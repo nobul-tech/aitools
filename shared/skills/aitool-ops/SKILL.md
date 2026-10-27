@@ -355,7 +355,7 @@ dir exists for the transient update session). This is benign noise.
 
 ## Cross-references
 
-- Full tool-ops registry (CRUD): `/tool-ops` skill (aitools repo only)
+- Full tool-ops registry (CRUD): `/tool-ops` skill (listed in every repo; works only inside the aitools repo)
 - Tool-ops governance rule: `.claude/rules/tool-ops.md` (aitools repo)
 - CC operational reference: `reference/tool-ops-claude-code.md` (aitools
   repo; deployed copy `~/.aitools/reference/tool-ops-claude-code.md`; read

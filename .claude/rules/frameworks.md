@@ -51,5 +51,6 @@ that process.
 - Adoption lifecycle: `@reference/framework-adoption.md`
 - Three-layer pattern: `@reference/framework-three-layer-governance.md`
 - Rules (anatomy, scopes, deployment): `@reference/rules.md`
+- Skills (anatomy, scopes, deployment): `@reference/skills.md`
 - Governed data access: `@.claude/rules/governed-data-access.md`
 - Provenance map: `/frameworks` skill (check provenance mode)

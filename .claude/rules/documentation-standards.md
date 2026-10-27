@@ -68,6 +68,9 @@ Create a `plans/*.md` file when work:
 
 - **Rules** (`.claude/rules/`) = concise behavioral directives, ~40-100 lines
   (what a rule is, its anatomy, scopes and deployment: `@reference/rules.md`)
+- **Skills** (`.claude/skills/`, `shared/skills/`) = the governed process,
+  loaded on demand (what a skill is, its anatomy, scopes and deployment:
+  `@reference/skills.md`)
 - **References** (`reference/`) = implementation detail, unlimited length
 - **No duplication** — one authoritative location per fact
 - **Tool configs** documented per-tool via `/tool-registry` skill
@@ -77,20 +80,31 @@ Create a `plans/*.md` file when work:
 
 ### Skill placement
 
-- **User-level** (`shared/skills/` → deployed to `~/.claude/skills/`):
-  managed tool patterns, project-agnostic conventions, USO enablement.
-  Content must be factual (patterns, gotchas, platform behavior), not
-  project-specific opinions.
-- **Project-level** (`.claude/skills/` in repo): project-specific
-  frameworks, governance workflows, development patterns. Auto-discovered
-  by Claude Code, not deployed.
-- **Split threshold**: A tool needs both user and project skills only
-  when it serves two distinct personas (end user vs developer). Use
-  `<name>` for user-level and `<name>-dev` for project-level.
-- **No project overrides of user skills**: User-level takes priority
-  in Claude Code. Never create same-name skills at both levels.
-- Full inventory and architecture:
-  `@plans/governance-and-compliance-framework.md`
+Where a skill's source lives decides what it is written for, not where it
+is deployed: every skill in `shared/skills/`, `.claude/skills/` and the
+dotprofile `claude/skills/` is deployed to user scope (`~/.claude/skills/`,
+`~/.cursor/skills/`) through `~/.aitools/skills` (commander, 2026-10-26).
+
+- **Shared** (`shared/skills/`): managed tool patterns, project-agnostic
+  conventions, USO enablement. Content must be factual (patterns, gotchas,
+  platform behavior), not project-specific opinions, and must work in any
+  repo (write aitools paths as "aitools `<path>`").
+- **Project** (`.claude/skills/` in the aitools repo): aitools frameworks,
+  governance workflows, development patterns. Deployed to user scope too,
+  so it is listed in every repo; it may cite aitools repo-relative paths
+  only if it says it works inside aitools only.
+- **Dotprofile** (`<userRepoPath>/claude/skills/`): the user's own skills.
+- **Unique names**: a skill name must be unique across the three sources
+  (a duplicate is an ERROR on every deploy-harness run; first source wins:
+  shared, then project, then dotprofile). Inside aitools each project skill
+  exists at both levels until the commander removes the project copies,
+  and Claude Code runs the user-level copy, so a branch that edits a
+  project skill sees the old copy until the next `aitools` run.
+- **Split threshold**: A tool needs two skills only when it serves two
+  distinct personas (end user vs developer). Use `<name>` for the shared
+  skill and `<name>-dev` for the project one.
+- Anatomy, scopes and deployment: `@reference/skills.md`; inventory and
+  architecture: `@plans/governance-and-compliance-framework.md`
 
 ### `@` link convention
 

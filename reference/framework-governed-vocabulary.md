@@ -55,8 +55,8 @@ Base artifacts combine with scope modifiers:
 | claude | CLAUDE.md file at the given scope |
 | config | JSON configuration file (settings.json, config.json, mcp.json) |
 | hook | Hook script (`.sh` in `shared/hooks/` or `~/.claude/hooks/`) |
-| rule | Claude Code rule file (`.md` in `.claude/rules/` or `~/.claude/rules/`) |
-| skill | Skill definition (`SKILL.md` in `.claude/skills/`, `shared/skills/`, or `~/.claude/skills/`) |
+| rule | Rule file (`.md` in `.claude/rules/`, `shared/rules/`, the dotprofile `claude/rules/`, `~/.aitools/rules/` or `~/.claude/rules/`; converted to `.mdc` in `~/.cursor/rules/`) |
+| skill | Skill directory with a `SKILL.md` (in `.claude/skills/`, `shared/skills/`, the dotprofile `claude/skills/`, `~/.aitools/skills/`, `~/.claude/skills/` or `~/.cursor/skills/`) |
 
 ### Examples
 
@@ -67,9 +67,9 @@ Base artifacts combine with scope modifiers:
 | dotprofile claude | `<userRepoPath>/claude/CLAUDE.md` |
 | user claude | `~/.claude/CLAUDE.md` (generated, don't edit directly) |
 | project rule | `.claude/rules/*.md` |
-| user rule | `~/.claude/rules/*.md` |
+| user rule | `~/.claude/rules/*.md`, `~/.cursor/rules/*.mdc` (fanned out from `~/.aitools/rules/`) |
 | shared skill | `shared/skills/*/SKILL.md` (source) |
-| user skill | `~/.claude/skills/*/SKILL.md` (deployed) |
+| user skill | `~/.claude/skills/*/SKILL.md`, `~/.cursor/skills/*/SKILL.md` (fanned out from `~/.aitools/skills/`) |
 | shared hook | `shared/hooks/*.sh` (source) |
 | user hook | `~/.claude/hooks/*.sh` (deployed) |
 | user config | `~/.claude/settings.json` |

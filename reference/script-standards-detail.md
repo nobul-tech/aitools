@@ -320,6 +320,7 @@ definitions — do not substitute synonyms.
 | `"created"` | File did not exist, now written | First-time deployment |
 | `"configured"` | Server/service set up or reconfigured | MCP server, integration setup |
 | `"accepted"` | User chose to adopt local value back to source | Adopt menu outcome |
+| `"removed"` | A deployed copy backed up and deleted because its source retired it | Fan-out consumers pruning a retired rule or skill (`deploy_tracker_record removed` / `Record-DeployOutcome -Outcome removed`); the summary counts `N removed` |
 | `"n/a (<environment>)"` | Step does not apply in this environment (tool platform state `n/a`) | `write_environment_skip` / `Write-EnvironmentSkip`, category OK (`.claude/rules/cross-platform.md` "Environment branches") |
 
 Non-governed detail values (version strings, error descriptions, counts)

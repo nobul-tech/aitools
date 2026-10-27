@@ -200,8 +200,9 @@ repo has it. For other projects, add:
 ## Cross-References
 
 - Governing rule: user rule `scratch.md` (source `shared/rules/scratch.md`
-  in the aitools repo; deployed to `~/.claude/rules/` once
-  deploy-harness ships a path for `shared/rules/`)
+  in the aitools repo; copied to `~/.aitools/rules/` by deploy-harness and
+  fanned out to `~/.claude/rules/` by setup-user-claude and to
+  `~/.cursor/rules/scratch.mdc` by setup-user-cursor)
 - Standing orders: USO "Scratch files for complex scripting" and USO
   "Simple Bash commands only" (user CLAUDE.md); enforcement in the
   standing-order-guard hook

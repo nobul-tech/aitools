@@ -16,17 +16,20 @@ The tool evaluation domain has three tiers:
 
 | Tier | Skill | Scope | Available where |
 |------|-------|-------|-----------------|
-| Project (full process) | `/tool-eval` | Full evaluation + registry hand-off | aitools repo only |
+| Project (full process) | `/tool-eval` | Full evaluation + registry hand-off | Listed in every repo (deployed to user scope with every aitools skill); works only inside the aitools repo (it reads aitools repo-relative paths) |
 | User (portable) | `/aitool-eval` | Read-only evaluation methodology | Any repo (deployed to ~/.claude/skills/) |
 | Framework | -- | `reference/tool-evaluation-criteria.md`, `reference/tool-evaluation-playbook.md` | aitools repo only |
 
 - In the aitools repo, `/tool-eval` is the primary skill (full
   evaluation with registry writes). `/aitool-eval` is also available
   but redundant here.
-- In any other repo, `/aitool-eval` is the only available skill.
-  It provides the full evaluation methodology (criteria, discovery
-  playbook, health flags) without needing the aitools repo's source
-  files.
+- In any other repo, use `/aitool-eval`. It provides the full
+  evaluation methodology (criteria, discovery playbook, health flags)
+  without needing the aitools repo's source files. `/tool-eval` is
+  listed there too (every aitools skill is deployed to user scope,
+  `@reference/skills.md`), but its paths (`reference/tool-evaluation-*.md`,
+  `reference/evaluations/`, `.claude/rules/tool-*.md`) do not resolve
+  outside the aitools repo.
 
 ### When to invoke /aitool-eval
 

@@ -108,8 +108,10 @@ skills, and context.
 5. Check for `.aitools/` workspace (harness state)
 
 If this is the aitools repo, you have access to the full harness.
-If this is another repo, you have user-level skills only
-(`~/.claude/skills/`).
+If this is another repo, you have the user-level skills
+(`~/.claude/skills/`): every aitools skill, including the project ones
+(`tool-ops`, `incident`, `glossary`, ...), which cite aitools repo paths
+and work only inside the aitools repo.
 
 ### Step 2: Load operational learning
 
@@ -410,7 +412,8 @@ Key marse-specific patterns (M1-M4) apply.
 
 ### In any other repo
 
-You have user-level skills only. Check for:
+You have the user-level skills (every aitools skill; the ones that cite
+aitools repo paths work only inside aitools). Check for:
 - `CLAUDE.md` for project instructions
 - `.claude/rules/` for project rules
 - `.claude/skills/` for project skills

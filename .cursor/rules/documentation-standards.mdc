@@ -30,6 +30,8 @@ Spans multiple sessions, has phased gates, or needs detailed design beyond a roa
 
 - **Rules** (`.claude/rules/` / `.cursor/rules/`) = concise behavioral directives, ~40-100 lines
   (what a rule is, its anatomy, scopes and deployment: `reference/rules.md`)
+- **Skills** (`.claude/skills/`, `shared/skills/`) = the governed process, loaded on demand
+  (what a skill is, its anatomy, scopes and deployment: `reference/skills.md`)
 - **References** (`reference/`) = implementation detail, unlimited length
 - **No duplication** — one authoritative location per fact
 - **Tool configs** documented per-tool via the `/tool-registry` skill

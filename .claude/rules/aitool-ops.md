@@ -15,15 +15,18 @@ The tool-ops domain has three tiers:
 
 | Tier | Skill | Scope | Available where |
 |------|-------|-------|-----------------|
-| Project (full CRUD) | `/tool-ops` | Read and write tool-ops.json | aitools repo only |
+| Project (full CRUD) | `/tool-ops` | Read and write tool-ops.json | Listed in every repo (deployed to user scope with every aitools skill); works only inside the aitools repo (it reads aitools repo-relative paths) |
 | User (portable) | `/aitool-ops` | Read-only reference card | Any repo (deployed to ~/.claude/skills/) |
 | Framework | — | `reference/framework-tool-ops.md` | aitools repo only |
 
 - In the aitools repo, `/tool-ops` is the primary skill (full CRUD).
   `/aitool-ops` is also available but redundant here.
-- In any other repo, `/aitool-ops` is the only available skill.
-  It provides enough operational knowledge for correct behavior
-  without needing the aitools repo's source files.
+- In any other repo, use `/aitool-ops`. It provides enough
+  operational knowledge for correct behavior without needing the
+  aitools repo's source files. `/tool-ops` is listed there too (every
+  aitools skill is deployed to user scope, `@reference/skills.md`), but
+  its paths (`reference/tool-ops-*.md` and the tool-ops registry) do not
+  resolve outside the aitools repo.
 
 ### When to invoke /aitool-ops
 

@@ -58,10 +58,13 @@ a summary row, never silent (`@plans/build-package/design.md` section 3(d)):
 ### MDM run order
 
 `deploy/deploy-harness.sh/.ps1` runs first: it fills `~/.aitools` (rules,
-reference, registries, hooks, skills, bin, config.json), and the rules fan-out
-in `setup-user-cursor` (and `setup-user-claude` once it fans out) reads
-`~/.aitools/rules`. Run in the other order, the fan-out step reports
-`n/a (no harness rules)` and deploys nothing.
+reference, registries, hooks, skills, bin, config.json), and the fan-outs in
+`setup-user-claude` and `setup-user-cursor` read `~/.aitools/rules` and
+`~/.aitools/skills` (the only way the dotprofile's `claude/rules` reaches an
+endpoint). Run in the other order, the fan-out steps report
+`n/a (no harness rules)` / `n/a (no harness skills)` and deploy no rules or
+skills from the harness; `setup-user-skills` then deploys skills (SKILL.md
+only) as the fallback (FD-9 of `@plans/skills-and-rules-fanout.md`).
 
 `deploy-harness` ships with its `deploy/` directory: its config.json writer
 (`setup-user-config`, `aitools-profile`, `aitools-json`) sits beside it. As on
@@ -115,9 +118,11 @@ logic:
   merge formerly duplicated in `setup-user-mcp` was removed in the settings-sync
   refactor (`sync_managed_json` now owns settings.json).
 - `setup-user-claude.sh/.ps1` (M3 B5): template interpolation, footer, managed-file
-  deploy and rules logic are extracted from `scripts/`. `build-deploy.sh` adds only
-  the profile/template source block (the live dotprofile on the machine wins, else
-  the embedded build-time copies) and the rules fallback.
+  deploy and the rules and skills fan-outs are extracted from `scripts/` (the skills
+  fan-out is the library's `fanout_harness_skills` / `Invoke-HarnessSkillsFanout`,
+  inlined with the lib). `build-deploy.sh` adds only the profile/template source
+  block (the live dotprofile on the machine wins, else the embedded build-time
+  copies); no rules are embedded.
 - `setup-user-cursor.sh/.ps1` (M3 B5): the whole cursor body is extracted; only the
   two preference defaults in the profile preferences block are replaced with the
   build-time `profile.json` `cursor.cli` values (the fallback when the machine has
@@ -139,21 +144,24 @@ heading or rewording those lines fails the build loudly.
 
 **What IS auto-embedded** (safe — single source of truth):
 - `shared/hooks/*.sh` → read via `cat` at build time
-- `shared/skills/*.md` → read via `cat` at build time
+- `shared/skills/*/SKILL.md` → read at build time into `deploy/setup-user-skills.*`,
+  the fallback deployer that runs only when `~/.aitools/skills` does not exist
+  (FD-9); on an endpoint the skills normally arrive through
+  `deploy/deploy-harness.*` and the fan-outs
 - `<userRepoPath>/claude/CLAUDE.md` (else `@shared/claude-shared.md`) → read at
   build time, tokens left in place (the fallback template; resolved at runtime)
 - `<userRepoPath>/profile.json` → its snapshot (`aitools-json.pl snapshot`:
   version, identity, cursor, profiles), the fallback when the machine has no
   dotprofile
-- `<userRepoPath>/claude/rules/*.md` → read at build time (the fallback rules)
 - `scripts/aitools-profile.sh/.ps1`, `scripts/aitools-lib.sh/.ps1`,
   `scripts/aitools-json.pl/.ps1` → copied at build time into the resolver-consuming
   deploy scripts and written to a temp dir at runtime (`AITOOLS_PROFILE_SH` /
   `AITOOLS_PROFILE_PS1`); a file the resolver loads that the embed does not carry
   fails the build
 - Every `scripts/deploy-harness.*` source (`reference/`, `registries/`,
-  `shared/hooks`, `shared/skills`, `.claude/skills`, `shared/rules`,
-  `.claude/rules`, `<userRepoPath>/claude/rules`, the bin CLIs) → its
+  `shared/hooks`, `.claude/hooks`, `shared/skills`, `.claude/skills`, <!-- path-ref: ignore (a deploy-harness source that may be absent) -->
+  `<userRepoPath>/claude/skills`, `shared/rules`, `.claude/rules`,
+  `<userRepoPath>/claude/rules`, the bin CLIs) → its
   `git ls-files` list and contents, embedded as base64 at build time
 
 `check-pre-push` step 7 rebuilds into a temp copy of the dotprofile and dry-runs

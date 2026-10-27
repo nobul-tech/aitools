@@ -12,6 +12,7 @@ Cursor uses `.mdc` files (Markdown with YAML frontmatter) for AI rules. Three sc
 |-------|----------|---------|
 | Project rules | `.cursor/rules/*.mdc` | Yes (via git) |
 | User rules | Cursor Settings > Rules | No (local to machine) |
+| User rule files | `~/.cursor/rules/*.mdc` (written by the `setup-user-cursor` fan-out from `~/.aitools/rules`; loaded because `~` is an ancestor of the workspace) | No (local to machine) |
 | Team rules | `.cursor/rules/*.mdc` (shared) | Yes (via git) |
 
 ### Rule Frontmatter
@@ -127,10 +128,16 @@ The agent CLI reads rules and context from these locations:
 | Cursor User Rules | Cursor Settings > Rules (SQLite) | Not file-accessible; set via IDE UI |
 | Project CLAUDE.md | `./CLAUDE.md` in project root | Same as Claude Code |
 | Project rules | `.cursor/rules/*.mdc` | Cursor-specific rules |
-| User skills | `~/.cursor/skills/*/SKILL.md` | Our deployed skills land here |
+| User skills | `~/.cursor/skills/*/SKILL.md` | The `setup-user-cursor` skills fan-out writes here (every skill in `~/.aitools/skills` minus retired) |
 | Built-in skills | `~/.cursor/skills-cursor/*/SKILL.md` | 5 Cursor-provided skills |
 
-**Not read by agent CLI:** `~/.claude/CLAUDE.md`, `~/.claude/skills/`, `.claude/rules/`.
+**Not read by agent CLI:** `~/.claude/CLAUDE.md`, `.claude/rules/`. For
+skills, Cursor's docs (cursor.com/docs/skills, read with chrome-devtools
+2026-10-27) say "For compatibility, Cursor also loads skills from Claude and
+Codex directories: .claude/skills/, .codex/skills/, ~/.claude/skills/, and
+~/.codex/skills/"; the page does not separate the IDE and the agent CLI.
+Whether the agent CLI now reads `~/.claude/skills/` (this file said it did
+not; date of that check unknown): unknown.
 
 ### User Rules (deprecated workflow)
 
@@ -187,8 +194,10 @@ Cursor supports a Skills system for reusable AI capabilities:
 - Skills can include example code, patterns, and instructions
 - Useful for encoding project-specific workflows (e.g., "how to add a new API endpoint")
 
-We deploy Chrome DevTools skills (`chrome-devtools`, `a11y-debugging`) to both locations
-via `setup-user-mcp`. These are vendored from the upstream repo in `shared/skills/`.
+Every harness skill (`shared/skills/`, `.claude/skills/`, the dotprofile
+`claude/skills/`) is fanned out to both locations from `~/.aitools/skills`
+(`reference/skills.md`); `chrome-devtools` and `a11y-debugging` are vendored
+from the upstream repo in `shared/skills/`.
 
 | Tool | Skills location |
 |------|----------------|
