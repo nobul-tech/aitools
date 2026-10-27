@@ -338,6 +338,9 @@ seed_retired() {
     hskill old SKILL.md 'old'                                   # retired, but still in ~/.aitools/skills
     hskill '[r].bak.2026-10-25T000000Z' SKILL.md 'r'
     dskill gone SKILL.md 'gone'; dskill gone tests/x.md 'gx'; dskill gone SKILL.md.bak.2026-01-01T000000Z 'an old backup'
+    dskill gone .DS_Store 'finder junk'; dskill gone tests/Thumbs.db 'explorer junk'   # never block the prune
+    local i
+    for i in 1 2 3 4 5 6; do dskill "../skills.bak.2026-01-0${i}T000000Z/old$i" SKILL.md "old backup $i"; done
     dskill old SKILL.md 'old'
     dskill mine2 SKILL.md 'my own'
     dskill '[r]' SKILL.md 'r'
@@ -345,13 +348,15 @@ seed_retired() {
 case_run retired seed_retired
 check "retired: exit 0, row 1 added, 3 removed (WARN: a kept dir still loads)" "[ \"\$(rc)\" = 0 ] && [ \"\$(nondetail)\" = 'WARN|claude skills|1 added, 3 removed' ]"
 check "retired: copies removed from ~/.claude/skills" "[ ! -e '$(S)/gone' ] && [ ! -e '$(S)/old' ] && [ ! -e '$(S)/[r]' ]"
-check "retired: one backup dir beside ~/.claude/skills holds them" "[ \"\$(bakdirs)\" = 1 ] && b=\$(ls -d '$C/sh/.claude/'skills.bak.*) && grep -qx gone \"\$b/gone/SKILL.md\" && grep -qx gx \"\$b/gone/tests/x.md\" && grep -qx old \"\$b/old/SKILL.md\" && grep -qx r \"\$b/[r]/SKILL.md\""
+check "retired: OS junk files did not block the prune; the backup keeps them" "b=\$(ls -d '$C/sh/.claude/'skills.bak.* | LC_ALL=C sort | tail -n 1) && [ -f \"\$b/gone/.DS_Store\" ] && [ -f \"\$b/gone/tests/Thumbs.db\" ]"
+check "retired: the newest backup dir beside ~/.claude/skills holds them" "b=\$(ls -d '$C/sh/.claude/'skills.bak.* | LC_ALL=C sort | tail -n 1) && grep -qx gone \"\$b/gone/SKILL.md\" && grep -qx gx \"\$b/gone/tests/x.md\" && grep -qx old \"\$b/old/SKILL.md\" && grep -qx r \"\$b/[r]/SKILL.md\""
+check "retired: backups beside ~/.claude/skills pruned to the newest 5" "[ \"\$(bakdirs)\" = 5 ] && [ ! -e '$C/sh/.claude/skills.bak.2026-01-01T000000Z' ] && [ ! -e '$C/sh/.claude/skills.bak.2026-01-02T000000Z' ] && [ -d '$C/sh/.claude/skills.bak.2026-01-03T000000Z' ] && grep -q 'Pruned old backup' '$C/sh.out'"
 check "retired: removals in DETAIL rows" "row 'DETAIL|claude skills|removed: gone' && row 'DETAIL|claude skills|removed: old' && row 'DETAIL|claude skills|removed: [r]'"
 check "retired: a retired skill still in ~/.aitools/skills is not fanned out" "grep -q 'Not fanned out: old (retired in the skills manifest)' '$C/sh.out' && ! row 'DETAIL|claude skills|added: old/SKILL.md'"
 check "retired: user dir with a retired name kept, ACTION row" "grep -qx 'my own' '$(S)/mine2/SKILL.md' && row 'ACTION||Claude Code still loads retired skills in ~/.claude/skills: mine2 -- delete them unless you wrote them'"
 parity retired
 case_run retired-dry seed_retired --dry-run -DryRun
-check "retired dry run: nothing removed, row dry run, removal previewed" "[ \"\$(rc)\" = 0 ] && [ \"\$(nondetail)\" = 'WARN|claude skills|dry run (no files written)' ] && [ -d '$(S)/gone' ] && [ -d '$(S)/old' ] && [ ! -e '$(S)/a' ] && [ \"\$(bakdirs)\" = 0 ] && grep -q 'DRY RUN\] Would back up and remove gone' '$C/sh.out'"
+check "retired dry run: nothing removed, row dry run, removal previewed" "[ \"\$(rc)\" = 0 ] && [ \"\$(nondetail)\" = 'WARN|claude skills|dry run (no files written)' ] && [ -d '$(S)/gone' ] && [ -d '$(S)/old' ] && [ ! -e '$(S)/a' ] && [ \"\$(bakdirs)\" = 6 ] && grep -q 'DRY RUN\] Would back up and remove gone' '$C/sh.out'"
 parity retired-dry
 
 # A retired name whose copy differs only in case (Gone for gone)
@@ -459,6 +464,39 @@ check "bracket name: deployed" "[ \"\$(nondetail)\" = 'OK|claude skills|2 added'
 rerun
 check "bracket name: rerun verified" "[ \"\$(nondetail)\" = 'OK|claude skills|2 verified' ]"
 parity bracket
+
+# Non-text files (a NUL byte; invalid UTF-8): copied byte for byte, never corrupted
+seed_binary() {
+    manifest 'b|shared'
+    hskill b SKILL.md 'skill b'
+    printf 'PNG\000\001\002 bytes\n' > "$H/.aitools/skills/b/img.bin"
+    printf '\377\376latin1 \351\n' > "$H/.aitools/skills/b/latin.txt"
+}
+case_run binary seed_binary
+check "binary: exit 0, row 3 added, bytes identical" "[ \"\$(rc)\" = 0 ] && [ \"\$(nondetail)\" = 'OK|claude skills|3 added' ] && cmp -s '$C/sh/.aitools/skills/b/img.bin' '$(S)/b/img.bin' && cmp -s '$C/sh/.aitools/skills/b/latin.txt' '$(S)/b/latin.txt'"
+parity binary
+rerun
+check "binary rerun: row 3 verified" "[ \"\$(nondetail)\" = 'OK|claude skills|3 verified' ]"
+printf 'changed\000\n' > "$(S sh)/b/img.bin"
+if [ "$HAVE_PWSH" = "true" ]; then printf 'changed\000\n' > "$(S ps)/b/img.bin"; fi
+rerun
+check "binary edited: overwritten byte for byte, backup kept" "[ \"\$(nondetail)\" = 'OK|claude skills|1 updated, 2 verified' ] && cmp -s '$C/sh/.aitools/skills/b/img.bin' '$(S)/b/img.bin' && ls '$(S)/b' | grep -q '^img\.bin\.bak\.' && ! ls '$(S)/b' | grep -q 'aitools-tmp'"
+parity binary-edited
+
+# Names Claude Code owns (synced, anthropic-skills*): never written, never removed
+seed_reserved() {
+    manifest 'a|shared' 'anthropic-skills-old|retired'
+    hskill a SKILL.md 'skill a'
+    hskill synced SKILL.md 'not ours to write'
+    hskill Anthropic-Skills-pack SKILL.md 'not ours either'
+    hskill anthropic-skills-old.bak.2026-10-25T000000Z SKILL.md 'o'
+    dskill synced keep.txt 'theirs'
+    dskill anthropic-skills-old SKILL.md 'o'
+}
+case_run reserved seed_reserved
+check "reserved: exit 1, row 2 failed, failed DETAIL rows" "[ \"\$(rc)\" = 1 ] && [ \"\$(nondetail)\" = 'ERROR|claude skills|2 failed' ] && row 'DETAIL|claude skills|failed: synced' && row 'DETAIL|claude skills|failed: Anthropic-Skills-pack'"
+check "reserved: nothing written into or removed from them" "[ ! -e '$(S)/synced/SKILL.md' ] && grep -qx theirs '$(S)/synced/keep.txt' && [ ! -e '$(S)/Anthropic-Skills-pack' ] && grep -qx o '$(S)/anthropic-skills-old/SKILL.md' && [ -f '$(S)/a/SKILL.md' ] && ! row 'DETAIL|claude skills|removed: anthropic-skills-old'"
+parity reserved
 
 if $CASE_SENSITIVE_FS; then
     seed_dupcase() { hskill a SKILL.md 'lower'; hskill A SKILL.md 'upper'; }

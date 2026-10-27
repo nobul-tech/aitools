@@ -2863,6 +2863,141 @@ function Get-FanoutSortedNames([string]$Path) {
     return , $names
 }
 
+# Test-FanoutBinary Path: $true when the file holds a NUL byte or is not valid
+# UTF-8 (reading it as text would corrupt it), $false when it is text. Throws
+# when it cannot be read. Parity: _fanout_is_binary in aitools-lib.sh.
+function Test-FanoutBinary([string]$Path) {
+    $bytes = [System.IO.File]::ReadAllBytes($Path)
+    if ([Array]::IndexOf($bytes, [byte]0) -ge 0) { return $true }
+    try {
+        $null = [System.Text.UTF8Encoding]::new($false, $true).GetString($bytes)
+    } catch [System.Text.DecoderFallbackException] {
+        return $true
+    }
+    return $false
+}
+
+# Copy-FanoutBinary Source Dest ItemName: deploy a non-text file byte for byte
+# (no review menu: a binary has no line diff; SOURCE wins, as on a
+# non-interactive run). Equal bytes -> "verified". Otherwise an existing Dest
+# is backed up (Backup-File; no backup -> "failed", nothing written), Source is
+# copied to a temp file beside Dest, compared, and moved over Dest. Returns
+# created / updated / verified / failed (failed: LogError with the reason).
+# Honors $DryRun. Parity: _fanout_copy_binary in aitools-lib.sh.
+function Copy-FanoutBinary([string]$Source, [string]$Dest, [string]$ItemName) {
+    $srcBytes = [System.IO.File]::ReadAllBytes($Source)
+    $exists = [System.IO.File]::Exists($Dest)
+    if ($exists) {
+        try {
+            $destBytes = [System.IO.File]::ReadAllBytes($Dest)
+            if ([System.Linq.Enumerable]::SequenceEqual($srcBytes, $destBytes)) { return "verified" }
+        } catch {
+            LogDetail "Copy-FanoutBinary: cannot read ${Dest}: $($_.Exception.Message) (it is replaced)"
+        }
+    }
+    if ($DryRun) {
+        if ($exists) { Log "[DRY RUN] Would update: $ItemName (binary) -> $Dest" }
+        else { Log "[DRY RUN] Would create: $ItemName (binary) -> $Dest" }
+        return "verified"
+    }
+    try {
+        [System.IO.Directory]::CreateDirectory([System.IO.Path]::GetDirectoryName($Dest)) | Out-Null
+    } catch {
+        LogError "Failed: ${ItemName}: cannot create the directory of ${Dest}: $($_.Exception.Message)"
+        return "failed"
+    }
+    if ($exists) {
+        Backup-File -FilePath $Dest
+        if (-not $script:BackupFileOk) {
+            LogError "Failed: ${ItemName}: backup of $Dest failed -- nothing written"
+            return "failed"
+        }
+    }
+    $tmp = "$Dest.aitools-tmp.$PID"
+    try {
+        [System.IO.File]::Copy($Source, $tmp, $true)
+        if (-not [System.Linq.Enumerable]::SequenceEqual($srcBytes, [System.IO.File]::ReadAllBytes($tmp))) { throw "the copy differs from the source" }
+        [System.IO.File]::Move($tmp, $Dest, $true)
+        if (-not [System.Linq.Enumerable]::SequenceEqual($srcBytes, [System.IO.File]::ReadAllBytes($Dest))) { throw "the written file differs from the source" }
+    } catch {
+        if ([System.IO.File]::Exists($tmp)) {
+            try { [System.IO.File]::Delete($tmp) } catch { LogDetail "Copy-FanoutBinary: cannot remove ${tmp}: $($_.Exception.Message)" }
+        }
+        LogError "Failed: ${ItemName}: cannot write $Dest (binary): $($_.Exception.Message)"
+        return "failed"
+    }
+    if ($exists) {
+        LogOk "Updated: $ItemName (binary, no review: source wins; backup kept) -> $Dest"
+        return "updated"
+    }
+    LogOk "Created: $ItemName (binary) -> $Dest"
+    return "created"
+}
+
+# Test-FanoutSkillReserved Name: $true when Name is a skills directory name
+# Claude Code owns (synced, anthropic-skills*; case-insensitive): the fan-out
+# never writes or removes it. Parity: _fanout_skill_reserved in aitools-lib.sh.
+function Test-FanoutSkillReserved([string]$Name) {
+    $lc = $Name.ToLowerInvariant()
+    return ($lc -ceq "synced" -or $lc.StartsWith("anthropic-skills", [StringComparison]::Ordinal))
+}
+
+# Test-FanoutDirMatchesIgnoringJunk Target Candidate: Test-FanoutDirMatches on
+# a temp copy of Target without OS junk files (.DS_Store, Thumbs.db,
+# desktop.ini, any depth, case-insensitive), so a Finder or Explorer file never
+# blocks a retired prune. Same return codes; 2 also when the temp copy fails
+# (detail log). Parity: _fanout_matches_ignoring_junk in aitools-lib.sh.
+function Test-FanoutDirMatchesIgnoringJunk([string]$Target, [string]$Candidate) {
+    $tmpd = Join-Path ([System.IO.Path]::GetTempPath()) ("aitools-fanout-" + [guid]::NewGuid().ToString("N"))
+    try {
+        Copy-DirectoryTree -Source $Target -Dest (Join-Path $tmpd "t")
+        $reparse = [System.IO.FileAttributes]::ReparsePoint
+        foreach ($f in [System.IO.Directory]::EnumerateFiles((Join-Path $tmpd "t"), "*", [System.IO.SearchOption]::AllDirectories)) {
+            $info = [System.IO.FileInfo]::new($f)
+            if ($info.Attributes -band $reparse) { continue }
+            if ($info.Name.ToLowerInvariant() -in @(".ds_store", "thumbs.db", "desktop.ini")) { [System.IO.File]::Delete($f) }
+        }
+    } catch {
+        LogDetail "fanout: cannot copy $Target to compare it: $($_.Exception.Message)"
+        if ([System.IO.Directory]::Exists($tmpd)) {
+            try { [System.IO.Directory]::Delete($tmpd, $true) } catch { LogDetail "fanout: cannot remove ${tmpd}: $($_.Exception.Message)" }
+        }
+        return 2
+    }
+    $rc = Test-FanoutDirMatches (Join-Path $tmpd "t") $Candidate
+    try { [System.IO.Directory]::Delete($tmpd, $true) } catch { LogDetail "fanout: cannot remove ${tmpd}: $($_.Exception.Message)" }
+    return $rc
+}
+
+# Remove-FanoutOldDestBackups DestDir Keep: remove all but the newest Keep
+# DestDir.bak.<UTC>[-n] directories beside DestDir (literal name match, never a
+# wildcard; the pattern Backup-Dir prunes). Failures are warnings.
+# Parity: _fanout_prune_dest_backups in aitools-lib.sh.
+function Remove-FanoutOldDestBackups([string]$DestDir, [int]$Keep) {
+    $reparse = [System.IO.FileAttributes]::ReparsePoint
+    $parent = [System.IO.Path]::GetDirectoryName($DestDir)
+    $pattern = '\A' + [regex]::Escape([System.IO.Path]::GetFileName($DestDir)) + '\.bak\.[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{6}Z(?:-[0-9]+)?\z'
+    try {
+        [string[]]$names = @([System.IO.DirectoryInfo]::new($parent).GetDirectories() | Where-Object {
+            $_.Name -cmatch $pattern -and -not ($_.Attributes -band $reparse)
+        } | ForEach-Object { $_.Name })
+    } catch {
+        LogWarn "Could not prune old backups of $DestDir -- cannot list ${parent}: $($_.Exception.Message)"
+        return
+    }
+    [Array]::Sort($names, [StringComparer]::Ordinal)
+    [Array]::Reverse($names)
+    for ($i = $Keep; $i -lt $names.Count; $i++) {
+        $old = Join-Path $parent $names[$i]
+        try {
+            [System.IO.Directory]::Delete($old, $true)
+            Log "Pruned old backup: $old"
+        } catch {
+            LogWarn "Could not prune old backup ${old}: $($_.Exception.Message)"
+        }
+    }
+}
+
 # ---------------------------------------------------------------------------
 # Invoke-HarnessSkillsFanout -ToolName -DestDir -AitoolsRepo -Dotprofile
 # Skills fan-out (plans/skills-and-rules-fanout.md section 3.4): every skill
@@ -2888,8 +3023,14 @@ function Get-FanoutSortedNames([string]$Path) {
 # Test-FanoutDirMatches says it holds the harness copy's files
 # (.aitools\skills\<name> or a <name>.bak.* backup there), after a verified
 # backup to DestDir.bak.<UTC>\<name>\ beside DestDir (not in DestDir, where the
-# tool would still load it as a skill); else kept, WARN and one ACTION row.
-# $DryRun writes nothing. Returns nothing (failures are LogError + an ERROR
+# tool would still load it as a skill); else kept, WARN and one ACTION row;
+# OS junk files (.DS_Store, Thumbs.db, desktop.ini) in the copy do not block
+# it; the newest 5 DestDir.bak.<UTC> directories are kept. A file with a NUL
+# byte or invalid UTF-8 is copied byte for byte (no review menu, backup kept).
+# The names synced and anthropic-skills* belong to Claude Code: a harness
+# skill of that name is a failed item, never written, and is never removed
+# from DestDir. No .aitools\skills: info log only, no row (setup-user-skills,
+# the fallback, owns the ToolName rows then). $DryRun writes nothing. Returns nothing (failures are LogError + an ERROR
 # row, counted in $errors for the caller's exit footer); [x]abort at a review
 # exits 2 from the library. .NET IO for every name (no wildcard paths: a
 # name with [ ] * ? works). Parity: fanout_harness_skills in aitools-lib.sh.
@@ -3031,6 +3172,12 @@ function Invoke-HarnessSkillsFanout {
     $kept = New-Object System.Collections.Generic.List[string]
     $list = New-Object System.Collections.Generic.List[object]   # @{ Name; Rel }
     foreach ($ent in $skills) {
+        # A name Claude Code owns in its skills directory: never written
+        if (Test-FanoutSkillReserved $ent) {
+            LogError "Not fanned out: $ent (a reserved skills directory name: synced and anthropic-skills* belong to Claude Code) -- rename the harness skill"
+            Record-DeployOutcome -Outcome "failed" -ToolName $ToolName -ItemName $ent
+            continue
+        }
         # Two harness skills whose names differ only in case (possible on a
         # case-sensitive file system) map to one directory here: the first wins
         if ($owned.Contains($ent)) {
@@ -3121,23 +3268,35 @@ function Invoke-HarnessSkillsFanout {
         $mSrcShown = if ($mSrc) { $mSrc } else { "unknown" }
         $adoptShown = if ($adopt) { $adopt } else { "none" }
         LogDetail "${ToolName}: $itemName source=$mSrcShown adopt=$adoptShown"
+        # A file with a NUL byte or invalid UTF-8 is copied byte for byte
+        # (reading it as text would corrupt it); text goes through the review menu
         try {
-            $content = [System.IO.File]::ReadAllText($srcFile, [System.Text.UTF8Encoding]::new($false))
+            $isBinary = Test-FanoutBinary $srcFile
+            $content = if ($isBinary) { "" } else { [System.IO.File]::ReadAllText($srcFile, [System.Text.UTF8Encoding]::new($false)) }
         } catch {
             LogError "Cannot read harness skill file ${srcFile}: $($_.Exception.Message)"
             Record-DeployOutcome -Outcome "failed" -ToolName $ToolName -ItemName $itemName
             continue
         }
-        if (-not $DryRun) {
-            # The library creates a missing parent with New-Item -Path (a
-            # wildcard path): create it here with .NET so [ ] in a name works
+        if ($isBinary) {
             try {
-                [System.IO.Directory]::CreateDirectory([System.IO.Path]::GetDirectoryName($destFile)) | Out-Null
+                $res = Copy-FanoutBinary $srcFile $destFile $itemName
             } catch {
-                LogDetail "${ToolName}: cannot create the directory of ${destFile}: $($_.Exception.Message) (the deploy reports it)"
+                LogError "Failed: ${itemName}: $($_.Exception.Message)"
+                $res = "failed"
             }
+        } else {
+            if (-not $DryRun) {
+                # The library creates a missing parent with New-Item -Path (a
+                # wildcard path): create it here with .NET so [ ] in a name works
+                try {
+                    [System.IO.Directory]::CreateDirectory([System.IO.Path]::GetDirectoryName($destFile)) | Out-Null
+                } catch {
+                    LogDetail "${ToolName}: cannot create the directory of ${destFile}: $($_.Exception.Message) (the deploy reports it)"
+                }
+            }
+            $res = Deploy-ManagedFile -Content $content -DestPath $destFile -ToolName $ToolName -ItemName $itemName -AdoptPath $adopt
         }
-        $res = Deploy-ManagedFile -Content $content -DestPath $destFile -ToolName $ToolName -ItemName $itemName -AdoptPath $adopt
         if ($res -notin @("created", "updated", "verified", "accept & adopt", "skipped", "failed")) {
             LogError "Unexpected deploy result for ${itemName}: $res"
             $res = "failed"
@@ -3186,6 +3345,8 @@ function Invoke-HarnessSkillsFanout {
     foreach ($rm in $retired) {
         # Deployed this run under a name that differs only in case
         if ($owned.Contains($rm)) { continue }
+        # A name Claude Code owns is never removed
+        if (Test-FanoutSkillReserved $rm) { continue }
         # The copy in DestDir, found case-insensitively; a real directory only
         $rmPath = ""
         foreach ($n in $dList) {
@@ -3207,7 +3368,8 @@ function Invoke-HarnessSkillsFanout {
         $why = ""
         foreach ($cand in $cands) {
             if (-not (Test-Path -LiteralPath $cand -PathType Container)) { continue }
-            $rc = Test-FanoutDirMatches $rmPath $cand
+            # OS junk files (.DS_Store, Thumbs.db, desktop.ini) in the copy do not count
+            $rc = Test-FanoutDirMatchesIgnoringJunk $rmPath $cand
             if ($rc -eq 0) {
                 $why = "same files as $([System.IO.Path]::GetFileName($cand))"
                 break
@@ -3229,11 +3391,15 @@ function Invoke-HarnessSkillsFanout {
             $bakRoot = "${DestDir}.bak.${ts}"
             $bn = 0
             while (Test-Path -LiteralPath $bakRoot) { $bn++; $bakRoot = "${DestDir}.bak.${ts}-$bn" }
+            $bakMade = $false
             try {
                 [System.IO.Directory]::CreateDirectory($bakRoot) | Out-Null
+                $bakMade = $true
             } catch {
                 LogWarn "Cannot create the backup directory ${bakRoot}: $($_.Exception.Message)"
             }
+            # Keep the newest 5 DestDir.bak.<UTC> directories (this one included)
+            if ($bakMade) { Remove-FanoutOldDestBackups $DestDir 5 }
         }
         $bakDir = Join-Path $bakRoot $rmDir
         $backed = $false

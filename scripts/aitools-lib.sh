@@ -2846,6 +2846,145 @@ _fanout_list_dir() {
     ' "$1"
 }
 
+# _fanout_is_binary FILE: exit 0 when FILE holds a NUL byte or is not valid
+# UTF-8 (a shell variable cannot carry it: deploy_managed_file would corrupt
+# it), 1 when it is text, 2 (reason on stdout) when it cannot be read.
+# Parity: Test-FanoutBinary in aitools-lib.ps1.
+_fanout_is_binary() {
+    perl -e '
+        open my $fh, "<:raw", $ARGV[0] or do { print "cannot read $ARGV[0]: $!\n"; exit 2 };
+        local $/; my $c = <$fh>; close $fh;
+        $c = "" unless defined $c;
+        exit 0 if index($c, "\0") >= 0;
+        exit(utf8::decode($c) ? 1 : 0);
+    ' "$1"
+}
+
+# _fanout_copy_binary SRC DEST ITEM: deploy a non-text file byte for byte (no
+# review menu: a binary has no line diff; SOURCE wins, as on a non-interactive
+# run). Equal bytes -> "verified". Otherwise an existing DEST is backed up
+# (backup_file; no backup -> failed, nothing written), SRC is copied to a temp
+# file beside DEST, compared, and moved over DEST. Sets MANAGED_FILE_RESULT to
+# created / updated / verified / failed (failed: log_error with the reason).
+# Honors DRY_RUN. Parity: Copy-FanoutBinary in aitools-lib.ps1.
+_fanout_copy_binary() {
+    local src="$1" dest="$2" item="$3" tmp
+    MANAGED_FILE_RESULT="failed"
+    if [ -f "$dest" ] && cmp -s "$src" "$dest"; then
+        MANAGED_FILE_RESULT="verified"
+        return 0
+    fi
+    if [ "${DRY_RUN:-}" = "true" ]; then
+        if [ -f "$dest" ]; then log "[DRY RUN] Would update: $item (binary) -> $(display_path "$dest")"
+        else log "[DRY RUN] Would create: $item (binary) -> $(display_path "$dest")"; fi
+        MANAGED_FILE_RESULT="verified"
+        return 0
+    fi
+    if ! mkdir -p "$(dirname "$dest")"; then
+        log_error "Failed: $item: cannot create the directory of $(display_path "$dest")"
+        return 0
+    fi
+    local existed=false
+    if [ -f "$dest" ]; then
+        existed=true
+        backup_file "$dest"
+        if [ "$BACKUP_FILE_OK" != "true" ]; then
+            log_error "Failed: $item: backup of $(display_path "$dest") failed -- nothing written"
+            return 0
+        fi
+    fi
+    tmp="$dest.aitools-tmp.$$"
+    if ! cp "$src" "$tmp" || ! cmp -s "$src" "$tmp"; then
+        rm -f "$tmp"
+        log_error "Failed: $item: cannot copy $(display_path "$src") (binary)"
+        return 0
+    fi
+    if ! mv -f "$tmp" "$dest" || ! cmp -s "$src" "$dest"; then
+        rm -f "$tmp"
+        log_error "Failed: $item: cannot write $(display_path "$dest") (binary)"
+        return 0
+    fi
+    if $existed; then
+        log_ok "Updated: $item (binary, no review: source wins; backup kept) -> $(display_path "$dest")"
+        MANAGED_FILE_RESULT="updated"
+    else
+        log_ok "Created: $item (binary) -> $(display_path "$dest")"
+        MANAGED_FILE_RESULT="created"
+    fi
+}
+
+# _fanout_skill_reserved NAME: exit 0 when NAME is a skills directory name
+# Claude Code owns (synced, anthropic-skills*; compared case-insensitively):
+# the fan-out never writes or removes it. Parity: Test-FanoutSkillReserved.
+_fanout_skill_reserved() {
+    case "$(lower_name "$1")" in
+        synced|anthropic-skills*) return 0 ;;
+    esac
+    return 1
+}
+
+# _fanout_matches_ignoring_junk TARGET CAND: fanout_dir_matches on a temp copy
+# of TARGET without OS junk files (.DS_Store, Thumbs.db, desktop.ini, any
+# depth, case-insensitive), so a Finder or Explorer file never blocks a
+# retired prune. Same exit codes; 2 also when the temp copy fails (detail log).
+# Parity: Test-FanoutDirMatchesIgnoringJunk in aitools-lib.ps1.
+_fanout_matches_ignoring_junk() {
+    local t="$1" c="$2" tmpd rc=0 why=""
+    if ! tmpd=$(mktemp -d); then
+        log_detail "fanout: cannot create a temp directory to compare $(display_path "$t")"
+        return 2
+    fi
+    if ! why=$(cp -R "$t" "$tmpd/t" 2>&1); then
+        log_detail "fanout: cannot copy $(display_path "$t") to compare it: $why"
+        rm -rf "$tmpd"
+        return 2
+    fi
+    if ! why=$(perl -MFile::Find -e '
+        find({ no_chdir => 1, wanted => sub {
+            return if -l $_ || ! -f _;
+            my ($b) = m{([^/]+)\z};
+            if (lc($b) =~ /\A(?:\.ds_store|thumbs\.db|desktop\.ini)\z/) { unlink $_ or die "cannot remove $_: $!\n" }
+        } }, $ARGV[0]);
+    ' "$tmpd/t" 2>&1); then
+        log_detail "fanout: cannot drop OS junk files from the copy of $(display_path "$t"): $why"
+        rm -rf "$tmpd"
+        return 2
+    fi
+    fanout_dir_matches "$tmpd/t" "$c" || rc=$?
+    rm -rf "$tmpd"
+    return "$rc"
+}
+
+# _fanout_prune_dest_backups DEST KEEP: remove all but the newest KEEP
+# DEST.bak.<UTC>[-n] directories beside DEST (literal name match, never a glob;
+# the same pattern backup_dir prunes). Failures are warnings.
+_fanout_prune_dest_backups() {
+    local dest="${1%/}" keep="$2" parent base old prc=0 list
+    parent=$(dirname "$dest"); base=$(basename "$dest")
+    list=$(perl -e '
+        my ($parent, $base, $keep) = @ARGV;
+        opendir my $dh, $parent or do { print "cannot list $parent: $!"; exit 1 };
+        my @b = sort { $b cmp $a } grep {
+            /\A\Q$base\E\.bak\.[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{6}Z(?:-[0-9]+)?\z/
+                && ! -l "$parent/$_" && -d "$parent/$_"
+        } readdir $dh;
+        closedir $dh;
+        print "$parent/$_\n" for @b[$keep .. $#b];
+    ' "$parent" "$base" "$keep" 2>&1) || prc=$?
+    if [ "$prc" -ne 0 ]; then
+        log_warn "Could not prune old backups of $(display_path "$dest") -- $list"
+        return 0
+    fi
+    while IFS= read -r old; do
+        [ -n "$old" ] || continue
+        if rm -rf "$old" && [ ! -e "$old" ]; then
+            log "Pruned old backup: $(display_path "$old")"
+        else
+            log_warn "Could not prune old backup $(display_path "$old")"
+        fi
+    done <<< "$list"
+}
+
 # ---------------------------------------------------------------------------
 # fanout_harness_skills TOOL DEST AITOOLS_REPO DOTPROFILE
 # Skills fan-out (plans/skills-and-rules-fanout.md section 3.4): every skill
@@ -2870,8 +3009,15 @@ _fanout_list_dir() {
 # the harness copy's files (~/.aitools/skills/<name> or a <name>.bak.* backup
 # there), after a verified backup to DEST.bak.<UTC>/<name>/ beside DEST (not in
 # DEST, where the tool would still load it as a skill); else kept, WARN and
-# one ACTION row. DRY_RUN=true writes nothing. Rows: see the contract; the
-# final row is the tracker's (OK / WARN skipped / ERROR failed).
+# one ACTION row; OS junk files (.DS_Store, Thumbs.db, desktop.ini) in the
+# copy do not block it; the newest 5 DEST.bak.<UTC> directories are kept. A
+# file with a NUL byte or invalid UTF-8 is copied byte for byte (no review
+# menu, backup kept). The names synced and anthropic-skills* belong to Claude
+# Code: a harness skill of that name is a failed item, never written, and is
+# never removed from DEST. No ~/.aitools/skills: info log only, no row
+# (setup-user-skills, the fallback, owns the TOOL rows then). DRY_RUN=true
+# writes nothing. Rows: see the contract; the final row is the tracker's
+# (OK / WARN skipped / ERROR failed).
 # Returns 0 (failures are log_error + an ERROR row, counted in ERRORS for the
 # caller's exit footer); [x]abort at a review exits 2 from the library.
 # Parity: Invoke-HarnessSkillsFanout in aitools-lib.ps1.
@@ -3011,6 +3157,12 @@ fanout_harness_skills() {
     while IFS= read -r _fs_ent; do
         [ -n "$_fs_ent" ] || continue
         _fs_lc=$(lower_name "$_fs_ent")
+        # A name Claude Code owns in its skills directory: never written
+        if _fanout_skill_reserved "$_fs_ent"; then
+            log_error "Not fanned out: $_fs_ent (a reserved skills directory name: synced and anthropic-skills* belong to Claude Code) -- rename the harness skill"
+            deploy_tracker_record "failed" "$_fs_tool" "$_fs_ent"
+            continue
+        fi
         # Two harness skills whose names differ only in case (possible on a
         # case-sensitive file system) map to one directory here: the first wins
         if in_list "$_fs_lc" "$_fs_owned_lc"; then
@@ -3099,13 +3251,26 @@ fanout_harness_skills() {
             fi
         fi
         log_detail "$_fs_tool: $_fs_item source=${_fs_msrc:-unknown} adopt=${_fs_adopt:-none}"
-        _fs_content=""
-        if ! _fs_content=$(cat "$_fs_sfile"); then
-            log_error "Cannot read harness skill file $(display_path "$_fs_sfile")"
+        # A file with a NUL byte or invalid UTF-8 is copied byte for byte (a
+        # shell variable would corrupt it); text goes through the review menu
+        _fs_lrc=0
+        _fs_content=$(_fanout_is_binary "$_fs_sfile") || _fs_lrc=$?
+        if [ "$_fs_lrc" -ne 0 ] && [ "$_fs_lrc" -ne 1 ]; then
+            log_error "Cannot read harness skill file $(display_path "$_fs_sfile"): ${_fs_content:-perl failed (exit $_fs_lrc)}"
             deploy_tracker_record "failed" "$_fs_tool" "$_fs_item"
             continue
         fi
-        deploy_managed_file "$_fs_content" "$_fs_dfile" "$_fs_tool" "$_fs_item" "$_fs_adopt"
+        if [ "$_fs_lrc" -eq 0 ]; then
+            _fanout_copy_binary "$_fs_sfile" "$_fs_dfile" "$_fs_item"
+        else
+            _fs_content=""
+            if ! _fs_content=$(cat "$_fs_sfile"); then
+                log_error "Cannot read harness skill file $(display_path "$_fs_sfile")"
+                deploy_tracker_record "failed" "$_fs_tool" "$_fs_item"
+                continue
+            fi
+            deploy_managed_file "$_fs_content" "$_fs_dfile" "$_fs_tool" "$_fs_item" "$_fs_adopt"
+        fi
         _fs_res="$MANAGED_FILE_RESULT"
         case "$_fs_res" in
             created|updated|verified|"accept & adopt"|skipped|failed) ;;
@@ -3155,6 +3320,8 @@ fanout_harness_skills() {
         _fs_rm_lc=$(lower_name "$_fs_rm")
         # Deployed this run under a name that differs only in case
         if in_list "$_fs_rm_lc" "$_fs_owned_lc"; then continue; fi
+        # A name Claude Code owns is never removed
+        if _fanout_skill_reserved "$_fs_rm"; then continue; fi
         # The copy in DEST, found case-insensitively; a real directory only
         _fs_rm_path=""
         while IFS= read -r _fs_ent; do
@@ -3171,7 +3338,8 @@ fanout_harness_skills() {
         for _fs_cand in "$_fs_src/$_fs_rm" "$_fs_src/$_fs_rm".bak.*; do
             [ -d "$_fs_cand" ] || continue
             _fs_rc=0
-            fanout_dir_matches "$_fs_rm_path" "$_fs_cand" || _fs_rc=$?
+            # OS junk files (.DS_Store, Thumbs.db, desktop.ini) in the copy do not count
+            _fanout_matches_ignoring_junk "$_fs_rm_path" "$_fs_cand" || _fs_rc=$?
             if [ "$_fs_rc" -eq 0 ]; then
                 _fs_rm_why="same files as $(basename "$_fs_cand")"
                 break
@@ -3200,6 +3368,9 @@ fanout_harness_skills() {
             done
             if ! mkdir -p "$_fs_bak_root"; then
                 log_warn "Cannot create the backup directory $(display_path "$_fs_bak_root")"
+            else
+                # Keep the newest 5 DEST.bak.<UTC> directories (this one included)
+                _fanout_prune_dest_backups "$_fs_dest" 5
             fi
         fi
         _fs_rc=1
