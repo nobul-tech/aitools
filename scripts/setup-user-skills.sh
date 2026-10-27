@@ -7,6 +7,21 @@
 # Deploys to ~/.claude/skills/ and ~/.cursor/skills/.
 # Reverse discovery: detects user-created skills in deploy target and offers
 # to adopt them to the dotprofile repo.
+#
+# Fallback deployer (FD-9, plans/skills-and-rules-fanout.md FO-6): when
+# ~/.aitools/skills exists (deploy-harness has run), the fan-out owns the skills
+# -- setup-user-claude writes ~/.claude/skills (row "claude skills") and
+# setup-user-cursor writes ~/.cursor/skills (row "cursor skills"). This script
+# then deploys nothing, writes neither row, writes OK "skills" "n/a (fanned out
+# from ~/.aitools/skills)" and keeps reverse discovery, which treats every name
+# in ~/.aitools/skills (a directory or a manifest line, any source) and every
+# backup or hidden name as not user-created. A resolver error then skips reverse
+# discovery (its adopt target is the dotprofile): ERROR "skills". Without
+# ~/.aitools/skills it deploys as before (an MDM endpoint run before
+# deploy-harness, or a machine where deploy-harness failed). The check sits in
+# the extracted body, so the generated MDM script (build-deploy) carries it.
+# Platform: macOS/Linux; Windows uses setup-user-skills.ps1 (same rows).
+# Tool data: /tool-registry skill.
 
 # --- BEGIN skills body (extracted by build-deploy) ---
 set -euo pipefail
@@ -35,6 +50,18 @@ esac
 
 [ "$DRY_RUN" = "true" ] && log "[DRY RUN] Preview mode -- no files will be written"
 
+# --- Harness check (FD-9): one writer per skill file ---
+# ~/.aitools/skills exists -> the setup-user-claude / setup-user-cursor fan-out
+# deploys the skills, so this script does not (no second review menu, no second
+# adopt target for one file). In the extracted body: the MDM script has it too.
+SKILLS_HARNESS_DIR="$HOME/.aitools/skills"
+SKILLS_FANNED_OUT=false
+if [ -d "$SKILLS_HARNESS_DIR" ]; then
+    SKILLS_FANNED_OUT=true
+    log "Skills are fanned out from $(display_path "$SKILLS_HARNESS_DIR") by setup-user-claude (claude skills) and setup-user-cursor (cursor skills): not deploying them here"
+    write_summary OK "skills" "n/a (fanned out from ~/.aitools/skills)"
+fi
+
 # --- BEGIN skill discovery (replaced by build-deploy) ---
 
 # --- Resolve paths ---
@@ -55,9 +82,16 @@ USER_REPO_PATH="$AITLIB_USER_REPO_PATH"
 SKILLS_BLOCKED=false
 if [ "$URP_RC" -ne 0 ] && [ "$URP_RC" -ne 1 ]; then
     SKILLS_BLOCKED=true
-    log_error "Dotprofile unresolved (resolver error above) -- skills not deployed, so shared copies cannot replace dotprofile versions"
-    write_summary ERROR "claude skills" "not deployed: dotprofile error"
-    write_summary ERROR "cursor skills" "not deployed: dotprofile error"
+    if [ "$SKILLS_FANNED_OUT" = "true" ]; then
+        # The fan-out deploys; reverse discovery adopts into the dotprofile, so
+        # it cannot run. Reported under "skills": the two fan-out rows are not ours.
+        log_error "Dotprofile unresolved (resolver error above) -- reverse discovery skipped, so no skill can be adopted to the dotprofile"
+        write_summary ERROR "skills" "reverse discovery skipped: dotprofile error"
+    else
+        log_error "Dotprofile unresolved (resolver error above) -- skills not deployed, so shared copies cannot replace dotprofile versions"
+        write_summary ERROR "claude skills" "not deployed: dotprofile error"
+        write_summary ERROR "cursor skills" "not deployed: dotprofile error"
+    fi
 fi
 DOTPROFILE_SKILLS=""
 if [ -n "$USER_REPO_PATH" ] && [ -d "$USER_REPO_PATH/claude/skills" ]; then
@@ -72,6 +106,8 @@ ALL_SKILL_DESTS="$SKILLS_DEST $SKILLS_DEST_CURSOR"
 SKILL_NAMES=""
 if [ "$SKILLS_BLOCKED" = "true" ]; then
     :  # resolver error: nothing is discovered, deployed or offered for adoption
+elif [ "$SKILLS_FANNED_OUT" = "true" ]; then
+    :  # the fan-out deploys: nothing is discovered for deployment here
 elif [ -d "$SKILLS_SRC" ]; then
     for skill_dir in "$SKILLS_SRC"/*/; do
         [ -d "$skill_dir" ] || continue
@@ -81,7 +117,7 @@ elif [ -d "$SKILLS_SRC" ]; then
     done
 fi
 # Add dotprofile skills not already in shared
-if [ -n "$DOTPROFILE_SKILLS" ]; then
+if [ -n "$DOTPROFILE_SKILLS" ] && [ "$SKILLS_FANNED_OUT" != "true" ]; then
     for skill_dir in "$DOTPROFILE_SKILLS"/*/; do
         [ -d "$skill_dir" ] || continue
         skill_name=$(basename "$skill_dir")
@@ -94,7 +130,7 @@ if [ -n "$DOTPROFILE_SKILLS" ]; then
 fi
 SKILL_NAMES="${SKILL_NAMES# }"
 
-if [ -z "$SKILL_NAMES" ] && [ "$SKILLS_BLOCKED" != "true" ]; then
+if [ -z "$SKILL_NAMES" ] && [ "$SKILLS_BLOCKED" != "true" ] && [ "$SKILLS_FANNED_OUT" != "true" ]; then
     log_warn "No skills found in shared/skills/ or dotprofile"
     write_summary WARN "claude skills" "no skills found"
 fi
@@ -192,6 +228,12 @@ reverse_discover_skills() {
         skill_name=$(basename "$skill_dir")
         [ -f "$skill_dir/SKILL.md" ] || continue
 
+        # Fan-out mode: the fan-out's own backup and hidden names, and every
+        # harness skill (HARNESS_SKILL_NAMES), are not user-created
+        if [ "$SKILLS_FANNED_OUT" = "true" ]; then
+            [ "$(skill_name_kind "$skill_name")" = "skill" ] || continue
+            in_list "$(lower_name "$skill_name")" "$HARNESS_SKILL_NAMES" && continue
+        fi
         # Skip if in shared
         [ -d "$SKILLS_SRC/$skill_name" ] && continue
         # Skip if in dotprofile
@@ -230,8 +272,72 @@ reverse_discover_skills() {
     done
 }
 
-if [ "$SKILLS_BLOCKED" != "true" ]; then
+# --- Harness skill names (fan-out mode only) ---
+# Every name in ~/.aitools/skills, as an entry or as a manifest line (any
+# source, retired included), is a harness skill: the fan-out put it in
+# ~/.claude/skills, so it is never offered for adoption. Lower-cased (APFS and
+# NTFS are case-insensitive), one per line, each line ending in a newline
+# (in_list). Returns 1 after log_error + ERROR "skills" when ~/.aitools/skills
+# or its manifest cannot be read: reverse discovery is then skipped, so a
+# harness skill is never mistaken for a user-created one. A manifest with a bad
+# header adds no names (the fan-out reports it); its directory names still count.
+HARNESS_SKILL_NAMES=""
+collect_harness_skill_names() {
+    local dir="$SKILLS_HARNESS_DIR"
+    local manifest="$SKILLS_HARNESS_DIR/.aitools-skills-manifest"
+    local tab entry name out line rc=0
+    tab=$(printf '\t')
+    if [ ! -r "$dir" ] || [ ! -x "$dir" ]; then
+        log_error "Cannot read $(display_path "$dir") -- reverse discovery skipped, so no harness skill is offered for adoption"
+        write_summary ERROR "skills" "reverse discovery skipped: cannot read ~/.aitools/skills"
+        return 1
+    fi
+    for entry in "$dir"/*; do
+        # an empty directory leaves the pattern itself (no such entry)
+        [ -e "$entry" ] || [ -L "$entry" ] || continue
+        name=$(basename "$entry")
+        [ "$(skill_name_kind "$name")" = "skill" ] || continue
+        HARNESS_SKILL_NAMES="$HARNESS_SKILL_NAMES$(lower_name "$name")
+"
+    done
+    if [ -e "$manifest" ] || [ -L "$manifest" ]; then
+        # rc captured: 1 = unreadable (message in out), 2 = caller bug
+        out=$(read_harness_manifest "$manifest" skills 2>&1) || rc=$?
+        if [ "$rc" -ne 0 ]; then
+            log_error "Cannot read the skills manifest $(display_path "$manifest") (exit $rc): $out -- reverse discovery skipped, so no harness skill is offered for adoption"
+            write_summary ERROR "skills" "reverse discovery skipped: cannot read skills manifest"
+            return 1
+        fi
+        if [ "$out" = "header-bad" ]; then
+            log "Skills manifest header not recognised: harness skill names taken from $(display_path "$dir") only"
+            return 0
+        fi
+        while IFS= read -r line; do
+            case "$line" in
+                "rule$tab"*)
+                    name="${line#rule$tab}"
+                    name="${name%%$tab*}"
+                    HARNESS_SKILL_NAMES="$HARNESS_SKILL_NAMES$(lower_name "$name")
+"
+                    ;;
+                "invalid$tab"*)
+                    log_detail "skills manifest: ignored line ${line#invalid$tab}"
+                    ;;
+            esac
+        done <<< "$out"
+    fi
+    return 0
+}
+
+if [ "$SKILLS_BLOCKED" = "true" ]; then
+    :  # resolver error: no adopt target (logged and reported above)
+elif [ "$SKILLS_FANNED_OUT" != "true" ]; then
     reverse_discover_skills "$SKILLS_DEST"
+elif [ -n "$USER_REPO_PATH" ]; then
+    # Without a dotprofile there is no adopt target and nothing to offer
+    if collect_harness_skill_names; then
+        reverse_discover_skills "$SKILLS_DEST"
+    fi
 fi
 
 # --- END skill discovery (replaced by build-deploy) ---

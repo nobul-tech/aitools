@@ -1307,6 +1307,10 @@ deploy_embedded_skill() {
 
 DEPLOY_SKILL_FUNC
 
+    # FD-9 (FO-6): the extracted body's harness check set SKILLS_FANNED_OUT
+    # (and wrote OK "skills" "n/a (fanned out ...)") when ~/.aitools/skills
+    # exists; the fan-out then owns both rows, so the embedded deploy is skipped.
+    echo 'if [ "$SKILLS_FANNED_OUT" != "true" ]; then'
     # Dynamically discover and embed all skills from shared/skills/
     _embedded_skills=""
     echo '_skill_tmp=$(mktemp -d)'
@@ -1352,6 +1356,7 @@ DEPLOY_SKILL_FUNC
     echo 'fi'
     echo ''
     echo 'rm -rf "$_skill_tmp"'
+    echo 'fi  # SKILLS_FANNED_OUT'
     echo ''
 
     # Emit exit footer from source
@@ -1398,6 +1403,9 @@ function Deploy-EmbeddedSkill {
 
 DEPLOY_SKILL_PS1_FUNC
 
+    # FD-9 (FO-6): skip the embedded deploy when the extracted body's harness
+    # check set $skillsFannedOut (~/.aitools/skills exists; same as the .sh)
+    echo 'if (-not $skillsFannedOut) {'
     # Dynamically discover and embed all skills from shared/skills/
     _embedded_skills=""
     for _skill_dir in "$SHARED_DIR/skills"/*/; do
@@ -1445,6 +1453,7 @@ DEPLOY_SKILL_PS1_FUNC
     echo '} else {'
     echo '    Write-Summary "ERROR" "cursor skills" "deploy failed"'
     echo '}'
+    echo '}  # skillsFannedOut'
     echo ''
 
     # Emit exit footer from source (CRLF for PS1)
