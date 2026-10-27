@@ -509,9 +509,9 @@ function Complete-Match($P, $E, [string]$Via) {
 function Resolve-Machine($P, [string]$ConfigId, [string]$ConfigAlias) {
     $script:RmKey = ""; $script:RmAlias = ""; $script:RmVia = "none"; $script:RmOwner = "absent"; $script:RmLegacy = "false"
     $script:RmKind = ""; $script:RmOverrideSource = ""
-    if ((Get-JText $P @("version")) -ne "2" -or (Get-JType $P @("profiles")) -ne "object") {
-        Add-Err "profile.json is not v2 or has no profiles"; return 2
-    }
+    # Two states, two messages (callers tell them apart; PR #98 review m1)
+    if ((Get-JText $P @("version")) -ne "2") { Add-Err "profile.json is not v2"; return 2 }
+    if ((Get-JType $P @("profiles")) -ne "object") { Add-Err "profile.json has no profiles object"; return 2 }
     Import-Entries $P
     $E = $script:Entries
     if ($E.Count -eq 0) { Add-Err "profile.json has no machine profiles"; return 2 }
@@ -1294,9 +1294,8 @@ function Invoke-Migrate {
         $g.state = "refused"; Add-Err "profile from AITOOLS_PROFILE_FILE is a read-only snapshot -- not written"; & $putMig; Complete-Command 3
     }
     $p = $script:PfValue
-    if ((Get-JText $p @("version")) -ne "2" -or (Get-JType $p @("profiles")) -ne "object") {
-        $g.state = "failed"; Add-Err "profile.json is not v2 or has no profiles"; & $putMig; Complete-Command 2
-    }
+    if ((Get-JText $p @("version")) -ne "2") { $g.state = "failed"; Add-Err "profile.json is not v2"; & $putMig; Complete-Command 2 }
+    if ((Get-JType $p @("profiles")) -ne "object") { $g.state = "failed"; Add-Err "profile.json has no profiles object"; & $putMig; Complete-Command 2 }
     Import-Entries $p
     $E = $script:Entries
     # Target: the key each entry ends up with

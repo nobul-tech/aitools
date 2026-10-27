@@ -308,7 +308,20 @@ write_profile "$H/repos/aitools-nobul-jose" <<'JSON'
 JSON
 printf '{ "githubUser": "nobul-jose" }\n' > "$H/.aitools/config.json"
 case_run rm-v1 2 resolve "${M[@]}"
-expect_line '^error\tprofile.json is not v2 or has no profiles'
+expect_line '^error\tprofile.json is not v2$'
+expect_no_line 'has no profiles object'
+# A v2 file without a profiles object has its own message (PR #98 review m1)
+write_profile "$H/repos/aitools-nobul-jose" <<'JSON'
+{ "version": 2, "identity": { "github": "nobul-jose" } }
+JSON
+case_run rm-v2-no-profiles 2 resolve "${M[@]}"
+expect_line '^error\tprofile.json has no profiles object$'
+expect_no_line 'is not v2'
+write_profile "$H/repos/aitools-nobul-jose" <<'JSON'
+{ "version": 2, "identity": { "github": "nobul-jose" }, "profiles": [] }
+JSON
+case_run rm-v2-profiles-array 2 resolve "${M[@]}"
+expect_line '^error\tprofile.json has no profiles object$'
 
 fresh_home rm-profile-file
 CASE_ENV="AITOOLS_PROFILE_FILE=$H/missing.json"
@@ -986,6 +999,17 @@ mig_profile > "$H/snap.json"
 case_fresh mig-snapshot 3 setup_mig_plain migrate
 expect result refused
 CASE_ENV=""
+# Not v2, and v2 without a profiles object: one message each, nothing written (PR #98 m1)
+setup_mig_v1() { rm -rf "$EXC_DIR"; printf '{ "name": "Jose", "machines": [] }\n' | write_profile "$EXC_DIR"; }
+case_fresh mig-v1 2 setup_mig_v1 migrate
+expect result failed
+expect_line '^error\tprofile.json is not v2$'
+setup_mig_noprof() { rm -rf "$EXC_DIR"; printf '{ "version": 2, "identity": { "github": "nobul-jose" } }\n' | write_profile "$EXC_DIR"; }
+case_fresh mig-no-profiles 2 setup_mig_noprof migrate
+expect result failed
+expect_line '^error\tprofile.json has no profiles object$'
+if [ "$(cat "$EXC_PF")" = '{ "version": 2, "identity": { "github": "nobul-jose" } }' ]; then ok "mig-no-profiles: profile.json untouched"
+else bad "mig-no-profiles: profile.json changed"; fi
 
 # --- regressions from the PR #73 review (S3-Profile-Review) --------------------------
 fresh_home rev
