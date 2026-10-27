@@ -2457,16 +2457,19 @@ function Adopt-ManagedFile {
 # ---------------------------------------------------------------------------
 
 $script:dtAdded = 0; $script:dtUpdated = 0; $script:dtVerified = 0
-$script:dtAccepted = 0; $script:dtSkipped = 0; $script:dtPreserved = 0; $script:dtFailed = 0
+$script:dtAccepted = 0; $script:dtSkipped = 0; $script:dtPreserved = 0; $script:dtFailed = 0; $script:dtRemoved = 0
 $script:deployTrackerText = ""
 
 function Initialize-DeployTracker {
     $script:dtAdded = 0; $script:dtUpdated = 0; $script:dtVerified = 0
-    $script:dtAccepted = 0; $script:dtSkipped = 0; $script:dtPreserved = 0; $script:dtFailed = 0
+    $script:dtAccepted = 0; $script:dtSkipped = 0; $script:dtPreserved = 0; $script:dtFailed = 0; $script:dtRemoved = 0
     $script:deployTrackerText = ""
 }
 
 # Record a single file outcome. Increments counter and writes DETAIL summary.
+# "removed": the caller backed up and deleted a deployed file (a fan-out
+# consumer pruning a retired rule). An outcome the tracker does not know is a
+# caller bug: it is logged and counted as failed, never dropped.
 function Record-DeployOutcome {
     param([string]$Outcome, [string]$ToolName, [string]$ItemName)
     switch ($Outcome) {
@@ -2475,8 +2478,14 @@ function Record-DeployOutcome {
         "accept & adopt" { $script:dtAccepted++;  Write-Summary "DETAIL" $ToolName "accept & adopt: $ItemName" }
         "skipped"   { $script:dtSkipped++;   Write-Summary "DETAIL" $ToolName "skipped: $ItemName" }
         "failed"    { $script:dtFailed++;    Write-Summary "DETAIL" $ToolName "failed: $ItemName" }
+        "removed"   { $script:dtRemoved++;   Write-Summary "DETAIL" $ToolName "removed: $ItemName" }
         "verified"  { $script:dtVerified++ }
         "preserved" { $script:dtPreserved++ }
+        default {
+            LogError "Record-DeployOutcome: unknown outcome `"$Outcome`" for $ItemName ($ToolName) -- counted as failed"
+            $script:dtFailed++
+            Write-Summary "DETAIL" $ToolName "failed: $ItemName"
+        }
     }
 }
 
@@ -2488,6 +2497,7 @@ function Write-DeployTrackerSummary {
     if ($script:dtAdded -gt 0)     { $parts += "$($script:dtAdded) added" }
     if ($script:dtUpdated -gt 0)   { $parts += "$($script:dtUpdated) updated" }
     if ($script:dtAccepted -gt 0)  { $parts += "$($script:dtAccepted) accepted" }
+    if ($script:dtRemoved -gt 0)   { $parts += "$($script:dtRemoved) removed" }
     if ($script:dtVerified -gt 0)  { $parts += "$($script:dtVerified) verified" }
     if ($script:dtFailed -gt 0)    { $parts += "$($script:dtFailed) failed" }
     $text = if ($parts.Count -gt 0) { $parts -join ", " } else { "verified" }
@@ -2500,6 +2510,161 @@ function Write-DeployTrackerSummary {
     } else {
         Write-Summary "OK" $ToolName $text
     }
+}
+
+# ---------------------------------------------------------------------------
+# Fan-out helpers, for the consumers of .aitools\rules and .aitools\skills
+# (setup-user-claude, setup-user-cursor; setup-user-cursor still defines its own
+# Read-RulesManifest, which matches this one). deploy-harness writes one
+# manifest per kind (rules: PR #100 contract; skills:
+# plans/skills-and-rules-fanout.md section 3.2): first line $rulesManifestHeader
+# or $skillsManifestHeader, then "<name><TAB><source>" lines, source shared |
+# aitools | dotprofile | retired. Parity: rule_name_kind, skill_name_kind,
+# read_harness_manifest, read_rules_manifest, fanout_text_equal and
+# fanout_dir_matches in aitools-lib.sh (same results, same return codes).
+# lower_name and in_list have no twin here: PowerShell callers use a
+# HashSet with StringComparer.OrdinalIgnoreCase.
+# ---------------------------------------------------------------------------
+$rulesManifestHeader = "# aitools rules manifest v1"
+$skillsManifestHeader = "# aitools skills manifest v1"
+
+# The kind of a file name in .aitools\rules, compared case-insensitively
+# (commander decision 2026-10-22): "hidden" (a dot file, e.g. the rules
+# manifest), "backup" (*.bak.*, the library's backup naming), "rule" (*.md) or
+# "other". Parity: rule_name_kind in aitools-lib.sh.
+function Get-RuleNameKind([string]$Name) {
+    if ($Name.StartsWith(".")) { return "hidden" }
+    if ($Name -like "*.bak.*") { return "backup" }
+    if ($Name -like "*.md") { return "rule" }
+    return "other"
+}
+
+# The kind of an entry name in .aitools\skills, compared case-insensitively:
+# "hidden" (a dot name, e.g. the skills manifest), "backup" (*.bak.*, a
+# backed-up skill directory) or "skill" (anything else). The name only: the
+# caller checks that a "skill" entry is a directory.
+# Parity: skill_name_kind in aitools-lib.sh.
+function Get-SkillNameKind([string]$Name) {
+    if ($Name.StartsWith(".")) { return "hidden" }
+    if ($Name -like "*.bak.*") { return "backup" }
+    return "skill"
+}
+
+# Read the manifest at Path of Kind ("rules" or "skills", case-sensitive).
+# Returns @{ Status = "ok" | "header-bad"; Rules = list of @{ Name; Source }
+# (the same key for both kinds); Invalid = list of ignored lines (tabs shown as
+# <TAB>) }. Status is "header-bad" when the first line (a UTF-8 BOM and a CR
+# before the LF ignored) is not the kind's header. A valid line: a name with no
+# / or \ and no .bak. (rules: a *.md name; skills: not starting with a dot), a
+# source of shared, aitools, dotprofile or retired, and a name not already
+# listed (compared case-insensitively). Throws for an unknown Kind and when the
+# file cannot be read (a directory included); the caller wraps it in a
+# try/catch that logs. Parity: read_harness_manifest in aitools-lib.sh.
+function Read-HarnessManifest {
+    param([string]$Path, [string]$Kind)
+    switch -CaseSensitive ($Kind) {
+        "rules"  { $header = $rulesManifestHeader;  $namePattern = '\A[^/\\]+\.md\z' }
+        "skills" { $header = $skillsManifestHeader; $namePattern = '\A[^/\\.][^/\\]*\z' }
+        default  { throw "Read-HarnessManifest: unknown kind `"$Kind`" (rules or skills)" }
+    }
+    $result = @{ Status = "ok"; Rules = New-Object System.Collections.Generic.List[object]; Invalid = New-Object System.Collections.Generic.List[string] }
+    $text = [System.IO.File]::ReadAllText($Path, [System.Text.UTF8Encoding]::new($false))
+    if ($text.Length -gt 0 -and $text[0] -eq [char]0xFEFF) { $text = $text.Substring(1) }
+    $lines = $text -split "`n"
+    # A CR is a line ending only before an LF (as the .sh reads it): the last
+    # piece, which no LF follows, keeps a trailing CR (and fails validation)
+    $last = $lines.Count - 1
+    $head = if ($last -gt 0) { $lines[0] -replace "`r$", "" } else { $lines[0] }
+    if ($head -cne $header) { $result.Status = "header-bad"; return $result }
+    $seen = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
+    for ($i = 1; $i -lt $lines.Count; $i++) {
+        $l = if ($i -lt $last) { $lines[$i] -replace "`r$", "" } else { $lines[$i] }
+        if ($l -eq "") { continue }
+        $tab = $l.IndexOf("`t")
+        $name = if ($tab -ge 0) { $l.Substring(0, $tab) } else { $l }
+        $src = if ($tab -ge 0) { $l.Substring($tab + 1) } else { "" }
+        if ($name -cnotmatch $namePattern -or $name -clike "*.bak.*" -or
+            $src -cnotmatch '\A(?:shared|aitools|dotprofile|retired)\z' -or -not $seen.Add($name)) {
+            $result.Invalid.Add(($l -replace "`t", "<TAB>"))
+            continue
+        }
+        $result.Rules.Add(@{ Name = $name; Source = $src })
+    }
+    return $result
+}
+
+# Read the rules manifest: Read-HarnessManifest -Kind rules (the result of
+# setup-user-cursor's own Read-RulesManifest). Throws when the file cannot be
+# read. Parity: read_rules_manifest in aitools-lib.sh.
+function Read-RulesManifest([string]$Path) {
+    return Read-HarnessManifest -Path $Path -Kind "rules"
+}
+
+# 0 when files A and B hold the same bytes apart from trailing CR/LF
+# (Deploy-ManagedFile normalizes trailing newlines), 1 when they differ, 2 when
+# one cannot be read (missing, a directory, no permission; logged at detail
+# level). Parity: fanout_text_equal in aitools-lib.sh.
+function Test-FanoutTextEqual([string]$A, [string]$B) {
+    try {
+        # Latin1 maps each byte to one char: a byte comparison, as the .sh does
+        $ta = [System.Text.Encoding]::Latin1.GetString([System.IO.File]::ReadAllBytes($A))
+        $tb = [System.Text.Encoding]::Latin1.GetString([System.IO.File]::ReadAllBytes($B))
+    } catch {
+        LogDetail "Test-FanoutTextEqual: cannot read $A or ${B}: $_"
+        return 2
+    }
+    if (($ta -replace '[\r\n]+\z', '') -ceq ($tb -replace '[\r\n]+\z', '')) { return 0 }
+    return 1
+}
+
+# 0 when Target is a real directory (not a symlink), every regular file under
+# it (recursive; a file whose base name is *.bak.*, compared case-insensitively,
+# is ignored) exists at the same relative path under Candidate and is equal to
+# it as Test-FanoutTextEqual compares, and it holds at least one such file. 1
+# otherwise: Target missing, a file or a symlink; no such file; a file missing
+# or different in Candidate; a symlink (reparse point) anywhere under Target
+# (never followed: what the fan-out did not write is the user's). 2 when an
+# entry cannot be read (2 wins over 1: the whole tree is checked; logged at
+# detail level). Used before pruning a retired skill directory.
+# Parity: fanout_dir_matches in aitools-lib.sh.
+function Test-FanoutDirMatches([string]$Target, [string]$Candidate) {
+    $reparse = [System.IO.FileAttributes]::ReparsePoint
+    if (-not (Test-Path -LiteralPath $Target -PathType Container)) { return 1 }
+    try {
+        $root = [System.IO.DirectoryInfo]::new($Target)
+        if ($root.Attributes -band $reparse) { return 1 }
+    } catch {
+        LogDetail "Test-FanoutDirMatches: cannot read ${Target}: $_"
+        return 2
+    }
+    $n = 0; $bad = $false; $err = $false
+    $stack = New-Object System.Collections.Generic.Stack[string]
+    $stack.Push("")
+    while ($stack.Count -gt 0) {
+        $rel = $stack.Pop()
+        $dir = if ($rel -eq "") { $Target } else { Join-Path $Target $rel }
+        try {
+            $entries = @([System.IO.DirectoryInfo]::new($dir).GetFileSystemInfos())
+        } catch {
+            LogDetail "Test-FanoutDirMatches: cannot list ${dir}: $_"
+            $err = $true
+            continue
+        }
+        foreach ($e in $entries) {
+            $r = if ($rel -eq "") { $e.Name } else { "$rel/$($e.Name)" }
+            if ($e.Attributes -band $reparse) { $bad = $true; continue }
+            if ($e -is [System.IO.DirectoryInfo]) { $stack.Push($r); continue }
+            if ($e.Name -like "*.bak.*") { continue }
+            $n++
+            $cp = Join-Path $Candidate $r
+            if (-not (Test-Path -LiteralPath $cp -PathType Leaf)) { $bad = $true; continue }
+            $eq = Test-FanoutTextEqual -A $e.FullName -B $cp
+            if ($eq -eq 2) { $err = $true } elseif ($eq -ne 0) { $bad = $true }
+        }
+    }
+    if ($err) { return 2 }
+    if ($bad -or $n -eq 0) { return 1 }
+    return 0
 }
 
 # ---------------------------------------------------------------------------

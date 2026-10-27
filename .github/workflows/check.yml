@@ -161,6 +161,12 @@ jobs:
       - name: setup-user-claude dev + MDM tests (macOS /bin/bash 3.2)
         run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/claude-mdm/test-claude-mdm.sh
 
+      - name: Fan-out lib helper tests (bash 5 + pwsh parity)
+        run: bash tests/fanout-lib/test-fanout-lib.sh
+
+      - name: Fan-out lib helper tests (macOS /bin/bash 3.2)
+        run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/fanout-lib/test-fanout-lib.sh --bash-only
+
       - name: Build deploy scripts
         run: |
           echo "::group::Running build-deploy.sh"
@@ -328,6 +334,9 @@ jobs:
 
       - name: setup-user-claude dev + MDM tests (bash + pwsh)
         run: bash tests/claude-mdm/test-claude-mdm.sh
+
+      - name: Fan-out lib helper tests (bash + pwsh parity)
+        run: bash tests/fanout-lib/test-fanout-lib.sh
 
       - name: Build deploy scripts
         run: bash scripts/build-deploy.sh

@@ -2468,16 +2468,19 @@ adopt_managed_file() {
 
 # Reset all deploy tracker counters. Call before a deploy loop.
 _DT_ADDED=0; _DT_UPDATED=0; _DT_VERIFIED=0
-_DT_ACCEPTED=0; _DT_SKIPPED=0; _DT_PRESERVED=0; _DT_FAILED=0
+_DT_ACCEPTED=0; _DT_SKIPPED=0; _DT_PRESERVED=0; _DT_FAILED=0; _DT_REMOVED=0
 DEPLOY_TRACKER_TEXT=""
 
 deploy_tracker_init() {
     _DT_ADDED=0; _DT_UPDATED=0; _DT_VERIFIED=0
-    _DT_ACCEPTED=0; _DT_SKIPPED=0; _DT_PRESERVED=0; _DT_FAILED=0
+    _DT_ACCEPTED=0; _DT_SKIPPED=0; _DT_PRESERVED=0; _DT_FAILED=0; _DT_REMOVED=0
     DEPLOY_TRACKER_TEXT=""
 }
 
 # Record a single file outcome. Increments counter and writes DETAIL summary.
+# "removed": the caller backed up and deleted a deployed file (a fan-out
+# consumer pruning a retired rule). An outcome the tracker does not know is a
+# caller bug: it is logged and counted as failed, never dropped.
 # Args: $1=outcome $2=tool_name $3=item_name
 deploy_tracker_record() {
     local outcome="$1" tool_name="$2" item_name="$3"
@@ -2492,8 +2495,13 @@ deploy_tracker_record() {
                    write_summary DETAIL "$tool_name" "skipped: $item_name" ;;
         failed)    _DT_FAILED=$((_DT_FAILED + 1))
                    write_summary DETAIL "$tool_name" "failed: $item_name" ;;
+        removed)   _DT_REMOVED=$((_DT_REMOVED + 1))
+                   write_summary DETAIL "$tool_name" "removed: $item_name" ;;
         verified)  _DT_VERIFIED=$((_DT_VERIFIED + 1)) ;;
         preserved) _DT_PRESERVED=$((_DT_PRESERVED + 1)) ;;
+        *)         log_error "deploy_tracker_record: unknown outcome \"$outcome\" for $item_name ($tool_name) -- counted as failed"
+                   _DT_FAILED=$((_DT_FAILED + 1))
+                   write_summary DETAIL "$tool_name" "failed: $item_name" ;;
     esac
 }
 
@@ -2507,6 +2515,7 @@ deploy_tracker_summary() {
     if [ "$_DT_ADDED" -gt 0 ];    then parts="$_DT_ADDED added"; fi
     if [ "$_DT_UPDATED" -gt 0 ];  then parts="${parts:+$parts, }$_DT_UPDATED updated"; fi
     if [ "$_DT_ACCEPTED" -gt 0 ]; then parts="${parts:+$parts, }$_DT_ACCEPTED accepted"; fi
+    if [ "$_DT_REMOVED" -gt 0 ];  then parts="${parts:+$parts, }$_DT_REMOVED removed"; fi
     if [ "$_DT_VERIFIED" -gt 0 ]; then parts="${parts:+$parts, }$_DT_VERIFIED verified"; fi
     if [ "$_DT_FAILED" -gt 0 ];   then parts="${parts:+$parts, }$_DT_FAILED failed"; fi
     if [ -z "$parts" ]; then parts="verified"; fi
@@ -2519,6 +2528,197 @@ deploy_tracker_summary() {
     else
         write_summary OK "$tool_name" "$parts"
     fi
+}
+
+# ---------------------------------------------------------------------------
+# Fan-out helpers, for the consumers of ~/.aitools/rules and ~/.aitools/skills
+# (setup-user-claude, setup-user-cursor; setup-user-cursor still defines its own
+# copies of lower_name, in_list and read_rules_manifest, which match these).
+# deploy-harness writes one manifest per kind (rules: PR #100 contract; skills:
+# plans/skills-and-rules-fanout.md section 3.2): first line RULES_MANIFEST_HEADER
+# or SKILLS_MANIFEST_HEADER, then "<name><TAB><source>" lines, source shared |
+# aitools | dotprofile | retired. Parity: Get-RuleNameKind, Get-SkillNameKind,
+# Read-HarnessManifest, Read-RulesManifest, Test-FanoutTextEqual and
+# Test-FanoutDirMatches in aitools-lib.ps1 (same results, same exit codes).
+# ---------------------------------------------------------------------------
+RULES_MANIFEST_HEADER="# aitools rules manifest v1"
+SKILLS_MANIFEST_HEADER="# aitools skills manifest v1"
+
+# Lower-case a name (APFS and NTFS are case-insensitive)
+lower_name() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
+
+# Exit 0 when the line $1 is in the newline-separated list $2 (bash 3.2: no
+# associative arrays)
+in_list() {
+    case "
+$2" in
+        *"
+$1
+"*) return 0 ;;
+    esac
+    return 1
+}
+
+# Print the kind of a file name in ~/.aitools/rules, compared case-insensitively
+# (commander decision 2026-10-22): "hidden" (a dot file, e.g. the rules
+# manifest), "backup" (*.bak.*, the library's backup naming), "rule" (*.md) or
+# "other". Parity: Get-RuleNameKind in aitools-lib.ps1.
+rule_name_kind() {
+    local lc
+    lc=$(lower_name "$1")
+    case "$lc" in
+        .*)      printf 'hidden\n' ;;
+        *.bak.*) printf 'backup\n' ;;
+        *.md)    printf 'rule\n' ;;
+        *)       printf 'other\n' ;;
+    esac
+}
+
+# Print the kind of an entry name in ~/.aitools/skills, compared
+# case-insensitively: "hidden" (a dot name, e.g. the skills manifest), "backup"
+# (*.bak.*, a backed-up skill directory) or "skill" (anything else). The name
+# only: the caller checks that a "skill" entry is a directory.
+# Parity: Get-SkillNameKind in aitools-lib.ps1.
+skill_name_kind() {
+    local lc
+    lc=$(lower_name "$1")
+    case "$lc" in
+        .*)      printf 'hidden\n' ;;
+        *.bak.*) printf 'backup\n' ;;
+        *)       printf 'skill\n' ;;
+    esac
+}
+
+# read_harness_manifest FILE KIND: print the manifest FILE of KIND (rules or
+# skills) as lines "rule<TAB><name><TAB><source>" (the same first word for both
+# kinds) and "invalid<TAB><line, tabs as <TAB>>", or the one line "header-bad"
+# when its first line (a UTF-8 BOM and a CR before the LF ignored) is not the
+# kind's header. A valid line: a name with no / or \ and no .bak. (rules: a *.md
+# name; skills: not starting with a dot), a source of shared, aitools,
+# dotprofile or retired, and a name not already listed (compared
+# case-insensitively). Exit 2 (message on stderr) for an unknown KIND; exit
+# non-zero (message on stderr) when FILE cannot be read or is a directory. The
+# caller captures 2>&1 and checks the exit. Parity: Read-HarnessManifest in
+# aitools-lib.ps1.
+read_harness_manifest() {
+    local header
+    case "${2:-}" in
+        rules)  header="$RULES_MANIFEST_HEADER" ;;
+        skills) header="$SKILLS_MANIFEST_HEADER" ;;
+        *)
+            printf 'read_harness_manifest: unknown kind "%s" (rules or skills)\n' "${2:-}" >&2
+            return 2 ;;
+    esac
+    perl -e '
+        my ($f, $header, $kind) = @ARGV;
+        die "cannot read $f: is a directory\n" if -d $f;
+        open my $fh, "<:raw", $f or die "cannot read $f: $!\n";
+        my $head = <$fh>; $head = "" unless defined $head;
+        $head =~ s/\A\xEF\xBB\xBF//; $head =~ s/\r?\n\z//;
+        if ($head ne $header) { print "header-bad\n"; exit 0 }
+        my $name_re = $kind eq "rules" ? qr/\A[^\/\\]+\.md\z/ : qr/\A[^\/\\.][^\/\\]*\z/;
+        my %seen;
+        while (my $l = <$fh>) {
+            $l =~ s/\r?\n\z//;
+            next if $l eq "";
+            my ($name, $src) = split /\t/, $l, 2;
+            $src = "" unless defined $src;
+            if ($name !~ $name_re || $name =~ /\.bak\./
+                    || $src !~ /\A(?:shared|aitools|dotprofile|retired)\z/ || $seen{lc $name}++) {
+                (my $show = $l) =~ s/\t/<TAB>/g;
+                print "invalid\t$show\n";
+                next;
+            }
+            print "rule\t$name\t$src\n";
+        }
+        close $fh;
+    ' "$1" "$header" "$2"
+}
+
+# read_rules_manifest FILE: read_harness_manifest FILE rules (the output of
+# setup-user-cursor's own read_rules_manifest, byte for byte).
+# Parity: Read-RulesManifest in aitools-lib.ps1.
+read_rules_manifest() {
+    read_harness_manifest "$1" rules
+}
+
+# fanout_text_equal A B: exit 0 when files A and B hold the same bytes apart
+# from trailing CR/LF (deploy_managed_file normalizes trailing newlines), 1 when
+# they differ, 2 when one cannot be read (missing, a directory, no permission;
+# logged at detail level). Parity: Test-FanoutTextEqual in aitools-lib.ps1.
+fanout_text_equal() {
+    local rc=0
+    perl -e '
+        my @t;
+        for my $f (@ARGV) {
+            exit 2 if -d $f;
+            open my $fh, "<:raw", $f or exit 2;
+            local $/; my $c = <$fh>; close $fh;
+            $c = "" unless defined $c; $c =~ s/[\r\n]+\z//; push @t, $c;
+        }
+        exit($t[0] eq $t[1] ? 0 : 1);
+    ' "${1:-}" "${2:-}" || rc=$?
+    if [ "$rc" -eq 2 ]; then
+        log_detail "fanout_text_equal: cannot read ${1:-} or ${2:-}"
+    fi
+    return "$rc"
+}
+
+# fanout_dir_matches TARGET CAND: exit 0 when TARGET is a real directory (not a
+# symlink), every regular file under it (recursive; a file whose base name is
+# *.bak.*, compared case-insensitively, is ignored) exists at the same relative
+# path under CAND and is equal to it as fanout_text_equal compares, and it holds
+# at least one such file. Exit 1 otherwise: TARGET missing, a file or a symlink;
+# no such file; a file missing or different in CAND; a symlink or another
+# non-regular entry anywhere under TARGET (never followed: what the fan-out did
+# not write is the user's). Exit 2 when an entry cannot be read (2 wins over 1:
+# the whole tree is checked). Used before pruning a retired skill directory.
+# Parity: Test-FanoutDirMatches in aitools-lib.ps1.
+fanout_dir_matches() {
+    local rc=0 why=""
+    # perl prints only the reasons for exit 2 (stdout and stderr both captured)
+    why=$(perl -e '
+        my ($t, $c) = @ARGV;
+        exit 1 if -l $t || ! -d $t;
+        my ($n, $bad, $err) = (0, 0, 0);
+        my $norm = sub {
+            my $f = shift;
+            return undef if -d $f;
+            open my $fh, "<:raw", $f or return undef;
+            local $/; my $x = <$fh>; close $fh;
+            $x = "" unless defined $x; $x =~ s/[\r\n]+\z//;
+            return $x;
+        };
+        my @stack = ("");
+        while (@stack) {
+            my $rel = pop @stack;
+            my $dir = $rel eq "" ? $t : "$t/$rel";
+            my $dh;
+            unless (opendir $dh, $dir) { print STDERR "cannot list $dir: $!\n"; $err = 1; next }
+            my @names = grep { $_ ne "." && $_ ne ".." } readdir $dh;
+            closedir $dh;
+            for my $e (@names) {
+                my $r = $rel eq "" ? $e : "$rel/$e";
+                my $p = "$t/$r";
+                if (-l $p) { $bad = 1; next }
+                if (-d _) { push @stack, $r; next }
+                if (! -f _) { $bad = 1; next }
+                next if lc($e) =~ /\.bak\./;
+                $n++;
+                my $cp = "$c/$r";
+                if (! -e $cp || -d $cp) { $bad = 1; next }
+                my ($x, $y) = ($norm->($p), $norm->($cp));
+                if (!defined $x || !defined $y) { print STDERR "cannot read $p or $cp\n"; $err = 1; next }
+                $bad = 1 if $x ne $y;
+            }
+        }
+        exit 2 if $err;
+        exit(($bad || $n == 0) ? 1 : 0);
+    ' "${1:-}" "${2:-}" 2>&1) || rc=$?
+    if [ -n "$why" ]; then
+        log_detail "fanout_dir_matches: $why"
+    fi
+    return "$rc"
 }
 
 # ---------------------------------------------------------------------------
