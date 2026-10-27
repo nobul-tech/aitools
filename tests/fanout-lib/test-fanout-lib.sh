@@ -137,8 +137,44 @@ fi
 skill "$D/linkdir/T"; skill "$D/linkdir/C"
 if $SYMLINKS; then ln -s "$D/linkdir/C/sub" "$D/linkdir/T/other"; fi
 
+# FIFO fixtures (a FIFO under TARGET, and one in CAND at a TARGET file's path):
+# both must give 1 without reading (reading a FIFO blocks)
+FIFOS=true
+skill "$D/fifo/T"; skill "$D/fifo/C"; printf 'p\n' > "$D/fifo/C/pipe"
+skill "$D/candfifo/T"; skill "$D/candfifo/C"; printf 'p\n' > "$D/candfifo/T/p.txt"
+if ! command -v mkfifo >/dev/null 2>&1 || ! mkfifo "$D/fifo/T/pipe" "$D/candfifo/C/p.txt"; then
+    FIFOS=false
+fi
+
+# backup_dir fixtures, one copy per shell (each run backs them up): plain;
+# a name with [ ] * ? next to 6 old backups and decoys a glob would match
+# (another directory's backups, a non-stamp suffix); no top-level *.md; missing
+SPECIAL=true
+for tag in sh ps; do
+    B="$F/bd/$tag"
+    mkdir -p "$B/plain/rules" "$B/nomd/d" "$B/missing" "$B/unread/d"
+    printf 'a\n' > "$B/plain/rules/a.md"
+    printf 'x\n' > "$B/nomd/d/x.txt"
+    printf 'a\n' > "$B/unread/d/a.md"
+    if mkdir -p "$B/special/r[1]*?"; then
+        printf 'a\n' > "$B/special/r[1]*?/a.md"
+        for d in 1 2 3 4 5 6; do mkdir -p "$B/special/r[1]*?.bak.2020-01-0${d}T000000Z"; done
+        mkdir -p "$B/special/r1zz.bak.2020-01-01T000000Z" "$B/special/r[1]*?.bak.foo" \
+            "$B/special/r[1]*?.bak.2020-01-01T000000Z.bak.2020-01-02T000000Z" \
+            "$B/special/r[1]*?x.bak.2020-01-07T000000Z"
+    else
+        SPECIAL=false   # a file system that refuses * ? in names (Windows)
+    fi
+done
+
 # Unreadable fixtures (skipped when chmod 000 still leaves them readable)
 UNREAD=true
+skill "$D/unread2/T"; skill "$D/unread2/C"
+printf 'a\n' > "$D/unread2/T/a.txt"; printf 'a\n' > "$D/unread2/C/a.txt"
+printf 'b\n' > "$D/unread2/T/b.txt"; printf 'b\n' > "$D/unread2/C/b.txt"
+chmod 000 "$D/unread2/T/a.txt" "$D/unread2/T/b.txt"
+skill "$D/noexec/T"; skill "$D/noexec/C"; chmod 644 "$D/noexec/T/sub"
+chmod 000 "$F/bd/sh/unread/d" "$F/bd/ps/unread/d"
 printf '%s\n' "$RH" > "$F/r-unread"; chmod 000 "$F/r-unread"
 printf 'a\n' > "$F/t/unread"; chmod 000 "$F/t/unread"
 skill "$D/unreadfile/T"; skill "$D/unreadfile/C"; chmod 000 "$D/unreadfile/T/sub/x.txt"
@@ -162,6 +198,8 @@ printf 't-blank\tDETAIL|t|failed: x.md ;; ERROR|t|1 failed ;; text=1 failed ;; e
 printf 't-mix\tDETAIL|t|added: a.md ;; DETAIL|t|removed: b.md ;; DETAIL|t|failed: d.md ;; ERROR|t|1 failed ;; text=1 added, 1 removed, 1 verified, 1 failed ;; errors=1\ttracker\tadded:a.md,removed:b.md,verified:c.md,bogus:d.md,preserved:e.md\n'
 printf 't-order\tDETAIL|t|accept & adopt: a.md ;; DETAIL|t|removed: b.md ;; DETAIL|t|updated: d.md ;; DETAIL|t|added: e.md ;; OK|t|1 added, 1 updated, 1 accepted, 1 removed, 1 verified ;; text=1 added, 1 updated, 1 accepted, 1 removed, 1 verified ;; errors=0\ttracker\taccept & adopt:a.md,removed:b.md,verified:c.md,updated:d.md,created:e.md\n'
 printf 't-skip\tDETAIL|t|removed: a.md ;; DETAIL|t|skipped: b.md ;; WARN|t|1 skipped (user review) ;; text=1 removed ;; errors=0\ttracker\tremoved:a.md,skipped:b.md\n'
+# outcomes are matched case-sensitively in both shells
+printf 't-case\tDETAIL|t|failed: x.md ;; DETAIL|t|failed: y.md ;; DETAIL|t|failed: z.md ;; ERROR|t|3 failed ;; text=3 failed ;; errors=3\ttracker\tRemoved:x.md,Added:y.md,CREATED:z.md\n'
 # name kinds
 for spec in "a.md rule skill" "A.MD rule skill" ".hidden.md hidden hidden" ".aitools-skills-manifest hidden hidden" \
             "x.md.bak.2026-10-22T010203Z backup backup" "X.MD.BAK.1 backup backup" "odd.bak.2026.md backup backup" \
@@ -191,6 +229,13 @@ printf 'm-s-bomcrlf\trule^my-skill^shared\tmanifest\ts-bomcrlf\tskills\n'
 printf 'm-s-rulesfile\t%s\tmanifest\tr-ok\tskills\n' 'header-bad'
 printf 'm-kind-caps\tfail\tmanifest\tr-ok\tRules\n'
 printf 'm-kind-bogus\tfail\tmanifest\tr-ok\tbogus\n'
+# read_harness_manifest exit codes (bash only: PowerShell throws): 0 read,
+# 1 missing / unreadable / directory, 2 unknown KIND
+printf 'mrc-ok\trc=0\tsh_mrc\tr-ok\trules\n'
+printf 'mrc-headerbad\trc=0\tsh_mrc\tr-headerbad\trules\n'
+printf 'mrc-missing\trc=1\tsh_mrc\tr-missing\trules\n'
+printf 'mrc-dir\trc=1\tsh_mrc\tr-dir\trules\n'
+printf 'mrc-kind\trc=2\tsh_mrc\tr-ok\tRules\n'
 # read_rules_manifest = setup-user-cursor's copy (output, stderr and exit code)
 for m in r-ok r-headerbad r-skillshead r-headeronly r-invalid r-bom r-crlf r-nolf r-crnolf r-empty r-missing s-ok; do
     printf 'rr-%s\tsame\trr\t%s\n' "$m" "$m"
@@ -205,6 +250,9 @@ printf 'te-bytes\trc=0\tteq\tt/bin1\tt/bin2\n'
 printf 'te-missing\trc=2\tteq\tt/a-lf\tt/nope\n'
 printf 'te-missing1\trc=2\tteq\tt/nope\tt/a-lf\n'
 printf 'te-dir\trc=2\tteq\tt/dir\tt/a-lf\n'
+printf 'te-emptyarg\trc=2\tteq\t-\tt/a-lf\n'
+# perl itself fails (a stub perl first on PATH): rc 2 and a detail line (bash only)
+printf 'te-perlfail\trc=2\tsh_teqperl\tt/a-lf\tt/b\n'
 # directory match
 printf 'dm-match\trc=0\tdmatch\td/match/T\td/match/C\n'
 printf 'dm-extra\trc=1\tdmatch\td/extra/T\td/extra/C\n'
@@ -220,6 +268,21 @@ printf 'dm-candmissing\trc=1\tdmatch\td/candmissing/T\td/candmissing/C\n'
 printf 'dm-canddir\trc=1\tdmatch\td/canddir/T\td/canddir/C\n'
 printf 'dm-targetfile\trc=1\tdmatch\td/targetfile/T\td/targetfile/C\n'
 printf 'dm-targetmissing\trc=1\tdmatch\td/targetmissing/T\td/targetmissing/C\n'
+printf 'dm-emptytarget\trc=1\tdmatch\t-\td/match/C\n'
+printf 'dm-emptycand\trc=1\tdmatch\td/match/T\t-\n'
+if $FIFOS; then
+    printf 'dm-fifo\trc=1\tdmatch\td/fifo/T\td/fifo/C\n'
+    printf 'dm-candfifo\trc=1\tdmatch\td/candfifo/T\td/candfifo/C\n'
+fi
+# backup_dir / Backup-Dir ("@" is the shell's own fixture copy); <TS> is this run's stamp
+printf 'bd-plain\tok=true reason=- path=rules.bak.<TS> copied=yes siblings=rules,rules.bak.<TS>\tbdir\tbd/@/plain/rules\n'
+printf 'bd-nomd\tok=false reason=no top-level *.md path=- copied=no siblings=d\tbdir\tbd/@/nomd/d\n'
+printf 'bd-missing\tok=false reason=no directory path=- copied=no siblings=(none)\tbdir\tbd/@/missing/nope\n'
+if $SPECIAL; then
+    printf 'bd-special\t%s\tbdir\t%s\n' \
+        'ok=true reason=- path=r[1]*?.bak.<TS> copied=yes siblings=r1zz.bak.2020-01-01T000000Z,r[1]*?,r[1]*?.bak.2020-01-01T000000Z.bak.2020-01-02T000000Z,r[1]*?.bak.2020-01-03T000000Z,r[1]*?.bak.2020-01-04T000000Z,r[1]*?.bak.2020-01-05T000000Z,r[1]*?.bak.2020-01-06T000000Z,r[1]*?.bak.<TS>,r[1]*?.bak.foo,r[1]*?x.bak.2020-01-07T000000Z' \
+        'bd/@/special/r[1]*?'
+fi
 if $SYMLINKS; then
     printf 'dm-linktarget\trc=1\tdmatch\td/linktarget/T\td/linktarget/C\n'
     printf 'dm-linkinside\trc=1\tdmatch\td/linkinside/T\td/linkinside/C\n'
@@ -233,10 +296,21 @@ if $UNREAD; then
     printf 'dm-unreadsub\trc=2\tdmatch\td/unreadsub/T\td/unreadsub/C\n'
     printf 'dm-unreadcand\trc=2\tdmatch\td/unreadcand/T\td/unreadcand/C\n'
     printf 'dm-unreaddiffer\trc=2\tdmatch\td/unreaddiffer/T\td/unreaddiffer/C\n'
+    printf 'dm-unread2\trc=2\tdmatch\td/unread2/T\td/unread2/C\n'
+    printf 'dm-noexec\trc=2\tdmatch\td/noexec/T\td/noexec/C\n'
+    printf 'mrc-unread\trc=1\tsh_mrc\tr-unread\trules\n'
+    printf 'bd-unread\tok=false reason=cannot list path=- copied=no siblings=d\tbdir\tbd/@/unread/d\n'
 fi
 } > "$CASES"
 if ! $SYMLINKS; then SKIP=$((SKIP + 3)); printf '  skip symlink cases (ln -s does not make symlinks here)\n'; fi
-if ! $UNREAD; then SKIP=$((SKIP + 7)); printf '  skip unreadable cases (chmod 000 leaves files readable: root or Windows)\n'; fi
+if ! $FIFOS; then SKIP=$((SKIP + 2)); printf '  skip FIFO cases (no mkfifo)\n'; fi
+if ! $SPECIAL; then SKIP=$((SKIP + 1)); printf '  skip backup_dir special-name case (* ? not allowed in names here)\n'; fi
+if ! $UNREAD; then SKIP=$((SKIP + 11)); printf '  skip unreadable cases (chmod 000 leaves files readable: root or Windows)\n'; fi
+
+# A stub perl that fails, for te-perlfail
+mkdir -p "$WORK/badperl"
+printf '#!/bin/sh\necho "stub perl: boom" >&2\nexit 9\n' > "$WORK/badperl/perl"
+chmod +x "$WORK/badperl/perl"
 
 # setup-user-cursor's own manifest readers, renamed, for the rr cases
 CUR_SH="$WORK/cursor-copy.sh"
@@ -261,6 +335,11 @@ source "$CUR_SH"
 TAB=$(printf '\t')
 : > "$OUT"
 emit() { printf '%s\t%s\n' "$1" "$2" >> "$OUT"; }
+fx() {  # fixture path: "-" is the empty string, "@" this shell's copy (sh)
+    if [ "$1" = "-" ]; then return 0; fi
+    local p="$F/$1"
+    printf '%s' "${p//@/sh}"
+}
 norm() {  # manifest reader stdout -> one line (rule lines first)
     perl -e 'my (@r, @i); while (<STDIN>) { s/\n\z//; s/\t/^/g; s/\r/<CR>/g; if (/\Arule\^/) { push @r, $_ } else { push @i, $_ } }
              my @a = (@r, @i); print @a ? join(" ;; ", @a) : "(none)"'
@@ -289,11 +368,28 @@ while IFS="$TAB" read -r id want call a1 a2 <&3; do
                 emit "$id" "fail"
             fi ;;
         rr)
+            # same output and message; exit: both 0 or both non-zero (the lib's
+            # read failure is exit 1, the cursor copy's perl die exits errno)
             o1=$(read_rules_manifest "$F/$a1" 2>&1); r1=$?
             o2=$(cursor_read_rules_manifest "$F/$a1" 2>&1); r2=$?
-            if [ "$o1" = "$o2" ] && [ "$r1" = "$r2" ]; then emit "$id" "same"; else emit "$id" "differ (lib rc=$r1, cursor rc=$r2)"; fi ;;
-        teq) rc=0; fanout_text_equal "$F/$a1" "$F/$a2" || rc=$?; emit "$id" "rc=$rc" ;;
-        dmatch) rc=0; fanout_dir_matches "$F/$a1" "$F/$a2" || rc=$?; emit "$id" "rc=$rc" ;;
+            z1=ok; [ "$r1" -eq 0 ] || z1=fail
+            z2=ok; [ "$r2" -eq 0 ] || z2=fail
+            if [ "$o1" = "$o2" ] && [ "$z1" = "$z2" ]; then emit "$id" "same"; else emit "$id" "differ (lib rc=$r1, cursor rc=$r2)"; fi ;;
+        sh_mrc) rc=0; read_harness_manifest "$(fx "$a1")" "$a2" > /dev/null 2>&1 || rc=$?; emit "$id" "rc=$rc" ;;
+        teq) rc=0; fanout_text_equal "$(fx "$a1")" "$(fx "$a2")" || rc=$?; emit "$id" "rc=$rc" ;;
+        sh_teqperl) rc=0; PATH="$WORK/badperl:$PATH" fanout_text_equal "$(fx "$a1")" "$(fx "$a2")" || rc=$?; emit "$id" "rc=$rc" ;;
+        dmatch) rc=0; fanout_dir_matches "$(fx "$a1")" "$(fx "$a2")" || rc=$?; emit "$id" "rc=$rc" ;;
+        bdir)
+            p=$(fx "$a1")
+            backup_dir "$p"
+            copied=no
+            if [ "$BACKUP_DIR_OK" = true ] && [ -f "$BACKUP_DIR_PATH/a.md" ]; then copied=yes; fi
+            bp="-"
+            if [ -n "$BACKUP_DIR_PATH" ]; then bp=$(basename "$BACKUP_DIR_PATH"); fi
+            sib=$(perl -e 'opendir my $dh, $ARGV[0] or do { print "cannot list"; exit 0 };
+                           my @n = sort grep { $_ ne "." && $_ ne ".." } readdir $dh; print @n ? join(",", @n) : "(none)"' "$(dirname "$p")")
+            res="ok=$BACKUP_DIR_OK reason=${BACKUP_DIR_REASON:--} path=$bp copied=$copied siblings=$sib"
+            emit "$id" "$(printf '%s' "$res" | perl -pe 's/(?!2020)[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{6}Z/<TS>/g')" ;;
         *) emit "$id" "unknown call $call" ;;
     esac
 done 3< "$CASES"
@@ -316,6 +412,10 @@ function Format-Manifest($r) {
     if ($a.Count -eq 0) { return "(none)" }
     return ($a -join " ;; ")
 }
+function Resolve-Fx([string]$Rel) {  # "-" is the empty string, "@" this shell's copy (ps)
+    if ($Rel -eq "-") { return "" }
+    return (Join-Path $F $Rel).Replace("@", "ps")
+}
 function Invoke-Reader([scriptblock]$Read) {
     try { return Format-Manifest (& $Read) } catch { LogDetail "reader threw: $_"; return "fail" }
 }
@@ -324,6 +424,7 @@ foreach ($line in [IO.File]::ReadAllLines($env:CASES)) {
     $id = $fields[0]; $call = $fields[2]
     $a1 = if ($fields.Count -gt 3) { $fields[3] } else { "" }
     $a2 = if ($fields.Count -gt 4) { $fields[4] } else { "" }
+    if ($call.StartsWith("sh_")) { continue }   # bash-only case
     switch -CaseSensitive ($call) {
         "tracker" {
             $env:AITOOLS_SUMMARY_FILE = Join-Path $env:WORK "sum-ps-$id"
@@ -347,8 +448,25 @@ foreach ($line in [IO.File]::ReadAllLines($env:CASES)) {
             $y = Invoke-Reader { Read-CursorRulesManifest $p }
             $res = if ($x -ceq $y) { "same" } else { "differ (lib $x, cursor $y)" }
         }
-        "teq" { $res = "rc=" + (Test-FanoutTextEqual (Join-Path $F $a1) (Join-Path $F $a2)) }
-        "dmatch" { $res = "rc=" + (Test-FanoutDirMatches (Join-Path $F $a1) (Join-Path $F $a2)) }
+        "teq" { $res = "rc=" + (Test-FanoutTextEqual (Resolve-Fx $a1) (Resolve-Fx $a2)) }
+        "dmatch" { $res = "rc=" + (Test-FanoutDirMatches (Resolve-Fx $a1) (Resolve-Fx $a2)) }
+        "bdir" {
+            $p = Resolve-Fx $a1
+            Backup-Dir -DirPath $p
+            $copied = if ($script:BackupDirOk -and (Test-Path -LiteralPath (Join-Path $script:BackupDirPath "a.md") -PathType Leaf)) { "yes" } else { "no" }
+            $bp = if ($script:BackupDirPath) { [IO.Path]::GetFileName($script:BackupDirPath) } else { "-" }
+            try {
+                [string[]]$sib = @([IO.Directory]::GetFileSystemEntries([IO.Path]::GetDirectoryName($p)) | ForEach-Object { [IO.Path]::GetFileName($_) })
+                [Array]::Sort($sib, [StringComparer]::Ordinal)
+                $sibText = if ($sib.Count -gt 0) { $sib -join "," } else { "(none)" }
+            } catch {
+                LogDetail "driver: cannot list the parent of ${p}: $_"
+                $sibText = "cannot list"
+            }
+            $reason = if ($script:BackupDirReason) { $script:BackupDirReason } else { "-" }
+            $ok = if ($script:BackupDirOk) { "true" } else { "false" }
+            $res = "ok=$ok reason=$reason path=$bp copied=$copied siblings=$sibText" -replace '(?!2020)[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{6}Z', '<TS>'
+        }
         default { $res = "unknown call $call" }
     }
     $results.Add("$id`t$res")
@@ -391,7 +509,9 @@ result_of() {
 }
 
 while IFS="$TAB" read -r id want call rest <&3; do
-    for s in $SHELLS; do
+    case_shells="$SHELLS"
+    case "$call" in sh_*) case_shells="sh" ;; esac   # bash-only cases: no PowerShell run, no parity
+    for s in $case_shells; do
         got=$(result_of "$s" "$id") || got="(no result)"
         if [ "$got" = "$want" ]; then
             ok "$s $id"
@@ -400,7 +520,7 @@ while IFS="$TAB" read -r id want call rest <&3; do
             printf '      want: %s\n      got:  %s\n' "$want" "$got"
         fi
     done
-    if $USE_PS; then
+    if $USE_PS && [ "$case_shells" != "sh" ]; then
         a=$(result_of sh "$id") || a="(none sh)"
         b=$(result_of ps "$id") || b="(none ps)"
         if [ "$a" = "$b" ]; then ok "parity $id"; else bad "parity $id (sh: $a | ps: $b)"; fi
@@ -415,6 +535,48 @@ for s in $SHELLS; do
         bad "$s unknown outcome logged"
     fi
 done
+
+# Every deploy.log line keeps the [timestamp] [script] [level] format (a
+# multi-line reason is one log line per entry)
+for s in $SHELLS; do
+    badlines=$(perl -ne 'print unless /\A\[\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ\] \[test-fanout-lib\] \[(?:info|ok|warn|error|detail)\] /' "$WORK/logs-$s/deploy.log")
+    if [ -z "$badlines" ]; then
+        ok "$s deploy.log: every line has the log line format"
+    else
+        bad "$s deploy.log: lines without the log line format"
+        printf '%s\n' "$badlines" | head -n 5 | perl -pe 's/^/      | /'
+    fi
+done
+
+# logged SHELL TEXT DESC: a detail line containing TEXT in that shell's log
+logged() {
+    if grep -F -- "[detail] $2" "$WORK/logs-$1/deploy.log" > /dev/null; then
+        ok "$1 detail log: $3"
+    else
+        bad "$1 detail log: $3 (no line with: $2)"
+    fi
+}
+logged sh "fanout_text_equal: cannot read $F/t/nope: " "fanout_text_equal names the missing file and why"
+logged sh "fanout_text_equal: cannot read $F/t/dir: is a directory" "fanout_text_equal: a directory"
+logged sh "fanout_text_equal: perl failed (exit 9): stub perl: boom" "fanout_text_equal: perl failure"
+logged sh "backup_dir: $F/bd/sh/nomd/d: not backed up (no top-level *.md file)" "backup_dir skip rule"
+logged sh "backup_dir: $F/bd/sh/missing/nope: not backed up (no directory)" "backup_dir: no directory"
+if $USE_PS; then
+    logged ps "Test-FanoutTextEqual: cannot read $F/t/nope: " "Test-FanoutTextEqual names the missing file and why"
+    logged ps "Test-FanoutTextEqual: cannot read $F/t/dir: is a directory" "Test-FanoutTextEqual: a directory"
+    logged ps "Backup-Dir: $F/bd/ps/nomd/d: not backed up (no top-level *.md file)" "Backup-Dir skip rule"
+    logged ps "Backup-Dir: $F/bd/ps/missing/nope: not backed up (no directory)" "Backup-Dir: no directory"
+fi
+if $UNREAD; then
+    logged sh "fanout_dir_matches: cannot read $D/unread2/T/a.txt: " "fanout_dir_matches: first unreadable entry"
+    logged sh "fanout_dir_matches: cannot read $D/unread2/T/b.txt: " "fanout_dir_matches: second unreadable entry (own line)"
+    logged sh "fanout_dir_matches: cannot read $D/noexec/T/sub/" "fanout_dir_matches: lstat failure"
+    if $USE_PS; then
+        logged ps "Test-FanoutDirMatches: cannot read $D/unread2/T/a.txt: " "Test-FanoutDirMatches: first unreadable entry"
+        logged ps "Test-FanoutDirMatches: cannot read $D/unread2/T/b.txt: " "Test-FanoutDirMatches: second unreadable entry (own line)"
+        logged ps "Test-FanoutDirMatches: cannot list $D/noexec/T/sub: " "Test-FanoutDirMatches: directory without search permission"
+    fi
+fi
 
 printf '\n%d passed, %d failed, %d skipped\n' "$PASS" "$FAIL" "$SKIP"
 [ "$FAIL" -eq 0 ]
