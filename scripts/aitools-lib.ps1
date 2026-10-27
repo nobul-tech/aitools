@@ -2619,7 +2619,9 @@ function Write-DeployTrackerSummary {
     if ($script:dtRemoved -gt 0)   { $parts += "$($script:dtRemoved) removed" }
     if ($script:dtVerified -gt 0)  { $parts += "$($script:dtVerified) verified" }
     if ($script:dtFailed -gt 0)    { $parts += "$($script:dtFailed) failed" }
-    $text = if ($parts.Count -gt 0) { $parts -join ", " } else { "verified" }
+    # Every count 0 (nothing recorded, or only skipped/preserved items): not
+    # "verified", which would claim a check that never ran
+    $text = if ($parts.Count -gt 0) { $parts -join ", " } else { "n/a (nothing to deploy)" }
     $script:deployTrackerText = $text
 
     if ($script:dtFailed -gt 0) {
