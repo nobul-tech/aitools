@@ -13,10 +13,9 @@ NOT rewriting the source documents. **Audience**: Every agent writing or
 deploying a rule, in any repo.
 
 Version 1.0, 2026-10-26. Written by S3-RulesSpec for Session Commander
-10cf255a-c. A version, not a draft (D-DEL5, in progress). The intent above is
-the mission's intent as given in the launch prompt; like every intent
-statement it is protected (`@.claude/rules/sources-of-truth.md` "Intent
-statements").
+10cf255a-c. A version, not a draft (D-DEL5, in progress). The intent above was
+approved by the commander on 2026-10-26; like every intent statement it is
+protected (`@.claude/rules/sources-of-truth.md` "Intent statements").
 
 Every claim cites the file it comes from. "Today" means `origin/main` at
 `072c744` (2026-10-26); "planned" means a plan or an open PR, named. Where

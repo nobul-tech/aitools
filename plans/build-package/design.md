@@ -567,3 +567,16 @@ registered yet when App B runs right after a new user's first sign-in; whether
 whether Claude Code web can download a GitHub release asset of a repo that is
 not attached; perl core modules on minimal Ubuntu images; how HOME and SHELL
 are set under Jamf, Intune and `sudo -H`.
+
+## 17. Commander decisions on P-1..P-7 (2026-10-26, session 10cf255a-c; binding)
+
+| # | Decision (commander's words in quotes) | Effect |
+|---|---|---|
+| P-1 | "yes" | `build-package.sh` is bash-only; apply the cross-platform.md exemption rows ("package launchers" category) |
+| P-2 | "yes, when running in cursor-cloud and only then" | `AITOOLS_ENVIRONMENT=cursor-cloud` is set by the Cursor cloud install command only; never inferred elsewhere; confirm once on a real Cursor cloud run |
+| P-3 | "all for now, eventually we will support per user tools/mcp servers etc via profile.json" | For v1 the package ships all hooks, skills and MCP servers (no fleet/harness split yet); a neutral fleet CLAUDE.md template is still needed so no `{{PROFILE_NAME}}` placeholder or personal identity reaches a fleet user. Future: per-user tools/MCP servers selected through profile.json (design later) |
+| P-4 | "can it run on all platforms or does it have to be windows? if all platforms, then /tool-adopt and /tool-eval as required for all platforms" | Microsoft's IntuneWinAppUtil (Win32 Content Prep Tool) is published as a Windows executable; the executing mission verifies with `/tool-eval` whether an official macOS/Linux build exists. If any platform: evaluate and adopt on every platform it supports; if Windows only: evaluate and adopt for Windows as a build-host tool |
+| P-5 | "homebrew still runs on intel macs, we should /tool-eval and /tool-adopt brew and manage it as part of aitools. thats a decision" | DECISION: Homebrew becomes a managed aitools tool via `/tool-eval` + `/tool-adopt` (macOS Intel and Apple Silicon; Linux as Homebrew on Linux if the evaluation supports it; Windows has no native Homebrew, only via WSL). Intel Macs are NOT dropped: the package path installs Homebrew by the method the evaluation picks |
+| P-6 | "aitools user init can be run multiple times. ... aitools user init should check if one exists and pull it down if it does, create one otherwise. the location of the repo in github should always be <gh-user-name>/aitools-<gh-user-name>" | `aitools user init` is re-runnable; on a machine without the dotprofile it checks GitHub for `<gh-user>/aitools-<gh-user>` (e.g. `nobul-jose/aitools-nobul-jose`), clones it if it exists, creates it otherwise. Verify today's Path 1/2/3 against this and fix the gap |
+| P-7 | "yes" | Change "I work on both Windows 11 and macOS" in the dotprofile CLAUDE.md template to the five supported platforms/environments |
+| .deb | "use info@nobul.tech" | Maintainer field: `info@nobul.tech` |

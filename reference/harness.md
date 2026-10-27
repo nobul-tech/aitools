@@ -183,4 +183,5 @@ writer, `scripts/setup-user-config.sh` / `.ps1`.
 - Provenance framework: `@reference/framework-provenance.md`
 - Deployed harness: `@scripts/deploy-harness.sh` / `.ps1`;
   managed-file model: `@reference/managed-file-deployment.md`
+- Rules, their scopes and the rules fan-out: `@reference/rules.md`
 - Skills: `/frameworks`, `/glossary`, `/audit`, `/intent-audit`, `/incident`
