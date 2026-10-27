@@ -77,31 +77,35 @@ gitc() { git -c user.name=test -c user.email=test@example.invalid -c commit.gpgs
 
 # --- Temp aitools checkout: a copy of scripts/ (adopt targets of shared and
 # aitools rules land here, never in this repo) ---
+# A fixture step that fails ends the run (exit 1) instead of showing up later
+# as failed or vacuous checks (audit A N8)
+fixture_fail() { printf 'FATAL fixture setup failed: %s\n' "$1"; exit 1; }
 A="$TMP_ROOT/aitools"
-mkdir -p "$A/scripts" "$A/shared/rules" "$A/.claude/rules"
+mkdir -p "$A/scripts" "$A/shared/rules" "$A/.claude/rules" || fixture_fail "mkdir $A"
 for f in setup-user-claude.sh aitools-lib.sh aitools-lib.ps1 aitools-profile.sh aitools-profile.ps1 aitools-json.pl aitools-json.ps1; do
-    cp "$ROOT/scripts/$f" "$A/scripts/$f"
+    cp "$ROOT/scripts/$f" "$A/scripts/$f" || fixture_fail "cp scripts/$f"
 done
-perl -pe 's/-and -not \$IsWindows\)/-and \$false)/' "$ROOT/scripts/setup-user-claude.ps1" > "$A/scripts/setup-user-claude.ps1"
-cp "$ROOT/shared/claude-shared.md" "$A/shared/claude-shared.md"
+perl -pe 's/-and -not \$IsWindows\)/-and \$false)/' "$ROOT/scripts/setup-user-claude.ps1" > "$A/scripts/setup-user-claude.ps1" || fixture_fail "OS-guard copy of setup-user-claude.ps1"
+grep -q -- '-and \$false)' "$A/scripts/setup-user-claude.ps1" || fixture_fail "OS guard not patched in setup-user-claude.ps1"
+cp "$ROOT/shared/claude-shared.md" "$A/shared/claude-shared.md" || fixture_fail "cp shared/claude-shared.md"
 # A package payload (git archive) has the same files but no .git: adopt into it
 # is never offered (BUILD-PKG BP-6). The fan-out counts only a git checkout.
 PAYLOAD="$TMP_ROOT/payload"
-mkdir -p "$PAYLOAD"
-cp -R "$A/scripts" "$A/shared" "$A/.claude" "$PAYLOAD/"
-git -C "$A" init -q
+mkdir -p "$PAYLOAD" || fixture_fail "mkdir $PAYLOAD"
+cp -R "$A/scripts" "$A/shared" "$A/.claude" "$PAYLOAD/" || fixture_fail "payload copy"
+git -C "$A" init -q || fixture_fail "git init $A"
 REPO="$A"   # the checkout run_one / run_pty run setup-user-claude from
 
 # --- Fixture dotprofile (a git repo, no remote: an adopt commits, the push fails) ---
 DP="$TMP_ROOT/aitools-tess"
-mkdir -p "$DP/claude/rules"
-printf '# Prefs for {{PROFILE_NAME}}\n\n## Code Style\n\n- keep it simple\n' > "$DP/claude/CLAUDE.md"
-printf '{"version":2,"identity":{"git":{"name":"Tess","email":"t@example.com"}},"profiles":{"m1":{"name":"Tess","company":""}}}\n' > "$DP/profile.json"
-printf '## dot d\n' > "$DP/claude/rules/d.md"
-printf '## only in the dotprofile\n' > "$DP/claude/rules/only-dp.md"
-git -C "$DP" init -q
-gitc -C "$DP" add -A
-gitc -C "$DP" commit -q -m fixture
+mkdir -p "$DP/claude/rules" || fixture_fail "mkdir $DP"
+printf '# Prefs for {{PROFILE_NAME}}\n\n## Code Style\n\n- keep it simple\n' > "$DP/claude/CLAUDE.md" || fixture_fail "dotprofile CLAUDE.md"
+printf '{"version":2,"identity":{"git":{"name":"Tess","email":"t@example.com"}},"profiles":{"m1":{"name":"Tess","company":""}}}\n' > "$DP/profile.json" || fixture_fail "dotprofile profile.json"
+printf '## dot d\n' > "$DP/claude/rules/d.md" || fixture_fail "dotprofile d.md"
+printf '## only in the dotprofile\n' > "$DP/claude/rules/only-dp.md" || fixture_fail "dotprofile only-dp.md"
+git -C "$DP" init -q || fixture_fail "git init $DP"
+gitc -C "$DP" add -A || fixture_fail "git add (dotprofile)"
+gitc -C "$DP" commit -q -m fixture || fixture_fail "git commit (dotprofile)"
 
 # --- Case helpers ---
 # H: the HOME of the run being seeded (set by case_run for each language)
@@ -363,8 +367,10 @@ seed_adoptmap() {
 case_run adoptmap seed_adoptmap
 for lang in sh ps; do
     if [ "$lang" = ps ] && [ "$HAVE_PWSH" != "true" ]; then continue; fi
-    check "adopt map $lang: shared -> aitools shared/rules" "logged 'claude rules: s.md source=shared adopt=' $lang && logged '/shared/rules/s.md' $lang"
-    check "adopt map $lang: aitools -> aitools .claude/rules" "logged 'claude rules: p.md source=aitools adopt=' $lang && logged '/.claude/rules/p.md' $lang"
+    # The full adopt path, as one log line (a split match could pass on
+    # "adopt=none" plus the deploy destination's ".../.claude/rules/p.md")
+    check "adopt map $lang: shared -> aitools shared/rules" "logged 'claude rules: s.md source=shared adopt=$A/shared/rules/s.md' $lang"
+    check "adopt map $lang: aitools -> aitools .claude/rules" "logged 'claude rules: p.md source=aitools adopt=$A/.claude/rules/p.md' $lang"
     check "adopt map $lang: dotprofile -> dotprofile claude/rules" "logged 'claude rules: d.md source=dotprofile adopt=$DP/claude/rules/d.md' $lang"
     check "adopt map $lang: no repo file -> none" "logged 'claude rules: z.md source=dotprofile adopt=none' $lang"
 done
@@ -454,6 +460,17 @@ seed_nocreate() { harness a.md 'rule a'; mkdir -p "$H/.claude"; printf 'not a di
 case_run nocreate seed_nocreate
 check "cannot create rules dir: ERROR row, exit 1, file untouched" "[ \"\$(rc)\" = 1 ] && [ \"\$(nondetail)\" = 'ERROR|claude rules|cannot create rules dir' ] && grep -qx 'not a dir' '$C/sh/.claude/rules' && grep -q 'FAILED with' '$C/sh.out'"
 parity nocreate
+# The dry run previews that error (audit B N3): same row, exit 1, nothing written
+case_run nocreate-dry seed_nocreate --dry-run -DryRun
+check "cannot create rules dir, dry run: same ERROR row, exit 1, file untouched" "[ \"\$(rc)\" = 1 ] && [ \"\$(nondetail)\" = 'ERROR|claude rules|cannot create rules dir' ] && grep -qx 'not a dir' '$C/sh/.claude/rules' && grep -q 'not a directory (dry run)' '$C/sh.out'"
+parity nocreate-dry
+
+# A directory at the manifest path is unreadable, not absent (audit B N5): the
+# fan-out runs, the manifest is a failed item, the final row is ERROR
+seed_manifest_dir() { harness a.md 'rule a'; mkdir -p "$H/.aitools/rules/.aitools-rules-manifest"; }
+case_run manifest-dir seed_manifest_dir
+check "manifest is a directory: unreadable, rules fanned out, final row ERROR, exit 1" "[ \"\$(rc)\" = 1 ] && [ -f '$(R)/a.md' ] && row 'ERROR|claude rules|cannot read rules manifest' && row 'DETAIL|claude rules|failed: .aitools-rules-manifest' && [ \"\$(nondetail)\" = 'ERROR|claude rules|1 failed' ] && ! grep -q 'No rules manifest' '$C/sh.out'"
+parity manifest-dir
 
 printf '\n%d passed, %d failed, %d skipped\n' "$PASS" "$FAIL" "$SKIP"
 [ "$FAIL" -eq 0 ]

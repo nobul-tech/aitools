@@ -2486,8 +2486,13 @@ esac
 # Post-build: Fix file permissions and line endings
 # ============================================================
 # 1. Ensure all .sh files are executable on disk (Write tool creates 100644)
-chmod +x "$DEPLOY_DIR"/*.sh 2>/dev/null || true
-blog_ok "Set +x on all .sh files in deploy/"
+#    2>/dev/null: chmod's own message is replaced by the blog_warn below, which
+#    the result check raises when any .sh could not be made executable.
+if chmod +x "$DEPLOY_DIR"/*.sh 2>/dev/null; then
+    blog_ok "Set +x on all .sh files in deploy/"
+else
+    blog_warn "Could not set +x on every .sh file in deploy/ -- a generated script may not be executable"
+fi
 
 # 2. Convert deploy/*.ps1 to CRLF (.gitattributes requires eol=crlf)
 #    build-deploy.sh writes LF; without this, git sees them as modified.
@@ -2497,7 +2502,12 @@ blog_ok "Converted deploy/*.ps1 to CRLF"
 
 # 3. Generated script size limits (HARNESS Q4; final sizes, after CRLF). Intune:
 #    Windows PowerShell scripts "must be less than 200 KB (ASCII)", macOS shell
-#    scripts "must be less than 1 MB" (learn.microsoft.com, read 2026-10-22).
+#    scripts "must be less than 1 MB" (learn.microsoft.com, read 2026-10-22;
+#    re-read 2026-10-26, quotes in .aitools/channel/handoffs/
+#    2026-10-21_10cf255a-c-missions/S3-MdmPkg/S3-MdmPkg-Intune-notes.md).
+#    The limits below read KB/MB as 10^3/10^6 bytes (200000 / 1000000): the
+#    docs do not say decimal or binary; the decimal reading is the stricter one
+#    and is our choice, not Microsoft's wording.
 #    The payload is a data file and does not count. Every generated .ps1/.sh is
 #    measured; over the limit is a WARN, repeated at the end of the build, and
 #    does not fail it (RECONCILE FX-12, decision D3: the MDM per-script delivery
@@ -2509,6 +2519,7 @@ for _sz_name in deploy-harness.ps1 deploy-harness.sh; do
     fi
 done
 SIZE_WARNINGS=""
+SIZE_OVER=0
 for _sz_f in "$DEPLOY_DIR"/*.ps1 "$DEPLOY_DIR"/*.sh; do
     [ -f "$_sz_f" ] || continue
     _sz_name="${_sz_f##*/}"
@@ -2522,8 +2533,13 @@ for _sz_f in "$DEPLOY_DIR"/*.ps1 "$DEPLOY_DIR"/*.sh; do
     fi
     _sz=$((_sz + 0))
     if [ "$_sz" -ge "$_sz_max" ]; then
-        _sz_msg="deploy/$_sz_name is $_sz bytes, over the Intune script limit ($_sz_max)"
+        case "$_sz_name" in
+            deploy-harness.*) _sz_hint="move content to deploy-harness.payload" ;;
+            *)                _sz_hint="see FX-35 (inlined lib)" ;;
+        esac
+        _sz_msg="deploy/$_sz_name is $_sz bytes, over the Intune script limit ($_sz_max) -- $_sz_hint"
         blog_warn "$_sz_msg"
+        SIZE_OVER=$((SIZE_OVER + 1))
         SIZE_WARNINGS="$SIZE_WARNINGS$_sz_msg
 "
     else
@@ -2552,9 +2568,10 @@ DEPLOY_DIR="$DEPLOY_DIR_FINAL"
 
 blog_ok "Build complete: $GENERATED scripts generated in deploy/"
 ls -la "$DEPLOY_DIR/"
-blog "Scripts are self-contained and ready for MDM deployment"
-if [ -n "$SIZE_WARNINGS" ]; then
-    blog_warn "Generated scripts over the Intune script limits (WARN only, the build does not fail):"
+if [ "$SIZE_OVER" -eq 0 ]; then
+    blog "Scripts are self-contained and ready for MDM deployment"
+else
+    blog_warn "$SIZE_OVER generated script(s) over the Intune script limit (WARN only, the build does not fail):"
     printf '%s' "$SIZE_WARNINGS" | while IFS= read -r _sz_msg; do
         if [ -n "$_sz_msg" ]; then
             blog_warn "  $_sz_msg"
