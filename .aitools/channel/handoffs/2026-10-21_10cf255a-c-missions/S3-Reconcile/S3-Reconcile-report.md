@@ -1,6 +1,8 @@
 # S3-Reconcile report (mission RECONCILE, 2026-10-26)
 
-From S3-Reconcile to Session Commander 10cf255a-c. Plan: `plans/fan-plan-reconciliation.md` v1.1 (v1.0 c1358b9). Mission folder: this directory.
+From S3-Reconcile to Session Commander 10cf255a-c. Plan: `plans/fan-plan-reconciliation.md` v1.2 (v1.0 c1358b9, v1.1 072c744). Mission folder: this directory.
+
+**v1.2 changes (commander decisions relayed after 23:01Z):** Q4 answered (all project rules and skills to user-scope Claude Code; no variant). No incident filings: R13 keeps only ledger closing (now 19: + #86, #94; #33 stays open) and R13-pre; every unfiled marker is a fix item in **R15 = `S3-Reconcile-Fix-backlog.md`**: 76 items FX-1..FX-76 (6 high), 34 code batches F1-F34 and 12 docs batches DX1-DX12, ~145 verbatim OLD/NEW blocks applying on origin/main 9861ff7, the three high FAN-PLAN items drafted and tested (post-push step 7 rebuilding the real dotprofile; pre-commit `--fix`/githook rebuild + stage; bash Cursor fan-out never prompting). New finding FX-7: post-push step 23 FAILs on main today (comment filter in check-script-compliance.sh never matches after `grep -n`; spot-checked, 6 sites). 21 further decisions (D1-D21) join the question message as Q16. `reference/rules.md` (60e7fd7) is cited, not written. Test scripts the batches cite were copied from scratch into `S3-Reconcile-Fix-drafts/{checks,code}/tests/` and `S3-Reconcile-Code-drafts/tests/`. The ledger table below (item 7) is superseded by this paragraph.
 
 ## Summary (5 lines)
 
@@ -42,6 +44,7 @@ Also: my own common brief listed "Cursor user-level only" as part of a binding d
 | S3-Reconcile-Code | code facts, tested drafts | S3-Reconcile-Code-findings.md, S3-Reconcile-Code-drafts/ | Read the drafts' format and apply.pl; reviewer re-applied every draft to its base (all clean; E3a not on #116) |
 | S3-Reconcile-Ledger | incident ledger sync | S3-Reconcile-Ledger-findings.md | Reviewer confirmed max id 145, the 25 close/update ids open, #60 merged 845a935 |
 | S3-Reconcile-Review | independent review of v1.0 (no access to my reasoning) | S3-Reconcile-Review-verdict.md | APPROVE WITH CHANGES, 13 required — all applied in v1.1; I spot-checked RC-7 (`.mdc` :23 clause on #106) |
+| S3-Reconcile-Fix (+ 3 level-3 sub-delegates Code, Checks, Docs) | markers -> fix batches (v1.2) | S3-Reconcile-Fix-backlog.md, -Code/-Checks/-Docs-items.md, S3-Reconcile-Fix-drafts/ | Spot-checked FX-7 (`git grep` shows the 6 `grep -v '^\s*#'` sites after `grep -n`); it spot-checked its sub-delegates (#171, #172, #175, #190, M-1). v1.2's R15 section was not independently reviewed |
 | S3-Reconcile-Barrier | simulated a fresh SC on section 7, R1, R2a, R6 | S3-Reconcile-Barrier-results.md | PASS WITH FIXES, 13 fixes — all applied in v1.1 (R1 retargeted to the S3-M3Lead plan + a 5-column row) |
 
 v1.1 was not re-reviewed by a fresh reviewer (the changes are the reviewers' own fixes). Not done: Windows anything; the relay drafts against #115/#116 tests; reading all of reference/*.md myself (delegates read the subsets they cite). `S3-Reconcile-Code-edits/` (untracked) is a duplicate of `S3-Reconcile-Code-drafts/` and was not committed.

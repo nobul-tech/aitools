@@ -1,0 +1,54 @@
+FX-NEW-1 (medium; found by S3-Reconcile-Fix while testing FX-1): bash
+check-script-compliance.sh filters comments with `grep -n ... | grep -v '^\s*#'`.
+`-n` prefixes "NNN:", so the comment filter never matches, at all six sites
+(steps 3, 6, 7, 11, 12 twice). Visible today in step 12: a comment naming
+write_summary / Write-Summary counts as an invalid category, so on origin/main
+post-push step 23 FAILs with "2 invalid: setup-user-config.sh(1)
+setup-user-config.ps1(1)" (the "# --- 3. One ACTION ... write_summary" comment;
+throwaway-clone run 2026-10-26). The PowerShell twin tests each line without a
+prefix and is correct. Fix: match the comment after the "NNN:" prefix (steps 3
+and 11 need the line numbers, so -n stays). Excluding comments only removes
+matches, so no check can newly fail.
+
+@@@FILE scripts/check-script-compliance.sh step 3 comment filter
+@@@OLD
+    exit_lines=$(grep -n 'exit 1' "$f" 2>/dev/null | grep -v '^\s*#' | grep -v 'esac' || true)
+@@@NEW
+    # grep -n prefixes "NNN:"; the comment filter matches after it.
+    exit_lines=$(grep -n 'exit 1' "$f" 2>/dev/null | grep -vE '^[0-9]+:[[:space:]]*#' | grep -v 'esac' || true)
+@@@END
+
+@@@FILE scripts/check-script-compliance.sh step 6 comment filter
+@@@OLD
+    raw_echos=$(grep -n '^\s*echo ' "$f" 2>/dev/null | grep -v '^\s*#' | grep -v 'echo ""' || true)
+@@@NEW
+    raw_echos=$(grep -n '^\s*echo ' "$f" 2>/dev/null | grep -vE '^[0-9]+:[[:space:]]*#' | grep -v 'echo ""' || true)
+@@@END
+
+@@@FILE scripts/check-script-compliance.sh step 7 comment filter
+@@@OLD
+    unsafe=$(grep -n 'grep' "$f" 2>/dev/null | grep -v '^\s*#' | grep -v '|| true' | grep -v 'if ' | grep -v 'command -v' | grep -v '&>/dev/null' || true)
+@@@NEW
+    unsafe=$(grep -n 'grep' "$f" 2>/dev/null | grep -vE '^[0-9]+:[[:space:]]*#' | grep -v '|| true' | grep -v 'if ' | grep -v 'command -v' | grep -v '&>/dev/null' || true)
+@@@END
+
+@@@FILE scripts/check-script-compliance.sh step 11 comment filter
+@@@OLD
+    sc_lines=$(grep -n 'ErrorAction SilentlyContinue' "$f" 2>/dev/null | grep -v '^\s*#' || true)
+@@@NEW
+    sc_lines=$(grep -n 'ErrorAction SilentlyContinue' "$f" 2>/dev/null | grep -vE '^[0-9]+:[[:space:]]*#' || true)
+@@@END
+
+@@@FILE scripts/check-script-compliance.sh step 12 comment filter (sh scripts)
+@@@OLD
+    bad_cats=$(grep -n 'write_summary' "$f" 2>/dev/null | grep -v '^\s*#' | grep -vE "write_summary (${valid_cats}) " || true)
+@@@NEW
+    bad_cats=$(grep -n 'write_summary' "$f" 2>/dev/null | grep -vE '^[0-9]+:[[:space:]]*#' | grep -vE "write_summary (${valid_cats}) " || true)
+@@@END
+
+@@@FILE scripts/check-script-compliance.sh step 12 comment filter (ps1 scripts)
+@@@OLD
+    bad_cats=$(grep -n 'Write-Summary' "$f" 2>/dev/null | grep -v '^\s*#' | grep -vE "Write-Summary \"(${valid_cats})\"" || true)
+@@@NEW
+    bad_cats=$(grep -n 'Write-Summary' "$f" 2>/dev/null | grep -vE '^[0-9]+:[[:space:]]*#' | grep -vE "Write-Summary \"(${valid_cats})\"" || true)
+@@@END

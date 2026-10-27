@@ -1,6 +1,6 @@
 # Plan: reconcile code, docs and decisions in the deployment area (fan-out, ANSWER-1A/1B, parity, abort, step 7, incident ledger)
 
-**Version:** v1.1, 2026-10-26 (v1.0 c1358b9; v1.1 applies the independent review's 13 required changes and the barrier test's 13 fixes). **Author:** S3-Reconcile (orchestrator, level 1, delegated by Session Commander 10cf255a-c; commander Jose). **Status:** executable. Nothing here is implemented yet.
+**Version:** v1.2, 2026-10-26 (v1.0 c1358b9; v1.1 072c744 applied the independent review's 13 required changes and the barrier test's 13 fixes; v1.2 applies the commander decisions relayed after 23:01Z — Q4 answered, no incident filings, markers become fix batches R15 — and the state after MERGE-ALL's first merges). **Author:** S3-Reconcile (orchestrator, level 1, delegated by Session Commander 10cf255a-c; commander Jose). **Status:** executable. Nothing here is implemented yet.
 
 **Intent**: **Purpose**: Give the next executing Session Commander a plan it can run without asking anyone, which resolves every pending reconciliation item between the code, the docs and the commander's recorded decisions in the deployment area, starting with: should `setup-user-claude` be updated, or the docs, or both, and which files change. **Scope**: items 1-8 of mission RECONCILE (section 2), the commander decisions they rest on (section 3), the batches that change docs and code (section 6), their order against open PRs and running missions (section 5), and the open questions only the commander can answer (section 4). NOT executing the plan. NOT the setup-user-claude fan-out refactor itself (FAN-PLAN's plan). NOT merging the open PRs, the dotprofile `deploy/` rebuild, the #102 incident apply, D-DEL5 or the v0.74.0 release (mission MERGE-ALL). NOT re-litigating recorded decisions. **Audience**: the executing Session Commander and its delegates; the commander, who answers section 4.
 
@@ -21,8 +21,8 @@ branches of #100/#110/#111 until they merge, the S3-H2-MDM drafts only on
 #111's, the S3-H2-DraftsM3b row 8 draft only on #105's; read them with
 `git -C /Users/new-jose/repos/aitools show origin/<branch>:<path>` (branches:
 #100 `feature/harness-rules-manifest`, #110 `feature/harness-cursor-user-rules`,
-#111 `feature/harness-mdm-followups`, #105 `docs/m3-approved-intents`, #97
-`docs/m3-lead-plan`). FAN-PLAN's plan is on main as
+#111 `feature/harness-mdm-followups`, #97 `docs/m3-lead-plan`; #105's draft is on
+main since 92bdcc1). FAN-PLAN's plan is on main as
 `plans/rules-fanout-claude.md` (landed 3a5f260, during v1.1); its report and
 review are in `.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-FanPlan/`
 (`S3-FanPlan-report.md`, `S3-FanPlan-Review-verdict.md`; check
@@ -39,8 +39,8 @@ that wrote them).
 4. **Parity (item 4):** the commander killed the parity mandate (March 2026) and since then asks for specific twins ("1d"); remove the leftover mandate, keep and correct the twins that exist (R7, Q9).
 5. **Abort (item 5):** fix the profile-mirror menu text (false today); fix the #106 PS1 duplicate-row parity bug; a non-harness abort as WARN needs the commander's yes (R8, Q6); redraft #105's row 8 relay Intent (R8d).
 6. **Step 7 (item 6):** no doc still describes the old trigger (verified); the open problems are the false AnsA Q1 text (R4) and that every PR branch changing a deploy/ input FAILs step 7 by construction even after the rebuild (R11, Q5). The rebuild is MERGE-ALL's (A4).
-7. **Incident ledger (item 7):** after MERGE-ALL applies #146-#170: close 17, update 8, file 47 new (#171-#217, provisional) in id order (R13).
-8. **Other disagreements (item 8):** 15 more false or stale statements and 4 code deviations, batched in R12 or filed in R13.
+7. **Incident ledger (item 7):** no new filings (commander, 2026-10-26: markers become fixes). After MERGE-ALL applies #146-#170: close 17 and update 8 already-filed incidents (R13). Every unfiled marker (the 47 drafted by RC/Ledger, this plan's section 8, FAN-PLAN's, MdmPkg, AnsA, AnsB, AbortDocs, HARNESS-2, M3-FINISH) is a fix item in R15 (`RC/S3-Reconcile-Fix-backlog.md`).
+8. **Other disagreements (item 8):** 15 more false or stale statements (R12) and the code deviations (R15).
 
 ---
 
@@ -54,8 +54,8 @@ that wrote them).
 | 4 | .mdc parity | Remove the mandate; correct existing twins | docs | `.cursor/rules/cursor-rule-parity.mdc` (delete), `reference/cursor-practices.md`, `.cursor/rules/documentation-standards.mdc`, `.cursor/rules/config-file-safety.mdc` | R7a, R7b | G-P, Q9 |
 | 5 | Abort follow-ups | Menu text; PS1 relay parity; WARN row gated; row 8 Intent | both | `scripts/aitools-lib.sh/.ps1`, `.claude/rules/interactive-menus.md` + `.mdc`; gated: runners, relay, tests, docs | R8a1, R8a2, R8b, R8c, R8d | R8c: Q6; G-P for docs/intent |
 | 6 | Step 7 always runs | AnsA Q1 rewritten (R4); PR-branch FAIL gated | both | `scripts/check-pre-push.sh/.ps1`, `reference/pre-push-checklist.md` | R4, R11 | Q5 |
-| 7 | Incident ledger | R13-pre amendments; L0 close/update; L1-L5 new | data | `registries/incidents.json` (via `/incident`) | R13-pre, R13 | G-P, Q13 |
-| 8 | Other | R12 docs; code deviations filed in R13 | both | see R12 | R12 | G-P |
+| 7 | Incident ledger | R13-pre amendments; L0 close/update only; markers become fixes | data + fixes | `registries/incidents.json` (via `/incident`); R15 files | R13-pre, R13, R15 | G-P, Q13 |
+| 8 | Other | R12 docs; code deviations fixed in R15 | both | see R12, R15 | R12, R15 | G-P |
 
 ---
 
@@ -65,6 +65,7 @@ Verbatim; session 10cf255a-c unless stated; uuids in RC/S3-Reconcile-Trans-findi
 
 | When (UTC) | Words | What it settles here |
 |---|---|---|
+| 2026-10-26, after 23:01Z (relayed to S3-Reconcile by Session Commander 10cf255a-c; verbatim words in that session) | FAN-PLAN Q1/Q13: "ALL project-scope rules AND skills are deployed to user-scope Claude Code"; duplicates removed later by the commander; FAN-PLAN Q2-Q12 = suggested answers; "Incidents: do NOT file them" — every in-scope INCIDENT marker becomes a FIX item in this plan; spec for project rules at user scope = `reference/rules.md` (SC's delegate) | Q4 answered; R13 keeps only ledger closing + #102; R15 fix batches; R2/R3/R14 cite `reference/rules.md` once on main |
 | 2026-10-26T22:59:58Z (MERGE-ALL A2) | "User rule + skill; review after (Recommended)" — option text: "Protected files: written as a version and committed; you review the commit/PR diff instead of a pre-write draft." | Gate G-P (section 4 Q1): once MERGE-ALL lands review-after in `.claude/rules/sources-of-truth.md`, this plan's protected edits ship as versions and are reviewed after |
 | 2026-10-26T22:59:58Z / 23:01:36Z (MERGE-ALL A1, A4, A5) | "merge commits, mission merges, in the correct order, and checks after each step"; dotprofile deploy/: "do a backup of the deploy and then do a rm -rf if necessary (the mission, not me the commander)"; "Same, and the mission tags" | MERGE-ALL merges the open PRs, rebuilds the dotprofile deploy/, applies #102, tags v0.74.0. This plan waits for them |
 | 2026-10-26T22:42:03Z (b277b82b) | "Every pending item (Recommended)"; FAN-PLAN: "Launch now, consume it" | RECONCILE's scope |
@@ -90,17 +91,18 @@ The executing commander sends these first (section 7 step 3). Batches gated by a
 - **Q1. Protected-file gate (G-P).** MERGE-ALL A2 makes protected files "review after", but until MERGE-ALL commits it to `.claude/rules/sources-of-truth.md` the rule still says pre-write review. G-P is open when both hold: `git -C /Users/new-jose/repos/aitools grep -c -i -E "review[- ]after|reviewed after" origin/main -- .claude/rules/sources-of-truth.md` >= 1 and `git -C /Users/new-jose/repos/aitools grep -c "Wait for approval" origin/main -- .claude/rules/sources-of-truth.md` = 0. *Suggested:* wait for that; or answer "apply now under A2" to open G-P at once (then every protected batch ships as a version with a "Review after" PR section).
 - **Q2. Fan-out docs now, or wait for FAN-PLAN's code?** *Suggested:* now (R2/R3), describing today with "until it fans out" wording; your 22:17:19Z principle is "update docs on whatever current state is", and FAN-PLAN needs #106, #100 and its own review first.
 - **Q3. Cursor gets user-level rules only (#110)?** Your "3)" did not say it; the SC read it in. *Suggested:* yes.
-- **Q4. Reverse D5?** On 2026-10-23 you answered "put aitools rules in the user space of claude code" to "User-level only, or keep everything?". FAN-PLAN implements that (D5). Measured since: 17 of the 26 aitools `.claude/rules` have no `paths:`, about 79 KB (~20k tokens) loaded in every session in every repo; inside aitools each loads twice; "(this repo)" rules such as `sources-of-truth.md` and `script-standards.md` would govern every repo (FAN-PLAN plan section 8 R1). *Suggested:* keep D5 unless that cost changes your mind; if you reverse it, FAN-PLAN takes its costed "skip source aitools" variant (+15 lines per language). No answer = D5.
+- **Q4. (ANSWERED 2026-10-26, relayed by Session Commander 10cf255a-c.)** FAN-PLAN Q1/Q13: all project-scope rules **and skills** are deployed to user-scope Claude Code (the 26 aitools `.claude/rules` and `.claude/skills` included); the commander removes the duplicate project-level rules later himself. No "skip aitools source" variant. The spec for project rules at user scope is `reference/rules.md` (written by the Session Commander's delegate; cite it once on main, do not write it). FAN-PLAN's other questions Q2-Q12 take its report's suggested answers. Not to be asked again.
 - **Q5. Step 7 on PR branches.** Step 7 builds from the pushed branch and compares with the dotprofile `deploy/` built from main, so a branch that changes any deploy/ input (16 of the 19 PRs at plan time) FAILs even right after the rebuild (RC/Code 2.4). *Suggested:* R11: still always runs; a difference caused by the push's own deploy/ inputs becomes WARN with the rebuild instruction; FAIL stays for build/smoke failure and for staleness on a push that changes no input.
 - **Q6. A user abort in a non-harness script: ERROR or WARN?** Three conventions exist: #106 runners ERROR `script failed (exit 2)`, #115/#116 relay ERROR `aborted (exit 2)`, #106 deploy-harness WARN `aborted by user`. #106's T-Q3 note in `plans/tool-support-and-machine-profile.md` records ERROR as kept under your "lets keep functionality"; the row text itself was never asked. *Suggested:* WARN `aborted by user` everywhere, run continues, only deploy-harness stops (R8c).
 - **Q7. AnsB C: should `aitools user init --alias X` claim a profile no machine owns without asking?** Today it does, with or without a terminal, against the row-3 text you approved on 2026-10-23 (you asked to re-state row 3 on 2026-10-26; it was restated and not answered). *Suggested:* no: confirm on a terminal, ERROR + ACTION without one (R9); a brand-new alias stays prompt-free.
 - **Q8. AnsB H: the entry points' `aiToolingRepoPath` rename writes config.json without backup or validation.** *Suggested:* move it into `setup-user-config` (backup + validation), entry points read only (R10). Deleting it alone would make the writer ERROR on a legacy machine.
 - **Q9. Parity.** Your March words killed the mandate; since then you asked for specific twins ("Re-mirror after the managed-file spec rewrite lands", "1d) approved"). *Suggested:* no standing mandate (delete `cursor-rule-parity.mdc` and the parity sections); an existing `.mdc` is corrected when it is false, and re-mirrored when you ask for it; a new twin only on request.
 - **Q10. Timing against v0.74.0.** *Suggested:* docs batches (R1-R7, R12) land before the tag, and MERGE-ALL's RELEASE docs scrub takes this plan as its input for these files (no double edits); code batches R8-R11 may follow in v0.74.1 if they would hold the tag.
-- **Q11. Pre-commit step 3 `--fix` and `scripts/githooks/pre-commit` `git add` the frozen `aitools/deploy/`** after building into the dotprofile (RC/Docs D-15). *Suggested:* drop the `git add deploy/`; step 3 WARNs naming the dotprofile rebuild; step 7 is the real check. File it (R13), fix in a follow-up PR.
-- **Q12. deploy-harness adopts into the dotprofile are not committed and pushed (N-Q2).** *Suggested:* code fix in a follow-up PR; file it (R13).
-- **Q13. Incident batches L0-L5.** *Suggested:* one review page, review after (A2), then the PRs in id order.
+- **Q11. Pre-commit step 3 `--fix` and `scripts/githooks/pre-commit` `git add` the frozen `aitools/deploy/`** after building into the dotprofile (RC/Docs D-15). *Suggested:* drop the `git add deploy/`; step 3 WARNs naming the dotprofile rebuild; step 7 is the real check (fix item in R15).
+- **Q12. deploy-harness adopts into the dotprofile are not committed and pushed (N-Q2).** *Suggested:* code fix (fix item in R15; N-Q2 is binding, so this is a confirmation, not a choice).
+- **Q13. Ledger L0 (close 17, update 8).** *Suggested:* one PR, review after (A2).
 - **Q14. Channel exception beyond CLAUDE.md.** The SC's 22:17Z question proposed it "for all four places"; your answer named CLAUDE.md. *Suggested:* MERGE-ALL's D-DEL5 batch (it edits `delegation.md` and the `/delegate` skill) adds one line to `~/.claude/rules/delegation.md` and the `/handoff` skill; R12 adds a pointer in `aitools-workspace.md`.
+- **Q16. Fix-batch decisions D1-D21** (RC/S3-Reconcile-Fix-backlog.md section 6; each with a suggested answer). Send them in the same message.
 - **Q15. Who merges this plan's PRs?** MERGE-ALL's A1 covers the 19 PRs open at its launch. *Suggested:* extend A1: the executing commander's mission merges its own PRs with merge commits after green CI and an independent reviewer's verdict.
 
 ---
@@ -117,7 +119,7 @@ The executing commander sends these first (section 7 step 3). Batches gated by a
 
 ### 5.2 State at plan time (v1.1)
 
-origin/main adb61ec: #99 (3c4f8fe) and #101 (adb61ec) merged by MERGE-ALL. Still open: #97, #98, #100, #102-#106, #108-#116. Re-check before every batch.
+origin/main 9861ff7 or later (v1.2): #99, #101, #102 (merged, batch not yet applied), #104, #105 and #97 merged by MERGE-ALL; `plans/rules-fanout-claude.md` (3a5f260) and `reference/rules.md` (60e7fd7) on main. Re-check every gate with `gh pr view` before every batch; R1's #97 gate is open.
 
 ### 5.3 Batch order and gates
 
@@ -142,8 +144,9 @@ R8d     -> R8c merged (or Q6 = ERROR) + G-P
 R9      -> R8c merged (same files) + Q7 (+ G-P for R9b2's doc)
 R10     -> R9 merged + Q8 (+ G-P for R10c)
 R11     -> MERGE-ALL rebuild of the dotprofile deploy/ + Q5
-R13 L0  -> #102 applied + G-P + Q13; L1..L5 after L0, in id order
+R13 L0  -> #102 applied + G-P + Q13
 R14     -> FAN-PLAN's code PR merged
+R15 F*  -> per batch gate in RC/S3-Reconcile-Fix-backlog.md (high-severity batches first)
 ```
 
 R8 -> R9 -> R10 run strictly one after another: R8b, R8c, R9a and R10b all edit `scripts/aitools` / `aitools.ps1`; R8c and R9a both edit `tests/profile/test-user-init.sh`.
@@ -177,7 +180,7 @@ Two channel-exception files, one commit:
 
 ### R13-pre — Amend #102 before MERGE-ALL applies it (note + message)
 
-Write `S3-Reconcile-R13pre-note.md` in **this plan's executing SC's own mission folder** (direct to main), and send its text to MERGE-ALL's orchestrator (SendMessage if it is running; otherwise to the commander). The file to change is `.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Incidents/S3-MF-Incidents-batch.json` on branch `docs/mf-incidents` (#102):
+Write `S3-Reconcile-R13pre-note.md` in **this plan's executing SC's own mission folder** (direct to main), and send its text to MERGE-ALL's orchestrator (SendMessage if it is running; otherwise to the commander). The file to change is `.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Incidents/S3-MF-Incidents-batch.json`, on main since #102 merged (9861ff7; a handoffs path, so MERGE-ALL can amend it direct to main before running `S3-MF-Incidents-apply.py --write`):
 1. #165 suggestedResolution: a dotprofile push from a non-main branch is an **ERROR** (commander 2026-10-24T22:45:50Z "dotprofile pushes outside of main branch should error out"), not "WARN + ACTION".
 2. #166: add the case of two profile keys that differ only in case (`S3-MF-Fix3-Review-pr114.md:46` on #114's branch).
 3. #102's title says "#146-#161"; the batch is #146-#170 (25 entries).
@@ -306,7 +309,7 @@ Gate: Q9; G-P.
   - Docs (G-P), PR `docs/abort-warn-row` after the code merges: **R8c-d1** (after R2c) `.claude/rules/interactive-menus.md` OLD `exit 2 is handled like any failure.\n  The runner writes ERROR \`script failed (exit 2)\`` NEW `exit 2 is a user abort.\n  The runner writes WARN \`aborted by user\``; `.cursor/rules/interactive-menus.mdc` the matching clause; `reference/managed-file-deployment.md` the "[x]abort" table row whose cells say `` `validate_and_run` / `Invoke-ValidatedScript` treat it as a failure `` and `` `deploy_configs` / `Deploy-Configs` treat it as a failure ``: each -> `report it as WARN \`aborted by user\` and continue`. **R8c-d2** `reference/tool-support-decision-tree.md`: every row whose text says ERROR `script failed (exit 2)` for a non-harness script (`grep -n "script failed (exit 2)"`) -> WARN `aborted by user`; `plans/tool-support-and-machine-profile.md` T-Q3 note: the ERROR clause -> `an exit 2 from any other setup script is a WARN row \`aborted by user\` (changed by the commander, <date>, Q6)` — only if Q6 = WARN.
   - Verify: `bash tests/hookin/test-hookin.sh`; `bash tests/profile/test-lib.sh`; `bash tests/profile/test-user-init.sh`; `AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/profile/test-user-init.sh --bash-only`; `pwsh -NoProfile -File tests/profile/user-init-harness.ps1` if it runs standalone (else Not run: Windows); `git grep -n "aborted (exit 2)" -- scripts tests` = 0.
   - Audit: no new suppressions; each abort path writes one WARN row (15 chars); errors counter untouched; `bash -n` + pwsh parser on every touched script; bash 3.2 (no associative arrays, no `${x,,}`). Residual risk accepted by D-TS13: a bash runtime exit 2 that is not an abort shows as WARN.
-- **R8d** — #105 row 8 relay Intent (commander "1c) yes, re-draft"; gate R8c merged, or Q6 = ERROR; G-P because it is an intent statement). Code PR `docs/relay-intent`, files `scripts/aitools-lib.sh`, `scripts/aitools-lib.ps1`. Position: the row 8 draft's "Where" (`origin/docs/m3-approved-intents:.../S3-H2-DraftsM3b/S3-H2-DraftsM3b-drafts/scripts/aitools-lib.sh.edit.txt`: after the line ending `so installers and deploy-harness share one copy)`). First list the real consumers: `git grep -n "run_child_relayed\|Invoke-ChildRelayed" -- scripts`. Then insert (replace the Consumed-by list with the grep result; use `ERROR \`aborted (exit 2)\`` instead of the WARN clause if Q6 = ERROR):
+- **R8d** — #105 row 8 relay Intent (commander "1c) yes, re-draft"; gate R8c merged, or Q6 = ERROR; G-P because it is an intent statement). Code PR `docs/relay-intent`, files `scripts/aitools-lib.sh`, `scripts/aitools-lib.ps1`. Position: the row 8 draft's "Where" (on main since #105 merged, 92bdcc1: `.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-H2-DraftsM3b/S3-H2-DraftsM3b-drafts/scripts/aitools-lib.sh.edit.txt`: after the line ending `so installers and deploy-harness share one copy)`). First list the real consumers: `git grep -n "run_child_relayed\|Invoke-ChildRelayed" -- scripts`. Then insert (replace the Consumed-by list with the grep result; use `ERROR \`aborted (exit 2)\`` instead of the WARN clause if Q6 = ERROR):
   ```
   # Intent: give every parent script one way to run a child setup script and keep
   # its log in deploy.jsonl: show the child's console lines, mirror each structured
@@ -380,13 +383,23 @@ Gate: G-P. Pull and re-read first (BUILD-PKG pending edits, 5.1).
 
 Source: RC/S3-Reconcile-Ledger-findings.md (tables with evidence). Gate: MERGE-ALL has applied #146-#170; Q13; G-P.
 1. **Parse the whole file first** (`python3` + `json`: max id over `incidents` and `closed`, duplicates). Expected next id #171; if not, renumber the drafts in order.
-2. **L0 (no new ids):** close 17 (#129, #130, #84, #93, #114, #115, #122, #75, #97, #78, #95, #98, #109, #110, #99, #111, #145) with `closedIn` "PR #N (commit)" from the Ledger table (version added at the v0.74.0 tag); update 8: #74, #76, #77, #102, #116, #144 (correctiveAction "PR #60 (open)" -> "PR #60 (merged 845a935)"), #87 (its resolution prescribes the reversed D-TS13 marker), #112 (`affected` + `shared/cursor-rules/user-rules.md`; close it once R6 step 1 has merged). #102's apply script only appends: write a scratch close/update script (python3; back up first; refuse if an id is missing; validate the JSON after), run it, then run the `/incident` skill's validation on the result, diff, review.
-3. **L1-L5:** file the 47 new incidents (#171-#217 provisional) in id order, 10 per PR: L1 #171-#180, L2 #181-#190, L3 #191-#200, L4 #201-#210, L5 #211-#217. Before filing, verify the five "to verify" candidates (Ledger section 4.4) in code. Add the markers in section 8 below that the Ledger list lacks (check by title), skipping any closed by a merged batch here (e.g. parity after R7, decision 2 after R1).
-4. Verify each PR: the skill's validation; `python3` parse; ids contiguous; no duplicate titles.
+2. **L0 (no new ids):** close 19 — #86 and #94 (verified fixed, RC/S3-Reconcile-Fix-backlog.md section 7) plus the 17 (#129, #130, #84, #93, #114, #115, #122, #75, #97, #78, #95, #98, #109, #110, #99, #111, #145); keep #33 open (update it to name setup-user-hooks as the residual) with `closedIn` "PR #N (commit)" from the Ledger table (version added at the v0.74.0 tag); update 8: #74, #76, #77, #102, #116, #144 (correctiveAction "PR #60 (open)" -> "PR #60 (merged 845a935)"), #87 (its resolution prescribes the reversed D-TS13 marker), #112 (`affected` + `shared/cursor-rules/user-rules.md`; close it once R6 step 1 has merged). #102's apply script only appends: write a scratch close/update script (python3; back up first; refuse if an id is missing; validate the JSON after), run it, then run the `/incident` skill's validation on the result, diff, review.
+3. **No new filings.** The commander decided (2026-10-26, relayed) that unfiled markers are fixed, not filed: the 47 drafts RC/Ledger proposed as #171-#217 are fix items in R15. L0 is the only incidents.json write besides MERGE-ALL's #102 apply.
+4. Verify the PR: the skill's validation; `python3` parse; no id added; every closed entry has `closedIn` evidence.
 
 ### R14 — Hand-off to FAN-PLAN's doc batch
 
-When FAN-PLAN's code PR (its Batches B-D) merges, its section 7 drafts replace R2/R3's "today" texts. Write a note in the executing SC's mission folder (direct to main) and send it to FAN-PLAN's executor: its draft OLD blocks for `.claude/rules/managed-file-deployment.md`, `reference/harness.md`, `reference/managed-file-deployment.md`, `.claude/rules/hook-rollout.md` and `.claude/rules/deploy-paths.md` must be re-anchored on R2/R2c/R3/R4's merged text; `.claude/rules/aitools-workspace.md`, `.cursor/rules/hook-rollout.mdc` and `shared/skills/scratch/SKILL.md` need a flip it does not draft (to "copied to `~/.claude/rules/` by `setup-user-claude` and converted into `~/.cursor/rules/*.mdc` by `setup-user-cursor`"). FAN-PLAN's reviewer RC-1 (PowerShell `Backup-File` wildcard) is fixed on main by 9923a3c; that reviewer tested #112's head, which lacks it — re-test after rebase. The `build-deploy.sh` comment "setup-user-cursor (and the other rules fan-out consumers) read ~/.aitools/rules" becomes true with FAN-PLAN Batch C.
+FAN-PLAN's plan (`plans/rules-fanout-claude.md`, main 3a5f260) now implements D5 with skills included (section 3, relayed decision): its executor follows the commander's Q1/Q13 answer, not the costed variant, and cites `reference/rules.md` for the project-rules-at-user-scope spec once that file is on main. When FAN-PLAN's code PR (its Batches B-D) merges, its section 7 drafts replace R2/R3's "today" texts. Write a note in the executing SC's mission folder (direct to main) and send it to FAN-PLAN's executor: its draft OLD blocks for `.claude/rules/managed-file-deployment.md`, `reference/harness.md`, `reference/managed-file-deployment.md`, `.claude/rules/hook-rollout.md` and `.claude/rules/deploy-paths.md` must be re-anchored on R2/R2c/R3/R4's merged text; `.claude/rules/aitools-workspace.md`, `.cursor/rules/hook-rollout.mdc` and `shared/skills/scratch/SKILL.md` need a flip it does not draft (to "copied to `~/.claude/rules/` by `setup-user-claude` and converted into `~/.cursor/rules/*.mdc` by `setup-user-cursor`"). FAN-PLAN's reviewer RC-1 (PowerShell `Backup-File` wildcard) is fixed on main by 9923a3c; that reviewer tested #112's head, which lacks it — re-test after rebase. The `build-deploy.sh` comment "setup-user-cursor (and the other rules fan-out consumers) read ~/.aitools/rules" becomes true with FAN-PLAN Batch C.
+
+### R15 — Fix batches: every unfiled INCIDENT marker, fixed (F1-F34, DX1-DX12)
+
+Commander decision (2026-10-26, relayed): markers are fixed, not filed. The batches are **`RC/S3-Reconcile-Fix-backlog.md`** (part of this plan; v1.2): 76 fix items FX-1..FX-76 (6 high, 26 medium, 44 low) verified on origin/main 9861ff7, grouped into 34 code batches F1-F34 and 12 docs batches DX1-DX12 of <= 3 files, each with branch, gate, verification and error-handling audit; drafts in `RC/S3-Reconcile-Fix-drafts/{high,code,checks,docs}/edits-*.txt` (repo-relative `@@@FILE` paths: no prefix rewrite) applied with `RC/S3-Reconcile-Code-drafts/apply.pl`.
+- **Scratch paths in the backlog** are copied into tracked folders: `.scratch/session-rcfixk/<f>` -> `RC/S3-Reconcile-Fix-drafts/checks/tests/<f>`; `.scratch/session-rcfixc/<f>` -> `RC/S3-Reconcile-Fix-drafts/code/tests/<f>`; `high/tests/` is already tracked. Copy them into the batch worktree's scratch before running. Logs and one-off probes not copied are evidence only.
+- **Order:** F1, F2+F3 (after Q11), F5, F6, F7 first (no gate; the high items); F4 after #109/#110 merge; F8 after the open lib PRs and before R8a1; batches that share `scripts/aitools`, `aitools.ps1`, `aitools-install.*` or `aitools-lib.*` with R8-R10 run strictly before or after the R-batch holding the file (never in parallel); DX1 rides in R2's PR, DX7 in R7a's PR; FX-73 goes into R8c-d2.
+- **Decisions:** backlog section 6 (D1-D21, each with a suggested answer) joins section 4's message as Q16.
+- **Ledger:** backlog section 7 corrects R13 L0: close **19** (the 17 plus #86 and #94), keep **#33** open (setup-user-hooks still duplicates template logic), close #112/#216/#191/#192 when their batch merges.
+- **Handed to others:** FX-58 (`reference/rules.md` owner), FX-68 (MERGE-ALL: independent review of 3de51d6 before #106 merges), FX-71 (FAN-PLAN skills half), FX-74 (note for FAN-PLAN C13).
+- Specs without drafts (FX-5b, FX-9, FX-13, FX-20, FX-21, FX-35, FX-41, FX-44, FX-45, FX-46, FX-58, FX-67, FX-71, FX-72, FX-75, FX-76): the batch delegate writes the verbatim OLD/NEW into its PR body first and the independent reviewer checks it before the code is applied (a recorded deviation from plan-execution.md "verbatim code in plan", accepted because the items are small and spec'd).
 
 ---
 
@@ -401,7 +414,7 @@ When FAN-PLAN's code PR (its Batches B-D) merges, its section 7 drafts replace R
 
 ---
 
-## 8. INCIDENT markers raised by this mission (not filed; R13 files them)
+## 8. INCIDENT markers raised by this mission (not filed; each is a fix item in R15 unless a batch here already fixes it)
 
 - Pre-push step 7 FAILs every PR branch that changes a deploy/ input, by construction (`scripts/check-pre-push.sh` / `.ps1` step 7). Medium.
 - #106 PS1 passes `"harness files"` to `Invoke-ChildRelayed`, sh does not: duplicate rows. Medium.

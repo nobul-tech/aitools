@@ -1,0 +1,12 @@
+@@@FILE shared/claude-shared.md D202 Windows shell note matches the Claude Code setup docs (protected; mirror into <userRepoPath>/claude/CLAUDE.md)
+@@@OLD
+- **Note**: Claude Code on Windows always uses Git Bash (not configurable). `CLAUDE_CODE_SHELL` is broken on Windows ([#25558](https://github.com/anthropics/claude-code/issues/25558)). Use Unix shell syntax in all Claude Code sessions. To run PowerShell: `pwsh -NoProfile -Command '...'`
+@@@NEW
+- **Note**: Claude Code on Windows runs its Bash tool in Git Bash from Git for Windows (set `CLAUDE_CODE_GIT_BASH_PATH` in settings.json if it is not found); without Git for Windows it uses the PowerShell tool instead, and with it the PowerShell tool is available alongside Bash (on by default for claude.ai and Console accounts; `CLAUDE_CODE_USE_POWERSHELL_TOOL=0` turns it off). Source: code.claude.com/docs/en/setup, read 2026-10-26. `CLAUDE_CODE_SHELL` was reported broken on Windows ([#25558](https://github.com/anthropics/claude-code/issues/25558); not re-checked). The harness assumes Git Bash: use Unix shell syntax in the Bash tool. To run PowerShell from it: `pwsh -NoProfile -Command '...'`
+@@@END
+@@@FILE shared/claude-shared.md D51 USO names the tools a sub-agent may lack (protected; mirror into <userRepoPath>/claude/CLAUDE.md)
+@@@OLD
+- **USO: Dedicated tools for file ops** -- Use Read/Edit/Write/Grep/Glob for file operations. Bash is for shell execution only (git, scripts, build commands).
+@@@NEW
+- **USO: Dedicated tools for file ops** -- Use Read/Edit/Write (and Grep/Glob where your tool list has them) for file operations. Bash is for shell execution only (git, scripts, build commands); a session or sub-agent without Grep/Glob searches with `git grep`, or `grep -rn` / `find` in a pipeline.
+@@@END

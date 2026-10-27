@@ -1,5 +1,7 @@
 # S3-Reconcile running estimate
 
+Rev 4, 2026-10-26: plan v1.2 — Q4 answered (D5 + skills), item 7 becomes ledger closing only (19 close, #33 open) and item 8/markers become R15 fix batches (RC/S3-Reconcile-Fix-backlog.md, 76 FX items). Base origin/main 9861ff7.
+
 Rev 3, 2026-10-26 (plan v1.1: review APPROVE WITH CHANGES and barrier PASS WITH FIXES, all fixes applied). Base: origin/main adb61ec (#99, #101 merged by MERGE-ALL). Item 3 decision 2 now recorded in R1 at the S3-M3Lead plan + a 5-column row; item 5 gains R8d (row 8 Intent); Q4 reframed as "reverse D5?" (default D5).
 
 | # | Item | Status | Best answer now | Confidence | Provenance |

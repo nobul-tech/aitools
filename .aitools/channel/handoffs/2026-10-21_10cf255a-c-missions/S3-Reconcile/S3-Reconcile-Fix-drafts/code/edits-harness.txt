@@ -1,0 +1,24 @@
+@@@FILE scripts/deploy-harness.sh L187a add_source: *.bak.* compared case-insensitively (PS1 -like parity)
+@@@OLD
+        case "$base" in
+            *.bak.*) log_detail "skip backup copy: $label/$rel"; continue ;;
+        esac
+@@@NEW
+        # Names are compared case-insensitively (header; PS1 twin -like / -notlike):
+        # bracket patterns, so bash 3.2 needs no lower-casing fork per file
+        case "$base" in
+            *.[bB][aA][kK].*) log_detail "skip backup copy: $label/$rel"; continue ;;
+        esac
+@@@END
+@@@FILE scripts/deploy-harness.sh L187b add_source: flat-md *.md compared case-insensitively
+@@@OLD
+                    case "$rel" in
+                        *.md) ;;
+                        *) log_detail "skip non-.md file in a rules source: $label/$rel"; continue ;;
+                    esac
+@@@NEW
+                    case "$rel" in
+                        *.[mM][dD]) ;;
+                        *) log_detail "skip non-.md file in a rules source: $label/$rel"; continue ;;
+                    esac
+@@@END

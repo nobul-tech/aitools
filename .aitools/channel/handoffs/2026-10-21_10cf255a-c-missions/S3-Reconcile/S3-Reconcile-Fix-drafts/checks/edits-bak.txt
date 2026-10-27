@@ -1,0 +1,18 @@
+Draft for #190: two backup copies tracked in shared/hooks (a source directory).
+.gitignore has `*.bak` but not the library's `<file>.bak.<UTC timestamp>` form.
+The same commit also deletes the two files (not expressible as OLD/NEW), with
+two separate commands:
+  git rm shared/hooks/harness-db-sessionstart.sh.bak.2026-06-21T203304Z
+  git rm shared/hooks/standing-order-guard.sh.bak.2026-06-21T203334Z
+(two separate commands; no glob). S3-Reconcile-Fix-Checks, 2026-10-26.
+Base: origin/main 60e7fd7.
+
+@@@FILE .gitignore BAK-1 ignore timestamped backups
+@@@OLD
+*.bak
+.scratch/
+@@@NEW
+*.bak
+*.bak.*
+.scratch/
+@@@END
