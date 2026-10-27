@@ -11,7 +11,9 @@
 # Cases: build output and parse (bash -n, pwsh parser), extraction by body
 # markers (no marker line copied, section 5b kept; a missing or duplicated
 # marker fails the build and leaves deploy/ as it was), the payload data file
-# (deploy-harness.payload; scripts under the Intune size limits), cursor header
+# (deploy-harness.payload), the size gate (a script over the Intune limit is a
+# WARN with its fix hint, listed again at the end, and the build passes; a
+# forced case pads the fixture dotprofile so a .sh goes over 1 MB), cursor header
 # port and step 4 (MDM), no adopt target in MDM, first run / rerun / edit / dry
 # run equivalence (trees, exec bits, summary rows, exit codes), no git needed
 # at run time, --help, config.json: a fresh HOME (no bootstrap) skips the
@@ -30,7 +32,7 @@
 set -uo pipefail
 
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
-    perl -ne 'print if $. >= 2 && $. <= 27' "$0"
+    perl -ne 'print if $. >= 2 && $. <= 29' "$0"
     exit 0
 fi
 
@@ -169,25 +171,74 @@ check "payload: data file beside the scripts, none inline" \
 # size_gate_warned DIR OUT -- every generated .ps1 (200000) / .sh (1000000) at or
 # over its Intune limit has its WARN in the build output, twice (inline and the
 # end-of-build list); one under it has none (FX-12: WARN, not a build FAIL)
+# Each over-limit WARN carries its fix hint (deploy-harness: the payload; the
+# others: FX-35). The end-of-build header counts them, and "ready for MDM
+# deployment" is printed only when none is over. SIZE_GATE_OVER is set to the
+# number of over-limit scripts found.
+SIZE_GATE_OVER=0
 size_gate_warned() {
-    local f n max sz line
+    local f n max sz line hint over=0
     for f in "$1"/*.ps1 "$1"/*.sh; do
         [ -f "$f" ] || continue
         n="${f##*/}"
         case "$n" in *.ps1) max=200000 ;; *) max=1000000 ;; esac
-        sz=$(wc -c < "$f"); sz=$((sz + 0))
-        line="deploy/$n is $sz bytes, over the Intune script limit ($max)"
+        # a wc failure must fail the check, not read as 0 bytes (under the limit)
+        sz=$(wc -c < "$f") || return 1
+        sz=$((sz + 0))
+        case "$n" in
+            deploy-harness.*) hint="move content to deploy-harness.payload" ;;
+            *)                hint="see FX-35 (inlined lib)" ;;
+        esac
+        line="deploy/$n is $sz bytes, over the Intune script limit ($max) -- $hint"
         if [ "$sz" -ge "$max" ]; then
             [ "$(grep -F -- '[warn]' "$2" | grep -cF -- "$line")" = 2 ] || return 1
+            over=$((over + 1))
         else
             if grep -F -- "[warn] deploy/$n is " "$2" | grep -qF "over the Intune script limit"; then
                 return 1
             fi
         fi
     done
+    SIZE_GATE_OVER=$over
+    if [ "$over" -gt 0 ]; then
+        grep -qF -- "[warn] $over generated script(s) over the Intune script limit (WARN only, the build does not fail):" "$2" || return 1
+        ! grep -qF 'ready for MDM deployment' "$2" || return 1
+    else
+        grep -qF 'Scripts are self-contained and ready for MDM deployment' "$2" || return 1
+        ! grep -qF 'generated script(s) over the Intune script limit' "$2" || return 1
+    fi
 }
 check "size gate: a generated script over its Intune limit is a WARN, not a build failure (FX-12)" \
     "[ \"\$(rc_of build-b1)\" = 0 ] && size_gate_warned '$G' '$TMP_ROOT/build-b1.out'"
+
+# Forced over-limit case, independent of the real script sizes: a copy of the
+# fixture dotprofile with a ~1.2 MB rule, which build-deploy embeds in the
+# generated setup-user-claude.sh (the fallback rules), so that .sh is over
+# 1 MB. If the gate were removed or stopped measuring .sh files, there would
+# be no WARN and this check fails.
+DOT_BIG="$TMP_ROOT/dot-big"
+cp -Rp "$DOT" "$DOT_BIG"
+rm -rf "$DOT_BIG/deploy"
+perl -e 'print "# padding rule (size-gate test)\n"; print "x" x 99, "\n" for 1 .. 12000' > "$DOT_BIG/claude/rules/zz-big.md"
+gitc -C "$DOT_BIG" add -A
+gitc -C "$DOT_BIG" commit -q -m padding
+HB_BIG="$TMP_ROOT/home-build-big"
+mkdir -p "$HB_BIG/.aitools"
+printf '{\n  "version": 3,\n  "reposPath": "%s",\n  "repoPath": "%s",\n  "userRepoPath": "%s"\n}\n' \
+    "$TMP_ROOT" "$ROOT" "$DOT_BIG" > "$HB_BIG/.aitools/config.json"
+OUT="$TMP_ROOT/build-big.out"
+env -u AITOOLS_USER_REPO_PATH HOME="$HB_BIG" bash "$ROOT/scripts/build-deploy.sh" > "$OUT" 2>&1
+echo $? > "$TMP_ROOT/build-big.rc"
+big_sh_over() {
+    local sz
+    sz=$(wc -c < "$DOT_BIG/deploy/setup-user-claude.sh") || return 1
+    [ "$((sz + 0))" -ge 1000000 ] || return 1
+    size_gate_warned "$DOT_BIG/deploy" "$OUT" || return 1
+    [ "$SIZE_GATE_OVER" -ge 1 ]
+}
+check "size gate (forced): a .sh padded over 1 MB is a WARN with the FX-35 hint, build exit 0" \
+    "[ \"\$(rc_of build-big)\" = 0 ] && big_sh_over"
+OUT=""
 check "payload: the script's sha256 is the payload's (CRs removed)" \
     "[ \"\$(perl -MDigest::SHA=sha256_hex -0777 -ne 's/\\r//g; print sha256_hex(\$_)' '$G/deploy-harness.payload')\" = \"\$(perl -ne 'print \$1 if /^MDM_PAYLOAD_SHA256=(\\S+)/' '$G/deploy-harness.sh')\" ]"
 check "markers: no marker line copied into the MDM scripts" \
