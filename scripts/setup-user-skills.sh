@@ -12,11 +12,14 @@
 # ~/.aitools/skills exists (deploy-harness has run), the fan-out owns the skills
 # -- setup-user-claude writes ~/.claude/skills (row "claude skills") and
 # setup-user-cursor writes ~/.cursor/skills (row "cursor skills"). This script
-# then deploys nothing, writes neither row, writes OK "skills" "n/a (fanned out
-# from ~/.aitools/skills)" and keeps reverse discovery, which treats every name
-# in ~/.aitools/skills (a directory or a manifest line, any source) and every
-# backup or hidden name as not user-created. A resolver error then skips reverse
-# discovery (its adopt target is the dotprofile): ERROR "skills". Without
+# then deploys nothing, writes neither row, writes OK "skills" "n/a (fanned
+# out)" and keeps reverse discovery, which treats every name in
+# ~/.aitools/skills (a directory or a manifest line, any source) and every
+# backup or hidden name as not user-created. Reverse discovery's own rows (a
+# failed adopt, an unreadable directory) then use the tool "skills" too. A
+# resolver error, or an unreadable ~/.aitools/skills, manifest or
+# ~/.claude/skills, means reverse discovery does not run (its adopt target is
+# the dotprofile): ERROR "skills" "no adopt: <reason>". Without
 # ~/.aitools/skills it deploys as before (an MDM endpoint run before
 # deploy-harness, or a machine where deploy-harness failed). The check sits in
 # the extracted body, so the generated MDM script (build-deploy) carries it.
@@ -54,12 +57,16 @@ esac
 # ~/.aitools/skills exists -> the setup-user-claude / setup-user-cursor fan-out
 # deploys the skills, so this script does not (no second review menu, no second
 # adopt target for one file). In the extracted body: the MDM script has it too.
+# SKILLS_ROW_TOOL: the summary tool for reverse discovery's rows ("skills" when
+# fanned out: the two fan-out tool names belong to the fan-out scripts).
 SKILLS_HARNESS_DIR="$HOME/.aitools/skills"
 SKILLS_FANNED_OUT=false
+SKILLS_ROW_TOOL="claude skills"
 if [ -d "$SKILLS_HARNESS_DIR" ]; then
     SKILLS_FANNED_OUT=true
-    log "Skills are fanned out from $(display_path "$SKILLS_HARNESS_DIR") by setup-user-claude (claude skills) and setup-user-cursor (cursor skills): not deploying them here"
-    write_summary OK "skills" "n/a (fanned out from ~/.aitools/skills)"
+    SKILLS_ROW_TOOL="skills"
+    log "Skills are fanned out from ~/.aitools/skills by setup-user-claude (claude skills) and setup-user-cursor (cursor skills): not deploying them here"
+    write_summary OK "skills" "n/a (fanned out)"
 fi
 
 # --- BEGIN skill discovery (replaced by build-deploy) ---
@@ -85,8 +92,8 @@ if [ "$URP_RC" -ne 0 ] && [ "$URP_RC" -ne 1 ]; then
     if [ "$SKILLS_FANNED_OUT" = "true" ]; then
         # The fan-out deploys; reverse discovery adopts into the dotprofile, so
         # it cannot run. Reported under "skills": the two fan-out rows are not ours.
-        log_error "Dotprofile unresolved (resolver error above) -- reverse discovery skipped, so no skill can be adopted to the dotprofile"
-        write_summary ERROR "skills" "reverse discovery skipped: dotprofile error"
+        log_error "Dotprofile unresolved (resolver error above) -- reverse discovery not run, so no skill can be adopted to the dotprofile"
+        write_summary ERROR "skills" "no adopt: dotprofile error"
     else
         log_error "Dotprofile unresolved (resolver error above) -- skills not deployed, so shared copies cannot replace dotprofile versions"
         write_summary ERROR "claude skills" "not deployed: dotprofile error"
@@ -221,6 +228,16 @@ fi
 reverse_discover_skills() {
     local dest_base="$1"
     [ -d "$dest_base" ] || return 0
+    # No adopt target: nothing would be offered, so the scan is not needed
+    [ -n "$USER_REPO_PATH" ] || return 0
+    # An unreadable directory would leave the glob below empty: report it
+    if [ ! -r "$dest_base" ] || [ ! -x "$dest_base" ]; then
+        log_error "Cannot read ~/.claude/skills -- reverse discovery not run, so no user-created skill is offered for adoption: not readable"
+        write_summary ERROR "$SKILLS_ROW_TOOL" "no adopt: target unreadable"
+        # return 0: the error is counted in ERRORS (the exit footer exits 1);
+        # a non-zero return would end the script under set -e before the footer
+        return 0
+    fi
 
     for skill_dir in "$dest_base"/*/; do
         [ -d "$skill_dir" ] || continue
@@ -258,7 +275,7 @@ reverse_discover_skills() {
                     a|adopt)
                         local _errors_before=$ERRORS
                         if ! adopt_managed_file "$skill_dir/SKILL.md" "$USER_REPO_PATH/claude/skills/$skill_name/SKILL.md" || [ "$ERRORS" -gt "$_errors_before" ]; then
-                            write_summary ERROR "claude skills" "adopt failed: $skill_name"
+                            write_summary ERROR "$SKILLS_ROW_TOOL" "adopt failed: $skill_name"
                         fi
                         ;;
                     *)
@@ -278,7 +295,7 @@ reverse_discover_skills() {
 # ~/.claude/skills, so it is never offered for adoption. Lower-cased (APFS and
 # NTFS are case-insensitive), one per line, each line ending in a newline
 # (in_list). Returns 1 after log_error + ERROR "skills" when ~/.aitools/skills
-# or its manifest cannot be read: reverse discovery is then skipped, so a
+# or its manifest cannot be read: reverse discovery is then not run, so a
 # harness skill is never mistaken for a user-created one. A manifest with a bad
 # header adds no names (the fan-out reports it); its directory names still count.
 HARNESS_SKILL_NAMES=""
@@ -288,8 +305,8 @@ collect_harness_skill_names() {
     local tab entry name out line rc=0
     tab=$(printf '\t')
     if [ ! -r "$dir" ] || [ ! -x "$dir" ]; then
-        log_error "Cannot read $(display_path "$dir") -- reverse discovery skipped, so no harness skill is offered for adoption"
-        write_summary ERROR "skills" "reverse discovery skipped: cannot read ~/.aitools/skills"
+        log_error "Cannot read ~/.aitools/skills -- reverse discovery not run, so no harness skill is offered for adoption: not readable"
+        write_summary ERROR "skills" "no adopt: harness unreadable"
         return 1
     fi
     for entry in "$dir"/*; do
@@ -304,12 +321,14 @@ collect_harness_skill_names() {
         # rc captured: 1 = unreadable (message in out), 2 = caller bug
         out=$(read_harness_manifest "$manifest" skills 2>&1) || rc=$?
         if [ "$rc" -ne 0 ]; then
-            log_error "Cannot read the skills manifest $(display_path "$manifest") (exit $rc): $out -- reverse discovery skipped, so no harness skill is offered for adoption"
-            write_summary ERROR "skills" "reverse discovery skipped: cannot read skills manifest"
+            # out is "cannot read <file>: <reason>": the reason goes last, as in the .ps1
+            log_error "Cannot read the skills manifest ~/.aitools/skills/.aitools-skills-manifest -- reverse discovery not run, so no harness skill is offered for adoption: ${out##*: }"
+            log_detail "read_harness_manifest exit $rc: $out"
+            write_summary ERROR "skills" "no adopt: manifest unreadable"
             return 1
         fi
         if [ "$out" = "header-bad" ]; then
-            log "Skills manifest header not recognised: harness skill names taken from $(display_path "$dir") only"
+            log "Skills manifest header not recognised: harness skill names taken from ~/.aitools/skills only"
             return 0
         fi
         while IFS= read -r line; do

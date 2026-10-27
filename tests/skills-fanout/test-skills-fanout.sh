@@ -612,7 +612,9 @@ cparity cursor-rerun
 
 seed_cursor_none() { cskill mine SKILL.md 'mine'; }
 cursor_case cursor-none seed_cursor_none
-check "cursor, no harness skills: OK n/a, ~/.cursor/skills untouched" "[ \"\$(rc)\" = 0 ] && [ \"\$(cnondetail)\" = 'OK|cursor skills|n/a (no harness skills)' ] && [ \"\$(ls '$(CS)')\" = mine ]"
+# No row: setup-user-skills (the fallback) owns the cursor skills rows then
+# (PR #125 N2, #124 5267e9e; merged with #123 in #125)
+check "cursor, no harness skills: no cursor skills row, logged, ~/.cursor/skills untouched" "[ \"\$(rc)\" = 0 ] && ! grep -qF '|cursor skills|' '$C/sh.summary' && grep -q 'No harness skills at .*setup-user-skills deploys skills' '$C/sh.out' && [ \"\$(ls '$(CS)')\" = mine ]"
 cparity cursor-none
 
 printf '\n%d passed, %d failed, %d skipped\n' "$PASS" "$FAIL" "$SKIP"
