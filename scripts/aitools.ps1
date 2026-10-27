@@ -151,11 +151,25 @@ function Get-RepoVersion {
     } catch { return "unknown" }
 }
 
+# Invoke-DeployAbort SCRIPT -- deploy-harness exited 2: the user chose [x]abort at a
+# review menu (D-TS13; abort ends the whole run, T-Q3). The remaining deploy steps
+# are not run; the caller shows the summary and exits 2. Parity: deploy_abort in
+# scripts/aitools.
+function Invoke-DeployAbort([string]$AbortedScript) {
+    # Not $ScriptName: it would hide the lib's $scriptName, the [script] field Log writes
+    $script:deployAborted = $true
+    Log "${AbortedScript}: aborted by user at a review menu -- remaining deploy steps not run"
+    Write-Summary "WARN" "harness files" "aborted by user"
+}
+
 # Deploy all config scripts from the repo's scripts/ directory.
 function Deploy-Configs {
     param([string]$ScriptDir)
-    $deployScripts = @("setup-user-config.ps1", "setup-user-claude.ps1", "setup-user-mcp.ps1", "setup-user-skills.ps1", "setup-cursor-ide-mcp.ps1", "setup-user-cursor.ps1", "setup-user-settings.ps1", "setup-user-hooks.ps1")
+    # deploy-harness first: it fills .aitools and runs the config writer
+    # (setup-user-config) itself, so the writer is not in this list (once per run)
+    $deployScripts = @("deploy-harness.ps1", "setup-user-claude.ps1", "setup-user-mcp.ps1", "setup-user-skills.ps1", "setup-cursor-ide-mcp.ps1", "setup-user-cursor.ps1", "setup-user-settings.ps1", "setup-user-hooks.ps1")
     $errors = 0
+    $script:deployAborted = $false   # the caller reads it (Invoke-DeployAbort sets it)
     $env:AITOOLS_DEPLOY = "1"
     if ($DryRun) { $env:AITOOLS_DRY_RUN = "1" }
     if ($Force) { $env:AITOOLS_FORCE = "1" }
@@ -173,6 +187,23 @@ function Deploy-Configs {
                 LogError "$script has parse errors -- skipped (see $logFile)"
                 Write-Summary "ERROR" ($script -replace '\.ps1$', '') "parse errors -- skipped"
                 $errors++
+                continue
+            }
+            if ($script -eq "deploy-harness.ps1") {
+                # In-process and relayed to deploy.jsonl (aitools-lib Invoke-ChildRelayed);
+                # the review menu reads and writes the console directly. The lib logs
+                # the error for a failed run (and the ERROR row for a throw).
+                $harnessRc = Invoke-ChildRelayed $script $scriptPath @{} "harness files"
+                if ($script:AitLibChildRc -eq 2) {
+                    Invoke-DeployAbort $script
+                    break
+                }
+                if ($harnessRc -ne 0) {
+                    # Exit 0 with error lines: the lib logged them and returned 1
+                    $harnessExit = if ($script:AitLibChildRc -eq 0) { 1 } else { $script:AitLibChildRc }
+                    Write-Summary "ERROR" "harness files" "script failed (exit $harnessExit)"
+                    $errors++
+                }
                 continue
             }
             # Reset exit code before each script (prevents stale values from previous iteration)
@@ -201,6 +232,14 @@ function Deploy-Configs {
         if ($script -eq "setup-user-mcp.ps1") {
             Show-CloudMcp -Context "install" -ScriptName "setup-user-mcp"
         }
+    }
+
+    # [x]abort in deploy-harness: the run stops here (the caller exits 2)
+    if ($script:deployAborted) {
+        if (Test-Path Env:\AITOOLS_DEPLOY) { Remove-Item Env:\AITOOLS_DEPLOY }
+        if (Test-Path Env:\AITOOLS_DRY_RUN) { Remove-Item Env:\AITOOLS_DRY_RUN }
+        if (Test-Path Env:\AITOOLS_FORCE) { Remove-Item Env:\AITOOLS_FORCE }
+        return $errors
     }
 
     # Best-effort: mirror relay.md into ~/.cursor/AGENTS.md (same as scripts/aitools bash).
@@ -2057,6 +2096,12 @@ if ($doInstall) {
     $installerRc = $LASTEXITCODE
     if (Test-Path Env:\AITOOLS_FORCE) { Remove-Item Env:\AITOOLS_FORCE }
     Write-Host ""
+    # Exit 2 = the user chose [x]abort at a review menu (D-TS13): the run stops
+    if ($installerRc -eq 2) {
+        Log "Installer aborted by user at a review menu -- run stopped (exit 2)"
+        Show-Summary
+        exit 2
+    }
     if ($installerRc -eq 0) {
         LogOk "All up to date ($(Get-RepoVersion $repoPath))"
         # Session archive hint (after final status line)
@@ -2074,6 +2119,11 @@ if ($doInstall) {
     # --- gitpull: pull + rebuild + deploy + changelog + version tag ---
     Log "Step 3/$steps`: Deploying configurations"
     $deployRc = Deploy-Configs (Join-Path $repoPath "scripts")
+    # [x]abort in deploy-harness (D-TS13): show what ran and stop with exit 2
+    if ($script:deployAborted) {
+        Show-Summary
+        exit 2
+    }
     if ($deployRc -eq 0) {
         LogOk "Done"
     } else {
@@ -2140,6 +2190,11 @@ if ($doInstall) {
     # --- no-args: quiet pull + rebuild + deploy ---
     Log "Step 3/$steps`: Deploying configurations"
     $deployRc = Deploy-Configs (Join-Path $repoPath "scripts")
+    # [x]abort in deploy-harness (D-TS13): show what ran and stop with exit 2
+    if ($script:deployAborted) {
+        Show-Summary
+        exit 2
+    }
     if ($deployRc -eq 0) {
         LogOk "Done"
     } else {
