@@ -272,7 +272,18 @@ too. The duplicate project-level copies are removed by the commander later
 - Rules that say "this repo" (e.g. `@.claude/rules/sources-of-truth.md`,
   `@.claude/rules/script-standards.md`) would read as governing every repo.
 - A costed variant (skip source `aitools` in the Claude fan-out, as Cursor
-  does) exists in R1; the decision is to fan out.
+  did under R-2) exists in R1; the decision is to fan out.
+- **Cursor pays the same cost (R-6).** The Cursor fan-out converts every
+  non-retired rule, the aitools ones included, into `~/.cursor/rules/*.mdc`;
+  a rule without `paths:` becomes `alwaysApply: true`
+  (`@reference/tool-ops-cursor.md` "Harness deployment"), and Cursor loads
+  `~/.cursor/rules` in every workspace under `$HOME` (section 5). So the
+  same ~79 KB of unscoped rules reach every Cursor workspace, and the
+  scoped ones attach wherever their `**/<pattern>` globs match. How many
+  tokens Cursor spends on them: unknown (its docs do not say). Inside
+  aitools Cursor also loads the project's `.cursor/rules/*.mdc` twins, so a
+  rule with a twin is in context in two versions there (the converted
+  rule and its condensed twin).
 
 **Skills**: deployed the same way (R-7): `@reference/skills.md`, with the
 measured cost of project skills at user scope (about 1.7 KB, ~440 tokens of

@@ -272,13 +272,13 @@ aitools .claude/skills/<name>/     ─┼─ deploy-harness ─▶ ~/.aitools/sk
 
 | Step | Built | Where |
 |------|-------|-------|
-| deploy-harness fills `~/.aitools/skills` | `shared/skills`, `.claude/skills`, dotprofile `claude/skills` → `~/.aitools/skills/<name>/**`, first source wins, git-tracked files only; skill directories named `.*` or `*.bak.*` not deployed; manifest `~/.aitools/skills/.aitools-skills-manifest` (`# aitools skills manifest v1`, `<name><TAB>shared\|aitools\|dotprofile\|retired`); retired skill directories backed up (`backup_dir`, `<name>.bak.<UTC>/`) and removed (`@reference/harness.md` "Skills manifest and retired skills") | `shared` and `.claude` sources: #88 (main); the rest: #119 (FO-2, open) |
+| deploy-harness fills `~/.aitools/skills` | `shared/skills`, `.claude/skills`, dotprofile `claude/skills` → `~/.aitools/skills/<name>/**`, first source wins, git-tracked files only; skill directories named `.*` or `*.bak.*` not deployed; manifest `~/.aitools/skills/.aitools-skills-manifest` (`# aitools skills manifest v1`, `<name><TAB>shared\|aitools\|dotprofile\|retired`); retired skill directories copied by deploy-harness itself (`cp -R` to `<name>.bak.<UTC>/`, `diff -r -q`, then `rm -rf`; the newest 5 backups kept; an unremovable half copy renamed `<name>.bak.incomplete.<UTC>`; not `backup_dir`) and removed (`@reference/harness.md` "Skills manifest and retired skills") | `shared` and `.claude` sources: #88 (main); the rest: #119 (FO-2, open) |
 | something runs deploy-harness | Installer Step 8b and first in `deploy_configs` | #106 (open; MERGE-ALL) |
 | lib helpers | `skill_name_kind`, `read_harness_manifest` (rules and skills), `fanout_text_equal`, `fanout_dir_matches`, `backup_dir` result flags, tracker `removed` (sh and ps1) | #118 (FO-1, open) |
 | lib fan-out | `fanout_harness_skills TOOL DEST AITOOLS_REPO DOTPROFILE` / `Invoke-HarnessSkillsFanout -ToolName -DestDir -AitoolsRepo -Dotprofile` in `@scripts/aitools-lib.sh` / `@scripts/aitools-lib.ps1` | #124 (FO-4, open) |
 | Claude Code skills | `setup-user-claude` calls the lib fan-out in its `skills fan-out` span (extracted by build-deploy, so MDM runs it too): summary tool `claude skills`; adopt target from the manifest source (`shared` → `<aitools>/shared/skills/...`, `aitools` → `<aitools>/.claude/skills/...`, `dotprofile` → `<dotprofile>/claude/skills/...`) when the file exists and the script runs from a git checkout | #124 (FO-4, open) |
 | Cursor skills | `setup-user-cursor` step 5: `fanout_harness_skills "cursor skills" "$CURSOR_DIR/skills" "" ""`, no adopt | #123 (FO-5, open; step 5 is commit c5d1bd8) |
-| setup-user-skills | when `~/.aitools/skills` exists: `OK skills n/a (fanned out from ~/.aitools/skills)`, no `claude skills` / `cursor skills` rows; reverse discovery kept, every name in `~/.aitools/skills` or its manifest (and every `*.bak.*` or hidden name) not user-created; otherwise the old behaviour (fallback). MDM: the generated `deploy/setup-user-skills.*` carry the check | #125 (FO-6, open) |
+| setup-user-skills | when `~/.aitools/skills` exists: `OK skills n/a (fanned out)`, no `claude skills` / `cursor skills` rows; reverse discovery kept, every name in `~/.aitools/skills` or its manifest (and every `*.bak.*` or hidden name) not user-created; otherwise the old behaviour (fallback). MDM: the generated `deploy/setup-user-skills.*` carry the check | #125 (FO-6, open) |
 | CI | every `tests/<dir>/test-*.sh` in CI, checked by a CI step; `tests/fanout-lib`, `tests/skills-fanout`, `tests/skills-legacy` | #117 (FO-0), #118, #124, #125 (open) |
 
 ### 6.3 Rules for deploying skills (`fanout_harness_skills`; contract `@plans/skills-and-rules-fanout.md` 3.4 as shipped in #124)
@@ -329,6 +329,15 @@ aitools .claude/skills/<name>/     ─┼─ deploy-harness ─▶ ~/.aitools/sk
   copies nothing for a skills directory (its skip rule: no top-level
   `*.md`); each written file is still backed up by `deploy_managed_file`
   (`<file>.bak.<UTC>`) (#124 contract change 2).
+- **Logging** (#124 commit 2fdcefb): on a failed `mkdir`, `cat`, `chmod`,
+  `cp -R` or `rm -rf` the command's stderr is captured into the
+  `log_error` reason (no raw console line); invalid manifest lines write the
+  "Run aitools to rebuild ~/.aitools/skills and its manifest" ACTION row; a
+  DEST that cannot be listed writes an ACTION row saying the retired skills
+  were not checked (the preserved count is then unknown); a failed removal
+  says the copy may be partly removed and where the backup is; a retired
+  directory that is kept, or whose removal failed, is not also counted as
+  preserved.
 - **Return and abort**: the function returns 0; failures are `log_error` +
   an ERROR row counted by the caller's exit footer. `[x]abort` exits 2 from
   the library (no tool row); the runner's handling is

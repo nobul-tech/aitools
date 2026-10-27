@@ -264,14 +264,20 @@ manifest; one planner and one writer serve both kinds
   `retired`. The name is the directory name as found on disk; a valid name
   has no `/` or `\`, does not start with `.` and has no `.bak.`. Invalid
   previous lines are warned and dropped.
-- **Retiring.** As for rules, per kind. The skill directory
-  `~/.aitools/skills/<name>/` is copied with `backup_dir()` to
-  `<name>.bak.<UTC>/` beside it (the newest 5 kept), the copy is found and
-  compared with the directory, and only then is the directory removed and
-  checked gone. Any failure is `log_error` + an ERROR row `harness files
-  retire failed: <name>` and the directory stays (the next run tries
-  again). A file or symlink with a retired name is left alone with a
-  warning. Dry run: logged only.
+- **Retiring.** As for rules, per kind. deploy-harness copies the skill
+  directory itself, not through `backup_dir()` (`retire_skill_dir` in
+  `@scripts/deploy-harness.sh`, `Remove-RetiredSkill` in
+  `@scripts/deploy-harness.ps1`): `cp -R` to
+  `~/.aitools/skills/<name>.bak.<UTC>/` beside it (any skill directory, no
+  `*.md` precondition), `diff -r -q` against the directory, and only then
+  `rm -rf` of the directory, checked gone; then the newest 5
+  `<name>.bak.<UTC>` backups are kept (`prune_skill_backups`, names matched
+  literally). A failed or unproven copy is removed again; when it cannot be
+  removed it is renamed `<name>.bak.incomplete.<UTC>` (never counted by the
+  prune; `.bak.` keeps it from being deployed or fanned out) with an ERROR
+  row. Any failure is `log_error` + an ERROR row and the directory stays
+  (the next run tries again). A file or symlink with a retired name is left
+  alone with a warning. Dry run: logged only.
 - **A skill that moves source** (e.g. from `.claude/skills/` to
   `shared/skills/`) changes its manifest source and is not retired.
 - **The last dotprofile skill removed**: git drops the empty

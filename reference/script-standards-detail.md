@@ -222,7 +222,7 @@ These are the canonical tool names for field 2. Always use these exact strings.
 | `claude skills` | setup-user-claude (the skills fan-out, `fanout_harness_skills`); setup-user-skills writes it only as the fallback (no `~/.aitools/skills`) |
 | `cursor rules` | setup-user-cursor |
 | `cursor skills` | setup-user-cursor (the skills fan-out, `fanout_harness_skills`); setup-user-skills writes it only as the fallback (no `~/.aitools/skills`) |
-| `skills` | setup-user-skills (fanned-out mode: `n/a (fanned out from ~/.aitools/skills)`, reverse-discovery errors) |
+| `skills` | setup-user-skills (fanned-out mode: `n/a (fanned out)`, reverse-discovery errors) |
 | `cursor ide mcp` | setup-cursor-ide-mcp |
 | `python` | setup-python |
 | `uv` | setup-uv |
