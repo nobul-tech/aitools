@@ -373,7 +373,7 @@ the shape in /delegate "Final response shape".
 ## Environment limits that shape delegation
 
 Verify these before relying on them; versions move. Source of record:
-`/aitool-ops` skill and aitools `reference/tool-ops-claude-code.md`.
+`/tool-ops` skill and aitools `reference/tool-ops-claude-code.md`.
 
 - **Nesting depth.** Claude Code caps sub-agent nesting with
   `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` (documented default 3). The Claude
@@ -500,7 +500,7 @@ names so provenance survives the chain (`S4-A`, prefix `S4-A-`).
 - Governing rule: `~/.claude/rules/delegation.md` (source: dotprofile
   `claude/rules/delegation.md`)
 - Detection hook: `delegation-duty-guard.sh` (aitools `shared/hooks/`)
-- Claude Code limits: `/aitool-ops` skill
+- Claude Code limits: `/tool-ops` skill
 - Handoff delegations: `/handoff` skill
 - Mission monitoring: `/mission-control` skill
 - Session strategy: `/planning` skill
