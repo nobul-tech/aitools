@@ -1009,30 +1009,92 @@ backup_file() {
 }
 
 # ---------------------------------------------------------------------------
-# Backup a directory before modifying managed files. Keeps at most $max_backups copies.
+# Back up a directory before modifying managed files: copy DIR to
+# DIR.bak.<UTC> (DIR.bak.<UTC>-<n> when that name is taken) and keep the
+# newest $max_backups copies. Result variables (reset on every call):
+#   BACKUP_DIR_OK      true only when the copy exists after cp; else false
+#   BACKUP_DIR_PATH    the copy's path when BACKUP_DIR_OK is true, else ""
+#   BACKUP_DIR_REASON  why not, when false: "no directory", "no top-level
+#                      *.md", "cannot list", "copy failed"
+# Skip rule (kept: its callers, the setup-user-claude and setup-user-cursor
+# rules fan-outs, back up only a directory that holds a top-level *.md file):
+# no top-level regular *.md file -> no copy, a detail log line, reason
+# "no top-level *.md". A failed copy is non-fatal (warn, return 0;
+# config-file-safety.md "Backup before overwrite"): callers that must not write
+# without a backup check BACKUP_DIR_OK. Old backups are matched by literal name
+# (DIR's base name + ".bak." + the UTC stamp, optional "-<n>"), never a glob, so
+# names with [ ] * ? work and another directory's backups are never pruned.
+# Parity: Backup-Dir in aitools-lib.ps1.
 # ---------------------------------------------------------------------------
+BACKUP_DIR_OK=false
+BACKUP_DIR_PATH=""
+BACKUP_DIR_REASON=""
 backup_dir() {
-    local dir="$1" max_backups=5
-    [ -d "$dir" ] || return 0
-    local file_count
-    file_count=$(find "$dir" -maxdepth 1 -name '*.md' -type f | wc -l | tr -d ' ')
-    if [ "$file_count" -eq 0 ]; then
+    local dir="${1%/}" max_backups=5
+    BACKUP_DIR_OK=false; BACKUP_DIR_PATH=""; BACKUP_DIR_REASON=""
+    if [ -z "$dir" ] || [ ! -d "$dir" ]; then
+        BACKUP_DIR_REASON="no directory"
+        log_detail "backup_dir: ${1:-}: not backed up (no directory)"
         return 0
     fi
-    local ts
+    local file_count rc=0
+    # stdout: the count; on exit 1, the reason (stderr captured too)
+    file_count=$(perl -e '
+        my $d = shift;
+        opendir my $dh, $d or do { print "cannot list $d: $!"; exit 1 };
+        my $n = grep { /\.md\z/ && ! -l "$d/$_" && -f "$d/$_" } readdir $dh;
+        closedir $dh;
+        print $n;
+    ' "$dir" 2>&1) || rc=$?
+    if [ "$rc" -ne 0 ]; then
+        BACKUP_DIR_REASON="cannot list"
+        log_warn "Could not back up $(display_path "$dir") -- $file_count"
+        return 0
+    fi
+    if [ "$file_count" -eq 0 ]; then
+        BACKUP_DIR_REASON="no top-level *.md"
+        log_detail "backup_dir: $dir: not backed up (no top-level *.md file)"
+        return 0
+    fi
+    local ts dest n=0
     ts=$(date -u +%Y-%m-%dT%H%M%SZ)
-    if ! cp -R "$dir" "${dir}.bak.${ts}"; then
+    dest="${dir}.bak.${ts}"
+    while [ -e "$dest" ] || [ -L "$dest" ]; do
+        n=$((n + 1))
+        dest="${dir}.bak.${ts}-$n"
+    done
+    if ! cp -R "$dir" "$dest" || [ ! -d "$dest" ]; then
+        BACKUP_DIR_REASON="copy failed"
         log_warn "Could not back up $(display_path "$dir") -- proceeding without backup"
         return 0
     fi
-    local old_backups
-    old_backups=$(find "$(dirname "$dir")" -maxdepth 1 -name "$(basename "$dir").bak.*" -type d \
-        | sort -r | tail -n +$((max_backups + 1)))
-    if [ -n "$old_backups" ]; then
-        printf '%s\n' "$old_backups" | while IFS= read -r old_dir; do
-            rm -rf "$old_dir"
-            log "Pruned old backup: $(display_path "$old_dir")"
-        done
+    BACKUP_DIR_OK=true
+    BACKUP_DIR_PATH="$dest"
+    local parent base old_backups old_dir prc=0
+    parent=$(dirname "$dir")
+    base=$(basename "$dir")
+    # Newest first by name (the UTC stamp sorts by time); print the ones past the limit
+    old_backups=$(perl -e '
+        my ($parent, $base, $keep) = @ARGV;
+        opendir my $dh, $parent or do { print "cannot list $parent: $!"; exit 1 };
+        my @b = sort { $b cmp $a } grep {
+            /\A\Q$base\E\.bak\.[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{6}Z(?:-[0-9]+)?\z/
+                && ! -l "$parent/$_" && -d "$parent/$_"
+        } readdir $dh;
+        closedir $dh;
+        print "$parent/$_\n" for @b[$keep .. $#b];
+    ' "$parent" "$base" "$max_backups" 2>&1) || prc=$?
+    if [ "$prc" -ne 0 ]; then
+        log_warn "Could not prune old backups of $(display_path "$dir") -- $old_backups"
+    elif [ -n "$old_backups" ]; then
+        while IFS= read -r old_dir; do
+            [ -n "$old_dir" ] || continue
+            if rm -rf "$old_dir" && [ ! -e "$old_dir" ]; then
+                log "Pruned old backup: $(display_path "$old_dir")"
+            else
+                log_warn "Could not prune old backup $(display_path "$old_dir")"
+            fi
+        done <<< "$old_backups"
     fi
     log "Backed up $(display_path "$dir") ($file_count managed files)"
 }
@@ -2596,10 +2658,15 @@ skill_name_kind() {
 # kind's header. A valid line: a name with no / or \ and no .bak. (rules: a *.md
 # name; skills: not starting with a dot), a source of shared, aitools,
 # dotprofile or retired, and a name not already listed (compared
-# case-insensitively). Exit 2 (message on stderr) for an unknown KIND; exit
-# non-zero (message on stderr) when FILE cannot be read or is a directory. The
-# caller captures 2>&1 and checks the exit. Parity: Read-HarnessManifest in
-# aitools-lib.ps1.
+# case-insensitively). Exit codes:
+#   0  read (the output may be "header-bad")
+#   1  FILE missing, unreadable or a directory ("cannot read FILE: <reason>"
+#      on stderr)
+#   2  unknown KIND, a caller bug (message on stderr)
+# The caller captures 2>&1 and checks the exit. setup-user-cursor's own copy
+# of read_rules_manifest exits with perl's errno for a read failure; the
+# output and message are the same. Parity: Read-HarnessManifest in
+# aitools-lib.ps1 (throws for both failures).
 read_harness_manifest() {
     local header
     case "${2:-}" in
@@ -2611,8 +2678,8 @@ read_harness_manifest() {
     esac
     perl -e '
         my ($f, $header, $kind) = @ARGV;
-        die "cannot read $f: is a directory\n" if -d $f;
-        open my $fh, "<:raw", $f or die "cannot read $f: $!\n";
+        if (-d $f) { print STDERR "cannot read $f: is a directory\n"; exit 1 }
+        open my $fh, "<:raw", $f or do { print STDERR "cannot read $f: $!\n"; exit 1 };
         my $head = <$fh>; $head = "" unless defined $head;
         $head =~ s/\A\xEF\xBB\xBF//; $head =~ s/\r?\n\z//;
         if ($head ne $header) { print "header-bad\n"; exit 0 }
@@ -2642,52 +2709,82 @@ read_rules_manifest() {
     read_harness_manifest "$1" rules
 }
 
+# _fanout_log_detail_lines PREFIX TEXT: one detail log line "PREFIX: <line>"
+# per non-empty line of TEXT, so a multi-line reason keeps the
+# [timestamp] [script] [detail] format on every line
+_fanout_log_detail_lines() {
+    local prefix="$1" l
+    while IFS= read -r l; do
+        if [ -n "$l" ]; then
+            log_detail "$prefix: $l"
+        fi
+    done <<< "${2:-}"
+}
+
 # fanout_text_equal A B: exit 0 when files A and B hold the same bytes apart
 # from trailing CR/LF (deploy_managed_file normalizes trailing newlines), 1 when
-# they differ, 2 when one cannot be read (missing, a directory, no permission;
-# logged at detail level). Parity: Test-FanoutTextEqual in aitools-lib.ps1.
+# they differ, 2 when they cannot be compared: a file is missing, a directory
+# or unreadable, or perl itself failed. Every exit 2 writes a detail log line
+# "fanout_text_equal: cannot read <file>: <reason>" or "fanout_text_equal: perl
+# failed (exit N): <message>". Parity: Test-FanoutTextEqual in aitools-lib.ps1.
 fanout_text_equal() {
-    local rc=0
-    perl -e '
+    local rc=0 why=""
+    # perl writes only failure reasons (stderr, captured)
+    why=$(perl -e '
         my @t;
         for my $f (@ARGV) {
-            exit 2 if -d $f;
-            open my $fh, "<:raw", $f or exit 2;
+            if (-d $f) { print STDERR "cannot read $f: is a directory\n"; exit 2 }
+            open my $fh, "<:raw", $f or do { print STDERR "cannot read $f: $!\n"; exit 2 };
             local $/; my $c = <$fh>; close $fh;
             $c = "" unless defined $c; $c =~ s/[\r\n]+\z//; push @t, $c;
         }
         exit($t[0] eq $t[1] ? 0 : 1);
-    ' "${1:-}" "${2:-}" || rc=$?
-    if [ "$rc" -eq 2 ]; then
-        log_detail "fanout_text_equal: cannot read ${1:-} or ${2:-}"
+    ' "${1:-}" "${2:-}" 2>&1) || rc=$?
+    if [ "$rc" -gt 2 ]; then
+        why="perl failed (exit $rc)${why:+: $why}"
+        rc=2
+    elif [ "$rc" -eq 2 ] && [ -z "$why" ]; then
+        why="perl failed (exit 2) with no message"
+    fi
+    if [ -n "$why" ]; then
+        _fanout_log_detail_lines "fanout_text_equal" "$why"
     fi
     return "$rc"
 }
 
 # fanout_dir_matches TARGET CAND: exit 0 when TARGET is a real directory (not a
 # symlink), every regular file under it (recursive; a file whose base name is
-# *.bak.*, compared case-insensitively, is ignored) exists at the same relative
-# path under CAND and is equal to it as fanout_text_equal compares, and it holds
-# at least one such file. Exit 1 otherwise: TARGET missing, a file or a symlink;
-# no such file; a file missing or different in CAND; a symlink or another
-# non-regular entry anywhere under TARGET (never followed: what the fan-out did
-# not write is the user's). Exit 2 when an entry cannot be read (2 wins over 1:
-# the whole tree is checked). Used before pruning a retired skill directory.
+# *.bak.*, compared case-insensitively, is ignored) exists as a regular file
+# (a symlink to one counts) at the same relative path under CAND and is equal
+# to it as fanout_text_equal compares, and it holds at least one such file.
+# Exit 1 otherwise: TARGET or CAND empty; TARGET missing, a file or a symlink;
+# no such file; a file missing, different or not a regular file in CAND; any
+# non-regular entry anywhere under TARGET -- a symlink (never followed: what
+# the fan-out did not write is the user's), a FIFO, a socket, a block or
+# character device. Exit 2 when an entry cannot be read: a directory that
+# cannot be listed, an entry that cannot be lstat'ed (a directory without
+# search permission), a file that cannot be read; or perl failed. 2 wins over 1
+# (the whole tree is checked). Every reason for exit 2 is its own detail log
+# line "fanout_dir_matches: cannot list <dir>: <reason>" / "fanout_dir_matches:
+# cannot read <path>: <reason>". Used before pruning a retired skill directory.
 # Parity: Test-FanoutDirMatches in aitools-lib.ps1.
 fanout_dir_matches() {
     local rc=0 why=""
-    # perl prints only the reasons for exit 2 (stdout and stderr both captured)
+    if [ -z "${1:-}" ] || [ -z "${2:-}" ]; then
+        return 1
+    fi
+    # perl writes only failure reasons (stderr, captured), one line each
     why=$(perl -e '
         my ($t, $c) = @ARGV;
         exit 1 if -l $t || ! -d $t;
         my ($n, $bad, $err) = (0, 0, 0);
-        my $norm = sub {
+        my $read = sub {   # (text, undef) or (undef, reason); trailing CR/LF dropped
             my $f = shift;
-            return undef if -d $f;
-            open my $fh, "<:raw", $f or return undef;
+            return (undef, "is a directory") if -d $f;
+            open my $fh, "<:raw", $f or return (undef, "$!");
             local $/; my $x = <$fh>; close $fh;
             $x = "" unless defined $x; $x =~ s/[\r\n]+\z//;
-            return $x;
+            return ($x, undef);
         };
         my @stack = ("");
         while (@stack) {
@@ -2700,23 +2797,30 @@ fanout_dir_matches() {
             for my $e (@names) {
                 my $r = $rel eq "" ? $e : "$rel/$e";
                 my $p = "$t/$r";
-                if (-l $p) { $bad = 1; next }
+                unless (lstat $p) { print STDERR "cannot read $p: $!\n"; $err = 1; next }
+                if (-l _) { $bad = 1; next }
                 if (-d _) { push @stack, $r; next }
-                if (! -f _) { $bad = 1; next }
+                if (! -f _) { $bad = 1; next }   # FIFO, socket, device
                 next if lc($e) =~ /\.bak\./;
                 $n++;
                 my $cp = "$c/$r";
-                if (! -e $cp || -d $cp) { $bad = 1; next }
-                my ($x, $y) = ($norm->($p), $norm->($cp));
-                if (!defined $x || !defined $y) { print STDERR "cannot read $p or $cp\n"; $err = 1; next }
+                if (! -f $cp) { $bad = 1; next }   # missing, a directory, a FIFO ...
+                my ($x, $xwhy) = $read->($p);
+                if (defined $xwhy) { print STDERR "cannot read $p: $xwhy\n"; $err = 1; next }
+                my ($y, $ywhy) = $read->($cp);
+                if (defined $ywhy) { print STDERR "cannot read $cp: $ywhy\n"; $err = 1; next }
                 $bad = 1 if $x ne $y;
             }
         }
         exit 2 if $err;
         exit(($bad || $n == 0) ? 1 : 0);
-    ' "${1:-}" "${2:-}" 2>&1) || rc=$?
+    ' "$1" "$2" 2>&1) || rc=$?
+    if [ "$rc" -gt 2 ]; then
+        why="perl failed (exit $rc)${why:+: $why}"
+        rc=2
+    fi
     if [ -n "$why" ]; then
-        log_detail "fanout_dir_matches: $why"
+        _fanout_log_detail_lines "fanout_dir_matches" "$why"
     fi
     return "$rc"
 }
