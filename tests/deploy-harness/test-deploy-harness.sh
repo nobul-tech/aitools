@@ -10,7 +10,11 @@
 # --force on a terminal, conflicts (first source wins, ERROR rows, exit 1),
 # dry run (no writes), config writer failure (stub and real writer),
 # missing / non-git dotprofile, preserved files, bad arguments, --help, the
-# rules manifest and retired rules (.sh, and the .ps1 on pwsh when available).
+# rules manifest and retired rules (.sh, and the .ps1 on pwsh when available),
+# the skills manifest and retired skills (dotprofile skills source, shared vs
+# .claude duplicate, the .claude -> shared move, retire with a verified
+# backup_dir backup, unlisted source, per-kind listing, dry run, failed backup,
+# invalid lines, bad header), run by the .sh and the .ps1 with identical traces.
 # Interactive cases use tests/managed-files/pty-run.py (python3); skipped
 # without it. The config writer is a stub except in the "real writer" case.
 # Platform: macOS, Linux. Exit 1 if any case fails.
@@ -20,7 +24,7 @@
 set -uo pipefail
 
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
-    perl -ne 'print if $. >= 2 && $. <= 18' "$0"
+    perl -ne 'print if $. >= 2 && $. <= 22' "$0"
     exit 0
 fi
 
@@ -260,7 +264,7 @@ setup_case nodot
 write_config "$C/no-such-dotprofile"
 run_dh "" --
 check "missing dotprofile: info, exit 0, 17 added" \
-    "[ \"\$(rc)\" = 0 ] && grep -q '\[info\] Dotprofile .* not found -- dotprofile rules skipped' '$LOG' && row 'OK|harness files|17 added'"
+    "[ \"\$(rc)\" = 0 ] && grep -q '\[info\] Dotprofile .* not found -- dotprofile rules and skills skipped' '$LOG' && row 'OK|harness files|17 added'"
 
 setup_case nogitdot
 rm -rf "$D/.git"
@@ -447,6 +451,152 @@ if command -v pwsh >/dev/null 2>&1; then
     fi
 else
     printf 'SKIP ps1 manifest cases (pwsh not found)\n'; SKIP=$((SKIP + 1))
+fi
+
+# ---------------------------------------------------------------------------
+# Skills manifest (~/.aitools/skills/.aitools-skills-manifest) and retired skills
+# (plan skills-and-rules-fanout.md section 3.2, FO-2). One case sequence, run by
+# the .sh and by the .ps1 (pwsh); each step's exit code, summary rows, manifest
+# and skills tree go to a trace, and the two traces must be identical.
+# ---------------------------------------------------------------------------
+SM() { printf '%s' "$H/.aitools/skills/.aitools-skills-manifest"; }
+# smf_is LINE... -- the skills manifest is exactly the header + these lines (LF, in order)
+smf_is() {
+    { printf '# aitools skills manifest v1\n'; printf '%s\n' "$@"; } > "$C/smf.expected"
+    cmp -s "$C/smf.expected" "$(SM)"
+}
+# n_bak NAME -- number of NAME.bak.* directories in ~/.aitools/skills
+n_bak() { find "$(A)/skills" -maxdepth 1 -type d -name "$1.bak.*" | grep -c .; }
+# trace STEP -- append the observable state (timestamps normalized) to $C/trace
+trace() {
+    {
+        printf '== %s rc=%s\n' "$1" "$(rc)"
+        cat "$C/summary"
+        printf -- '-- manifest\n'
+        if [ -f "$(SM)" ]; then cat "$(SM)"; fi
+        printf -- '-- tree\n'
+        (cd "$(A)/skills" && find . | LC_ALL=C sort)
+    } | perl -pe 's/\.bak\.\d{4}-\d\d-\d\dT\d{6}Z/.bak.TS/g' >> "$C/trace"
+}
+run_sk_sh() { mkdir -p "$C/logs"; fresh_log; run_dh "" -- "$@"; }
+run_sk_ps() {
+    mkdir -p "$C/logs"; fresh_log; : > "$C/summary"
+    local a=()
+    if [ "${1:-}" = "--dry-run" ]; then a=(-DryRun); fi
+    env -u AITOOLS_FORCE -u AITOOLS_DRY_RUN HOME="$H" USERPROFILE="$H" AITOOLS_LOG_DIR="$C/logs" \
+        AITOOLS_SUMMARY_FILE="$C/summary" pwsh -NoProfile -File "$R/scripts/deploy-harness.ps1" ${a[@]+"${a[@]}"} < /dev/null > "$C/out" 2>&1
+    echo $? > "$C/rc"
+    LOG="$C/logs/deploy.log"
+    [ -f "$LOG" ] || : > "$LOG"
+}
+ps_fixture() {  # the .ps1 twin in the case repo, OS guard disabled, stub config writer
+    perl -pe 's/-and -not \$IsWindows\)/-and \$false)/' "$ROOT/scripts/deploy-harness.ps1" > "$R/scripts/deploy-harness.ps1"
+    cp "$ROOT/scripts/aitools-lib.ps1" "$R/scripts/"
+    printf 'param([switch]$DryRun, [switch]$Force)\nexit 0\n' > "$R/scripts/setup-user-config.ps1"
+}
+
+# skill_cases RUNNER SIDE -- the FO-2 skills sequence on the current case
+skill_cases() {
+    local run="$1" side="$2"
+    mkdir -p "$D/claude/skills/d1/ref" "$R/shared/skills/.hidden" "$R/shared/skills/old.bak.1"
+    printf 'dotprofile skill\n' > "$D/claude/skills/d1/SKILL.md"
+    printf 'dotprofile ref\n' > "$D/claude/skills/d1/ref/x.md"
+    gitc -C "$D" add -A; gitc -C "$D" commit -q -m skills
+    printf 'hidden\n' > "$R/shared/skills/.hidden/SKILL.md"
+    printf 'backup\n' > "$R/shared/skills/old.bak.1/SKILL.md"
+    gitc -C "$R" add -A; gitc -C "$R" commit -q -m hidden
+
+    "$run"; trace first
+    check "$side skills: first run writes the manifest (sorted, winning sources, dotprofile)" \
+        "[ \"\$(rc)\" = 0 ] && smf_is 'd1${T}dotprofile' 's1${T}shared' 's2${T}shared' 's3${T}aitools'"
+    check "$side skills: dotprofile skill deployed as a directory (nested file)" \
+        "grep -qx 'dotprofile ref' '$(A)/skills/d1/ref/x.md'"
+    check "$side skills: hidden and *.bak.* skill directories neither deployed nor listed" \
+        "[ ! -e '$(A)/skills/.hidden' ] && [ ! -e '$(A)/skills/old.bak.1' ] && ! grep -q 'hidden\|old' '$(SM)'"
+    check "$side skills: manifest not reported as preserved, no .tmp left" \
+        "! grep -q 'Preserved: .*aitools-skills-manifest' '$LOG' && [ ! -e '$(SM).tmp' ]"
+
+    mkdir -p "$R/.claude/skills/S2"
+    printf 'project S2\n' > "$R/.claude/skills/S2/SKILL.md"
+    gitc -C "$R" add -A; gitc -C "$R" commit -q -m dup
+    "$run"; trace dup
+    check "$side skills: same name in shared/ and .claude/ -- shared wins, ERROR row, manifest shared" \
+        "[ \"\$(rc)\" = 1 ] && row 'ERROR|harness files|S2: dup in .claude/skills' && grep -qx 's2${T}shared' '$(SM)' && ! grep -q '^S2' '$(SM)' && grep -qx 'skill two' '$(A)/skills/s2/SKILL.md'"
+    gitc -C "$R" rm -q -r .claude/skills/S2; gitc -C "$R" commit -q -m undup
+
+    # The #74/#75 layout move: a skill moves from .claude/skills to shared/skills
+    gitc -C "$R" mv .claude/skills/s3 shared/skills/s3; gitc -C "$R" commit -q -m move
+    "$run"; trace move
+    check "$side skills: moved .claude -> shared: source flips, nothing retired" \
+        "[ \"\$(rc)\" = 0 ] && grep -qx 's3${T}shared' '$(SM)' && [ -f '$(A)/skills/s3/SKILL.md' ] && ! grep -q 'Retired skill' '$LOG' && [ \"\$(n_bak s3)\" = 0 ]"
+
+    gitc -C "$R" rm -q -r shared/skills/s2; gitc -C "$R" commit -q -m retire
+    "$run"; trace retire
+    check "$side skills: removed from its source -- retired line, DETAIL row" \
+        "[ \"\$(rc)\" = 0 ] && grep -qx 's2${T}retired' '$(SM)' && row 'DETAIL|harness files|retired: skills/s2' && grep -q 'Retired skill: s2 (was shared' '$LOG'"
+    check "$side skills: harness directory backed up (backup_dir) and removed" \
+        "[ ! -e '$(A)/skills/s2' ] && [ \"\$(n_bak s2)\" = 1 ] && grep -rqx 'skill two' '$(A)/skills/'s2.bak.*/SKILL.md"
+    check "$side skills: backup directory not reported as preserved" "! grep -q 'Preserved: .*s2.bak' '$LOG'"
+
+    "$run"; trace rerun
+    check "$side skills: retired line persists; no new backup, no row" \
+        "[ \"\$(rc)\" = 0 ] && grep -qx 's2${T}retired' '$(SM)' && [ \"\$(n_bak s2)\" = 1 ] && ! has_row 'retired:'"
+
+    write_config "$C/no-such-dotprofile"
+    "$run"; trace unlisted
+    check "$side skills: source not listed (no dotprofile) -- kept, line kept" \
+        "[ \"\$(rc)\" = 0 ] && grep -qx 'd1${T}dotprofile' '$(SM)' && [ -f '$(A)/skills/d1/SKILL.md' ] && grep -q 'Skills manifest: d1 kept as dotprofile' '$LOG'"
+    write_config "$D"
+    gitc -C "$D" rm -q -r claude/skills; gitc -C "$D" commit -q -m no-skills
+    "$run"; trace perkind
+    check "$side skills: dotprofile rules listed, dotprofile skills not -- skill kept (per kind)" \
+        "[ \"\$(rc)\" = 0 ] && grep -qx 'd1${T}dotprofile' '$(SM)' && [ -f '$(A)/skills/d1/SKILL.md' ] && grep -qx 'user1.md${T}dotprofile' '$(M)' && grep -q 'Source dotprofile/skills not found' '$LOG'"
+
+    mkdir -p "$D/claude/skills/d2"
+    printf 'second dotprofile skill\n' > "$D/claude/skills/d2/SKILL.md"
+    gitc -C "$D" add -A; gitc -C "$D" commit -q -m d2
+    "$run" --dry-run; trace dryrun
+    check "$side skills: dry run -- retirement reported, nothing removed or written" \
+        "[ \"\$(rc)\" = 0 ] && [ -f '$(A)/skills/d1/SKILL.md' ] && grep -qx 'd1${T}dotprofile' '$(SM)' && [ ! -e '$(A)/skills/d2' ] && grep -q 'DRY RUN\] Would back up and remove .*skills/d1' '$LOG' && [ \"\$(n_bak d1)\" = 0 ]"
+    "$run"; trace d1gone
+    check "$side skills: dotprofile skills listed again -- d1 retired, d2 deployed" \
+        "[ \"\$(rc)\" = 0 ] && grep -qx 'd1${T}retired' '$(SM)' && grep -qx 'd2${T}dotprofile' '$(SM)' && [ ! -e '$(A)/skills/d1' ] && [ \"\$(n_bak d1)\" = 1 ]"
+
+    if [ "$(id -u)" != 0 ]; then
+        gitc -C "$R" rm -q -r shared/skills/s1; gitc -C "$R" commit -q -m s1-gone
+        chmod 555 "$(A)/skills"
+        "$run"; trace bakfail
+        chmod 755 "$(A)/skills"
+        check "$side skills: failed backup keeps the directory (ERROR row, exit 1)" \
+            "[ \"\$(rc)\" = 1 ] && [ -f '$(A)/skills/s1/SKILL.md' ] && row 'ERROR|harness files|retire failed: s1' && grep -q 'Retired skill s1: backup failed' '$LOG' && [ \"\$(n_bak s1)\" = 0 ]"
+        "$run"; trace bakretry
+        check "$side skills: next run retries -- backed up and removed" \
+            "[ \"\$(rc)\" = 0 ] && [ ! -e '$(A)/skills/s1' ] && [ \"\$(n_bak s1)\" = 1 ] && grep -qx 's1${T}retired' '$(SM)'"
+    fi
+
+    printf 'a file\n' > "$(A)/skills/zz"
+    printf '# aitools skills manifest v1\nzz\tretired\n../evil\tshared\n.hidden\tshared\nx.bak.1\tshared\na/b\tshared\nok\tbogus\n' > "$(SM)"
+    "$run"; trace invalid
+    check "$side skills: invalid lines ignored (5 warnings); a file named like a retired skill left alone" \
+        "[ \"\$(rc)\" = 0 ] && [ \"\$(grep -c 'line ignored' '$LOG')\" = 5 ] && [ -f '$(A)/skills/zz' ] && grep -q 'Retired skill zz: .* is not a directory' '$LOG' && grep -qx 'zz${T}retired' '$(SM)' && ! grep -q 'evil\|hidden\|bogus' '$(SM)'"
+    printf 'not a manifest\nd2\tdotprofile\n' > "$(SM)"
+    "$run"; trace header
+    check "$side skills: unknown header -- warning, nothing retired, rewritten" \
+        "[ \"\$(rc)\" = 0 ] && grep -q '\[warn\] Skills manifest .*the first line is not' '$LOG' && head -n 1 '$(SM)' | grep -qx '# aitools skills manifest v1' && ! grep -q 'retired' '$(SM)'"
+}
+
+setup_case skillssh
+skill_cases run_sk_sh sh
+if command -v pwsh >/dev/null 2>&1; then
+    SH_TRACE="$C/trace"
+    setup_case skillsps
+    ps_fixture
+    skill_cases run_sk_ps ps1
+    check "skills parity: .sh and .ps1 traces identical (exit codes, rows, manifest, tree)" \
+        "[ \"\$(grep -c '^== ' '$SH_TRACE')\" -ge 12 ] && grep -q '^-- manifest' '$SH_TRACE' && diff '$SH_TRACE' '$C/trace' > '$C/trace.diff'"
+    if [ -s "$C/trace.diff" ]; then perl -pe 's/^/      | /' "$C/trace.diff" | head -n 40; fi
+else
+    printf 'SKIP ps1 skills cases (pwsh not found)\n'; SKIP=$((SKIP + 1))
 fi
 
 # ---------------------------------------------------------------------------
