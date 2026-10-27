@@ -187,6 +187,14 @@ jobs:
         if: ${{ !cancelled() }}
         run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/skills-legacy/test-skills-legacy.sh
 
+      - name: Claude skills fan-out tests (bash 5 + pwsh parity)
+        if: ${{ !cancelled() }}
+        run: bash tests/skills-fanout/test-skills-fanout.sh
+
+      - name: Claude skills fan-out tests (macOS /bin/bash 3.2)
+        if: ${{ !cancelled() }}
+        run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/skills-fanout/test-skills-fanout.sh --bash-only
+
       - name: Dotprofile resolver consumer tests (bash 5 + pwsh)
         if: ${{ !cancelled() }}
         run: bash tests/b8-consumers/test-b8-consumers.sh
@@ -443,6 +451,10 @@ jobs:
       - name: setup-user-skills fallback dev + MDM tests (bash + pwsh parity)
         if: ${{ !cancelled() }}
         run: bash tests/skills-legacy/test-skills-legacy.sh
+
+      - name: Claude skills fan-out tests (bash + pwsh parity)
+        if: ${{ !cancelled() }}
+        run: bash tests/skills-fanout/test-skills-fanout.sh
 
       - name: Dotprofile resolver consumer tests (bash + pwsh)
         if: ${{ !cancelled() }}
