@@ -35,9 +35,7 @@ Knowledge management — specifically:
   section against the stated intent, classifies drift, and surfaces
   findings for the DTCC.
 - **Detection hook** (planned) → PreToolUse prompt hook on
-  Write/Edit reminds agents to check intent before writing. The
-  agent has the `/intent-audit` skill in context via SubagentStart
-  cache.
+  Write/Edit reminds agents to check intent before writing.
 
 ## How It's Maintained
 
@@ -55,7 +53,7 @@ Knowledge management — specifically:
 - `@shared/skills/intent-writing/SKILL.md` (drafting process)
 - `@shared/skills/intent-audit/SKILL.md` (verification process)
 - `@.claude/rules/sources-of-truth.md` (protection gate)
-- `@CLAUDE.md` "Document intent" design principle
+- `@.claude/rules/sources-of-truth.md` "Intent statements" (the protection) and `/intent-writing` (the convention)
 
 ## Cross-References
 

@@ -9,6 +9,17 @@
 > S3-GateFix (mission folders under `.aitools/channel/handoffs/`). The intent
 > statement is unchanged from revision 3.
 
+> **Implementation status (2026-10-27, origin/main `e03d490`)**: this is the
+> approved design. Implemented: the tool exception engine (section 8:
+> `aitools-profile.sh`/`.ps1 exception-get/-set`, `tool_exception_get` /
+> `tool_exception_record`, `Get-ToolException` / `Set-ToolException`) and the
+> exit-2 contract of section 7.5. Not implemented: the tree helpers of section
+> 7.2 (except the two exception helpers), `scripts/gen-tool-specs.py` and
+> `generated/tool-specs/` (7.1), `write_platform_skip` (section 3 NA), the
+> pre-commit conformance step (section 9) and the planned hook. Registry schema
+> is still 1.0. Setup scripts still use their own install logic. Sentences below
+> in the present tense describe the design.
+
 **Intent**: **Purpose**: Define the one decision tree every managed-tool setup
 script follows to install, update, keep, or replace a tool on the current
 platform and environment, with the registry fields, library helpers, tool
@@ -34,7 +45,7 @@ check step, reviewers of setup-script changes.
 
 | Term | Meaning in this file |
 |------|----------------------|
-| platform | Governed term (`/glossary`); API value `$AITOOLS_PLATFORM` / `$AitoolsPlatform` = `macos`, `linux`, `windows`. On Linux the package-manager family (`apt`, `dnf`, ...) also selects methods (section 6 `family`) |
+| platform | Governed term (`/glossary`); API value `$AITOOLS_PLATFORM` / `$AitoolsPlatform` = `macos`, `linux`, `windows`. On Linux the package-manager family (`apt`, `dnf`, ...) also selects methods (section 6 `family`; only `apt` is a supported family: Ubuntu 24.04 and 22.04, `@reference/cross-platform-detail.md` "Supported platforms and environments") |
 | environment | Governed term (`/glossary`); here only its API value `$AITOOLS_ENVIRONMENT` / `$AitoolsEnvironment` = `local` or `claude-code-web` |
 | method | One entry of `install.<platform>[]`, identified by its `method` id (unique within the tool across all platforms) |
 | preferred method | The one method with `preferred: true` selected by T1 |
@@ -253,9 +264,10 @@ This section is the single authority for the fields the tree reads. The
 becomes `1.1`. Changes are additive except where marked.
 
 T-Q9 (decided 2026-10-21): the registry schema is documented in the
-`/tool-registry` skill. This table moves there once that skill's move to user
-level (`shared/skills/`, LAYOUT PR-b) is on main; until then it stays here, and
-the skill must not restate it.
+`/tool-registry` skill. The skill is at user level since #128 (LAYOUT re-land);
+moving this table there is now due (follow-up, owner: whoever next edits the
+skill). Until it moves, this table is the authority and the skill must not
+restate it.
 
 N-Q6 (decided 2026-10-21): the schema allows one preferred method per platform
 (per platform, environment and Linux family where `environments` / `family`

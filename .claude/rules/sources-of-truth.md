@@ -25,9 +25,9 @@ Certain files are authoritative references that feed scripts, deploy pipelines, 
 | Intent statements in any file | Defines how all future sessions interpret the file's purpose and scope | Any |
 | `reference/framework-*.md` | Framework documentation — discipline source, adoption rationale, maintenance | Any |
 | `registries/framework-registry.json` | Framework registry — source of truth for all adopted frameworks | Any |
-| `.claude/rules/frameworks.md` | Framework rule — intent of frameworks, registry of registries | Any |
+| `.claude/rules/frameworks.md` | Framework rule — check-before-assuming principle, three-layer registry pattern, /frameworks trigger | Any |
 | `reference/incident-*.md` | Incident reference files — full discovery context for framework-level incidents | Any |
-| `reference/harness.md` | Harness architecture — the five components and their relationships | Any |
+| `reference/harness.md` | Harness architecture — the six components and their relationships | Any |
 | `registries/glossary.json` | Governed vocabulary definitions — source of truth for all terms | Any |
 | `registries/tool-ops.json` | Tool operations registry — per-tool governance modes and verification specs | Any |
 | `reference/framework-tool-ops.md` | Tool operations framework — SRE discipline source and adoption rationale | Any |

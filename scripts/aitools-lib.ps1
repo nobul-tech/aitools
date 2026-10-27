@@ -474,9 +474,13 @@ function ConvertTo-AitLibJsonlText($Value) {
 # Write-JsonlRecord TS SCRIPT LEVEL MSG -- append one record to deploy.jsonl in the
 # log directory ($script:logDir, set by Initialize-Logging). Key order: ts, host,
 # os, script, run_id, level, msg (the installers' order). run_id = AITOOLS_RUN_ID,
-# else one random id per process. A failed write is logged at detail and
-# otherwise ignored: logging must not break the run it records (logging.md section 5).
+# else one random id per process. Logging must not break the run it records
+# (logging.md section 5): the first failed write is one LogWarn (audit A-16: the
+# run goes on, and the warning says why its records are missing); later calls
+# write nothing ($script:AitLibJsonlFailed, set before the warning so an
+# installer whose Log calls Write-JsonlRecord does not recurse). Parity: jsonl_record.
 function Write-JsonlRecord($Ts, $ScriptLabel, $Level, $Msg) {
+    if ($script:AitLibJsonlFailed) { return }
     Initialize-AitLibJsonl
     $rec = [ordered]@{
         ts = (ConvertTo-AitLibJsonlText $Ts); host = (ConvertTo-AitLibJsonlText $script:AitLibJsonlHost)
@@ -484,11 +488,14 @@ function Write-JsonlRecord($Ts, $ScriptLabel, $Level, $Msg) {
         run_id = (ConvertTo-AitLibJsonlText $script:AitLibRunId); level = (ConvertTo-AitLibJsonlText $Level)
         msg = (ConvertTo-AitLibJsonlText $Msg)
     }
+    $f = "deploy.jsonl"
     try {
         $f = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath((Join-Path $script:logDir "deploy.jsonl"))
         [IO.File]::AppendAllText($f, (($rec | ConvertTo-Json -Compress) + "`n"), [System.Text.UTF8Encoding]::new($false))
     } catch {
-        LogDetail "deploy.jsonl: write failed ($($_.Exception.Message))"
+        $script:AitLibJsonlFailed = $true
+        LogDetail "deploy.jsonl: $($_.Exception.Message -replace '\s*\r?\n\s*', ' ')"
+        LogWarn "deploy.jsonl: cannot write $f -- structured log records are skipped for the rest of this run"
     }
 }
 

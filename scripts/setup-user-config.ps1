@@ -3,11 +3,14 @@
 # Intent: Build this machine's ~/.aitools/config.json from two inputs -- the
 # bootstrap values its callers pass (repos path, aitools repo path, detected
 # Google Drives) and the values derived from the dotprofile's profile.json by
-# aitools-profile.ps1 (dotprofile path, GitHub user, machine alias and how it was
-# chosen). NOT a writer of profile.json (machine registration is `aitools user
-# init`). NOT an interactive prompt (callers prompt, then pass -MachineAlias).
+# aitools-profile.ps1 (dotprofile path, GitHub user, this machine's profile key --
+# machineId -- with its display alias, and how they were chosen). NOT a writer of
+# profile.json (machine registration is `aitools user init`). NOT an interactive
+# prompt (callers prompt, then pass -MachineId, or -NoMachine when they leave
+# this machine unregistered).
 # NOT the settings.json sync (setup-user-settings). Consumed by: aitools-install.ps1
-# Step 5, `aitools user init`, and the `aitools` sync deploy list (first entry).
+# Step 5, `aitools user init`, and deploy-harness.ps1 (first in the `aitools` sync
+# deploy list; skipped with -SkipConfig when the installer's Step 5 ran it).
 #
 # Safe to re-run: unchanged inputs produce "verified" and no write.
 # Platform: Windows. On macOS/Linux use setup-user-config.sh.
@@ -283,7 +286,7 @@ if (-not $seen -or $deriveRc -gt 2) {
 }
 
 # --- 2. Merge (read-then-merge; managed keys only) ---
-$configIntentJson = '{"purpose":"Per-machine pointers that let aitools find its repos and this machine profile, built from profile.json","scope":"Bootstrap pointers (reposPath, repoPath), detected googleDrives, and values derived from profile.json (githubUser, userRepoPath, machineAlias). NOT identity or preferences (profile.json). NOT hand-edited: setup-user-config is the only writer","audience":"read_config_key/ReadConfigKey callers, resolve_user_repo_path/Resolve-UserRepoPath, ait-harvest.py, hh, check-lib; written by setup-user-config.sh/.ps1"}'
+$configIntentJson = '{"purpose":"Per-machine pointers that let aitools find its repos and this machine profile, built from profile.json","scope":"Bootstrap pointers (reposPath, repoPath), detected googleDrives, and values derived from profile.json (githubUser, userRepoPath, machineId, and machineAlias as a display value). NOT identity or preferences (profile.json). NOT hand-edited: setup-user-config is the only writer","audience":"read_config_key/ReadConfigKey callers, resolve_user_repo_path/Resolve-UserRepoPath, ait-harvest.py, hh, check-lib; written by setup-user-config.sh/.ps1"}'
 
 $configState = "updated"; $corruptReason = ""; $midHad = ""
 $old = $null

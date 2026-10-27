@@ -107,6 +107,7 @@ repo whose root has `.scratch/.current-session`, each block is a `hook_block` ev
 in `<session dir>/events.jsonl`.
 
 The hook lifecycle beyond rollout (source, deploy, adopt, user-created hooks,
-retirement) is governed by the user-level rule `@shared/rules/hook-lifecycle.md`
-(deployed to `~/.claude/rules/hook-lifecycle.md` once a deploy path for
-`shared/rules/` exists).
+retirement) is governed by the user-level rule `@shared/rules/hook-lifecycle.md`.
+`deploy-harness` copies it to `~/.aitools/rules/` and `setup-user-cursor` fans it
+out to `~/.cursor/rules/`; it reaches `~/.claude/rules/` once `setup-user-claude`
+fans out the harness rules.

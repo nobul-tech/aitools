@@ -118,8 +118,10 @@ Initialize-Logging "setup-toolname"
 **Entry points** load the lib as early as they can. `scripts/aitools` / `aitools.ps1`
 source it once `repoPath` is known (only `--help`, `--version` and a missing-repo clone
 run before it) and use its logging unchanged; warnings found before it loads are queued
-and logged right after. `aitools-install` sources it first and overrides the log
-functions only to add JSONL output:
+and logged right after. `aitools-install` sources the lib first and overrides the log
+functions only to add a `deploy.jsonl` record per line, through the lib's
+`jsonl_record` / `Write-JsonlRecord` (escaped; one `AITOOLS_RUN_ID` for the installer
+and its relayed children; an unwritable file is one warning, audit A-16):
 
 Bash (`scripts/aitools-install.sh`):
 ```bash
@@ -130,8 +132,7 @@ log() {
     local level="${2:-info}"
     local ts; ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     printf '[%s] [%s] [%s] %s\n' "$ts" "$SCRIPT_NAME" "$level" "$1" | tee -a "$LOG_FILE"
-    printf '{"ts":"%s","host":"%s","os":"%s","script":"%s","run_id":"%s","level":"%s","msg":"%s"}\n' \
-        "$ts" "$HOST_NAME" "$OS_NAME" "$SCRIPT_NAME" "$RUN_ID" "$level" "$1" >> "$LOG_JSONL"
+    jsonl_record "$ts" "$SCRIPT_NAME" "$level" "$1"
 }
 log_ok()    { log "$1" "ok"; }
 log_error() { log "$1" "error"; ERRORS=$((ERRORS + 1)); }
@@ -146,8 +147,7 @@ function Log($msg, $level = "info") {
     $line = "[$ts] [$scriptName] [$level] $msg"
     Write-Host $line
     Add-Content -Path $logFile -Value $line
-    $json = @{ ts=$ts; host=$hostName; os=$osName; script=$scriptName; run_id=$runId; level=$level; msg=$msg } | ConvertTo-Json -Compress
-    Add-Content -Path $logJsonl -Value $json
+    Write-JsonlRecord $ts $scriptName $level $msg
 }
 function LogOk($msg)    { Log $msg "ok" }
 function LogError($msg) { Log $msg "error"; $script:errors++ }
@@ -163,7 +163,8 @@ no overrides. `tests/logging/` checks that the entry points define no log functi
 | Script | Bash overrides | PS1 overrides | Reason |
 |--------|---------------|---------------|--------|
 | `scripts/aitools-install` | `log`, `log_ok`, `log_error`, `log_warn` | `Log`, `LogOk`, `LogError`, `LogWarn` | JSONL dual-format (human-readable + structured JSON) |
-| `scripts/build-deploy.sh` | `blog`, `blog_ok`, `blog_error` | n/a | Standalone build tool; doesn't source aitools-lib.sh; defines own logging functions |
+| `scripts/build-deploy.sh` | `blog`, `blog_ok`, `blog_warn`, `blog_error` (warn/error to stderr; colour only when stderr is a terminal) | n/a | Standalone build tool; does not source aitools-lib.sh (its dotprofile lookup runs the lib in a child bash); the entry points append its output to deploy.log |
+| `scripts/aitools-profile` | `log` (console line to stderr; file line unchanged) | `Log` (same) | Library-style tool: stdout carries data only (see "Library-style tools") |
 
 **`log_detail` / `LogDetail`**: File-only logging for diagnostic content (rejected merge
 output, verbose debugging). Not included in override tables -- entry points that override
@@ -174,6 +175,43 @@ directly to `$LOG_FILE`/`$logFile` regardless of console routing.
 as `log` but writes only to `$LOG_FILE` (no console). This prevents stdout pollution
 when `invoke_ai` output is captured via `$()`. Entry point overrides of `log` do NOT
 affect `_ai_log` -- it always writes directly to the log file.
+
+### Library-style tools
+
+A library-style tool is a script whose stdout is a data protocol read by other
+scripts, not output for a person. Only the scripts in this table qualify;
+adding one requires commander approval.
+
+| Script | Protocol | Consumers |
+|--------|----------|-----------|
+| `scripts/aitools-profile.sh` / `.ps1` | `key<TAB>value` lines, then `warn<TAB>...` / `error<TAB>...` lines (or one JSON object with `--json`); exit 0 ok, 1 not found, 2 error, 3 refused, 4 refused (alias in use) | `aitools-lib` wrappers, `setup-user-config`, `aitools user init`, `build-deploy.sh`, generated `setup-user-claude` |
+
+A library-style tool:
+
+- MUST follow the block order (header, `set -euo pipefail`, source the lib +
+  `logging_init`, OS guard) and the error-handling requirements like any
+  reusable script.
+- MUST NOT write log lines, summary rows or ACTION items to stdout. Its `log` /
+  `Log` override sends console lines to stderr (row in "Logging overrides").
+- MUST NOT call `write_summary` / `Write-Summary` and has no exit footer: it
+  returns every warning and error to its caller as a `warn` / `error` protocol
+  line, and the caller logs each at its level and owns the summary rows and the
+  ERRORS / WARNINGS counters.
+- MUST log every warning, error and exit code to deploy.log at `detail` level
+  (`log_detail` / `LogDetail`), including paths that exit before the protocol
+  is written (usage errors, internal engine errors, `snapshot`, `machine-id`,
+  `hostname`): deploy.log keeps the reason even when a caller discards stderr.
+- MAY print a short `aitools-profile: <reason>` line to stderr on those early
+  exits (no protocol to carry it); it is in addition to the detail line, never
+  instead of it.
+- Exception: a guard that runs before the lib is loaded (the PowerShell 7
+  version check) writes stderr only; nothing else can log there.
+
+Its contract (commands, fields, exit codes) lives in the script header and in
+`reference/user-repo.md` "Resolution"; changing it requires updating every
+consumer in the table in the same change. How callers log what it returns:
+`@reference/logging.md` "Library-style tools return diagnostics; callers log
+them at level".
 
 ## End-of-run summary
 
@@ -219,17 +257,31 @@ These are the canonical tool names for field 2. Always use these exact strings.
 | `claude rules` | setup-user-claude |
 | `claude hooks` | setup-user-hooks |
 | `claude mcp` | setup-user-mcp |
-| `claude skills` | setup-user-mcp |
+| `claude skills` | setup-user-skills |
+| `claude settings` | setup-user-settings |
+| `claude template` | aitools user init (dotprofile scaffold) |
 | `cursor rules` | setup-user-cursor |
-| `cursor skills` | setup-user-mcp |
+| `cursor skills` | setup-user-skills |
 | `cursor ide mcp` | setup-cursor-ide-mcp |
 | `python` | setup-python |
 | `uv` | setup-uv |
 | `go` | setup-go |
 | `datadog cli` | setup-datadog |
 | `cursor cli` | setup-user-cursor |
-| `aitools config` | aitools-install |
+| `aitools config` | setup-user-config (relayed by aitools-install Step 5 and `aitools user init`) |
+| `profile.json` | setup-user-config |
+| `profile keys` | aitools user init |
+| `dotprofile` | aitools-lib resolver wrappers, setup-user-config |
+| `machine profile` | aitools-lib resolver wrappers, setup-user-config, aitools user init |
 | `harness files` | deploy-harness |
+| `config.json` | deploy-harness |
+| `shell` | setup-user-shell |
+| `gh auth` | aitools-install |
+| `aitools install` | aitools-install |
+| `pwsh` | aitools-install |
+| `bash` | setup-bash |
+| `perl` | setup-perl |
+| `dashboard` | aitools-dashboard |
 | `google chrome` | setup-google-chrome |
 | `nss tools` | setup-google-chrome |
 | `chrome proxy ca` | setup-google-chrome |
@@ -253,6 +305,7 @@ A tool where `brew upgrade` returned unexpected output but the existing version 
 - `log_warn` + `write_summary WARN` -- tool works but with a caveat (disclose the caveat)
 - `log_error` + `write_summary ERROR` -- tool not functional (install failed, not on PATH, dependency broken)
 - `log_warn` + `write_summary ACTION` -- user action required; always pair ACTION with a log_warn carrying the same instruction
+- SHADOWED (a managed tool is installed, but the command resolves to another copy) is ERROR `shadowed (see log)` + ACTION, although a copy runs: supported means the command resolves to the managed copy (D-TS11, `@reference/tool-support-decision-tree.md`)
 
 ### Summary coverage rule
 
@@ -339,20 +392,18 @@ These render left-aligned with the detail column (position 25).
 **Summary file format** -- new `DETAIL` category:
 
 ```
-OK|claude hooks|3 keys updated
-DETAIL|claude hooks|effortLevel: medium -> high
-DETAIL|claude hooks|autoMemoryEnabled: false -> true
-DETAIL|claude hooks|hooks: updated
+OK|claude settings|2 keys updated
+DETAIL|claude settings|effortLevel: medium -> high
+DETAIL|claude settings|autoMemoryEnabled: false -> true
 ```
 
 **Rendered output:**
 
 ```
 ────────────────────────────────────────────────────────
-  [ok]  claude hooks      3 keys updated
+  [ok]  claude settings   2 keys updated
                           effortLevel: medium -> high
                           autoMemoryEnabled: false -> true
-                          hooks: updated
   [ok]  claude.md         updated
   [ok]  claude rules      verified
 ────────────────────────────────────────────────────────
@@ -369,12 +420,12 @@ DETAIL lines:
 
 Bash:
 ```bash
-write_summary DETAIL "claude hooks" "effortLevel: medium -> high"
+write_summary DETAIL "claude settings" "effortLevel: medium -> high"
 ```
 
 PowerShell:
 ```powershell
-Write-Summary "DETAIL" "claude hooks" "effortLevel: medium -> high"
+Write-Summary "DETAIL" "claude settings" "effortLevel: medium -> high"
 ```
 
 ### Canonical patterns by file type
@@ -902,8 +953,8 @@ Considered keeping `Write-Host`/`echo` in guards (simpler, no dependency
 on logging init). Rejected because:
 
 1. Breaks Datadog log parsing — unstructured lines in the log stream
-2. Inconsistent with PSO "Script logging" — all reusable scripts must use
-   structured logging
+2. Inconsistent with the script-standards rule (`@.claude/rules/script-standards.md`
+   "Log line format": all reusable scripts use structured logging)
 3. Guards are the most common "wrong platform" signal — they should be
    visible in dashboards and alerts
 
@@ -1173,6 +1224,6 @@ fi
 
 Protected -- requires user approval to modify.
 
-| Script | Line(s) | Pattern | Reason |
-|--------|---------|---------|--------|
-| `check-lib.ps1` | 177 | `2>$null` (InvokeGit) | Git stderr triggers PS ErrorActionPreference=Stop; caller checks result |
+| Script | Function | Pattern | Reason |
+|--------|----------|---------|--------|
+| `check-lib.ps1` | `InvokeGit` | `2>$null` | Git stderr triggers PS ErrorActionPreference=Stop; caller checks result |

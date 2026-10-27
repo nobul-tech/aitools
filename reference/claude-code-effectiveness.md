@@ -1,4 +1,8 @@
-# Claude Code Effectiveness Tracker
+# Claude Code Effectiveness Tracker (historical copy)
+
+> Not maintained. The effectiveness tracker is the dotprofile
+> `claude/effectiveness.md` (user CLAUDE.md "Coaching"), whose incident ids
+> differ from the ones below from I10 on. Kept for history; do not cite these ids.
 
 Self-assessment of how effectively Jose works with Claude Code, tracked over time.
 See `shared/claude-shared.md` > Coaching section for the active improvement checklist.
@@ -114,7 +118,7 @@ incidents. Each incident gets RCA and remediation tracking.
 
 - **Observed**: Session-archive hook was deployed and appeared working, but was actually a no-op because `userRepoPath` was missing from `config.json`
 - **RCA**: Hook silently exits on missing config. Feature described as "working" when it had never fired
-- **Remediation**: Added `.claude/rules/surface-silent-failures.md` rule. Technical fix: user ran `aitools user init` to set `userRepoPath`
+- **Remediation**: Added `.claude/rules/surface-silent-failures.md` rule (since absorbed into `.claude/rules/script-standards.md` "Error handling requirements"). Technical fix: user ran `aitools user init` to set `userRepoPath`
 - **Status**: Remediated
 - **Detection gap**: Check scripts could verify hook prerequisites (config keys present, target dirs exist). Post-push step #5 partially covers this
 - **Next step**: Extend post-push step #5 to verify archive directory exists and has recent files
@@ -134,7 +138,7 @@ incidents. Each incident gets RCA and remediation tracking.
 
 - **Observed**: Initial plan for setup-typst.sh included `cargo uninstall typst-cli 2>/dev/null || true` and `npm uninstall -g typst 2>/dev/null || true` without the required explanatory comments, without noting the need for exemption table entries, and with vague pseudocode that omitted required logging block elements (display_path, tool-registry.md header reference). User had to request a re-audit to surface these issues.
 - **RCA**: Rules were treated as applying only to committed code. Plan-phase pseudocode was given "draft quality" latitude, allowing violations to be deferred to implementation. This is wrong -- the plan is the blueprint, and a blueprint with violations produces violations.
-- **Remediation**: Broadened scope in error-handling.md and script-standards.md to explicitly cover plans and pseudocode. Violations in plans are equivalent to violations in committed code and must be documented as incidents.
+- **Remediation**: Broadened scope in error-handling.md (since absorbed into `.claude/rules/script-standards.md` "Error handling requirements") and script-standards.md to explicitly cover plans and pseudocode. Violations in plans are equivalent to violations in committed code and must be documented as incidents.
 - **Status**: RCA (rule updates applied)
 
 #### I8: Plan revision shallow -- keyword grep instead of full re-read (2026-02-28)
@@ -207,6 +211,8 @@ incidents. Each incident gets RCA and remediation tracking.
   Perl one-liners including the USO-prescribed pattern.
   `&&` and `||` checks have zero false positives in the log and could enforce independently.
   Fix: exempt `;` when it appears inside a `-Command '...'` or `-e '...'` argument before promoting.
+- **Update 2026-03-24**: `&&`, `||`, `;` and backticks promoted to enforce; commands starting with
+  `pwsh`, `powershell` or `perl` are exempt from the `;` check (`.claude/rules/hook-rollout.md`).
 
 #### I13: Newline-separated commands in single Bash tool call (2026-03-02)
 

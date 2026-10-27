@@ -1,6 +1,26 @@
 # S3-FanoutImpl-CI hand-back (FO-0)
 
-Version 1.0, 2026-10-27, by S3-FanoutImpl-CI (level 2) for S3-FanoutImpl.
+Version 1.1, 2026-10-27, by S3-FanoutImpl-CI (level 2) for S3-FanoutImpl.
+Version 1.1 adds the FO-0b follow-up below. Sections after it are from v1.0.
+
+## v1.1: FO-0b follow-up (the S3-FanoutImpl message)
+
+- Head **dbe8f46**. CI run **40442790737**: green on macos, linux and windows. Every step passed, including deploy-harness-mdm, claude-mdm on bash 5 and on 3.2, Build deploy scripts and Check deploy drift. The earlier head e4096d8 was also green (run 40441806471).
+- **#120 is merged in with `--no-ff` twice.** The first merge was at 978e72d, as the message asked. #120 then moved to 1d37d93 (cdad49f is review fixes, followed by a merge of main), so I merged it again. #117 contains #120's head, so #120 merges first.
+- **I also merged origin/main c412377 into the branch.** GitHub reported #117 as CONFLICTING (mergeable_state dirty). Because of that, the CI workflow did not run on 57c9dd7. Locally the merge with main was clean (ort), and the branch had 3 merge bases with main (03b833f, 2419d23, 1692959). After this merge, GitHub reports it MERGEABLE.
+- **deploy-harness-mdm** now has steps in the macos and linux jobs. Its `%exempt` entry is removed, so the exempt list is empty. Local results with #120 1d37d93:
+  - deploy-harness-mdm: 65 pass, 0 fail (bash 5 and 3.2)
+  - claude-mdm: 34 pass, 0 fail (bash 5 and 3.2)
+- **Review finding 1:** the coverage step's comment now lists its blind spots: single-line `run:` only; a run in any job counts; `if:` is ignored; `bash <path>` can appear anywhere on the line before `#`; it covers test-*.sh only.
+- **Review finding 3:** the coverage step now has a single copy, in the linux job. The macos job has a comment pointing to it. I did not use a YAML anchor, because Ruby 3.1+ `YAML.load_file` refuses aliases. That would break the plan's YAML parse check (local Ruby is 2.6, so the break would not show locally).
+- **Review finding 5:** added `if: ${{ !cancelled() }}` to the claude-mdm macOS 3.2 step.
+- **Findings 2, 4 and 6** are listed as follow-ups in the PR body.
+- I re-ran the coverage test from the parsed YAML:
+  - There is exactly 1 copy, in the linux job.
+  - It passes on the tree: 14 suites, none exempt.
+  - It fails, as it should, on: a removed step, a new suite, an exempt suite that is run, a stale exemption, a path that appears only in a comment.
+  - It passes on an exempt suite that is not run.
+- check-pre-push: only step 7 FAILs. The cause is the known stale dotprofile `deploy/`; the rebuild itself now succeeds.
 
 ## Summary
 
