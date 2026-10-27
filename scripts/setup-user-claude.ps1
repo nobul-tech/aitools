@@ -394,32 +394,9 @@ if ($rulesSrc) {
                 # tracker records every outcome (failed -> ERROR row).
             }
             Record-DeployOutcome -Outcome $ruleResult -ToolName "claude rules" -ItemName $rf.Name
-            # After a merge & adopt (the library already wrote the merge to the
-            # dotprofile), auto commit+push to keep the dotprofile in sync.
-            # Kept: commander confirmed 2026-10-21 (contract item #11).
-            if ($ruleResult -eq "accept & adopt" -and $script:MergedContent -and $userRepoPath) {
-                try {
-                    Push-Location $userRepoPath
-                    & git add "claude/rules/$($rf.Name)"
-                    # Suppress git stderr noise; LASTEXITCODE checked on next line
-                    & git diff --cached --quiet "claude/rules/$($rf.Name)" 2>$null
-                    if ($LASTEXITCODE -ne 0) {
-                        # Has staged changes -- commit and push
-                        & git commit -m "Sync merged $($rf.Name) from deploy"
-                        if ($LASTEXITCODE -ne 0) { throw "git commit failed" }
-                        & git push
-                        if ($LASTEXITCODE -ne 0) { throw "git push failed" }
-                        LogOk "Pushed merged $($rf.Name) to user repo"
-                    } else {
-                        Log "No diff to commit in user repo for $($rf.Name)"
-                    }
-                } catch {
-                    LogWarn "Failed to push merged $($rf.Name) to user repo: $_"
-                    Write-Summary "WARN" "claude rules" "$($rf.Name) not pushed"
-                } finally {
-                    Pop-Location
-                }
-            }
+            # After accept & adopt or merge & adopt the library commits that one
+            # dotprofile rule and pushes it (Invoke-DotprofileCommitPush, N-Q2;
+            # commander confirmed 2026-10-21, contract item #11). No commit here.
         }
 
         # Log preserved files (in target but not in source)
