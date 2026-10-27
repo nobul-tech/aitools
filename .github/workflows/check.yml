@@ -155,17 +155,17 @@ jobs:
       - name: User init tests (macOS /bin/bash 3.2)
         run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/profile/test-user-init.sh --bash-only
 
-      - name: setup-user-claude dev + MDM tests (bash 5 + pwsh)
-        run: bash tests/claude-mdm/test-claude-mdm.sh
-
-      - name: setup-user-claude dev + MDM tests (macOS /bin/bash 3.2)
-        run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/claude-mdm/test-claude-mdm.sh
-
       - name: Fan-out lib helper tests (bash 5 + pwsh parity)
         run: bash tests/fanout-lib/test-fanout-lib.sh
 
       - name: Fan-out lib helper tests (macOS /bin/bash 3.2)
         run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/fanout-lib/test-fanout-lib.sh --bash-only
+
+      - name: setup-user-claude dev + MDM tests (bash 5 + pwsh)
+        run: bash tests/claude-mdm/test-claude-mdm.sh
+
+      - name: setup-user-claude dev + MDM tests (macOS /bin/bash 3.2)
+        run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/claude-mdm/test-claude-mdm.sh
 
       - name: Build deploy scripts
         run: |
@@ -332,11 +332,11 @@ jobs:
       - name: User init tests (bash + pwsh parity, pty menus)
         run: bash tests/profile/test-user-init.sh
 
-      - name: setup-user-claude dev + MDM tests (bash + pwsh)
-        run: bash tests/claude-mdm/test-claude-mdm.sh
-
       - name: Fan-out lib helper tests (bash + pwsh parity)
         run: bash tests/fanout-lib/test-fanout-lib.sh
+
+      - name: setup-user-claude dev + MDM tests (bash + pwsh)
+        run: bash tests/claude-mdm/test-claude-mdm.sh
 
       - name: Build deploy scripts
         run: bash scripts/build-deploy.sh
