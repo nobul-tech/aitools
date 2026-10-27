@@ -164,6 +164,7 @@ no overrides. `tests/logging/` checks that the entry points define no log functi
 |--------|---------------|---------------|--------|
 | `scripts/aitools-install` | `log`, `log_ok`, `log_error`, `log_warn` | `Log`, `LogOk`, `LogError`, `LogWarn` | JSONL dual-format (human-readable + structured JSON) |
 | `scripts/build-deploy.sh` | `blog`, `blog_ok`, `blog_error` | n/a | Standalone build tool; doesn't source aitools-lib.sh; defines own logging functions |
+| `scripts/aitools-profile` | `log` (console line to stderr; file line unchanged) | `Log` (same) | Library-style tool: stdout carries data only (see "Library-style tools") |
 
 **`log_detail` / `LogDetail`**: File-only logging for diagnostic content (rejected merge
 output, verbose debugging). Not included in override tables -- entry points that override
@@ -174,6 +175,43 @@ directly to `$LOG_FILE`/`$logFile` regardless of console routing.
 as `log` but writes only to `$LOG_FILE` (no console). This prevents stdout pollution
 when `invoke_ai` output is captured via `$()`. Entry point overrides of `log` do NOT
 affect `_ai_log` -- it always writes directly to the log file.
+
+### Library-style tools
+
+A library-style tool is a script whose stdout is a data protocol read by other
+scripts, not output for a person. Only the scripts in this table qualify;
+adding one requires commander approval.
+
+| Script | Protocol | Consumers |
+|--------|----------|-----------|
+| `scripts/aitools-profile.sh` / `.ps1` | `key<TAB>value` lines, then `warn<TAB>...` / `error<TAB>...` lines (or one JSON object with `--json`); exit 0 ok, 1 not found, 2 error, 3 refused, 4 refused (alias in use) | `aitools-lib` wrappers, `setup-user-config`, `aitools user init`, `build-deploy.sh`, generated `setup-user-claude` |
+
+A library-style tool:
+
+- MUST follow the block order (header, `set -euo pipefail`, source the lib +
+  `logging_init`, OS guard) and the error-handling requirements like any
+  reusable script.
+- MUST NOT write log lines, summary rows or ACTION items to stdout. Its `log` /
+  `Log` override sends console lines to stderr (row in "Logging overrides").
+- MUST NOT call `write_summary` / `Write-Summary` and has no exit footer: it
+  returns every warning and error to its caller as a `warn` / `error` protocol
+  line, and the caller logs each at its level and owns the summary rows and the
+  ERRORS / WARNINGS counters.
+- MUST log every warning, error and exit code to deploy.log at `detail` level
+  (`log_detail` / `LogDetail`), including paths that exit before the protocol
+  is written (usage errors, internal engine errors, `snapshot`, `machine-id`,
+  `hostname`): deploy.log keeps the reason even when a caller discards stderr.
+- MAY print a short `aitools-profile: <reason>` line to stderr on those early
+  exits (no protocol to carry it); it is in addition to the detail line, never
+  instead of it.
+- Exception: a guard that runs before the lib is loaded (the PowerShell 7
+  version check) writes stderr only; nothing else can log there.
+
+Its contract (commands, fields, exit codes) lives in the script header and in
+`reference/user-repo.md` "Resolution"; changing it requires updating every
+consumer in the table in the same change. How callers log what it returns:
+`@reference/logging.md` "Library-style tools return diagnostics; callers log
+them at level".
 
 ## End-of-run summary
 

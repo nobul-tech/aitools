@@ -195,20 +195,21 @@ function Invoke-ValidatedScript {
     }
 }
 
-# Invoke-HarnessStep SCRIPT -- Step 8b: run deploy-harness.ps1 (SCRIPT) in-process and
-# relayed (aitools-lib Invoke-ChildRelayed: its Write-Host lines go to the console and
+# Invoke-HarnessStep SCRIPT [ARGS] -- Step 8b: run deploy-harness.ps1 (SCRIPT) with the
+# ARGS hashtable (the caller passes @{ SkipConfig = $true } when Step 5 ran the config
+# writer) in-process and relayed (aitools-lib Invoke-ChildRelayed: its Write-Host lines go to the console and
 # deploy.jsonl; the review menu reads and writes the console directly). A parse error
 # throws, which the lib reports as a failure (exit 1), never as an abort. Returns 2
 # when deploy-harness exited 2 (the user chose [x]abort, D-TS13; the caller stops the
 # install), else 0. Exit 1 (errors): the lib logged the error; this adds the ERROR
 # row and the install continues. Parity: run_harness_step in aitools-install.sh.
-function Invoke-HarnessStep([string]$Harness) {
+function Invoke-HarnessStep([string]$Harness, [hashtable]$HarnessArgs = @{}) {
     if (-not (Test-Path -LiteralPath $Harness)) {
         LogWarn "deploy-harness.ps1 not found -- skipping (MDM deploy)"
         Write-Summary "WARN" "harness files" "deploy-harness.ps1 not found"
         return 0
     }
-    $harnessRc = Invoke-ChildRelayed "Step 8b: deploy-harness.ps1" $Harness @{} "harness files"
+    $harnessRc = Invoke-ChildRelayed "Step 8b: deploy-harness.ps1" $Harness $HarnessArgs "harness files"
     if ($harnessRc -eq 0) { return 0 }
     if ($script:AitLibChildRc -eq 2) {
         Log "Step 8b: aborted by user at a review menu -- install stopped (exit 2)"
@@ -431,6 +432,7 @@ Log "Step 5: Writing config"
 # config.json has one writer: setup-user-config.ps1 (bootstrap keys from this
 # installer + values derived from profile.json; no node needed, P-Q3).
 $configWriter = Join-Path $PSScriptRoot "setup-user-config.ps1"
+$configWriterRan = $false   # true: Step 8b passes -SkipConfig (the writer runs once)
 if (-not $reposOk) {
     Log "Step 5: skipped -- the repos path is unusable (see the error above); config.json not written"
 } elseif (-not (Test-Path $configWriter)) {
@@ -443,6 +445,7 @@ if (-not $reposOk) {
     if ($DryRun) { $writerArgs["DryRun"] = $true }
     # In-process like Invoke-ValidatedScript: reset the exit code, catch a throw
     Invoke-ConfigWriter $configWriter $writerArgs
+    $configWriterRan = $true
 }
 
 # ============================================================
@@ -592,11 +595,14 @@ if (Get-Command node -ErrorAction SilentlyContinue) {
 # 8b. Deployed harness (%USERPROFILE%\.aitools) -- deploy-harness.ps1
 # ============================================================
 # After Node (Step 8). deploy-harness fills .aitools\{reference,registries,hooks,
-# rules,skills,bin} (bin was this installer's own step before) and re-derives
-# config.json through setup-user-config.ps1 (Step 5 wrote the bootstrap keys it needs).
+# rules,skills,bin} (bin was this installer's own step before). When Step 5 ran the
+# config writer, deploy-harness gets -SkipConfig, so the writer runs once per
+# install (OK "config.json" "n/a (written by installer)"). When Step 5 skipped it
+# (repos path unusable, writer missing), deploy-harness runs the writer itself.
 Log "Step 8b: Deployed harness"
 
-$harnessStepRc = Invoke-HarnessStep (Join-Path $PSScriptRoot "deploy-harness.ps1")
+$harnessStepArgs = if ($configWriterRan) { @{ SkipConfig = $true } } else { @{} }
+$harnessStepRc = Invoke-HarnessStep (Join-Path $PSScriptRoot "deploy-harness.ps1") $harnessStepArgs
 if ($harnessStepRc -eq 2) {
     if (-not $env:AITOOLS_SUPPRESS_SUMMARY_DISPLAY) { Show-Summary }
     exit 2
