@@ -85,7 +85,9 @@ has not run, the harness files still deploy but the run reports
 2. Run `bash scripts/build-deploy.sh` to regenerate the `<userRepoPath>/deploy/` counterpart
    (it takes the dotprofile from `AITOOLS_USER_REPO_PATH`, else from the resolver;
    an agent runs it only under an isolated `HOME` with a copy of the dotprofile:
-   it deletes and rebuilds `<dotprofile>/deploy/`)
+   it replaces `<dotprofile>/deploy/`. It first copies the old tree to
+   `<dotprofile>/deploy.bak.<UTC>/` (at most 5 kept), builds in a temp dir and swaps
+   the new tree in only on success, so a failed build leaves the old `deploy/` (incident #86))
 3. Verify the dotprofile `deploy/` includes the change (the shared `aitools/deploy/` is frozen, so pre-commit deploy-drift steps 3+10 no longer apply to it)
 4. If the script runs on the package path (every script `scripts/aitools-install.*`
    runs), run `bash scripts/build-package.sh stage` and verify the staged payload

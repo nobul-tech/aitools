@@ -27,7 +27,7 @@ Three parallel deployment paths must produce equivalent results:
 ### Changing scripts/setup-*.sh/.ps1
 
 1. Edit `scripts/` source
-2. Run `build-deploy.sh` to regenerate `deploy/` (it takes the dotprofile from `AITOOLS_USER_REPO_PATH`, else from the resolver; an agent runs it only under an isolated `HOME` with a copy of the dotprofile: it deletes and rebuilds `<dotprofile>/deploy/`)
+2. Run `build-deploy.sh` to regenerate `deploy/` (it takes the dotprofile from `AITOOLS_USER_REPO_PATH`, else from the resolver; an agent runs it only under an isolated `HOME` with a copy of the dotprofile: it replaces `<dotprofile>/deploy/`. It first copies the old tree to `<dotprofile>/deploy.bak.<UTC>/` (at most 5 kept), builds in a temp dir and swaps the new tree in only on success, so a failed build leaves the old `deploy/` (incident #86))
 3. Verify via pre-commit steps 3+10
 4. If the script runs on the package path (every script `scripts/aitools-install.*` runs), run `bash scripts/build-package.sh stage` and verify the staged payload contains the change (from batch B2 of plans/build-package/implementation-plan.md; until then `stage` is a stub that exits 1, and `--dry-run` shows the plan)
 
