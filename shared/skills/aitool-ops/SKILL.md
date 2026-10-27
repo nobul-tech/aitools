@@ -105,7 +105,7 @@ part of the operational landscape):
 | Stop | `estimate-refresh-stop.sh` | Running estimate refresh reminder |
 | PreToolUse (Read glossary.json) | `glossary-skill-guard.sh` | Redirect direct JSON access to /glossary skill |
 | PreToolUse (Agent) | `block-claude-code-guide.sh` | Block guide subagent + context injection |
-| PreToolUse (Agent) | `delegation-duty-guard.sh` | Check delegation prompts for the seven duty elements (observe mode) |
+| PreToolUse (Agent\|Workflow) | `delegation-duty-guard.sh` | Remind to load /delegate on every Agent and Workflow call; check the prompt or workflow script for the eight duty elements (observe mode) |
 | SessionStart | `tool-ops-session-audit.sh` | Audit tool-ops coverage at session start |
 | SessionStart | `dashboard-serve.sh` | Start dashboard server if running estimate exists |
 | SessionStart | `harness-db-sessionstart.sh` | Record session start in harness DB |

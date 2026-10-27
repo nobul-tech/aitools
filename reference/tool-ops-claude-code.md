@@ -281,7 +281,7 @@ the delegate to start every `*.md` file name with its own name
 as the delegate's name does not itself start with one of the four words. The
 prefix also records which delegate wrote the file. Governed by the user rule
 `delegation.md` and the `/delegate` skill; detected by
-`delegation-duty-guard.sh` (element 7, observe mode).
+`delegation-duty-guard.sh` (element 8 of eight since 2026-10-26, observe mode).
 
 ### Sub-agent Nesting Depth
 

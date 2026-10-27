@@ -161,6 +161,12 @@ jobs:
       - name: setup-user-claude dev + MDM tests (macOS /bin/bash 3.2)
         run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/claude-mdm/test-claude-mdm.sh
 
+      - name: delegation-duty-guard hook tests (bash 5)
+        run: bash tests/hooks/test-delegation-duty-guard.sh
+
+      - name: delegation-duty-guard hook tests (macOS /bin/bash 3.2)
+        run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/hooks/test-delegation-duty-guard.sh
+
       - name: Build deploy scripts
         run: |
           echo "::group::Running build-deploy.sh"
@@ -329,6 +335,9 @@ jobs:
       - name: setup-user-claude dev + MDM tests (bash + pwsh)
         run: bash tests/claude-mdm/test-claude-mdm.sh
 
+      - name: delegation-duty-guard hook tests
+        run: bash tests/hooks/test-delegation-duty-guard.sh
+
       - name: Build deploy scripts
         run: bash scripts/build-deploy.sh
 
@@ -434,6 +443,10 @@ jobs:
       - name: Dotprofile adopt commit+push tests (PowerShell, native)
         shell: pwsh
         run: pwsh -NoProfile -File tests/managed-files/test-adopt-push.ps1
+
+      - name: delegation-duty-guard hook tests (via Git Bash)
+        shell: bash
+        run: bash tests/hooks/test-delegation-duty-guard.sh
 
       - name: Profile resolver (PowerShell, native machine id and hostname)
         shell: pwsh
