@@ -113,6 +113,46 @@ jobs:
           fi
           echo "All .py files passed syntax validation"
 
+      - name: Every test suite is in CI
+        if: ${{ !cancelled() }}
+        run: |
+          # Fails when a tracked tests/<dir>/test-*.sh is not run by a step of
+          # this workflow (a "run:" line that runs "bash <path>"). Same step in
+          # the linux job. A suite that cannot run in CI goes in %exempt with
+          # the reason; an exempt suite that is also run, or no longer exists,
+          # fails the step too (stale exemption).
+          git ls-files 'tests/*/test-*.sh' | perl -e '
+            my %exempt = (
+              "tests/deploy-harness-mdm/test-deploy-harness-mdm.sh" =>
+                "fails on the integration base d7f6855: build-deploy.sh exits 1, deploy/deploy-harness.ps1 is 202519 bytes, over the Intune 200000-byte guard (PR #111); not FO-0 code",
+            );
+            open(my $fh, "<", ".github/workflows/check.yml") or die "cannot read .github/workflows/check.yml: $!\n";
+            my $yml = do { local $/; <$fh> };
+            close($fh);
+            my ($n, $bad) = (0, 0);
+            my %seen;
+            while (my $p = <STDIN>) {
+              chomp $p;
+              next if $p eq "";
+              $n++;
+              $seen{$p} = 1;
+              my $run = $yml =~ /^\s*run:\s[^#\n]*\bbash\s+\Q$p\E(?:\s|$)/m;
+              if (exists $exempt{$p}) {
+                if ($run) { print "::error::$p is run in CI and also exempt: remove the exemption\n"; $bad++; }
+                else { print "exempt: $p ($exempt{$p})\n"; }
+              } elsif (!$run) {
+                print "::error::$p is not run by any step in .github/workflows/check.yml\n"; $bad++;
+              }
+            }
+            for my $p (sort keys %exempt) {
+              next if $seen{$p};
+              print "::error::exempt suite $p is not tracked: remove the exemption\n"; $bad++;
+            }
+            die "::error::no tests/*/test-*.sh found (git ls-files)\n" if $n == 0;
+            exit 1 if $bad;
+            print "All $n test suites are in CI or exempt\n";
+          '
+
       - name: Logging unit tests (bash)
         run: bash tests/logging/test-logging.sh
 
@@ -166,6 +206,34 @@ jobs:
 
       - name: setup-user-claude dev + MDM tests (macOS /bin/bash 3.2)
         run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/claude-mdm/test-claude-mdm.sh
+
+      - name: Dotprofile resolver consumer tests (bash 5 + pwsh)
+        if: ${{ !cancelled() }}
+        run: bash tests/b8-consumers/test-b8-consumers.sh
+
+      - name: Dotprofile resolver consumer tests (macOS /bin/bash 3.2)
+        if: ${{ !cancelled() }}
+        run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/b8-consumers/test-b8-consumers.sh
+
+      - name: deploy-harness tests (bash 5 + pwsh)
+        if: ${{ !cancelled() }}
+        run: bash tests/deploy-harness/test-deploy-harness.sh
+
+      - name: Installer harness hook-in tests (bash 5 + pwsh)
+        if: ${{ !cancelled() }}
+        run: bash tests/hookin/test-hookin.sh
+
+      - name: Cursor rules fan-out tests (bash 5 + pwsh parity)
+        if: ${{ !cancelled() }}
+        run: bash tests/rules-fanout-cursor/test-rules-fanout-cursor.sh
+
+      - name: build-package CLI tests (bash 5)
+        if: ${{ !cancelled() }}
+        run: bash tests/build-package/test-cli.sh
+
+      - name: build-package CLI tests (macOS /bin/bash 3.2)
+        if: ${{ !cancelled() }}
+        run: TEST_BASH=/bin/bash /bin/bash tests/build-package/test-cli.sh
 
       - name: Build deploy scripts
         run: |
@@ -291,6 +359,46 @@ jobs:
           fi
           echo "All .py files passed syntax validation"
 
+      - name: Every test suite is in CI
+        if: ${{ !cancelled() }}
+        run: |
+          # Fails when a tracked tests/<dir>/test-*.sh is not run by a step of
+          # this workflow (a "run:" line that runs "bash <path>"). Same step in
+          # the macos job. A suite that cannot run in CI goes in %exempt with
+          # the reason; an exempt suite that is also run, or no longer exists,
+          # fails the step too (stale exemption).
+          git ls-files 'tests/*/test-*.sh' | perl -e '
+            my %exempt = (
+              "tests/deploy-harness-mdm/test-deploy-harness-mdm.sh" =>
+                "fails on the integration base d7f6855: build-deploy.sh exits 1, deploy/deploy-harness.ps1 is 202519 bytes, over the Intune 200000-byte guard (PR #111); not FO-0 code",
+            );
+            open(my $fh, "<", ".github/workflows/check.yml") or die "cannot read .github/workflows/check.yml: $!\n";
+            my $yml = do { local $/; <$fh> };
+            close($fh);
+            my ($n, $bad) = (0, 0);
+            my %seen;
+            while (my $p = <STDIN>) {
+              chomp $p;
+              next if $p eq "";
+              $n++;
+              $seen{$p} = 1;
+              my $run = $yml =~ /^\s*run:\s[^#\n]*\bbash\s+\Q$p\E(?:\s|$)/m;
+              if (exists $exempt{$p}) {
+                if ($run) { print "::error::$p is run in CI and also exempt: remove the exemption\n"; $bad++; }
+                else { print "exempt: $p ($exempt{$p})\n"; }
+              } elsif (!$run) {
+                print "::error::$p is not run by any step in .github/workflows/check.yml\n"; $bad++;
+              }
+            }
+            for my $p (sort keys %exempt) {
+              next if $seen{$p};
+              print "::error::exempt suite $p is not tracked: remove the exemption\n"; $bad++;
+            }
+            die "::error::no tests/*/test-*.sh found (git ls-files)\n" if $n == 0;
+            exit 1 if $bad;
+            print "All $n test suites are in CI or exempt\n";
+          '
+
       - name: Hook-registration parity audit
         run: |
           # Same audit as check-post-push step 32: setup-user-hooks.sh/.ps1 and
@@ -337,6 +445,26 @@ jobs:
 
       - name: setup-user-claude dev + MDM tests (bash + pwsh)
         run: bash tests/claude-mdm/test-claude-mdm.sh
+
+      - name: Dotprofile resolver consumer tests (bash + pwsh)
+        if: ${{ !cancelled() }}
+        run: bash tests/b8-consumers/test-b8-consumers.sh
+
+      - name: deploy-harness tests (bash + pwsh)
+        if: ${{ !cancelled() }}
+        run: bash tests/deploy-harness/test-deploy-harness.sh
+
+      - name: Installer harness hook-in tests (bash + pwsh)
+        if: ${{ !cancelled() }}
+        run: bash tests/hookin/test-hookin.sh
+
+      - name: Cursor rules fan-out tests (bash + pwsh parity)
+        if: ${{ !cancelled() }}
+        run: bash tests/rules-fanout-cursor/test-rules-fanout-cursor.sh
+
+      - name: build-package CLI tests (bash)
+        if: ${{ !cancelled() }}
+        run: bash tests/build-package/test-cli.sh
 
       - name: Build deploy scripts
         run: bash scripts/build-deploy.sh
@@ -482,6 +610,14 @@ jobs:
           # The runner appends `exit $LASTEXITCODE` to pwsh steps; the expected
           # exit 1 from resolve would otherwise fail the step.
           exit 0
+
+      # tests/rules-fanout-cursor is not run here: its header lists Git Bash, but
+      # its manifest cases run setup-user-cursor.sh, whose OS guard exits on
+      # Windows (CI run 40435445568). It runs on macos and linux.
+      - name: build-package CLI tests (bash, via Git Bash)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: bash tests/build-package/test-cli.sh
 
       - name: Build deploy scripts (via Git Bash)
         shell: bash
