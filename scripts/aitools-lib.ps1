@@ -855,23 +855,30 @@ $script:BackupFileOk = $true
 function Backup-File {
     param([string]$FilePath, [int]$MaxBackups = 20)
     $script:BackupFileOk = $true
-    if (-not (Test-Path $FilePath)) { return }
+    # -LiteralPath throughout: with -Path a name containing [ ] is a wildcard,
+    # so Test-Path is false and the file silently gets no backup.
+    if (-not (Test-Path -LiteralPath $FilePath)) { return }
     $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHHmmssZ")
     $backupPath = "${FilePath}.bak.${ts}"
     # A failed backup is non-fatal (config-file-safety.md "Backup before overwrite"):
     # warn and let the caller proceed.
     try {
-        Copy-Item -Path $FilePath -Destination $backupPath -ErrorAction Stop
+        Copy-Item -LiteralPath $FilePath -Destination $backupPath -ErrorAction Stop
     } catch {
         $script:BackupFileOk = $false
         LogWarn "Could not back up $FilePath -- proceeding without backup: $_"
         return
     }
-    # Prune oldest beyond limit
-    $backups = @(Get-ChildItem -Path "${FilePath}.bak.*" | Sort-Object LastWriteTime -Descending)
+    # Prune oldest beyond limit (match the name prefix literally, not as a wildcard)
+    $fullPath = [IO.Path]::GetFullPath($FilePath)
+    $parentDir = [IO.Path]::GetDirectoryName($fullPath)
+    $prefix = [IO.Path]::GetFileName($fullPath) + ".bak."
+    $backups = @(Get-ChildItem -LiteralPath $parentDir -File |
+        Where-Object { $_.Name.StartsWith($prefix, [StringComparison]::Ordinal) } |
+        Sort-Object LastWriteTime -Descending)
     if ($backups.Count -gt $MaxBackups) {
         foreach ($old in ($backups | Select-Object -Skip $MaxBackups)) {
-            try { Remove-Item $old.FullName -Force -ErrorAction Stop }
+            try { Remove-Item -LiteralPath $old.FullName -Force -ErrorAction Stop }
             catch { LogWarn "Could not prune old backup $($old.FullName)" }
         }
     }
@@ -883,13 +890,13 @@ function Backup-File {
 # ---------------------------------------------------------------------------
 function Backup-Dir {
     param([string]$DirPath, [int]$MaxBackups = 5)
-    if (-not (Test-Path $DirPath)) { return }
-    $mdFiles = Get-ChildItem -Path $DirPath -Filter "*.md" -File -ErrorAction SilentlyContinue
+    if (-not (Test-Path -LiteralPath $DirPath)) { return }
+    $mdFiles = Get-ChildItem -LiteralPath $DirPath -Filter "*.md" -File -ErrorAction SilentlyContinue
     if (-not $mdFiles -or $mdFiles.Count -eq 0) { return }
     $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHHmmssZ")
     $backupPath = "${DirPath}.bak.${ts}"
     try {
-        Copy-Item -Path $DirPath -Destination $backupPath -Recurse -ErrorAction Stop
+        Copy-Item -LiteralPath $DirPath -Destination $backupPath -Recurse -ErrorAction Stop
     } catch {
         LogWarn "Could not back up $DirPath -- proceeding without backup: $_"
         return

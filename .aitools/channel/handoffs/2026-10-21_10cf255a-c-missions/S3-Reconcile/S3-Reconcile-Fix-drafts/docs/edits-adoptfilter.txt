@@ -1,0 +1,58 @@
+@@@FILE reference/managed-file-deployment.md DAF1 bash signature: ADOPT_FILTER is argument 6 (protected)
+@@@OLD
+deploy_managed_file SRC_CONTENT DEST TOOL_NAME ITEM_NAME [ADOPT_PATH]
+    reads ADOPT_TRANSFORM when set; sets MANAGED_FILE_RESULT
+@@@NEW
+deploy_managed_file SRC_CONTENT DEST TOOL_NAME ITEM_NAME [ADOPT_PATH] [ADOPT_FILTER]
+    sets MANAGED_FILE_RESULT
+@@@END
+@@@FILE reference/managed-file-deployment.md DAF2 PowerShell signature: -AdoptFilter (protected)
+@@@OLD
+Deploy-ManagedFile -Content -DestPath -ToolName -ItemName [-AdoptPath] [-AdoptTransform]
+@@@NEW
+Deploy-ManagedFile -Content -DestPath -ToolName -ItemName [-AdoptPath] [-AdoptFilter]
+@@@END
+@@@FILE reference/managed-file-deployment.md DAF3 argument description (protected)
+@@@OLD
+- `ADOPT_TRANSFORM` (bash, a function name, optional) / `-AdoptTransform`
+  (PS1, a scriptblock, optional) turns LOCAL content into adopt-target
+  content before the write (used for the CLAUDE.md template; see
+  "Markdown files").
+@@@NEW
+- `ADOPT_FILTER` (bash, argument 6: the name of a function that reads LOCAL
+  on stdin and prints the adopt-target content; optional, text files only) /
+  `-AdoptFilter` (PS1, a scriptblock that takes LOCAL and returns the
+  adopt-target content; optional) turns LOCAL content into adopt-target
+  content before the write (used for the CLAUDE.md template; see
+  "Markdown files"). Empty = plain copy.
+@@@END
+@@@FILE reference/managed-file-deployment.md DAF4 CLAUDE.md template paragraph (protected)
+@@@OLD
+`setup-user-claude` therefore passes an adopt transform with the template as
+`ADOPT_PATH` (bash: the function name in `ADOPT_TRANSFORM`; PS1:
+`-AdoptTransform` scriptblock; today's logic is `adopt_claude_md`). The
+library applies the transform to the content before writing `ADOPT_PATH`,
+@@@NEW
+`setup-user-claude` therefore passes an adopt filter with the template as
+`ADOPT_PATH` (bash: the function name as `ADOPT_FILTER`,
+`claude_md_adopt_filter`; PS1: the `-AdoptFilter` scriptblock
+`$claudeMdAdoptFilter`). The library applies the filter to the content
+before writing `ADOPT_PATH`,
+@@@END
+@@@FILE .claude/rules/managed-file-deployment.md DAF5 rule names the code's adopt filter (protected)
+@@@OLD
+CLAUDE.md, a template, passes an adopt transform that strips the
+machine footer and reverses the interpolation (`ADOPT_TRANSFORM` /
+`-AdoptTransform`; today `adopt_claude_md`).
+@@@NEW
+CLAUDE.md, a template, passes an adopt filter that strips the
+machine footer and reverses the interpolation (`ADOPT_FILTER` /
+`-AdoptFilter`: `claude_md_adopt_filter` / `$claudeMdAdoptFilter` in
+`setup-user-claude`).
+@@@END
+@@@FILE .cursor/rules/managed-file-deployment.mdc DAF6 twin of DAF5 (protected; correct-when-false, Q9)
+@@@OLD
+CLAUDE.md, a template, passes an adopt transform that strips the machine footer and reverses the interpolation (`ADOPT_TRANSFORM` / `-AdoptTransform`; today `adopt_claude_md`).
+@@@NEW
+CLAUDE.md, a template, passes an adopt filter that strips the machine footer and reverses the interpolation (`ADOPT_FILTER` / `-AdoptFilter`: `claude_md_adopt_filter` / `$claudeMdAdoptFilter` in `setup-user-claude`).
+@@@END

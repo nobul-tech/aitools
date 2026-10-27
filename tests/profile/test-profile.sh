@@ -308,7 +308,20 @@ write_profile "$H/repos/aitools-nobul-jose" <<'JSON'
 JSON
 printf '{ "githubUser": "nobul-jose" }\n' > "$H/.aitools/config.json"
 case_run rm-v1 2 resolve "${M[@]}"
-expect_line '^error\tprofile.json is not v2 or has no profiles'
+expect_line '^error\tprofile.json is not v2$'
+expect_no_line 'has no profiles object'
+# A v2 file without a profiles object has its own message (PR #98 review m1)
+write_profile "$H/repos/aitools-nobul-jose" <<'JSON'
+{ "version": 2, "identity": { "github": "nobul-jose" } }
+JSON
+case_run rm-v2-no-profiles 2 resolve "${M[@]}"
+expect_line '^error\tprofile.json has no profiles object$'
+expect_no_line 'is not v2'
+write_profile "$H/repos/aitools-nobul-jose" <<'JSON'
+{ "version": 2, "identity": { "github": "nobul-jose" }, "profiles": [] }
+JSON
+case_run rm-v2-profiles-array 2 resolve "${M[@]}"
+expect_line '^error\tprofile.json has no profiles object$'
 
 fresh_home rm-profile-file
 CASE_ENV="AITOOLS_PROFILE_FILE=$H/missing.json"
@@ -550,6 +563,8 @@ case_fresh() {
     "$setup"
     run_impl bash "$OUT" "$@"
     local brc=$RC
+    # temp file names carry each run's PID (normalised with or without pwsh)
+    if [ "${NORM_TMP:-}" = "1" ]; then perl -pi -e 's/\.tmp\.[0-9]+/.tmp.<pid>/g' "$OUT"; fi
     cp "$EXC_PF" "$WORK/$name.bash.profile.json" 2>/dev/null || : > "$WORK/$name.bash.profile.json"  # absent profile = empty copy
     if [ "$brc" -eq "$want" ]; then ok "$name: bash exit $brc"
     else bad "$name: bash exit $brc, want $want"; sed 's/^/       /' "$OUT" "$OUT.err"; fi
@@ -559,6 +574,7 @@ case_fresh() {
         run_impl ps "$pout" "$@"
         cp "$EXC_PF" "$WORK/$name.ps.profile.json" 2>/dev/null || : > "$WORK/$name.ps.profile.json"  # absent profile = empty copy
         if [ "$RC" -ne "$brc" ]; then bad "$name: pwsh exit $RC, bash $brc"; sed 's/^/       /' "$pout" "$pout.err"; fi
+        if [ "${NORM_TMP:-}" = "1" ]; then perl -pi -e 's/\.tmp\.[0-9]+/.tmp.<pid>/g' "$pout"; fi
         if diff "$OUT" "$pout" > "$WORK/$name.diff"; then ok "$name: bash and pwsh output identical"
         else bad "$name: bash and pwsh output differ"; sed 's/^/       /' "$WORK/$name.diff"; fi
         if [ "${NORM_AT:-}" = "1" ]; then  # a real clock: the two runs are seconds apart
@@ -983,6 +999,17 @@ mig_profile > "$H/snap.json"
 case_fresh mig-snapshot 3 setup_mig_plain migrate
 expect result refused
 CASE_ENV=""
+# Not v2, and v2 without a profiles object: one message each, nothing written (PR #98 m1)
+setup_mig_v1() { rm -rf "$EXC_DIR"; printf '{ "name": "Jose", "machines": [] }\n' | write_profile "$EXC_DIR"; }
+case_fresh mig-v1 2 setup_mig_v1 migrate
+expect result failed
+expect_line '^error\tprofile.json is not v2$'
+setup_mig_noprof() { rm -rf "$EXC_DIR"; printf '{ "version": 2, "identity": { "github": "nobul-jose" } }\n' | write_profile "$EXC_DIR"; }
+case_fresh mig-no-profiles 2 setup_mig_noprof migrate
+expect result failed
+expect_line '^error\tprofile.json has no profiles object$'
+if [ "$(cat "$EXC_PF")" = '{ "version": 2, "identity": { "github": "nobul-jose" } }' ]; then ok "mig-no-profiles: profile.json untouched"
+else bad "mig-no-profiles: profile.json changed"; fi
 
 # --- regressions from the PR #73 review (S3-Profile-Review) --------------------------
 fresh_home rev
@@ -1184,6 +1211,86 @@ RC=0
 printf 'rename\tx\tprofiles\tnope\n' | perl "$JPL" edit "$JW/in.json" "$JW/keep.json" 2>/dev/null || RC=$?  # rc checked below
 if [ "$RC" -eq 2 ] && [ "$(cat "$JW/keep.json")" = "sentinel" ]; then ok "jr-keep-out: existing OUT untouched on failure"
 else bad "jr-keep-out: rc $RC, OUT '$(cat "$JW/keep.json")'"; fi
+
+# --- S3-MF-Audit A-6..A-9: write failures, key case, detail logging ------------------
+# JSON engines: a set whose new segment equals an existing key ignoring case is
+# refused by both, with one message (A-9; perl used to add a sibling key that
+# ConvertFrom-Json cannot read, PowerShell overwrote the other key)
+jr_case jr-set-case-last 2 "set\tstring\tv\tprofiles\tNOBUL-MAC\n" "set|v|profiles|NOBUL-MAC"
+jr_msg "set: 'NOBUL-MAC' differs only in case from existing key 'nobul-mac'"
+jr_case jr-set-case-mid 2 "set\tstring\tv\tprofiles\tNOBUL-MAC\talias\n" "set|v|profiles|NOBUL-MAC|alias"
+jr_msg "set: 'NOBUL-MAC' differs only in case from existing key 'nobul-mac'"
+jr_case jr-set-case-top 2 "set\tstring\tv\tProfiles\n" "set|v|Profiles"
+jr_msg "set: 'Profiles' differs only in case from existing key 'profiles'"
+jr_case jr-set-exact 0 "set\tstring\tv\tprofiles\tnobul-mac\tbrand-new\n" "set|v|profiles|nobul-mac|brand-new"
+if [ "$(perl "$JPL" get "$JOUT" profiles nobul-mac brand-new)" = "v" ]; then ok "jr-set-exact: new key written"
+else bad "jr-set-exact: new key missing"; fi
+JR_IN="$JW/uni.json"
+jr_case jr-set-case-unicode 2 "set\tstring\tv\ta\tb\tété\n" "set|v|a|b|été"
+jr_msg "set: 'été' differs only in case from existing key 'Été'"
+JR_IN=""
+
+fresh_home a69
+EXC_DIR="$H/repos/aitools-nobul-jose"
+EXC_PF="$EXC_DIR/profile.json"
+# writable DIR -- undo a read-only fixture so the next setup (rm -rf) can run
+writable() { if [ -d "$1" ]; then chmod u+w "$1"; fi; }
+exc_case_profile() { exc_profile | perl -0pe 's/("hostname": "nobul-mac.local",\n        "os": "darwin"\n      \})/$1,\n      "ToolExceptions": {}/'; }
+setup_a69_case() {
+    writable "$EXC_DIR"; rm -rf "$EXC_DIR"
+    exc_case_profile | write_profile "$EXC_DIR"
+    printf '{ "githubUser": "nobul-jose" }\n' > "$H/.aitools/config.json"
+}
+# exception-set on a profile with a hand-written "ToolExceptions": refused by both,
+# same lines, profile.json untouched
+case_fresh a9-exc-case 2 setup_a69_case "${SET_ARGS[@]}" "${M[@]}"
+expect result failed
+expect_line "^error\\texception-set failed: set: 'toolExceptions' differs only in case from existing key 'ToolExceptions'$"
+if cmp -s "$WORK/a9-exc-case.bash.profile.json" <(exc_case_profile); then ok "a9-exc-case: profile.json untouched"
+else bad "a9-exc-case: profile.json changed"; fi
+
+# A temp file that cannot be written: same message in both (A-8), no temp file left (A-7)
+setup_a69_ro() { writable "$EXC_DIR"; setup_exc_plain; chmod 555 "$EXC_DIR"; }
+NORM_TMP=1 case_fresh a78-exc-ro 2 setup_a69_ro "${SET_ARGS[@]}" "${M[@]}"
+writable "$EXC_DIR"
+expect result failed
+expect_line "^error\\texception-set failed: cannot write $EXC_PF\\.tmp\\.<pid>: Permission denied$"
+if [ -z "$(find "$EXC_DIR" -name 'profile.json.tmp.*')" ]; then ok "a78-exc-ro: no temp file left"
+else bad "a78-exc-ro: temp file left"; fi
+if cmp -s "$WORK/a78-exc-ro.bash.profile.json" <(exc_profile); then ok "a78-exc-ro: profile.json untouched"
+else bad "a78-exc-ro: profile.json changed"; fi
+setup_a69_mig_ro() { writable "$EXC_DIR"; setup_mig_plain; chmod 555 "$EXC_DIR"; }
+NORM_TMP=1 case_fresh a8-mig-ro 2 setup_a69_mig_ro migrate
+writable "$EXC_DIR"
+expect result failed
+expect_line "^error\\tmigrate failed: cannot write $EXC_PF\\.tmp\\.<pid>: Permission denied$"
+# register --out that cannot be written (read-only directory, missing directory)
+exc_profile | write_profile "$H/a8reg"
+mkdir -p "$H/a8ro"
+chmod 555 "$H/a8ro"
+case_run a8-reg-ro 2 register --profile "$H/a8reg/profile.json" --alias nobul-mac --out "$H/a8ro/out.json" "${M[@]}"
+chmod u+w "$H/a8ro"
+expect result failed
+expect_line "^error\\tregister failed: cannot write $H/a8ro/out.json: Permission denied$"
+case_run a8-reg-nodir 2 register --profile "$H/a8reg/profile.json" --alias nobul-mac --out "$H/a8none/sub/out.json" "${M[@]}"
+expect_line "^error\\tregister failed: cannot write $H/a8none/sub/out.json: No such file or directory$"
+
+# snapshot failures reach deploy.log at detail, not only stderr (A-6): one line per
+# implementation run
+A6_RUNS=1
+if $USE_PS; then A6_RUNS=2; fi
+# a6_logged NAME TEXT -- deploy.log has TEXT on A6_RUNS detail lines
+a6_logged() {
+    local n
+    n=$(grep -cF "[detail] $2" "$H/.aitools/logs/deploy.log" || true)  # grep -c exits 1 on 0 matches; count checked below
+    if [ "$n" = "$A6_RUNS" ]; then ok "$1: logged at detail ($n)"
+    else bad "$1: $n detail lines in deploy.log, want $A6_RUNS"; fi
+}
+case_run a6-snap-missing 1 snapshot --profile "$H/a6none/profile.json"
+a6_logged a6-snap-missing "snapshot: profile.json not found: $H/a6none/profile.json"
+printf '{ "version": \n' > "$H/a6bad.json"
+case_run a6-snap-invalid 2 snapshot --profile "$H/a6bad.json"
+a6_logged a6-snap-invalid "snapshot: $H/a6bad.json is invalid JSON"
 
 # --- usage ------------------------------------------------------------------------
 case_run usage-unknown 2 resolve --bogus

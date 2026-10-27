@@ -56,8 +56,19 @@ No AI merge runs in a non-interactive run.
 ### Abort
 
 `[x]abort` logs an error and exits 2; a bare exit 2 is a user abort
-(D-TS13). Abort ends this setup script; the installer continues with the
-next script.
+(D-TS13). Abort ends this setup script. What the runner does next depends
+on the script (commander, 2026-10-26: keep this behaviour):
+
+- **`deploy-harness`** (installer Step 8b; the first script of the `aitools`
+  sync, `deploy_configs` / `Deploy-Configs`): the run stops. The runner
+  writes WARN `harness files` `aborted by user`, runs no further step,
+  renders the summary and exits 2.
+- **Any other setup script** (the `setup-user-*` / `setup-cursor-*` deploy
+  scripts, the tool setup scripts): exit 2 is handled like any failure.
+  The runner writes ERROR `script failed (exit 2)` and the run continues
+  with the next script.
+
+Detail: `@reference/managed-file-deployment.md` "[x]abort".
 
 The installers apply the same rule to their own prompts (gh login, repos path):
 terminal and not forced = prompt; otherwise use the default.
@@ -119,8 +130,9 @@ into `profile.json` with no prompt. `overwrite`/`adopt`/`skip` are per-leaf; onl
   [x]abort    : stop the run
 ```
 
-(`[x]abort` ends this setup script with exit 2; the installer continues
-with the next script.)
+(`[x]abort` ends `setup-user-settings` with exit 2. Despite the menu text,
+the run does not stop: the runner writes ERROR `script failed (exit 2)` and
+continues with the next script; see "Abort" above.)
 
 - **Adopt** available for every managed leaf (the settings sync mirrors all
   of settings.json in `profile.json`, including permission rules)

@@ -1,0 +1,14 @@
+PROTECTED (.claude/rules/hook-rollout.md is in the sources-of-truth.md table):
+draft text only, for commander approval. Companion to edits-sog.txt (#209).
+S3-Reconcile-Fix-Checks, 2026-10-26. Base: origin/main 60e7fd7. R3 also edits
+this file (fan-out wording, other section): re-anchor if R3 merges first.
+.cursor/rules/hook-rollout.mdc: decision 2026-10-26 (R7) removed the parity
+mandate; add the same row there only if the .mdc keeps a state table.
+
+@@@FILE .claude/rules/hook-rollout.md SOGD-1 state table row for MODE_LATER
+@@@OLD
+| `echo`/`printf` redirect on first line | none (literal `"enforce"`) | enforce | No mode variable |
+@@@NEW
+| `echo`/`printf` redirect on first line | none (literal `"enforce"`) | enforce | No mode variable |
+| `rm` glob, `cat`/`head`/`tail`/`sed`/`awk` outside a pipeline, `echo`/`printf` redirect, on lines 2-3 of a multi-line command | `MODE_LATER` | observe | Since 2026-10-26 (#209, a widening change); line 1 keeps the checks above; observe logs `(later line)` entries and continues |
+@@@END

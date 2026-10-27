@@ -1,0 +1,13 @@
+DRAFT FOR APPROVAL (S3-H2-DraftsM3, 2026-10-22) -- governed glossary entry, written only
+through the /glossary skill (protected). Not in #96; found while applying row 2. Not applied.
+
+Term "profile" (glossary.json terms["profile"]) still says a machine profile is "keyed
+by machine alias", which row 2 (now landed) and commander decision 5 replaced. No term
+is added or removed, so .claude/rules/glossary.md does not change.
+
+OLD definition (fragment):
+(one entry of its 'profiles' object, keyed by machine alias)
+NEW definition (fragment):
+(one entry of its 'profiles' object, keyed by machine id)
+
+Source: add "; commander decision 5 of 2026-10-22".

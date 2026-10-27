@@ -20,7 +20,7 @@ S3-GateFix/S3-GateFix-review-page.json`.
   `~/.aitools/registries/` (macOS/Linux) and `%USERPROFILE%\.aitools\registries\` (Windows).
   LAYOUT PR-b does not move them.
 - **SD-8 extended** to 7 user-level skills (adds incident, glossary, frameworks).
-- **Machine identity**: raw machine ids (P-Q2); resolver is native `scripts/aitools-profile.sh/.ps1`
+- **Machine identity**: raw machine ids (P-Q2), and machine profiles are keyed by them: `profiles.<machineId>` (lower-cased), human-readable name in the profile's `alias` field, tool exceptions at `profiles.<machineId>.toolExceptions`; legacy alias-keyed profiles are still read and re-keyed by `aitools-profile migrate` (commander, 2026-10-22); resolver is native `scripts/aitools-profile.sh/.ps1`
   (P-Q3), not JavaScript; one scutil command that reports `nobul-mac`, and scripts that take
   hostnames from DNS are removed (P-Q5).
 - **`tool-versions.json` is deleted** and every reference remediated; `tool-registry.md` is
@@ -30,6 +30,9 @@ S3-GateFix/S3-GateFix-review-page.json`.
   scripts), at user level (TA-PLACE, TA-SKILL).
 - **Dotprofile writes auto-commit and push** (N-Q2).
 - **Re-run the correctness (A) review as an independent delegate** (E-independence).
+- **Registration never overwrites another machine** (commander, 2026-10-22): `aitools user init --alias <new>` without a terminal creates this machine's profile; an alias used by another machine's profile is refused unless the run is interactive and the user confirms.
+- **`aitools user init` scaffolds a missing profile.json** (identity + this machine's profile under its id), commits and pushes it (commander, 2026-10-22).
+- **config.json is generated from profile.json by deploy-harness**, which calls `setup-user-config.sh/.ps1`, the single writer (commander, 2026-10-22).
 
 ## All items
 
@@ -94,7 +97,7 @@ S3-GateFix/S3-GateFix-review-page.json`.
 | G-terms | Glossary | Approve the 7 proposed terms (tool adoption, tool exception, update channel, machine profile, machine alias, machine id, aitools config) and the modified 'managed tool'? | Approve with the E-glossary-1 fix |  |
 | G-profile | Glossary | 'profile' has three ungoverned meanings (shell profile, profile.json, machine profile). Add a governed disambiguation? | (see note) | shell profile, profile.json = user profile, machine profile is a field in profile.json. profile should also mean user profile, not shell, not machine |
 | G-userconfig | Glossary | The composition example 'user config' resolves only to ~/.claude/settings.json, while ~/.aitools/config.json is also a user-deployed config. Fix the example? | (see note) | aitools config should encompass ALL managed config data for all tools for a user. this is for claude, cursor cli, shell variables, and also conf aitools config.json itself. it is the aitools harness config, for short. |
-| T-Q3 | Non-blocking | [x]abort scope: the whole run or only this tool? | Answered by SD-5: the whole run (exit 2) |  |
+| T-Q3 | Non-blocking | [x]abort scope: the whole run or only this tool? | Answered by SD-5: the whole run (exit 2) | Implemented by PR #106 and kept by the commander 2026-10-26 ("keep functionality, update docs on whatever current state is"): only an exit 2 from deploy-harness stops the run (installer Step 8b, `aitools` sync); an exit 2 from any other setup script is an ERROR row `script failed (exit 2)` and the run continues. Detail: reference/managed-file-deployment.md "[x]abort" |
 | T-Q4 | Non-blocking | Keep automatic fallback methods (modal pip, datadog cargo on macOS)? | Remove them; a missing manager = PREREQ ERROR + ACTION | this should be documented in the decision tree of tool-lifecycle.md and tool-support-decision-tree.md. make sure to log errors and log error on summary |
 | T-Q5 | Non-blocking | Below minVersion (bash < 5.0, perl < 5.010): ERROR or WARN? | (see note) | the harness manages bash and perl, it should update them and if it fails to update it should log a warning, also print it in summary, and continue |
 | T-Q6 | Non-blocking | Must verification query upstream for the channel's newest version number? | No; the update command is the mechanism |  |
@@ -103,9 +106,9 @@ S3-GateFix/S3-GateFix-review-page.json`.
 | T-Q12 | Non-blocking | Platform-level n/a row: a new write_platform_skip, or reuse the environment helper? | New platform variant (write_platform_skip / Write-PlatformSkip, n/a (<platform>)) |  |
 | P-Q4 | Non-blocking | Does the config writer prompt? | Writer silent; aitools user init prompts (chat 2026-10-21) | what? need more context here |
 | P-Q5 | Non-blocking | Pin the kernel HostName (sudo scutil --set HostName nobul-mac)? | Skip | document exactly what command to run and only use that one that reports nobul-mac on macs with sc util. cleanup any scripts that pull other hostnames from DNS |
-| P-Q6 | Non-blocking | Move googleDrives into profile.json now? | Later, under profiles.<alias>.googleDrives | later, but it should be under profiles.machineid or whatever.google drives and it should store the path and the name of the drive or whatever we can pull |
+| P-Q6 | Non-blocking | Move googleDrives into profile.json now? | Later, under profiles.<alias>.googleDrives (now `profiles.<machineId>.googleDrives`, the commander's note; commander, 2026-10-22) | later, but it should be under profiles.machineid or whatever.google drives and it should store the path and the name of the drive or whatever we can pull |
 | P-Q7 | Non-blocking | Generate deploy/setup-user-config and embed tool specs and helpers for MDM (+ T-Q1 MDM part)? | (see note) | yes, but tool specs should be in the registry no? |
-| P-Q12 | Non-blocking | Non-interactive registration: add aitools user init --alias <A>? | Add --alias |  |
+| P-Q12 | Non-blocking | Non-interactive registration: add aitools user init --alias <A>? | Add --alias (sets the alias field of this machine's id-keyed profile; an alias used by another machine's profile is refused without a terminal, and needs an interactive confirm otherwise -- commander, 2026-10-22) |  |
 | P-Q13 | Non-blocking | Token reverse order on adopt: {{PROFILE_NAME}} wins, or the git name wins? | {{PROFILE_NAME}} wins (today) |  |
 | N-Q2 | Non-blocking | Dotprofile commits: register auto-commits and pushes, while [k]eep only adds an ACTION? | Both auto-commit and push (confirmed in chat 2026-10-21); the existing dotprofile auto-commit/push in setup-user-claude is kept | both auto commit and push |
 | N-Q4 | Non-blocking | knownPaths field name 'verified' collides with the governed outcome: rename, or keep and define? | Keep and define |  |

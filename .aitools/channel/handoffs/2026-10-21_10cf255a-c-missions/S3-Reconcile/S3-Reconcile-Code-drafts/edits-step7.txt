@@ -1,0 +1,87 @@
+@@@FILE main/check-pre-push.sh E13a step 7: list this push's deploy/ inputs
+@@@OLD
+else
+    d7_tmp=$(mktemp -d)
+    mkdir -p "$d7_tmp/home/.aitools" "$d7_tmp/dot" "$d7_tmp/committed"
+@@@NEW
+else
+    # Deploy/ inputs this push changes: build-deploy and every source the generated
+    # scripts embed (setup scripts, lib, resolver, JSON engine, config writer,
+    # deploy-harness and its sources, the bin CLIs). A fresh build from such a push
+    # differs from the dotprofile's deploy/ (built from main) by design.
+    # grep exits 1 when nothing matches (no inputs); any failure here leaves the
+    # list empty, which keeps the stricter FAIL below.
+    d7_inputs=$(printf '%s\n' "$PUSH_FILES" | grep -E '^(scripts/(setup-[^/]*|build-deploy|aitools-lib|aitools-profile|deploy-harness)\.(sh|ps1)$|scripts/aitools-json\.(pl|ps1)$|scripts/(harness-db|read-session|read-session-full)\.py$|shared/|reference/|registries/|\.claude/(hooks|skills|rules)/)' | tr '\n' ' ') || d7_inputs=""
+    d7_note=""
+    d7_tmp=$(mktemp -d)
+    mkdir -p "$d7_tmp/home/.aitools" "$d7_tmp/dot" "$d7_tmp/committed"
+@@@END
+@@@FILE main/check-pre-push.sh E13b step 7: stale caused by this push = WARN
+@@@OLD
+            d7_problems="dotprofile deploy/ is stale (${d7_files% }) -- run build-deploy.sh and commit in $USER_REPO_PATH"
+@@@NEW
+            if [ -n "$d7_inputs" ]; then
+                d7_note="this push changes deploy/ inputs (${d7_inputs% }) -- after it merges, rebuild deploy/ from main and commit in $USER_REPO_PATH (differs now: ${d7_files% })"
+            else
+                d7_problems="dotprofile deploy/ is stale (${d7_files% }) -- run build-deploy.sh and commit in $USER_REPO_PATH"
+            fi
+@@@END
+@@@FILE main/check-pre-push.sh E13c step 7: result
+@@@OLD
+        if [ -z "$d7_problems" ]; then
+            step_pass "7" "deploy/ matches source" "dotprofile deploy/ matches a fresh build; resolver consumers dry-run clean"
+        else
+            step_fail "7" "deploy/ matches source" "$d7_problems"
+        fi
+@@@NEW
+        if [ -n "$d7_problems" ]; then
+            step_fail "7" "deploy/ matches source" "$d7_problems"
+        elif [ -n "$d7_note" ]; then
+            step_warn "7" "deploy/ matches source" "$d7_note"
+        else
+            step_pass "7" "deploy/ matches source" "dotprofile deploy/ matches a fresh build; resolver consumers dry-run clean"
+        fi
+@@@END
+@@@FILE main/check-pre-push.ps1 E14a step 7: list this push's deploy/ inputs
+@@@OLD
+} else {
+    $d7Tmp = Join-Path ([IO.Path]::GetTempPath()) ("aitools-prepush7-" + [guid]::NewGuid())
+@@@NEW
+} else {
+    # Deploy/ inputs this push changes (see check-pre-push.sh step 7; same pattern,
+    # case-sensitive like grep -E). A fresh build from such a push differs from the
+    # dotprofile's deploy/ (built from main) by design.
+    $d7Inputs = @($pushFiles | Where-Object { $_ -cmatch '^(scripts/(setup-[^/]*|build-deploy|aitools-lib|aitools-profile|deploy-harness)\.(sh|ps1)$|scripts/aitools-json\.(pl|ps1)$|scripts/(harness-db|read-session|read-session-full)\.py$|shared/|reference/|registries/|\.claude/(hooks|skills|rules)/)' })
+    $d7Note = ""
+    $d7Tmp = Join-Path ([IO.Path]::GetTempPath()) ("aitools-prepush7-" + [guid]::NewGuid())
+@@@END
+@@@FILE main/check-pre-push.ps1 E14b step 7: stale caused by this push = WARN
+@@@OLD
+        if ($d7Stale.Count -gt 0) {
+            $d7Problems += "dotprofile deploy/ is stale ($($d7Stale -join ' ')) -- run build-deploy.sh and commit in $($script:UserRepoPath)"
+        }
+@@@NEW
+        if ($d7Stale.Count -gt 0) {
+            if ($d7Inputs.Count -gt 0) {
+                $d7Note = "this push changes deploy/ inputs ($($d7Inputs -join ' ')) -- after it merges, rebuild deploy/ from main and commit in $($script:UserRepoPath) (differs now: $($d7Stale -join ' '))"
+            } else {
+                $d7Problems += "dotprofile deploy/ is stale ($($d7Stale -join ' ')) -- run build-deploy.sh and commit in $($script:UserRepoPath)"
+            }
+        }
+@@@END
+@@@FILE main/check-pre-push.ps1 E14c step 7: result
+@@@OLD
+        if ($d7Problems.Count -eq 0) {
+            StepPass "7" "deploy/ matches source" "dotprofile deploy/ matches a fresh build; resolver consumers dry-run clean"
+        } else {
+            StepFail "7" "deploy/ matches source" ($d7Problems -join "; ")
+        }
+@@@NEW
+        if ($d7Problems.Count -gt 0) {
+            StepFail "7" "deploy/ matches source" ($d7Problems -join "; ")
+        } elseif ($d7Note) {
+            StepWarn "7" "deploy/ matches source" $d7Note
+        } else {
+            StepPass "7" "deploy/ matches source" "dotprofile deploy/ matches a fresh build; resolver consumers dry-run clean"
+        }
+@@@END

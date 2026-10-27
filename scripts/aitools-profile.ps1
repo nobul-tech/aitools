@@ -7,19 +7,18 @@
 # the config.json values that come from them. NOT a writer of config.json
 # (setup-user-config.sh/.ps1 is the only writer). NOT a writer of profile.json
 # except the `register` subcommand, which writes to a temp file the caller
-# validates, backs up and moves, and the `exception-set` subcommand, the only
-# writer of toolExceptions, which writes in place (temp, validate, backup, move)
-# and commits and pushes profile.json. NOT the settings.json sync
+# validates, backs up and moves, the `exception-set` subcommand, the only writer
+# of toolExceptions, and the `migrate` subcommand, which re-keys profiles by
+# machine id; those two write in place (temp, validate, backup, move) and commit
+# and push profile.json. NOT the settings.json sync
 # (Sync-ManagedJson). Consumed by: the PowerShell shared-lib wrappers
 # Resolve-UserRepoPath / Resolve-MachineProfile / Get-ToolException /
 # Set-ToolException, setup-user-config.ps1, aitools.ps1 `user init`, and the
-# generated deploy/setup-user-claude.ps1 (embedded copy).
+# generated deploy/setup-user-claude.ps1, setup-user-settings.ps1 and
+# setup-user-cursor.ps1 (embedded copies).
 #
 # Usage: aitools-profile.ps1 <command> [options]   (--help for details)
 #   In-process: $out = & aitools-profile.ps1 resolve; $rc = $LASTEXITCODE
-# Writers: `migrate` also writes profile.json (re-keys profiles in place: temp,
-#   validate, backup, move, commit, push). The intent statement above predates
-#   it; its update awaits commander approval.
 # Machine profiles (profile.json revision 2.2, re-key design): keyed by this
 #   machine's raw id, lower-cased (`profiles.<machineId>`; `machine.id` repeats
 #   the key), or `environment:<name>` for an environment without a stable id
@@ -510,9 +509,9 @@ function Complete-Match($P, $E, [string]$Via) {
 function Resolve-Machine($P, [string]$ConfigId, [string]$ConfigAlias) {
     $script:RmKey = ""; $script:RmAlias = ""; $script:RmVia = "none"; $script:RmOwner = "absent"; $script:RmLegacy = "false"
     $script:RmKind = ""; $script:RmOverrideSource = ""
-    if ((Get-JText $P @("version")) -ne "2" -or (Get-JType $P @("profiles")) -ne "object") {
-        Add-Err "profile.json is not v2 or has no profiles"; return 2
-    }
+    # Two states, two messages (callers tell them apart; PR #98 review m1)
+    if ((Get-JText $P @("version")) -ne "2") { Add-Err "profile.json is not v2"; return 2 }
+    if ((Get-JType $P @("profiles")) -ne "object") { Add-Err "profile.json has no profiles object"; return 2 }
     Import-Entries $P
     $E = $script:Entries
     if ($E.Count -eq 0) { Add-Err "profile.json has no machine profiles"; return 2 }
@@ -860,6 +859,18 @@ function Remove-TempFile([string]$Path) {
     catch { LogDetail "remove ${Path}: $($_.Exception.Message)"; Add-Warn "could not remove $Path" }
 }
 
+# Get-WriteErrorText ERRORRECORD -- why a file write failed, worded as the bash
+# resolver's perl engine words it ($!) for the common cases ("Permission denied",
+# "No such file or directory"); otherwise the .NET reason. A .NET method call wraps
+# the real exception in a MethodInvocationException ("Exception calling ...").
+function Get-WriteErrorText($Err) {
+    $ex = $Err.Exception
+    if ($ex -is [System.Management.Automation.MethodInvocationException] -and $ex.InnerException) { $ex = $ex.InnerException }
+    if ($ex -is [System.UnauthorizedAccessException]) { return "Permission denied" }
+    if ($ex -is [System.IO.DirectoryNotFoundException] -or $ex -is [System.IO.FileNotFoundException]) { return "No such file or directory" }
+    return $ex.Message
+}
+
 function Invoke-ExceptionSet {
     Test-Slug
     if (@("macos", "linux", "windows") -cnotcontains $opt["platform"]) { Stop-Usage "--platform must be macos, linux or windows" }
@@ -931,27 +942,36 @@ function Invoke-ExceptionSet {
     # returns the compact JSON of the written entry
     $writeEntry = {
         param([string]$When)
-        if ((Get-JType $p @("profiles", $k, "toolExceptions")) -ne "object") {
-            Set-JValue $p ([PSCustomObject]@{}) @("profiles", $k, "toolExceptions")
+        # A failed edit (e.g. a key that differs only in case, aitools-json.ps1
+        # Set-JValue) is reported like the bash engine's edit failure
+        try {
+            if ((Get-JType $p @("profiles", $k, "toolExceptions")) -ne "object") {
+                Set-JValue $p ([PSCustomObject]@{}) @("profiles", $k, "toolExceptions")
+            }
+            $detected = [PSCustomObject]@{}
+            $detected | Add-Member -NotePropertyName platform -NotePropertyValue $opt["platform"]
+            $detected | Add-Member -NotePropertyName method -NotePropertyValue $opt["method"]
+            $detected | Add-Member -NotePropertyName path -NotePropertyValue $opt["path"]
+            $detected | Add-Member -NotePropertyName version -NotePropertyValue $opt["version"]
+            $entry = [PSCustomObject]@{}
+            $entry | Add-Member -NotePropertyName decision -NotePropertyValue "keep"
+            $entry | Add-Member -NotePropertyName detected -NotePropertyValue $detected
+            $entry | Add-Member -NotePropertyName decidedAt -NotePropertyValue $When
+            $entry | Add-Member -NotePropertyName decidedBy -NotePropertyValue $opt["by"]
+            $reason = if ($opt["reason"]) { $opt["reason"] } else { $null }
+            $entry | Add-Member -NotePropertyName reason -NotePropertyValue $reason
+            Set-JValue $p $entry @("profiles", $k, "toolExceptions", $slug)
+        } catch {
+            Remove-TempFile $tmp
+            $s.state = "failed"; Add-Err "exception-set failed: $($_.Exception.Message)"; & $putSet; Complete-Command 2
         }
-        $detected = [PSCustomObject]@{}
-        $detected | Add-Member -NotePropertyName platform -NotePropertyValue $opt["platform"]
-        $detected | Add-Member -NotePropertyName method -NotePropertyValue $opt["method"]
-        $detected | Add-Member -NotePropertyName path -NotePropertyValue $opt["path"]
-        $detected | Add-Member -NotePropertyName version -NotePropertyValue $opt["version"]
-        $entry = [PSCustomObject]@{}
-        $entry | Add-Member -NotePropertyName decision -NotePropertyValue "keep"
-        $entry | Add-Member -NotePropertyName detected -NotePropertyValue $detected
-        $entry | Add-Member -NotePropertyName decidedAt -NotePropertyValue $When
-        $entry | Add-Member -NotePropertyName decidedBy -NotePropertyValue $opt["by"]
-        $reason = if ($opt["reason"]) { $opt["reason"] } else { $null }
-        $entry | Add-Member -NotePropertyName reason -NotePropertyValue $reason
-        Set-JValue $p $entry @("profiles", $k, "toolExceptions", $slug)
         # Write path: temp -> validate -> backup -> move (config-file-safety.md)
         try {
             [IO.File]::WriteAllText($tmp, (ConvertTo-NodeJson $p) + "`n", $script:Utf8NoBom)
         } catch {
-            $s.state = "failed"; Add-Err "exception-set failed: cannot write ${tmp}: $($_.Exception.Message)"; & $putSet; Complete-Command 2
+            $why = Get-WriteErrorText $_
+            Remove-TempFile $tmp
+            $s.state = "failed"; Add-Err "exception-set failed: cannot write ${tmp}: $why"; & $putSet; Complete-Command 2
         }
         $v = Read-ResolverJson $tmp
         if ($v.State -ne "valid" -or (Get-JType $v.Value @("profiles", $k, "toolExceptions", $slug)) -ne "object") {
@@ -1041,8 +1061,14 @@ function Invoke-DeriveConfig {
 function Invoke-Snapshot {
     if (-not $opt["profile"]) { Stop-Usage "snapshot needs --profile" }
     $r = Read-ResolverJson $opt["profile"]
-    if ($r.State -eq "missing") { [Console]::Error.WriteLine("aitools-profile: profile.json not found: $($opt['profile'])"); exit 1 }
-    if ($r.State -eq "invalid") { [Console]::Error.WriteLine("aitools-profile: $($r.Message)"); exit 2 }
+    if ($r.State -eq "missing") {
+        LogDetail "snapshot: profile.json not found: $($opt['profile'])"
+        [Console]::Error.WriteLine("aitools-profile: profile.json not found: $($opt['profile'])"); exit 1
+    }
+    if ($r.State -eq "invalid") {
+        LogDetail "snapshot: $($r.Message)"
+        [Console]::Error.WriteLine("aitools-profile: $($r.Message)"); exit 2
+    }
     $snap = [ordered]@{}
     foreach ($k in @("version", "identity", "cursor", "profiles")) {
         $n = Get-JNode $r.Value @($k)
@@ -1227,7 +1253,7 @@ function Invoke-Register {
     try {
         [IO.File]::WriteAllText($opt["out"], (ConvertTo-NodeJson $p) + "`n", $script:Utf8NoBom)
     } catch {
-        $g.state = "failed"; Add-Err "register failed: cannot write $($opt['out']): $($_.Exception.Message)"; & $putReg; Complete-Command 2
+        $g.state = "failed"; Add-Err "register failed: cannot write $($opt['out']): $(Get-WriteErrorText $_)"; & $putReg; Complete-Command 2
     }
     $v = Read-ResolverJson $opt["out"]
     if ($v.State -ne "valid" -or (Get-JType $v.Value @("profiles", $key)) -ne "object") {
@@ -1268,9 +1294,8 @@ function Invoke-Migrate {
         $g.state = "refused"; Add-Err "profile from AITOOLS_PROFILE_FILE is a read-only snapshot -- not written"; & $putMig; Complete-Command 3
     }
     $p = $script:PfValue
-    if ((Get-JText $p @("version")) -ne "2" -or (Get-JType $p @("profiles")) -ne "object") {
-        $g.state = "failed"; Add-Err "profile.json is not v2 or has no profiles"; & $putMig; Complete-Command 2
-    }
+    if ((Get-JText $p @("version")) -ne "2") { $g.state = "failed"; Add-Err "profile.json is not v2"; & $putMig; Complete-Command 2 }
+    if ((Get-JType $p @("profiles")) -ne "object") { $g.state = "failed"; Add-Err "profile.json has no profiles object"; & $putMig; Complete-Command 2 }
     Import-Entries $p
     $E = $script:Entries
     # Target: the key each entry ends up with
@@ -1327,8 +1352,9 @@ function Invoke-Migrate {
     try {
         [IO.File]::WriteAllText($tmp, (ConvertTo-NodeJson $p) + "`n", $script:Utf8NoBom)
     } catch {
+        $why = Get-WriteErrorText $_
         Remove-TempFile $tmp
-        $g.state = "failed"; Add-Err "migrate failed: cannot write ${tmp}: $($_.Exception.Message)"; & $putMig; Complete-Command 2
+        $g.state = "failed"; Add-Err "migrate failed: cannot write ${tmp}: $why"; & $putMig; Complete-Command 2
     }
     $v = Read-ResolverJson $tmp
     if ($v.State -ne "valid") {

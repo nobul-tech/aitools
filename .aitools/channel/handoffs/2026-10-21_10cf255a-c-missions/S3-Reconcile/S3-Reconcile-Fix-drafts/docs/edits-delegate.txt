@@ -1,0 +1,33 @@
+@@@FILE shared/skills/delegate/SKILL.md D177-D178 file ownership is checked before a PR opens; stacked PRs target main
+@@@OLD
+- **Assign file ownership.** List the parallel delegates and the files each
+  owns. No two delegates edit the same file; one that needs another's file
+  waits for its PR to merge.
+@@@NEW
+- **Assign file ownership.** List the parallel delegates and the files each
+  owns. No two delegates edit the same file; one that needs another's file
+  waits for its PR to merge. Keep the list in a tracked file every running
+  mission reads (the shared packet or the delegating agent's mission
+  folder), and have each delegate compare
+  `git diff --name-only origin/main...HEAD` with it, and with the files of
+  every open PR (`gh pr list`, `gh pr diff <n> --name-only`), before it
+  opens a PR. An overlap is reported, not pushed.
+- **Stacked PRs target main.** GitHub retargets a stacked PR only when its
+  base branch is deleted on merge, and this repo keeps merged branches
+  (`delete_branch_on_merge` is false). Open every PR against `main`; when a
+  change depends on another PR, say so in the body and merge in order.
+  Before merging, check `gh pr view <n> --json baseRefName` is `main`; a PR
+  merged into any other base never reaches main (#74 and #75 did that).
+@@@END
+@@@FILE shared/skills/delegate/SKILL.md D51 sub-agents may have no Grep or Glob
+@@@OLD
+- **File access.** Claude Code 2.1.74 denied sub-agents Glob/Grep outside
+  their working repo while Read with an absolute path worked (`/aitool-ops`
+  item #24; not re-verified since). Pass explicit paths.
+@@@NEW
+- **File access.** Claude Code 2.1.74 denied sub-agents Glob/Grep outside
+  their working repo while Read with an absolute path worked (`/aitool-ops`
+  item #24). Observed in 2.1.307 and 2.1.309 (macOS, 2026-10-26): Agent-tool
+  delegates have no Grep or Glob tool at all. Pass explicit paths, and tell
+  the delegate to search with `git grep` or `grep -rn` / `find` in Bash.
+@@@END

@@ -6,16 +6,27 @@
 #   1. Installs ripgrep (rg) if not already present (required by Cursor CLI)
 #   2. Installs Cursor CLI (agent command) if not already present
 #   3. Merges preferences into ~/.cursor/cli-config.json (preserves CLI-managed fields)
-#   4. Fans the harness rules (%USERPROFILE%\.aitools\rules) out to Cursor's user rule
-#      files (%USERPROFILE%\.cursor\rules\*.mdc), converting each Claude Code .md rule to .mdc
+#   4. Fans the user-level harness rules (%USERPROFILE%\.aitools\rules) out to Cursor's
+#      user rule files (%USERPROFILE%\.cursor\rules\*.mdc), converting each Claude Code
+#      .md rule to .mdc
 #
 # cli-config.json:
 #   Managed fields: version, editor, permissions, model, hasChangedDefaultModel
 #   Preserved: authInfo, privacyCache, network, statsigBootstrap, maxMode, all other fields
-# %USERPROFILE%\.cursor\rules\ (additive deploy):
-#   Managed: one <name>.mdc per %USERPROFILE%\.aitools\rules\<name>.md (converted); *.bak.*
-#            backups and non-.md files in .aitools\rules are not fanned out
-#   Preserved: .cursor\rules files not produced from .aitools\rules
+# %USERPROFILE%\.cursor\rules\ (additive deploy, pruned against the rules manifest):
+#   Managed: one <name>.mdc per .aitools\rules\<name>.md whose source in
+#            .aitools\rules\.aitools-rules-manifest is shared or dotprofile
+#            (user-level rules only; commander decision 2026-10-22). *.bak.*
+#            backups, the manifest and non-.md files are not fanned out.
+#   Removed (backup kept): <name>.mdc for a manifest name whose source is
+#            aitools (project rules) or retired, only if the fan-out created it
+#            (the aitools-fanout marker line, or, for files from before the
+#            marker, the same content as the conversion of the harness copy or
+#            of one of its *.bak.* backups); any other file of such a name is
+#            kept with a warning and an ACTION row (Cursor still loads it)
+#   Preserved: every other .cursor\rules file
+#   No manifest, or one with another first line: nothing fanned out, nothing
+#   removed, WARN row + ACTION (run aitools)
 #   Location and format: S3-H-Cursor-research.md (.aitools/channel/handoffs/
 #   2026-10-21_10cf255a-c-missions/S3-H-Cursor/)
 
@@ -271,11 +282,11 @@ $lostKeys = @($beforeKeys | Where-Object { $_ -notin $config.Keys })
 $afterJson = Normalize-JsonForComparison $config -Depth 10
 
 if ($prefsUnresolved) {
-    # Not counted again: the resolver error is already an error and the ERROR
-    # row "dotprofile" (the lib wrote both).
-    Log "Skipped the $cliConfig merge: dotprofile unresolved (resolver error above), so the profile preferences are unknown"
-    $status.cliConfig = "SKIPPED (dotprofile error)"
-    Write-Summary "ERROR" "cursor cli" "skipped (dotprofile error)"
+    # Counted (S3-M3Lead decision, as setup-user-settings and -skills): this
+    # step fails too, not only the resolver (the lib logged that one).
+    LogError "Dotprofile unresolved (resolver error above) -- $cliConfig not merged, so defaults cannot replace the profile preferences"
+    $status.cliConfig = "ERROR (dotprofile error)"
+    Write-Summary "ERROR" "cursor cli" "not merged: dotprofile error"
 } elseif ($DryRun) {
     # --- Dry-run output ---
     Log "[DRY RUN] $cliConfig`: merge"
@@ -286,12 +297,15 @@ if ($prefsUnresolved) {
     if ($corrupt) {
         LogWarn "[DRY RUN] File is corrupt -- -Force required to overwrite"
     }
+    # Same rows as the .sh dry run: unchanged -> verified, else would update.
     if ($beforeJson -eq $afterJson -and -not $corrupt) {
         Log "[DRY RUN] No changes needed (already up to date)"
         $status.cliConfig = "already up to date (dry-run)"
+        Write-Summary "OK" "cursor cli" "verified"
     } else {
         Log "[DRY RUN] Would write merged config"
         $status.cliConfig = "would merge (dry-run)"
+        Write-Summary "OK" "cursor cli" "dry-run: would update"
     }
 } else {
     # --- Normal mode ---
@@ -376,7 +390,11 @@ if ($prefsUnresolved) {
 # needs a leading --- frontmatter block, so each Claude Code .md rule is
 # converted (ConvertTo-CursorRule). Adopt is not offered (-AdoptPath ""): the
 # harness copy is not the repo source, and the deployed file is a converted
-# form of it. Parity: step 4 in setup-user-cursor.sh.
+# form of it. Cursor gets user-level rules only (commander decision
+# 2026-10-22): the rules manifest deploy-harness writes (PR #100 contract)
+# names each rule's source; shared and dotprofile rules are fanned out, and
+# the .mdc of an aitools or retired rule is removed when the fan-out created
+# it. Parity: step 4 in setup-user-cursor.sh.
 
 Log "Step 4: Cursor user rules"
 
@@ -394,8 +412,14 @@ $cursorRulesDir = Join-Path $cursorDir "rules"
 #     Claude Code paths are project-relative. Absolute and "**/" patterns are kept.
 #     "alwaysApply: false" is added unless the frontmatter sets alwaysApply.
 #   - Every other frontmatter line and the body are kept; CRLF becomes LF and a
-#     UTF-8 BOM is dropped. Parity: cursor_rule_from_md in setup-user-cursor.sh.
-function ConvertTo-CursorRule([string]$Text) {
+#     UTF-8 BOM is dropped.
+#   - With a rule name, the line after the frontmatter is the aitools-fanout
+#     marker ($cursorFanoutMarker + name): it tells a file this fan-out created
+#     from a user's own .mdc, so pruning never removes the user's file.
+#     Parity: cursor_rule_from_md in setup-user-cursor.sh.
+$cursorFanoutMarker = "<!-- aitools-fanout: generated by setup-user-cursor from ~/.aitools/rules/"
+function ConvertTo-CursorRule([string]$Text, [string]$Name = "") {
+    $mark = if ($Name) { "$cursorFanoutMarker$Name; edit that rule, not this file -->`n" } else { "" }
     function Get-AnchoredGlob([string]$Glob) {
         $g = $Glob -replace '^\s+', '' -replace '\s+$', ''
         if ($g -cmatch '^"(.*)"$') { $g = $Matches[1] } elseif ($g -cmatch "^'(.*)'$") { $g = $Matches[1] }
@@ -422,7 +446,7 @@ function ConvertTo-CursorRule([string]$Text) {
     $t = $t -replace "`r`n", "`n"
     $m = [regex]::Match($t, '\A---[ \t]*\n(?:(.*?)\n)?---[ \t]*(?:\n|\z)(.*)\z', [System.Text.RegularExpressions.RegexOptions]::Singleline)
     if (-not $m.Success) {
-        return "---`nalwaysApply: true`n---`n" + $t
+        return "---`nalwaysApply: true`n---`n" + $mark + $t
     }
     $fm = if ($m.Groups[1].Success) { $m.Groups[1].Value } else { "" }
     $body = $m.Groups[2].Value
@@ -457,7 +481,53 @@ function ConvertTo-CursorRule([string]$Text) {
     if (-not $hasAlways) {
         if ($hasGlobs) { $out.Add("alwaysApply: false") } else { $out.Add("alwaysApply: true") }
     }
-    return "---`n" + ($out -join "`n") + "`n---`n" + $body
+    return "---`n" + ($out -join "`n") + "`n---`n" + $mark + $body
+}
+
+# True when the .mdc text was created by this fan-out: the line right after its
+# frontmatter starts with $cursorFanoutMarker. Parity: cursor_rule_is_fanout
+# in setup-user-cursor.sh.
+function Test-CursorFanoutRule([string]$Text) {
+    $t = $Text
+    if ($t.Length -gt 0 -and $t[0] -eq [char]0xFEFF) { $t = $t.Substring(1) }
+    $t = $t -replace "`r`n", "`n"
+    # Frontmatter lines may not be "---": the marker must follow the FIRST closing ---
+    $pattern = '\A---[ \t]*\n(?:(?!---[ \t]*\n)[^\n]*\n)*---[ \t]*\n' + [regex]::Escape($cursorFanoutMarker)
+    return [regex]::IsMatch($t, $pattern)
+}
+
+# Read the rules manifest (deploy-harness section 5b, PR #100 contract).
+# Returns @{ Status = "ok" | "header-bad"; Rules = list of @{ Name; Source };
+# Invalid = list of ignored lines (tabs shown as <TAB>) }. A valid line: a *.md
+# name with no / or \ and no .bak., a source of shared, aitools, dotprofile or
+# retired, and a name not already listed (compared case-insensitively). Throws
+# when the file cannot be read. Parity: read_rules_manifest in setup-user-cursor.sh.
+$rulesManifestHeader = "# aitools rules manifest v1"
+function Read-RulesManifest([string]$Path) {
+    $result = @{ Status = "ok"; Rules = New-Object System.Collections.Generic.List[object]; Invalid = New-Object System.Collections.Generic.List[string] }
+    $text = [System.IO.File]::ReadAllText($Path, [System.Text.UTF8Encoding]::new($false))
+    if ($text.Length -gt 0 -and $text[0] -eq [char]0xFEFF) { $text = $text.Substring(1) }
+    $lines = $text -split "`n"
+    # A CR is a line ending only before an LF (as the .sh reads it): the last
+    # piece, which no LF follows, keeps a trailing CR (and fails validation)
+    $last = $lines.Count - 1
+    $head = if ($last -gt 0) { $lines[0] -replace "`r$", "" } else { $lines[0] }
+    if ($head -cne $rulesManifestHeader) { $result.Status = "header-bad"; return $result }
+    $seen = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
+    for ($i = 1; $i -lt $lines.Count; $i++) {
+        $l = if ($i -lt $last) { $lines[$i] -replace "`r$", "" } else { $lines[$i] }
+        if ($l -eq "") { continue }
+        $tab = $l.IndexOf("`t")
+        $name = if ($tab -ge 0) { $l.Substring(0, $tab) } else { $l }
+        $src = if ($tab -ge 0) { $l.Substring($tab + 1) } else { "" }
+        if ($name -cnotmatch '\A[^/\\]+\.md\z' -or $name -clike "*.bak.*" -or
+            $src -cnotmatch '\A(?:shared|aitools|dotprofile|retired)\z' -or -not $seen.Add($name)) {
+            $result.Invalid.Add(($l -replace "`t", "<TAB>"))
+            continue
+        }
+        $result.Rules.Add(@{ Name = $name; Source = $src })
+    }
+    return $result
 }
 
 # Check a converted .mdc the way Cursor parses it: Cursor splits the whole file
@@ -473,12 +543,17 @@ function Test-CursorRuleParse([string]$Text) {
     return "Cursor would not see alwaysApply in its frontmatter (a --- inside a frontmatter value?)"
 }
 
+$rulesManifest = Join-Path $harnessRulesDir ".aitools-rules-manifest"
+$entitledNames = New-Object System.Collections.Generic.List[string]   # manifest names Cursor gets (shared, dotprofile)
+$entitledSet = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
+$removeRules = New-Object System.Collections.Generic.List[object]     # @{ Name; Source } for aitools, retired
+$removeSet = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
+$entries = $null
+
 if (-not (Test-Path -LiteralPath $harnessRulesDir -PathType Container)) {
     Log "No harness rules at $harnessRulesDir (deploy-harness has not run) -- skipping"
     Write-Summary "OK" "cursor rules" "n/a (no harness rules)"
 } else {
-    # Source files: every regular, non-hidden file, flat (the deploy-harness contract)
-    $ruleSources = @()
     try {
         $entries = @(Get-ChildItem -LiteralPath $harnessRulesDir -ErrorAction Stop | Sort-Object Name)
     } catch {
@@ -487,152 +562,323 @@ if (-not (Test-Path -LiteralPath $harnessRulesDir -PathType Container)) {
     }
     if ($null -eq $entries) {
         Write-Summary "ERROR" "cursor rules" "cannot read harness rules"
+    } elseif (-not (Test-Path -LiteralPath $rulesManifest -PathType Leaf)) {
+        # Safe behaviour: without the manifest the source of each rule is unknown,
+        # so nothing is fanned out (a project rule would load in every chat) and
+        # nothing is removed (a user-level rule could be taken for a project rule)
+        LogWarn "No rules manifest at $rulesManifest -- Cursor rules left unchanged (nothing fanned out, nothing removed)"
+        Write-Summary "WARN" "cursor rules" "no rules manifest"
+        Write-Summary "ACTION" "" "Run aitools to rebuild ~/.aitools/rules and its manifest"
+        $entries = $null
     } else {
-        $ruleBroken = @()   # dangling symlinks: reported as failed in the deploy loop
-        foreach ($entry in $entries) {
-            if ($entry.Name.StartsWith(".")) { continue }
-            # Contract (S3-Harness correction): only *.md rules; *.bak.* are the
-            # backups Deploy-ManagedFile leaves next to updated harness files
-            if ($entry.Name -clike "*.bak.*") { continue }
-            if (-not ($entry.Name -clike "*.md")) {
-                Log "Ignoring non-rule file in harness rules: $($entry.Name) (only *.md is fanned out)"
-                continue
+        $manifest = $null
+        try {
+            $manifest = Read-RulesManifest $rulesManifest
+        } catch {
+            LogError "Cannot read the rules manifest ${rulesManifest}: $_"
+            Write-Summary "ERROR" "cursor rules" "cannot read rules manifest"
+            $entries = $null
+        }
+        if ($manifest -and $manifest.Status -eq "header-bad") {
+            LogWarn "Rules manifest ${rulesManifest}: the first line is not `"$rulesManifestHeader`" -- Cursor rules left unchanged (nothing fanned out, nothing removed)"
+            Write-Summary "WARN" "cursor rules" "rules manifest not v1"
+            Write-Summary "ACTION" "" "Run aitools to rebuild ~/.aitools/rules and its manifest"
+            $entries = $null
+        } elseif ($manifest) {
+            foreach ($bad in $manifest.Invalid) { LogWarn "Rules manifest ${rulesManifest}: line ignored: $bad" }
+            foreach ($r in $manifest.Rules) {
+                if ($r.Source -ceq "shared" -or $r.Source -ceq "dotprofile") {
+                    $entitledNames.Add($r.Name); [void]$entitledSet.Add($r.Name)
+                } else {
+                    $removeRules.Add($r); [void]$removeSet.Add($r.Name)
+                }
             }
-            if ($entry.LinkType) {
-                # Test-Path is true for a dangling link on pwsh 7; check the final target
-                $linkOk = $false
-                try { $linkOk = [bool]$entry.ResolveLinkTarget($true).Exists } catch { $linkOk = $false }
-                if (-not $linkOk) { $ruleBroken += $entry.Name; continue }
+        }
+    }
+}
+
+if ($null -ne $entries) {
+    # Source files: every regular, non-hidden file, flat (the deploy-harness
+    # contract), that the manifest lists as a user-level rule
+    $ruleSources = @()
+    $foundSet = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
+    $ruleBroken = @()   # dangling symlinks: reported as failed in the deploy loop
+    foreach ($entry in $entries) {
+        # Hidden files (the manifest among them) are skipped silently
+        if ($entry.Name.StartsWith(".")) { continue }
+        # Contract (S3-Harness correction): only *.md rules; *.bak.* are the
+        # backups Deploy-ManagedFile leaves next to updated harness files
+        if ($entry.Name -clike "*.bak.*") { continue }
+        if (-not ($entry.Name -clike "*.md")) {
+            Log "Ignoring non-rule file in harness rules: $($entry.Name) (only *.md is fanned out)"
+            continue
+        }
+        # Cursor gets user-level rules only (commander decision 2026-10-22)
+        if (-not $entitledSet.Contains($entry.Name)) {
+            if ($removeSet.Contains($entry.Name)) {
+                LogDetail "Not fanned out: $($entry.Name) (a project or retired rule in the rules manifest)"
+            } else {
+                Log "Not fanned out: $($entry.Name) (not in the rules manifest)"
             }
-            if ($entry.PSIsContainer) { Log "Ignoring non-file in harness rules: $($entry.Name)"; continue }
-            $ruleSources += $entry
+            continue
+        }
+        [void]$foundSet.Add($entry.Name)
+        if ($entry.LinkType) {
+            # Test-Path is true for a dangling link on pwsh 7; check the final target
+            $linkOk = $false
+            try { $linkOk = [bool]$entry.ResolveLinkTarget($true).Exists } catch { $linkOk = $false }
+            if (-not $linkOk) { $ruleBroken += $entry.Name; continue }
+        }
+        if ($entry.PSIsContainer) { Log "Ignoring non-file in harness rules: $($entry.Name)"; continue }
+        $ruleSources += $entry
+    }
+
+    # A user-level name in the manifest with no file: nothing to fan out
+    foreach ($name in $entitledNames) {
+        if (-not $foundSet.Contains($name)) {
+            LogWarn "Not fanned out: $name is in the rules manifest but not in $harnessRulesDir (run aitools to rebuild it)"
+        }
+    }
+
+    if ($ruleSources.Count -eq 0 -and $ruleBroken.Count -eq 0 -and $removeRules.Count -eq 0) {
+        Log "No user-level rules in $harnessRulesDir -- skipping"
+        Write-Summary "OK" "cursor rules" "n/a (no user-level rules)"
+    } else {
+        if (-not $DryRun) {
+            Backup-Dir -DirPath $cursorRulesDir
+            try {
+                New-Item -ItemType Directory -Path $cursorRulesDir -Force -ErrorAction Stop | Out-Null
+            } catch {
+                LogError "Cannot create $cursorRulesDir -- $_"
+            }
         }
 
-        if ($ruleSources.Count -eq 0 -and $ruleBroken.Count -eq 0) {
-            Log "Harness rules directory $harnessRulesDir is empty -- skipping"
-            Write-Summary "OK" "cursor rules" "n/a (no harness rules)"
-        } else {
-            if (-not $DryRun) {
-                Backup-Dir -DirPath $cursorRulesDir
-                try {
-                    New-Item -ItemType Directory -Path $cursorRulesDir -Force -ErrorAction Stop | Out-Null
-                } catch {
-                    LogError "Cannot create $cursorRulesDir -- $_"
-                }
+        Initialize-DeployTracker
+        $errorsBeforeCursorRules = $errors
+        foreach ($brokenName in $ruleBroken) {
+            LogError "Failed: ${brokenName}: dangling symlink in $harnessRulesDir"
+            Record-DeployOutcome -Outcome "failed" -ToolName "cursor rules" -ItemName $brokenName
+        }
+        $ruleDests = New-Object System.Collections.Generic.List[string]       # deployed names
+        $ruleDestsLc = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
+        foreach ($src in $ruleSources) {
+            $ruleBase = $src.Name
+            $destName = $ruleBase.Substring(0, $ruleBase.Length - 3) + ".mdc"
+
+            # Two sources mapping to one target (names that differ only in case,
+            # possible on a case-sensitive file system): the first wins
+            if ($ruleDestsLc.Contains($destName)) {
+                LogError "Skipped duplicate: $ruleBase -> $destName (already deployed from another harness rule)"
+                Record-DeployOutcome -Outcome "failed" -ToolName "cursor rules" -ItemName $ruleBase
+                continue
+            }
+            $ruleDests.Add($destName)
+            [void]$ruleDestsLc.Add($destName)
+
+            try {
+                $raw = [System.IO.File]::ReadAllText($src.FullName, [System.Text.UTF8Encoding]::new($false))
+            } catch {
+                LogError "Failed: ${ruleBase}: cannot read $($src.FullName) -- $_"
+                Record-DeployOutcome -Outcome "failed" -ToolName "cursor rules" -ItemName $destName
+                continue
+            }
+            $ruleContent = ConvertTo-CursorRule $raw $ruleBase
+            if (-not $ruleContent) {
+                LogError "Failed: ${ruleBase}: empty after conversion -- nothing written"
+                Record-DeployOutcome -Outcome "failed" -ToolName "cursor rules" -ItemName $destName
+                continue
             }
 
-            Initialize-DeployTracker
-            $errorsBeforeCursorRules = $errors
-            foreach ($brokenName in $ruleBroken) {
-                LogError "Failed: ${brokenName}: dangling symlink in $harnessRulesDir"
-                Record-DeployOutcome -Outcome "failed" -ToolName "cursor rules" -ItemName $brokenName
+            $result = Deploy-ManagedFile -Content $ruleContent -DestPath (Join-Path $cursorRulesDir $destName) `
+                -ToolName "cursor rules" -ItemName $destName -AdoptPath ""
+            switch ($result) {
+                { $_ -in @("created", "updated", "verified", "skipped", "failed") } {
+                    # The library wrote (or left) LOCAL; the tracker records every
+                    # outcome (failed -> ERROR row, skipped -> WARN row).
+                }
+                "accept & adopt" {
+                    # Not reachable: adopt is not offered without an adopt target
+                    LogError "Unexpected accept & adopt for $destName (no adopt target)"
+                }
+                default {
+                    LogError "Unexpected deploy result for ${destName}: $result"
+                    $result = "failed"
+                }
             }
-            $ruleDests = New-Object System.Collections.Generic.List[string]       # deployed names
-            $ruleDestsLc = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
-            foreach ($src in $ruleSources) {
-                $ruleBase = $src.Name
-                $destName = $ruleBase.Substring(0, $ruleBase.Length - 3) + ".mdc"
+            Record-DeployOutcome -Outcome $result -ToolName "cursor rules" -ItemName $destName
+        }
 
-                # Two sources mapping to one target (names that differ only in case,
-                # possible on a case-sensitive file system): the first wins
-                if ($ruleDestsLc.Contains($destName)) {
-                    LogError "Skipped duplicate: $ruleBase -> $destName (already deployed from another harness rule)"
-                    Record-DeployOutcome -Outcome "failed" -ToolName "cursor rules" -ItemName $ruleBase
-                    continue
-                }
-                $ruleDests.Add($destName)
-                [void]$ruleDestsLc.Add($destName)
-
-                try {
-                    $raw = [System.IO.File]::ReadAllText($src.FullName, [System.Text.UTF8Encoding]::new($false))
-                } catch {
-                    LogError "Failed: ${ruleBase}: cannot read $($src.FullName) -- $_"
-                    Record-DeployOutcome -Outcome "failed" -ToolName "cursor rules" -ItemName $destName
-                    continue
-                }
-                $ruleContent = ConvertTo-CursorRule $raw
-                if (-not $ruleContent) {
-                    LogError "Failed: ${ruleBase}: empty after conversion -- nothing written"
-                    Record-DeployOutcome -Outcome "failed" -ToolName "cursor rules" -ItemName $destName
-                    continue
-                }
-
-                $result = Deploy-ManagedFile -Content $ruleContent -DestPath (Join-Path $cursorRulesDir $destName) `
-                    -ToolName "cursor rules" -ItemName $destName -AdoptPath ""
-                switch ($result) {
-                    { $_ -in @("created", "updated", "verified", "skipped", "failed") } {
-                        # The library wrote (or left) LOCAL; the tracker records every
-                        # outcome (failed -> ERROR row, skipped -> WARN row).
-                    }
-                    "accept & adopt" {
-                        # Not reachable: adopt is not offered without an adopt target
-                        LogError "Unexpected accept & adopt for $destName (no adopt target)"
-                    }
-                    default {
-                        LogError "Unexpected deploy result for ${destName}: $result"
-                        $result = "failed"
-                    }
-                }
-                Record-DeployOutcome -Outcome $result -ToolName "cursor rules" -ItemName $destName
+        # Prune: a project (aitools) or retired rule must not stay loaded in
+        # Cursor. Its .mdc is removed (backup kept) only when this fan-out
+        # created it: the aitools-fanout marker, or, for a file deployed before
+        # the marker existed (PR #87), the same content as the conversion of the
+        # harness copy. Any other file of that name is the user's and is preserved.
+        $removedCount = 0
+        $rmKept = New-Object System.Collections.Generic.List[string]   # project/retired names kept (not created by the fan-out)
+        foreach ($r in $removeRules) {
+            $rmDest = $r.Name.Substring(0, $r.Name.Length - 3) + ".mdc"
+            # Deployed this run from a user-level rule whose name differs only in case
+            if ($ruleDestsLc.Contains($rmDest)) { continue }
+            $rmPath = Join-Path $cursorRulesDir $rmDest
+            if (-not (Test-Path -LiteralPath $rmPath -PathType Leaf)) { continue }
+            try {
+                $rmText = [System.IO.File]::ReadAllText($rmPath, [System.Text.UTF8Encoding]::new($false))
+            } catch {
+                LogError "Cannot read $rmPath -- not removed: $_"
+                Record-DeployOutcome -Outcome "failed" -ToolName "cursor rules" -ItemName $rmDest
+                continue
             }
-
-            if ($DryRun) {
-                if ($script:dtFailed -gt 0) {
-                    Write-Summary "ERROR" "cursor rules" "$($script:dtFailed) failed (dry run)"
-                } else {
-                    Write-Summary "OK" "cursor rules" "dry run (no files written)"
-                }
+            $rmWhy = ""
+            if (Test-CursorFanoutRule $rmText) {
+                $rmWhy = "aitools-fanout marker"
             } else {
-                # Preserved: files in .cursor\rules not produced from .aitools\rules
-                if (Test-Path -LiteralPath $cursorRulesDir -PathType Container) {
-                    foreach ($existing in @(Get-ChildItem -LiteralPath $cursorRulesDir -File)) {
-                        if ($existing.Name -like "*.bak.*") { continue }
-                        if (-not $ruleDestsLc.Contains($existing.Name)) {
-                            Log "Preserved unmanaged rule: $($existing.Name)"
-                            Record-DeployOutcome -Outcome "preserved" -ToolName "cursor rules" -ItemName $existing.Name
-                        }
-                    }
+                # No marker (a PR #87 file): compare with the conversion of the
+                # harness copy and of each backup deploy-harness left beside it
+                # (it backs a rule up when it updates or retires it), so a rule
+                # edited or retired since the #87 run is still recognised
+                $rmCands = New-Object System.Collections.Generic.List[string]
+                $rmCands.Add((Join-Path $harnessRulesDir $r.Name))
+                try {
+                    $rmBaks = @([System.IO.Directory]::GetFiles($harnessRulesDir) |
+                        Where-Object { [System.IO.Path]::GetFileName($_).StartsWith("$($r.Name).bak.", [System.StringComparison]::Ordinal) } |
+                        Sort-Object -Property { [System.IO.Path]::GetFileName($_) } -CaseSensitive)
+                    foreach ($b in $rmBaks) { $rmCands.Add($b) }
+                } catch {
+                    LogDetail "cursor rules: cannot list backups of $($r.Name) in ${harnessRulesDir}: $_"
                 }
-
-                # Post-write validation: non-empty, and a .mdc starts with frontmatter
-                foreach ($destName in $ruleDests) {
-                    $destPath = Join-Path $cursorRulesDir $destName
-                    if (-not (Test-Path -LiteralPath $destPath -PathType Leaf)) { continue }
-                    $item = Get-Item -LiteralPath $destPath
-                    if ($item.Length -eq 0) {
-                        LogError "Validation failed: $destName is empty after deploy"
+                foreach ($rmCand in $rmCands) {
+                    if (-not (Test-Path -LiteralPath $rmCand -PathType Leaf)) { continue }
+                    try {
+                        $rmLegacy = ConvertTo-CursorRule ([System.IO.File]::ReadAllText($rmCand, [System.Text.UTF8Encoding]::new($false)))
+                    } catch {
+                        LogDetail "cursor rules: cannot read $rmCand for the content check: $_"
                         continue
                     }
-                    if ($destName -clike "*.mdc") {
-                        try {
-                            $deployed = [System.IO.File]::ReadAllText($destPath)
-                        } catch {
-                            LogError "Validation failed: cannot read $destPath -- $_"
-                            continue
-                        }
-                        if (-not $deployed.TrimStart([char]0xFEFF).StartsWith("---")) {
-                            LogError "Validation failed: $destName has no frontmatter (Cursor skips it)"
-                        } else {
-                            # Check each deployed rule as Cursor parses it (warn: the
-                            # rule is deployed but Cursor would misread its frontmatter)
-                            $parseProblem = Test-CursorRuleParse $deployed
-                            if ($parseProblem) {
-                                LogWarn "${destName}: $parseProblem -- fix the source rule in $harnessRulesDir"
-                            }
+                    # Compared as bash compares them: trailing newlines dropped
+                    if ($rmLegacy -and ($rmLegacy -replace '\n+\z', '') -ceq ($rmText -replace '\n+\z', '')) {
+                        $rmWhy = "same content as the conversion of $([System.IO.Path]::GetFileName($rmCand))"
+                        break
+                    }
+                }
+            }
+            if (-not $rmWhy) {
+                # Kept (it may be the user's own file), but Cursor still loads it
+                LogWarn "Kept ${rmDest}: the rules manifest lists $($r.Name) as $($r.Source) (Cursor gets user-level rules only), but this file was not created by the fan-out (no aitools-fanout marker, no matching harness copy) -- Cursor still loads it; remove it if it is an old fan-out copy"
+                $rmKept.Add($rmDest)
+                continue
+            }
+            if ($DryRun) {
+                Log "[DRY RUN] Would back up and remove $rmDest ($($r.Source) rule; $rmWhy)"
+                continue
+            }
+            if ($rmPath -match '[\[\]\*\?]') {
+                # Backup-File (aitools-lib) uses wildcard paths: for a path with
+                # [ ] * ? its Test-Path is false and it returns "ok" without a
+                # copy. Back up with -LiteralPath here instead (same name scheme;
+                # no pruning, as each removal backs a file up once).
+                $script:BackupFileOk = $true
+                $rmTs = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHHmmssZ")
+                try {
+                    Copy-Item -LiteralPath $rmPath -Destination "$rmPath.bak.$rmTs" -ErrorAction Stop
+                    Log "Backed up $rmPath"
+                } catch {
+                    $script:BackupFileOk = $false
+                    LogWarn "Could not back up $rmPath -- $_"
+                }
+            } else {
+                Backup-File -FilePath $rmPath
+            }
+            if (-not $script:BackupFileOk) {
+                LogError "Not removed: $rmDest ($($r.Source) rule): backup failed"
+                Record-DeployOutcome -Outcome "failed" -ToolName "cursor rules" -ItemName $rmDest
+                continue
+            }
+            try {
+                Remove-Item -LiteralPath $rmPath -Force -ErrorAction Stop
+            } catch {
+                LogError "Cannot remove $rmPath ($($r.Source) rule) -- $_"
+                Record-DeployOutcome -Outcome "failed" -ToolName "cursor rules" -ItemName $rmDest
+                continue
+            }
+            if (Test-Path -LiteralPath $rmPath) {
+                LogError "Cannot remove $rmPath ($($r.Source) rule): still present"
+                Record-DeployOutcome -Outcome "failed" -ToolName "cursor rules" -ItemName $rmDest
+                continue
+            }
+            $removedCount++
+            Log "Removed $rmDest ($($r.Source) rule: Cursor gets user-level rules only; $rmWhy; backup kept)"
+            Write-Summary "DETAIL" "cursor rules" "removed: $rmDest"
+        }
+        if ($rmKept.Count -gt 0) {
+            Write-Summary "ACTION" "" "Cursor still loads project/retired rules in ~/.cursor/rules: $($rmKept -join ', ') -- delete them unless you wrote them"
+        }
+
+        if ($DryRun) {
+            if ($script:dtFailed -gt 0) {
+                Write-Summary "ERROR" "cursor rules" "$($script:dtFailed) failed (dry run)"
+            } else {
+                Write-Summary "OK" "cursor rules" "dry run (no files written)"
+            }
+        } else {
+            # Preserved: files in .cursor\rules not produced from .aitools\rules
+            if (Test-Path -LiteralPath $cursorRulesDir -PathType Container) {
+                foreach ($existing in @(Get-ChildItem -LiteralPath $cursorRulesDir -File)) {
+                    if ($existing.Name -like "*.bak.*") { continue }
+                    if (-not $ruleDestsLc.Contains($existing.Name)) {
+                        Log "Preserved unmanaged rule: $($existing.Name)"
+                        Record-DeployOutcome -Outcome "preserved" -ToolName "cursor rules" -ItemName $existing.Name
+                    }
+                }
+            }
+
+            # Post-write validation: non-empty, and a .mdc starts with frontmatter
+            foreach ($destName in $ruleDests) {
+                $destPath = Join-Path $cursorRulesDir $destName
+                if (-not (Test-Path -LiteralPath $destPath -PathType Leaf)) { continue }
+                $item = Get-Item -LiteralPath $destPath
+                if ($item.Length -eq 0) {
+                    LogError "Validation failed: $destName is empty after deploy"
+                    continue
+                }
+                if ($destName -clike "*.mdc") {
+                    try {
+                        $deployed = [System.IO.File]::ReadAllText($destPath)
+                    } catch {
+                        LogError "Validation failed: cannot read $destPath -- $_"
+                        continue
+                    }
+                    if (-not $deployed.TrimStart([char]0xFEFF).StartsWith("---")) {
+                        LogError "Validation failed: $destName has no frontmatter (Cursor skips it)"
+                    } else {
+                        # Check each deployed rule as Cursor parses it (warn: the
+                        # rule is deployed but Cursor would misread its frontmatter)
+                        $parseProblem = Test-CursorRuleParse $deployed
+                        if ($parseProblem) {
+                            LogWarn "${destName}: $parseProblem -- fix the source rule in $harnessRulesDir"
                         }
                     }
                 }
+            }
 
-                if ($script:dtFailed -gt 0) {
-                    # Write-DeployTrackerSummary writes the ERROR row ("N failed")
-                    Write-DeployTrackerSummary -ToolName "cursor rules"
-                    Log "Cursor rules: $($script:deployTrackerText), $($script:dtPreserved) preserved in $cursorRulesDir"
-                } elseif ($errors -eq $errorsBeforeCursorRules) {
-                    Write-DeployTrackerSummary -ToolName "cursor rules"
-                    LogOk "Cursor rules: $($script:deployTrackerText), $($script:dtPreserved) preserved in $cursorRulesDir"
+            if ($script:dtFailed -gt 0) {
+                # Write-DeployTrackerSummary writes the ERROR row ("N failed")
+                Write-DeployTrackerSummary -ToolName "cursor rules"
+                Log "Cursor rules: $($script:deployTrackerText), $removedCount removed, $($script:dtPreserved) preserved in $cursorRulesDir"
+            } elseif ($errors -eq $errorsBeforeCursorRules) {
+                if ($ruleDests.Count -eq 0) {
+                    # Nothing fanned out: the row reports the pruning alone
+                    if ($removedCount -gt 0) {
+                        Write-Summary "OK" "cursor rules" "$removedCount removed"
+                    } else {
+                        Write-Summary "OK" "cursor rules" "n/a (no user-level rules)"
+                    }
+                    LogOk "Cursor rules: no user-level rules, $removedCount removed, $($script:dtPreserved) preserved in $cursorRulesDir"
                 } else {
-                    Write-Summary "ERROR" "cursor rules" "validation failed"
+                    Write-DeployTrackerSummary -ToolName "cursor rules"
+                    LogOk "Cursor rules: $($script:deployTrackerText), $removedCount removed, $($script:dtPreserved) preserved in $cursorRulesDir"
                 }
+            } else {
+                Write-Summary "ERROR" "cursor rules" "validation failed"
             }
         }
     }

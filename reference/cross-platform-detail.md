@@ -4,6 +4,26 @@ Detail and background for `.claude/rules/cross-platform.md`. This file is
 referenced by `@` links from the rules file — it loads on demand, not every
 session.
 
+## Supported platforms and environments
+
+Decided 2026-10-26 (commander). This section is the one authoritative list:
+other docs point here and do not repeat it. aitools supports only:
+
+| Kind | Supported | API value | Package (package path) |
+|---|---|---|---|
+| Platform | macOS (Apple Silicon; Intel best-effort) | `macos` | unsigned `.pkg` (Intune, Jamf) |
+| Platform | Windows 11 | `windows` | `.intunewin` (Intune Win32 app) |
+| Platform | Linux: Ubuntu 24.04 and 22.04 | `linux` | `.deb` (one, `Architecture: all`) |
+| Environment | local (an agent on any platform above) | `local` | the platform's package |
+| Environment | Claude Code web (Ubuntu 24.04 VM) | `claude-code-web` | `.deb`, from the environment setup script |
+| Environment | Cursor cloud (Ubuntu VM) | `cursor-cloud` (proposed, pending decision P-2) | `.deb`, from the install command of the project's Cursor `environment.json` |
+
+Each is first-class. Anything else (other Linux distributions or package-manager
+families such as dnf, WSL as a target) is unsupported: scripts may run there but
+are not designed or verified for it. Intel Macs on the package path in v1 are
+pending decision P-5 (proposed: unsupported; the dev path is unchanged). The
+package path and the P-n decisions: `plans/build-package/design.md`.
+
 ## OS guard patterns — rationale
 
 **PowerShell guard**: Use `-not $IsWindows` (catches macOS AND Linux). Never
@@ -51,14 +71,23 @@ explicitly.
 |---|---|---|
 | `AITOOLS_PLATFORM` | `$AitoolsPlatform` | `macos`, `linux`, `windows`, `unknown` |
 | `IS_MACOS`, `IS_WINDOWS`, `IS_LINUX` | (`$IsWindows` etc. built in) | `true` / `false` |
-| `AITOOLS_ENVIRONMENT` | `$AitoolsEnvironment` | `claude-code-web` or `local` |
+| `AITOOLS_ENVIRONMENT` | `$AitoolsEnvironment` | `claude-code-web` or `local` (`cursor-cloud` proposed, not yet a value) |
 | `is_claude_code_web` | `Test-ClaudeCodeWeb` | true in Claude Code web |
 | `is_local_environment` | `Test-LocalEnvironment` | true for a local agent |
 | `write_environment_skip TOOL REASON` | `Write-EnvironmentSkip -Tool -Reason` | info line + `OK` row `n/a (<environment>)` |
 | -- | `Resolve-AitoolsPlatform`, `Resolve-AitoolsEnvironment` | pure resolvers (testable from any platform) |
 
-The value list is closed. A new environment (for example a hosted Cursor agent) is added by
-decision: a new value, its signal, and the scripts that branch on it.
+The value list is closed. A new environment is added by decision: a new value, its signal,
+and the scripts that branch on it.
+
+Cursor cloud is a supported environment (commander, 2026-10-26; "Supported platforms and
+environments" above), but its value is not decided. Proposed (decision P-2): value
+`cursor-cloud`, set explicitly as `AITOOLS_ENVIRONMENT=cursor-cloud` by the
+install command of the project's Cursor `environment.json`; secondary signal: the Cursor metadata socket
+`${CURSOR_AGENT_SOCKET:-/run/cursor/api.sock}` exists, on Linux only (Cursor documents that
+API as preview). Until the library implements it, the resolution above is unchanged: a Cursor
+cloud run resolves to `local`, and `AITOOLS_ENVIRONMENT=cursor-cloud` is an invalid override
+(item 4).
 
 ### Hooks
 

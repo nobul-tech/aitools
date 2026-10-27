@@ -1,0 +1,30 @@
+#!/bin/bash
+# postinst -- aitools .deb maintainer script (package launcher)
+#
+# Intent (batch B10a, plans/build-package/implementation-plan.md): files only.
+# Steps when implemented, for "configure" ($1; other actions exit 0):
+#   1. validate the payload: /opt/aitools/VERSION,
+#      /opt/aitools/repo/scripts/aitools-install.sh and an executable
+#      /opt/aitools/bin/aitools-setup (the /usr/bin symlink is package data);
+#      missing: message to stderr, exit 1 (Debian Policy: non-zero on error)
+#   2. no log file: messages go to stdout/stderr only (dpkg shows them;
+#      /var/log/aitools is written by the cloud setup snippets, B10c)
+#   3. print one line: "aitools <v> installed; run aitools-setup"
+#   NO per-user writes, NO network, NO prompts, NO systemctl; idempotent
+#   (Debian Policy ch. 6; PkgLinux notes section 4).
+# Run context: root, by dpkg (apt-get install, dpkg -i). Arguments from dpkg:
+#   $1 = configure | abort-upgrade | abort-remove | abort-deconfigure,
+#   $2 = the most recently configured version. No terminal: never prompt.
+# Platform: Ubuntu 22.04 and 24.04 (bash; Depends: bash). Package launcher:
+#   exempt from the .sh/.ps1 pairing (category "package launchers", BP-5,
+#   pending P-1).
+# Follows: BP-5, BP-7, BP-9, BP-13, BP-16, BP-17.
+# Safe to re-run: will be idempotent (Debian Policy requirement).
+#
+# VERSION 1.0 SCAFFOLDING: refuses to run (exit 1).
+
+set -euo pipefail
+
+printf '[%s] [aitools-postinst] [error] not implemented in v1.0 scaffolding (batch B10, plans/build-package/implementation-plan.md)\n' \
+    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >&2
+exit 1
