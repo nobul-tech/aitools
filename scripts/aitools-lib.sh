@@ -2825,6 +2825,441 @@ fanout_dir_matches() {
     return "$rc"
 }
 
+# _fanout_list_dir DIR: the entry names of DIR, one per line, sorted in byte
+# order (names holding a newline left out). Exit 1 with the reason on stdout
+# when DIR cannot be listed. Used by fanout_harness_skills.
+# Parity: Get-FanoutSortedNames in aitools-lib.ps1.
+_fanout_list_dir() {
+    perl -e '
+        opendir my $d, $ARGV[0] or do { print "cannot list $ARGV[0]: $!\n"; exit 1 };
+        print "$_\n" for sort grep { $_ ne "." && $_ ne ".." && !/\n/ } readdir $d;
+    ' "$1"
+}
+
+# ---------------------------------------------------------------------------
+# fanout_harness_skills TOOL DEST AITOOLS_REPO DOTPROFILE
+# Skills fan-out (plans/skills-and-rules-fanout.md section 3.4): every skill
+# directory in ~/.aitools/skills (deploy-harness fills it, first source wins,
+# and writes the skills manifest) except the ones the manifest retires ->
+# DEST/<name>/** through deploy_managed_file, one item per file
+# ("<name>/<rel>"). Callers: setup-user-claude ("claude skills",
+# ~/.claude/skills) and setup-user-cursor ("cursor skills", ~/.cursor/skills).
+#   TOOL          summary tool name
+#   DEST          the tool's skills directory (created when missing)
+#   AITOOLS_REPO  the aitools git checkout (adopt targets of shared and aitools
+#                 skills); "" = none (deploy/ copy, package payload, Cursor)
+#   DOTPROFILE    the dotprofile (adopt target of dotprofile skills); "" = none
+# Behaviour: names compared case-insensitively; hidden and *.bak.* entries
+# skipped (also *.bak.* file names inside a skill); a top-level file ignored
+# with a log line; a dangling symlink, a case-only duplicate name and an
+# unexpected deploy result are failed items; the executable bit follows the
+# harness copy. DEST/<name> that is a symlink or a file is never written
+# (preserved, WARN, one ACTION row), nor is any directory in DEST the fan-out
+# did not deploy this run (third-party skills, the firecrawl symlinks). The
+# copy of a retired skill is removed only when fanout_dir_matches says it holds
+# the harness copy's files (~/.aitools/skills/<name> or a <name>.bak.* backup
+# there), after a verified backup to DEST.bak.<UTC>/<name>/ beside DEST (not in
+# DEST, where the tool would still load it as a skill); else kept, WARN and
+# one ACTION row. DRY_RUN=true writes nothing. Rows: see the contract; the
+# final row is the tracker's (OK / WARN skipped / ERROR failed).
+# Returns 0 (failures are log_error + an ERROR row, counted in ERRORS for the
+# caller's exit footer); [x]abort at a review exits 2 from the library.
+# Parity: Invoke-HarnessSkillsFanout in aitools-lib.ps1.
+# ---------------------------------------------------------------------------
+fanout_harness_skills() {
+    local _fs_tool="${1:-}" _fs_dest="${2:-}" _fs_repo="${3:-}" _fs_dp="${4:-}"
+    local _fs_src="$HOME/.aitools/skills"
+    local _fs_manifest="$_fs_src/.aitools-skills-manifest"
+    local _fs_tab _fs_who _fs_shown
+    _fs_tab=$(printf '\t')
+    if [ -z "$_fs_tool" ] || [ -z "$_fs_dest" ]; then
+        log_error "fanout_harness_skills: TOOL and DEST are required (caller bug)"
+        write_summary ERROR "${_fs_tool:-skills}" "fan-out not run (caller bug)"
+        return 0
+    fi
+    _fs_dest="${_fs_dest%/}"
+    case "$_fs_tool" in
+        "claude skills") _fs_who="Claude Code" ;;
+        "cursor skills") _fs_who="Cursor" ;;
+        *)               _fs_who="$_fs_tool" ;;
+    esac
+    # DEST as the ACTION rows show it: ~/... under HOME, forward slashes
+    _fs_shown="$_fs_dest"
+    case "$_fs_dest" in "$HOME"/*) _fs_shown="~/${_fs_dest#"$HOME"/}" ;; esac
+
+    if [ ! -d "$_fs_src" ]; then
+        log "No harness skills at $(display_path "$_fs_src") (deploy-harness has not run) -- skipping"
+        write_summary OK "$_fs_tool" "n/a (no harness skills)"
+        return 0
+    fi
+    local _fs_entries="" _fs_lrc=0
+    if [ -r "$_fs_src" ] && [ -x "$_fs_src" ]; then
+        _fs_entries=$(_fanout_list_dir "$_fs_src" 2>&1) || _fs_lrc=$?
+    else
+        _fs_lrc=1; _fs_entries="permission denied"
+    fi
+    if [ "$_fs_lrc" -ne 0 ]; then
+        log_error "Cannot list $(display_path "$_fs_src") ($_fs_entries)"
+        write_summary ERROR "$_fs_tool" "cannot read harness skills"
+        return 0
+    fi
+
+    # Skills manifest: each skill's source (adopt target) and the retired names.
+    # Without one every skill is fanned out, none is retired, adopt not offered.
+    local _fs_m_ok=false _fs_m_failed=false _fs_m_out="" _fs_m_line _fs_m_rest _fs_m_name _fs_m_src
+    local _fs_source_of="" _fs_retired="" _fs_retired_lc=""
+    if [ ! -e "$_fs_manifest" ] && [ ! -L "$_fs_manifest" ]; then
+        log "No skills manifest at $(display_path "$_fs_manifest") -- every skill fanned out, none retired, adopt not offered"
+    elif ! _fs_m_out=$(read_harness_manifest "$_fs_manifest" skills 2>&1); then
+        log_error "Cannot read the skills manifest $(display_path "$_fs_manifest"): $_fs_m_out -- every skill fanned out, none retired"
+        write_summary ERROR "$_fs_tool" "cannot read skills manifest"
+        _fs_m_failed=true
+    elif [ "$_fs_m_out" = "header-bad" ]; then
+        log_warn "Skills manifest $(display_path "$_fs_manifest"): the first line is not \"$SKILLS_MANIFEST_HEADER\" -- every skill fanned out, none retired, adopt not offered"
+        write_summary ACTION "" "Run aitools to rebuild ~/.aitools/skills and its manifest"
+    else
+        _fs_m_ok=true
+        while IFS= read -r _fs_m_line; do
+            [ -n "$_fs_m_line" ] || continue
+            case "$_fs_m_line" in
+                "invalid$_fs_tab"*)
+                    log_warn "Skills manifest $(display_path "$_fs_manifest"): line ignored: ${_fs_m_line#invalid"$_fs_tab"}" ;;
+                "rule$_fs_tab"*)
+                    _fs_m_rest="${_fs_m_line#rule"$_fs_tab"}"
+                    _fs_m_name="${_fs_m_rest%%"$_fs_tab"*}"
+                    _fs_m_src="${_fs_m_rest#*"$_fs_tab"}"
+                    if [ "$_fs_m_src" = "retired" ]; then
+                        _fs_retired="${_fs_retired}${_fs_m_name}
+"
+                        _fs_retired_lc="${_fs_retired_lc}$(lower_name "$_fs_m_name")
+"
+                    else
+                        _fs_source_of="${_fs_source_of}$(lower_name "$_fs_m_name")${_fs_tab}${_fs_m_src}
+"
+                    fi ;;
+            esac
+        done <<< "$_fs_m_out"
+    fi
+
+    # Skill directories: every entry whose kind is "skill", not retired
+    local _fs_ent _fs_skills="" _fs_broken=""
+    while IFS= read -r _fs_ent; do
+        [ -n "$_fs_ent" ] || continue
+        case "$(skill_name_kind "$_fs_ent")" in
+            skill) ;;
+            *) continue ;;   # hidden (the manifest) and *.bak.* (deploy-harness backups)
+        esac
+        if in_list "$(lower_name "$_fs_ent")" "$_fs_retired_lc"; then
+            log "Not fanned out: $_fs_ent (retired in the skills manifest)"
+            continue
+        fi
+        if [ -L "$_fs_src/$_fs_ent" ] && [ ! -e "$_fs_src/$_fs_ent" ]; then
+            _fs_broken="${_fs_broken}${_fs_ent}
+"
+            continue
+        fi
+        if [ ! -d "$_fs_src/$_fs_ent" ]; then
+            log "Ignoring non-skill file in harness skills: $_fs_ent (only skill directories are fanned out)"
+            continue
+        fi
+        _fs_skills="${_fs_skills}${_fs_ent}
+"
+    done <<< "$_fs_entries"
+
+    if [ -z "$_fs_skills" ] && [ -z "$_fs_broken" ] && [ -z "$_fs_retired" ]; then
+        log "No skills in $(display_path "$_fs_src") -- skipping"
+        # An unreadable manifest already wrote this tool's ERROR row
+        if [ "$_fs_m_failed" != "true" ]; then
+            write_summary OK "$_fs_tool" "n/a (no harness skills)"
+        fi
+        return 0
+    fi
+    if [ "${DRY_RUN:-}" != "true" ]; then
+        backup_dir "$_fs_dest"
+        if ! mkdir -p "$_fs_dest" || [ ! -d "$_fs_dest" ]; then
+            log_error "Cannot create $(display_path "$_fs_dest")"
+            write_summary ERROR "$_fs_tool" "cannot create skills dir"
+            return 0
+        fi
+    fi
+
+    deploy_tracker_init
+    local _fs_errs_before=$ERRORS
+    if [ "$_fs_m_failed" = "true" ]; then
+        deploy_tracker_record "failed" "$_fs_tool" ".aitools-skills-manifest"
+    fi
+    while IFS= read -r _fs_ent; do
+        [ -n "$_fs_ent" ] || continue
+        log_error "Failed: $_fs_ent: dangling symlink in $(display_path "$_fs_src")"
+        deploy_tracker_record "failed" "$_fs_tool" "$_fs_ent"
+    done <<< "$_fs_broken"
+
+    # Per skill: claim the name, check DEST/<name>, list its files. The deploy
+    # list holds "<name><TAB><rel>" lines.
+    local _fs_owned_lc="" _fs_kept="" _fs_list="" _fs_lc _fs_files _fs_f _fs_rel
+    while IFS= read -r _fs_ent; do
+        [ -n "$_fs_ent" ] || continue
+        _fs_lc=$(lower_name "$_fs_ent")
+        # Two harness skills whose names differ only in case (possible on a
+        # case-sensitive file system) map to one directory here: the first wins
+        if in_list "$_fs_lc" "$_fs_owned_lc"; then
+            log_error "Skipped duplicate: $_fs_ent (a harness skill whose name differs only in case was already fanned out)"
+            deploy_tracker_record "failed" "$_fs_tool" "$_fs_ent"
+            continue
+        fi
+        _fs_owned_lc="${_fs_owned_lc}${_fs_lc}
+"
+        if [ -L "$_fs_dest/$_fs_ent" ] || { [ -e "$_fs_dest/$_fs_ent" ] && [ ! -d "$_fs_dest/$_fs_ent" ]; }; then
+            log_warn "Kept $_fs_ent: not a directory this fan-out owns ($(display_path "$_fs_dest/$_fs_ent") is a symlink or a file) -- the harness copy is not deployed"
+            deploy_tracker_record "preserved" "$_fs_tool" "$_fs_ent"
+            _fs_kept="${_fs_kept:+$_fs_kept, }$_fs_ent"
+            continue
+        fi
+        # Files under the skill: real directories walked (symlinked ones not
+        # followed), regular files (or symlinks to one) listed, *.bak.* base
+        # names skipped; "f<TAB>rel" or "x<TAB>rel" (not a file: ignored)
+        _fs_lrc=0
+        _fs_files=$(perl -e '
+            my $root = shift;
+            my (@out, @stack) = ();
+            @stack = ("");
+            while (@stack) {
+                my $rel = pop @stack;
+                my $dir = $rel eq "" ? $root : "$root/$rel";
+                opendir my $dh, $dir or do { print "cannot list $dir: $!\n"; exit 1 };
+                my @names = grep { $_ ne "." && $_ ne ".." } readdir $dh;
+                closedir $dh;
+                for my $e (@names) {
+                    next if $e =~ /\n/;
+                    my $r = $rel eq "" ? $e : "$rel/$e";
+                    my $p = "$root/$r";
+                    if (! -l $p && -d _) { push @stack, $r; next }
+                    next if lc($e) =~ /\.bak\./;
+                    push @out, (-f $p ? "f" : "x") . "\t$r";
+                }
+            }
+            print "$_\n" for sort { substr($a, 2) cmp substr($b, 2) } @out;
+        ' "$_fs_src/$_fs_ent" 2>&1) || _fs_lrc=$?
+        if [ "$_fs_lrc" -ne 0 ]; then
+            log_error "Failed: $_fs_ent: $_fs_files"
+            deploy_tracker_record "failed" "$_fs_tool" "$_fs_ent"
+            continue
+        fi
+        while IFS= read -r _fs_f; do
+            [ -n "$_fs_f" ] || continue
+            _fs_rel="${_fs_f#?"$_fs_tab"}"
+            case "$_fs_f" in
+                "f$_fs_tab"*) _fs_list="${_fs_list}${_fs_ent}${_fs_tab}${_fs_rel}
+" ;;
+                *) log "Ignoring non-file in harness skills: $_fs_ent/$_fs_rel" ;;
+            esac
+        done <<< "$_fs_files"
+    done <<< "$_fs_skills"
+
+    # Deploy loop. The list is read on fd 3: stdin stays the terminal, so the
+    # review menu can prompt (a loop fed on stdin never prompts). [x]abort exits
+    # 2 from the library here: no TOOL row is written.
+    local _fs_line _fs_name _fs_item _fs_dfile _fs_sfile _fs_msrc _fs_abase _fs_adopt _fs_content _fs_res
+    local _fs_deployed=""   # deployed file paths, one per line (validation)
+    while IFS= read -r _fs_line <&3; do
+        [ -n "$_fs_line" ] || continue
+        _fs_name="${_fs_line%%"$_fs_tab"*}"
+        _fs_rel="${_fs_line#*"$_fs_tab"}"
+        _fs_item="$_fs_name/$_fs_rel"
+        _fs_sfile="$_fs_src/$_fs_name/$_fs_rel"
+        _fs_dfile="$_fs_dest/$_fs_name/$_fs_rel"
+        _fs_msrc=""
+        _fs_adopt=""
+        if [ "$_fs_m_ok" = "true" ]; then
+            _fs_lc=$(lower_name "$_fs_name")
+            while IFS= read -r _fs_m_line; do
+                case "$_fs_m_line" in
+                    "$_fs_lc$_fs_tab"*) _fs_msrc="${_fs_m_line#*"$_fs_tab"}"; break ;;
+                esac
+            done <<< "$_fs_source_of"
+            _fs_abase=""
+            case "$_fs_msrc" in
+                shared)     if [ -n "$_fs_repo" ]; then _fs_abase="$_fs_repo/shared/skills"; fi ;;
+                aitools)    if [ -n "$_fs_repo" ]; then _fs_abase="$_fs_repo/.claude/skills"; fi ;;
+                dotprofile) if [ -n "$_fs_dp" ]; then _fs_abase="$_fs_dp/claude/skills"; fi ;;
+            esac
+            if [ -n "$_fs_abase" ] && [ -f "$_fs_abase/$_fs_name/$_fs_rel" ]; then
+                _fs_adopt="$_fs_abase/$_fs_name/$_fs_rel"
+            fi
+        fi
+        log_detail "$_fs_tool: $_fs_item source=${_fs_msrc:-unknown} adopt=${_fs_adopt:-none}"
+        _fs_content=""
+        if ! _fs_content=$(cat "$_fs_sfile"); then
+            log_error "Cannot read harness skill file $(display_path "$_fs_sfile")"
+            deploy_tracker_record "failed" "$_fs_tool" "$_fs_item"
+            continue
+        fi
+        deploy_managed_file "$_fs_content" "$_fs_dfile" "$_fs_tool" "$_fs_item" "$_fs_adopt"
+        _fs_res="$MANAGED_FILE_RESULT"
+        case "$_fs_res" in
+            created|updated|verified|"accept & adopt"|skipped|failed) ;;
+            *)
+                log_error "Unexpected deploy result for ${_fs_item}: $_fs_res"
+                _fs_res="failed" ;;
+        esac
+        # The executable bit follows the harness copy (a skill may ship scripts)
+        if [ "${DRY_RUN:-}" != "true" ] && [ -f "$_fs_dfile" ]; then
+            case "$_fs_res" in
+                created|updated|verified|"accept & adopt")
+                    if [ -x "$_fs_sfile" ] && [ ! -x "$_fs_dfile" ]; then
+                        if ! chmod +x "$_fs_dfile"; then
+                            log_error "Failed: $_fs_item: cannot set the executable bit on $(display_path "$_fs_dfile")"
+                            _fs_res="failed"
+                        fi
+                    elif [ ! -x "$_fs_sfile" ] && [ -x "$_fs_dfile" ]; then
+                        if ! chmod a-x "$_fs_dfile"; then
+                            log_error "Failed: $_fs_item: cannot clear the executable bit on $(display_path "$_fs_dfile")"
+                            _fs_res="failed"
+                        fi
+                    fi ;;
+            esac
+        fi
+        _fs_deployed="${_fs_deployed}${_fs_dfile}
+"
+        deploy_tracker_record "$_fs_res" "$_fs_tool" "$_fs_item"
+    done 3<<< "$_fs_list"
+    if [ -n "$_fs_kept" ]; then
+        write_summary ACTION "" "$_fs_who skills in $_fs_shown not updated (a symlink or a file, not a directory the fan-out owns): $_fs_kept -- move them aside to get the aitools copy"
+    fi
+
+    # Retired skills: the copy in DEST is backed up and removed when it holds
+    # this fan-out's files -- those of the harness copy or of a backup
+    # deploy-harness made when it retired the skill. Any other directory of that
+    # name may be the user's own: kept, with a warning.
+    local _fs_rm _fs_rm_lc _fs_rm_path _fs_rm_dir _fs_rm_why _fs_cand _fs_rc _fs_rm_kept=""
+    local _fs_bak_root="" _fs_ts _fs_n _fs_dlist=""
+    if [ -n "$_fs_retired" ] && [ -d "$_fs_dest" ]; then
+        if ! _fs_dlist=$(_fanout_list_dir "$_fs_dest" 2>&1); then
+            log_warn "Cannot list $(display_path "$_fs_dest") for the retired skills -- $_fs_dlist"
+            _fs_dlist=""
+        fi
+    fi
+    while IFS= read -r _fs_rm; do
+        [ -n "$_fs_rm" ] || continue
+        _fs_rm_lc=$(lower_name "$_fs_rm")
+        # Deployed this run under a name that differs only in case
+        if in_list "$_fs_rm_lc" "$_fs_owned_lc"; then continue; fi
+        # The copy in DEST, found case-insensitively; a real directory only
+        _fs_rm_path=""
+        while IFS= read -r _fs_ent; do
+            [ -n "$_fs_ent" ] || continue
+            if [ "$(lower_name "$_fs_ent")" = "$_fs_rm_lc" ] && [ ! -L "$_fs_dest/$_fs_ent" ] && [ -d "$_fs_dest/$_fs_ent" ]; then
+                _fs_rm_path="$_fs_dest/$_fs_ent"
+                break
+            fi
+        done <<< "$_fs_dlist"
+        [ -n "$_fs_rm_path" ] || continue
+        _fs_rm_dir=$(basename "$_fs_rm_path")
+        _fs_rm_why=""
+        # "$_fs_src/$_fs_rm".bak.*: the quoted part is literal ([ ] * ? work)
+        for _fs_cand in "$_fs_src/$_fs_rm" "$_fs_src/$_fs_rm".bak.*; do
+            [ -d "$_fs_cand" ] || continue
+            _fs_rc=0
+            fanout_dir_matches "$_fs_rm_path" "$_fs_cand" || _fs_rc=$?
+            if [ "$_fs_rc" -eq 0 ]; then
+                _fs_rm_why="same files as $(basename "$_fs_cand")"
+                break
+            fi
+            if [ "$_fs_rc" -ne 1 ]; then
+                log_warn "Cannot compare $(display_path "$_fs_rm_path") with $(display_path "$_fs_cand")"
+            fi
+        done
+        if [ -z "$_fs_rm_why" ]; then
+            log_warn "Kept $_fs_rm_dir: the skills manifest retires $_fs_rm, but this directory matches no harness copy (it may be your own) -- $_fs_who still loads it; delete it if it is an old fan-out copy"
+            _fs_rm_kept="${_fs_rm_kept:+$_fs_rm_kept, }$_fs_rm_dir"
+            continue
+        fi
+        if [ "${DRY_RUN:-}" = "true" ]; then
+            log "[DRY RUN] Would back up and remove $_fs_rm_dir (retired skill; $_fs_rm_why)"
+            continue
+        fi
+        # Backup beside DEST (DEST.bak.<UTC>/<name>), one directory per run
+        if [ -z "$_fs_bak_root" ]; then
+            _fs_ts=$(date -u +%Y-%m-%dT%H%M%SZ)
+            _fs_bak_root="${_fs_dest}.bak.${_fs_ts}"
+            _fs_n=0
+            while [ -e "$_fs_bak_root" ] || [ -L "$_fs_bak_root" ]; do
+                _fs_n=$((_fs_n + 1))
+                _fs_bak_root="${_fs_dest}.bak.${_fs_ts}-$_fs_n"
+            done
+            if ! mkdir -p "$_fs_bak_root"; then
+                log_warn "Cannot create the backup directory $(display_path "$_fs_bak_root")"
+            fi
+        fi
+        _fs_rc=1
+        if [ -d "$_fs_bak_root" ] && [ ! -e "$_fs_bak_root/$_fs_rm_dir" ] && cp -R "$_fs_rm_path" "$_fs_bak_root/$_fs_rm_dir"; then
+            _fs_rc=0
+            fanout_dir_matches "$_fs_rm_path" "$_fs_bak_root/$_fs_rm_dir" || _fs_rc=$?
+        fi
+        if [ "$_fs_rc" -ne 0 ]; then
+            log_error "Not removed: $_fs_rm_dir (retired skill): backup to $(display_path "$_fs_bak_root") failed"
+            deploy_tracker_record "failed" "$_fs_tool" "$_fs_rm_dir"
+            continue
+        fi
+        if ! rm -rf "$_fs_rm_path" || [ -e "$_fs_rm_path" ] || [ -L "$_fs_rm_path" ]; then
+            log_error "Cannot remove $(display_path "$_fs_rm_path") (retired skill)"
+            deploy_tracker_record "failed" "$_fs_tool" "$_fs_rm_dir"
+            continue
+        fi
+        log "Removed $_fs_rm_dir (retired skill; $_fs_rm_why; backup in $(display_path "$_fs_bak_root"))"
+        deploy_tracker_record "removed" "$_fs_tool" "$_fs_rm_dir"
+    done <<< "$_fs_retired"
+    if [ -n "$_fs_rm_kept" ]; then
+        write_summary ACTION "" "$_fs_who still loads retired skills in $_fs_shown: $_fs_rm_kept -- delete them unless you wrote them"
+    fi
+
+    if [ "${DRY_RUN:-}" = "true" ]; then
+        if [ "$_DT_FAILED" -gt 0 ]; then
+            write_summary ERROR "$_fs_tool" "$_DT_FAILED failed (dry run)"
+        else
+            write_summary OK "$_fs_tool" "dry run (no files written)"
+        fi
+        return 0
+    fi
+
+    # Preserved: skills in DEST this fan-out did not deploy this run
+    # (directories and symlinks; never touched)
+    if ! _fs_dlist=$(_fanout_list_dir "$_fs_dest" 2>&1); then
+        log_warn "Cannot list $(display_path "$_fs_dest") for the preserved report -- $_fs_dlist"
+        _fs_dlist=""
+    fi
+    while IFS= read -r _fs_ent; do
+        [ -n "$_fs_ent" ] || continue
+        case "$(skill_name_kind "$_fs_ent")" in skill) ;; *) continue ;; esac
+        if [ ! -d "$_fs_dest/$_fs_ent" ] && [ ! -L "$_fs_dest/$_fs_ent" ]; then continue; fi
+        if ! in_list "$(lower_name "$_fs_ent")" "$_fs_owned_lc"; then
+            log "Preserved unmanaged skill: $_fs_ent"
+            deploy_tracker_record "preserved" "$_fs_tool" "$_fs_ent"
+        fi
+    done <<< "$_fs_dlist"
+
+    # Post-write validation: each deployed file is non-empty (a file whose
+    # deploy failed is already reported; the library left it as it was)
+    while IFS= read -r _fs_f; do
+        [ -n "$_fs_f" ] || continue
+        if [ -f "$_fs_f" ] && [ ! -s "$_fs_f" ]; then
+            log_error "Validation failed: $(display_path "$_fs_f") is empty after deploy"
+        fi
+    done <<< "$_fs_deployed"
+
+    if [ "$_DT_FAILED" -gt 0 ]; then
+        # deploy_tracker_summary writes the ERROR row ("N failed")
+        deploy_tracker_summary "$_fs_tool"
+        log "Skills ($_fs_tool): $DEPLOY_TRACKER_TEXT, $_DT_PRESERVED preserved in $(display_path "$_fs_dest")"
+    elif [ "$ERRORS" -eq "$_fs_errs_before" ]; then
+        deploy_tracker_summary "$_fs_tool"
+        log_ok "Skills ($_fs_tool): $DEPLOY_TRACKER_TEXT, $_DT_PRESERVED preserved in $(display_path "$_fs_dest")"
+    else
+        write_summary ERROR "$_fs_tool" "validation failed"
+    fi
+    return 0
+}
+
 # ---------------------------------------------------------------------------
 # Granular per-leaf review prompt for JSON settings sync (sync_managed_json)
 # and the JSON field review (review_json_fields).
