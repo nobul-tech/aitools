@@ -67,6 +67,7 @@ Create a `plans/*.md` file when work:
 ### Layered reference architecture
 
 - **Rules** (`.claude/rules/`) = concise behavioral directives, ~40-100 lines
+  (what a rule is, its anatomy, scopes and deployment: `@reference/rules.md`)
 - **References** (`reference/`) = implementation detail, unlimited length
 - **No duplication** — one authoritative location per fact
 - **Tool configs** documented per-tool via `/tool-registry` skill

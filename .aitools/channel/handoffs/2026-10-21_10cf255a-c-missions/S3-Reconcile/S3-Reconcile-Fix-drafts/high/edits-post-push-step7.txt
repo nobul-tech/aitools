@@ -1,0 +1,83 @@
+FX-1 (high): check-post-push step 7 runs build-deploy.sh with no exit check
+(sh: under set -e a failed build aborts the checklist before print_summary; ps1:
+the result is discarded), and build-deploy.sh now deletes and rebuilds the REAL
+dotprofile <userRepoPath>/deploy/ from whatever branch is checked out. The step
+then diffs aitools/deploy/, which build-deploy no longer writes (frozen), so it
+always passes, and its `git checkout -- deploy/` can discard another agent's
+work. Fix: no build here; check only that the frozen aitools/deploy/ is
+unchanged; pre-push step 7 (temp dotprofile copy, every push) is the real
+check. Base: origin/main (no open PR touches either file).
+
+@@@FILE scripts/check-post-push.sh step 7 without build-deploy
+@@@OLD
+# ---------------------------------------------------------------------------
+# 7. deploy/ drift audit
+# ---------------------------------------------------------------------------
+bash "$SCRIPT_DIR/build-deploy.sh" >/dev/null 2>&1
+drift=$(git diff deploy/ 2>/dev/null || true)
+if [ -z "$drift" ]; then
+    step_pass "7" "deploy/ drift audit"
+else
+    step_fail "7" "deploy/ drift audit" "deploy/ is stale -- rebuild needed"
+    git checkout -- deploy/ 2>/dev/null || true
+fi
+@@@NEW
+# ---------------------------------------------------------------------------
+# 7. Frozen deploy/ unchanged
+# ---------------------------------------------------------------------------
+# aitools/deploy/ is frozen (deploy-paths.md). build-deploy.sh writes the
+# dotprofile's <userRepoPath>/deploy/ (it deletes and rebuilds it), so this step
+# never runs it: it would rebuild the real dotprofile from whatever branch is
+# checked out. Pre-push step 7 rebuilds into a temporary dotprofile copy on
+# every push; here, only check that nothing changed the frozen directory. No
+# auto-reset: the changes may be another session's work.
+d7_rc=0
+d7_out=$(git status --porcelain -- deploy/ 2>&1) || d7_rc=$?
+if [ "$d7_rc" -ne 0 ]; then
+    step_fail "7" "Frozen deploy/ unchanged" "git status failed (exit $d7_rc): $d7_out"
+elif [ -z "$d7_out" ]; then
+    step_pass "7" "Frozen deploy/ unchanged" "the dotprofile deploy/ is checked by pre-push step 7"
+else
+    d7_count=$(printf '%s\n' "$d7_out" | wc -l | tr -d ' ')
+    step_fail "7" "Frozen deploy/ unchanged" "aitools/deploy/ has $d7_count local change(s) -- it is frozen; review, then git checkout -- deploy/"
+fi
+@@@END
+
+@@@FILE scripts/check-post-push.ps1 step 7 without build-deploy
+@@@OLD
+# ---------------------------------------------------------------------------
+# 7. deploy/ drift audit
+# ---------------------------------------------------------------------------
+if ($bashExe) {
+    & $bashExe (Join-Path $scriptDir "build-deploy.sh") 2>$null | Out-Null
+    $drift = InvokeGit diff deploy/
+    if (-not $drift) {
+        StepPass "7" "deploy/ drift audit"
+    } else {
+        StepFail "7" "deploy/ drift audit" "deploy/ is stale -- rebuild needed"
+        InvokeGit checkout -- deploy/
+    }
+} else {
+    StepSkip "7" "deploy/ drift audit" "bash not found"
+}
+@@@NEW
+# ---------------------------------------------------------------------------
+# 7. Frozen deploy/ unchanged
+# ---------------------------------------------------------------------------
+# aitools/deploy/ is frozen (deploy-paths.md). build-deploy.sh writes the
+# dotprofile's <userRepoPath>/deploy/ (it deletes and rebuilds it), so this step
+# never runs it: it would rebuild the real dotprofile from whatever branch is
+# checked out. Pre-push step 7 rebuilds into a temporary dotprofile copy on
+# every push; here, only check that nothing changed the frozen directory. No
+# auto-reset: the changes may be another session's work.
+# Where-Object drops the $null InvokeGit returns for no output (@($null) has Count 1).
+$d7Out = @(InvokeGit status --porcelain -- deploy/ | Where-Object { $_ })
+$d7Rc = $LASTEXITCODE
+if ($d7Rc -ne 0) {
+    StepFail "7" "Frozen deploy/ unchanged" "git status failed (exit $d7Rc)"
+} elseif ($d7Out.Count -eq 0) {
+    StepPass "7" "Frozen deploy/ unchanged" "the dotprofile deploy/ is checked by pre-push step 7"
+} else {
+    StepFail "7" "Frozen deploy/ unchanged" "aitools/deploy/ has $($d7Out.Count) local change(s) -- it is frozen; review, then git checkout -- deploy/"
+}
+@@@END

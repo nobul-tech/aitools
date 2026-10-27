@@ -1,0 +1,45 @@
+Drafts for FAN-PLAN F6 / Checks I-2: tests/deploy-harness, tests/deploy-harness-mdm
+and tests/rules-fanout-cursor are on main but not in .github/workflows/check.yml.
+Adds bash steps to the macos and linux jobs after "User init tests". Windows
+is F4 (not here). S3-Reconcile-Fix-Checks, 2026-10-26. Base: origin/main 60e7fd7.
+Local runs on origin/main (committed export outside the repo, isolated HOME):
+deploy-harness 45/45 (bash 5 and /bin/bash 3.2), deploy-harness-mdm 30/30,
+rules-fanout-cursor 78/78 + 1 SKIP (case-insensitive FS; runs on Linux).
+Anchors conflict textually with #112 and #116 (same anchor): re-anchor after
+MERGE-ALL merges them.
+
+@@@FILE .github/workflows/check.yml CI-1 macos: harness and Cursor fan-out suites
+@@@OLD
+      - name: User init tests (macOS /bin/bash 3.2)
+        run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/profile/test-user-init.sh --bash-only
+@@@NEW
+      - name: User init tests (macOS /bin/bash 3.2)
+        run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/profile/test-user-init.sh --bash-only
+
+      - name: deploy-harness tests (dev path, pty menus)
+        run: bash tests/deploy-harness/test-deploy-harness.sh
+
+      - name: deploy-harness MDM tests (build + dev/MDM equivalence)
+        run: bash tests/deploy-harness-mdm/test-deploy-harness-mdm.sh
+
+      - name: Cursor rules fan-out tests (bash + pwsh converter parity)
+        run: bash tests/rules-fanout-cursor/test-rules-fanout-cursor.sh
+@@@END
+
+@@@FILE .github/workflows/check.yml CI-2 linux: harness and Cursor fan-out suites
+@@@OLD
+      - name: User init tests (bash + pwsh parity, pty menus)
+        run: bash tests/profile/test-user-init.sh
+@@@NEW
+      - name: User init tests (bash + pwsh parity, pty menus)
+        run: bash tests/profile/test-user-init.sh
+
+      - name: deploy-harness tests (dev path, pty menus)
+        run: bash tests/deploy-harness/test-deploy-harness.sh
+
+      - name: deploy-harness MDM tests (build + dev/MDM equivalence)
+        run: bash tests/deploy-harness-mdm/test-deploy-harness-mdm.sh
+
+      - name: Cursor rules fan-out tests (bash + pwsh converter parity, case-sensitive FS)
+        run: bash tests/rules-fanout-cursor/test-rules-fanout-cursor.sh
+@@@END

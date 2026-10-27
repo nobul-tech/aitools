@@ -1,0 +1,85 @@
+Drafts for shared/hooks/standing-order-guard.sh (#209: the first-token checks
+see only the first line of a 2-3 line command). Hook: bash on all platforms, no
+.ps1 twin. hook-rollout.md: this WIDENS what is matched, so the new later-line
+checks start in observe (MODE_LATER="observe"); every existing check, and line 1,
+is unchanged. S3-Reconcile-Fix-Checks, 2026-10-26. Base: origin/main 60e7fd7.
+Companion doc edit: edits-sog-docs.txt (hook-rollout.md table row; protected).
+
+@@@FILE shared/hooks/standing-order-guard.sh SOG-1 header: the new mode
+@@@OLD
+#                              enforce (commander, 2026-10-21)
+#   See .claude/rules/hook-rollout.md for the observe-then-enforce practice.
+@@@NEW
+#                              enforce (commander, 2026-10-21)
+#   MODE_LATER="observe"     — rm-glob, cat/head/tail/sed/awk and echo/printf
+#                              redirect on lines 2-3 of a multi-line command
+#                              (#209; widening, so it starts in observe)
+#   See .claude/rules/hook-rollout.md for the observe-then-enforce practice.
+@@@END
+
+@@@FILE shared/hooks/standing-order-guard.sh SOG-2 mode variable
+@@@OLD
+MODE_SED="enforce"       # sed — #82 sed -n exemption (2026-10-21) only narrowed matching; enforce
+@@@NEW
+MODE_SED="enforce"       # sed — #82 sed -n exemption (2026-10-21) only narrowed matching; enforce
+MODE_LATER="observe"     # first-token checks on lines 2-3 (#209); new 2026-10-26, widening -> observe
+@@@END
+
+@@@FILE shared/hooks/standing-order-guard.sh SOG-3 later-line checks before the first-token allowlist
+@@@OLD
+# --- USO: Dedicated tools for file operations ---
+# Pattern: command starts with a file-op utility that has a dedicated tool.
+# We check the first token of the command (before any arguments).
+read -r FIRST_TOKEN _ <<< "$COMMAND"
+@@@NEW
+# --- Later lines of a 2-3 line command (#209) ---
+# The first-token checks below see only line 1 (and an allowlisted first token,
+# e.g. git, exits before them), so a second line could run rm with a glob, or
+# sed/awk/cat on a file, unchecked. Each later line gets the same first-token
+# checks. Observe mode logs and continues (it must not exit 0 before line 1 is
+# checked); enforce blocks through violation().
+later_violation() {  # message check-name
+    if [ "$MODE_LATER" = "enforce" ]; then
+        violation "$1" "enforce" "$2"
+    fi
+    emit_hook_event "hook_warn" "{\"check\":\"$2\",\"mode\":\"observe\",\"line\":\"later\"}"
+    printf '%s [WOULD-BLOCK] (later line) %s | cmd: %s\n' \
+        "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" "$COMMAND_FULL" >> "$LOG_FILE"
+}
+check_later_line() {  # line
+    local line="$1" tok
+    read -r tok _ <<< "$line"
+    case "$tok" in
+        rm)
+            case "$line" in
+                *'*'*|*'?'*) later_violation "USO: Simple Bash commands only --: Don't use glob patterns (*, ?) with 'rm' (line 2 or later of a multi-line command). Write a cleanup script listing the specific files." "glob-rm" ;;
+            esac ;;
+        cat|head|tail|sed|awk)
+            case "$line" in
+                *\|*) ;;  # pipeline: legitimate shell use, as on line 1
+                *) later_violation "USO: Dedicated tools --: '$tok' outside a pipeline on line 2 or later of a multi-line command. Use the Read/Edit tool, or put the commands in a scratch script." "$tok" ;;
+            esac ;;
+        echo|printf)
+            case "$line" in
+                *\>*) later_violation "USO: Dedicated tools --: Use the Write tool instead of echo/printf redirection to create files (line 2 or later of a multi-line command)." "echo-redirect" ;;
+            esac ;;
+    esac
+}
+if [ "$NEWLINE_COUNT" -gt 0 ]; then
+    _later="${COMMAND_FULL//\\n/$NL}"
+    case "$_later" in
+        *"$NL"*) _later="${_later#*"$NL"}" ;;
+        *) _later="" ;;
+    esac
+    if [ -n "$_later" ]; then
+        while IFS= read -r _line; do
+            check_later_line "$_line"
+        done <<< "$_later"
+    fi
+fi
+
+# --- USO: Dedicated tools for file operations ---
+# Pattern: command starts with a file-op utility that has a dedicated tool.
+# We check the first token of the command (before any arguments).
+read -r FIRST_TOKEN _ <<< "$COMMAND"
+@@@END

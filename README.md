@@ -1,6 +1,6 @@
 # aitools
 
-Cross-machine AI tooling hub — shared configs, rules, and scripts for Claude Code, Cursor, and MCP across Windows 11 and macOS.
+Cross-machine AI tooling hub — shared configs, rules, and scripts for Claude Code, Cursor, and MCP on macOS, Windows, Linux (Ubuntu), Claude Code web and Cursor cloud. Supported list: `reference/cross-platform-detail.md` "Supported platforms and environments".
 
 ## What's here
 
@@ -21,6 +21,8 @@ Cross-machine AI tooling hub — shared configs, rules, and scripts for Claude C
 ## How it works
 
 `shared/` is the single source of truth for shared framework content. `scripts/build-deploy.sh` reads from `shared/` **and the user's dotprofile repo**, then embeds the content into self-contained, personalized deploy scripts written to **`<userRepoPath>/deploy/`** (the user's `aitools-<user>` repo) — not the shared `aitools/deploy/`, which is now frozen/historical. Deploy scripts need only bash or PowerShell on the target machine — no repo clone required. The workflow is: edit `shared/` (framework) or your dotprofile repo (personal config) → run `build-deploy.sh` → commit the generated `deploy/` **in your dotprofile repo** → deploy to endpoints.
+
+A third, parallel path, `build-package` (in design), builds installable packages for a fleet of users: a Windows Intune Win32 app (`.intunewin`), an unsigned macOS PKG (Intune, Jamf) and a Linux `.deb` for Ubuntu 24.04 and 22.04 (VMs and containers, including Claude Code web and Cursor cloud). The dev and MDM paths stay as they are. Design: `plans/build-package/design.md`.
 
 ## Quick start
 

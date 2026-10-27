@@ -398,6 +398,25 @@ priority when present; the aitools `shared/` directory is the fallback.
 The adopt target for a file is the primary or fallback source it was
 actually read from.
 
+### Deployed harness (`~/.aitools`)
+
+`deploy-harness.sh` / `.ps1` copies harness content into `~/.aitools`
+(Windows `%USERPROFILE%\.aitools`). Each file goes through
+`deploy_managed_file` / `Deploy-ManagedFile` with the tool name
+`harness files`; the adopt target is the repo file it was read from. Only
+git-tracked files are deployed. On a name conflict the first source wins
+and each skipped duplicate is a `log_error` plus an ERROR row.
+
+| Deployed to | Sources, in order |
+|-------------|-------------------|
+| `~/.aitools/reference/**` | `reference/**` |
+| `~/.aitools/registries/**` | `registries/**` |
+| `~/.aitools/hooks/` (flat) | `shared/hooks/`, `.claude/hooks/` |
+| `~/.aitools/skills/<name>/` | `shared/skills/`, `.claude/skills/` |
+| `~/.aitools/rules/` (flat, `*.md`) | `shared/rules/`, `.claude/rules/`, `<userRepoPath>/claude/rules/` |
+| `~/.aitools/bin/` | `scripts/harness-db.py`, `scripts/read-session.py`, `scripts/read-session-full.py` |
+| `~/.aitools/config.json` | generated from `profile.json` by `setup-user-config` (called by deploy-harness) |
+
 **`userRepoPath` resolution**: read from `~/.aitools/config.json`. Set by
 `aitools user init`. If not configured, dotprofile features are skipped
 and shared fallbacks are used.

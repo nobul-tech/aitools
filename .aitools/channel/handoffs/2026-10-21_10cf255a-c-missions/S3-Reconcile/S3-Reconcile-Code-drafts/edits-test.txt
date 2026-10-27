@@ -1,0 +1,32 @@
+@@@FILE tests/profile/test-user-init.sh T1 alias-claim without a terminal is refused
+@@@OLD
+echo "== --alias naming a profile no machine owns: claimed (explicit choice)"
+case_run alias-claim 0 fx_two --alias nobul-mac
+pj_alias "$THIS_KEY" nobul-mac
+pj_no_key nobul-mac
+@@@NEW
+echo "== --alias naming a profile no machine owns, no terminal -> not claimed (ERROR + ACTION, exit 1)"
+case_run alias-claim 1 fx_two --alias nobul-mac
+has_row "ERROR|machine profile|not claimed (no terminal)"
+has_row "ACTION||Run: aitools user init on a terminal to claim nobul-mac (or --alias <another name>)"
+pj_lacks "\"$THIS_KEY\""
+@@@END
+@@@FILE tests/profile/test-user-init.sh T2 alias-claim on a terminal: confirm / decline
+@@@OLD
+    echo "== interactive (pty) with --force: no prompt; an unregistered machine is refused like no terminal"
+@@@NEW
+    echo "== interactive (pty): --alias naming a profile no machine owns -> confirm -> claimed"
+    PTY_INPUT=$'\n\ny\n'
+    case_run pty-claim-confirm 0 fx_two --alias nobul-mac
+    pj_alias "$THIS_KEY" nobul-mac
+    pj_no_key nobul-mac
+    out_has "names profile nobul-mac, which belongs to no machine. Claim it for this machine? [y/N]"
+
+    echo "== interactive (pty): ... declined -> skipped (WARN row; not registered = exit 1)"
+    PTY_INPUT=$'\n\nn\n'
+    case_run pty-claim-decline 1 fx_two --alias nobul-mac
+    has_row "WARN|machine profile|skipped"
+    pj_lacks "\"$THIS_KEY\""
+
+    echo "== interactive (pty) with --force: no prompt; an unregistered machine is refused like no terminal"
+@@@END

@@ -1,0 +1,65 @@
+@@@FILE scripts/build-deploy.sh L210a skills embed (bash): runtime temp dir checked
+@@@OLD
+    echo '_skill_tmp=$(mktemp -d)'
+@@@NEW
+    echo 'if ! _skill_tmp=$(mktemp -d); then'
+    echo '    log_error "mktemp -d failed -- skills not deployed"'
+    echo '    write_summary ERROR "claude skills" "temp dir failed"'
+    echo '    write_summary ERROR "cursor skills" "temp dir failed"'
+    echo '    exit 1'
+    echo 'fi'
+@@@END
+@@@FILE scripts/build-deploy.sh L210b skills embed (bash): delimiter check and final newline
+@@@OLD
+        _heredoc_marker="__SKILL_$(echo "$_sname" | tr '[:lower:]-' '[:upper:]_')__"
+        echo "cat > \"\$_skill_tmp/${_sname}.md\" <<'${_heredoc_marker}'"
+        cat "$_sfile"
+        echo "${_heredoc_marker}"
+@@@NEW
+        _heredoc_marker="__SKILL_$(echo "$_sname" | tr '[:lower:]-' '[:upper:]_')__"
+        # A line equal to the marker would end the heredoc early (embed_file_bash
+        # checks the same). One perl, no pipe: grep -q could SIGPIPE it.
+        if M="$_heredoc_marker" perl -0777 -ne 's/\r\n/\n/g; exit(/^\Q$ENV{M}\E$/m ? 0 : 1)' "$_sfile"; then
+            blog_error "Cannot embed $_sfile: it contains the heredoc delimiter line $_heredoc_marker"
+            exit 1
+        fi
+        echo "cat > \"\$_skill_tmp/${_sname}.md\" <<'${_heredoc_marker}'"
+        # CRLF -> LF and one final newline, so the marker always starts its own line
+        perl -0777 -pe 's/\r\n/\n/g; s/\n?\z/\n/' "$_sfile"
+        echo "${_heredoc_marker}"
+@@@END
+@@@FILE scripts/build-deploy.sh L210c skills embed (PS1): here-string terminator check and final newline
+@@@OLD
+        echo "\$skill_${_varname} = @'"
+        cat "$_sfile"
+        echo "'@"
+@@@NEW
+        # A line starting with '@ would end the here-string early: fail the build
+        if perl -0777 -ne 'exit(/^\x27@/m ? 0 : 1)' "$_sfile"; then
+            blog_error "Cannot embed $_sfile in setup-user-skills.ps1: a line starts with '@ (here-string terminator)"
+            exit 1
+        fi
+        echo "\$skill_${_varname} = @'"
+        # One final newline, so the terminator always starts its own line
+        perl -0777 -pe 's/\n?\z/\n/' "$_sfile"
+        echo "'@"
+@@@END
+@@@FILE scripts/build-deploy.sh L217 MDM deploy-harness.ps1: catch statement-terminating errors (no silent rc 0)
+@@@OLD
+    cat <<'BLOCK'
+} finally {
+    # ErrorAction: checked on the next line
+    Remove-Item -LiteralPath $mdmStage -Recurse -Force -ErrorAction SilentlyContinue
+@@@NEW
+    cat <<'BLOCK'
+} catch {
+    # A statement-terminating error (a .NET exception, a parameter binding error)
+    # inside this try skips the exit footer, and pwsh -File then ends the script
+    # after the finally block with exit code 0 (probe, pwsh 7.6.3). Fail instead.
+    LogError "MDM: unexpected error -- run stopped: $_"
+    Write-Summary "ERROR" $tool "unexpected error"
+    exit 1
+} finally {
+    # ErrorAction: checked on the next line
+    Remove-Item -LiteralPath $mdmStage -Recurse -Force -ErrorAction SilentlyContinue
+@@@END

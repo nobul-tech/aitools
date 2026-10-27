@@ -1,0 +1,34 @@
+Drafts for #184 (`printf ... | head -N` under set -euo pipefail exits 141 once
+the input exceeds the pipe buffer; probe .scratch/session-rcfixk/probe-sigpipe.sh:
+100 lines rc 0, 200000 lines rc 141, bash 5 and /bin/bash 3.2). The two sites
+whose input can be large. No .ps1 twin: PowerShell has no SIGPIPE (the PS1
+preview uses Select-Object -First). S3-Reconcile-Fix-Checks, 2026-10-26.
+Base: origin/main 60e7fd7.
+
+@@@FILE scripts/aitools-lib.sh SP-1 merge preview without a pipe (prompt_diff_review)
+@@@OLD
+        printf '%s\n' "$merged" | head -30 | while IFS= read -r line; do
+            printf '  | %s\n' "$line" > /dev/tty
+        done
+@@@NEW
+        # A here-string, not `printf | head`: under pipefail a merged file larger
+        # than the pipe buffer made printf die of SIGPIPE (exit 141, set -e) (#184).
+        local _pv_n=0 _pv_line
+        while IFS= read -r _pv_line; do
+            _pv_n=$((_pv_n + 1))
+            if [ "$_pv_n" -gt 30 ]; then break; fi
+            printf '  | %s\n' "$_pv_line" > /dev/tty
+        done <<< "$merged"
+@@@END
+
+@@@FILE scripts/aitools SP-2 git pull preview without a pipe
+@@@OLD
+            printf '%s\n' "$pull_out" | head -3 | sed 's/^/    /' >&2
+@@@NEW
+            _pv_n=0
+            while IFS= read -r _pull_line; do
+                _pv_n=$((_pv_n + 1))
+                if [ "$_pv_n" -gt 3 ]; then break; fi
+                printf '    %s\n' "$_pull_line" >&2
+            done <<< "$pull_out"
+@@@END
