@@ -3093,11 +3093,12 @@ function Invoke-HarnessSkillsFanout {
             $mFailed = $true
         }
         if ($manifest -and $manifest.Status -eq "header-bad") {
-            LogWarn "Skills manifest ${fsManifest}: the first line is not `"$skillsManifestHeader`" -- every skill fanned out, none retired, adopt not offered"
+            LogWarn "Skills manifest ${fsManifest}: the first line is not `"$skillsManifestHeader`" -- every skill fanned out, none retired, adopt not offered -- Run aitools to rebuild ~/.aitools/skills and its manifest"
             Write-Summary "ACTION" "" "Run aitools to rebuild ~/.aitools/skills and its manifest"
         } elseif ($manifest) {
             $mOk = $true
-            foreach ($bad in $manifest.Invalid) { LogWarn "Skills manifest ${fsManifest}: line ignored: $bad" }
+            foreach ($bad in $manifest.Invalid) { LogWarn "Skills manifest ${fsManifest}: line ignored: $bad -- Run aitools to rebuild ~/.aitools/skills and its manifest" }
+            if ($manifest.Invalid.Count -gt 0) { Write-Summary "ACTION" "" "Run aitools to rebuild ~/.aitools/skills and its manifest" }
             foreach ($r in $manifest.Rules) {
                 if ($r.Source -ceq "retired") {
                     $retired.Add($r.Name); [void]$retiredSet.Add($r.Name)
@@ -3138,7 +3139,14 @@ function Invoke-HarnessSkillsFanout {
         if (-not $mFailed) { Write-Summary "OK" $ToolName "n/a (no harness skills)" }
         return
     }
-    if (-not $DryRun) {
+    if ($DryRun) {
+        # The dry run predicts the real run's outcome for a DestDir that is not a directory
+        if ((Test-Path -LiteralPath $DestDir) -and -not (Test-Path -LiteralPath $DestDir -PathType Container)) {
+            LogError "Cannot create $DestDir (a file is in the way) [DRY RUN]"
+            Write-Summary "ERROR" $ToolName "cannot create skills dir"
+            return
+        }
+    } else {
         Backup-Dir -DirPath $DestDir
         if (-not (Test-Path -LiteralPath $DestDir -PathType Container)) {
             $mkdirError = ""
@@ -3190,7 +3198,7 @@ function Invoke-HarnessSkillsFanout {
         # A symlink (dangling too: LinkTarget is set) or a file (not a directory)
         $destIsLink = $null -ne ([System.IO.FileInfo]::new($destEnt)).LinkTarget
         if ($destIsLink -or [System.IO.File]::Exists($destEnt)) {
-            LogWarn "Kept ${ent}: not a directory this fan-out owns ($destEnt is a symlink or a file) -- the harness copy is not deployed"
+            LogWarn "Kept ${ent}: not a directory this fan-out owns ($destEnt is a symlink or a file) -- the harness copy is not deployed; move it aside to get the aitools copy"
             Record-DeployOutcome -Outcome "preserved" -ToolName $ToolName -ItemName $ent
             $kept.Add($ent)
             continue
@@ -3306,6 +3314,7 @@ function Invoke-HarnessSkillsFanout {
         if (-not $DryRun -and -not $IsWindows -and $res -in @("created", "updated", "verified", "accept & adopt") -and
                 (Test-Path -LiteralPath $destFile -PathType Leaf)) {
             $xBits = [System.IO.UnixFileMode]::UserExecute -bor [System.IO.UnixFileMode]::GroupExecute -bor [System.IO.UnixFileMode]::OtherExecute
+            $xVerb = "set"
             try {
                 $srcX = ([System.IO.File]::GetUnixFileMode($srcFile) -band [System.IO.UnixFileMode]::UserExecute) -ne 0
                 $destMode = [System.IO.File]::GetUnixFileMode($destFile)
@@ -3313,10 +3322,11 @@ function Invoke-HarnessSkillsFanout {
                 if ($srcX -and -not $destX) {
                     [System.IO.File]::SetUnixFileMode($destFile, ($destMode -bor $xBits))
                 } elseif (-not $srcX -and $destX) {
+                    $xVerb = "clear"
                     [System.IO.File]::SetUnixFileMode($destFile, [System.IO.UnixFileMode]([int]$destMode -band (-bnot [int]$xBits)))
                 }
             } catch {
-                LogError "Failed: ${itemName}: cannot set the executable bit on ${destFile}: $($_.Exception.Message)"
+                LogError "Failed: ${itemName}: cannot $xVerb the executable bit on ${destFile}: $($_.Exception.Message)"
                 $res = "failed"
             }
         }
@@ -3334,12 +3344,15 @@ function Invoke-HarnessSkillsFanout {
     $rmKept = New-Object System.Collections.Generic.List[string]
     $bakRoot = ""
     $dList = @()
+    $unlisted = $false
+    $rmSeen = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
     if ($retired.Count -gt 0 -and (Test-Path -LiteralPath $DestDir -PathType Container)) {
         try {
             $dList = Get-FanoutSortedNames $DestDir
         } catch {
-            LogWarn "Cannot list $DestDir for the retired skills -- $($_.Exception.Message)"
+            LogWarn "Cannot list $DestDir for the retired skills -- $($_.Exception.Message) -- check its permissions"
             $dList = @()
+            $unlisted = $true
         }
     }
     foreach ($rm in $retired) {
@@ -3356,6 +3369,8 @@ function Invoke-HarnessSkillsFanout {
         }
         if (-not $rmPath) { continue }
         $rmDir = [System.IO.Path]::GetFileName($rmPath)
+        # Reported here (kept, failed or removed): not counted again as preserved
+        [void]$rmSeen.Add($rmDir)
         $cands = New-Object System.Collections.Generic.List[string]
         $cands.Add((Join-Path $fsSrc $rm))
         try {
@@ -3403,29 +3418,41 @@ function Invoke-HarnessSkillsFanout {
         }
         $bakDir = Join-Path $bakRoot $rmDir
         $backed = $false
+        $bakWhy = "no backup directory"
         if ((Test-Path -LiteralPath $bakRoot -PathType Container) -and -not (Test-Path -LiteralPath $bakDir)) {
             try {
                 Copy-DirectoryTree -Source $rmPath -Dest $bakDir
+                # Directory modes as cp -R keeps them (the .sh), not the default
+                if (-not $IsWindows) {
+                    $rootFull = [System.IO.Path]::GetFullPath($rmPath)
+                    foreach ($d in @($rootFull) + @([System.IO.Directory]::EnumerateDirectories($rootFull, "*", [System.IO.SearchOption]::AllDirectories))) {
+                        $to = Join-Path $bakDir ([System.IO.Path]::GetRelativePath($rootFull, $d))
+                        if ([System.IO.Directory]::Exists($to) -and $null -eq ([System.IO.FileInfo]::new($to)).LinkTarget) {
+                            [System.IO.File]::SetUnixFileMode($to, [System.IO.File]::GetUnixFileMode($d))
+                        }
+                    }
+                }
+                $bakWhy = "the copy differs"
                 $backed = ((Test-FanoutDirMatches $rmPath $bakDir) -eq 0)
             } catch {
-                LogDetail "${ToolName}: backup of ${rmPath} failed: $($_.Exception.Message)"
+                $bakWhy = $_.Exception.Message
                 $backed = $false
             }
         }
         if (-not $backed) {
-            LogError "Not removed: $rmDir (retired skill): backup to $bakRoot failed"
+            LogError "Not removed: $rmDir (retired skill): backup to $bakRoot failed: $bakWhy"
             Record-DeployOutcome -Outcome "failed" -ToolName $ToolName -ItemName $rmDir
             continue
         }
+        $rmWhy = ""
         try {
             [System.IO.Directory]::Delete($rmPath, $true)
         } catch {
-            LogError "Cannot remove $rmPath (retired skill) -- $($_.Exception.Message)"
-            Record-DeployOutcome -Outcome "failed" -ToolName $ToolName -ItemName $rmDir
-            continue
+            $rmWhy = $_.Exception.Message
         }
-        if (Test-Path -LiteralPath $rmPath) {
-            LogError "Cannot remove $rmPath (retired skill): still present"
+        if ($rmWhy -or (Test-Path -LiteralPath $rmPath)) {
+            if (-not $rmWhy) { $rmWhy = "still present" }
+            LogError "Cannot remove $rmPath (retired skill; it may be partly removed; backup in ${bakDir}): $rmWhy"
             Record-DeployOutcome -Outcome "failed" -ToolName $ToolName -ItemName $rmDir
             continue
         }
@@ -3437,6 +3464,9 @@ function Invoke-HarnessSkillsFanout {
     }
 
     if ($DryRun) {
+        if ($unlisted) {
+            Write-Summary "ACTION" "" "$who skills in $shown cannot be listed: retired skills not checked -- check its permissions"
+        }
         if ($script:dtFailed -gt 0) {
             Write-Summary "ERROR" $ToolName "$($script:dtFailed) failed (dry run)"
         } else {
@@ -3451,13 +3481,18 @@ function Invoke-HarnessSkillsFanout {
     try {
         $destNames = Get-FanoutSortedNames $DestDir
     } catch {
-        LogWarn "Cannot list $DestDir for the preserved report -- $($_.Exception.Message)"
+        LogWarn "Cannot list $DestDir for the preserved report -- $($_.Exception.Message) -- check its permissions"
+        $unlisted = $true
+    }
+    if ($unlisted) {
+        Write-Summary "ACTION" "" "$who skills in $shown cannot be listed: retired skills not checked and other skills not counted -- check its permissions"
     }
     foreach ($n in $destNames) {
         if ((Get-SkillNameKind $n) -ne "skill") { continue }
         $p = Join-Path $DestDir $n
         # A directory or a symlink (dangling too); not a plain file
         if (-not [System.IO.Directory]::Exists($p) -and $null -eq ([System.IO.FileInfo]::new($p)).LinkTarget) { continue }
+        if ($rmSeen.Contains($n)) { continue }
         if (-not $owned.Contains($n)) {
             Log "Preserved unmanaged skill: $n"
             Record-DeployOutcome -Outcome "preserved" -ToolName $ToolName -ItemName $n
@@ -3472,13 +3507,14 @@ function Invoke-HarnessSkillsFanout {
         }
     }
 
+    $pres = if ($unlisted) { "preserved count unknown (cannot list)" } else { "$($script:dtPreserved) preserved" }
     if ($script:dtFailed -gt 0) {
         # Write-DeployTrackerSummary writes the ERROR row ("N failed")
         Write-DeployTrackerSummary -ToolName $ToolName
-        Log "Skills (${ToolName}): $($script:deployTrackerText), $($script:dtPreserved) preserved in $DestDir"
+        Log "Skills (${ToolName}): $($script:deployTrackerText), $pres in $DestDir"
     } elseif ($script:errors -eq $errorsBefore) {
         Write-DeployTrackerSummary -ToolName $ToolName
-        LogOk "Skills (${ToolName}): $($script:deployTrackerText), $($script:dtPreserved) preserved in $DestDir"
+        LogOk "Skills (${ToolName}): $($script:deployTrackerText), $pres in $DestDir"
     } else {
         Write-Summary "ERROR" $ToolName "validation failed"
     }
