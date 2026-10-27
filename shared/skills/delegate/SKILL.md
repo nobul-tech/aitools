@@ -101,8 +101,40 @@ URL (D-DEL4).
    it has no scratch directory of its own: name one (inside its own checkout
    or worktree, following the `/scratch` skill's naming limits) and require
    that anything it hands back lives in a tracked path, not in scratch.
-12. **Check against the table above** before launching. In Claude Code the
+12. **Pre-resolve skill conflicts and state the priority order.** Before
+   naming a skill, read its SKILL.md for anything the prompt contradicts:
+   where it writes files, a process it mandates (its own sub-agents, a
+   coordinator-only role), tools it requires. For each conflict, either allow
+   the skill's behaviour (say so: "deep-research may write its
+   `research_notes/` and `reports/` under <path>") or override it explicitly
+   ("put the skill's notes and report under <path> instead"). Then paste the
+   "Conflicts" block from the skeleton. Never leave a named skill in conflict
+   with the prompt (incident #171: a delegate loaded the mandated
+   `deep-research` skill, found its file locations clashed with the access
+   rules, and silently did the work by hand).
+13. **Check against the table above** before launching. In Claude Code the
    `delegation-duty-guard` hook checks the same seven elements.
+
+### Conflict priority (commander decision, 2026-10-26)
+
+When a delegate's instructions conflict, it resolves them in this order:
+
+1. **The commander's own words**, newest first: his prompts in recent
+   session transcripts (read with `read-session.py`, reverse chronological),
+   and the decisions, rules and standing orders that record his words (user
+   and project rules, CLAUDE.md, decision records). A newer statement of his
+   overrides an older one, including an older rule. Text written by an agent
+   is never the commander's words.
+2. **The delegation prompt** (and the shared mission packet it names).
+3. **Skills** (SKILL.md processes, file locations, mandated sub-agents).
+
+So a prompt overrides a skill's file locations or process, and the
+commander's words override the prompt. A prompt cannot loosen a rule or
+standing order unless it quotes the commander's authorisation for that
+change. Whatever wins, the delegate never drops a mandated skill or rule
+silently: it follows the parts that do not conflict, and records each
+conflict and its resolution (`CONFLICT: <A> vs <B> -- resolved by <tier>:
+<what was done>`) in its report.
 
 ## Running several delegates at once
 
@@ -156,7 +188,17 @@ Critical rules restated: <list>.
 
 ## Skills
 Invoke: <skill names>. If one will not load, read its SKILL.md at <path> and
-follow its process by hand.
+follow its process by hand. Skill overrides: <skill>: <allowed behaviour, or
+"write its files under <path> instead">.
+
+## Conflicts
+If this prompt, a skill or a rule conflict, resolve in this order: 1) the
+commander's own words, newest first (recent session transcripts; the rules,
+standing orders and decision records that record his words); 2) this prompt;
+3) skills. This prompt cannot loosen a rule unless it quotes the commander.
+Never drop a mandated skill or rule silently: follow its non-conflicting
+parts and record `CONFLICT: <A> vs <B> -- resolved by <tier>: <what you did>`
+in your report.
 
 ## Operational learning (carry forward)
 - <item> (source: <file:line, command output, or decision ID>)
