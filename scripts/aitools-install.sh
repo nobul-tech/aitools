@@ -4,7 +4,8 @@
 #
 # Installs/updates gh CLI, configures repos directory, auto-detects Google
 # Drive mounts, writes ~/.aitools/config.json, installs the
-# aitools command to ~/.local/bin/, adds shell integration, and deploys
+# aitools command to ~/.local/bin/, adds shell integration, deploys the
+# harness to ~/.aitools (deploy-harness.sh, Step 8b), and deploys
 # all configuration scripts.
 
 set -euo pipefail
@@ -123,6 +124,9 @@ esac
 # JSONL logging (extends standard pattern with structured JSON)
 LOG_JSONL="$LOG_DIR/deploy.jsonl"
 RUN_ID="${AITOOLS_RUN_ID:-$(head -c 6 /dev/urandom | od -An -tx1 | tr -d ' \n')}"
+# One run id for this installer's records and the child lines the lib relays to
+# deploy.jsonl (run_child_relayed, Step 8b): the lib reads AITOOLS_RUN_ID
+export AITOOLS_RUN_ID="$RUN_ID"
 HOST_NAME="$(hostname -s 2>/dev/null || hostname)"
 OS_NAME="$(uname -s)"
 
@@ -237,6 +241,47 @@ validate_and_run() {
         log_error "$name failed (exit $script_rc)"
         write_summary ERROR "${name%.sh}" "script failed (exit $script_rc)"
     fi
+}
+
+# run_harness_step SCRIPT -- Step 8b: run deploy-harness.sh (SCRIPT) relayed
+# (aitools-lib run_child_relayed: its stdout goes to the console and deploy.jsonl;
+# stdin stays the terminal, the review menu reads /dev/tty). Checked with bash -n
+# first: bash exits 2 on a syntax error, which would read as an abort. Returns 2 when
+# deploy-harness exited 2 (the user chose [x]abort, D-TS13; the caller stops the
+# install), else 0. Exit 1 (errors): the lib logged the error; this adds the ERROR
+# row and the install continues. Parity: Invoke-HarnessStep in aitools-install.ps1.
+run_harness_step() {
+    local harness="$1"
+    local syntax_out syntax_rc=0 syntax_line
+    if [ ! -f "$harness" ]; then
+        log_warn "deploy-harness.sh not found -- skipping (MDM deploy)"
+        write_summary WARN "harness files" "deploy-harness.sh not found"
+        return 0
+    fi
+    syntax_out=$(bash -n "$harness" 2>&1) || syntax_rc=$?
+    if [ "$syntax_rc" -ne 0 ]; then
+        while IFS= read -r syntax_line; do
+            if [ -n "$syntax_line" ]; then log_detail "deploy-harness.sh syntax: $syntax_line"; fi
+        done <<< "$syntax_out"
+        log_error "deploy-harness.sh has syntax errors -- skipped (see $(display_path "$LOG_FILE"))"
+        write_summary ERROR "harness files" "syntax errors -- skipped"
+        return 0
+    fi
+    if run_child_relayed "Step 8b: deploy-harness.sh" "${BASH:-bash}" "$harness"; then
+        return 0
+    fi
+    if [ "$AITLIB_CHILD_RC" -eq 2 ]; then
+        log "Step 8b: aborted by user at a review menu -- install stopped (exit 2)"
+        write_summary WARN "harness files" "aborted by user"
+        return 2
+    fi
+    # Exit 0 with error lines: the lib logged them and returned 1
+    if [ "$AITLIB_CHILD_RC" -eq 0 ]; then
+        write_summary ERROR "harness files" "errors logged (exit 0)"
+    else
+        write_summary ERROR "harness files" "script failed (exit $AITLIB_CHILD_RC)"
+    fi
+    return 0
 }
 
 # display_path is provided by aitools-lib.sh
@@ -535,34 +580,7 @@ else
     log_warn "hh.sh not found — skipping"
 fi
 
-# Harness Python CLIs -> ~/.aitools/bin (deployed copy, called by hooks via
-# absolute path so every project's hooks resolve them — not run from the repo).
-# These are sole-owned generated artifacts (the user never edits the deployed
-# copy), so per config-file-safety.md we back up + diff-log + overwrite, with
-# NO interactive review. deploy_managed_file's prompt is for user-customizable
-# files only.
-AITOOLS_BIN="$HOME/.aitools/bin"
-mkdir -p "$AITOOLS_BIN"
-_hbin_deployed=0
-for _hcli in harness-db.py read-session.py read-session-full.py; do
-    _src="$SCRIPT_DIR/$_hcli"
-    _dst="$AITOOLS_BIN/$_hcli"
-    if [ ! -f "$_src" ]; then
-        log_warn "$_hcli not found at $(display_path "$_src") (MDM deploy — skipping)"
-        continue
-    fi
-    if [ -f "$_dst" ] && diff -q "$_src" "$_dst" >/dev/null 2>&1; then
-        continue  # identical — nothing to deploy
-    fi
-    if [ -f "$_dst" ]; then
-        backup_file "$_dst"                                  # backup + rotate (aitools-lib)
-        diff -u "$_dst" "$_src" >> "$LOG_FILE" 2>/dev/null || true  # log diff before overwrite
-    fi
-    cp "$_src" "$_dst"
-    log_ok "Deployed $_hcli -> $(display_path "$_dst")"
-    _hbin_deployed=$((_hbin_deployed + 1))
-done
-write_summary OK "harness bin" "$_hbin_deployed deployed to ~/.aitools/bin"
+# The harness Python CLIs (~/.aitools/bin) are deployed by deploy-harness (Step 8b).
 
 # ============================================================
 # 7. Shell integration
@@ -637,6 +655,21 @@ else
             write_summary WARN "node.js" "install manually (https://nodejs.org)"
             ;;
     esac
+fi
+
+# ============================================================
+# 8b. Deployed harness (~/.aitools) -- deploy-harness.sh
+# ============================================================
+# After Node (Step 8). deploy-harness fills ~/.aitools/{reference,registries,hooks,
+# rules,skills,bin} (bin was this installer's own step before) and re-derives
+# config.json through setup-user-config.sh (Step 5 wrote the bootstrap keys it needs).
+log "Step 8b: Deployed harness"
+
+harness_rc=0
+run_harness_step "$SCRIPT_DIR/deploy-harness.sh" || harness_rc=$?
+if [ "$harness_rc" -eq 2 ]; then
+    if [ -z "${AITOOLS_SUPPRESS_SUMMARY_DISPLAY:-}" ]; then show_summary; fi
+    exit 2
 fi
 
 # ============================================================

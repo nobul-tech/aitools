@@ -148,10 +148,12 @@ read_config_key() {
 # machine-id) is rewritten to 2 first (_aitlib_profile_run).
 # ---------------------------------------------------------------------------
 
-# _aitlib_rm_tmp FILE -- remove a temp file of the runner; a failure is a detail
-# line (never silent; not a warning, which would promote the caller's OK rows)
+# _aitlib_rm_tmp FILE [WHO] -- remove a temp file of the lib (the runner's stderr
+# capture, the relay's exit-code file); a failure is a detail line naming WHO
+# (default "aitools-profile") -- never silent; not a warning, which would promote
+# the caller's OK rows
 _aitlib_rm_tmp() {
-    if [ -e "$1" ] && ! rm -f "$1"; then log_detail "aitools-profile: could not remove temp file $1"; fi
+    if [ -e "$1" ] && ! rm -f "$1"; then log_detail "${2:-aitools-profile}: could not remove temp file $1"; fi
     return 0
 }
 
@@ -369,6 +371,8 @@ resolve_machine_profile() {
     if ! _aitlib_profile_run resolve --environment "$AITOOLS_ENVIRONMENT"; then
         log_error "machine profile: resolver aitools-profile not found next to aitools-lib.sh"
         write_summary ERROR "machine profile" "resolver missing"
+        # Same text as resolve_user_repo_path's: one ACTION per run for a missing resolver
+        _aitlib_action_once "see deploy.log -- the dotprofile could not be resolved"
         return 3
     fi
     AITLIB_MACHINE_ALIAS=$(_aitlib_profile_tag alias)
@@ -503,7 +507,8 @@ tool_exception_record() {
 # and errors.
 #   jsonl_record TS SCRIPT LEVEL MSG   append one deploy.jsonl record
 #   relay_child_log TEXT               relay captured child output (all lines)
-#   run_child_relayed LABEL CMD ARGS   run CMD ARGS, relay each line as it comes
+#   run_child_relayed [--summary-tool TOOL] LABEL CMD ARGS
+#                                      run CMD ARGS, relay each line as it comes
 # Results (set by relay_child_log and run_child_relayed, read after the call):
 #   AITLIB_CHILD_WARNINGS  the child's warn lines (the exit footer
 #                          "COMPLETED with N warning(s)" is relayed, not counted)
@@ -512,6 +517,14 @@ tool_exception_record() {
 # Every counted warning also increments WARNINGS (it promotes the parent's OK
 # rows, as the child's own rows are). Errors are not added to ERRORS line by
 # line: run_child_relayed logs one log_error for a failed child.
+# Summary rows: the child writes its own. With --summary-tool TOOL, a failed
+# child (non-zero exit, or error lines with exit 0, or not run at all) that
+# wrote no ERROR row of its own -- it died before its write_summary (a set -e
+# abort, exit 127, a crash) -- gets one: "ERROR|TOOL|script failed (exit N)",
+# "aborted (exit 2)" (D-TS13), "logged errors (exit 0)", or "not run (...)".
+# A child that wrote an ERROR row (any tool) gets no second one -- also when it
+# crashed after writing it: the panel then shows the child's row, and the crash
+# is the relay's log_error in deploy.log.
 # Private caches (JSON-escaped): AITLIB_RUN_ID, AITLIB_JSONL_HOST, AITLIB_JSONL_OS.
 # ---------------------------------------------------------------------------
 
@@ -605,46 +618,96 @@ relay_child_log() {
     return 0
 }
 
-# run_child_relayed LABEL CMD [ARGS...] -- run a child script (e.g.
-# run_child_relayed "Step 5: setup-user-config.sh" "${BASH:-bash}" "$writer" ...)
-# and relay its stdout line by line as it arrives, so its log lines show before
-# any prompt it reads from /dev/tty. stdin and stderr are the caller's. CMD runs
-# in a subshell: it must be a separate process (a script), not a function that
-# changes the caller's variables. The child writes its own summary rows. Sets
-# AITLIB_CHILD_RC, AITLIB_CHILD_WARNINGS, AITLIB_CHILD_ERRORS. Returns 0 when the
-# child exited 0 with no error line; otherwise 1 after one log_error naming LABEL
-# (call it as: run_child_relayed ... || rc=$?). No CMD (e.g. an empty array) is
-# a failure, not a no-op. It returns when every process holding the child's
-# stdout has closed it (a background grandchild keeps it waiting).
+# _aitlib_summary_errors VAR -- set VAR to the number of ERROR rows in the run
+# summary (AITOOLS_SUMMARY_FILE; 0 without one). An unreadable summary counts 0
+# and is a detail line. VAR must not be one of this function's locals
+# (_aitlib_se_*): printf -v would set the local, not the caller's variable.
+_aitlib_summary_errors() {
+    local _aitlib_se_n=0 _aitlib_se_l _aitlib_se_f="${AITOOLS_SUMMARY_FILE:-}"
+    if [ -n "$_aitlib_se_f" ] && [ -f "$_aitlib_se_f" ]; then
+        if [ -r "$_aitlib_se_f" ]; then
+            while IFS= read -r _aitlib_se_l || [ -n "$_aitlib_se_l" ]; do
+                case "$_aitlib_se_l" in "ERROR|"*) _aitlib_se_n=$((_aitlib_se_n + 1)) ;; esac
+            done < "$_aitlib_se_f"
+        else
+            log_detail "run summary unreadable ($_aitlib_se_f) -- its ERROR rows are not counted"
+        fi
+    fi
+    printf -v "$1" '%s' "$_aitlib_se_n"
+}
+
+# _aitlib_child_row TOOL BEFORE DETAIL -- for a failed child: write the row
+# "ERROR|TOOL|DETAIL" unless TOOL is "" or the child wrote an ERROR row of its own
+# (the run summary now holds more than BEFORE ERROR rows)
+_aitlib_child_row() {
+    local _aitlib_cr_now=0
+    if [ -z "$1" ]; then return 0; fi
+    _aitlib_summary_errors _aitlib_cr_now
+    if [ "$_aitlib_cr_now" -gt "$2" ]; then
+        log_detail "$1: the child wrote its own ERROR row -- none added"
+        return 0
+    fi
+    write_summary ERROR "$1" "$3"
+}
+
+# run_child_relayed [--summary-tool TOOL] LABEL CMD [ARGS...] -- run a child
+# script (e.g. run_child_relayed --summary-tool "aitools config"
+# "Step 5: setup-user-config.sh" "${BASH:-bash}" "$writer" ...) and relay its
+# stdout line by line as it arrives, so its log lines show before any prompt it
+# reads from /dev/tty. stdin and stderr are the caller's. CMD runs in a
+# subshell: it must be a separate process (a script), not a function that
+# changes the caller's variables. The child writes its own summary rows; TOOL
+# names the row for a failed child that wrote none (see the section comment).
+# Sets AITLIB_CHILD_RC, AITLIB_CHILD_WARNINGS, AITLIB_CHILD_ERRORS. Returns 0 when
+# the child exited 0 with no error line; otherwise 1 after one log_error naming
+# LABEL (call it as: run_child_relayed ... || rc=$?). No CMD (e.g. an empty
+# array) is a failure, not a no-op. It returns when every process holding the
+# child's stdout has closed it (a background grandchild keeps it waiting).
 run_child_relayed() {
-    local label="$1"; shift
-    local line rcf="" rc=""
+    local tool="" label line rcf="" rc="" errs0=0 detail
     AITLIB_CHILD_RC=0; AITLIB_CHILD_WARNINGS=0; AITLIB_CHILD_ERRORS=0
+    if [ "${1:-}" = "--summary-tool" ]; then
+        if [ "$#" -lt 2 ]; then
+            AITLIB_CHILD_RC=1
+            log_error "run_child_relayed: --summary-tool needs a value"
+            return 1
+        fi
+        tool="$2"; shift 2
+    fi
+    label="${1:-child script}"
+    if [ "$#" -gt 0 ]; then shift; fi
     if [ "$#" -eq 0 ]; then
         AITLIB_CHILD_RC=1
         log_error "$label: not run (no command given)"
+        if [ -n "$tool" ]; then write_summary ERROR "$tool" "not run (no command)"; fi
         return 1
     fi
     if ! rcf="$(mktemp)"; then
         AITLIB_CHILD_RC=1
         log_error "$label: not run (mktemp failed)"
+        if [ -n "$tool" ]; then write_summary ERROR "$tool" "not run (mktemp failed)"; fi
         return 1
     fi
+    _aitlib_summary_errors errs0
     while IFS= read -r line || [ -n "$line" ]; do
         _aitlib_relay_line "$line"
     done < <(_aitlib_rc=0; "$@" || _aitlib_rc=$?; printf '%s\n' "$_aitlib_rc" > "$rcf")
+    # a failed read leaves rc empty: the case below counts it as a failure
     rc="$(cat "$rcf")" || rc=""
-    rm -f "$rcf"
+    _aitlib_rm_tmp "$rcf" "$label"
     case "$rc" in
         ''|*[!0-9]*) log_detail "$label: exit code not recorded -- counted as a failure"; rc=1 ;;
     esac
     AITLIB_CHILD_RC="$rc"
     if [ "$rc" -ne 0 ]; then
-        log_error "$label failed (exit $rc) -- see $(display_path "$LOG_FILE")"
+        if [ "$rc" -eq 2 ]; then detail="aborted (exit 2)"; else detail="script failed (exit $rc)"; fi
+        log_error "$label ${detail#script } -- see $(display_path "$LOG_FILE")"
+        _aitlib_child_row "$tool" "$errs0" "$detail"
         return 1
     fi
     if [ "$AITLIB_CHILD_ERRORS" -gt 0 ]; then
         log_error "$label logged $AITLIB_CHILD_ERRORS error(s) but exited 0 -- see $(display_path "$LOG_FILE")"
+        _aitlib_child_row "$tool" "$errs0" "logged errors (exit 0)"
         return 1
     fi
     return 0
@@ -946,30 +1009,92 @@ backup_file() {
 }
 
 # ---------------------------------------------------------------------------
-# Backup a directory before modifying managed files. Keeps at most $max_backups copies.
+# Back up a directory before modifying managed files: copy DIR to
+# DIR.bak.<UTC> (DIR.bak.<UTC>-<n> when that name is taken) and keep the
+# newest $max_backups copies. Result variables (reset on every call):
+#   BACKUP_DIR_OK      true only when the copy exists after cp; else false
+#   BACKUP_DIR_PATH    the copy's path when BACKUP_DIR_OK is true, else ""
+#   BACKUP_DIR_REASON  why not, when false: "no directory", "no top-level
+#                      *.md", "cannot list", "copy failed"
+# Skip rule (kept: its callers, the setup-user-claude and setup-user-cursor
+# rules fan-outs, back up only a directory that holds a top-level *.md file):
+# no top-level regular *.md file -> no copy, a detail log line, reason
+# "no top-level *.md". A failed copy is non-fatal (warn, return 0;
+# config-file-safety.md "Backup before overwrite"): callers that must not write
+# without a backup check BACKUP_DIR_OK. Old backups are matched by literal name
+# (DIR's base name + ".bak." + the UTC stamp, optional "-<n>"), never a glob, so
+# names with [ ] * ? work and another directory's backups are never pruned.
+# Parity: Backup-Dir in aitools-lib.ps1.
 # ---------------------------------------------------------------------------
+BACKUP_DIR_OK=false
+BACKUP_DIR_PATH=""
+BACKUP_DIR_REASON=""
 backup_dir() {
-    local dir="$1" max_backups=5
-    [ -d "$dir" ] || return 0
-    local file_count
-    file_count=$(find "$dir" -maxdepth 1 -name '*.md' -type f | wc -l | tr -d ' ')
-    if [ "$file_count" -eq 0 ]; then
+    local dir="${1%/}" max_backups=5
+    BACKUP_DIR_OK=false; BACKUP_DIR_PATH=""; BACKUP_DIR_REASON=""
+    if [ -z "$dir" ] || [ ! -d "$dir" ]; then
+        BACKUP_DIR_REASON="no directory"
+        log_detail "backup_dir: ${1:-}: not backed up (no directory)"
         return 0
     fi
-    local ts
+    local file_count rc=0
+    # stdout: the count; on exit 1, the reason (stderr captured too)
+    file_count=$(perl -e '
+        my $d = shift;
+        opendir my $dh, $d or do { print "cannot list $d: $!"; exit 1 };
+        my $n = grep { /\.md\z/ && ! -l "$d/$_" && -f "$d/$_" } readdir $dh;
+        closedir $dh;
+        print $n;
+    ' "$dir" 2>&1) || rc=$?
+    if [ "$rc" -ne 0 ]; then
+        BACKUP_DIR_REASON="cannot list"
+        log_warn "Could not back up $(display_path "$dir") -- $file_count"
+        return 0
+    fi
+    if [ "$file_count" -eq 0 ]; then
+        BACKUP_DIR_REASON="no top-level *.md"
+        log_detail "backup_dir: $dir: not backed up (no top-level *.md file)"
+        return 0
+    fi
+    local ts dest n=0
     ts=$(date -u +%Y-%m-%dT%H%M%SZ)
-    if ! cp -R "$dir" "${dir}.bak.${ts}"; then
+    dest="${dir}.bak.${ts}"
+    while [ -e "$dest" ] || [ -L "$dest" ]; do
+        n=$((n + 1))
+        dest="${dir}.bak.${ts}-$n"
+    done
+    if ! cp -R "$dir" "$dest" || [ ! -d "$dest" ]; then
+        BACKUP_DIR_REASON="copy failed"
         log_warn "Could not back up $(display_path "$dir") -- proceeding without backup"
         return 0
     fi
-    local old_backups
-    old_backups=$(find "$(dirname "$dir")" -maxdepth 1 -name "$(basename "$dir").bak.*" -type d \
-        | sort -r | tail -n +$((max_backups + 1)))
-    if [ -n "$old_backups" ]; then
-        printf '%s\n' "$old_backups" | while IFS= read -r old_dir; do
-            rm -rf "$old_dir"
-            log "Pruned old backup: $(display_path "$old_dir")"
-        done
+    BACKUP_DIR_OK=true
+    BACKUP_DIR_PATH="$dest"
+    local parent base old_backups old_dir prc=0
+    parent=$(dirname "$dir")
+    base=$(basename "$dir")
+    # Newest first by name (the UTC stamp sorts by time); print the ones past the limit
+    old_backups=$(perl -e '
+        my ($parent, $base, $keep) = @ARGV;
+        opendir my $dh, $parent or do { print "cannot list $parent: $!"; exit 1 };
+        my @b = sort { $b cmp $a } grep {
+            /\A\Q$base\E\.bak\.[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{6}Z(?:-[0-9]+)?\z/
+                && ! -l "$parent/$_" && -d "$parent/$_"
+        } readdir $dh;
+        closedir $dh;
+        print "$parent/$_\n" for @b[$keep .. $#b];
+    ' "$parent" "$base" "$max_backups" 2>&1) || prc=$?
+    if [ "$prc" -ne 0 ]; then
+        log_warn "Could not prune old backups of $(display_path "$dir") -- $old_backups"
+    elif [ -n "$old_backups" ]; then
+        while IFS= read -r old_dir; do
+            [ -n "$old_dir" ] || continue
+            if rm -rf "$old_dir" && [ ! -e "$old_dir" ]; then
+                log "Pruned old backup: $(display_path "$old_dir")"
+            else
+                log_warn "Could not prune old backup $(display_path "$old_dir")"
+            fi
+        done <<< "$old_backups"
     fi
     log "Backed up $(display_path "$dir") ($file_count managed files)"
 }
@@ -1942,6 +2067,16 @@ deploy_managed_file() {
     # strips them, and every write adds exactly one back.
     src_content=$(printf '%s' "$src_content" | perl -0777 -pe 's/[\r\n]+$/\n/')
 
+    # A dangling symlink at DEST: never write through it (the write would create
+    # the link's target, wherever it points). A live symlink is read and written
+    # through, as before (dotfile managers link deployed files). Parity:
+    # Deploy-ManagedFile (same message, also in a dry run).
+    if [ -L "$dest" ] && [ ! -e "$dest" ]; then
+        log_error "Failed: $item_name: $(display_path "$dest") is a dangling symlink -- not written through it"
+        MANAGED_FILE_RESULT="failed"
+        return 0
+    fi
+
     # Dry run: report what would happen without writing
     if [ "${DRY_RUN:-}" = "true" ]; then
         if [ -f "$dest" ]; then
@@ -2405,16 +2540,19 @@ adopt_managed_file() {
 
 # Reset all deploy tracker counters. Call before a deploy loop.
 _DT_ADDED=0; _DT_UPDATED=0; _DT_VERIFIED=0
-_DT_ACCEPTED=0; _DT_SKIPPED=0; _DT_PRESERVED=0; _DT_FAILED=0
+_DT_ACCEPTED=0; _DT_SKIPPED=0; _DT_PRESERVED=0; _DT_FAILED=0; _DT_REMOVED=0
 DEPLOY_TRACKER_TEXT=""
 
 deploy_tracker_init() {
     _DT_ADDED=0; _DT_UPDATED=0; _DT_VERIFIED=0
-    _DT_ACCEPTED=0; _DT_SKIPPED=0; _DT_PRESERVED=0; _DT_FAILED=0
+    _DT_ACCEPTED=0; _DT_SKIPPED=0; _DT_PRESERVED=0; _DT_FAILED=0; _DT_REMOVED=0
     DEPLOY_TRACKER_TEXT=""
 }
 
 # Record a single file outcome. Increments counter and writes DETAIL summary.
+# "removed": the caller backed up and deleted a deployed file (a fan-out
+# consumer pruning a retired rule). An outcome the tracker does not know is a
+# caller bug: it is logged and counted as failed, never dropped.
 # Args: $1=outcome $2=tool_name $3=item_name
 deploy_tracker_record() {
     local outcome="$1" tool_name="$2" item_name="$3"
@@ -2429,8 +2567,13 @@ deploy_tracker_record() {
                    write_summary DETAIL "$tool_name" "skipped: $item_name" ;;
         failed)    _DT_FAILED=$((_DT_FAILED + 1))
                    write_summary DETAIL "$tool_name" "failed: $item_name" ;;
+        removed)   _DT_REMOVED=$((_DT_REMOVED + 1))
+                   write_summary DETAIL "$tool_name" "removed: $item_name" ;;
         verified)  _DT_VERIFIED=$((_DT_VERIFIED + 1)) ;;
         preserved) _DT_PRESERVED=$((_DT_PRESERVED + 1)) ;;
+        *)         log_error "deploy_tracker_record: unknown outcome \"$outcome\" for $item_name ($tool_name) -- counted as failed"
+                   _DT_FAILED=$((_DT_FAILED + 1))
+                   write_summary DETAIL "$tool_name" "failed: $item_name" ;;
     esac
 }
 
@@ -2444,6 +2587,7 @@ deploy_tracker_summary() {
     if [ "$_DT_ADDED" -gt 0 ];    then parts="$_DT_ADDED added"; fi
     if [ "$_DT_UPDATED" -gt 0 ];  then parts="${parts:+$parts, }$_DT_UPDATED updated"; fi
     if [ "$_DT_ACCEPTED" -gt 0 ]; then parts="${parts:+$parts, }$_DT_ACCEPTED accepted"; fi
+    if [ "$_DT_REMOVED" -gt 0 ];  then parts="${parts:+$parts, }$_DT_REMOVED removed"; fi
     if [ "$_DT_VERIFIED" -gt 0 ]; then parts="${parts:+$parts, }$_DT_VERIFIED verified"; fi
     if [ "$_DT_FAILED" -gt 0 ];   then parts="${parts:+$parts, }$_DT_FAILED failed"; fi
     if [ -z "$parts" ]; then parts="verified"; fi
@@ -2456,6 +2600,239 @@ deploy_tracker_summary() {
     else
         write_summary OK "$tool_name" "$parts"
     fi
+}
+
+# ---------------------------------------------------------------------------
+# Fan-out helpers, for the consumers of ~/.aitools/rules and ~/.aitools/skills
+# (setup-user-claude, setup-user-cursor; setup-user-cursor still defines its own
+# copies of lower_name, in_list and read_rules_manifest, which match these).
+# deploy-harness writes one manifest per kind (rules: PR #100 contract; skills:
+# plans/skills-and-rules-fanout.md section 3.2): first line RULES_MANIFEST_HEADER
+# or SKILLS_MANIFEST_HEADER, then "<name><TAB><source>" lines, source shared |
+# aitools | dotprofile | retired. Parity: Get-RuleNameKind, Get-SkillNameKind,
+# Read-HarnessManifest, Read-RulesManifest, Test-FanoutTextEqual and
+# Test-FanoutDirMatches in aitools-lib.ps1 (same results, same exit codes).
+# ---------------------------------------------------------------------------
+RULES_MANIFEST_HEADER="# aitools rules manifest v1"
+SKILLS_MANIFEST_HEADER="# aitools skills manifest v1"
+
+# Lower-case a name (APFS and NTFS are case-insensitive)
+lower_name() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
+
+# Exit 0 when the line $1 is in the newline-separated list $2 (bash 3.2: no
+# associative arrays)
+in_list() {
+    case "
+$2" in
+        *"
+$1
+"*) return 0 ;;
+    esac
+    return 1
+}
+
+# Print the kind of a file name in ~/.aitools/rules, compared case-insensitively
+# (commander decision 2026-10-22): "hidden" (a dot file, e.g. the rules
+# manifest), "backup" (*.bak.*, the library's backup naming), "rule" (*.md) or
+# "other". Parity: Get-RuleNameKind in aitools-lib.ps1.
+rule_name_kind() {
+    local lc
+    lc=$(lower_name "$1")
+    case "$lc" in
+        .*)      printf 'hidden\n' ;;
+        *.bak.*) printf 'backup\n' ;;
+        *.md)    printf 'rule\n' ;;
+        *)       printf 'other\n' ;;
+    esac
+}
+
+# Print the kind of an entry name in ~/.aitools/skills, compared
+# case-insensitively: "hidden" (a dot name, e.g. the skills manifest), "backup"
+# (*.bak.*, a backed-up skill directory) or "skill" (anything else). The name
+# only: the caller checks that a "skill" entry is a directory.
+# Parity: Get-SkillNameKind in aitools-lib.ps1.
+skill_name_kind() {
+    local lc
+    lc=$(lower_name "$1")
+    case "$lc" in
+        .*)      printf 'hidden\n' ;;
+        *.bak.*) printf 'backup\n' ;;
+        *)       printf 'skill\n' ;;
+    esac
+}
+
+# read_harness_manifest FILE KIND: print the manifest FILE of KIND (rules or
+# skills) as lines "rule<TAB><name><TAB><source>" (the same first word for both
+# kinds) and "invalid<TAB><line, tabs as <TAB>>", or the one line "header-bad"
+# when its first line (a UTF-8 BOM and a CR before the LF ignored) is not the
+# kind's header. A valid line: a name with no / or \ and no .bak. (rules: a *.md
+# name; skills: not starting with a dot), a source of shared, aitools,
+# dotprofile or retired, and a name not already listed (compared
+# case-insensitively). Exit codes:
+#   0  read (the output may be "header-bad")
+#   1  FILE missing, unreadable or a directory ("cannot read FILE: <reason>"
+#      on stderr)
+#   2  unknown KIND, a caller bug (message on stderr)
+# The caller captures 2>&1 and checks the exit. setup-user-cursor's own copy
+# of read_rules_manifest exits with perl's errno for a read failure; the
+# output and message are the same. Parity: Read-HarnessManifest in
+# aitools-lib.ps1 (throws for both failures).
+read_harness_manifest() {
+    local header
+    case "${2:-}" in
+        rules)  header="$RULES_MANIFEST_HEADER" ;;
+        skills) header="$SKILLS_MANIFEST_HEADER" ;;
+        *)
+            printf 'read_harness_manifest: unknown kind "%s" (rules or skills)\n' "${2:-}" >&2
+            return 2 ;;
+    esac
+    perl -e '
+        my ($f, $header, $kind) = @ARGV;
+        if (-d $f) { print STDERR "cannot read $f: is a directory\n"; exit 1 }
+        open my $fh, "<:raw", $f or do { print STDERR "cannot read $f: $!\n"; exit 1 };
+        my $head = <$fh>; $head = "" unless defined $head;
+        $head =~ s/\A\xEF\xBB\xBF//; $head =~ s/\r?\n\z//;
+        if ($head ne $header) { print "header-bad\n"; exit 0 }
+        my $name_re = $kind eq "rules" ? qr/\A[^\/\\]+\.md\z/ : qr/\A[^\/\\.][^\/\\]*\z/;
+        my %seen;
+        while (my $l = <$fh>) {
+            $l =~ s/\r?\n\z//;
+            next if $l eq "";
+            my ($name, $src) = split /\t/, $l, 2;
+            $src = "" unless defined $src;
+            if ($name !~ $name_re || $name =~ /\.bak\./
+                    || $src !~ /\A(?:shared|aitools|dotprofile|retired)\z/ || $seen{lc $name}++) {
+                (my $show = $l) =~ s/\t/<TAB>/g;
+                print "invalid\t$show\n";
+                next;
+            }
+            print "rule\t$name\t$src\n";
+        }
+        close $fh;
+    ' "$1" "$header" "$2"
+}
+
+# read_rules_manifest FILE: read_harness_manifest FILE rules (the output of
+# setup-user-cursor's own read_rules_manifest, byte for byte).
+# Parity: Read-RulesManifest in aitools-lib.ps1.
+read_rules_manifest() {
+    read_harness_manifest "$1" rules
+}
+
+# _fanout_log_detail_lines PREFIX TEXT: one detail log line "PREFIX: <line>"
+# per non-empty line of TEXT, so a multi-line reason keeps the
+# [timestamp] [script] [detail] format on every line
+_fanout_log_detail_lines() {
+    local prefix="$1" l
+    while IFS= read -r l; do
+        if [ -n "$l" ]; then
+            log_detail "$prefix: $l"
+        fi
+    done <<< "${2:-}"
+}
+
+# fanout_text_equal A B: exit 0 when files A and B hold the same bytes apart
+# from trailing CR/LF (deploy_managed_file normalizes trailing newlines), 1 when
+# they differ, 2 when they cannot be compared: a file is missing, a directory
+# or unreadable, or perl itself failed. Every exit 2 writes a detail log line
+# "fanout_text_equal: cannot read <file>: <reason>" or "fanout_text_equal: perl
+# failed (exit N): <message>". Parity: Test-FanoutTextEqual in aitools-lib.ps1.
+fanout_text_equal() {
+    local rc=0 why=""
+    # perl writes only failure reasons (stderr, captured)
+    why=$(perl -e '
+        my @t;
+        for my $f (@ARGV) {
+            if (-d $f) { print STDERR "cannot read $f: is a directory\n"; exit 2 }
+            open my $fh, "<:raw", $f or do { print STDERR "cannot read $f: $!\n"; exit 2 };
+            local $/; my $c = <$fh>; close $fh;
+            $c = "" unless defined $c; $c =~ s/[\r\n]+\z//; push @t, $c;
+        }
+        exit($t[0] eq $t[1] ? 0 : 1);
+    ' "${1:-}" "${2:-}" 2>&1) || rc=$?
+    if [ "$rc" -gt 2 ]; then
+        why="perl failed (exit $rc)${why:+: $why}"
+        rc=2
+    elif [ "$rc" -eq 2 ] && [ -z "$why" ]; then
+        why="perl failed (exit 2) with no message"
+    fi
+    if [ -n "$why" ]; then
+        _fanout_log_detail_lines "fanout_text_equal" "$why"
+    fi
+    return "$rc"
+}
+
+# fanout_dir_matches TARGET CAND: exit 0 when TARGET is a real directory (not a
+# symlink), every regular file under it (recursive; a file whose base name is
+# *.bak.*, compared case-insensitively, is ignored) exists as a regular file
+# (a symlink to one counts) at the same relative path under CAND and is equal
+# to it as fanout_text_equal compares, and it holds at least one such file.
+# Exit 1 otherwise: TARGET or CAND empty; TARGET missing, a file or a symlink;
+# no such file; a file missing, different or not a regular file in CAND; any
+# non-regular entry anywhere under TARGET -- a symlink (never followed: what
+# the fan-out did not write is the user's), a FIFO, a socket, a block or
+# character device. Exit 2 when an entry cannot be read: a directory that
+# cannot be listed, an entry that cannot be lstat'ed (a directory without
+# search permission), a file that cannot be read; or perl failed. 2 wins over 1
+# (the whole tree is checked). Every reason for exit 2 is its own detail log
+# line "fanout_dir_matches: cannot list <dir>: <reason>" / "fanout_dir_matches:
+# cannot read <path>: <reason>". Used before pruning a retired skill directory.
+# Parity: Test-FanoutDirMatches in aitools-lib.ps1.
+fanout_dir_matches() {
+    local rc=0 why=""
+    if [ -z "${1:-}" ] || [ -z "${2:-}" ]; then
+        return 1
+    fi
+    # perl writes only failure reasons (stderr, captured), one line each
+    why=$(perl -e '
+        my ($t, $c) = @ARGV;
+        exit 1 if -l $t || ! -d $t;
+        my ($n, $bad, $err) = (0, 0, 0);
+        my $read = sub {   # (text, undef) or (undef, reason); trailing CR/LF dropped
+            my $f = shift;
+            return (undef, "is a directory") if -d $f;
+            open my $fh, "<:raw", $f or return (undef, "$!");
+            local $/; my $x = <$fh>; close $fh;
+            $x = "" unless defined $x; $x =~ s/[\r\n]+\z//;
+            return ($x, undef);
+        };
+        my @stack = ("");
+        while (@stack) {
+            my $rel = pop @stack;
+            my $dir = $rel eq "" ? $t : "$t/$rel";
+            my $dh;
+            unless (opendir $dh, $dir) { print STDERR "cannot list $dir: $!\n"; $err = 1; next }
+            my @names = grep { $_ ne "." && $_ ne ".." } readdir $dh;
+            closedir $dh;
+            for my $e (@names) {
+                my $r = $rel eq "" ? $e : "$rel/$e";
+                my $p = "$t/$r";
+                unless (lstat $p) { print STDERR "cannot read $p: $!\n"; $err = 1; next }
+                if (-l _) { $bad = 1; next }
+                if (-d _) { push @stack, $r; next }
+                if (! -f _) { $bad = 1; next }   # FIFO, socket, device
+                next if lc($e) =~ /\.bak\./;
+                $n++;
+                my $cp = "$c/$r";
+                if (! -f $cp) { $bad = 1; next }   # missing, a directory, a FIFO ...
+                my ($x, $xwhy) = $read->($p);
+                if (defined $xwhy) { print STDERR "cannot read $p: $xwhy\n"; $err = 1; next }
+                my ($y, $ywhy) = $read->($cp);
+                if (defined $ywhy) { print STDERR "cannot read $cp: $ywhy\n"; $err = 1; next }
+                $bad = 1 if $x ne $y;
+            }
+        }
+        exit 2 if $err;
+        exit(($bad || $n == 0) ? 1 : 0);
+    ' "$1" "$2" 2>&1) || rc=$?
+    if [ "$rc" -gt 2 ]; then
+        why="perl failed (exit $rc)${why:+: $why}"
+        rc=2
+    fi
+    if [ -n "$why" ]; then
+        _fanout_log_detail_lines "fanout_dir_matches" "$why"
+    fi
+    return "$rc"
 }
 
 # ---------------------------------------------------------------------------

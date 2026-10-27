@@ -20,7 +20,7 @@ deploys both CLAUDE.md and rules) must handle all return values at each site
 independently. **Known limitation:** Step 30 validates at file level, not
 call-site level -- manual audit required for multi-deployment scripts.
 Non-interactive fallback required (`AITOOLS_FORCE`/`--force`, non-terminal stdin, EOF at prompt -> overwrite + warn; no AI merge); installers apply the same rule to their own prompts.
-`[x]abort` logs an error and exits 2; a bare exit 2 is a user abort (D-TS13); it ends this setup script and the installer continues with the next script.
+`[x]abort` logs an error and exits 2; a bare exit 2 is a user abort (D-TS13); it ends this setup script. Exit 2 from `deploy-harness` (installer Step 8b, first script of the `aitools` sync) stops the run: WARN `harness files` `aborted by user`, no further step, summary, exit 2. Exit 2 from any other setup script is handled like any failure: ERROR `script failed (exit 2)`, and the run continues with the next script (the profile-mirror menu's "stop the run" text included).
 
 PS1 console I/O: `[Console]::ReadLine/WriteLine`. Read external command output
 via temp file + `[IO.File]::ReadAllText(..., UTF8)` (not pipeline capture).

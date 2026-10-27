@@ -1,0 +1,59 @@
+Draft edit for .claude/rules/deploy-paths.md (protected; awaiting commander approval).
+Base: the file as PR #99 (docs/harness-approved-drafts) writes it. Apply after #99 merges.
+The same two edits apply to .cursor/rules/deploy-paths.mdc (PR #99 writes it too).
+Source of the behaviour: PR (feature/harness-mdm-followups), HARNESS Q3/Q4/Q6.
+
+=== Edit 1: "MDM run order", second paragraph ===
+
+OLD:
+`deploy-harness` ships with its `deploy/` directory: its config.json writer
+(`setup-user-config`, `aitools-profile`, `aitools-json`) sits beside it. As on
+the dev path, the writer needs the installer's bootstrap keys (`reposPath`,
+`repoPath`) in `~/.aitools/config.json`; on an endpoint where `aitools-install`
+has not run, the harness files still deploy but the run reports
+`ERROR config.json not generated` and exits 1.
+
+NEW:
+`deploy-harness` ships with its `deploy/` directory: the harness snapshot it
+reads (`deploy-harness.payload`) and its config.json writer
+(`setup-user-config`, `aitools-profile`, `aitools-json`) sit beside it, so an
+MDM deploys the directory, not one script. The writer needs the installer's
+bootstrap keys (`reposPath`, `repoPath`) in `~/.aitools/config.json`; on an
+endpoint where `aitools-install` has not run, the MDM variant does not run it,
+reports `OK config.json n/a (no bootstrap)` and exits 0 (the harness files
+deploy). `--skip-config` / `-SkipConfig` takes the same path on both variants
+(`n/a (written by installer)`), for callers that already ran the writer.
+
+=== Edit 2: "Scripts with deploy templates", the deploy-harness paragraph ===
+
+OLD:
+`deploy-harness.sh/.ps1` is **extract + embed**: `build-deploy.sh` extracts its
+code between its section headings (`extract_span`, each heading must match one
+line) and replaces only section 2 (dotprofile lookup) with the embedded
+snapshot; the source directories and bin CLIs are parsed from its
+`add_source` / `for cli in` lines, not listed twice. Renaming a section
+heading or rewording those lines fails the build loudly.
+
+NEW:
+`deploy-harness.sh/.ps1` is **extract + embed**: `build-deploy.sh` extracts its
+code between its body markers (`# --- BEGIN/END <name> (extracted|replaced by
+build-deploy) ---`; `extract_markers`, each marker must be on exactly one line)
+and replaces two spans: the config bootstrap check (MDM: no bootstrap keys, no
+writer) and the dotprofile lookup (section 2, the embedded snapshot). The
+source directories and bin CLIs are parsed from its `add_source` /
+`for cli in` lines, not listed twice. Removing or duplicating a marker, or
+rewording those lines, fails the build loudly.
+
+=== Edit 3: "What IS auto-embedded", last bullet ===
+
+OLD:
+  `.claude/rules`, `<userRepoPath>/claude/rules`, the bin CLIs) → its
+  `git ls-files` list and contents, embedded as base64 at build time
+
+NEW:
+  `.claude/rules`, `<userRepoPath>/claude/rules`, the bin CLIs) → its
+  `git ls-files` list and contents, written as base64 to
+  `deploy/deploy-harness.payload` at build time (each record with its size and
+  sha256; the scripts hold the payload's sha256). Not inline: the scripts were
+  about 2.2 MB each, over the Intune limits (Windows PowerShell scripts
+  < 200 KB, macOS shell scripts < 1 MB).

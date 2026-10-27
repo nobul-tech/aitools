@@ -1065,6 +1065,16 @@ repo_version() {
     fi
 }
 
+# deploy_abort SCRIPT -- deploy-harness exited 2: the user chose [x]abort at a review
+# menu (D-TS13; abort ends the whole run, T-Q3). The remaining deploy steps are not
+# run; the caller shows the summary and returns 2. Parity: Invoke-DeployAbort in
+# aitools.ps1.
+deploy_abort() {
+    deploy_aborted=true
+    log "$1: aborted by user at a review menu -- remaining deploy steps not run"
+    write_summary WARN "harness files" "aborted by user"
+}
+
 # Deploy all config scripts from the repo's scripts/ directory.
 # On Windows (Git Bash), calls .ps1 variants via pwsh.
 # Child scripts log to LOG_FILE themselves (via tee/Add-Content), so we
@@ -1072,6 +1082,7 @@ repo_version() {
 deploy_configs() {
     local script_dir="$1"
     local errors=0
+    deploy_aborted=false   # global: the caller reads it (deploy_abort sets it)
     export AITOOLS_DEPLOY=1
     if $dry_run; then export AITOOLS_DRY_RUN=1; fi
     if $force; then export AITOOLS_FORCE=1; fi
@@ -1081,7 +1092,9 @@ deploy_configs() {
                 log_error "pwsh (PowerShell 7) not found. Install: winget install --id Microsoft.PowerShell --source winget"
                 return 1
             fi
-            local deploy_scripts="setup-user-config.ps1 setup-user-claude.ps1 setup-user-mcp.ps1 setup-user-skills.ps1 setup-cursor-ide-mcp.ps1 setup-user-cursor.ps1 setup-user-settings.ps1 setup-user-hooks.ps1"
+            # deploy-harness first: it fills ~/.aitools and runs the config writer
+            # (setup-user-config) itself, so the writer is not in this list (once per run)
+            local deploy_scripts="deploy-harness.ps1 setup-user-claude.ps1 setup-user-mcp.ps1 setup-user-skills.ps1 setup-cursor-ide-mcp.ps1 setup-user-cursor.ps1 setup-user-settings.ps1 setup-user-hooks.ps1"
             for script in $deploy_scripts; do
                 local script_path="$script_dir/$script"
                 if [ -f "$script_path" ]; then
@@ -1106,12 +1119,20 @@ deploy_configs() {
                     # Run without output redirection -- child PS1 scripts log to
                     # deploy.log via [IO.File]::AppendAllText. PowerShell's 2>> holds
                     # an exclusive file lock that blocks the child's AppendAllText.
-                    local script_rc=0
+                    # deploy-harness.ps1 is not relayed here: a PS1 review prompt is
+                    # written to stdout without a newline, and a relay reading pwsh's
+                    # stdout line by line would hold it until the user answered.
+                    local script_rc=0 row_tool="${script%.ps1}"
+                    if [ "$script" = "deploy-harness.ps1" ]; then row_tool="harness files"; fi
                     pwsh -NoProfile -ExecutionPolicy Bypass \
                         -File "$(cygpath -w "$script_path")" || script_rc=$?
+                    if [ "$script" = "deploy-harness.ps1" ] && [ "$script_rc" -eq 2 ]; then
+                        deploy_abort "$script"
+                        break
+                    fi
                     if [ "$script_rc" -ne 0 ]; then
                         log_error "$script failed (exit $script_rc) -- see $LOG_DISPLAY"
-                        write_summary ERROR "${script%.ps1}" "script failed (exit $script_rc)"
+                        write_summary ERROR "$row_tool" "script failed (exit $script_rc)"
                         errors=$((errors + 1))
                     fi
                 else
@@ -1124,7 +1145,9 @@ deploy_configs() {
             done
             ;;
         *)
-            local deploy_scripts="setup-user-config.sh setup-user-claude.sh setup-user-mcp.sh setup-user-skills.sh setup-cursor-ide-mcp.sh setup-user-cursor.sh setup-user-settings.sh setup-user-hooks.sh"
+            # deploy-harness first: it fills ~/.aitools and runs the config writer
+            # (setup-user-config) itself, so the writer is not in this list (once per run)
+            local deploy_scripts="deploy-harness.sh setup-user-claude.sh setup-user-mcp.sh setup-user-skills.sh setup-cursor-ide-mcp.sh setup-user-cursor.sh setup-user-settings.sh setup-user-hooks.sh"
             for script in $deploy_scripts; do
                 local script_path="$script_dir/$script"
                 if [ -f "$script_path" ]; then
@@ -1145,6 +1168,23 @@ deploy_configs() {
                     # deploy.log via >> append. Removing redirection ensures
                     # parity with the Windows fix and lets errors surface.
                     local script_rc=0
+                    if [ "$script" = "deploy-harness.sh" ]; then
+                        # Relayed (aitools-lib run_child_relayed): stdout to the console
+                        # and deploy.jsonl; stdin stays the terminal (the review menu
+                        # reads /dev/tty). The lib logs the error for a failed run.
+                        run_child_relayed "$script" "${BASH:-bash}" "$script_path" || script_rc="$AITLIB_CHILD_RC"
+                        # Exit 0 with error lines: the lib logged it; count it as a failure
+                        if [ "$script_rc" -eq 0 ] && [ "$AITLIB_CHILD_ERRORS" -gt 0 ]; then script_rc=1; fi
+                        if [ "$script_rc" -eq 2 ]; then
+                            deploy_abort "$script"
+                            break
+                        fi
+                        if [ "$script_rc" -ne 0 ]; then
+                            write_summary ERROR "harness files" "script failed (exit $script_rc)"
+                            errors=$((errors + 1))
+                        fi
+                        continue
+                    fi
                     bash "$script_path" || script_rc=$?
                     if [ "$script_rc" -ne 0 ]; then
                         log_error "$script failed (exit $script_rc) -- see $LOG_DISPLAY"
@@ -1161,6 +1201,14 @@ deploy_configs() {
             done
             ;;
     esac
+
+    # [x]abort in deploy-harness: the run stops here (the caller returns 2)
+    if $deploy_aborted; then
+        unset AITOOLS_DEPLOY
+        unset AITOOLS_DRY_RUN
+        unset AITOOLS_FORCE
+        return "$errors"
+    fi
 
     # Best-effort: mirror relay.md into ~/.cursor/AGENTS.md (Cursor IDE).
     # Non-fatal if Python or sync fails.
@@ -2109,6 +2157,12 @@ if $do_install; then
     installer_rc=$?
     unset AITOOLS_FORCE
     echo ""
+    # Exit 2 = the user chose [x]abort at a review menu (D-TS13): the run stops
+    if [ $installer_rc -eq 2 ]; then
+        log "Installer aborted by user at a review menu -- run stopped (exit 2)"
+        show_summary
+        return 2
+    fi
     if [ $installer_rc -eq 0 ]; then
         log_ok "All up to date ($(repo_version "$repo_path"))"
         # Session archive hint (after final status line)
@@ -2126,6 +2180,11 @@ elif $do_gitpull; then
     log "Step 3/$STEPS: Deploying configurations"
     deploy_configs "$repo_path/scripts"
     deploy_rc=$?
+    # [x]abort in deploy-harness (D-TS13): show what ran and stop with exit 2
+    if $deploy_aborted; then
+        show_summary
+        return 2
+    fi
     if [ $deploy_rc -eq 0 ]; then
         log_ok "Done"
     else
@@ -2183,6 +2242,11 @@ else
     log "Step 3/$STEPS: Deploying configurations"
     deploy_configs "$repo_path/scripts"
     deploy_rc=$?
+    # [x]abort in deploy-harness (D-TS13): show what ran and stop with exit 2
+    if $deploy_aborted; then
+        show_summary
+        return 2
+    fi
     if [ $deploy_rc -eq 0 ]; then
         log_ok "Done"
     else

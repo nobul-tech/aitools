@@ -10,7 +10,8 @@
 #
 # deploy/deploy-harness.sh/.ps1 (the MDM path of scripts/deploy-harness.*) embed a
 # snapshot of every harness source file (~/.aitools); MDM runs it first, before
-# setup-user-cursor, whose rules fan-out reads ~/.aitools/rules. Its config.json
+# setup-user-claude and setup-user-cursor, whose rules fan-outs read
+# ~/.aitools/rules (the only way dotprofile rules reach an endpoint). Its config.json
 # writer (setup-user-config + aitools-profile + aitools-json) is copied alongside.
 #
 # Relay → ~/.cursor/AGENTS.md: NOT embedded here. That step needs the live repo file
@@ -231,28 +232,16 @@ DEPLOY_DIR="$_urp/deploy"
 blog "Dotprofile: $_urp (via $_urp_via)"
 blog "Build target: $DEPLOY_DIR (dotprofile repo)"
 
-# --- User rules (embedded as a fallback; see "Embedded dotprofile content") ---
-USER_RULE_COUNT=0
-declare -a USER_RULE_FILES=()
-if [ -d "$_urp/claude/rules" ]; then
-    for rf in "$_urp/claude/rules"/*.md; do
-        [ -f "$rf" ] || continue
-        USER_RULE_FILES+=("$rf")
-        USER_RULE_COUNT=$((USER_RULE_COUNT + 1))
-    done
-fi
-if [ "$USER_RULE_COUNT" -gt 0 ]; then
-    blog "User rules: $USER_RULE_COUNT files from $_urp/claude/rules"
-else
-    blog "No user rules in the dotprofile -- the deploy scripts embed none (a machine with the dotprofile still uses its own claude/rules/)"
-fi
+# Dotprofile rules are not embedded in setup-user-claude: they reach an endpoint
+# through deploy/deploy-harness.* (its snapshot includes <dotprofile>/claude/rules),
+# and setup-user-claude fans out ~/.aitools/rules (rules fan-out, 2026-10-22).
 
 # --- Embedded dotprofile content: fallbacks, resolved per machine at RUNTIME ---
 # deploy/ is committed once and used by every machine of this user, so no machine's
 # values are interpolated here (M3 B5: the cross-machine defect, decision 4). The
 # generated setup-user-claude.* resolve this machine's profile when they run: from
 # the live dotprofile on that machine when it has one (what scripts/ reads), else
-# from the build-time template, profile snapshot and rules embedded below.
+# from the build-time template and profile snapshot embedded below.
 TEMPLATE_FILE="$CLAUDE_SHARED"
 TEMPLATE_LABEL="shared/claude-shared.md"
 if [ -f "$_urp/claude/CLAUDE.md" ]; then
@@ -409,6 +398,21 @@ extract_span() {
     rm -f "$errf"
 }
 
+# extract_markers FILE FROM TO
+#   Prints the lines between the marker line "# --- FROM (...) ---" and the
+#   marker line "# --- TO (...) ---" (both excluded; FROM/TO are "BEGIN <name>"
+#   or "END <name>", the parenthesis says what build-deploy does with the span).
+#   Each marker must be on exactly one line, FROM before TO, or the build fails.
+#   Used for scripts/deploy-harness.* (HARNESS Q6: markers, not section headings).
+extract_markers() {
+    local from to
+    from=$(printf '%s' "$2" | perl -pe 's/([^A-Za-z0-9 ])/\\$1/g')
+    to=$(printf '%s' "$3" | perl -pe 's/([^A-Za-z0-9 ])/\\$1/g')
+    extract_span "$1" "^# --- $from \\(.*\\) ---\$" "^# --- $to \\(.*\\) ---\$" | perl -ne '$n++ or next; print'
+}
+# extract_marked FILE NAME -- the span between "BEGIN NAME" and "END NAME"
+extract_marked() { extract_markers "$1" "BEGIN $2" "END $2"; }
+
 # replace_once OLD NEW -- stdin -> stdout with the literal text OLD replaced by
 #   NEW. OLD must occur exactly once, or the build fails (a reworded source line
 #   must not slip through unchanged).
@@ -493,7 +497,7 @@ embed_file_ps1() {
 }
 
 # write_resolver_block_bash OUT [claude] -- the bash embed block; "claude" adds the
-# dotprofile fallbacks (template, profile snapshot, rules).
+# dotprofile fallbacks (template, profile snapshot).
 write_resolver_block_bash() {
     local out="$1" with_claude="${2:-}" f i
     {
@@ -513,7 +517,7 @@ trap _aitools_embed_cleanup EXIT
 if ! _AITOOLS_EMBED_DIR=$(mktemp -d "${TMPDIR:-/tmp}/aitools-embed.XXXXXX"); then
     _AITOOLS_EMBED_DIR=""
     _AITOOLS_EMBED_ERR="mktemp -d failed"
-elif ! mkdir -p "$_AITOOLS_EMBED_DIR/claude" "$_AITOOLS_EMBED_DIR/shared" "$_AITOOLS_EMBED_DIR/rules"; then
+elif ! mkdir -p "$_AITOOLS_EMBED_DIR/claude" "$_AITOOLS_EMBED_DIR/shared"; then
     _AITOOLS_EMBED_ERR="mkdir failed in $_AITOOLS_EMBED_DIR"
 fi
 BLOCK
@@ -527,10 +531,6 @@ BLOCK
             if [ -n "$PROFILE_SNAPSHOT" ]; then
                 embed_file_bash "profile.json" "$BUILD_TMP/profile-snapshot.json"
             fi
-            for i in $(seq 0 $((USER_RULE_COUNT - 1))); do
-                [ "$USER_RULE_COUNT" -gt 0 ] || break
-                embed_file_bash "rules/$(basename "${USER_RULE_FILES[$i]}")" "${USER_RULE_FILES[$i]}"
-            done
         fi
         cat <<'BLOCK'
 if [ -z "$_AITOOLS_EMBED_ERR" ]; then
@@ -579,10 +579,6 @@ BLOCK
             if [ -n "$PROFILE_SNAPSHOT" ]; then
                 embed_file_ps1 "profile.json" "$BUILD_TMP/profile-snapshot.json"
             fi
-            for i in $(seq 0 $((USER_RULE_COUNT - 1))); do
-                [ "$USER_RULE_COUNT" -gt 0 ] || break
-                embed_file_ps1 "rules/$(basename "${USER_RULE_FILES[$i]}")" "${USER_RULE_FILES[$i]}"
-            done
         fi
         cat <<'BLOCK'
 try {
@@ -648,24 +644,26 @@ mkdir -p "$DEPLOY_DIR"
 blog "Generating deploy/setup-user-claude.sh"
 
 # Pure extract from scripts/setup-user-claude.sh (template interpolation, footer,
-# managed-file deploy, rules logic: no duplicated logic, I6), plus two generated
-# parts: the profile/template source on this machine (before the body) and the
-# rules fallback (between the rules source selection and the rules logic).
+# managed-file deploy, rules fan-out: no duplicated logic, I6), plus one generated
+# part: the profile/template source on this machine (before the body). The rules
+# come from ~/.aitools/rules, which deploy/deploy-harness.sh fills (run it first).
 {
     echo '#!/usr/bin/env bash'
     echo "$HEADER_COMMENT_BASH"
     cat <<'BLOCK'
-# setup-user-claude.sh -- Creates user-level ~/.claude/CLAUDE.md and deploys user rules
+# setup-user-claude.sh -- Creates user-level ~/.claude/CLAUDE.md and fans out the harness rules
 # Self-contained (MDM-ready): the profile resolver and build-time copies of the
-# dotprofile's CLAUDE.md template, profile snapshot and rules are embedded below.
+# dotprofile's CLAUDE.md template and profile snapshot are embedded below.
 # This machine's profile is resolved when the script runs, never at build time. On a
-# machine with the dotprofile, its live template, profile.json and rules are used
+# machine with the dotprofile, its live template and profile.json are used
 # (as by scripts/setup-user-claude.sh); the embedded copies are the fallback.
+# Run deploy-harness.sh first: the rules fan-out reads ~/.aitools/rules, which it fills.
 # Safe to re-run.
 #
 # Managed: ~/.claude/CLAUDE.md (sole owner, overwrite)
-# Managed: ~/.claude/rules/*.md (additive deploy from the rules source)
-# Preserved: ~/.claude/rules/ files not in the rules source
+# Managed: ~/.claude/rules/*.md fanned out from ~/.aitools/rules (additive; the
+#   copy of a rule the rules manifest retires is backed up and removed)
+# Preserved: ~/.claude/rules/ files not in ~/.aitools/rules
 
 set -euo pipefail
 
@@ -714,17 +712,6 @@ BLOCK
         '^# --- END preamble' '^# --- BEGIN rules deployment'
     extract_between "$SCRIPTS_DIR/setup-user-claude.sh" \
         '^# --- BEGIN rules deployment' '^# --- BEGIN rules deploy logic'
-    if [ "$USER_RULE_COUNT" -gt 0 ]; then
-        cat <<'BLOCK'
-# --- Rules fallback (generated by build-deploy.sh): the build-time copy when this
-# machine has no dotprofile (a dotprofile without claude/rules/ deploys none, as
-# scripts/ does; review m3) ---
-if [ "$_DP_RC" -ne 0 ] && [ -z "$RULES_SRC" ] && [ -n "$_AITOOLS_EMBED_DIR" ] && [ -d "$_AITOOLS_EMBED_DIR/rules" ]; then
-    RULES_SRC="$_AITOOLS_EMBED_DIR/rules"
-    log "Rules source: embedded build-time copy (no dotprofile on this machine)"
-fi
-BLOCK
-    fi
     extract_between "$SCRIPTS_DIR/setup-user-claude.sh" \
         '^# --- BEGIN rules deploy logic' '^# --- END rules deploy logic'
     extract_between "$SCRIPTS_DIR/setup-user-claude.sh" \
@@ -739,22 +726,24 @@ GENERATED=$((GENERATED + 1))
 # ============================================================
 blog "Generating deploy/setup-user-claude.ps1"
 
-# Pure extract from scripts/setup-user-claude.ps1, plus the same two generated parts
-# as the .sh (parity).
+# Pure extract from scripts/setup-user-claude.ps1, plus the same generated part as
+# the .sh (parity).
 {
     echo "$HEADER_COMMENT_PS1"
     cat <<'BLOCK'
-# setup-user-claude.ps1 -- Creates user-level ~/.claude/CLAUDE.md and deploys user rules
+# setup-user-claude.ps1 -- Creates user-level ~/.claude/CLAUDE.md and fans out the harness rules
 # Self-contained (MDM-ready): the profile resolver and build-time copies of the
-# dotprofile's CLAUDE.md template, profile snapshot and rules are embedded below.
+# dotprofile's CLAUDE.md template and profile snapshot are embedded below.
 # This machine's profile is resolved when the script runs, never at build time. On a
-# machine with the dotprofile, its live template, profile.json and rules are used
+# machine with the dotprofile, its live template and profile.json are used
 # (as by scripts/setup-user-claude.ps1); the embedded copies are the fallback.
+# Run deploy-harness.ps1 first: the rules fan-out reads .aitools\rules, which it fills.
 # Safe to re-run.
 #
 # Managed: ~/.claude/CLAUDE.md (sole owner, overwrite)
-# Managed: ~/.claude/rules/*.md (additive deploy from the rules source)
-# Preserved: ~/.claude/rules/ files not in the rules source
+# Managed: ~/.claude/rules/*.md fanned out from ~/.aitools/rules (additive; the
+#   copy of a rule the rules manifest retires is backed up and removed)
+# Preserved: ~/.claude/rules/ files not in ~/.aitools/rules
 
 param(
     [string]$SharedPath = "",
@@ -808,18 +797,6 @@ BLOCK
         '^# --- END preamble' '^# --- BEGIN rules deployment' --crlf
     extract_between "$SCRIPTS_DIR/setup-user-claude.ps1" \
         '^# --- BEGIN rules deployment' '^# --- BEGIN rules deploy logic' --crlf
-    if [ "$USER_RULE_COUNT" -gt 0 ]; then
-        cat <<'BLOCK'
-# --- Rules fallback (generated by build-deploy.sh): the build-time copy when this
-# machine has no dotprofile (a dotprofile without claude/rules/ deploys none, as
-# scripts/ does; review m3) ---
-$aitoolsEmbedRules = Join-Path $aitoolsEmbedDir "rules"
-if ($aitoolsDpRc -ne 0 -and -not $rulesSrc -and (Test-Path -LiteralPath $aitoolsEmbedRules)) {
-    $rulesSrc = $aitoolsEmbedRules
-    Log "Rules source: embedded build-time copy (no dotprofile on this machine)"
-}
-BLOCK
-    fi
     extract_between "$SCRIPTS_DIR/setup-user-claude.ps1" \
         '^# --- BEGIN rules deploy logic' '^# --- END rules deploy logic' --crlf
     printf '%s\n' "$EMBED_CLEANUP_PS1"
@@ -1330,6 +1307,10 @@ deploy_embedded_skill() {
 
 DEPLOY_SKILL_FUNC
 
+    # FD-9 (FO-6): the extracted body's harness check set SKILLS_FANNED_OUT
+    # (and wrote OK "skills" "n/a (fanned out ...)") when ~/.aitools/skills
+    # exists; the fan-out then owns both rows, so the embedded deploy is skipped.
+    echo 'if [ "$SKILLS_FANNED_OUT" != "true" ]; then'
     # Dynamically discover and embed all skills from shared/skills/
     _embedded_skills=""
     echo '_skill_tmp=$(mktemp -d)'
@@ -1375,6 +1356,7 @@ DEPLOY_SKILL_FUNC
     echo 'fi'
     echo ''
     echo 'rm -rf "$_skill_tmp"'
+    echo 'fi  # SKILLS_FANNED_OUT'
     echo ''
 
     # Emit exit footer from source
@@ -1421,6 +1403,9 @@ function Deploy-EmbeddedSkill {
 
 DEPLOY_SKILL_PS1_FUNC
 
+    # FD-9 (FO-6): skip the embedded deploy when the extracted body's harness
+    # check set $skillsFannedOut (~/.aitools/skills exists; same as the .sh)
+    echo 'if (-not $skillsFannedOut) {'
     # Dynamically discover and embed all skills from shared/skills/
     _embedded_skills=""
     for _skill_dir in "$SHARED_DIR/skills"/*/; do
@@ -1468,6 +1453,7 @@ DEPLOY_SKILL_PS1_FUNC
     echo '} else {'
     echo '    Write-Summary "ERROR" "cursor skills" "deploy failed"'
     echo '}'
+    echo '}  # skillsFannedOut'
     echo ''
 
     # Emit exit footer from source (CRLF for PS1)
@@ -1708,14 +1694,23 @@ GENERATED=$((GENERATED + 1))
 # here: for every source directory the dev script names (parsed from its
 # add_source calls -- not a second list), the `git ls-files -z` output and every
 # listed file (contents + executable bit), plus the bin CLIs (parsed from its
-# `for cli in` line). The generated script embeds them (base64), unpacks them to
-# a temp directory laid out like the repos, and answers the plan's two git calls
+# `for cli in` line). They go in deploy/deploy-harness.payload (base64, one
+# record per file with its size and sha256), a data file beside the scripts:
+# inline, each script was about 2.2 MB, over the Intune limits (Windows
+# PowerShell scripts < 200 KB, macOS shell scripts < 1 MB; HARNESS Q4). The
+# scripts hold the payload's sha256 and check it before unpacking to a temp
+# directory laid out like the repos; they answer the plan's two git calls
 # (rev-parse --is-inside-work-tree, ls-files -z) from the snapshot. Everything
-# else is the dev script's own code, extracted between its section headings:
-# preamble + flags + section 1 (config.json), then sections 3-7 (directories,
-# plan and conflicts, deploy, preserved, summary + exit). By design:
-#   - section 2 (dotprofile lookup) is replaced: dotprofile rules are the
-#     build-time dotprofile's, as with setup-user-claude's embedded rules;
+# else is the dev script's own code, extracted between its body markers
+# ("# --- BEGIN/END <name> (...) ---", HARNESS Q6): preamble, flags and
+# section 1 (config.json), then sections 3-7 (directories, plan and conflicts,
+# deploy, 5b rules manifest, preserved, summary + exit). By design:
+#   - the "config bootstrap check" span is replaced: without reposPath/repoPath
+#     in config.json (aitools-install has not run) the writer is skipped with
+#     OK "config.json" "n/a (no bootstrap)" -- the --skip-config path (Q3);
+#   - the "dotprofile lookup" span (section 2) is replaced: dotprofile rules are
+#     the build-time dotprofile's (an endpoint gets them only this way: the
+#     setup-user-claude and setup-user-cursor fan-outs read ~/.aitools/rules);
 #   - the adopt target is "" (the source is the embed, not a repo file), as for
 #     the embedded skills (contract default #9).
 HARNESS_SH="$SCRIPTS_DIR/deploy-harness.sh"
@@ -1727,11 +1722,13 @@ for _hf in "$HARNESS_SH" "$HARNESS_PS1"; do
     fi
 done
 
-if ! MDM_TMP=$(mktemp -d); then
+# Under BUILD_TMP, so its EXIT trap removes it (a second trap here replaced that
+# one and leaked BUILD_TMP).
+MDM_TMP="$BUILD_TMP/mdm"
+if ! mkdir -p "$MDM_TMP"; then
     blog_error "Could not create a temp directory for the harness snapshot"
     exit 1
 fi
-trap 'rm -rf "$MDM_TMP"' EXIT
 MDM_MANIFEST="$MDM_TMP/manifest.tsv"   # stage path <TAB> source file <TAB> exec (0|1)
 : > "$MDM_MANIFEST"
 
@@ -1890,13 +1887,19 @@ MDM_FILES=$(perl -ne '$n++ unless /\/\.aitools-mdm-ls-files\t/; END { print $n +
 MDM_RECORDS=$(perl -ne '$n++; END { print $n + 0 }' "$MDM_MANIFEST")
 blog "Harness snapshot: $MDM_FILES files from $MDM_DIRS source directories (+ bin)"
 
-# mdm_emit_payload MANIFEST sh|ps1 -- one unpack call per manifest line, the file
-# as base64, preceded by a comment with its stage path, size and sha256 (so a
-# deploy/ diff shows which harness file changed).
-mdm_emit_payload() {
+# mdm_write_payload MANIFEST OUT -- deploy/deploy-harness.payload (ASCII, LF):
+#   line 1: "# aitools harness payload v1 ..."; then per manifest line a record
+#   "<stage path><TAB><exec 0|1><TAB><size><TAB><sha256>", the file as base64
+#   lines, and "--- end" (never a base64 line). The record lines show in a
+#   deploy/ diff which harness file changed. Prints the payload's sha256 (of the
+#   file with every CR removed, as the readers compute it: a CRLF checkout of
+#   the dotprofile on Windows must still verify).
+MDM_PAYLOAD_HEADER="# aitools harness payload v1 (generated by scripts/build-deploy.sh -- do not edit)"
+mdm_write_payload() {
     if ! perl -MMIME::Base64 -MDigest::SHA=sha256_hex -e '
-        my ($manifest, $mode) = @ARGV;
+        my ($manifest, $out, $header) = @ARGV;
         open my $m, "<", $manifest or die "cannot read $manifest: $!\n";
+        my $text = "$header\n";
         while (my $line = <$m>) {
             chomp $line;
             my ($rel, $src, $exec) = split /\t/, $line, 3;
@@ -1904,23 +1907,26 @@ mdm_emit_payload() {
             my $data = do { local $/; <$fh> };
             close $fh;
             $data = "" unless defined $data;
-            my ($size, $sha) = (length($data), sha256_hex($data));
-            printf "# %s (%d bytes, sha256 %s)\n", $rel, $size, $sha;
-            my $b64 = encode_base64($data);
-            if ($mode eq "sh") {
-                (my $q = $rel) =~ s/\x27/\x27\\\x27\x27/g;
-                print "mdm_unpack \x27$q\x27 $exec $size $sha <<\x27__AITOOLS_MDM_B64__\x27 || MDM_UNPACK_FAILED=\$((MDM_UNPACK_FAILED + 1))\n";
-                print $b64, "__AITOOLS_MDM_B64__\n";
-            } else {
-                (my $q = $rel) =~ s/\x27/\x27\x27/g;
-                print "Expand-MdmPayload \x27$q\x27 $size \x27$sha\x27 \@\x27\n", $b64, "\x27\@\n";
-            }
+            $text .= sprintf "%s\t%s\t%d\t%s\n", $rel, $exec, length($data), sha256_hex($data);
+            $text .= encode_base64($data) . "--- end\n";
         }
-    ' "$1" "$2"; then
-        blog_error "Harness snapshot: could not write the embedded payload ($2)"
+        open my $o, ">:raw", $out or die "cannot write $out: $!\n";
+        print $o $text;
+        close $o or die "cannot write $out: $!\n";
+        print sha256_hex($text);
+    ' "$1" "$2" "$MDM_PAYLOAD_HEADER"; then
+        blog_error "Harness snapshot: could not write $2"
         exit 1
     fi
 }
+blog "Writing deploy/deploy-harness.payload (harness snapshot, read by deploy-harness.sh/.ps1)"
+if ! MDM_PAYLOAD_SHA=$(mdm_write_payload "$MDM_MANIFEST" "$DEPLOY_DIR/deploy-harness.payload"); then
+    exit 1
+fi
+if ! printf '%s' "$MDM_PAYLOAD_SHA" | perl -ne 'exit(/\A[0-9a-f]{64}\z/ ? 0 : 1)'; then
+    blog_error "Harness snapshot: no sha256 for deploy/deploy-harness.payload"
+    exit 1
+fi
 
 blog "Generating deploy/deploy-harness.sh (extracted + embedded harness snapshot)"
 {
@@ -1930,21 +1936,22 @@ blog "Generating deploy/deploy-harness.sh (extracted + embedded harness snapshot
 # deploy-harness.sh -- populate ~/.aitools, the deployed harness, from a
 # build-time snapshot (macOS/Linux; MDM path of scripts/deploy-harness.sh)
 #
-# Ships with its deploy/ directory: the config.json writer it calls
-# (setup-user-config.sh, aitools-profile.sh, aitools-json.pl) sits beside it.
-# Every harness source file is embedded below (base64, one block per file with
-# its size and sha256, both verified when unpacked). No repo, dotprofile
-# checkout or git is needed at run time. Safe to re-run: a file equal to its
-# source is verified and not written. Platform: macOS/Linux. On Windows use
-# deploy-harness.ps1.
+# Ships with its deploy/ directory: the harness snapshot it reads
+# (deploy-harness.payload) and the config.json writer it calls
+# (setup-user-config.sh, aitools-profile.sh, aitools-json.pl) sit beside it.
+# The payload holds every harness source file (base64, one record per file
+# with its size and sha256); this script holds the payload's sha256. All are
+# verified before anything is deployed. No repo, dotprofile checkout or git is
+# needed at run time. Safe to re-run: a file equal to its source is verified
+# and not written. Platform: macOS/Linux. On Windows use deploy-harness.ps1.
 #
 # Run it FIRST in an MDM sequence: setup-user-cursor (and the other rules
 # fan-out consumers) read ~/.aitools/rules, which this script fills.
 #
-# config.json, as on the dev path, needs the installer's bootstrap keys
-# (reposPath, repoPath) in ~/.aitools/config.json. Where aitools-install has
-# not run, the harness files still deploy, but the run reports ERROR
-# "config.json not generated" and exits 1.
+# config.json: the writer needs the installer's bootstrap keys (reposPath,
+# repoPath) in ~/.aitools/config.json. Where aitools-install has not run they
+# are absent: the writer is not run and the summary row is OK "config.json"
+# "n/a (no bootstrap)" (the --skip-config path). The harness files deploy.
 #
 # Same directories, plan, name conflicts (first source wins, ERROR row per
 # duplicate), outcomes, summary rows ("harness files") and exit codes as
@@ -1954,77 +1961,156 @@ blog "Generating deploy/deploy-harness.sh (extracted + embedded harness snapshot
 #     directory: its git ls-files list, the listed files, their git mode);
 #   - dotprofile rules are those of the dotprofile deploy/ was built from;
 #   - accept & adopt / merge & adopt are not offered (the source is the embed);
-#   - config.json is generated by setup-user-config.sh in this directory.
+#   - config.json is generated by setup-user-config.sh in this directory, or
+#     not at all without the bootstrap keys (above).
 #
 # Scope, from scripts/deploy-harness.sh (<aitools>, <dotprofile> = the snapshot):
 BLOCK
-    extract_span "$HARNESS_SH" '^# Managed \(' '^# Usage:'
+    extract_marked "$HARNESS_SH" scope
     cat <<'BLOCK'
-# Usage: deploy-harness.sh [--dry-run] [--force] [--help]
-#   --dry-run   report what would change; write nothing (also AITOOLS_DRY_RUN=1)
-#   --force     no review menu: source wins (also AITOOLS_FORCE=1)
+# Usage: deploy-harness.sh [--dry-run] [--force] [--skip-config] [--help]
+#   --dry-run       report what would change; write nothing (also AITOOLS_DRY_RUN=1)
+#   --force         no review menu: source wins (also AITOOLS_FORCE=1)
+#   --skip-config   do not run the config writer; summary row OK "config.json"
+#                   "n/a (written by installer)"
 # Exit: 0 done (warnings possible), 1 errors (incl. duplicates, config.json
-#   not generated, a damaged embedded file), 2 aborted by the user at a review menu.
+#   not generated, a missing or damaged payload, a truncated script), 2 aborted
+#   by the user at a review menu.
+
+# Truncation guard, the first command (review B1): bash runs a script one
+# top-level command at a time, so a copy cut anywhere after this line stops
+# here with exit 1, before the library or any deploy step runs. (Exit 2 from
+# a bash parse error would read as a user abort.) The library is not loaded
+# yet: the log line and the summary row are written by hand in their formats.
+if command -v perl >/dev/null 2>&1 && ! perl -ne '$f = 1 if $_ eq "# --- END OF GENERATED SCRIPT (deploy-harness.sh) ---\n"; END { exit($f ? 0 : 1) }' "${BASH_SOURCE[0]}"; then
+    printf '[%s] [deploy-harness] [error] %s is truncated or damaged (end marker missing) -- nothing deployed\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${BASH_SOURCE[0]}" >&2
+    if [ -n "${AITOOLS_SUMMARY_FILE:-}" ]; then printf 'ERROR|harness files|script truncated\n' >> "$AITOOLS_SUMMARY_FILE"; fi
+    exit 1
+fi
 
 BLOCK
-    extract_span "$HARNESS_SH" '^set -euo pipefail$' '^# 2\. Dotprofile'
+    extract_markers "$HARNESS_SH" "BEGIN body" "BEGIN config bootstrap check"
 } | inline_lib_bash > "$DEPLOY_DIR/deploy-harness.sh"
 {
     cat <<'BLOCK'
+# MDM: an endpoint where aitools-install has not run has no bootstrap keys
+# (reposPath, repoPath) in config.json, and the writer fails without them: it
+# is skipped, with the --skip-config row (HARNESS Q3). read_config_key returns
+# 1 when the file or the key is absent; that is the answer here.
+if [ -z "$SKIP_CONFIG" ]; then
+    if ! read_config_key "$HARNESS_DIR/config.json" reposPath > /dev/null || ! read_config_key "$HARNESS_DIR/config.json" repoPath > /dev/null; then
+        SKIP_CONFIG="no bootstrap"
+    fi
+fi
+BLOCK
+    extract_markers "$HARNESS_SH" "END config bootstrap check" "BEGIN dotprofile lookup"
+} >> "$DEPLOY_DIR/deploy-harness.sh"
+{
+    cat <<'BLOCK'
+# =========================================================================
 # 2. (MDM) Embedded sources -- replaces the dev path's dotprofile lookup
 # =========================================================================
 # Each source directory of scripts/deploy-harness.sh was snapshotted when this
 # deploy/ was built: its `git ls-files -z` output (.aitools-mdm-ls-files) and
-# every listed file, plus the bin CLIs. They are unpacked into a temp directory
-# laid out like the repos ($MDM_STAGE/aitools, $MDM_STAGE/dotprofile). The git
-# function below answers the plan's two git calls for those directories from
-# the snapshot and passes every other call to the real git, so sections 3-7 are
-# the dev script's code, unchanged except the adopt target ("").
+# every listed file, plus the bin CLIs, in deploy-harness.payload beside this
+# script. The payload's sha256 is checked first, then each record's size and
+# sha256 while it is unpacked into a temp directory laid out like the repos
+# ($MDM_STAGE/aitools, $MDM_STAGE/dotprofile). The git function below answers
+# the plan's two git calls for those directories from the snapshot and passes
+# every other call to the real git, so sections 3-7 are the dev script's code,
+# unchanged except the adopt target ("").
 if ! command -v perl >/dev/null 2>&1; then
     log_error "perl not found -- the embedded harness files cannot be unpacked"
     write_summary ERROR "$TOOL" "perl not found"
     exit 1
 fi
-# A truncated copy (upload, transport) would end inside the payload with no
-# error from bash: require the end marker written after the last line.
+# A truncated copy (upload, transport) would end with no error from bash:
+# require the end marker written after the last line.
 if ! perl -ne '$f = 1 if $_ eq "# --- END OF GENERATED SCRIPT (deploy-harness.sh) ---\n"; END { exit($f ? 0 : 1) }' "${BASH_SOURCE[0]}"; then
     log_error "MDM: $(display_path "${BASH_SOURCE[0]}") is truncated or damaged (end marker missing) -- nothing deployed"
     write_summary ERROR "$TOOL" "script truncated"
     exit 1
 fi
+MDM_PAYLOAD="$SCRIPT_DIR/deploy-harness.payload"
 MDM_STAGE="$WORK/src"
 MDM_UNPACK_FAILED=0
 MDM_UNPACKED=0
+BLOCK
+    printf 'MDM_PAYLOAD_SHA256=%s\n' "$MDM_PAYLOAD_SHA"
+    printf 'MDM_EMBEDDED_FILES=%s\n' "$MDM_FILES"
+    printf 'MDM_EMBEDDED_BLOCKS=%s\n' "$MDM_RECORDS"
+    cat <<'BLOCK'
+if [ ! -f "$MDM_PAYLOAD" ]; then
+    log_error "MDM: $(display_path "$MDM_PAYLOAD") not found -- it ships in deploy/ with this script; nothing deployed"
+    write_summary ERROR "$TOOL" "payload missing"
+    exit 1
+fi
 
-# mdm_unpack REL EXEC SIZE SHA256 -- decode base64 on stdin into $MDM_STAGE/REL,
-# after checking its size and sha256 (EXEC 1: executable)
-mdm_unpack() {
-    local dest="$MDM_STAGE/$1" err
-    if ! mkdir -p "${dest%/*}"; then
-        log_error "MDM: cannot create the directory for embedded $1"
-        return 1
-    fi
-    if ! err=$(perl -MMIME::Base64 -MDigest::SHA=sha256_hex -e '
-        my ($dest, $size, $sha) = @ARGV;
-        my $d = decode_base64(do { local $/; <STDIN> });
-        die "size " . length($d) . ", expected $size\n" unless length($d) == $size;
-        die "sha256 mismatch\n" unless sha256_hex($d) eq $sha;
-        open my $o, ">:raw", $dest or die "cannot write: $!\n";
-        print $o $d;
-        close $o or die "cannot write: $!\n";
-    ' -- "$dest" "$3" "$4" 2>&1); then
-        log_error "MDM: embedded $1 is damaged or cannot be written ($err) -- not unpacked"
-        return 1
-    fi
-    if [ "$2" = "1" ]; then
-        if ! chmod +x "$dest"; then
-            log_error "MDM: cannot set the executable bit on embedded $1"
-            return 1
-        fi
-    fi
-    MDM_UNPACKED=$((MDM_UNPACKED + 1))
-    return 0
+# mdm_unpack_payload PAYLOAD STAGE SHA256 RESULTS -- check the payload's sha256
+# (CRs removed), then decode each record into STAGE/<path> after checking its
+# size and sha256. RESULTS gets "ok<TAB>path" or "bad<TAB>path<TAB>reason" per
+# record. Exit 3: payload checksum mismatch (nothing unpacked); other non-zero:
+# the payload cannot be read or is malformed (message on stderr).
+mdm_unpack_payload() {
+    perl -MMIME::Base64 -MDigest::SHA=sha256_hex -MFile::Path=make_path -e '
+        my ($payload, $stage, $want, $results) = @ARGV;
+        open my $p, "<:raw", $payload or die "cannot read $payload: $!\n";
+        my $text = do { local $/; <$p> };
+        close $p;
+        $text = "" unless defined $text;
+        $text =~ s/\r//g;
+        if (sha256_hex($text) ne $want) { print STDERR "sha256 mismatch\n"; exit 3; }
+        open my $r, ">", $results or die "cannot write $results: $!\n";
+        my @l = split /\n/, $text, -1;
+        shift @l;   # the header line
+        while (@l) {
+            my $h = shift @l;
+            next if $h eq "";
+            my ($rel, $exec, $size, $sha) = split /\t/, $h, 4;
+            die "malformed record line: $h\n"
+                unless defined $sha && $exec =~ /\A[01]\z/ && $size =~ /\A\d+\z/ && $sha =~ /\A[0-9a-f]{64}\z/;
+            my $b64 = "";
+            while (@l && $l[0] ne "--- end") { $b64 .= shift(@l) . "\n"; }
+            die "record $rel has no end line\n" unless @l;
+            shift @l;
+            if ($rel =~ m{(?:\A|/)\.\.(?:/|\z)} || $rel =~ m{\A/}) { print $r "bad\t$rel\tunsafe path\n"; next; }
+            my $d = decode_base64($b64);
+            if (length($d) != $size) { print $r "bad\t$rel\tsize " . length($d) . ", expected $size\n"; next; }
+            if (sha256_hex($d) ne $sha) { print $r "bad\t$rel\tsha256 mismatch\n"; next; }
+            my $dest = "$stage/$rel";
+            (my $dir = $dest) =~ s{/[^/]*\z}{};
+            # A make_path failure is reported by the open below ("cannot write").
+            eval { make_path($dir); 1 } or print STDERR "cannot create $dir\n";
+            my $o;
+            unless (open $o, ">:raw", $dest) { print $r "bad\t$rel\tcannot write: $!\n"; next; }
+            print $o $d;
+            unless (close $o) { print $r "bad\t$rel\tcannot write: $!\n"; next; }
+            if ($exec eq "1" && !chmod(0755, $dest)) { print $r "bad\t$rel\tcannot set the executable bit: $!\n"; next; }
+            print $r "ok\t$rel\n";
+        }
+        close $r or die "cannot write $results: $!\n";
+    ' -- "$@"
 }
+
+MDM_RC=0
+MDM_ERR=$(mdm_unpack_payload "$MDM_PAYLOAD" "$MDM_STAGE" "$MDM_PAYLOAD_SHA256" "$WORK/unpack.tsv" 2>&1) || MDM_RC=$?
+if [ "$MDM_RC" -eq 3 ]; then
+    log_error "MDM: $(display_path "$MDM_PAYLOAD") is damaged or from another build (sha256 mismatch) -- nothing deployed"
+    write_summary ERROR "$TOOL" "payload damaged"
+    exit 1
+elif [ "$MDM_RC" -ne 0 ]; then
+    log_error "MDM: cannot unpack $(display_path "$MDM_PAYLOAD"): $MDM_ERR -- nothing deployed"
+    write_summary ERROR "$TOOL" "payload damaged"
+    exit 1
+fi
+while IFS=$'\t' read -r mdm_st mdm_rel mdm_why; do
+    if [ "$mdm_st" = "ok" ]; then
+        MDM_UNPACKED=$((MDM_UNPACKED + 1))
+    else
+        MDM_UNPACK_FAILED=$((MDM_UNPACK_FAILED + 1))
+        log_error "MDM: embedded $mdm_rel is damaged or cannot be written ($mdm_why) -- not unpacked"
+    fi
+done < "$WORK/unpack.tsv"
 
 # git -C DIR rev-parse --is-inside-work-tree / git -C DIR ls-files -z for a
 # snapshot directory: answered from its .aitools-mdm-ls-files. Anything else:
@@ -2042,16 +2128,8 @@ git() {
     command git "$@"
 }
 
-# --- Embedded harness snapshot (generated from the repos at build time) ---
-BLOCK
-    printf 'MDM_EMBEDDED_FILES=%s\n' "$MDM_FILES"
-    printf 'MDM_EMBEDDED_BLOCKS=%s\n' "$MDM_RECORDS"
-    mdm_emit_payload "$MDM_MANIFEST" sh
-    cat <<'BLOCK'
-# --- End of embedded harness snapshot ---
-
 if [ "$MDM_UNPACKED" -ne "$MDM_EMBEDDED_BLOCKS" ]; then
-    log_error "MDM: $MDM_UNPACKED of $MDM_EMBEDDED_BLOCKS embedded blocks unpacked ($MDM_UNPACK_FAILED failed) -- the script is damaged"
+    log_error "MDM: $MDM_UNPACKED of $MDM_EMBEDDED_BLOCKS payload records unpacked ($MDM_UNPACK_FAILED failed) -- the payload is damaged"
     write_summary ERROR "$TOOL" "$(short "$((MDM_EMBEDDED_BLOCKS - MDM_UNPACKED)) embedded file(s) damaged")"
 fi
 log "MDM: sources are the build-time snapshot ($MDM_EMBEDDED_FILES files), unpacked in $(display_path "$MDM_STAGE")"
@@ -2063,9 +2141,8 @@ if ! mkdir -p "$DOTPROFILE"; then
     write_summary ERROR "$TOOL" "no work directory"
 fi
 
-# =========================================================================
 BLOCK
-    extract_span "$HARNESS_SH" '^# 3\. The six directories' EOF \
+    extract_markers "$HARNESS_SH" "END dotprofile lookup" "END body" \
         | replace_once 'deploy_managed_file "$content" "$dest" "$TOOL" "$item" "$src"' \
                        'deploy_managed_file "$content" "$dest" "$TOOL" "$item" ""  # MDM: no adopt target (the source is the embed)'
     echo '# --- END OF GENERATED SCRIPT (deploy-harness.sh) ---'
@@ -2075,26 +2152,28 @@ GENERATED=$((GENERATED + 1))
 
 blog "Generating deploy/deploy-harness.ps1 (extracted + embedded harness snapshot)"
 {
-    echo "$HEADER_COMMENT_PS1"
+    # ASCII header (Intune: "less than 200 KB (ASCII)"); HEADER_COMMENT_PS1 has an em-dash.
+    echo "# Generated by scripts/build-deploy.sh -- do not edit directly."
     cat <<'BLOCK'
 # deploy-harness.ps1 -- populate %USERPROFILE%\.aitools, the deployed harness, from
 # a build-time snapshot (Windows; MDM path of scripts/deploy-harness.ps1)
 #
-# Ships with its deploy\ directory: the config.json writer it calls
-# (setup-user-config.ps1, aitools-profile.ps1, aitools-json.ps1) sits beside it.
-# Every harness source file is embedded below (base64, one block per file with
-# its size and sha256, both verified when unpacked). No repo, dotprofile
-# checkout or git is needed at run time. Safe to re-run: a file equal to its
-# source is verified and not written. Platform: Windows. On macOS/Linux use
-# deploy-harness.sh.
+# Ships with its deploy\ directory: the harness snapshot it reads
+# (deploy-harness.payload) and the config.json writer it calls
+# (setup-user-config.ps1, aitools-profile.ps1, aitools-json.ps1) sit beside it.
+# The payload holds every harness source file (base64, one record per file
+# with its size and sha256); this script holds the payload's sha256. All are
+# verified before anything is deployed. No repo, dotprofile checkout or git is
+# needed at run time. Safe to re-run: a file equal to its source is verified
+# and not written. Platform: Windows. On macOS/Linux use deploy-harness.sh.
 #
 # Run it FIRST in an MDM sequence: setup-user-cursor (and the other rules
 # fan-out consumers) read .aitools\rules, which this script fills.
 #
-# config.json, as on the dev path, needs the installer's bootstrap keys
-# (reposPath, repoPath) in .aitools\config.json. Where aitools-install has
-# not run, the harness files still deploy, but the run reports ERROR
-# "config.json not generated" and exits 1.
+# config.json: the writer needs the installer's bootstrap keys (reposPath,
+# repoPath) in .aitools\config.json. Where aitools-install has not run they
+# are absent: the writer is not run and the summary row is OK "config.json"
+# "n/a (no bootstrap)" (the -SkipConfig path). The harness files deploy.
 #
 # Same directories, plan, name conflicts (first source wins, ERROR row per
 # duplicate), outcomes, summary rows ("harness files") and exit codes as
@@ -2104,37 +2183,73 @@ blog "Generating deploy/deploy-harness.ps1 (extracted + embedded harness snapsho
 #     directory: its git ls-files list and the listed files);
 #   - dotprofile rules are those of the dotprofile deploy/ was built from;
 #   - accept & adopt / merge & adopt are not offered (the source is the embed);
-#   - config.json is generated by setup-user-config.ps1 in this directory.
+#   - config.json is generated by setup-user-config.ps1 in this directory, or
+#     not at all without the bootstrap keys (above).
 #
 # Scope, from scripts/deploy-harness.ps1 (<aitools>, <dotprofile> = the snapshot):
 BLOCK
-    extract_span "$HARNESS_PS1" '^# Managed \(' '^# Usage:'
+    extract_marked "$HARNESS_PS1" scope
     cat <<'BLOCK'
-# Usage: deploy-harness.ps1 [-DryRun] [-Force] [-Help]
-#   -DryRun   report what would change; write nothing (also AITOOLS_DRY_RUN=1)
-#   -Force    no review menu: source wins (also AITOOLS_FORCE=1)
+# Usage: deploy-harness.ps1 [-DryRun] [-Force] [-SkipConfig] [-Help]
+#   -DryRun       report what would change; write nothing (also AITOOLS_DRY_RUN=1)
+#   -Force        no review menu: source wins (also AITOOLS_FORCE=1)
+#   -SkipConfig   do not run the config writer; summary row OK "config.json"
+#                 "n/a (written by installer)"
 # Exit: 0 done (warnings possible), 1 errors (incl. duplicates, config.json
-#   not generated, a damaged embedded file), 2 aborted by the user at a review menu.
+#   not generated, a missing or damaged payload), 2 aborted by the user at a
+#   review menu.
 
 BLOCK
-    extract_span "$HARNESS_PS1" '^param\($' '^# 2\. Dotprofile'
+    extract_markers "$HARNESS_PS1" "BEGIN body" "BEGIN config bootstrap check"
 } | inline_lib_ps1 > "$DEPLOY_DIR/deploy-harness.ps1"
 {
     cat <<'BLOCK'
+# MDM: an endpoint where aitools-install has not run has no bootstrap keys
+# (reposPath, repoPath) in config.json, and the writer fails without them: it
+# is skipped, with the -SkipConfig row (HARNESS Q3). ReadConfigKey returns
+# nothing when the file or the key is absent; that is the answer here.
+if (-not $configSkip) {
+    $mdmCfg = Join-Path $harnessDir "config.json"
+    if (-not (ReadConfigKey -File $mdmCfg -Key "reposPath") -or -not (ReadConfigKey -File $mdmCfg -Key "repoPath")) {
+        $configSkip = "no bootstrap"
+    }
+}
+BLOCK
+    extract_markers "$HARNESS_PS1" "END config bootstrap check" "BEGIN dotprofile lookup"
+    cat <<'BLOCK'
+# =========================================================================
 # 2. (MDM) Embedded sources -- replaces the dev path's dotprofile lookup
 # =========================================================================
 # Each source directory of scripts/deploy-harness.ps1 was snapshotted when this
 # deploy/ was built: its `git ls-files -z` output (.aitools-mdm-ls-files) and
-# every listed file, plus the bin CLIs. They are unpacked into a temp directory
-# laid out like the repos ($mdmStage\aitools, $mdmStage\dotprofile). The git
-# function below answers the plan's two git calls for those directories from
-# the snapshot and passes every other call to the real git, so sections 3-7 are
-# the dev script's code, unchanged except the adopt target (""). The temp
-# directory is removed in the finally block at the end (it runs on exit too).
+# every listed file, plus the bin CLIs, in deploy-harness.payload beside this
+# script. The payload's sha256 is checked first, then each record's size and
+# sha256 while it is unpacked into a temp directory laid out like the repos
+# ($mdmStage\aitools, $mdmStage\dotprofile). The git function below answers
+# the plan's two git calls for those directories from the snapshot and passes
+# every other call to the real git, so sections 3-7 are the dev script's code,
+# unchanged except the adopt target (""). The temp directory is removed in the
+# finally block at the end (it runs on exit too).
 $mdmStage = Join-Path ([IO.Path]::GetTempPath()) ("aitools-harness-" + [guid]::NewGuid().ToString("N"))
 try {
 $mdmUnpackFailed = 0
 $mdmUnpacked = 0
+$mdmPayload = Join-Path $scriptDir "deploy-harness.payload"
+BLOCK
+    printf '$mdmPayloadSha256 = "%s"\n' "$MDM_PAYLOAD_SHA"
+    printf '$mdmEmbeddedFiles = %s\n' "$MDM_FILES"
+    printf '$mdmEmbeddedBlocks = %s\n' "$MDM_RECORDS"
+    cat <<'BLOCK'
+
+# Get-MdmSha256 BYTES -- lowercase hex sha256
+function Get-MdmSha256([byte[]]$Bytes) {
+    $hasher = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        return ([BitConverter]::ToString($hasher.ComputeHash($Bytes)) -replace '-', '').ToLowerInvariant()
+    } finally {
+        $hasher.Dispose()
+    }
+}
 
 # Expand-MdmPayload REL SIZE SHA256 BASE64 -- decode into $mdmStage\REL after
 # checking its size and sha256
@@ -2142,15 +2257,12 @@ function Expand-MdmPayload {
     param([string]$Rel, [long]$Size, [string]$Sha256, [string]$B64)
     $dest = Join-Path $mdmStage ($Rel -replace '/', [IO.Path]::DirectorySeparatorChar)
     try {
+        if ($Rel -match '(^|[/\\])\.\.([/\\]|$)' -or $Rel -match '^([/\\]|[A-Za-z]:)') { throw "unsafe path" }
+        $stageFull = [IO.Path]::GetFullPath($mdmStage) + [IO.Path]::DirectorySeparatorChar
+        if (-not [IO.Path]::GetFullPath($dest).StartsWith($stageFull, [StringComparison]::OrdinalIgnoreCase)) { throw "unsafe path" }
         $bytes = [Convert]::FromBase64String($B64)
         if ($bytes.Length -ne $Size) { throw "size $($bytes.Length), expected $Size" }
-        $hasher = [System.Security.Cryptography.SHA256]::Create()
-        try {
-            $hash = ([BitConverter]::ToString($hasher.ComputeHash($bytes)) -replace '-', '').ToLowerInvariant()
-        } finally {
-            $hasher.Dispose()
-        }
-        if ($hash -ne $Sha256) { throw "sha256 mismatch" }
+        if ((Get-MdmSha256 $bytes) -ne $Sha256) { throw "sha256 mismatch" }
         $dir = Split-Path -Parent $dest
         if (-not (Test-Path -LiteralPath $dir -PathType Container)) {
             New-Item -ItemType Directory -Path $dir -Force -ErrorAction Stop | Out-Null
@@ -2192,16 +2304,50 @@ function git {
     & $realGit @args
 }
 
-# --- Embedded harness snapshot (generated from the repos at build time) ---
-BLOCK
-    printf '$mdmEmbeddedFiles = %s\n' "$MDM_FILES"
-    printf '$mdmEmbeddedBlocks = %s\n' "$MDM_RECORDS"
-    mdm_emit_payload "$MDM_MANIFEST" ps1
-    cat <<'BLOCK'
-# --- End of embedded harness snapshot ---
+# The payload: whole-file sha256 (CRs removed, as build-deploy computed it),
+# then one Expand-MdmPayload per record. A missing or damaged payload deploys
+# nothing (exit 1; the finally block below still removes the temp directory).
+if (-not (Test-Path -LiteralPath $mdmPayload -PathType Leaf)) {
+    LogError "MDM: $mdmPayload not found -- it ships in deploy\ with this script; nothing deployed"
+    Write-Summary "ERROR" $tool "payload missing"
+    exit 1
+}
+# Raw bytes, CRs (byte 13) removed: the same bytes the .sh hashes (no BOM
+# stripping). Latin-1 maps every byte to one char and back, losslessly.
+$mdmLatin1 = [System.Text.Encoding]::GetEncoding(28591)
+try {
+    $mdmText = $mdmLatin1.GetString([IO.File]::ReadAllBytes($mdmPayload)) -replace "`r", ""
+} catch {
+    LogError "MDM: cannot read ${mdmPayload}: $_ -- nothing deployed"
+    Write-Summary "ERROR" $tool "payload damaged"
+    exit 1
+}
+if ((Get-MdmSha256 ($mdmLatin1.GetBytes($mdmText))) -ne $mdmPayloadSha256) {
+    LogError "MDM: $mdmPayload is damaged or from another build (sha256 mismatch) -- nothing deployed"
+    Write-Summary "ERROR" $tool "payload damaged"
+    exit 1
+}
+# Parse as UTF-8 (record paths may be non-ASCII; review N6), after the check on bytes.
+$mdmLines = [System.Text.Encoding]::UTF8.GetString($mdmLatin1.GetBytes($mdmText)) -split "`n"
+$mdmI = 1   # line 0 is the header
+while ($mdmI -lt $mdmLines.Count) {
+    $mdmHead = $mdmLines[$mdmI]; $mdmI++
+    if ($mdmHead -eq "") { continue }
+    $mdmF = $mdmHead -split "`t", 4
+    $mdmB64 = [System.Text.StringBuilder]::new()
+    while ($mdmI -lt $mdmLines.Count -and $mdmLines[$mdmI] -ne "--- end") { [void]$mdmB64.Append($mdmLines[$mdmI]); $mdmI++ }
+    if ($mdmF.Count -ne 4 -or $mdmI -ge $mdmLines.Count -or $mdmF[1] -notmatch '^[01]$' -or
+            $mdmF[2] -notmatch '^\d+$' -or $mdmF[3] -notmatch '^[0-9a-f]{64}$') {
+        LogError "MDM: $mdmPayload has a malformed record ($mdmHead) -- nothing deployed"
+        Write-Summary "ERROR" $tool "payload damaged"
+        exit 1
+    }
+    $mdmI++   # the "--- end" line
+    Expand-MdmPayload $mdmF[0] ([long]$mdmF[2]) $mdmF[3] $mdmB64.ToString()
+}
 
 if ($mdmUnpacked -ne $mdmEmbeddedBlocks) {
-    LogError "MDM: $mdmUnpacked of $mdmEmbeddedBlocks embedded blocks unpacked ($mdmUnpackFailed failed) -- the script is damaged"
+    LogError "MDM: $mdmUnpacked of $mdmEmbeddedBlocks payload records unpacked ($mdmUnpackFailed failed) -- the payload is damaged"
     Write-Summary "ERROR" $tool (Get-ShortDetail "$($mdmEmbeddedBlocks - $mdmUnpacked) embedded file(s) damaged")
 }
 Log "MDM: sources are the build-time snapshot ($mdmEmbeddedFiles files), unpacked in $mdmStage"
@@ -2215,9 +2361,8 @@ try {
     Write-Summary "ERROR" $tool "no work directory"
 }
 
-# =========================================================================
 BLOCK
-    extract_span "$HARNESS_PS1" '^# 3\. The six directories' EOF \
+    extract_markers "$HARNESS_PS1" "END dotprofile lookup" "END body" \
         | replace_once '-ItemName $p.Item -AdoptPath $p.Src' \
                        '-ItemName $p.Item -AdoptPath ""  # MDM: no adopt target (the source is the embed)'
     cat <<'BLOCK'
@@ -2335,14 +2480,74 @@ esac
 # Post-build: Fix file permissions and line endings
 # ============================================================
 # 1. Ensure all .sh files are executable on disk (Write tool creates 100644)
-chmod +x "$DEPLOY_DIR"/*.sh 2>/dev/null || true
-blog_ok "Set +x on all .sh files in deploy/"
+#    2>/dev/null: chmod's own message is replaced by the blog_warn below, which
+#    the result check raises when any .sh could not be made executable.
+if chmod +x "$DEPLOY_DIR"/*.sh 2>/dev/null; then
+    blog_ok "Set +x on all .sh files in deploy/"
+else
+    blog_warn "Could not set +x on every .sh file in deploy/ -- a generated script may not be executable"
+fi
 
 # 2. Convert deploy/*.ps1 to CRLF (.gitattributes requires eol=crlf)
 #    build-deploy.sh writes LF; without this, git sees them as modified.
 #    PERLIO=:perlio (set at top) prevents Strawberry Perl text-mode double-CR.
 perl -pi -e 's/(?<!\r)\n/\r\n/' "$DEPLOY_DIR"/*.ps1
 blog_ok "Converted deploy/*.ps1 to CRLF"
+
+# 3. Generated script size limits (HARNESS Q4; final sizes, after CRLF). Intune:
+#    Windows PowerShell scripts "must be less than 200 KB (ASCII)", macOS shell
+#    scripts "must be less than 1 MB" (learn.microsoft.com, read 2026-10-22;
+#    re-read 2026-10-26, quotes in .aitools/channel/handoffs/
+#    2026-10-21_10cf255a-c-missions/S3-MdmPkg/S3-MdmPkg-Intune-notes.md).
+#    The limits below read KB/MB as 10^3/10^6 bytes (200000 / 1000000): the
+#    docs do not say decimal or binary; the decimal reading is the stricter one
+#    and is our choice, not Microsoft's wording.
+#    The payload is a data file and does not count. Every generated .ps1/.sh is
+#    measured; over the limit is a WARN, repeated at the end of the build, and
+#    does not fail it (RECONCILE FX-12, decision D3: the MDM per-script delivery
+#    is not decided; deduplicating the inlined lib is FX-35, deferred).
+for _sz_name in deploy-harness.ps1 deploy-harness.sh; do
+    if [ ! -f "$DEPLOY_DIR/$_sz_name" ]; then
+        blog_error "deploy/$_sz_name was not generated"
+        exit 1
+    fi
+done
+SIZE_WARNINGS=""
+SIZE_OVER=0
+for _sz_f in "$DEPLOY_DIR"/*.ps1 "$DEPLOY_DIR"/*.sh; do
+    [ -f "$_sz_f" ] || continue
+    _sz_name="${_sz_f##*/}"
+    case "$_sz_name" in
+        *.ps1) _sz_max=200000 ;;
+        *)     _sz_max=1000000 ;;
+    esac
+    if ! _sz=$(wc -c < "$_sz_f"); then
+        blog_error "Cannot measure deploy/$_sz_name"
+        exit 1
+    fi
+    _sz=$((_sz + 0))
+    if [ "$_sz" -ge "$_sz_max" ]; then
+        case "$_sz_name" in
+            deploy-harness.*) _sz_hint="move content to deploy-harness.payload" ;;
+            *)                _sz_hint="see FX-35 (inlined lib)" ;;
+        esac
+        _sz_msg="deploy/$_sz_name is $_sz bytes, over the Intune script limit ($_sz_max) -- $_sz_hint"
+        blog_warn "$_sz_msg"
+        SIZE_OVER=$((SIZE_OVER + 1))
+        SIZE_WARNINGS="$SIZE_WARNINGS$_sz_msg
+"
+    else
+        case "$_sz_name" in
+            deploy-harness.*)
+                if [ "$_sz" -ge $((_sz_max * 95 / 100)) ]; then
+                    blog_warn "deploy/$_sz_name is $_sz bytes, within 5% of the Intune script limit ($_sz_max)"
+                else
+                    blog_ok "deploy/$_sz_name: $_sz bytes (Intune limit $_sz_max)"
+                fi
+                ;;
+        esac
+    fi
+done
 
 # Swap the staged build in
 if ! rm -rf "$DEPLOY_DIR_FINAL"; then
@@ -2357,4 +2562,13 @@ DEPLOY_DIR="$DEPLOY_DIR_FINAL"
 
 blog_ok "Build complete: $GENERATED scripts generated in deploy/"
 ls -la "$DEPLOY_DIR/"
-blog "Scripts are self-contained and ready for MDM deployment"
+if [ "$SIZE_OVER" -eq 0 ]; then
+    blog "Scripts are self-contained and ready for MDM deployment"
+else
+    blog_warn "$SIZE_OVER generated script(s) over the Intune script limit (WARN only, the build does not fail):"
+    printf '%s' "$SIZE_WARNINGS" | while IFS= read -r _sz_msg; do
+        if [ -n "$_sz_msg" ]; then
+            blog_warn "  $_sz_msg"
+        fi
+    done
+fi

@@ -3,7 +3,8 @@
 #
 # Installs/updates gh CLI, configures repos directory, auto-detects Google
 # Drive mounts, writes ~/.aitools/config.json, installs the
-# aitools command to ~/.local/bin/, adds shell integration, and deploys
+# aitools command to ~/.local/bin/, adds shell integration, deploys the
+# harness to ~/.aitools (deploy-harness.ps1, Step 8b), and deploys
 # all configuration scripts.
 
 param(
@@ -50,6 +51,9 @@ if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
 # JSONL logging (extends standard pattern with structured JSON)
 $logJsonl = Join-Path $logDir "deploy.jsonl"
 $runId = if ($env:AITOOLS_RUN_ID) { $env:AITOOLS_RUN_ID } else { -join ((1..6) | ForEach-Object { '{0:x2}' -f (Get-Random -Max 256) }) }
+# One run id for the whole install (parity with aitools-install.sh, which the lib's
+# relay needs there); child scripts read AITOOLS_RUN_ID
+$env:AITOOLS_RUN_ID = $runId
 $hostName = $env:COMPUTERNAME
 $osName = "Windows"
 
@@ -174,6 +178,35 @@ function Invoke-ValidatedScript {
         LogError "$name failed (exit $scriptRc)"
         Write-Summary "ERROR" ($name -replace '\.ps1$', '') "script failed (exit $scriptRc)"
     }
+}
+
+# Invoke-HarnessStep SCRIPT -- Step 8b: run deploy-harness.ps1 (SCRIPT) in-process and
+# relayed (aitools-lib Invoke-ChildRelayed: its Write-Host lines go to the console and
+# deploy.jsonl; the review menu reads and writes the console directly). A parse error
+# throws, which the lib reports as a failure (exit 1), never as an abort. Returns 2
+# when deploy-harness exited 2 (the user chose [x]abort, D-TS13; the caller stops the
+# install), else 0. Exit 1 (errors): the lib logged the error; this adds the ERROR
+# row and the install continues. Parity: run_harness_step in aitools-install.sh.
+function Invoke-HarnessStep([string]$Harness) {
+    if (-not (Test-Path -LiteralPath $Harness)) {
+        LogWarn "deploy-harness.ps1 not found -- skipping (MDM deploy)"
+        Write-Summary "WARN" "harness files" "deploy-harness.ps1 not found"
+        return 0
+    }
+    $harnessRc = Invoke-ChildRelayed "Step 8b: deploy-harness.ps1" $Harness @{} "harness files"
+    if ($harnessRc -eq 0) { return 0 }
+    if ($script:AitLibChildRc -eq 2) {
+        Log "Step 8b: aborted by user at a review menu -- install stopped (exit 2)"
+        Write-Summary "WARN" "harness files" "aborted by user"
+        return 2
+    }
+    # Exit 0 with error lines: the lib logged them and returned 1
+    if ($script:AitLibChildRc -eq 0) {
+        Write-Summary "ERROR" "harness files" "errors logged (exit 0)"
+    } else {
+        Write-Summary "ERROR" "harness files" "script failed (exit $($script:AitLibChildRc))"
+    }
+    return 0
 }
 
 # --- Post-write JSON validation ---
@@ -433,31 +466,7 @@ if (Test-Path $hhPs1Src) {
     LogWarn "hh.ps1 not found -- skipping"
 }
 
-# Harness Python CLIs -> ~/.aitools/bin (deployed copy, called by hooks via
-# absolute path so every project's hooks resolve them -- not run from the repo).
-# These are sole-owned generated artifacts (the user never edits the deployed
-# copy), so per config-file-safety.md we back up + overwrite, with NO
-# interactive review. Deploy-ManagedFile's prompt is for user-customizable
-# files only.
-$aitoolsBin = Join-Path $env:USERPROFILE ".aitools\bin"
-if (-not (Test-Path $aitoolsBin)) { New-Item -ItemType Directory -Path $aitoolsBin -Force | Out-Null }
-$hbinDeployed = 0
-foreach ($hcli in @("harness-db.py", "read-session.py", "read-session-full.py")) {
-    $hsrc = Join-Path $PSScriptRoot $hcli
-    $hdst = Join-Path $aitoolsBin $hcli
-    if (-not (Test-Path $hsrc)) {
-        LogWarn "$hcli not found (MDM deploy -- skipping)"
-        continue
-    }
-    if ((Test-Path $hdst) -and -not (Compare-Object (Get-Content $hsrc) (Get-Content $hdst))) {
-        continue  # identical -- nothing to deploy
-    }
-    if (Test-Path $hdst) { Backup-File $hdst }
-    Copy-Item $hsrc $hdst -Force
-    LogOk "Deployed $hcli -> $hdst"
-    $hbinDeployed++
-}
-Write-Summary "OK" "harness bin" "$hbinDeployed deployed to ~/.aitools/bin"
+# The harness Python CLIs (.aitools\bin) are deployed by deploy-harness (Step 8b).
 
 # ============================================================
 # 7. Shell integration
@@ -561,6 +570,20 @@ if (Get-Command node -ErrorAction SilentlyContinue) {
         LogError "Node.js install failed (restart terminal and re-run)"
         Write-Summary "ERROR" "node.js" "install failed (restart terminal)"
     }
+}
+
+# ============================================================
+# 8b. Deployed harness (%USERPROFILE%\.aitools) -- deploy-harness.ps1
+# ============================================================
+# After Node (Step 8). deploy-harness fills .aitools\{reference,registries,hooks,
+# rules,skills,bin} (bin was this installer's own step before) and re-derives
+# config.json through setup-user-config.ps1 (Step 5 wrote the bootstrap keys it needs).
+Log "Step 8b: Deployed harness"
+
+$harnessStepRc = Invoke-HarnessStep (Join-Path $PSScriptRoot "deploy-harness.ps1")
+if ($harnessStepRc -eq 2) {
+    if (-not $env:AITOOLS_SUPPRESS_SUMMARY_DISPLAY) { Show-Summary }
+    exit 2
 }
 
 # ============================================================

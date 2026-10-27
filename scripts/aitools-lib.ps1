@@ -288,6 +288,8 @@ function Resolve-MachineProfile {
     if (-not (Invoke-AitLibProfile @("resolve", "--environment", $script:AitoolsEnvironment))) {
         LogError "machine profile: resolver aitools-profile.ps1 not found next to aitools-lib.ps1"
         Write-Summary "ERROR" "machine profile" "resolver missing"
+        # Same text as Resolve-UserRepoPath's: one ACTION per run for a missing resolver
+        Write-AitLibActionOnce "see deploy.log -- the dotprofile could not be resolved"
         return 3
     }
     $script:AitLibMachineAlias = Get-AitLibProfileTag "alias"
@@ -432,7 +434,16 @@ function Set-ToolException([string]$Slug, [string]$Method, [string]$Path, [strin
 # Every counted warning also increments $script:warnings (it promotes the
 # parent's OK rows, as the child's own rows are). Errors are not added to
 # $script:errors line by line: Invoke-ChildRelayed logs one LogError for a
-# failed child. Private caches: $script:AitLibRunId, AitLibJsonlHost, AitLibJsonlOs.
+# failed child.
+# Summary rows: the child writes its own. With TOOL, a failed child (non-zero
+# exit, a throw or parse error, error lines with exit 0, or not run at all)
+# that wrote no ERROR row of its own gets one: "ERROR|TOOL|script failed
+# (exit N)", "aborted (exit 2)" (D-TS13), "script failed (exception)", "logged
+# errors (exit 0)", or "not run (no command)". A child that wrote an ERROR row
+# (any tool) gets no second one -- also when it crashed after writing it: the
+# panel then shows the child's row, and the crash is the relay's LogError in
+# deploy.log. Parity: run_child_relayed --summary-tool.
+# Private caches: $script:AitLibRunId, AitLibJsonlHost, AitLibJsonlOs.
 # ---------------------------------------------------------------------------
 
 # Initialize-AitLibJsonl -- the host, os and run id fields, computed once
@@ -512,22 +523,56 @@ function Send-ChildLog([object[]]$Lines) {
     }
 }
 
+# Get-AitLibSummaryErrorCount -- the number of ERROR rows in the run summary
+# ($env:AITOOLS_SUMMARY_FILE; 0 without one). An unreadable summary counts 0 and
+# is a detail line. Parity: _aitlib_summary_errors.
+function Get-AitLibSummaryErrorCount {
+    if (-not $env:AITOOLS_SUMMARY_FILE) { return 0 }
+    $sf = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($env:AITOOLS_SUMMARY_FILE)
+    if (-not (Test-Path -LiteralPath $sf -PathType Leaf)) { return 0 }
+    try {
+        return @([IO.File]::ReadAllLines($sf, [System.Text.UTF8Encoding]::new($false)) | Where-Object { $_.StartsWith("ERROR|", [StringComparison]::Ordinal) }).Count
+    } catch {
+        LogDetail "run summary unreadable ($($_.Exception.Message)) -- its ERROR rows are not counted"
+        return 0
+    }
+}
+
+# Write-AitLibChildRow TOOL BEFORE DETAIL -- for a failed child: write the row
+# "ERROR|TOOL|DETAIL" unless TOOL is "" or the child wrote an ERROR row of its own
+# (the run summary now holds more than BEFORE ERROR rows). Parity: _aitlib_child_row.
+function Write-AitLibChildRow([string]$Tool, [int]$Before, [string]$Detail) {
+    if (-not $Tool) { return }
+    if ((Get-AitLibSummaryErrorCount) -gt $Before) {
+        LogDetail "${Tool}: the child wrote its own ERROR row -- none added"
+        return
+    }
+    Write-Summary "ERROR" $Tool $Detail
+}
+
 # Invoke-ChildRelayed LABEL SCRIPT [ARGS] [SUMMARYTOOL] -- run a child .ps1
 # in-process (e.g. Invoke-ChildRelayed "Step 5: setup-user-config.ps1" $writer
 # $writerArgs "aitools config"), its Write-Host output redirected with 6>&1 and
-# relayed line by line as it arrives. The child writes its own summary rows; a
-# throw (the child could not write them) is LogError plus, when SUMMARYTOOL is
-# given, the row "ERROR|SUMMARYTOOL|script failed (exception)" (bash has no
-# in-process throw, so run_child_relayed has no such argument). Sets
+# relayed line by line as it arrives. The child writes its own summary rows;
+# SUMMARYTOOL names the row for a failed child that wrote none (see the section
+# comment). A throw (or a parse error) is one LogError. Sets
 # $script:AitLibChildRc, AitLibChildWarnings, AitLibChildErrors. Returns 0 when
 # the child exited 0 with no error line; otherwise 1 after one LogError naming LABEL.
+# No SCRIPT ("") is a failure, not a no-op (parity: run_child_relayed).
 # The child must end with an explicit `exit N` (the standard exit footer): a
 # .ps1 that just ends reports the exit code of the last native command it ran.
-# The parameters carry the lib prefix because the in-process child can read this
-# function's variables through dynamic scope (an unset $Label in the child would
-# otherwise see ours).
+# The parameters and locals carry the lib prefix because the in-process child
+# can read this function's variables through dynamic scope (an unset $Label in
+# the child would otherwise see ours).
 function Invoke-ChildRelayed([string]$AitLibLabel, [string]$AitLibChildScript, [hashtable]$AitLibChildArgs = @{}, [string]$AitLibSummaryTool = "") {
     $script:AitLibChildRc = 0; $script:AitLibChildWarnings = 0; $script:AitLibChildErrors = 0
+    if (-not $AitLibChildScript) {
+        $script:AitLibChildRc = 1
+        LogError "${AitLibLabel}: not run (no command given)"
+        if ($AitLibSummaryTool) { Write-Summary "ERROR" $AitLibSummaryTool "not run (no command)" }
+        return 1
+    }
+    $AitLibErrRows = Get-AitLibSummaryErrorCount
     $global:LASTEXITCODE = 0
     try {
         & $AitLibChildScript @AitLibChildArgs 6>&1 | ForEach-Object { Send-AitLibChildLine $_ }
@@ -535,15 +580,18 @@ function Invoke-ChildRelayed([string]$AitLibLabel, [string]$AitLibChildScript, [
     } catch {
         $script:AitLibChildRc = 1
         LogError "${AitLibLabel} failed: $($_.Exception.Message)"
-        if ($AitLibSummaryTool) { Write-Summary "ERROR" $AitLibSummaryTool "script failed (exception)" }
+        Write-AitLibChildRow $AitLibSummaryTool $AitLibErrRows "script failed (exception)"
         return 1
     }
     if ($script:AitLibChildRc -ne 0) {
-        LogError "$AitLibLabel failed (exit $($script:AitLibChildRc)) -- see $logFile"
+        $AitLibDetail = if ($script:AitLibChildRc -eq 2) { "aborted (exit 2)" } else { "script failed (exit $($script:AitLibChildRc))" }
+        LogError "$AitLibLabel $($AitLibDetail -replace '^script ', '') -- see $logFile"
+        Write-AitLibChildRow $AitLibSummaryTool $AitLibErrRows $AitLibDetail
         return 1
     }
     if ($script:AitLibChildErrors -gt 0) {
         LogError "$AitLibLabel logged $($script:AitLibChildErrors) error(s) but exited 0 -- see $logFile"
+        Write-AitLibChildRow $AitLibSummaryTool $AitLibErrRows "logged errors (exit 0)"
         return 1
     }
     return 0
@@ -831,32 +879,118 @@ function Backup-File {
 }
 
 # ---------------------------------------------------------------------------
-# Backup a directory before modifying managed files. Keeps at most $MaxBackups copies.
+# Back up a directory before modifying managed files: copy DirPath to
+# DirPath.bak.<UTC> (DirPath.bak.<UTC>-<n> when that name is taken) and keep
+# the newest $MaxBackups copies. Result variables (reset on every call):
+#   $script:BackupDirOk      $true only when the copy exists after the copy
+#   $script:BackupDirPath    the copy's path when BackupDirOk, else ""
+#   $script:BackupDirReason  why not, when $false: "no directory", "no
+#                            top-level *.md", "cannot list", "copy failed"
+# Skip rule (kept: its callers, the setup-user-claude and setup-user-cursor
+# rules fan-outs, back up only a directory that holds a top-level *.md file):
+# no top-level regular *.md file (case-sensitive, as the .sh) -> no copy, a
+# detail log line, reason "no top-level *.md". A failed copy is non-fatal
+# (warn, return; config-file-safety.md "Backup before overwrite"): callers that
+# must not write without a backup check BackupDirOk. Old backups are matched by
+# literal name (the base name + ".bak." + the UTC stamp, optional "-<n>"),
+# never a wildcard, so names with [ ] * ? work and another directory's backups
+# are never pruned. Parity: backup_dir in aitools-lib.sh.
 # ---------------------------------------------------------------------------
-function Backup-Dir {
-    param([string]$DirPath, [int]$MaxBackups = 5)
-    if (-not (Test-Path -LiteralPath $DirPath)) { return }
-    $mdFiles = Get-ChildItem -LiteralPath $DirPath -Filter "*.md" -File -ErrorAction SilentlyContinue
-    if (-not $mdFiles -or $mdFiles.Count -eq 0) { return }
-    $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHHmmssZ")
-    $backupPath = "${DirPath}.bak.${ts}"
-    try {
-        Copy-Item -LiteralPath $DirPath -Destination $backupPath -Recurse -ErrorAction Stop
-    } catch {
-        LogWarn "Could not back up $DirPath -- proceeding without backup: $_"
-        return
-    }
-    $parentDir = Split-Path $DirPath -Parent
-    $dirName = Split-Path $DirPath -Leaf
-    $backups = Get-ChildItem -Path $parentDir -Directory -Filter "${dirName}.bak.*" -ErrorAction SilentlyContinue |
-        Sort-Object LastWriteTime -Descending
-    if ($backups -and $backups.Count -gt $MaxBackups) {
-        $backups | Select-Object -Skip $MaxBackups | ForEach-Object {
-            Remove-Item $_.FullName -Recurse -Force
-            Log "Pruned old backup: $($_.FullName)"
+$script:BackupDirOk = $false
+$script:BackupDirPath = ""
+$script:BackupDirReason = ""
+
+# Copy-DirectoryTree Source Dest: copy a directory tree with .NET calls, as
+# cp -R does (a symlink is copied as a symlink, never followed). Not
+# Copy-Item -Recurse: with a source name holding [ ] * ? and a sibling that
+# the name matches as a wildcard, it creates Dest but copies nothing into it
+# (pwsh 7.6, macOS). Throws on the first failure. Both paths absolute.
+function Copy-DirectoryTree([string]$Source, [string]$Dest) {
+    $reparse = [System.IO.FileAttributes]::ReparsePoint
+    [System.IO.Directory]::CreateDirectory($Dest) | Out-Null
+    foreach ($e in [System.IO.DirectoryInfo]::new($Source).GetFileSystemInfos()) {
+        $to = [System.IO.Path]::Combine($Dest, $e.Name)
+        if ($e.Attributes -band $reparse) {
+            if ($e -is [System.IO.DirectoryInfo]) {
+                [System.IO.Directory]::CreateSymbolicLink($to, $e.LinkTarget) | Out-Null
+            } else {
+                [System.IO.File]::CreateSymbolicLink($to, $e.LinkTarget) | Out-Null
+            }
+        } elseif ($e -is [System.IO.DirectoryInfo]) {
+            Copy-DirectoryTree -Source $e.FullName -Dest $to
+        } else {
+            [System.IO.File]::Copy($e.FullName, $to, $false)
         }
     }
-    Log "Backed up $DirPath ($($mdFiles.Count) managed files)"
+}
+
+function Backup-Dir {
+    param([string]$DirPath, [int]$MaxBackups = 5)
+    $script:BackupDirOk = $false; $script:BackupDirPath = ""; $script:BackupDirReason = ""
+    $reparse = [System.IO.FileAttributes]::ReparsePoint
+    $dir = if ($DirPath.Length -gt 1) { $DirPath.TrimEnd('/', '\') } else { $DirPath }
+    if (-not $dir -or -not (Test-Path -LiteralPath $dir -PathType Container)) {
+        $script:BackupDirReason = "no directory"
+        LogDetail "Backup-Dir: ${DirPath}: not backed up (no directory)"
+        return
+    }
+    # .NET resolves relative paths against the process directory: resolve first
+    $full = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($dir)
+    try {
+        $mdCount = @([System.IO.DirectoryInfo]::new($full).GetFiles() | Where-Object {
+            $_.Name.EndsWith(".md", [StringComparison]::Ordinal) -and -not ($_.Attributes -band $reparse)
+        }).Count
+    } catch {
+        $script:BackupDirReason = "cannot list"
+        LogWarn "Could not back up $dir -- cannot list ${full}: $_"
+        return
+    }
+    if ($mdCount -eq 0) {
+        $script:BackupDirReason = "no top-level *.md"
+        LogDetail "Backup-Dir: ${dir}: not backed up (no top-level *.md file)"
+        return
+    }
+    $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHHmmssZ")
+    $dest = "${full}.bak.${ts}"
+    $n = 0
+    while (Test-Path -LiteralPath $dest) { $n++; $dest = "${full}.bak.${ts}-$n" }
+    try {
+        Copy-DirectoryTree -Source $full -Dest $dest
+    } catch {
+        $script:BackupDirReason = "copy failed"
+        LogWarn "Could not back up $dir -- proceeding without backup: $_"
+        return
+    }
+    if (-not (Test-Path -LiteralPath $dest -PathType Container)) {
+        $script:BackupDirReason = "copy failed"
+        LogWarn "Could not back up $dir -- proceeding without backup (no copy at $dest)"
+        return
+    }
+    $script:BackupDirOk = $true
+    $script:BackupDirPath = $dest
+    $parent = [IO.Path]::GetDirectoryName($full)
+    $pattern = '\A' + [regex]::Escape([IO.Path]::GetFileName($full)) + '\.bak\.[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{6}Z(?:-[0-9]+)?\z'
+    try {
+        [string[]]$names = @([System.IO.DirectoryInfo]::new($parent).GetDirectories() | Where-Object {
+            $_.Name -cmatch $pattern -and -not ($_.Attributes -band $reparse)
+        } | ForEach-Object { $_.Name })
+    } catch {
+        LogWarn "Could not prune old backups of $dir -- cannot list ${parent}: $_"
+        [string[]]$names = @()
+    }
+    # Newest first by name (the UTC stamp sorts by time), ordinal as perl's cmp
+    [Array]::Sort($names, [StringComparer]::Ordinal)
+    [Array]::Reverse($names)
+    for ($i = $MaxBackups; $i -lt $names.Count; $i++) {
+        $old = Join-Path $parent $names[$i]
+        try {
+            Remove-Item -LiteralPath $old -Recurse -Force -ErrorAction Stop
+            Log "Pruned old backup: $old"
+        } catch {
+            LogWarn "Could not prune old backup ${old}: $_"
+        }
+    }
+    Log "Backed up $dir ($mdCount managed files)"
 }
 
 # ---------------------------------------------------------------------------
@@ -1917,6 +2051,30 @@ function Deploy-ManagedFile {
     # twin); every write adds exactly one back.
     $Content = $Content -replace '[\r\n]+$', ''
 
+    # A dangling symlink at DestPath: never write through it (the write would
+    # create the link's target, wherever it points). A live symlink is read and
+    # written through, as before (dotfile managers link deployed files). Parity:
+    # deploy_managed_file (same message, also in a dry run).
+    # (Test-Path and File.Exists are both true for a dangling link on Unix:
+    # resolve the final target instead; a link loop counts as dangling, as the
+    # .sh's [ -e ] is false for it)
+    $destFull = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($DestPath)
+    $destInfo = [System.IO.FileInfo]::new($destFull)
+    if ($null -ne $destInfo.LinkTarget) {
+        $dangling = $false
+        try {
+            $final = $destInfo.ResolveLinkTarget($true)
+            $dangling = ($null -eq $final -or -not $final.Exists)
+        } catch {
+            LogDetail "Deploy-ManagedFile: cannot resolve the symlink ${DestPath}: $_"
+            $dangling = $true
+        }
+        if ($dangling) {
+            LogError "Failed: ${ItemName}: $DestPath is a dangling symlink -- not written through it"
+            return "failed"
+        }
+    }
+
     # Dry run: report what would happen without writing
     if ($DryRun) {
         if (Test-Path -LiteralPath $DestPath) {
@@ -2409,26 +2567,39 @@ function Adopt-ManagedFile {
 # ---------------------------------------------------------------------------
 
 $script:dtAdded = 0; $script:dtUpdated = 0; $script:dtVerified = 0
-$script:dtAccepted = 0; $script:dtSkipped = 0; $script:dtPreserved = 0; $script:dtFailed = 0
+$script:dtAccepted = 0; $script:dtSkipped = 0; $script:dtPreserved = 0; $script:dtFailed = 0; $script:dtRemoved = 0
 $script:deployTrackerText = ""
 
 function Initialize-DeployTracker {
     $script:dtAdded = 0; $script:dtUpdated = 0; $script:dtVerified = 0
-    $script:dtAccepted = 0; $script:dtSkipped = 0; $script:dtPreserved = 0; $script:dtFailed = 0
+    $script:dtAccepted = 0; $script:dtSkipped = 0; $script:dtPreserved = 0; $script:dtFailed = 0; $script:dtRemoved = 0
     $script:deployTrackerText = ""
 }
 
 # Record a single file outcome. Increments counter and writes DETAIL summary.
+# "removed": the caller backed up and deleted a deployed file (a fan-out
+# consumer pruning a retired rule). An outcome the tracker does not know is a
+# caller bug: it is logged and counted as failed, never dropped. Matched
+# case-sensitively, as deploy_tracker_record's case statement does ("Removed"
+# is unknown in both).
 function Record-DeployOutcome {
     param([string]$Outcome, [string]$ToolName, [string]$ItemName)
-    switch ($Outcome) {
-        { $_ -eq "added" -or $_ -eq "created" } { $script:dtAdded++;     Write-Summary "DETAIL" $ToolName "added: $ItemName" }
+    switch -CaseSensitive ($Outcome) {
+        # two string clauses, not a { -eq } script block: -eq ignores case
+        "added"     { $script:dtAdded++;     Write-Summary "DETAIL" $ToolName "added: $ItemName" }
+        "created"   { $script:dtAdded++;     Write-Summary "DETAIL" $ToolName "added: $ItemName" }
         "updated"   { $script:dtUpdated++;   Write-Summary "DETAIL" $ToolName "updated: $ItemName" }
         "accept & adopt" { $script:dtAccepted++;  Write-Summary "DETAIL" $ToolName "accept & adopt: $ItemName" }
         "skipped"   { $script:dtSkipped++;   Write-Summary "DETAIL" $ToolName "skipped: $ItemName" }
         "failed"    { $script:dtFailed++;    Write-Summary "DETAIL" $ToolName "failed: $ItemName" }
+        "removed"   { $script:dtRemoved++;   Write-Summary "DETAIL" $ToolName "removed: $ItemName" }
         "verified"  { $script:dtVerified++ }
         "preserved" { $script:dtPreserved++ }
+        default {
+            LogError "Record-DeployOutcome: unknown outcome `"$Outcome`" for $ItemName ($ToolName) -- counted as failed"
+            $script:dtFailed++
+            Write-Summary "DETAIL" $ToolName "failed: $ItemName"
+        }
     }
 }
 
@@ -2440,6 +2611,7 @@ function Write-DeployTrackerSummary {
     if ($script:dtAdded -gt 0)     { $parts += "$($script:dtAdded) added" }
     if ($script:dtUpdated -gt 0)   { $parts += "$($script:dtUpdated) updated" }
     if ($script:dtAccepted -gt 0)  { $parts += "$($script:dtAccepted) accepted" }
+    if ($script:dtRemoved -gt 0)   { $parts += "$($script:dtRemoved) removed" }
     if ($script:dtVerified -gt 0)  { $parts += "$($script:dtVerified) verified" }
     if ($script:dtFailed -gt 0)    { $parts += "$($script:dtFailed) failed" }
     $text = if ($parts.Count -gt 0) { $parts -join ", " } else { "verified" }
@@ -2452,6 +2624,234 @@ function Write-DeployTrackerSummary {
     } else {
         Write-Summary "OK" $ToolName $text
     }
+}
+
+# ---------------------------------------------------------------------------
+# Fan-out helpers, for the consumers of .aitools\rules and .aitools\skills
+# (setup-user-claude, setup-user-cursor; setup-user-cursor still defines its own
+# Read-RulesManifest, which matches this one). deploy-harness writes one
+# manifest per kind (rules: PR #100 contract; skills:
+# plans/skills-and-rules-fanout.md section 3.2): first line $rulesManifestHeader
+# or $skillsManifestHeader, then "<name><TAB><source>" lines, source shared |
+# aitools | dotprofile | retired. Parity: rule_name_kind, skill_name_kind,
+# read_harness_manifest, read_rules_manifest, fanout_text_equal and
+# fanout_dir_matches in aitools-lib.sh (same results, same return codes).
+# lower_name and in_list have no twin here: PowerShell callers use a
+# HashSet with StringComparer.OrdinalIgnoreCase.
+# ---------------------------------------------------------------------------
+$rulesManifestHeader = "# aitools rules manifest v1"
+$skillsManifestHeader = "# aitools skills manifest v1"
+
+# The kind of a file name in .aitools\rules, compared case-insensitively
+# (commander decision 2026-10-22): "hidden" (a dot file, e.g. the rules
+# manifest), "backup" (*.bak.*, the library's backup naming), "rule" (*.md) or
+# "other". Parity: rule_name_kind in aitools-lib.sh.
+function Get-RuleNameKind([string]$Name) {
+    if ($Name.StartsWith(".")) { return "hidden" }
+    if ($Name -like "*.bak.*") { return "backup" }
+    if ($Name -like "*.md") { return "rule" }
+    return "other"
+}
+
+# The kind of an entry name in .aitools\skills, compared case-insensitively:
+# "hidden" (a dot name, e.g. the skills manifest), "backup" (*.bak.*, a
+# backed-up skill directory) or "skill" (anything else). The name only: the
+# caller checks that a "skill" entry is a directory.
+# Parity: skill_name_kind in aitools-lib.sh.
+function Get-SkillNameKind([string]$Name) {
+    if ($Name.StartsWith(".")) { return "hidden" }
+    if ($Name -like "*.bak.*") { return "backup" }
+    return "skill"
+}
+
+# Read the manifest at Path of Kind ("rules" or "skills", case-sensitive).
+# Returns @{ Status = "ok" | "header-bad"; Rules = list of @{ Name; Source }
+# (the same key for both kinds); Invalid = list of ignored lines (tabs shown as
+# <TAB>) }. Status is "header-bad" when the first line (a UTF-8 BOM and a CR
+# before the LF ignored) is not the kind's header. A valid line: a name with no
+# / or \ and no .bak. (rules: a *.md name; skills: not starting with a dot), a
+# source of shared, aitools, dotprofile or retired, and a name not already
+# listed (compared case-insensitively). Throws for an unknown Kind (the .sh
+# exits 2) and when the file is missing, unreadable or a directory (the .sh
+# exits 1); the caller wraps it in a try/catch that logs.
+# Parity: read_harness_manifest in aitools-lib.sh.
+function Read-HarnessManifest {
+    param([string]$Path, [string]$Kind)
+    switch -CaseSensitive ($Kind) {
+        "rules"  { $header = $rulesManifestHeader;  $namePattern = '\A[^/\\]+\.md\z' }
+        "skills" { $header = $skillsManifestHeader; $namePattern = '\A[^/\\.][^/\\]*\z' }
+        default  { throw "Read-HarnessManifest: unknown kind `"$Kind`" (rules or skills)" }
+    }
+    $result = @{ Status = "ok"; Rules = New-Object System.Collections.Generic.List[object]; Invalid = New-Object System.Collections.Generic.List[string] }
+    $text = [System.IO.File]::ReadAllText($Path, [System.Text.UTF8Encoding]::new($false))
+    if ($text.Length -gt 0 -and $text[0] -eq [char]0xFEFF) { $text = $text.Substring(1) }
+    $lines = $text -split "`n"
+    # A CR is a line ending only before an LF (as the .sh reads it): the last
+    # piece, which no LF follows, keeps a trailing CR (and fails validation)
+    $last = $lines.Count - 1
+    $head = if ($last -gt 0) { $lines[0] -replace "`r$", "" } else { $lines[0] }
+    if ($head -cne $header) { $result.Status = "header-bad"; return $result }
+    $seen = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
+    for ($i = 1; $i -lt $lines.Count; $i++) {
+        $l = if ($i -lt $last) { $lines[$i] -replace "`r$", "" } else { $lines[$i] }
+        if ($l -eq "") { continue }
+        $tab = $l.IndexOf("`t")
+        $name = if ($tab -ge 0) { $l.Substring(0, $tab) } else { $l }
+        $src = if ($tab -ge 0) { $l.Substring($tab + 1) } else { "" }
+        if ($name -cnotmatch $namePattern -or $name -clike "*.bak.*" -or
+            $src -cnotmatch '\A(?:shared|aitools|dotprofile|retired)\z' -or -not $seen.Add($name)) {
+            $result.Invalid.Add(($l -replace "`t", "<TAB>"))
+            continue
+        }
+        $result.Rules.Add(@{ Name = $name; Source = $src })
+    }
+    return $result
+}
+
+# Read the rules manifest: Read-HarnessManifest -Kind rules (the result of
+# setup-user-cursor's own Read-RulesManifest). Throws when the file cannot be
+# read. Parity: read_rules_manifest in aitools-lib.sh.
+function Read-RulesManifest([string]$Path) {
+    return Read-HarnessManifest -Path $Path -Kind "rules"
+}
+
+# Read-FanoutText Path: the file's bytes as text (Latin1 maps each byte to one
+# char: a byte comparison, as the .sh does) without trailing CR/LF. Throws
+# "is a directory" for a directory and the .NET reason when the file cannot be
+# read (missing, no permission). Shared by Test-FanoutTextEqual and
+# Test-FanoutDirMatches (the .sh does the same inside each perl block).
+function Read-FanoutText([string]$Path) {
+    if (Test-Path -LiteralPath $Path -PathType Container) { throw "is a directory" }
+    $t = [System.Text.Encoding]::Latin1.GetString([System.IO.File]::ReadAllBytes($Path))
+    return ($t -replace '[\r\n]+\z', '')
+}
+
+# Get-FanoutEntryType Path [-Follow]: "file" (a regular file), "dir", "missing"
+# (nothing there, or a dangling symlink) or "other" (a symlink without -Follow;
+# a FIFO, socket, block or character device). The Unix file type comes from
+# the provider's UnixStat (S_IFMT bits of Mode): .NET shows a FIFO as an
+# ordinary FileInfo, and reading one blocks. Windows has no UnixStat; there a
+# FileInfo that is not a reparse point is a file. Throws when the entry cannot
+# be stat'ed. Parity: the lstat / -f tests in fanout_dir_matches (aitools-lib.sh).
+function Get-FanoutEntryType([string]$Path, [switch]$Follow) {
+    $reparse = [System.IO.FileAttributes]::ReparsePoint
+    if (-not (Test-Path -LiteralPath $Path)) { return "missing" }
+    $item = Get-Item -LiteralPath $Path -Force -ErrorAction Stop
+    if ($item.Attributes -band $reparse) {
+        if (-not $Follow) { return "other" }
+        $final = $item.ResolveLinkTarget($true)
+        if ($null -eq $final -or -not $final.Exists) { return "missing" }
+        $item = Get-Item -LiteralPath $final.FullName -Force -ErrorAction Stop
+    }
+    if ($item -is [System.IO.DirectoryInfo]) { return "dir" }
+    $stat = $item.UnixStat
+    if ($null -ne $stat -and (($stat.Mode -band 0xF000) -ne 0x8000)) { return "other" }
+    return "file"
+}
+
+# 0 when files A and B hold the same bytes apart from trailing CR/LF
+# (Deploy-ManagedFile normalizes trailing newlines), 1 when they differ, 2 when
+# they cannot be compared: a file is missing, a directory or unreadable. Every
+# 2 writes a detail log line "Test-FanoutTextEqual: cannot read <file>:
+# <reason>". Parity: fanout_text_equal in aitools-lib.sh.
+function Test-FanoutTextEqual([string]$A, [string]$B) {
+    $texts = @()
+    foreach ($f in @($A, $B)) {
+        try {
+            $texts += , (Read-FanoutText $f)
+        } catch {
+            LogDetail "Test-FanoutTextEqual: cannot read ${f}: $($_.Exception.Message)"
+            return 2
+        }
+    }
+    if ($texts[0] -ceq $texts[1]) { return 0 }
+    return 1
+}
+
+# 0 when Target is a real directory (not a symlink), every regular file under
+# it (recursive; a file whose base name is *.bak.*, compared case-insensitively,
+# is ignored) exists as a regular file (a symlink to one counts) at the same
+# relative path under Candidate and is equal to it as Test-FanoutTextEqual
+# compares, and it holds at least one such file. 1 otherwise: Target or
+# Candidate empty; Target missing, a file or a symlink; no such file; a file
+# missing, different or not a regular file in Candidate; any non-regular entry
+# anywhere under Target -- a symlink or other reparse point (never followed:
+# what the fan-out did not write is the user's), a FIFO, a socket, a block or
+# character device (rejected before any read: reading a FIFO blocks). 2 when an
+# entry cannot be read: a directory that cannot be listed (also one without
+# search permission, where the .sh fails on lstat of its entries), an entry
+# that cannot be stat'ed, a file that cannot be read. 2 wins over 1 (the whole
+# tree is checked). Every reason for 2 is its own detail log line
+# "Test-FanoutDirMatches: cannot list <dir>: <reason>" / "Test-FanoutDirMatches:
+# cannot read <path>: <reason>". Used before pruning a retired skill directory.
+# Parity: fanout_dir_matches in aitools-lib.sh.
+function Test-FanoutDirMatches([string]$Target, [string]$Candidate) {
+    if ([string]::IsNullOrEmpty($Target) -or [string]::IsNullOrEmpty($Candidate)) { return 1 }
+    $reparse = [System.IO.FileAttributes]::ReparsePoint
+    if (-not (Test-Path -LiteralPath $Target -PathType Container)) { return 1 }
+    try {
+        $root = [System.IO.DirectoryInfo]::new($ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Target))
+        if ($root.Attributes -band $reparse) { return 1 }
+    } catch {
+        LogDetail "Test-FanoutDirMatches: cannot read ${Target}: $($_.Exception.Message)"
+        return 2
+    }
+    $n = 0; $bad = $false; $err = $false
+    $stack = New-Object System.Collections.Generic.Stack[string]
+    $stack.Push("")
+    while ($stack.Count -gt 0) {
+        $rel = $stack.Pop()
+        $dir = if ($rel -eq "") { $root.FullName } else { Join-Path $root.FullName $rel }
+        try {
+            $entries = @([System.IO.DirectoryInfo]::new($dir).GetFileSystemInfos())
+        } catch {
+            LogDetail "Test-FanoutDirMatches: cannot list ${dir}: $($_.Exception.Message)"
+            $err = $true
+            continue
+        }
+        foreach ($e in $entries) {
+            $r = if ($rel -eq "") { $e.Name } else { "$rel/$($e.Name)" }
+            if ($e.Attributes -band $reparse) { $bad = $true; continue }
+            if ($e -is [System.IO.DirectoryInfo]) { $stack.Push($r); continue }
+            try {
+                $type = Get-FanoutEntryType -Path $e.FullName
+            } catch {
+                LogDetail "Test-FanoutDirMatches: cannot read $($e.FullName): $($_.Exception.Message)"
+                $err = $true
+                continue
+            }
+            if ($type -ne "file") { $bad = $true; continue }   # FIFO, socket, device
+            if ($e.Name -like "*.bak.*") { continue }
+            $n++
+            $cp = Join-Path $Candidate $r
+            try {
+                $ctype = Get-FanoutEntryType -Path $cp -Follow
+            } catch {
+                LogDetail "Test-FanoutDirMatches: cannot read ${cp}: $($_.Exception.Message)"
+                $err = $true
+                continue
+            }
+            if ($ctype -ne "file") { $bad = $true; continue }   # missing, a directory, a FIFO ...
+            try {
+                $x = Read-FanoutText $e.FullName
+            } catch {
+                LogDetail "Test-FanoutDirMatches: cannot read $($e.FullName): $($_.Exception.Message)"
+                $err = $true
+                continue
+            }
+            try {
+                $y = Read-FanoutText $cp
+            } catch {
+                LogDetail "Test-FanoutDirMatches: cannot read ${cp}: $($_.Exception.Message)"
+                $err = $true
+                continue
+            }
+            if ($x -cne $y) { $bad = $true }
+        }
+    }
+    if ($err) { return 2 }
+    if ($bad -or $n -eq 0) { return 1 }
+    return 0
 }
 
 # ---------------------------------------------------------------------------

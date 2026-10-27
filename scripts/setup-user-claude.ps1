@@ -9,8 +9,11 @@
 # machine's profile from profile.json. See reference/user-repo.md.
 #
 # Managed: ~/.claude/CLAUDE.md (sole owner, overwrite)
-# Managed: ~/.claude/rules/*.md matching <userRepoPath>/claude/rules/ (additive deploy)
-# Preserved: ~/.claude/rules/ files not in user repo source
+# Managed: ~/.claude/rules/*.md fanned out from ~/.aitools/rules (additive; the
+#   copy of a rule the rules manifest retires is backed up and removed)
+# Preserved: ~/.claude/rules/ files not in ~/.aitools/rules
+# Rules come from ~/.aitools/rules only (deploy-harness fills it: run it first);
+# the dotprofile's claude/rules reaches Claude Code through it.
 
 param(
     [string]$SharedPath = (Join-Path $PSScriptRoot "..\shared\claude-shared.md"),
@@ -46,6 +49,10 @@ if ($DryRun) { Log "[DRY RUN] Preview mode -- no files will be written" }
 
 $claudeDir = Join-Path $env:USERPROFILE ".claude"
 $claudeMd = Join-Path $claudeDir "CLAUDE.md"
+# The directory this script runs from (aitools scripts/ on the dev path, the
+# dotprofile's deploy/ for the generated copy): the rules fan-out derives the
+# aitools checkout from it (SCRIPT_DIR in setup-user-claude.sh)
+$claudeScriptDir = $PSScriptRoot
 
 # Ensure ~/.claude/ exists
 if (-not (Test-Path $claudeDir)) {
@@ -314,119 +321,361 @@ if ($DryRun) {
 }
 
 # --- BEGIN rules deployment (extracted by build-deploy) ---
-# Deploy user rules: additive (add/update managed, preserve unmanaged, log diffs).
-$rulesSrc = ""
-if ($userRepoPath) {
-    $candidateRules = Join-Path $userRepoPath "claude\rules"
-    if (Test-Path $candidateRules) {
-        $rulesSrc = $candidateRules
+# Rules fan-out: .aitools\rules -> .claude\rules. deploy-harness fills
+# .aitools\rules from aitools shared/rules, aitools .claude/rules and the
+# dotprofile's claude/rules (first source wins) and writes its rules manifest
+# (PR #100 contract). Claude Code gets every rule there except the ones the
+# manifest retires (commander decisions 2026-10-22): *.md only, *.bak.* and
+# hidden files skipped, names compared case-insensitively. The dotprofile's
+# claude/rules is not read here. Additive: managed files updated, unmanaged
+# files preserved; the copy of a retired rule is backed up and removed when it
+# matches a harness copy. Adopt target: the repo file the manifest names as the
+# rule's source, when it is on this machine. Parity: setup-user-claude.sh.
+$rulesSrc = Join-Path (Join-Path $env:USERPROFILE ".aitools") "rules"
+$rulesDest = Join-Path $claudeDir "rules"
+$rulesManifest = Join-Path $rulesSrc ".aitools-rules-manifest"
+# The aitools checkout this script runs from: adopt targets of shared and
+# aitools rules. Only a git checkout counts: the generated deploy/ copy runs
+# from the dotprofile's deploy/ directory, and a package payload (git archive,
+# read-only) has no .git; adopt is then offered for dotprofile rules only.
+# A linked git worktree (.git is a file there) counts too: run from a
+# worktree, accept & adopt writes that worktree's shared/rules or
+# .claude/rules, not the main checkout's.
+$rulesAitoolsRepo = ""
+if ($claudeScriptDir) {
+    $rulesRepoCand = Split-Path -Parent $claudeScriptDir
+    if ((Test-Path -LiteralPath (Join-Path (Join-Path $rulesRepoCand "scripts") "aitools-lib.ps1") -PathType Leaf) -and
+        (Test-Path -LiteralPath (Join-Path (Join-Path $rulesRepoCand "shared") "claude-shared.md") -PathType Leaf) -and
+        (Test-Path -LiteralPath (Join-Path $rulesRepoCand ".git"))) {
+        $rulesAitoolsRepo = $rulesRepoCand
     }
 }
 
-$rulesDest = Join-Path $claudeDir "rules"
-
 # --- BEGIN rules deploy logic (extracted by build-deploy) ---
-if ($rulesSrc) {
-    $sourceRules = Get-ChildItem -Path $rulesSrc -Filter "*.md" -File -ErrorAction Stop
-    if (-not $sourceRules -or $sourceRules.Count -eq 0) {
-        Log "User repo claude/rules/ exists but has no .md files -- skipping"
-    } elseif ($DryRun) {
-        $existingCount = 0
-        if (Test-Path $rulesDest) {
-            $existingFiles = Get-ChildItem -Path $rulesDest -Filter "*.md" -File -ErrorAction Stop
-            if ($existingFiles) { $existingCount = $existingFiles.Count }
+# The repo file that a rule from Source (a rules manifest source) came from, or
+# "" when that file is not on this machine (adopt and merge are then not
+# offered). A dotprofile adopt target is committed and pushed by the library
+# (N-Q2); an aitools one is a working-tree change. Parity: rule_adopt_target in
+# setup-user-claude.sh.
+function Get-RuleAdoptTarget([string]$Name, [string]$Source) {
+    $target = ""
+    if ($Source -ceq "shared" -and $rulesAitoolsRepo) {
+        $target = Join-Path (Join-Path (Join-Path $rulesAitoolsRepo "shared") "rules") $Name
+    } elseif ($Source -ceq "aitools" -and $rulesAitoolsRepo) {
+        $target = Join-Path (Join-Path (Join-Path $rulesAitoolsRepo ".claude") "rules") $Name
+    } elseif ($Source -ceq "dotprofile" -and $userRepoPath) {
+        $target = Join-Path (Join-Path (Join-Path $userRepoPath "claude") "rules") $Name
+    }
+    if ($target -and (Test-Path -LiteralPath $target -PathType Leaf)) { return $target }
+    return ""
+}
+
+# Byte comparison of a retired rule's copy with its harness copies and
+# backups: the lib's Test-FanoutTextEqual (0 equal apart from trailing CR/LF,
+# 1 differ, 2 unreadable; parity fanout_text_equal).
+
+$rulesGo = $false
+$rulesEntries = @()
+if (-not (Test-Path -LiteralPath $rulesSrc -PathType Container)) {
+    Log "No harness rules at $rulesSrc (deploy-harness has not run) -- skipping"
+    Write-Summary "OK" "claude rules" "n/a (no harness rules)"
+} else {
+    try {
+        $rulesEntries = @(Get-ChildItem -LiteralPath $rulesSrc -ErrorAction Stop | Sort-Object Name)
+        $rulesGo = $true
+    } catch {
+        LogError "Cannot list ${rulesSrc}: $_"
+        Write-Summary "ERROR" "claude rules" "cannot read harness rules"
+    }
+}
+
+# Rules manifest: each rule's source (adopt target) and the retired names.
+# Without one (deploy-harness before PR #100) every rule is fanned out, none
+# is retired and adopt is not offered.
+$manifestOk = $false
+$manifestFailed = $false   # unreadable: counted as a failed item, so the final row is ERROR
+$ruleSourceOf = @{}   # name -> source; PowerShell hashtable keys are case-insensitive
+$retiredNames = New-Object System.Collections.Generic.List[string]
+$retiredSet = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
+if ($rulesGo) {
+    # Absent only when nothing is at the path: a directory or a dangling link
+    # there (Test-Path is true for one on pwsh 7) goes to the reader, which
+    # reports it as unreadable
+    if (-not (Test-Path -LiteralPath $rulesManifest)) {
+        Log "No rules manifest at $rulesManifest -- every rule fanned out, none retired, adopt not offered"
+    } else {
+        $manifest = $null
+        try {
+            $manifest = Read-RulesManifest $rulesManifest
+        } catch {
+            LogError "Cannot read the rules manifest ${rulesManifest}: $_ -- every rule fanned out, none retired"
+            Write-Summary "ERROR" "claude rules" "cannot read rules manifest"
+            $manifestFailed = $true
         }
-        Log "[DRY RUN] $rulesDest`: additive deploy"
-        Log "  Source: $rulesSrc ($($sourceRules.Count) rule files)"
-        Log "  Existing: $existingCount rule files"
-        foreach ($rf in $sourceRules) {
-            $destFile = Join-Path $rulesDest $rf.Name
-            if (Test-Path $destFile) {
-                try {
-                    $oldContent = Get-Content $destFile -Raw -ErrorAction Stop
-                    $newContent = Get-Content $rf.FullName -Raw -ErrorAction Stop
-                } catch {
-                    LogWarn "Cannot compare $($rf.Name): $_"
-                    Log "  Would update (cannot compare): $($rf.Name)"
-                    continue
-                }
-                if ($oldContent -eq $newContent) {
-                    Log "  Would skip (unchanged): $($rf.Name)"
+        if ($manifest -and $manifest.Status -eq "header-bad") {
+            LogWarn "Rules manifest ${rulesManifest}: the first line is not `"$rulesManifestHeader`" -- every rule fanned out, none retired, adopt not offered"
+            Write-Summary "ACTION" "" "Run aitools to rebuild ~/.aitools/rules and its manifest"
+        } elseif ($manifest) {
+            $manifestOk = $true
+            foreach ($bad in $manifest.Invalid) { LogWarn "Rules manifest ${rulesManifest}: line ignored: $bad" }
+            foreach ($r in $manifest.Rules) {
+                if ($r.Source -ceq "retired") {
+                    $retiredNames.Add($r.Name); [void]$retiredSet.Add($r.Name)
                 } else {
-                    Log "  Would update (changed): $($rf.Name)"
+                    $ruleSourceOf[$r.Name] = $r.Source
                 }
-            } else {
-                Log "  Would add (new): $($rf.Name)"
             }
         }
-        # Show preserved files
-        if (Test-Path $rulesDest) {
-            $existingFiles = Get-ChildItem -Path $rulesDest -Filter "*.md" -File -ErrorAction Stop
-            foreach ($ef in $existingFiles) {
-                $srcMatch = Join-Path $rulesSrc $ef.Name
-                if (-not (Test-Path $srcMatch)) {
-                    Log "  Would preserve (unmanaged): $($ef.Name)"
-                }
+    }
+}
+
+# Source files: every *.md in .aitools\rules (flat, the deploy-harness
+# contract) that the manifest does not retire. Hidden files are skipped.
+$ruleSources = @()
+$ruleBroken = @()   # dangling symlinks: failed in the deploy loop
+if ($rulesGo) {
+    foreach ($entry in $rulesEntries) {
+        $kind = Get-RuleNameKind $entry.Name
+        if ($kind -eq "backup" -or $kind -eq "hidden") { continue }
+        if ($kind -ne "rule") {
+            Log "Ignoring non-rule file in harness rules: $($entry.Name) (only *.md is fanned out)"
+            continue
+        }
+        if ($retiredSet.Contains($entry.Name)) {
+            Log "Not fanned out: $($entry.Name) (retired in the rules manifest)"
+            continue
+        }
+        if ($entry.LinkType) {
+            # Test-Path is true for a dangling link on pwsh 7; check the final target
+            $linkOk = $false
+            try {
+                $linkOk = [bool]$entry.ResolveLinkTarget($true).Exists
+            } catch {
+                LogDetail "claude rules: cannot resolve the link $($entry.FullName): $_"
+                $linkOk = $false
             }
+            if (-not $linkOk) { $ruleBroken += $entry.Name; continue }
+        }
+        if ($entry.PSIsContainer) { Log "Ignoring non-file in harness rules: $($entry.Name)"; continue }
+        $ruleSources += $entry
+    }
+
+    if ($ruleSources.Count -eq 0 -and $ruleBroken.Count -eq 0 -and $retiredNames.Count -eq 0) {
+        Log "No rules in $rulesSrc -- skipping"
+        # An unreadable manifest already wrote this tool's ERROR row
+        if (-not $manifestFailed) { Write-Summary "OK" "claude rules" "n/a (no harness rules)" }
+        $rulesGo = $false
+    } elseif ($DryRun) {
+        # The dry run previews the error the real run reports: something that
+        # is not a directory where .claude\rules goes
+        if ((Test-Path -LiteralPath $rulesDest) -and -not (Test-Path -LiteralPath $rulesDest -PathType Container)) {
+            LogError "Cannot create ${rulesDest}: not a directory (dry run)"
+            Write-Summary "ERROR" "claude rules" "cannot create rules dir"
+            $rulesGo = $false
         }
     } else {
         Backup-Dir -DirPath $rulesDest
-        if (-not (Test-Path $rulesDest)) {
+        if (-not (Test-Path -LiteralPath $rulesDest -PathType Container)) {
+            $mkdirError = ""
             try {
                 New-Item -ItemType Directory -Path $rulesDest -Force -ErrorAction Stop | Out-Null
             } catch {
-                LogError "Cannot create $rulesDest ($_)"
+                $mkdirError = "$_"
+            }
+            # New-Item -Force can return without an error when a file is in
+            # the way: check the result (parity with mkdir -p in the .sh)
+            if (-not (Test-Path -LiteralPath $rulesDest -PathType Container)) {
+                if (-not $mkdirError) { $mkdirError = "not a directory" }
+                LogError "Cannot create ${rulesDest}: $mkdirError"
                 Write-Summary "ERROR" "claude rules" "cannot create rules dir"
-                exit 1
+                $rulesGo = $false
             }
         }
+    }
+}
 
-        Initialize-DeployTracker
-        $errorsBefore = $errors
-        foreach ($rf in $sourceRules) {
-            $destFile = Join-Path $rulesDest $rf.Name
-            # Adopt target: the dotprofile rule (the file deployed from). Empty
-            # in the MDM deploy script (no user repo): adopt and merge not offered.
-            $ruleAdoptPath = ""
-            if ($userRepoPath) { $ruleAdoptPath = Join-Path (Join-Path $userRepoPath "claude\rules") $rf.Name }
+if ($rulesGo) {
+    Initialize-DeployTracker
+    $errorsBefore = $errors
+    if ($manifestFailed) {
+        Record-DeployOutcome -Outcome "failed" -ToolName "claude rules" -ItemName ".aitools-rules-manifest"
+    }
+    foreach ($brokenName in $ruleBroken) {
+        LogError "Failed: ${brokenName}: dangling symlink in $rulesSrc"
+        Record-DeployOutcome -Outcome "failed" -ToolName "claude rules" -ItemName $brokenName
+    }
 
+    # Deploy loop. [x]abort exits 2 from the library here: no "claude rules" row
+    # is written, and the calling installer or aitools loop records
+    # "script failed (exit 2)".
+    $ruleDests = New-Object System.Collections.Generic.List[string]   # deployed names
+    $ruleDestsLc = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
+    foreach ($src in $ruleSources) {
+        $ruleName = $src.Name
+        # Two harness rules whose names differ only in case (possible on a
+        # case-sensitive file system) map to one file here: the first wins
+        if ($ruleDestsLc.Contains($ruleName)) {
+            LogError "Skipped duplicate: $ruleName (a harness rule whose name differs only in case was already deployed)"
+            Record-DeployOutcome -Outcome "failed" -ToolName "claude rules" -ItemName $ruleName
+            continue
+        }
+        $ruleDests.Add($ruleName); [void]$ruleDestsLc.Add($ruleName)
+        $ruleSource = ""
+        $ruleAdoptPath = ""
+        if ($manifestOk -and $ruleSourceOf.ContainsKey($ruleName)) {
+            $ruleSource = $ruleSourceOf[$ruleName]
+            $ruleAdoptPath = Get-RuleAdoptTarget $ruleName $ruleSource
+        }
+        $ruleSourceShown = if ($ruleSource) { $ruleSource } else { "unknown" }
+        $ruleAdoptShown = if ($ruleAdoptPath) { $ruleAdoptPath } else { "none" }
+        LogDetail "claude rules: $ruleName source=$ruleSourceShown adopt=$ruleAdoptShown"
+        try {
+            $ruleContent = [System.IO.File]::ReadAllText($src.FullName, [System.Text.UTF8Encoding]::new($false))
+        } catch {
+            LogError "Cannot read harness rule $($src.FullName): $_"
+            Record-DeployOutcome -Outcome "failed" -ToolName "claude rules" -ItemName $ruleName
+            continue
+        }
+        $ruleResult = Deploy-ManagedFile -Content $ruleContent -DestPath (Join-Path $rulesDest $ruleName) -ToolName "claude rules" -ItemName $ruleName -AdoptPath $ruleAdoptPath
+        switch ($ruleResult) {
+            { $_ -in @("created", "updated", "verified", "accept & adopt", "skipped", "failed") } {
+                # The library wrote LOCAL and the adopt target itself (it commits
+                # and pushes a dotprofile adopt target, N-Q2); the tracker records
+                # every outcome (failed -> ERROR row, skipped -> WARN row).
+            }
+            default {
+                LogError "Unexpected deploy result for ${ruleName}: $ruleResult"
+                $ruleResult = "failed"
+            }
+        }
+        Record-DeployOutcome -Outcome $ruleResult -ToolName "claude rules" -ItemName $ruleName
+    }
+
+    # Retired rules: the copy in .claude\rules is backed up and removed when it
+    # is this fan-out's copy -- the same text as the harness copy or as a backup
+    # deploy-harness made when it retired the rule. Any other file of that name
+    # may be the user's own: kept, with a warning.
+    $rmKept = New-Object System.Collections.Generic.List[string]
+    foreach ($rmName in $retiredNames) {
+        # Deployed this run under a name that differs only in case
+        if ($ruleDestsLc.Contains($rmName)) { continue }
+        # The copy in .claude\rules, found case-insensitively (a case-sensitive
+        # file system may hold it as Gone.md for the manifest's gone.md)
+        $rmPath = ""
+        if (Test-Path -LiteralPath $rulesDest -PathType Container) {
             try {
-                $ruleContent = Get-Content $rf.FullName -Raw -ErrorAction Stop
-            } catch {
-                LogError "Cannot read source rule $($rf.Name): $_"
-                Record-DeployOutcome -Outcome "failed" -ToolName "claude rules" -ItemName $rf.Name
-                continue
-            }
-            $ruleResult = Deploy-ManagedFile -Content $ruleContent -DestPath $destFile -ToolName "claude rules" -ItemName $rf.Name -AdoptPath $ruleAdoptPath
-
-            if ($ruleResult -in @("created", "updated", "verified", "accept & adopt", "skipped", "failed")) {
-                # The library wrote LOCAL and the adopt target itself; the
-                # tracker records every outcome (failed -> ERROR row).
-            }
-            Record-DeployOutcome -Outcome $ruleResult -ToolName "claude rules" -ItemName $rf.Name
-            # After accept & adopt or merge & adopt the library commits that one
-            # dotprofile rule and pushes it (Invoke-DotprofileCommitPush, N-Q2;
-            # commander confirmed 2026-10-21, contract item #11). No commit here.
-        }
-
-        # Log preserved files (in target but not in source)
-        if (Test-Path $rulesDest) {
-            $existingFiles = Get-ChildItem -Path $rulesDest -Filter "*.md" -File -ErrorAction Stop
-            foreach ($ef in $existingFiles) {
-                $srcMatch = Join-Path $rulesSrc $ef.Name
-                if (-not (Test-Path $srcMatch)) {
-                    Log "Preserved unmanaged rule: $($ef.Name)"
-                    Record-DeployOutcome -Outcome "preserved" -ToolName "claude rules" -ItemName $ef.Name
+                foreach ($f in @([System.IO.Directory]::GetFiles($rulesDest) | Sort-Object -CaseSensitive)) {
+                    if ([string]::Equals([System.IO.Path]::GetFileName($f), $rmName, [System.StringComparison]::OrdinalIgnoreCase)) { $rmPath = $f; break }
                 }
+            } catch {
+                LogWarn "Cannot list $rulesDest for retired rule ${rmName}: $_"
+            }
+        }
+        if (-not $rmPath) { continue }
+        $rmFile = [System.IO.Path]::GetFileName($rmPath)
+        try {
+            $null = [System.IO.File]::ReadAllBytes($rmPath)
+        } catch {
+            LogError "Cannot read $rmPath (retired rule not removed): $_"
+            Record-DeployOutcome -Outcome "failed" -ToolName "claude rules" -ItemName $rmFile
+            continue
+        }
+        $rmCands = New-Object System.Collections.Generic.List[string]
+        $rmCands.Add((Join-Path $rulesSrc $rmName))
+        try {
+            $rmBaks = @([System.IO.Directory]::GetFiles($rulesSrc) |
+                Where-Object { [System.IO.Path]::GetFileName($_).StartsWith("$rmName.bak.", [System.StringComparison]::Ordinal) } |
+                Sort-Object -Property { [System.IO.Path]::GetFileName($_) } -CaseSensitive)
+            foreach ($b in $rmBaks) { $rmCands.Add($b) }
+        } catch {
+            LogWarn "Cannot list the backups of $rmName in ${rulesSrc}: $_"
+        }
+        $rmWhy = ""
+        foreach ($rmCand in $rmCands) {
+            if (-not (Test-Path -LiteralPath $rmCand -PathType Leaf)) { continue }
+            $rmRc = Test-FanoutTextEqual $rmPath $rmCand
+            if ($rmRc -eq 0) {
+                $rmWhy = "same text as $([System.IO.Path]::GetFileName($rmCand))"
+                break
+            }
+            if ($rmRc -ne 1) { LogWarn "Cannot compare $rmPath with $rmCand" }
+        }
+        if (-not $rmWhy) {
+            LogWarn "Kept ${rmFile}: the rules manifest retires $rmName, but this file matches no harness copy (it may be your own) -- Claude Code still loads it; delete it if it is an old fan-out copy"
+            $rmKept.Add($rmFile)
+            continue
+        }
+        if ($DryRun) {
+            Log "[DRY RUN] Would back up and remove $rmFile (retired rule; $rmWhy)"
+            continue
+        }
+        Backup-File -FilePath $rmPath
+        # Belt and braces: remove only when a backup with the same text exists
+        # beside it (a backup step that reports success without a copy must not
+        # lose the file)
+        $rmBacked = $false
+        if ($script:BackupFileOk) {
+            try {
+                foreach ($b in @([System.IO.Directory]::GetFiles($rulesDest) |
+                        Where-Object { [System.IO.Path]::GetFileName($_).StartsWith("$rmFile.bak.", [System.StringComparison]::Ordinal) })) {
+                    if ((Test-FanoutTextEqual $rmPath $b) -eq 0) { $rmBacked = $true; break }
+                }
+            } catch {
+                LogWarn "Cannot list the backups of $rmFile in ${rulesDest}: $_"
+            }
+        }
+        if (-not $rmBacked) {
+            LogError "Not removed: $rmFile (retired rule): backup failed"
+            Record-DeployOutcome -Outcome "failed" -ToolName "claude rules" -ItemName $rmFile
+            continue
+        }
+        try {
+            Remove-Item -LiteralPath $rmPath -Force -ErrorAction Stop
+        } catch {
+            LogError "Cannot remove $rmPath (retired rule): $_"
+            Record-DeployOutcome -Outcome "failed" -ToolName "claude rules" -ItemName $rmFile
+            continue
+        }
+        if (Test-Path -LiteralPath $rmPath) {
+            LogError "Cannot remove $rmPath (retired rule): still present"
+            Record-DeployOutcome -Outcome "failed" -ToolName "claude rules" -ItemName $rmFile
+            continue
+        }
+        Log "Removed $rmFile (retired rule; $rmWhy; backup kept)"
+        Record-DeployOutcome -Outcome "removed" -ToolName "claude rules" -ItemName $rmFile
+    }
+    if ($rmKept.Count -gt 0) {
+        Write-Summary "ACTION" "" "Claude Code still loads retired rules in ~/.claude/rules: $($rmKept -join ', ') -- delete them unless you wrote them"
+    }
+
+    if ($DryRun) {
+        if ($script:dtFailed -gt 0) {
+            Write-Summary "ERROR" "claude rules" "$($script:dtFailed) failed (dry run)"
+        } else {
+            Write-Summary "OK" "claude rules" "dry run (no files written)"
+        }
+    } else {
+        # Preserved: rules in .claude\rules not fanned out this run
+        $destEntries = @()
+        try {
+            $destEntries = @(Get-ChildItem -LiteralPath $rulesDest -File -ErrorAction Stop | Sort-Object Name)
+        } catch {
+            LogWarn "Cannot list $rulesDest for the preserved report: $_"
+        }
+        foreach ($existing in $destEntries) {
+            if ((Get-RuleNameKind $existing.Name) -ne "rule") { continue }
+            if (-not $ruleDestsLc.Contains($existing.Name)) {
+                Log "Preserved unmanaged rule: $($existing.Name)"
+                Record-DeployOutcome -Outcome "preserved" -ToolName "claude rules" -ItemName $existing.Name
             }
         }
 
         # Post-write validation: each deployed file is non-empty (a file whose
         # deploy failed is already reported; the library left it as it was)
-        foreach ($rf in $sourceRules) {
-            $destFile = Join-Path $rulesDest $rf.Name
-            if ((Test-Path $destFile) -and (Get-Item $destFile).Length -eq 0) {
-                LogError "Validation failed: $($rf.Name) is empty after deploy"
+        foreach ($ruleName in $ruleDests) {
+            $destFile = Join-Path $rulesDest $ruleName
+            if ((Test-Path -LiteralPath $destFile -PathType Leaf) -and (Get-Item -LiteralPath $destFile).Length -eq 0) {
+                LogError "Validation failed: $ruleName is empty after deploy"
             }
         }
 
@@ -441,8 +690,6 @@ if ($rulesSrc) {
             Write-Summary "ERROR" "claude rules" "validation failed"
         }
     }
-} else {
-    Log "No user rules to deploy (no claude/rules/ in user repo)"
 }
 # --- END rules deploy logic (extracted by build-deploy) ---
 # --- END rules deployment (extracted by build-deploy) ---
