@@ -1,4 +1,12 @@
-# S3-Merge2 report v1.1 (mission MERGE-2, 2026-10-28)
+# S3-Merge2 report v1.2 (mission MERGE-2, 2026-10-28)
+
+## v1.2 update (train resumed, then handback forced)
+- The Session Commander reported that, on the commander's direct order, an explicit allow rule `Bash(gh pr merge:*)` was added. I confirmed it is at line 5 of ~/.claude/settings.json.
+- Mission ALLOW-MERGE then merged #122 (d8f0aed, main CI 40737064303) and #120 (1b4e9d7, main CI 40741876684). Those merges are ALLOW-MERGE's; this mission did not verify them independently.
+- I resumed the train. S3-Merge2-Prep117 is still running in the background on branch feature/fanout-ci, in worktree /Users/new-jose/repos/aitools/.claude/worktrees/fo-ci. Its job: merge main, resolve check.yml with both sides kept, fix the PR body, get CI green. No result from it yet.
+- The harness then forced this handback, so the train stops at #117's Prep. Nothing from #117 onward is merged.
+- Remaining, in order: #117 (Prep running, then ReVerify, Land, Check) -> #118 -> #119 -> #121 -> #124 -> #123 -> #125 -> #126 (fix its 4 findings first) -> HOOK-2's #133, #134 -> #135 (only after HOOK-2's verdict on its final head).
+- For each remaining PR, the role specs in S3-Merge2-roles.md and the resolutions in S3-Merge2-progress.md are ready for whoever resumes.
 
 ## Summary
 1. Review phase complete: all 10 open PRs (#117-#126) have an independent reviewer verdict comment. 8 MERGEABLE (most only after merging main in), 2 BLOCKING: #117 (check.yml conflict with main, mechanical) and #126 (4 findings: docs predate #128/#129/#132).
