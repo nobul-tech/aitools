@@ -1,0 +1,40 @@
+FAIL rules: every rule stem of shared/.claude/dotprofile has a ~/.cursor/rules/<stem>.mdc (diff: rule-stems.diff)
+  expected 35 stems, actual 34
+  17d16
+  < fx-upper
+PASS rules: fan-out marker after the frontmatter in every fanned-out .mdc
+PASS user-own.mdc has no marker
+PASS rules: fx-dup.mdc is the shared copy
+PASS rules: fx-dup2.mdc is the aitools .claude copy
+PASS harness: ~/.aitools/rules/fx-dup.md is the shared copy
+PASS harness: ~/.aitools/rules/fx-dup2.md is the aitools copy
+PASS skills: 37 harness skill files present and identical (content + mode) under ~/.cursor/skills
+PASS skills: exec bit kept on fx-skill-a/scripts/run.sh (mode 0755)
+PASS skills: every skill name of shared/.claude/dotprofile is a ~/.cursor/skills dir (diff: skills.diff)
+PASS skills: fx-dupskill is the shared copy
+PASS skills: fx-dupskill2 is the aitools .claude copy
+PASS harness: 5 duplicate ERROR rows (found 5)
+  row: ERROR|harness files|fx-dupskill: dup in .claude...
+  row: ERROR|harness files|fx-dup.md: dup in dotprofile
+  row: ERROR|harness files|fx-dup2.md: dup in dotprofile
+  row: ERROR|harness files|fx-dupskill: dup in dotprof...
+  row: ERROR|harness files|fx-dupskill2: dup in dotpro...
+  log: [31m[2026-10-28T22:47:36Z] [deploy-harness] [error] Duplicate skills name: fx-dupskill in .claude/skills (/Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-sh/fx/aitools/.claude/skills/fx-dupskill) skipped; kept fx-dupskill from shared/skills (first source wins)[0m
+  log: [31m[2026-10-28T22:47:37Z] [deploy-harness] [error] Duplicate rules name: fx-dup.md in dotprofile (/Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-sh/fx/dotprofile/claude/rules/fx-dup.md) skipped; kept fx-dup.md from shared/rules (first source wins)[0m
+  log: [31m[2026-10-28T22:47:37Z] [deploy-harness] [error] Duplicate rules name: fx-dup2.md in dotprofile (/Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-sh/fx/dotprofile/claude/rules/fx-dup2.md) skipped; kept fx-dup2.md from .claude/rules (first source wins)[0m
+  log: [31m[2026-10-28T22:47:37Z] [deploy-harness] [error] Duplicate skills name: fx-dupskill in dotprofile/skills (/Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-sh/fx/dotprofile/claude/skills/fx-dupskill) skipped; kept fx-dupskill from shared/skills (first source wins)[0m
+  log: [31m[2026-10-28T22:47:37Z] [deploy-harness] [error] Duplicate skills name: fx-dupskill2 in dotprofile/skills (/Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-sh/fx/dotprofile/claude/skills/fx-dupskill2) skipped; kept fx-dupskill2 from .claude/skills (first source wins)[0m
+PASS bracket: ~/.cursor/rules/fx-[br].mdc exists
+PASS bracket: ~/.cursor/skills/fx-[br]ack/SKILL.md exists
+INFO FX-Upper.MD:
+  absent: /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-sh/fx/home/.aitools/rules/FX-Upper.MD
+  absent: /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-sh/fx/home/.cursor/rules/FX-Upper.mdc
+  in rules manifest: no
+  deploy.log: 20:[2026-10-28T22:47:37Z] [deploy-harness] [detail] skip non-.md file in a rules source: dotprofile/FX-Upper.MD
+PASS user file untouched: .cursor/rules/user-own.mdc
+PASS user dir untouched (type/mode): .cursor/skills/user-skill
+PASS user file untouched: .cursor/skills/user-skill/SKILL.md
+INFO *.bak.* entries under ~/.cursor after this phase: 0
+INFO directory backups beside ~/.cursor/rules and ~/.cursor/skills: 0
+  deploy.log: 212:[2026-10-28T22:47:41Z] [setup-user-cursor] [detail] backup_dir: /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-sh/fx/home/.cursor/rules: not backed up (no top-level *.md file)
+  deploy.log: 250:[2026-10-28T22:47:43Z] [setup-user-cursor] [detail] backup_dir: /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-sh/fx/home/.cursor/skills: not backed up (no top-level *.md file)
