@@ -11,8 +11,10 @@
 # (silent); malformed, truncated, empty and pretty-printed JSON (exit 0, no
 # crash); perl absent from PATH (reminder, elements not checked); the
 # delegation telemetry event (total 8, tool, checked); enforce mode (exit 2 on
-# a gap, 0 at 8/8); timing of a large prompt (< 50 ms; advisory on Windows Git
-# Bash, where process start-up alone can exceed it).
+# a gap, 0 at 8/8); timing of a large prompt (best of 5 < 100 ms; advisory on
+# Windows Git Bash, where process start-up alone can exceed it). The bound was
+# 50 ms until 2026-10-28: CI runners measured 40-54 ms for the same hook, so it
+# failed on runner variance; 100 ms still catches a 2x regression.
 # Platform: macOS, Linux, Windows Git Bash; bash 3.2 compatible. Safe to re-run.
 # Usage: bash tests/hooks/test-delegation-duty-guard.sh
 #        AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/hooks/test-delegation-duty-guard.sh
@@ -254,6 +256,8 @@ run_hook "$WORK/p.json" "$WORK/enforce.sh"
 [ "$RC" -eq 0 ] && ok "enforce + 8/8: exit 0" || bad "enforce full rc=$RC"
 
 echo "== Timing (large prompt) =="
+# Bound with headroom for shared CI runners (measured 40-54 ms on 2026-10-27/28).
+TIMING_MAX_MS=100
 big="$(prompt_without none) $(perl -e 'print "lorem ipsum dolor sit amet " x 8000')"
 agent_payload Agent "$big" > "$WORK/big.json"
 ms="$(perl -MTime::HiRes=time -e '
@@ -262,9 +266,9 @@ ms="$(perl -MTime::HiRes=time -e '
     printf "%d", $best;' "$BASH_ABS" "$HOOK" "$WORK/big.json")"
 case "$(uname -s)" in
     MINGW*|MSYS*|CYGWIN*)
-        if [ "$ms" -lt 50 ]; then ok "large prompt ($(wc -c < "$WORK/big.json") bytes): ${ms} ms"; else printf '  WARN large prompt: %s ms (>= 50; advisory on Windows Git Bash)\n' "$ms"; fi ;;
+        if [ "$ms" -lt "$TIMING_MAX_MS" ]; then ok "large prompt ($(wc -c < "$WORK/big.json") bytes): ${ms} ms"; else printf '  WARN large prompt: %s ms (>= %s; advisory on Windows Git Bash)\n' "$ms" "$TIMING_MAX_MS"; fi ;;
     *)
-        if [ "$ms" -lt 50 ]; then ok "large prompt ($(wc -c < "$WORK/big.json" | tr -d ' ') bytes): best of 5 = ${ms} ms"; else bad "large prompt: ${ms} ms (>= 50)"; fi ;;
+        if [ "$ms" -lt "$TIMING_MAX_MS" ]; then ok "large prompt ($(wc -c < "$WORK/big.json" | tr -d ' ') bytes): best of 5 = ${ms} ms (< ${TIMING_MAX_MS})"; else bad "large prompt: ${ms} ms (>= ${TIMING_MAX_MS})"; fi ;;
 esac
 
 perl -e 'print q({"tool_name":"Agent","tool_input":{"prompt":"), "name prefix " x 25000, q("}})' > "$WORK/adv.json"
