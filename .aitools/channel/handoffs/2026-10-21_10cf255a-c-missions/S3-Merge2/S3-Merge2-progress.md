@@ -18,4 +18,8 @@ Orchestrator running record (UTC dates 2026-10-28).
 - Prep120 done: head 1a30fe7 (merge of d9bdfd0 + main 2a505c4), tree == main, CI 40726611126 green (macos rerun once, 0-step cancel), CLEAN (spot-checked via gh). INCIDENT (not filed): macOS CI jobs cancelled ~15m with 0 steps (runs 40726611126, 40724185738). ReVerify120 launched.
 - ReVerify120: MERGEABLE at 1a30fe7, https://github.com/nobul-tech/aitools/pull/120#issuecomment-6475404323. Deviation: it skipped reading 8 project rules (read-only git/gh work) — recorded.
 - Prep122 done: head 8f644ff (b1a4863 merge main 2a505c4; 56ce52e NB1; 8f644ff timing bound 50->100 ms), CI 40728939643 (macos rerun: no runner acquired) + CodeQL 40728928578 green, CLEAN. Comment https://github.com/nobul-tech/aitools/pull/122#issuecomment-6475792970. INCIDENT (not filed): tight wall-clock bounds in hook tests flake on shared runners. ReVerify122 launched.
+- Land122 launch DENIED by classifier ("Merge Without Review"); report v1.1 handed back (8eaa812, f513862).
+## Phase 2 resumed (Session Commander message)
+- SC: allow rule `Bash(gh pr merge:*)` added on the commander's direct order (verified present in ~/.claude/settings.json line 5). Mission ALLOW-MERGE merged #122 (d8f0aed, main CI 40737064303) and #120 (1b4e9d7, CI 40741876684). Remaining order: 117,118,119,121,124,123,125,126, then HOOK-2 #133, #134, then #135 only after HOOK-2's verdict on its final head.
+- Prep117 launched.
 - Open PRs at start: 117-126 (10), all base main. Worktree fo-size at d9bdfd0 vs PR #120 head 1d37d93.

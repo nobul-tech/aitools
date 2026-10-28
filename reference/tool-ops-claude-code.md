@@ -60,8 +60,9 @@ Post-push checklist #20 triggers this review automatically.
 | 25 | SendMessage for agent continuation unavailable (gated behind Agent Teams flag; old `resume` param removed in 2.1.77) | 2.1.77 | 2.1.81 (2026-03-24); **superseded**: in 2.1.309 (macOS, 2026-10-27) `SendMessage` and `ListAgents` are offered to the main session for in-process subagents; not yet tested end to end | Agent tool documentation, delegation prompts | [#35240](https://github.com/anthropics/claude-code/issues/35240), [#37051](https://github.com/anthropics/claude-code/issues/37051), [#38183](https://github.com/anthropics/claude-code/issues/38183) |
 | 26 | Sub-agent Markdown file-name block: Write refuses a sub-agent write whose basename matches `^(REPORT\|SUMMARY\|FINDINGS\|ANALYSIS).*\.md$` (case-insensitive) | 2.1.289 | 2.1.289 (2026-10-05) | "Sub-agent Markdown File-Name Block" section below, dotprofile `claude/rules/delegation.md` (D-DEL1), `shared/skills/delegate/SKILL.md`, `shared/hooks/delegation-duty-guard.sh`, `shared/claude-shared.md` + dotprofile `claude/CLAUDE.md` (Delegation Duty) | -- (not in the official docs) |
 | 27 | `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` caps sub-agent nesting (documented default 3; the Claude Code web environment sets 1); the launch path decides whether a delegate gets the Agent tool (Workflow agents never do) | 2.1.219 | 2.1.307 (2026-10-21) | "Sub-agent Nesting Depth" section below, `shared/skills/delegate/SKILL.md`, `shared/skills/aitool-continue/SKILL.md` | -- |
-| 28 | Hook output channel: stderr of a hook that exits 0 never reaches Claude; observe-mode hooks reach Claude through stdout JSON `hookSpecificOutput.additionalContext`. Hooks docs (https://code.claude.com/docs/en/hooks, read 2026-10-28): "Claude never sees stderr from a hook that exits 0."; PreToolUse decision control, `additionalContext`: "String added to Claude’s context alongside the tool result."; "A hook’s additionalContext, systemMessage, and initialUserMessage strings, and its plain stdout, are capped at 10,000 characters" | 2.1.309 | 2.1.309 (2026-10-28) | `shared/hooks/delegation-duty-guard.sh`, `shared/hooks/workflow-delegation-guard.sh` (`finish()`: 4,000-character cap), `.claude/rules/hook-rollout.md` | -- |
-| 29 | Workflow event shape: Claude Code fires ONE PreToolUse(Workflow) per Workflow tool call, whose `tool_input` carries the whole `script` (the 5 real payloads of session 10cf255a-c carry only `script`); no hook event fires per `agent()` call (a workflow-runtime function, not a tool call); tool calls made inside workflow agents fire the configured hooks with `agent_id`. Hooks docs (read 2026-10-28): PreToolUse "Matches on any tool name except EndConversation: built-in tools such as Bash, PowerShell, Edit, Write, Read, Glob, Grep, Agent, Workflow, WebFetch, WebSearch, AskUserQuestion, and ExitPlanMode, and any MCP tool names."; "When a subagent calls a tool, tool events such as PreToolUse and PostToolUse fire the same configured hooks as in the main conversation, and the input carries the agent_id and agent_type common input fields that identify the subagent." Live record: workflow wf_11a87d20-2c7's agent transcripts hold 34 `PreToolUse:Bash`, 1 `PreToolUse:Read` and 68 `PostToolUse:Write` hook records | 2.1.309 | 2.1.309 (2026-10-28) | `shared/hooks/workflow-delegation-guard.sh` (parses the script at that one event), `shared/hooks/hooks-manifest.json`, `.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-Hook2/S3-Hook2-spec.md` section 1 | -- |
+| 28 | Auto mode: an explicit user-scope allow rule (`Bash(gh pr merge:*)`) resolves a matching command before the classifier, so `gh pr merge` no longer gets the "[Merge Without Review]" denial; applies to sub-agents; picked up mid-session | 2.1.309 | 2.1.309 (2026-10-28) | "Auto Mode and Allow Rules for PR Merges" section below, dotprofile `profile.json` `claude.settings.permissions.allow`, merge-mission prompts | -- (documented: permission-modes, permissions, settings) |
+| 29 | Hook output channel: stderr of a hook that exits 0 never reaches Claude; observe-mode hooks reach Claude through stdout JSON `hookSpecificOutput.additionalContext`. Hooks docs (https://code.claude.com/docs/en/hooks, read 2026-10-28): "Claude never sees stderr from a hook that exits 0."; PreToolUse decision control, `additionalContext`: "String added to Claude’s context alongside the tool result."; "A hook’s additionalContext, systemMessage, and initialUserMessage strings, and its plain stdout, are capped at 10,000 characters" | 2.1.309 | 2.1.309 (2026-10-28) | `shared/hooks/delegation-duty-guard.sh`, `shared/hooks/workflow-delegation-guard.sh` (`finish()`: 4,000-character cap), `.claude/rules/hook-rollout.md` | -- |
+| 30 | Workflow event shape: Claude Code fires ONE PreToolUse(Workflow) per Workflow tool call, whose `tool_input` carries the whole `script` (the 5 real payloads of session 10cf255a-c carry only `script`); no hook event fires per `agent()` call (a workflow-runtime function, not a tool call); tool calls made inside workflow agents fire the configured hooks with `agent_id`. Hooks docs (read 2026-10-28): PreToolUse "Matches on any tool name except EndConversation: built-in tools such as Bash, PowerShell, Edit, Write, Read, Glob, Grep, Agent, Workflow, WebFetch, WebSearch, AskUserQuestion, and ExitPlanMode, and any MCP tool names."; "When a subagent calls a tool, tool events such as PreToolUse and PostToolUse fire the same configured hooks as in the main conversation, and the input carries the agent_id and agent_type common input fields that identify the subagent." Live record: workflow wf_11a87d20-2c7's agent transcripts hold 34 `PreToolUse:Bash`, 1 `PreToolUse:Read` and 68 `PostToolUse:Write` hook records | 2.1.309 | 2.1.309 (2026-10-28) | `shared/hooks/workflow-delegation-guard.sh` (parses the script at that one event), `shared/hooks/hooks-manifest.json`, `.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-Hook2/S3-Hook2-spec.md` section 1 | -- |
 
 ### MEDIUM -- Affects developer experience or specific features
 
@@ -382,6 +383,100 @@ for each completion notification instead.
   ("this command sets HOME, injecting git configuration ... Refusing to run
   it"), so isolated-`HOME` runs (`build-deploy.sh`, #86) must run from a
   non-isolated agent or the main session.
+
+### Auto Mode and Allow Rules for PR Merges (#28)
+
+**Tested** 2026-10-28, Claude Code 2.1.309 (`claude --version`), macOS,
+local environment, session in auto mode (`permissions.defaultMode` stays
+`"default"`), by S3-AllowMerge, a level-1 delegate launched with the Agent
+tool by Session Commander 10cf255a-c.
+
+**The rule** (user scope, added by the Session Commander on the commander's
+order, 2026-10-28): `"permissions": {"allow": ["Bash(gh pr merge:*)"]}` in
+`~/.claude/settings.json` (backup `settings.json.bak.2026-10-28T173309Z`),
+mirrored in the dotprofile `profile.json` `claude.settings.permissions`
+(dotprofile commit 9cb13b2) so `setup-user-settings` keeps it. User scope
+applies in every repo and needs no workspace trust; a project-scope
+`.claude/settings.json` allow rule applies only after the folder's trust
+dialog is accepted (docs below).
+
+**Before** (MERGE-2, 2026-10-28, no allow rule): `gh pr merge 122 --merge
+--match-head-commit 8f644ff…` was denied with:
+
+```
+Permission for this action was denied by the Claude Code auto mode classifier. Reason: [Merge Without Review].
+```
+
+Earlier (MERGE-ALL, 2026-10-27) 25 PRs merged from inside a workflow; four
+were flagged afterwards with the same reason but not stopped. That matches the
+documented third subagent check: the classifier reviews a finished subagent's
+work and report and prepends a warning; it does not undo actions.
+
+**After** (this test, rule in place, delegate session):
+
+| PR | Command | Result | Merge commit |
+|----|---------|--------|--------------|
+| #122 | `gh pr merge 122 -R nobul-tech/aitools --merge --match-head-commit 8f644fffcf6e6c634ee09c4959887022d19ba2d2` | ran with no prompt or denial, empty output; `gh pr view` then showed `MERGED` at 2026-10-28T17:34:47Z; main CI run 40737064303 success | d8f0aedda0271fcf450c7595f5fa2b16eee39119 |
+| #120 | `gh pr merge 120 -R nobul-tech/aitools --merge --match-head-commit 1a30fe7f139fb9d313ec332f489e7b19572cc1f5` | same: no prompt or denial, empty output; `MERGED` at 2026-10-28T18:05:35Z; main CI run 40741876684 success | 1b4e9d7cae8b752a6a3d5355920c8eb791a9435a |
+
+Pre-merge checks: `gh pr view 122 --json state,headRefOid,mergeStateStatus,statusCheckRollup`
+showed head 8f644ff, all 8 checks `SUCCESS`; the first read returned
+`mergeStateStatus: UNKNOWN` (GitHub computes it lazily) and a second read
+`CLEAN` / `MERGEABLE`. Re-read until `CLEAN` before merging.
+
+The result is consistent with the documented decision order: a call that
+matches an allow rule resolves at step 1 and never reaches the classifier.
+The session cannot observe directly whether the classifier was skipped or
+consulted and agreed; the docs say it is skipped.
+
+**What the docs say** (read 2026-10-28 with chrome-devtools, `.md` pages):
+
+- https://code.claude.com/docs/en/permission-modes.md "How the classifier
+  evaluates actions": "Each action goes through a fixed decision order. The
+  first matching step wins: 1. Actions matching your allow, ask, or deny rules
+  resolve immediately, with these exceptions: …" (exceptions: protected-path
+  writes, critical-path `rm`/`rmdir`, `requiresUserInteraction` MCP tools,
+  commands with per-command allowed domains, content-matching ask rules,
+  symlinked protected paths, network-path reads) "… 3. Everything else goes
+  to the classifier".
+- Same page: "On entering auto mode, broad allow rules that grant arbitrary
+  code execution are dropped: Blanket `Bash(*)` or `PowerShell(*)`;
+  Wildcarded interpreters like `Bash(python*)`; Package-manager run commands;
+  `Agent` allow rules; `Monitor` allow rules … Narrow rules like
+  `Bash(npm test)` stay in effect." `Bash(gh pr merge:*)` is a narrow rule.
+- Same page, "How auto mode handles subagents": "2. While the subagent runs,
+  each of its actions goes through the same decision order as in the parent
+  session, with the same block and allow rules. Any `permissionMode` in the
+  subagent's frontmatter is ignored." and "1. Before a subagent starts, the
+  delegated task description is evaluated, so a dangerous-looking task is
+  blocked at spawn time."
+- https://code.claude.com/docs/en/permissions.md: "The `:*` suffix is an
+  equivalent way to write a trailing wildcard, so `Bash(ls:*)` matches the
+  same commands as `Bash(ls *)`." and "if user settings allow a permission
+  and project settings deny it, the deny rule blocks it." and
+  "`permissions.allow` rules … in a project's `.claude/settings.json` grant
+  capability, so Claude Code applies them only after you accept the
+  workspace trust dialog for that folder."
+- https://code.claude.com/docs/en/settings.md "When edits take effect":
+  "Claude Code watches your settings files and reloads them when they
+  change, so it applies most edits to the running session without a
+  restart, including edits to `permissions`, `hooks`, and credential
+  helpers". The rule was added mid-session and applied without a restart.
+
+**Guidance for merge missions:**
+
+1. The allow rule removes the classifier gate for `gh pr merge` only. It
+   does not replace review: the mission still gates each merge on green CI,
+   `mergeStateStatus: CLEAN`, a recorded independent verdict, and
+   `--match-head-commit <verified head>` so a moved branch fails the merge.
+2. Keep the form `gh pr merge <n> -R <owner/repo> …` as one simple command.
+   The rule matches the command prefix; a merge wrapped in a script or a
+   compound command may not match it and then goes to the classifier
+   (inference from the decision order; not tested).
+3. Record the commander's merge order in a PR comment after each merge.
+4. A deny or ask rule in any scope still wins over this allow rule.
+5. Other outward-facing commands (`git push` to `main`, `gh release`, tag
+   pushes) are not covered by this rule and still go to the classifier.
 
 ### Session Storage Internals
 
