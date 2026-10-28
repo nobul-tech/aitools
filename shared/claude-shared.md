@@ -26,14 +26,15 @@ Reading/referencing any source is always OK — the gate applies at "install" or
 - **Yellow flags** (disclose and let user decide): low adoption, sole maintainer, no release in 12+ months, excessive permissions, no license
 - **Always check**: publisher/org verification, last activity date, adoption metrics, requested permissions
 - **Quick checks**: VS Code → verified badge + install count; npm → `npm view <pkg> repository.url`; PyPI → pypi.org project URL; GitHub → org vs personal account
-- Tool governance lives in [`nobul-jose/aitools`](https://github.com/nobul-jose/aitools) -- pre-approved tools, evaluation framework, and lifecycle phases documented there
-- When working outside aitools: open an issue on `nobul-jose/aitools` via `gh` (see [RFC 0001](https://github.com/nobul-jose/aitools/blob/main/rfcs/RFC-0001-workspace-tool-requests.md))
+- Tool governance lives in [`nobul-tech/aitools`](https://github.com/nobul-tech/aitools) -- pre-approved tools, evaluation framework, and lifecycle phases documented there
+- When working outside aitools: open an issue on `nobul-tech/aitools` via `gh issue create -R nobul-tech/aitools` (see [RFC 0001](https://github.com/nobul-tech/aitools/blob/main/rfcs/RFC-0001-workspace-tool-requests.md))
 
 ## Cross-Platform Awareness
 
-- I work on both Windows 11 and macOS -- both are first-class, ensure a seamless experience on either
+- aitools supports macOS, Windows 11, Linux (Ubuntu 24.04/22.04), Claude Code web and Cursor cloud -- each is first-class (list: `reference/cross-platform-detail.md` "Supported platforms and environments"). I work day to day on Windows 11 and macOS.
+- Project working state (running estimates, consolidated findings, harvested artifacts) must carry forward across machines -- if I switch from Mac to Windows on the same project, I pick up where I left off. Track carry-forward state in git; gitignore session-ephemeral data
 - Use `~/` with forward slashes on macOS, `%USERPROFILE%\` with backslashes on Windows
-- Projects live in git repos under `~/repos/` (macOS) / `%USERPROFILE%\repos\` (Windows)
+- Projects live in git repos under `~/repos/` (macOS, Linux) / `%USERPROFILE%\repos\` (Windows)
 - My dotprofile repo (profile.json, personal CLAUDE.md template, rules, session archives) is `{{USER_REPO_PATH}}` on this machine -- convention `<reposPath>/aitools-<github-user>`. Code finds it with `resolve_user_repo_path` / `Resolve-UserRepoPath` (aitools-lib); never hardcode it
 - `profile.json` in the dotprofile is the source of truth for my identity and every machine (machine profiles keyed by machine id); `~/.aitools/config.json` is derived from it by `setup-user-config` -- change `profile.json`, never edit config.json by hand
 - Google Drive paths are auto-discovered by `aitools install` and stored in `~/.aitools/config.json` (`googleDrives` array) -- do not hardcode them
@@ -69,12 +70,14 @@ use `npx`, `bunx`, or other package runners.
 | Typst | `typst` |
 | pwsh | `pwsh` |
 | Modal CLI | `modal` |
-| Python | `python3` (macOS) / `python` (Windows) |
-| pip | `pip3` (macOS) / `python -m pip` (Windows) |
+| Python | `python3` (macOS, Linux) / `python` (Windows) -- uv-managed shims |
+| pip | `uv pip` / `python3 -m pip` (macOS, Linux) / `python -m pip` (Windows) |
 | uv | `uv` |
 | Go | `go` |
 | Datadog CLI | `pup` |
 | Perl | `perl` |
+| Bash (Git Bash on Windows) | `bash` |
+| Node.js | `node` |
 
 ### Per-Platform Tools
 
@@ -96,8 +99,8 @@ harness no longer force-disables vercel/webflow.
 ## Knowledge Management
 
 - **Claude Code preferences** are stored in `profile.json` (`claude.settings`) and synced by `setup-user-settings` to `~/.claude/settings.json`:
-  - `autoMemory: false` -- auto memory disabled. Durable knowledge belongs in git-tracked files: `CLAUDE.md`, `.claude/rules/`, or project docs.
-  - `alwaysThinking: true` -- extended thinking enabled by default for all sessions.
+  - `autoMemoryEnabled: false` -- auto memory disabled. Durable knowledge belongs in git-tracked files: `CLAUDE.md`, `.claude/rules/`, or project docs.
+  - `alwaysThinkingEnabled: true` -- extended thinking enabled by default for all sessions.
   - `effortLevel: "high"` -- reasoning effort level (low/medium/high). CC 2.1.68+ defaults to medium for Opus 4.6; "ultrathink" keyword forces high for one turn.
 - **Planning workflow:** When starting a major plan, check for stale auto memory files (`~/.claude/projects/.../memory/`) from before the disable and migrate any useful content into the repo.
 
@@ -112,10 +115,12 @@ Full evaluation and progress log: `claude/effectiveness.md` in your user repo.
 - **UCI: Hooks** -- Leverage Claude Code hooks beyond guardrails -- subagent context injection (PreToolUse on Agent to close the context gap), auto-format on Write/Edit, auto-test after code changes, completion notifications.
 - **UCI: Ask for help when stuck** -- When the environment is fundamentally broken (e.g., deleted CWD, corrupted shell state), ask the user to restart the session instead of burning tool calls on workarounds.
 - **UCI: Clean up before deleting** -- Always `cd` back to a stable directory before `rm -rf`'ing temp dirs used during testing.
-- **UCI: Subagent context gap** -- Subagents launched via Task do NOT inherit project rules or CLAUDE.md files. Prefer subagents for research; for code-writing in projects with cross-cutting rules, consider including critical rules in the subagent prompt.
+- **UCI: Subagent context gap** -- What a sub-agent receives varies by type and launch path (general-purpose Agent delegates get CLAUDE.md files; Explore/Plan and workflow agents may not; project rules may not attach). Every delegation prompt lists every CLAUDE.md and rule to read in full (`/delegate` element 2).
 - **UCI: Clarify before complying** -- If a user response seems to contradict or reverse a prior recommendation, ask a clarifying question before proceeding. A quick "Just to confirm -- did you mean X or Y?" avoids wasted work from miscommunication.
 - **UCI: Preserve subagent work product** -- When a subagent performs a substantial exploration (multi-file audit, multi-component analysis), write the full findings to the session scratch directory (per `/scratch` skill) -- do not condense them into a stub summary that discards the detail. The SessionEnd hook evaluates for harvesting. Trivial lookups can stay inline.
 - **UCI: Verify subagent audit results** -- When subagents perform audits (code review, pattern scanning, compliance checks), spot-check their results. Read at least one file reported "clean" and verify. Treat subagent results as leads, not conclusions.
+- **UCI: Suggest answers with questions** -- Never ask a question without also suggesting an answer. "Should we do X? I'd suggest Y because Z" beats a bare question that blocks the user.
+
 ### Standing Orders
 
 Standing orders are non-negotiable rules. USO (User) apply everywhere; PSO (Project) apply to a specific repo.
@@ -129,6 +134,12 @@ Repeated violations will end the working relationship.
 - **USO: Simple Bash commands only** -- Never use `$(...)`, backticks, `&&`, `||`, `;`, or glob patterns (`*`, `?`) in destructive commands (`rm`) in Bash tool calls -- these trigger permission prompts that block the user. For commit messages, write to the session scratch directory and use `git commit -F` (per `/scratch` skill). For sequential commands, make separate Bash calls. For cleanup, write a cleanup script and execute it. Pipelines (`|`) are OK.
 
 **In plan mode**: Always review these areas and proactively suggest relevant improvements (e.g., "consider breaking this into smaller batches" or "this would be a good candidate for a hook").
+
+## Session Hygiene
+
+- At the start of long sessions (3+ hours), proactively suggest a checkpoint commit if there are significant uncommitted changes
+- When context is getting large, suggest compacting before it becomes urgent
+- If a session spans multiple unrelated tasks, suggest splitting into focused sessions
 
 ## Delegation Duty
 

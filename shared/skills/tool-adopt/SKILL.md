@@ -65,12 +65,12 @@ Never read or name a registry JSON file directly.
 
 ## Today and after M2
 
-The tool support decision tree (`reference/tool-support-decision-tree.md`),
-tool registry schema 1.1, the generated tool specs and the `tool_*` helpers
-are mission M2 work and do not exist yet. Until they land, use the "Today"
-column. Check which applies at the start of every run: the tree applies once
-`reference/tool-support-decision-tree.md` exists and the `/tool-registry`
-skill reports schema `1.1`.
+The tool support decision tree reference (`reference/tool-support-decision-tree.md`)
+is written; tool registry schema 1.1, the generated tool specs
+(`scripts/gen-tool-specs.py`) and the `tool_*` helpers are mission M2 work and
+do not exist yet. Until they land, use the "Today" column. The "After M2"
+column applies only when the `/tool-registry` skill reports schema `1.1` (the
+reference existing is not enough).
 
 | Step | Today (current rules, hand-written scripts) | After M2 |
 |------|----------------------|----------|
@@ -85,7 +85,7 @@ Read these before step 1; do not work from memory:
 
 1. `.claude/rules/tool-lifecycle.md` — gates, onboarding checklist, update policy
 2. `.claude/rules/tool-evaluation.md` — evaluation principles
-3. `reference/tool-support-decision-tree.md` — only after M2 (see above)
+3. `reference/tool-support-decision-tree.md` — read for direction; binding only after M2 (schema 1.1)
 4. `/tool-registry` skill — how to read and write the registry
 5. `/tool-eval` skill — the evaluation process you may have to run
 6. `.claude/rules/script-standards.md`, `.claude/rules/cross-platform.md`,
@@ -163,10 +163,11 @@ item: that list no longer exists — open incident #65.)
 
 After M2, regenerate tool specs (`scripts/gen-tool-specs.py`) and commit them
 with the registry change. Rebuild and propagate under an isolated `HOME`
-(`build-deploy.sh` deletes and rebuilds the real dotprofile `deploy/`
-otherwise): `bash scripts/build-deploy.sh` (count grows by 2),
-`bash scripts/setup-user-claude.sh`, `bash scripts/check-post-push.sh`, then
-commit and push when the commander authorises it.
+(`build-deploy.sh` replaces the real dotprofile `deploy/` otherwise — with a
+backup and an atomic swap since d65623b, but still a change to the
+commander's dotprofile): `bash scripts/build-deploy.sh` (verify the new
+`setup-<tool>.sh/.ps1` pair is in the generated `deploy/`),
+`bash scripts/setup-user-claude.sh`, `bash scripts/check-post-push.sh`.
 
 ### 6. Verify
 
@@ -203,7 +204,7 @@ and `INCIDENT:` lines for deviations found.
   `[m]erge & adopt`)
 - Does NOT remove a tool installed from an unknown source
 - Does NOT create setup scripts or registry entries outside the aitools repo
-- Does NOT commit, push, or open PRs without the commander's authorisation
+- Does NOT push to main, merge, or tag; code changes ship on a branch with a PR (D-DEL4)
 
 ## Cross-References (aitools repo paths)
 

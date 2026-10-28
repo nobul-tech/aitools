@@ -1,0 +1,2 @@
+[REVIEW][0m /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-sh/fx/home/.cursor/rules/fx-shared.mdc differs from source. -> answered s
+[REVIEW][0m /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-sh/fx/home/.cursor/skills/fx-skill-b/SKILL.md differs from source. -> answered s

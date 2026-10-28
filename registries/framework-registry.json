@@ -32,7 +32,7 @@
       "referenceFile": "reference/framework-incident-governance.md",
       "artifacts": [
         ".claude/rules/incident-governance.md",
-        ".claude/skills/incident/SKILL.md",
+        "shared/skills/incident/SKILL.md",
         ".claude/skills/audit/SKILL.md"
       ],
       "lastUpdated": "2026-03-15"
@@ -60,8 +60,8 @@
         "reference/tool-evaluation-criteria.md",
         "reference/tool-evaluation-playbook.md",
         "reference/evaluations/",
-        ".claude/skills/tool-registry/SKILL.md",
-        ".claude/skills/tool-eval/SKILL.md"
+        "shared/skills/tool-registry/SKILL.md",
+        "shared/skills/tool-eval/SKILL.md"
       ],
       "lastUpdated": "2026-03-15"
     },
@@ -122,7 +122,7 @@
       "referenceFile": "reference/framework-governed-vocabulary.md",
       "artifacts": [
         ".claude/rules/glossary.md",
-        ".claude/skills/glossary/SKILL.md"
+        "shared/skills/glossary/SKILL.md"
       ],
       "lastUpdated": "2026-03-14"
     },
@@ -152,7 +152,7 @@
         ".claude/rules/frameworks.md (trigger directive)",
         ".claude/rules/incident-governance.md (trigger directive)",
         ".claude/rules/tool-evaluation.md (trigger directive)",
-        ".claude/skills/frameworks/SKILL.md",
+        "shared/skills/frameworks/SKILL.md",
         "reference/framework-governed-data-access.md"
       ],
       "lastUpdated": "2026-03-15"
@@ -165,7 +165,7 @@
       "referenceFile": "reference/framework-artifact-harvesting.md",
       "artifacts": [
         ".claude/rules/artifact-harvesting.md",
-        ".claude/skills/harvest/SKILL.md",
+        "shared/skills/harvest/SKILL.md",
         "harvesting/",
         "shared/hooks/harvest-session.sh"
       ],
@@ -179,7 +179,7 @@
       "referenceFile": "reference/framework-tool-ops.md",
       "artifacts": [
         ".claude/rules/tool-ops.md",
-        ".claude/skills/tool-ops/SKILL.md",
+        "shared/skills/tool-ops/SKILL.md",
         "registries/tool-ops.json",
         "reference/tool-ops-claude-code.md",
         "shared/hooks/tool-ops-session-audit.sh"

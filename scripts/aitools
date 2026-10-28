@@ -871,8 +871,8 @@ ui_scaffold_claude_md() {
 # Returns 0 done (warnings possible), 1 any failure, 2 user abort in a review menu
 # (D-TS13). The caller creates and shows the run summary (decision 3).
 user_init() {
-    local rc=0 raw repos_dir user_repo_dir out crc=0 dn de wrc=0 hook_rc=0 hook_setup
-    local writer_args=() no_machine=false
+    local rc=0 raw repos_dir user_repo_dir out crc=0 dn de hook_rc=0 hook_setup
+    local writer_args=() writer_cmd=() hook_cmd=() no_machine=false hook_direct=false hook_errs0=0 hook_detail=""
     gh_user=""; repo_name=""; machine_key=""; machine_alias=""; machine_owner=""
     # --force: no prompts here, and the review menus of setup-user-hooks take the source
     if $force; then export AITOOLS_FORCE=1; fi
@@ -989,42 +989,66 @@ user_init() {
         write_summary ERROR "machine profile" "not this machine's profile"
         machine_key=""; rc=1
     fi
+    # Both child scripts run through the lib relay (audit A-12, A-13): their lines
+    # are shown and mirrored to deploy.jsonl, their warnings are counted here, and a
+    # failed child is one error (logged by the relay) with an ERROR row of its own,
+    # or the relay's ("script failed (exit N)") when it died before writing one.
     case "$(uname -s)" in
         MINGW*|MSYS*|CYGWIN*)
             writer_args=(-GithubUser "$gh_user" -UserRepoPath "$(cygpath -w "$user_repo_dir")")
             if [ -n "$machine_key" ]; then writer_args+=(-MachineId "$machine_key")
             elif $no_machine; then writer_args+=(-NoMachine); fi
-            pwsh -NoProfile -ExecutionPolicy Bypass \
-                -File "$(cygpath -w "$repo_path/scripts/setup-user-config.ps1")" "${writer_args[@]}" || wrc=$?
+            writer_cmd=(pwsh -NoProfile -ExecutionPolicy Bypass
+                -File "$(cygpath -w "$repo_path/scripts/setup-user-config.ps1")" "${writer_args[@]}")
             ;;
         *)
             writer_args=(--github-user "$gh_user" --user-repo-path "$user_repo_dir")
             if [ -n "$machine_key" ]; then writer_args+=(--machine-id "$machine_key")
             elif $no_machine; then writer_args+=(--no-machine); fi
-            "${BASH:-bash}" "$repo_path/scripts/setup-user-config.sh" "${writer_args[@]}" || wrc=$?
+            writer_cmd=("${BASH:-bash}" "$repo_path/scripts/setup-user-config.sh" "${writer_args[@]}")
             ;;
     esac
-    if [ "$wrc" -ne 0 ]; then
-        log_error "user init: setup-user-config failed (exit $wrc) -- see $LOG_DISPLAY"
-        write_summary ERROR "aitools config" "setup-user-config failed"
-        rc=1
+    if ! run_child_relayed --summary-tool "aitools config" "user init: setup-user-config" "${writer_cmd[@]}"; then
+        rc=1   # the relay logged the failure (exit $AITLIB_CHILD_RC) and its row
     fi
 
     # Session archive hook. Exit 2 = the user aborted in the review menu (D-TS13):
-    # stop with exit 2; any other failure is logged.
+    # stop with exit 2 (the relay records it: one error, ERROR "claude hooks"
+    # "aborted (exit 2)" unless the hook script wrote a row); any other failure is
+    # logged by the relay.
     log "user init: deploying the session archive hook"
     case "$(uname -s)" in
         MINGW*|MSYS*|CYGWIN*)
+            # Not relayed (review B M-1): the PowerShell review menus write their prompt
+            # with [Console]::Write and no newline; through the relay's line reader it
+            # would stay hidden until the user answered. Run directly, as before; the
+            # failure is counted and its ERROR row written by the relay's rule below.
             hook_setup="$repo_path/scripts/setup-user-hooks.ps1"
-            if [ -f "$hook_setup" ]; then
-                pwsh -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$hook_setup")" || hook_rc=$?
-            else hook_rc=127; fi
+            hook_cmd=(pwsh -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$hook_setup")")
+            hook_direct=true
             ;;
         *)
             hook_setup="$repo_path/scripts/setup-user-hooks.sh"
-            if [ -f "$hook_setup" ]; then "${BASH:-bash}" "$hook_setup" || hook_rc=$?; else hook_rc=127; fi
+            hook_cmd=("${BASH:-bash}" "$hook_setup")
             ;;
     esac
+    if [ ! -f "$hook_setup" ]; then
+        hook_rc=127
+    elif $hook_direct; then
+        _aitlib_summary_errors hook_errs0
+        "${hook_cmd[@]}" || hook_rc=$?
+        if [ "$hook_rc" -ne 0 ]; then
+            # The relay's outcome for the same exit (run_child_relayed): one error and
+            # the row "aborted (exit 2)" / "script failed (exit N)" unless the child
+            # wrote an ERROR row of its own
+            if [ "$hook_rc" -eq 2 ]; then hook_detail="aborted (exit 2)"; else hook_detail="script failed (exit $hook_rc)"; fi
+            log_error "user init: $(basename "$hook_setup") ${hook_detail#script } -- see $LOG_DISPLAY"
+            _aitlib_child_row "claude hooks" "$hook_errs0" "$hook_detail"
+        fi
+    elif ! run_child_relayed --summary-tool "claude hooks" "user init: $(basename "$hook_setup")" "${hook_cmd[@]}"; then
+        hook_rc="$AITLIB_CHILD_RC"
+        if [ "$hook_rc" -eq 0 ]; then hook_rc=1; fi   # error lines with exit 0: a failure
+    fi
     if [ "$hook_rc" -eq 2 ]; then
         log "user init: aborted by user"
         return 2
@@ -1034,8 +1058,7 @@ user_init() {
         write_summary ERROR "claude hooks" "setup script missing"
         rc=1
     elif [ "$hook_rc" -ne 0 ]; then
-        log_error "user init: $(basename "$hook_setup") failed (exit $hook_rc) -- see $LOG_DISPLAY"
-        rc=1
+        rc=1   # the relay logged the failure and its row
     fi
     if [ "$rc" -eq 0 ]; then
         log_ok "user init: done -- sessions will be archived to $(display_path "$user_repo_dir/sessions/")"
@@ -1366,6 +1389,10 @@ force=false
 user_alias=""
 passthrough=()
 
+# Argument errors found while parsing, before the lib (and its logging) is loaded:
+# logged right after logging_init, then exit 1 (audit A-15)
+_pre_lib_errors=()
+
 # Capture original args before the parse loop consumes them (shift). The
 # smart-reload re-exec below must replay the user's intent (e.g. `install`);
 # by that point "$@" is empty, so it would silently degrade to the sync path.
@@ -1378,12 +1405,14 @@ while [[ $# -gt 0 ]]; do
         --dry-run)    dry_run=true; shift ;;
         --force)      force=true; shift ;;
         --alias)
-            # aitools user init --alias <alias>: register this machine without a prompt (P-Q12)
-            if [[ $# -lt 2 || "$2" =~ ^-- ]]; then
-                printf 'aitools: --alias needs a value\n' >&2
-                return 1
-            fi
-            user_alias="$2"; shift 2 ;;
+            # aitools user init --alias <alias>: register this machine without a prompt (P-Q12).
+            # No value: an error logged once the lib is loaded, then exit 1 (audit A-15)
+            if [[ $# -lt 2 || "$2" =~ ^- ]]; then
+                _pre_lib_errors+=("--alias needs a value (aitools user init --alias <name>)")
+                shift
+            else
+                user_alias="$2"; shift 2
+            fi ;;
         install)      do_install=true; shift ;;
         gitpull)
             do_gitpull=true; shift
@@ -1529,6 +1558,10 @@ LOG_DISPLAY=$(display_path "$LOG_FILE")
 for _w in ${_pre_lib_warnings[@]+"${_pre_lib_warnings[@]}"}; do
     log_warn "$_w"
 done
+if [ ${#_pre_lib_errors[@]} -gt 0 ]; then
+    for _e in "${_pre_lib_errors[@]}"; do log_error "$_e"; done
+    return 1
+fi
 
 # Reject unknown arguments when not installing (typos like "installs", "mcpp", etc.)
 if ! $do_install && [ ${#passthrough[@]} -gt 0 ]; then
@@ -1776,7 +1809,10 @@ if $do_user; then
             # Decision 3: user init has its own run summary -- created before the user
             # block (its rows and those of its child scripts), shown before it returns
             AITOOLS_SUMMARY_FILE="$HOME/.aitools/run-summary.txt"
-            rm -f "$AITOOLS_SUMMARY_FILE"
+            # A stale summary that cannot be removed would show an earlier run's rows (A-14)
+            if [ -e "$AITOOLS_SUMMARY_FILE" ] && ! rm -f "$AITOOLS_SUMMARY_FILE"; then
+                log_warn "user init: could not remove the old run summary $(display_path "$AITOOLS_SUMMARY_FILE") -- the summary panel may show an earlier run's rows"
+            fi
             if ! { mkdir -p "$HOME/.aitools" && touch "$AITOOLS_SUMMARY_FILE"; }; then
                 log_warn "user init: could not create the run summary $(display_path "$AITOOLS_SUMMARY_FILE") -- the summary panel is not shown"
             fi

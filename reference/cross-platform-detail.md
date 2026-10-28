@@ -97,8 +97,8 @@ code between `# --- BEGIN aitools environment block ---` and
 included. The block is bash 3.2 compatible, `set -u` safe and depends only on `uname`.
 Embedding rather than deploy-time injection keeps `shared/hooks/*.sh` runnable as-is for the
 hook-rollout smoke tests and avoids a third copy of template logic in `setup-user-hooks.sh`,
-`.ps1` and `build-deploy.sh` (`deploy-paths.md`). A check that compares each hook's copy with
-the library is planned.
+`.ps1` and `build-deploy.sh` (`deploy-paths.md`). No hook embeds the block yet; a check that
+compares each copy with the library is planned for when one does.
 
 ### Reporting a step that does not apply
 
@@ -190,7 +190,7 @@ Git's bundled perl (v5.38.2) instead of the managed Strawberry Perl (v5.42.0).
 
 **Resolution in check scripts**: `check-lib.ps1` explicitly prepends the
 managed Strawberry Perl install path on Windows, ensuring it takes priority
-over Git's bundled version. Per PSO "Fail, don't mask": if the managed tool
+over Git's bundled version. Per the no-silent-failures rule (user CLAUDE.md USO "No silent failures in reusable code"): if the managed tool
 is not installed, the script fails — no fallback to Git's bundled version.
 
 **Resolution in other contexts**: Use `Refresh-Path` (aitools-lib.ps1) or

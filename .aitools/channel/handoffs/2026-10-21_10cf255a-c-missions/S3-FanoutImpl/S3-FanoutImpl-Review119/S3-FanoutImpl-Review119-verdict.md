@@ -52,3 +52,42 @@ None.
   - **P6**: dotprofile rules listed, dotprofile `claude/skills` missing, manifest has `dk<TAB>dotprofile`: kept, line kept.
 
 Not run: Windows, `check-pre-commit`, `check-pre-push` (the author's job; not needed for the verdict), CI (FO-0).
+
+---
+
+## Re-verify at 58ff866 (2026-10-27)
+
+Posted: https://github.com/nobul-tech/aitools/pull/119#issuecomment-6432534710
+
+RE-VERIFY: APPROVE
+
+### Status of my earlier findings
+
+| # | Finding | Status |
+|---|---|---|
+| 1 | Retired skill with no top-level `*.md` stuck at ERROR | Fixed: the retire does its own `cp -R` / .NET copy; P5 retires with rc=0 in both languages |
+| 2 | Partial backup left behind | Fixed: P4/Q3a remove the incomplete copy; the retry succeeds |
+| 3 | `.bak.` case | Fixed in the deploy filter, the name rule and the preserved scan |
+| 4 | Non-directory with a retired name had no row | Fixed (WARN `not a dir: <name>`), checked by code read and the suite |
+| 5 | Library prune globbing | No longer on this path: deploy-harness prunes its own backups literally (Q1); the library stays FO-1 |
+| 6 | `reference/harness.md` drift | FO-7 |
+
+### Blocking findings
+
+None.
+
+### New non-blocking findings
+
+1. **`.sh` only: a failed cleanup leaves an incomplete backup that the prune treats as real.** When a skill has a read-only subdirectory, `cp -R` copies the 555 mode, so `discard_skill_backup`'s `rm -rf` fails (Q3b). The run reports it correctly (ERROR `bak cleanup failed`, rc=1). Afterwards the incomplete `<name>.bak.<UTC>` keeps a valid stamp name and the prune counts it as one of the 5 kept, with no further warning. The `.ps1` does not hit this, so the outcomes diverge here. Suggest `chmod -R u+w` before `rm -rf`, or renaming the leftover to `<name>.incomplete.<UTC>`.
+2. **Q4 logs one line differently.** With the manifest path a directory, the `.sh` logs `Preserved: .../.aitools-skills-manifest/inner`; the `.ps1` on macOS does not. Info log only; rows and exit codes match.
+
+### What I ran
+
+- `tests/deploy-harness`: 127/0 with bash 5.3.15 and with /bin/bash 3.2.57; trace parity passes.
+- `tests/deploy-harness-mdm`: 10 passed, 56 failed, all from the size gate (214,321 bytes). With the gate raised in a throwaway clone: 65 passed, 1 failed (size only); both dotprofile-skill checks pass.
+- Probes P0-P6, run on `.sh` and `.ps1`: identical results.
+- New probes, run on `.sh` and `.ps1`:
+  - Q1: prune keeps exactly 5 for a `b[1] *?` skill, and every decoy is kept.
+  - Q2: a same-second collision is an ERROR, the skill is kept, nothing is copied into the existing directory.
+  - Q3: partial-backup cleanup plus retry; Q3b is new finding 1.
+  - Q4: rules and skills manifest paths that are directories give both ERROR rows, rc=1, and the directories are untouched.

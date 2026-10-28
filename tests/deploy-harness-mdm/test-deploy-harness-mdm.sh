@@ -14,7 +14,8 @@
 # (deploy-harness.payload), the size gate (a script over the Intune limit is a
 # WARN with its fix hint, listed again at the end, and the build passes; a
 # forced case pads the fixture dotprofile so a .sh goes over 1 MB), cursor header
-# port and step 4 (MDM), no adopt target in MDM, first run / rerun / edit / dry
+# port and step 4 (MDM), no adopt target in MDM, dotprofile rules and skills
+# embedded (skills manifest same as dev), first run / rerun / edit / dry
 # run equivalence (trees, exec bits, summary rows, exit codes), no git needed
 # at run time, --help, config.json: a fresh HOME (no bootstrap) skips the
 # writer with OK "config.json" "n/a (no bootstrap)" and exit 0, the dev path
@@ -32,7 +33,7 @@
 set -uo pipefail
 
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
-    perl -ne 'print if $. >= 2 && $. <= 29' "$0"
+    perl -ne 'print if $. >= 2 && $. <= 30' "$0"
     exit 0
 fi
 
@@ -71,9 +72,11 @@ done
 gitc() { git -c user.name=test -c user.email=test@example.invalid -c commit.gpgsign=false "$@"; }
 
 DOT="$TMP_ROOT/dot"
-mkdir -p "$DOT/claude/rules"
+mkdir -p "$DOT/claude/rules" "$DOT/claude/skills/dskill/ref"
 printf 'user rule one\n' > "$DOT/claude/rules/user1.md"
 printf 'user rule two\n' > "$DOT/claude/rules/user2.md"
+printf 'dotprofile skill\n' > "$DOT/claude/skills/dskill/SKILL.md"
+printf 'dotprofile skill ref\n' > "$DOT/claude/skills/dskill/ref/r.md"
 git -C "$DOT" init -q
 gitc -C "$DOT" add -A
 gitc -C "$DOT" commit -q -m fixture
@@ -260,6 +263,10 @@ check "first run: same six directories and exec bits" "same_trees eq"
 check "first run: same summary rows" "same_summary eq"
 check "first run: config.json written by the MDM writer, same as dev" "cmp -s '$TMP_ROOT/eq-dev/.aitools/config.json' '$TMP_ROOT/eq-mdm/.aitools/config.json'"
 check "first run: dotprofile rule deployed by MDM" "grep -qx 'user rule one' '$TMP_ROOT/eq-mdm/.aitools/rules/user1.md'"
+check "first run: dotprofile skill embedded and deployed by MDM (nested file)" \
+    "perl -ne '\$f = 1 if /^dotprofile\\/claude\\/skills\\/dskill\\/ref\\/r\\.md\\t0\\t\\d+\\t[0-9a-f]{64}\$/; END { exit(\$f ? 0 : 1) }' '$G/deploy-harness.payload' && grep -qx 'dotprofile skill ref' '$TMP_ROOT/eq-mdm/.aitools/skills/dskill/ref/r.md'"
+check "first run: skills manifest written by MDM, same as dev, lists the dotprofile skill" \
+    "cmp -s '$TMP_ROOT/eq-dev/.aitools/skills/.aitools-skills-manifest' '$TMP_ROOT/eq-mdm/.aitools/skills/.aitools-skills-manifest' && grep -qx \"dskill\$(printf '\\t')dotprofile\" '$TMP_ROOT/eq-mdm/.aitools/skills/.aitools-skills-manifest'"
 check "first run: MDM needed no git" "no_fake_git"
 run dev eq
 run mdm eq
