@@ -352,6 +352,21 @@ not change the tool set. Not tested: spawning through the `claude` CLI
 (`claude -p`, present at `~/.local/bin/claude`) or RemoteTrigger, which are
 separate mechanisms with their own permissions.
 
+**`isolation: "remote"` fell back to a local worktree** (2.1.307, macOS,
+2026-10-27): an Agent-tool call with `subagent_type: "general-purpose"`,
+`isolation: "remote"` ran on this Mac in a new git worktree
+(`.claude/worktrees/agent-<id>`, branch `worktree-agent-<id>`, reported in
+the completion notice's `<worktree>` block), with `CLAUDE_CODE_REMOTE` and
+`CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` unset. No cloud or Claude Code web
+environment was used, so the web nesting limit (1) was not exercised; the
+tool describes remote availability as gated. In the same probe, levels 1 and
+2 had the Agent tool and level 3 did not, and the Agent tool given to
+delegates has no `run_in_background` parameter (every delegate launch was
+asynchronous: "Async agent launched successfully"), so skills that tell a
+delegate to launch foreground sub-agents (e.g. deep-research's
+`run_in_background=false`) cannot be followed as written; the delegate waits
+for each completion notification instead.
+
 - At the default cap (3), the third delegate has no Agent tool at all, so a
   chain runs main → L1 → L2 → L3.
 - Workflow agents cannot delegate, whatever the cap: a workflow is one level

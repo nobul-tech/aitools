@@ -1,6 +1,6 @@
 ## Source-of-Truth Review Gate (this repo)
 
-Certain files are authoritative references that feed scripts, deploy pipelines, or govern Claude's behavior. Changes to these files propagate across machines and affect real workflows, so they require user review before being written.
+Certain files are authoritative references that feed scripts, deploy pipelines, or govern Claude's behavior. Changes to these files propagate across machines and affect real workflows, so every change is reviewed by the user. Review happens after the write (review-after, decision D-DEL5, commander 2026-10-26): agents write a version, commit it, and present the diff.
 
 ### Protected files
 
@@ -35,11 +35,13 @@ Certain files are authoritative references that feed scripts, deploy pipelines, 
 
 ### The rule
 
-Before writing, editing, or deleting content in any protected file:
+When writing, editing, or deleting content in any protected file (review-after, D-DEL5):
 
-1. **Draft the change** — prepare the exact content but do not write it yet
-2. **Present for review** — show the proposed change to the user. Use full content for new sections, diff-style (old → new) for edits to existing content. When multiple protected files change in one task, present them together as a batch.
-3. **Wait for approval** — do not write until the user confirms. If the user requests modifications, revise and re-present.
+1. **Write the version** — make the change in place as a version (v1.0, v1.1, ...), never as a "draft" file to apply later. The change must serve a commander order or decision; cite it.
+2. **Commit it reviewably** — in a PR, list every protected edit old → new under a "Review after" section of the PR body; for a direct-to-main commit (CLAUDE.md "Channel exception"), list them in the commit body. When multiple protected files change in one task, list them together.
+3. **Present the diff** — tell the user which protected files changed and where the old → new list is. The user reviews after; if they ask for changes, make them as the next version (or revert), and record what changed.
+
+Outward-facing or destructive actions (merging, tagging, deleting, publishing) are not covered by review-after: they still need the commander's explicit order.
 
 ### Exceptions
 
@@ -50,11 +52,12 @@ Before writing, editing, or deleting content in any protected file:
 
 Intent statements (`**Intent**:` blocks in markdown, `intent:` header
 comments in code) are protected regardless of which file they appear
-in. Draft the intent, present for user review, write only after
-approval. This applies to new intent statements and modifications to
+in. They follow the same review-after rule: write the intent, list it
+old → new for review, and revise it as the next version if the user
+asks. This applies to new intent statements and modifications to
 existing ones. See `@reference/framework-adoption.md` for why intent
 is part of the harness.
 
 ### Why this matters
 
-These files are the "single source of truth" pattern — downstream scripts and behaviors derive from them. A silent change here can propagate incorrect install commands, alter behavioral rules, or deploy wrong configs across machines. The review step keeps Claude and user in sync.
+These files are the "single source of truth" pattern — downstream scripts and behaviors derive from them. A silent change here can propagate incorrect install commands, alter behavioral rules, or deploy wrong configs across machines. The review step keeps Claude and user in sync; review-after keeps it without blocking work on a pre-write approval, and no protected change is ever silent.
