@@ -245,4 +245,4 @@ The approved intent style has converged through iteration:
 - Intent audit: `/intent-audit` skill
 - Framework: `@reference/framework-adoption.md`
 - Protection rule: `@.claude/rules/sources-of-truth.md`
-- Design principle: `@CLAUDE.md` "Document intent"
+- Intent documentation framework: `reference/framework-intent-documentation.md`

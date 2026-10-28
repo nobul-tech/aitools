@@ -7,7 +7,7 @@
       "scope": "Operational metadata and governance modes only. NOT the ops knowledge itself. NOT install/versions. NOT incidents. NOT the framework definition",
       "audience": "/tool-ops skill, /audit skill, tool-ops-session-audit.sh hook, setup scripts"
     },
-    "lastUpdated": "2026-10-22"
+    "lastUpdated": "2026-10-26"
   },
   "tools": {
     "claude-code": {
@@ -27,9 +27,9 @@
         },
         {
           "event": "PreToolUse",
-          "matcher": "Agent",
+          "matcher": "Agent|Workflow",
           "script": "delegation-duty-guard.sh",
-          "purpose": "Check each delegation prompt for the seven delegation-duty elements (identity, rules, skills, operational learning, WRITE_BLOCKED, access, D-DEL1 Markdown name prefix); remind on gaps, observe mode"
+          "purpose": "Remind the caller to load /delegate on every Agent and Workflow call (D-DEL7), and check the delegation prompt (Agent) or workflow script (Workflow script / scriptPath, as one text) for the eight /delegate v2.0 elements (identity, rules and CLAUDE.md, skills with /delegate, operational learning, D-DEL6 conflict priority, WRITE_BLOCKED, access, D-DEL1 Markdown name prefix); per-element guidance on gaps, observe mode"
         }
       ],
       "contextInjection": {
@@ -41,7 +41,7 @@
         { "name": "hookFireRate", "source": "hook logs", "unit": "fires/session" },
         { "name": "guardBlocks", "source": "hook logs", "unit": "blocks/session" },
         { "name": "versionDepDrift", "source": "check script", "unit": "stale items" },
-        { "name": "delegationDutyScore", "source": "delegation-duty-guard.sh events (session events.jsonl)", "unit": "elements present / 7" }
+        { "name": "delegationDutyScore", "source": "delegation-duty-guard.sh events (session events.jsonl)", "unit": "elements present / 8 (7 before 2026-10-26; each event carries its total)" }
       ],
       "verifications": [
         {
@@ -65,16 +65,22 @@
           "target": "delegation-duty-guard.sh",
           "cases": [
             {
-              "input": {"tool_name":"Agent","tool_input":{"prompt":"You are S2-Audit. Read CLAUDE.md and .claude/rules/ by explicit path. Invoke the /glossary skills. Operational learning (carry forward): none. Name every .md file you write with the prefix S2-Audit-. If Write is denied, output WRITE_BLOCKED. Access: explicit paths only."}},
+              "input": {"tool_name":"Agent","tool_input":{"prompt":"You are S2-Audit. Read CLAUDE.md and .claude/rules/ by explicit path. Load /delegate first, then the /glossary skill. Operational learning (carry forward): none. Conflict priority (D-DEL6): commander, then prompt, then skills. Name every .md file you write with the prefix S2-Audit-. If Write is denied, output WRITE_BLOCKED. Access: explicit paths only."}},
               "expectExit": 0,
-              "expectStdout": null,
-              "expectStderr": null
+              "expectStdout": "hookSpecificOutput.*additionalContext",
+              "expectStderr": "Load /delegate before every Agent and Workflow call"
             },
             {
-              "input": {"tool_name":"Agent","tool_input":{"prompt":"You are S2-Audit. Read CLAUDE.md and .claude/rules/ by explicit path. Invoke the /glossary skills. Operational learning (carry forward): none. Write notes to notes.md. If Write is denied, output WRITE_BLOCKED. Access: explicit paths only."}},
+              "input": {"tool_name":"Agent","tool_input":{"prompt":"You are S2-Audit. Read CLAUDE.md and .claude/rules/ by explicit path. Load /delegate first, then the /glossary skill. Operational learning (carry forward): none. Conflict priority (D-DEL6): commander, then prompt, then skills. Write notes to notes.md. If Write is denied, output WRITE_BLOCKED. Access: explicit paths only."}},
               "expectExit": 0,
-              "expectStdout": null,
-              "expectStderr": "Delegation 6/7 duty elements. Missing: md-prefix"
+              "expectStdout": "hookSpecificOutput.*additionalContext",
+              "expectStderr": "Agent: 7/8 duty elements. Missing: md-prefix"
+            },
+            {
+              "input": {"tool_name":"Workflow","tool_input":{"script":"agent({prompt: 'You are S2-Audit. Write notes to notes.md.'})"}},
+              "expectExit": 0,
+              "expectStdout": "hookSpecificOutput.*additionalContext",
+              "expectStderr": "Workflow: 1/8 duty elements. Missing: rules,skills,OL,conflict,WRITE_BLOCKED,access,md-prefix"
             },
             {
               "input": {"tool_name":"Bash","tool_input":{"command":"git status"}},

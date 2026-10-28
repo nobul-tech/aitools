@@ -65,7 +65,7 @@ covers it but you didn't find it, or it's unclear). Check:
 - `/incident` skill — has this already been filed?
 - Rules that might address it — search `.claude/rules/` and
   `~/.claude/rules/`
-- Reference files, plan sections, design principles in `@CLAUDE.md`
+- Reference files and plan sections (`reference/`, `plans/`); CLAUDE.md has no design-principles section
 
 Record every artifact you checked and what it said (or didn't say).
 This becomes the `expected` field. If you find a spec that addresses

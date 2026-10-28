@@ -26,6 +26,30 @@ S3-FanoutImpl, Session Commander 10cf255a-c). No delegates used.
 | a0bd5e4 | C: build-deploy.sh (C1-C10, C11b), tests/claude-mdm (C12), README (C13, C14) |
 | bba5fad | D: tests/rules-fanout/test-rules-fanout.sh (D0 verbatim, 100755), check.yml (D1, D2) |
 
+## Fix round 2 (v1.1, 2026-10-27)
+
+- Head is `4339c08`.
+- Fix commit `ffcc5f1` covers the review (items 2, 3, 5) and audits A (N2, N6, N8) and B (N2, N3, N5).
+- `4339c08` fixes the deploy-harness-mdm size-gate test: it pads the CLAUDE.md template instead of a rule. With the gate disabled the check fails, so it still detects a removed gate.
+- Merges: FO-1 `3abc53f` and then `7b7e1fb`, FO-0 `dbe8f46` (it contains FO-0b `1d37d93`), and origin/main.
+- The finding-by-finding mapping is in https://github.com/nobul-tech/aitools/pull/121#issuecomment-6433855903.
+
+| Suite (local, macOS) | Result |
+|---|---|
+| rules-fanout (bash 5 + pwsh) | 118/0/1 |
+| rules-fanout (`/bin/bash` 3.2) | 44/0/23 |
+| claude-mdm (both bashes) | 35/0 each |
+| managed-files (sh / ps1) | 57/0 / 39/0 |
+| fanout-lib | 358/0 |
+| deploy-harness-mdm | 65/0 |
+
+CI run 40447927627:
+- macos and windows pass.
+- linux fails only in "Fan-out lib helper tests" (`bd-special` ps and parity, 356/2). That code is FO-1's lib and test, not changed here.
+- On linux, rules-fanout passes 122/0/0 and deploy-harness-mdm 65/0.
+
+A scratch worktree `.scratch/session-focr/neg-wt` (detached, the negative control) is left in place. Worktrees are never removed.
+
 ## Files changed
 
 scripts/setup-user-claude.sh, scripts/setup-user-claude.ps1, scripts/build-deploy.sh,
