@@ -93,12 +93,12 @@ Every `invoke_ai` / `Invoke-AI` call must log structured telemetry to deploy.log
 
 | Event | Level | Format |
 |-------|-------|--------|
-| Invocation start | `info` | `AI: speed=TIER backend=CLI attempt=N` |
-| Success | `info` | `AI: speed=TIER backend=CLI attempt=N result=accepted` |
-| Validation failure | `warn` | `AI: speed=TIER backend=CLI attempt=N result=rejected reason=REASON` |
+| Invocation start | `info` | `AI invocation: speed=TIER backend=CLI attempt=N` |
+| Success | `info` | `AI invocation: speed=TIER backend=CLI attempt=N result=accepted` |
+| Validation failure | `warn` | `AI invocation: speed=TIER backend=CLI attempt=N result=rejected reason=REASON` |
 | Rejected output | `detail` | `ai-rejected: LINE` (per-line, file-only) |
-| All retries exhausted | `warn` | `AI: speed=TIER backend=CLI exhausted after N attempts` |
-| Backend unavailable | `error` | `AI: no CLI available (claude or agent)` |
+| All retries exhausted | `warn` | `AI invocation: speed=TIER backend=CLI exhausted after N attempts` |
+| Backend unavailable | `error` | `AI invocation: no CLI available (claude or agent)` |
 
 This telemetry enables prompt iteration: read `[detail] ai-rejected:` lines
 from deploy.log, identify the failure mode, update the prompt, re-test.

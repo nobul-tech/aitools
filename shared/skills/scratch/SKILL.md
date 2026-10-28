@@ -100,8 +100,9 @@ Only names that start with `commit-msg`, end in `.log` or `.tmp`, or are
 `.md` files whose name contains `log`, `output` or `dump` count as
 ephemeral. A commit message named `msg-fix.txt` is harvested as an
 artifact. Avoid `log`, `output` and `dump` in the name of a `.md` you
-want kept (`S2-Catalog.md` is treated as ephemeral). Files in
-subdirectories of the session dir are never harvested.
+want kept (`S2-Catalog.md` is treated as ephemeral). `.json` files named
+`package-lock*`, `node_modules*`, `tsconfig*` or `*.config.json` are also
+ephemeral. Files in subdirectories of the session dir are never harvested.
 
 ## Commit message pattern
 
@@ -200,8 +201,9 @@ repo has it. For other projects, add:
 ## Cross-References
 
 - Governing rule: user rule `scratch.md` (source `shared/rules/scratch.md`
-  in the aitools repo; deployed to `~/.claude/rules/` once
-  deploy-harness ships a path for `shared/rules/`)
+  in the aitools repo; deploy-harness installs it to `~/.aitools/rules/`,
+  `setup-user-cursor` fans it out to Cursor, and the Claude Code fan-out to
+  `~/.claude/rules/` lands with PR #121 / `plans/rules-fanout-claude.md`)
 - Standing orders: USO "Scratch files for complex scripting" and USO
   "Simple Bash commands only" (user CLAUDE.md); enforcement in the
   standing-order-guard hook

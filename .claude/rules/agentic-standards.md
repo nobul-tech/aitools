@@ -48,7 +48,7 @@ When a prompt fails in production:
 
 Every choice in the managed-file review menus has one defined effect. Code:
 `prompt_diff_review` in `@scripts/aitools-lib.sh` (twin: `Prompt-DiffReview`
-in `@scripts/aitools-lib.ps1`); mission SOURCE-TRUTH implements this model.
+in `@scripts/aitools-lib.ps1`), with `review_json_fields` / `Review-JsonFields` for JSON.
 State machine: `@reference/managed-file-deployment.md`.
 
 **SOURCE is the source of truth.**

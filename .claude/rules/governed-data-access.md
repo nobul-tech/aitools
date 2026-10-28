@@ -2,8 +2,8 @@
 
 **Intent**: **Purpose**: Govern how governed JSON registries are
 accessed — skill-gated, never direct. **Scope**: The access
-principle and its enforcement. NOT which registries exist (see
-`@.claude/rules/frameworks.md` registries table). NOT the framework
+principle and its enforcement. NOT which registries exist (the
+`/frameworks` skill lists them). NOT the framework
 theory (`reference/framework-governed-data-access.md`). **Audience**:
 Every agent, every session.
 
@@ -33,11 +33,12 @@ defeating the skill gate.
 
 - **Prevention**: this rule (always in context)
 - **Detection**: pre-commit step 16 (capability bypass audit)
-- **Scope**: pre-commit checks `.claude/rules/`, `CLAUDE.md`, and
-  any `@` referenced files in `CLAUDE.md`
+- **Scope**: pre-commit step 16 scans `.claude/rules/`, `.cursor/rules/`
+  and `CLAUDE.md` for direct governed-JSON paths (Markdown table rows are
+  exempt; `@`-referenced files are not scanned)
 
 ### Cross-references
 
-- Registries table: `@.claude/rules/frameworks.md`
+- Registry inventory: `/frameworks` skill (the pattern: `@.claude/rules/frameworks.md`)
 - Framework theory: `reference/framework-governed-data-access.md`
 - Pre-commit enforcement: `scripts/check-pre-commit.sh/.ps1` step 16

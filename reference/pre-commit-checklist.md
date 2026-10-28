@@ -19,7 +19,7 @@ For every `.sh` or `.ps1` file being committed:
 
 ## 3. Build freshness
 
-If any file in `scripts/` or `shared/` was modified, run `bash scripts/build-deploy.sh` and include the regenerated `deploy/` in the commit.
+**Build freshness (dotprofile)**: if `scripts/` or `shared/` changed, the dotprofile `deploy/` may be stale. Do not run `--fix` from an agent: it runs `build-deploy.sh` against the real HOME (the shared `aitools/deploy/` is frozen and is not rebuilt). Verify with pre-push step 7, which rebuilds into a temporary copy.
 
 ## 4. Line endings
 
@@ -53,8 +53,9 @@ If the commit includes new features, bug fixes, or behavioral changes, `RELEASE_
 
 ## 10. Deploy drift check
 
-If step 3 ran (build freshness), verify no unstaged deploy/ changes remain after staging:
-`git diff deploy/` must be empty after `git add deploy/`. Catches forgotten build output.
+Retired for aitools in practice (`aitools/deploy/` is frozen, so `git diff deploy/`
+there can only be empty); the script still runs it. The dotprofile `deploy/` is
+checked by pre-push step 7.
 
 ## 11. User repo changes
 
@@ -74,10 +75,52 @@ takes priority at runtime -- a stale copy means dev/repo deployments miss the up
 
 If the commit modifies `scripts/setup-user-claude.*`, `scripts/setup-user-cursor.*`,
 `scripts/setup-user-mcp.*`, or `scripts/setup-user-hooks.*` AND does NOT modify
-`scripts/build-deploy.sh`, this is a **warning** (not a block): the corresponding
-deploy template in `build-deploy.sh` may need the same fix. See
-`.claude/rules/deploy-paths.md` "Scripts with deploy templates" for the full list.
+`scripts/build-deploy.sh`, this is a **warning** (not a block): only
+`setup-user-hooks` still has logic duplicated in `build-deploy.sh` (hook embedding,
+REGS_JSON); the other three are extracted at build time, so for them the warning
+only means "rebuild and check pre-push step 7". See
+`.claude/rules/deploy-paths.md` "Scripts with deploy templates".
 
 This check is a heuristic -- not all `scripts/` changes need template updates (e.g.,
 comments, variable renames that only exist in the scripts/ flow). But logic changes
 (merge functions, validation, error handling) almost always do.
+
+## 14. Build prerequisite framework
+
+Every `scripts/setup-*.sh/.ps1` that runs `cargo install` (not `--list`) calls
+`check_build_prereqs` / `diagnose_build_failure` (`Check-BuildPrereqs` /
+`Diagnose-BuildFailure`). FAIL.
+
+## 15. Deprecated summary terms
+
+No `write_summary ... "unchanged"` outside check scripts (use `verified`). FAIL.
+
+## 16. Capability bypass
+
+No governed registry JSON path (`glossary`, `framework-registry`, `incidents`,
+`tool-registry`, `tool-ops`) in `.claude/rules/`, `.cursor/rules/` or `CLAUDE.md`,
+outside Markdown table rows. FAIL.
+
+## 17. Hook portability
+
+`shared/hooks/*.sh` has no `stat -f ... || stat -c` chain, unguarded
+`stat -f` / `date -d`, `find -printf` or `grep -P`. FAIL.
+
+## 18. Python syntax
+
+`py_compile` on staged `.py` files. FAIL.
+
+## 19. Harness DB schema
+
+`reference/harness-db-schema.sql` exists. FAIL.
+
+## 20. Path references
+
+`scripts/check-path-refs.py`: every repo path cited in skills, rules, Cursor rules,
+reference docs, hooks and CLAUDE.md exists (allow list
+`scripts/check-path-refs-allow.txt`). FAIL.
+
+## 21. Skill levels
+
+`scripts/check-skill-levels.py`: no skill name in two of `shared/skills`,
+`.claude/skills`, dotprofile `claude/skills`. FAIL.

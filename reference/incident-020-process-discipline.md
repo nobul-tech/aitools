@@ -19,7 +19,7 @@ sequential dependencies without formally amending the plan first.
 
 ## State Audited
 
-- `@CLAUDE.md` design principles — three-layer governance, ambiguity
+- `@CLAUDE.md` design principles (as of 2026-03-14; CLAUDE.md no longer has that section) — three-layer governance, ambiguity
   is a defect, specs vs state. None address plan adherence or process
   discipline.
 - `@.claude/rules/incident-governance.md` — tracks defects, not

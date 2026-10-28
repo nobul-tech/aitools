@@ -14,8 +14,8 @@ and maintaining the three-layer enforcement pattern. **Scope**: The
 operational process for governed data management. NOT the access
 principle itself (`@.claude/rules/governed-data-access.md`). NOT the
 source discipline documentation
-(`reference/framework-governed-data-access.md`). NOT the registries
-table (`@.claude/rules/frameworks.md`). **Audience**: Any agent
+(`reference/framework-governed-data-access.md`). NOT the registry
+inventory (`/frameworks` skill). **Audience**: Any agent
 creating a new JSON registry, auditing governed data compliance, or
 checking whether a file should be governed.
 
@@ -51,8 +51,9 @@ When creating a new JSON registry that requires skill-gated access:
    when...").
 3. **Design the detection hook spec** — what to detect when the
    governed file is accessed directly.
-4. **Add to registries table** in `@.claude/rules/frameworks.md`
-   via the `/frameworks` skill.
+4. **Register it** in the framework registry through the `/frameworks`
+   skill (the "Governed data access" entry's artifacts); the rule
+   `.claude/rules/frameworks.md` holds no inventory.
 5. **Apply controlled distribution** — reference the SKILL in all
    rules and documentation, never the JSON file path.
 6. **Update pre-commit** — add the file to step 16's governed
@@ -66,8 +67,9 @@ ungoverned process.
 
 Check whether governed data access is being bypassed:
 
-1. Run pre-commit step 16 — checks `.claude/rules/` and `CLAUDE.md`
-   for direct JSON references
+1. Run pre-commit step 16 — scans `.claude/rules/`, `.cursor/rules/` and
+   `CLAUDE.md` for direct governed-JSON paths (table rows exempt;
+   `@`-referenced files are not scanned)
 2. Search reference files for governed JSON paths:
    `grep -rn 'glossary\.json\|framework-registry\.json\|incidents\.json\|tool-registry\.json\|tool-ops\.json' reference/*.md`
 3. Search skills for JSON paths that shouldn't be there (skills
@@ -86,5 +88,5 @@ Check whether governed data access is being bypassed:
 
 - Access principle: `@.claude/rules/governed-data-access.md`
 - Source disciplines: `reference/framework-governed-data-access.md`
-- Registries table: `@.claude/rules/frameworks.md`
+- Registries inventory: `/frameworks` skill
 - Pre-commit enforcement: `scripts/check-pre-commit.sh/.ps1` step 16
