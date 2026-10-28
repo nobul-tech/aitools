@@ -1,0 +1,6 @@
+OK|cursor cli|verified
+DETAIL|cursor rules|removed: fx-retire.mdc
+DETAIL|cursor rules|removed: fx-retire2.mdc
+OK|cursor rules|2 removed, 32 verified
+DETAIL|cursor skills|removed: fx-retire-skill
+OK|cursor skills|1 removed, 36 verified
