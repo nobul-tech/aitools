@@ -1,0 +1,10 @@
+ERROR|harness files|fx-dupskill: dup in .claude...
+ERROR|harness files|fx-dup.md: dup in dotprofile
+ERROR|harness files|fx-dup2.md: dup in dotprofile
+ERROR|harness files|fx-dupskill: dup in dotprof...
+ERROR|harness files|fx-dupskill2: dup in dotpro...
+WARN|harness files|2 updated, 142 verified
+DETAIL|cursor rules|updated: fx-shared.mdc
+WARN|cursor rules|1 updated, 33 verified
+DETAIL|cursor skills|updated: fx-skill-a/SKILL.md
+WARN|cursor skills|1 updated, 36 verified

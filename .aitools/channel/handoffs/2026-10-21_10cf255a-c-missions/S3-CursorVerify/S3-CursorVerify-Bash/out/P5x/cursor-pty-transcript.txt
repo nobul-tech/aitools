@@ -1,0 +1,26 @@
+[2026-10-28T22:51:33Z] [setup-user-cursor] [info] Step 1: ripgrep (rg)
+[2026-10-28T22:51:33Z] [setup-user-cursor] [ok] Already installed: ripgrep 14.1.0
+[2026-10-28T22:51:33Z] [setup-user-cursor] [info] Step 2: Cursor CLI (agent)
+[2026-10-28T22:51:33Z] [setup-user-cursor] [ok] Already installed: 2026.05.21-stub
+[2026-10-28T22:51:33Z] [setup-user-cursor] [info] Step 3: cli-config.json
+[2026-10-28T22:51:33Z] [setup-user-cursor] [info] Backed up /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-sh/fx/home/.cursor/cli-config.json
+[2026-10-28T22:51:33Z] [setup-user-cursor] [ok] Already up to date: /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-sh/fx/home/.cursor/cli-config.json
+[2026-10-28T22:51:33Z] [setup-user-cursor] [info] Step 4: Cursor user rules
+
+[33m[REVIEW][0m /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-sh/fx/home/.cursor/rules/fx-shared.mdc differs from source.
+
+  red - = only on this machine   green + = only in the repo
+
+--- this machine  /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-sh/fx/home/.cursor/rules/fx-shared.mdc
++++ repo          source (embedded)
+@@ -6,4 +6,3 @@ alwaysApply: true
+ 
+ Fixture shared rule.
+ P3 edit: shared rule changed.
+-P5 local edit (rule).
+
+  [o]verwrite       : this machine gets the green + lines (backup kept)
+  [s]kip            : nothing written; asked again next run
+  [x]abort          : stop this script (exit 2)
+  choice [o/s/x]: x
+[31m[2026-10-28T22:51:34Z] [setup-user-cursor] [error] Aborted by user[0m

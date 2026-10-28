@@ -1,0 +1,9 @@
+OK|config.json|n/a (written by installer)
+ERROR|harness files|fx-dupskill: dup in .claude...
+ERROR|harness files|fx-dup.md: dup in dotprofile
+ERROR|harness files|fx-dup2.md: dup in dotprofile
+ERROR|harness files|fx-dupskill: dup in dotprof...
+ERROR|harness files|fx-dupskill2: dup in dotpro...
+DETAIL|harness files|retired: rules/fx-[br].md
+DETAIL|harness files|retired: skills/fx-[br]ack
+WARN|harness files|140 verified
