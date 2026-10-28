@@ -76,6 +76,19 @@ check "stderr does not claim git+x fixed" eval '! contains "$ERR" "fixed: git+x"
 check "stdout additionalContext equals stderr" ctx_is PostToolUse "$ERR"
 check "index still 100644" [ "$(git -C "$REPOD" ls-files -s b.sh | cut -c1-6)" = "100644" ]
 
+echo "== git ls-files fails (corrupt index): reported, no crash =="
+R2="$WORK/repo2"
+mkdir -p "$R2"
+git -C "$R2" init -q
+printf 'echo c\r\n' > "$R2/c.sh"
+printf 'not an index' > "$R2/.git/index"
+payload "$R2/c.sh" > "$WORK/p.json"
+run_hook "$HOOK" "$WORK/p.json" "$NOGIT"
+check "exit 0 (pipefail does not abort the hook)" [ "$RC" -eq 0 ]
+check "stderr reports fix failed: git-mode-check" contains "$ERR" "git-mode-check"
+check "CRLF still fixed" has_cr "$R2/c.sh"
+check "stdout additionalContext equals stderr" ctx_is PostToolUse "$ERR"
+
 echo "== file name with spaces and a quote-like character =="
 H="$REPOD/my file's.sh"
 printf 'echo x\r\n' > "$H"

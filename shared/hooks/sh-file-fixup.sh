@@ -76,7 +76,13 @@ fi
 failed=""
 dir=$(dirname "$file_path")
 if git -C "$dir" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-    mode=$(git -C "$dir" ls-files -s "$file_path" 2>/dev/null | cut -c1-6)
+    # Under pipefail a failing ls-files would abort the hook before it
+    # reports anything (seen on Windows Git Bash, exit 128, for a path with
+    # a space and an apostrophe); report the failed check instead.
+    if ! mode=$(git -C "$dir" ls-files -s -- "$file_path" 2>/dev/null | cut -c1-6); then
+        mode=""
+        failed="${failed}git-mode-check "
+    fi
     if [ "$mode" = "100644" ]; then
         # -C "$dir": the index of the repo that holds the file, not the cwd's.
         # A failure (index lock held, ...) is reported, not hidden.
