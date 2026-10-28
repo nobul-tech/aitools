@@ -1,14 +1,13 @@
 #!/usr/bin/env bash
 # test-delegation-duty-guard.sh -- tests for shared/hooks/delegation-duty-guard.sh
-# (PreToolUse, matcher Agent|Workflow; the eight /delegate v2.0 elements).
+# (PreToolUse, matcher Agent; the eight /delegate v2.0 elements).
 #
-# Covers: the reminder line on every Agent/Task/Workflow call (alone at 8/8),
+# Covers: the reminder line on every Agent/Task call (alone at 8/8),
 # on stderr and as stdout hookSpecificOutput.additionalContext JSON;
 # real-shape payloads whose cwd/transcript_path absolute paths must not count
 # as access; each of the eight elements missing (named in the output, and only
-# it); Workflow with an inline script, with scriptPath (absolute, relative to
-# the payload cwd, missing, over the 512 KB cap) and with neither; another tool
-# (silent); malformed, truncated, empty and pretty-printed JSON (exit 0, no
+# it); Workflow payloads (silent since 2026-10-28: the Workflow cases moved to
+# tests/hooks/test-workflow-delegation-guard.sh); another tool (silent); malformed, truncated, empty and pretty-printed JSON (exit 0, no
 # crash); perl absent from PATH (reminder, elements not checked); the
 # delegation telemetry event (total 8, tool, checked); enforce mode (exit 2 on
 # a gap, 0 at 8/8); timing of a large prompt (best of 5 < 100 ms; advisory on
@@ -161,33 +160,14 @@ agent_payload Agent "$(prompt_without conflict) Report each CONFLICT: line." > "
 run_hook "$WORK/p.json"
 [ "$ERR" = "$REMINDER" ] && ok "'CONFLICT:' counts as conflict priority" || bad "CONFLICT: [$ERR]"
 
-echo "== Workflow =="
-WF_FULL="export const meta = {}; agent({prompt: '$(prompt_without none)'})"
+echo "== Workflow (checked by workflow-delegation-guard.sh since 2026-10-28) =="
+WF_FULL="export const meta = {}; agent('$(prompt_without WRITE_BLOCKED)')"
 printf '{"tool_name":"Workflow","tool_input":{"script":"%s"}}' "$WF_FULL" > "$WORK/p.json"
 run_hook "$WORK/p.json"
-[ "$RC" -eq 0 ] && [ "$ERR" = "$REMINDER" ] && ok "inline script 8/8: reminder only" || bad "inline script 8/8: rc=$RC [$ERR]"
-printf '{"tool_name":"Workflow","tool_input":{"script":"agent({prompt: %s})"}}' "'$(prompt_without WRITE_BLOCKED)'" > "$WORK/p.json"
+[ "$RC" -eq 0 ] && [ -z "$ERR" ] && [ -z "$OUT" ] && ok "Workflow inline script: silent, exit 0" || bad "Workflow script: rc=$RC [$ERR]"
+printf '{"tool_name":"Workflow","tool_input":{"scriptPath":"%s/wf.js"}}' "$WORK" > "$WORK/p.json"
 run_hook "$WORK/p.json"
-case "$ERR" in *"Workflow: 7/8 duty elements. Missing: WRITE_BLOCKED."*"checked as one text"*) ok "inline script missing WRITE_BLOCKED: named, Workflow limit noted" ;; *) bad "inline missing: [$ERR]" ;; esac
-
-printf '%s\n' "$WF_FULL" > "$WORK/wf-full.js"
-printf 'agent({prompt: "%s"})\n' "$(prompt_without access)" > "$WORK/wf-gap.js"
-printf '{"tool_name":"Workflow","tool_input":{"scriptPath":"%s"}}' "$WORK/wf-full.js" > "$WORK/p.json"
-run_hook "$WORK/p.json"
-[ "$RC" -eq 0 ] && [ "$ERR" = "$REMINDER" ] && ok "scriptPath (absolute) 8/8: reminder only" || bad "scriptPath 8/8: rc=$RC [$ERR]"
-printf '{"cwd":"%s","tool_name":"Workflow","tool_input":{"scriptPath":"wf-gap.js"}}' "$WORK" > "$WORK/p.json"
-run_hook "$WORK/p.json"
-case "$ERR" in *"Workflow: 7/8 duty elements. Missing: access."*) ok "scriptPath relative to cwd: file read, access missing" ;; *) bad "relative scriptPath: [$ERR]" ;; esac
-printf '{"tool_name":"Workflow","tool_input":{"scriptPath":"%s/nope.js"}}' "$WORK" > "$WORK/p.json"
-run_hook "$WORK/p.json"
-case "$ERR" in "$REMINDER"*"not checked."*) [ "$RC" -eq 0 ] && ok "missing scriptPath file: reminder, not checked, exit 0" || bad "missing file rc=$RC" ;; *) bad "missing file: [$ERR]" ;; esac
-perl -e 'print "x" x 524289' > "$WORK/wf-big.js"
-printf '{"tool_name":"Workflow","tool_input":{"scriptPath":"%s"}}' "$WORK/wf-big.js" > "$WORK/p.json"
-run_hook "$WORK/p.json"
-case "$ERR" in *"over 512 KB; duty elements not checked."*) ok "scriptPath over 512 KB: not read" ;; *) bad "big file: [$ERR]" ;; esac
-printf '{"tool_name":"Workflow","tool_input":{}}' > "$WORK/p.json"
-run_hook "$WORK/p.json"
-case "$ERR" in "$REMINDER"*"no script or scriptPath"*) [ "$RC" -eq 0 ] && ok "no script and no scriptPath: reminder, not checked" || bad "no script rc=$RC" ;; *) bad "no script: [$ERR]" ;; esac
+[ "$RC" -eq 0 ] && [ -z "$ERR" ] && [ -z "$OUT" ] && ok "Workflow scriptPath: silent, exit 0" || bad "Workflow scriptPath: rc=$RC [$ERR]"
 
 echo "== Other tools and malformed input =="
 printf '{"tool_name":"Bash","tool_input":{"command":"git status"}}' > "$WORK/p.json"
@@ -237,11 +217,9 @@ printf '{"tool_name":"Bash","tool_input":{"command":"ls"}}' > "$WORK/p.json"
 (cd "$WORK/repo" && "$BASH_BIN" "$HOOK" < "$WORK/p.json" >/dev/null 2>&1)
 EV="$WORK/repo/.scratch/session-t/events.jsonl"
 n="$(sed -n '$=' "$EV" 2>/dev/null || echo 0)"
-[ "$n" = "2" ] && ok "one event per Agent/Workflow call, none for Bash" || bad "event count=$n"
+[ "$n" = "1" ] && ok "one event per Agent call, none for Workflow or Bash" || bad "event count=$n"
 grep -q '"type":"delegation","src":"ddg","d":{"score":7,"total":8,"missing":"conflict","mode":"observe","tool":"Agent","checked":1}' "$EV" \
     && ok "Agent event: score 7, total 8, tool Agent" || bad "Agent event: $(sed -n '1p' "$EV")"
-grep -q '"d":{"score":8,"total":8,"missing":"","mode":"observe","tool":"Workflow","checked":1}' "$EV" \
-    && ok "Workflow event at 8/8 is emitted" || bad "Workflow event: $(sed -n '2p' "$EV")"
 if command -v python3 >/dev/null 2>&1; then
     python3 -c 'import json,sys; [json.loads(l) for l in open(sys.argv[1])]' "$EV" && ok "events are valid JSON" || bad "events not valid JSON"
 fi
