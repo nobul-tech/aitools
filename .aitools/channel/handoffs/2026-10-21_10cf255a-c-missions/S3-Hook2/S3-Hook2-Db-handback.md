@@ -1,4 +1,6 @@
-# S3-Hook2-Db handback (v1.0, 2026-10-28)
+# S3-Hook2-Db handback (v1.1, 2026-10-28)
+
+v1.1 adds the PR #133 fix batch (section "v1.1 fix batch"); the rest is v1.0.
 
 **Intent**: **Purpose**: Report mission HOOK2-DB (normalise harness-db's delegation scores by each event's total) to S3-Hook2 and the commander. **Scope**: what changed, the scale chosen, consumers, verification, findings, open questions. NOT the hooks (S3-Hook2-Parser, S3-Hook2-Audit). **Audience**: S3-Hook2, Jose.
 
@@ -7,8 +9,22 @@
 - `delegation.avgScore` / `delegation.minScore` are now fractions 0..1 (score / total per event); `delegation.count` = scored events.
 - `"checked": 0` events and malformed score/total values are skipped and logged by reason to `harness-db.log`.
 - An event without a `total` key counts as / 6 (evidence below).
-- New stdlib test (11 cases) runs in CI on macOS, Linux and Windows.
-- PR: https://github.com/nobul-tech/aitools/pull/133 (branch `fix/hook2-delegation-score`, commit 5c0055d plus this handback).
+- New stdlib test (11 cases in v1.0, 14 after the v1.1 fix batch) runs in CI on macOS, Linux and Windows.
+- PR: https://github.com/nobul-tech/aitools/pull/133 (branch `fix/hook2-delegation-score`, commits 5c0055d and 507a8c7 plus this handback).
+
+## v1.1 fix batch (S3-Hook2 request; findings in the PR #133 comments by S3-Hook2-Review133, S3-Hook2-LogA, S3-Hook2-LogB)
+
+Commit 507a8c7 (plus this v1.1 commit):
+
+1. `_as_number` returns None on `OverflowError` (`10**400`), so `process-events` no longer aborts; test `test_overflow_is_not_a_number` and two bad-value cases (Review133 #1).
+2. A `checked` that is present but not a JSON number (`false`, `"0"`, `null`) skips the event as `bad-checked`; test `test_bad_checked_is_skipped_with_reason` and three bad-value cases (Review133 #3, LogA #1, LogB #2).
+3. Clamped scores are counted; the log line is now `delegation score: skipped N event(s): <reasons|none>; clamped=M`, written when anything was skipped or clamped; test `test_clamped_are_logged` (Review133 #2).
+4. The test exits 1 when no test ran (LogB #1).
+5. `cmd_process_events` prints `N delegation event(s) not scored (see <harness-db.log>)`, through a new optional skip-count dict on `delegation_score_metrics` / `process_session_events` (no new metric is written) (LogA #2).
+
+Verification: 14 tests OK on macOS (Python 3.14.8); `py_compile` OK on both files; `process-events` smoke run in a temp project and temp HOME (`.scratch/session-h2db/smoke-process-events.sh`) printed `2 delegation event(s) not scored` and logged `skipped 2 event(s): bad-checked=1, unchecked=1; clamped=0`; `check-pre-commit.sh` 1 FAIL (step 6, known). CI on the new head: see the PR checks and the final response.
+
+Left as follow-ups (outside the diff, pre-existing): `process_session_events` drops unparsable events.jsonl lines (`except json.JSONDecodeError: continue`) and bad duration timestamps (`except (ValueError, TypeError): pass`) with no log line; `events_file.read_text()` has no `encoding=` (Windows code page; a `UnicodeDecodeError` is uncaught and `harness-db-sessionend.sh`'s `|| true` hides it); `_log_detail` swallows `OSError` by design (reference/logging.md section 5), so skip reasons are lost when the log dir is not writable.
 
 ## Commander decision
 
