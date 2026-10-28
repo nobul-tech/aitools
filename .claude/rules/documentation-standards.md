@@ -21,7 +21,7 @@ paths:
 Each version entry follows this structure:
 
 ```
-## vX.Y -- Title (YYYY-MM-DD)
+## vX.Y.Z -- Title (YYYY-MM-DD)
 
 ### Bug fixes           (table: #, Severity, Fix)
 ### New features        (table: #, Change)
@@ -66,7 +66,10 @@ Create a `plans/*.md` file when work:
 
 ### Layered reference architecture
 
-- **Rules** (`.claude/rules/`) = concise behavioral directives, ~40-100 lines
+- **Rules** (`.claude/rules/`) = concise behavioral directives, target ~40-100
+  lines; a rule over 150 lines should move its detail to `reference/` (today:
+  script-standards, incident-governance, cross-platform, deploy-paths,
+  config-file-safety, agentic-standards)
   (what a rule is, its anatomy, scopes and deployment: `@reference/rules.md`)
 - **References** (`reference/`) = implementation detail, unlimited length
 - **No duplication** — one authoritative location per fact
@@ -77,18 +80,26 @@ Create a `plans/*.md` file when work:
 
 ### Skill placement
 
-- **User-level** (`shared/skills/` → deployed to `~/.claude/skills/`):
-  managed tool patterns, project-agnostic conventions, USO enablement.
-  Content must be factual (patterns, gotchas, platform behavior), not
-  project-specific opinions.
-- **Project-level** (`.claude/skills/` in repo): project-specific
-  frameworks, governance workflows, development patterns. Auto-discovered
-  by Claude Code, not deployed.
-- **Split threshold**: A tool needs both user and project skills only
+- **Folder decides level.** `shared/skills/` = user level (deployed to
+  `~/.claude/skills/` and `~/.cursor/skills/`, every repo).
+  `.claude/skills/` = project level (aitools sessions only, never
+  deployed). Dotprofile `claude/skills/` = personal user level.
+- **Test**: user level if the skill is useful in a session on any repo,
+  even read-only. Project level only if it is meaningful solely inside
+  the aitools working tree (it edits or audits aitools source).
+- **One name, one place**: a skill name exists in exactly one of the
+  three folders. User-level takes priority in Claude Code, so a same-name
+  pair leaves the project copy dead. Pre-commit step 21 fails on a
+  collision between `shared/skills/`, `.claude/skills/` and the
+  dotprofile's `claude/skills/`.
+- **Governed data**: user-level skills say where their repo paths
+  resolve (a "Where the files live" section): the aitools clone, else
+  `repoPath` in `~/.aitools/config.json`, else the read-only
+  `~/.aitools/registries/` copy deploy-harness installs.
+- **Split personas**: a tool needs both user and project skills only
   when it serves two distinct personas (end user vs developer). Use
-  `<name>` for user-level and `<name>-dev` for project-level.
-- **No project overrides of user skills**: User-level takes priority
-  in Claude Code. Never create same-name skills at both levels.
+  `<name>` for user-level and `<name>-dev` for project-level. No level
+  prefixes (`aitool-`, `aitools-`) in new names.
 - Full inventory and architecture:
   `@plans/governance-and-compliance-framework.md`
 
@@ -102,7 +113,8 @@ Create a `plans/*.md` file when work:
 - In `CLAUDE.md`: `@path/file.md` IS resolved at load time and pulls the
   file into context. Only use `@` for files you want auto-loaded. Use
   plain paths for references you want to keep lazy (most references)
-- Standardize existing rules files to use `@` for all cross-refs
+- Standardize existing rules files to use `@` for all cross-refs (not yet
+  done: several rules still cite `reference/` paths without `@`)
 
 ### Function and library attribution
 

@@ -1,0 +1,17 @@
+ERROR|harness files|fx-dupskill: dup in .claude...
+ERROR|harness files|fx-dup.md: dup in dotprofile
+ERROR|harness files|fx-dup2.md: dup in dotprofile
+ERROR|harness files|fx-dupskill: dup in dotprof...
+ERROR|harness files|fx-dupskill2: dup in dotpro...
+DETAIL|harness files|retired: rules/fx-[br].md
+DETAIL|harness files|retired: skills/fx-[br]ack
+WARN|harness files|140 verified
+ACTION||Run aitools to rebuild ~/.aitools/rules and its manifest
+DETAIL|cursor rules|updated: fx-shared.mdc
+DETAIL|cursor rules|added: web-sources.mdc
+DETAIL|cursor rules|removed: fx-[br].mdc
+WARN|cursor rules|1 added, 1 updated, 1 removed, 30 verified
+DETAIL|cursor skills|updated: fx-skill-b/SKILL.md
+DETAIL|cursor skills|added: tool-ops/SKILL.md
+DETAIL|cursor skills|removed: fx-[br]ack
+WARN|cursor skills|1 added, 1 updated, 1 removed, 33 verified

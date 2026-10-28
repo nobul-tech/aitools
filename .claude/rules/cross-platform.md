@@ -14,7 +14,7 @@ and environments". Do not restate the list elsewhere; point to that section.
 When writing scripts or paths **in this repo**:
 - Provide both `.ps1` and `.sh` variants for setup/utility scripts
 - Use forward slashes in paths when possible (works on both platforms)
-- Repos live under `~/repos/` (macOS) / `%USERPROFILE%\repos\` (Windows)
+- Repos live under `~/repos/` (macOS, Linux) / `%USERPROFILE%\repos\` (Windows)
 - Use `$HOME` or `~` for user directory references, not hardcoded paths
 - After creating `.sh` files on Windows, always run `git update-index --chmod=+x <file>`
 
@@ -47,8 +47,9 @@ table. The OS guard enforces at runtime; header comments document platform.
 One `.sh` per tool for every POSIX platform and environment, paired with one
 `.ps1`. Do not split scripts per OS or per environment. Divergence (package
 managers, paths, environment behaviour) goes into library helpers chosen by
-capability or by the environment API (e.g. `install_via_brew` /
-`install_via_apt`). A script may be split only when its OS paths share almost
+capability or by the environment API (a library helper per package manager,
+chosen by capability, e.g. `command -v brew` vs `command -v apt-get`; no such
+helper is shared yet). A script may be split only when its OS paths share almost
 nothing; record the split as an exception in this file. Decided 2026-10-05.
 
 ### Environment branches
@@ -60,7 +61,8 @@ D-CHR2 for the Claude Code web chrome-devtools args).
 
 - **Detect** only through the library API: `is_claude_code_web` /
   `Test-ClaudeCodeWeb`, `$AITOOLS_ENVIRONMENT` / `$AitoolsEnvironment`
-  (`claude-code-web` or `local`), `$AITOOLS_PLATFORM` / `$AitoolsPlatform`.
+  (`claude-code-web` or `local`; `cursor-cloud` is proposed, pending decision
+  P-2, and today detects as `local`), `$AITOOLS_PLATFORM` / `$AitoolsPlatform`.
   Never read `CLAUDE_CODE_REMOTE` directly. Override: `AITOOLS_ENVIRONMENT`.
   `claude-code-web` exists only on Linux. Detail:
   `@reference/cross-platform-detail.md` "Environment detection".
@@ -109,8 +111,11 @@ Guards MUST use structured logging. Source `init-logging` before the guard.
 | Init libraries | `init-logging.sh/.ps1` | Sourced for initialization |
 | Hooks | `shared/hooks/*.sh` | CC hooks run bash on all platforms |
 | Shell alias modules | `shared/shell/aliases.sh/.ps1` | Sourced into shell profiles |
-| Build scripts | `build-deploy.sh` | See cross-language exceptions |
+| Build scripts | `build-deploy.sh`, `build-package.sh` (P-1, pending approval) | Bash-only builders, run in Git Bash on Windows; see cross-language exceptions |
 | Scratch/test files | `.scratch/*.sh` | Temporary, not deployed |
+| Entry points sourced or run on any platform (rationale unrecorded, pending approval) | `bootstrap.sh/.ps1`, `hh.sh/.ps1`, `relay-outbound-prompt.sh/.ps1`, `init-hh-hooks.sh` | Bootstrap/shell helpers; each `.sh` also runs in Git Bash |
+| Helper modules (rationale unrecorded, pending approval) | `aitools-json.ps1`, `_validate-ps1.ps1` | Dot-sourced / called by other scripts, never a setup entry point |
+| Analysis tools (rationale unrecorded, pending approval) | `analyze-session.sh` | Read-only session analysis |
 
 ### Dead code from platform guards
 
@@ -135,6 +140,12 @@ ask the user, get approval, document the exception.
 | Script | Why | Approved | Invocation |
 |--------|-----|----------|------------|
 | `build-deploy.sh` | Platform-independent output, result committed | 2026-02-17 | `& $bashExe "$path/build-deploy.sh"` |
+
+#### Unrecorded (in the code, approval pending)
+
+| Script | Why | Approved | Invocation |
+|--------|-----|----------|------------|
+| `check-pre-commit.ps1`, `check-post-push.ps1`, `check-pre-push.ps1` → Git Bash | They check `.sh` files (`bash -n`), the bash entry point's `--version`, and the bash-only `build-deploy.sh` | unrecorded (needs approval) | `& $bashExe ...` |
 
 ### PowerShell 7 baseline
 
@@ -186,7 +197,8 @@ environments. Hooks cannot source `aitools-lib.sh` or `check-lib.sh`
 | `grep` Perl regex | Not available | `grep -P` | Use `perl -ne` or `grep -E` |
 | `date` parsing | `date -j -f fmt` | `date -d string` | `uname -s` dispatch |
 
-**Canonical `stat` dispatch pattern for hooks** (from `session-archive.sh:68`):
+**Canonical `stat` dispatch pattern for hooks** (hooks cannot use the library's
+`get_mtime()` in `@scripts/check-lib.sh`, so they dispatch on `uname -s`):
 
 ```bash
 if [ "$(uname -s)" = "Darwin" ]; then

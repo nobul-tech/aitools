@@ -25,6 +25,21 @@ Certain files are authoritative references that feed scripts, deploy pipelines, 
 | `reference/tool-ops-claude-code.md` | Claude Code operations — version deps, session behavior, platform workarounds | Any |
 | `reference/user-repo.md` | User repo pattern, template resolution, session archive — scripts reference this | Any |
 | `reference/agentic-framework.md` | Agentic AI invocation spec — speed/permission tiers, prompt design, validation patterns | Any |
+| `.claude/rules/managed-file-deployment.md` | Deployment type definitions, content sources, platform config rules | Any |
+| `registries/incidents.json` | Incident tracking — governed by `.claude/rules/incident-governance.md` | Any |
+| `reference/managed-file-deployment.md` | Managed file deployment state machine -- menus, return values, caller contracts | Any |
+| Intent statements in any file | Defines how all future sessions interpret the file's purpose and scope | Any |
+| `reference/framework-*.md` | Framework documentation — discipline source, adoption rationale, maintenance | Any |
+| `registries/framework-registry.json` | Framework registry — source of truth for all adopted frameworks | Any |
+| `.claude/rules/frameworks.md` | Framework rule — check-before-assuming principle, three-layer registry pattern, /frameworks trigger | Any |
+| `reference/incident-*.md` | Incident reference files — full discovery context for framework-level incidents | Any |
+| `reference/harness.md` | Harness architecture — the six components and their relationships | Any |
+| `registries/glossary.json` | Governed vocabulary definitions — source of truth for all terms | Any |
+| `registries/tool-ops.json` | Tool operations registry — per-tool governance modes and verification specs | Any |
+| `reference/framework-tool-ops.md` | Tool operations framework — SRE discipline source and adoption rationale | Any |
+| `reference/tool-ops-*.md` | Per-tool ops references — operational knowledge for deeply-integrated tools | Any |
+
+Intent statements (`**Intent**:` blocks in markdown, `intent:` header comments in code) are protected regardless of which file they appear in, new or modified (`reference/framework-adoption.md`).
 
 ### The rule
 

@@ -52,12 +52,14 @@ mkdir -p "$SRC"
 cp -R "$REPO/scripts" "$REPO/shared" "$SRC/"
 cat > "$SRC/scripts/setup-user-hooks.sh" <<'STUB'
 #!/usr/bin/env bash
-# test stub: one summary row, exit $HOOK_RC
+# test stub: one structured warn line when HOOK_WARN=1, one summary row, exit $HOOK_RC
+if [ "${HOOK_WARN:-}" = "1" ]; then printf '[2026-01-01T00:00:00Z] [setup-user-hooks] [warn] stub hook warning\n'; fi
 if [ -n "${AITOOLS_SUMMARY_FILE:-}" ]; then printf 'OK|claude hooks|stub\n' >> "$AITOOLS_SUMMARY_FILE"; fi
 exit "${HOOK_RC:-0}"
 STUB
 cat > "$SRC/scripts/setup-user-hooks.ps1" <<'STUB'
-# test stub: one summary row, exit $env:HOOK_RC
+# test stub: one structured warn line when HOOK_WARN=1, one summary row, exit $env:HOOK_RC
+if ($env:HOOK_WARN -eq "1") { Write-Host "[2026-01-01T00:00:00Z] [setup-user-hooks] [warn] stub hook warning" }
 if ($env:AITOOLS_SUMMARY_FILE) { [IO.File]::AppendAllText($env:AITOOLS_SUMMARY_FILE, "OK|claude hooks|stub`n") }
 $rc = 0; if ($env:HOOK_RC) { $rc = [int]$env:HOOK_RC }
 exit $rc
@@ -403,7 +405,57 @@ has_row "WARN|machine profile|created (spare)"
 echo "== D-TS13: the hooks review aborted (exit 2) -> user init exits 2"
 CASE_ENV=(HOOK_RC=2)
 case_run hook-abort 2 fx_two --alias spare
+# FIX-2 (A-13): the relay records the abort (the stub wrote no ERROR row)
+has_row "ERROR|claude hooks|aborted (exit 2)"
 CASE_ENV=()
+
+# jsonl_count CASE IMPL SCRIPT [LEVEL MSG] -- valid records of SCRIPT (with LEVEL and
+# MSG when given) in that fixture's deploy.jsonl; "invalid" when a line is not JSON
+jsonl_count() {
+    perl -MJSON::PP -e '
+        my ($f, $s, $l, $m) = @ARGV; my $n = 0;
+        open(my $fh, "<:raw", $f) or do { print "0\n"; exit 0 };
+        while (my $r = <$fh>) {
+            my $o = eval { decode_json($r) }; if (!$o) { print "invalid\n"; exit 0 }
+            next unless $o->{script} eq $s;
+            next if defined $l && ($o->{level} ne $l || $o->{msg} ne $m);
+            $n++;
+        }
+        print "$n\n";' "$WORK/$1.$2/home/.aitools/logs/deploy.jsonl" "${@:3}"
+}
+
+echo "== FIX-2 (A-12, A-13): user init runs setup-user-config and setup-user-hooks through the lib relay"
+# A hooks script that dies (exit 3) without an ERROR row: the relay's row, one error, exit 1
+CASE_ENV=(HOOK_RC=3)
+case_run hook-crash 1 fx_two --alias spare
+has_row "ERROR|claude hooks|script failed (exit 3)"
+row_count "ERROR|claude hooks|" 1
+CASE_ENV=()
+# The children's lines reach deploy.jsonl and the console; a hooks warning is relayed
+CASE_ENV=(HOOK_WARN=1)
+case_run relay-jsonl 0 fx_two --alias spare
+out_has "[setup-user-hooks] [warn] stub hook warning"
+for impl in bash ps; do
+    if [ "$impl" = "ps" ] && ! $USE_PS; then continue; fi
+    n=$(jsonl_count relay-jsonl "$impl" setup-user-hooks warn "stub hook warning")
+    if [ "$n" = "1" ]; then ok "relay-jsonl ($impl): hooks warning in deploy.jsonl"
+    else bad "relay-jsonl ($impl): hooks warning records '$n', want 1"; fi
+    n=$(jsonl_count relay-jsonl "$impl" setup-user-config)
+    if [ "$n" != "invalid" ] && [ "$n" -gt 0 ]; then ok "relay-jsonl ($impl): writer lines in deploy.jsonl ($n)"
+    else bad "relay-jsonl ($impl): writer records '$n'"; fi
+done
+CASE_ENV=()
+
+echo "== FIX-2 (A-15): --alias without a value is an error through the lib (bash; pwsh binds it itself)"
+CASE="alias-novalue"
+fx_two bash
+run bash --alias
+if [ "$RC" -eq 1 ]; then ok "$CASE: bash exit 1"; else bad "$CASE: bash exit $RC, want 1"; perl -pe 's/^/       /' "$OUT"; fi
+out_has "[aitools] [error] --alias needs a value (aitools user init --alias <name>)"
+if grep -qF -- "--alias needs a value" "$H/.aitools/logs/deploy.log"; then ok "$CASE: in deploy.log"; else bad "$CASE: not in deploy.log"; fi
+run bash --alias --force
+if [ "$RC" -eq 1 ]; then ok "$CASE: '--alias --force' exit 1"; else bad "$CASE: '--alias --force' exit $RC, want 1"; fi
+out_has "--alias needs a value"
 
 echo "== review M1: a relative reposPath is refused (nothing created under the current directory)"
 fx_relative() { fixture "$CASE" "$1" "$PJ_TWO"; perl -pi -e 's/"reposPath": "[^"]*"/"reposPath": "repos"/' "$H/.aitools/config.json"; }

@@ -56,8 +56,9 @@ used as thinking tools, not formal frameworks:
 
 Before starting the handoff workflow:
 
-1. The session must have a scratch directory (per `/scratch` skill). If
-   `.scratch/.current-session` does not exist, create the directory first.
+1. The session must have a scratch directory (per `/scratch` skill): the
+   `Session scratch directory:` line in context, or
+   `<root>/.scratch/session-<your id or name>/` created by hand.
 2. The agent must know where the project's plan/briefing files live (if
    any). Check for `plans/*/handoff-prompt.md` or `plans/*/planning-brief.*`
    as indicators.
@@ -303,21 +304,18 @@ Verify before writing:
 
 Write the handoff to: [HANDOFF_PATH]
 
-Path pattern: `plans/<briefing-name>/handoff-<session-date>_<session-prefix>.md`
-(e.g., `plans/mission-command-briefing/handoff-2026-03-19_Z1IhGrcgGO.md`)
+Path: `.aitools/channel/handoffs/<UTC date>_<session-prefix>.md`
+(tracked; committed directly to main under CLAUDE.md "Channel exception"
+in aitools). In a repo without `.aitools/`, use a tracked path such as
+`plans/<briefing-name>/handoff-<date>_<prefix>.md`
+(e.g., `plans/mission-command-briefing/handoff-2026-03-19_Z1IhGrcgGO.md`).
 
-When `.aitools/channel/handoffs/` becomes tracked (after .gitignore
-restructuring), the canonical path will be:
-`.aitools/channel/handoffs/<session-date>_<session-prefix>.md`
-
-Until then, use `plans/<briefing-name>/handoff-prompt.md` (single
-handoff per briefing, updated in place) or the pattern above (one
-handoff per session, accumulating).
-
-The handoff MUST be written to a PERMANENT tracked location — never
-to session scratch. Scratch directories are deleted by the SessionEnd
-hook (harvest-session.sh lines 164-166). A handoff in scratch will
-not survive the session it was created in.
+The handoff MUST be written to a tracked location, never to session
+scratch. Scratch is never deleted, but it is gitignored, so it never
+leaves this machine. The SessionEnd harvester copies non-ephemeral
+top-level scratch files into `harvesting/` under renamed paths
+(`<date>_session-<id>_<name>`; files whose name starts with `handoff` go
+to `.aitools/channel/handoffs/`).
 
 SessionStart discovery: when a session starts, it should check for
 available handoffs and announce their presence. This enables the
@@ -364,11 +362,11 @@ Test these 9 criteria:
 2. **Reference integrity**: Does every file path referenced in the
    handoff exist on disk? Read each path to verify. Report any broken
    references. CRITICAL: also verify that referenced files will SURVIVE
-   the session lifecycle. Files in `.scratch/` are deleted by the
-   SessionEnd hook (harvest-session.sh). The handoff itself must NOT
-   be in scratch. Referenced scratch files will be harvested to
-   `harvesting/` with date-prefixed names — if the handoff references
-   scratch paths, note that these paths will change after session end.
+   the session lifecycle. Files in `.scratch/` are not deleted, but they
+   are gitignored and stay on this machine; the harvester copies them to
+   `harvesting/` under new names (`<date>_session-<id>_<name>`), so a
+   handoff that cites a scratch path is broken on every other machine.
+   The handoff itself must NOT be in scratch.
 
 3. **Reading order**: Does the reading order build context progressively
    (situation -> findings -> priorities -> background)? Are there
@@ -517,12 +515,13 @@ Every subagent launch in this workflow must follow the delegation duty.
 The delegating agent (not a fixed "S3" -- any agent that launches a
 subagent or produces a handoff) bears this duty. It is recursive per
 decision #7: when the delegating agent is itself a subagent, it
-inherits the duty from its parent. The full duty -- seven prompt
-elements and return verification -- is in the user rule
-`delegation.md` and the `/delegate` skill; the items below are what
-this workflow adds or stresses. The templates above carry identity,
-output and WRITE_BLOCKED; add rules, skills, operational learning and
-explicit paths per the `/delegate` skill when you fill them in.
+inherits the duty from its parent. The full duty -- eight prompt
+elements and return verification -- is in the `/delegate` skill
+(decisions: user rule `delegation.md`); the items below are what this
+workflow adds or stresses. The templates above carry identity, output
+and WRITE_BLOCKED; add rules, skills, operational learning, conflict
+priority (D-DEL6) and explicit paths per the `/delegate` skill when you
+fill them in, and state that outputs are versions, not drafts (D-DEL5).
 
 1. **Identity**: Name the subagent role (S2, S3, Verifier)
 2. **Context**: List every file the subagent must read, in order
@@ -542,8 +541,9 @@ explicit paths per the `/delegate` skill when you fill them in.
 8. **What comes after**: What depends on this subagent's output.
 9. **Lifecycle transition awareness**: The delegating agent must verify
    that all artifacts produced by the subagent will survive lifecycle
-   transitions. Files in `.scratch/` are deleted by the SessionEnd
-   hook. Handoffs, carry-forward state, and any artifact that must
+   transitions. Files in `.scratch/` are not deleted, but they are
+   gitignored and stay on this machine (the harvester copies them to
+   `harvesting/` under new names). Handoffs, carry-forward state, and any artifact that must
    persist MUST be written to a permanent tracked location (`plans/`,
    `reference/`, `.aitools/channel/`). If the subagent writes to
    scratch, the delegating agent must move the artifact to a permanent
@@ -595,7 +595,7 @@ This skill works in any project. The sections and depth adapt:
 - The handoff is written to a permanent tracked location chosen by
   the agent (e.g., `handoff-prompt.md` at repo root, or a new
   `plans/` directory created for this purpose). NEVER to scratch —
-  scratch is deleted by the SessionEnd hook.
+  scratch is gitignored and never leaves this machine.
 - The user decides the final location if the agent is unsure
 
 ## Lagebeurteilung as general-purpose capability
@@ -632,7 +632,7 @@ Each assumption gets tracked with:
 ## Cross-References
 
 - Session planning: `/planning` skill
-- Delegation duty (seven elements, prompt skeleton): `/delegate` skill,
+- Delegation duty (eight elements, prompt skeleton): `/delegate` skill,
   user rule `delegation.md`
 - Scratch files: `/scratch` skill (includes lifecycle warning)
 - Investigation methodology: `/investigate` skill

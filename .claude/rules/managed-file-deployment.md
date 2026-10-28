@@ -33,9 +33,11 @@ adopt or merge & adopt the library writes that file itself, in the same
 step. Callers never copy files back. An adopt target in the aitools repo is
 a working-tree change only (no commit, no push). An adopt target in the
 dotprofile repo is committed and pushed to its main automatically (N-Q2).
-CLAUDE.md, a template, passes an adopt transform that strips the
-machine footer and reverses the interpolation (`ADOPT_TRANSFORM` /
-`-AdoptTransform`; today `adopt_claude_md`).
+CLAUDE.md, a template, passes an adopt filter that strips the machine
+footer and reverses the interpolation (bash: 6th argument `ADOPT_FILTER`,
+a function name — `claude_md_adopt_filter` in `setup-user-claude.sh`;
+PS1: `-AdoptFilter` scriptblock — `$claudeMdAdoptFilter` in
+`setup-user-claude.ps1`).
 
 ### Content sources
 
@@ -45,12 +47,12 @@ Deployed content originates from two repos:
 |--------|----------|-----------------|
 | Dotprofile repo (`aitools-<username>`) | Primary (wins if present) | CLAUDE.md template, user rules, profile.json (preferences, identity, machine profiles) |
 | aitools repo (`shared/`) | Fallback | claude-shared.md template, hook scripts, skills, shell aliases |
-| aitools repo + dotprofile -> `~/.aitools/` (`deploy-harness`) | First source wins on a name conflict: `shared/`, then `.claude/`, then dotprofile `claude/rules/` | reference, registries, hooks, skills, rules (one flat directory), bin; config.json generated from profile.json. Rules reach the tools through the `setup-user-claude` / `setup-user-cursor` fan-out. Detail: `@reference/harness.md` "Deployed harness (`~/.aitools`)" |
+| aitools repo + dotprofile -> `~/.aitools/` (`deploy-harness`) | First source wins on a name conflict: `shared/`, then `.claude/`, then dotprofile `claude/rules/` | reference, registries, hooks, skills, rules (one flat directory), bin; config.json generated from profile.json. Rules reach Cursor through the `setup-user-cursor` fan-out; `setup-user-claude` does not fan out yet (it deploys the dotprofile `claude/rules/` only). Detail: `@reference/harness.md` "Deployed harness (`~/.aitools`)" |
 
 - **Template interpolation**: `{{PLACEHOLDER}}` tokens in CLAUDE.md replaced with this machine's profile values when the setup script runs on that machine (dev path and generated deploy/ scripts alike)
 - **Machine profile selection**: one resolver (`aitools-profile.sh` / `.ps1`, through `resolve_machine_profile` / `Resolve-MachineProfile`): override → environment → `profiles[<machine id>]` → config.json `machineId` (only when the id cannot be detected) → config.json `machineAlias` (2.1 profiles only) → hostname (warns) → no match = ERROR, never another machine's profile. Order and failure behaviour: `@reference/user-repo.md` "Resolution"
 - **Rules**: additive deploy from `<userRepoPath>/claude/rules/` — managed files updated, unmanaged files in target preserved
-- **Skills**: vendored from upstream in `shared/skills/`, deployed to `~/.claude/skills/` and `~/.cursor/skills/`
+- **Skills**: user-level skills in `shared/skills/` (aitools-authored; `chrome-devtools` and `a11y-debugging` vendored from upstream) and personal skills in the dotprofile `claude/skills/` (wins on a name clash), deployed by `setup-user-skills` to `~/.claude/skills/` and `~/.cursor/skills/`; `deploy-harness` also copies `shared/skills/` and `.claude/skills/` to `~/.aitools/skills/`
 - **Hooks**: canonical source in `shared/hooks/`, deployed to `~/.claude/hooks/`
 
 Full spec: `@reference/user-repo.md`
@@ -71,8 +73,8 @@ These apply equally regardless of file type:
 3. **Post-write validation**: verify the written file immediately.
    JSON: valid parse + required keys. Markdown: non-empty + required
    sections. Shell: non-empty + executable bit.
-4. **Outcome tracking**: every deployment must resolve to
-   created, updated, or unchanged — and report via `write_summary`.
+4. **Outcome tracking**: every deployment must resolve to a governed
+   outcome and report via `write_summary`.
    `deploy_managed_file` results (created, updated, verified, accept &
    adopt, skipped, failed) are recorded with the deploy tracker; `failed`
    is an ERROR row and the run continues with the next file.
@@ -86,7 +88,7 @@ Examples:
 
 | Config | Field | Windows | macOS | Linux |
 |--------|-------|---------|-------|-------|
-| mcp.json | chrome-devtools command | `cmd /c npx -y chrome-devtools-mcp@latest --isolated` | `npx -y chrome-devtools-mcp@latest --isolated` | same as macOS |
+| Claude Code MCP registration (`claude mcp add --scope user`, `~/.claude.json`) | chrome-devtools command | `cmd /c npx chrome-devtools-mcp@latest -- --isolated` | `npx chrome-devtools-mcp@latest --isolated` | same as macOS |
 | mcp.json, ~/.claude.json | chrome-devtools command, Claude Code web environment (D-CHR2) | n/a | n/a | `npx -y chrome-devtools-mcp@latest --isolated --headless --chromeArg=--no-sandbox` |
 | settings.json | hook paths | `bash "C:/Users/.../hooks/session-archive.sh"` | `bash "/Users/.../hooks/session-archive.sh"` | `bash "/home/.../hooks/session-archive.sh"` (`/root/...` as root) |
 

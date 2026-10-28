@@ -43,7 +43,7 @@ staleness rules mirror defect tracking practices.
 
 - `@.claude/rules/incident-governance.md` (operational rule)
 - Incident registry (data, via `/incident` skill)
-- `@.claude/skills/incident/SKILL.md` (filing)
+- `@shared/skills/incident/SKILL.md` (filing)
 - `@.claude/skills/audit/SKILL.md` (health checking)
 
 ## Cross-References

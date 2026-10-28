@@ -76,10 +76,10 @@ truth. Protected file. Machine-readable for `/audit` validation.
 Schema documented in the rule. Must include `meta.intent` with
 purpose, scope, and audience fields.
 
-**Skill** — loads the JSON on demand, presents it with context.
-Injected into subagents via SubagentStart cache. Write skills
-(`/incident`, `/tool-eval`) file entries. Read skills (`/incidents`,
-`/frameworks`, `/tools`) present the registry.
+**Skill** — loads the JSON on demand and presents it with its process
+(`/incident`, `/frameworks`, `/glossary`, `/tool-registry`, `/tool-ops`).
+Subagents do not inherit skills or rules; delegation prompts name them
+(user rule `delegation.md`). Each registry skill both reads and writes.
 
 **Per-entry reference files** (`reference/<concept>-*.md`) — when
 entries have enough detail to stand alone. Frameworks and tools
@@ -90,11 +90,11 @@ get a reference file.
 ### Naming
 
 - Rule: `.claude/rules/<registry-name>.md`
-- Data: `reference/<registry-name>.json` or `registries/<name>-registry.json`
-- Write skill: `/<singular>` (e.g., `/incident`, `/tool-eval`)
-- Read skill: `/<plural>` (e.g., `/incidents`, `/frameworks`, `/tools`)
+- Data: `registries/<name>.json`
+- Skill: one per registry, named for the user's mental model (`/incident`,
+  `/frameworks`, `/glossary`, `/tool-registry`, `/tool-ops`)
 - Per-entry reference: `reference/<concept>-<name>.md`
-  (e.g., `framework-incident-governance.md`, `tool-perl.md`,
+  (e.g., `framework-incident-governance.md`, `tool-ops-claude-code.md`,
   `incident-020-process-discipline.md`)
 
 ### Schema
@@ -116,7 +116,8 @@ get a reference file.
 
 ### Current registries
 
-The registry list is maintained in `@.claude/rules/frameworks.md`.
+The registry list is maintained in the framework registry (`/frameworks`
+skill); `@.claude/rules/frameworks.md` governs the pattern, not the instances.
 
 ## Three-Layer Completeness
 
@@ -161,7 +162,7 @@ When adopting or reviewing a framework, verify three-layer coverage:
 
 ## Implementing Artifacts
 
-- `@CLAUDE.md` design principles (defines the model)
+- `@reference/harness.md` and this file (define the model)
 - `@.claude/rules/*.md` (prevention layer)
 - `@shared/skills/` and `@.claude/skills/` (prevention + audit)
 - `@shared/hooks/*.sh` (detection layer)

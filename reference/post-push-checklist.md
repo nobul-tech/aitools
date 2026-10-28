@@ -12,6 +12,10 @@ When the audit produces flags:
 2. **Defer** -- requires planning or user action (e.g., `aitools user init`): add to ROADMAP.md or note in session
 3. **Won't-fix** -- known exception: document why inline and move on
 
+The script runs every step on every run (`EXTENSIVE=true` is hard-coded; the
+`--extensive` / `-Extensive` flag has no effect); the tiers below are a reading
+order, not modes.
+
 ## Always (after every push)
 
 ### 1. Verify push landed
@@ -20,7 +24,10 @@ When the audit produces flags:
 
 ### 2. Smoke-test deploy scripts
 
-`bash -n deploy/*.sh` -- catches build corruption or stale copies. Fast (<1s).
+`bash -n` on the generated deploy scripts -- catches build corruption or stale
+copies. Fast (<1s). The generated scripts live in `<userRepoPath>/deploy/` (the
+dotprofile build output); the script still checks the frozen aitools `deploy/`
+(steps 2, 6 and 14 need the same change: see the incident note under step 7).
 
 ### 2b. Functional smoke test (when requested or after significant changes)
 
@@ -67,30 +74,29 @@ Run all Always items first, then:
 files -- see `.claude/rules/cross-platform.md` Pre-validation convention for the
 full ParseFile command (pwsh is a managed tool).
 
-### 7. deploy/ drift audit
+### 7. deploy/ drift audit (retired)
 
-Rebuild and diff:
-```
-bash scripts/build-deploy.sh
-git diff deploy/
-```
-Any diff means deploy/ was stale at push time. Should be empty.
+The shared `aitools/deploy/` is frozen. Drift of the dotprofile `deploy/` is
+checked by pre-push step 7 (rebuild into a temporary copy). Do not run
+`build-deploy.sh` here: it replaces the real dotprofile `deploy/`. (The script
+still runs `build-deploy.sh` and then `git diff deploy/` on the frozen aitools
+tree, so the step always passes and rebuilds the real dotprofile as a side
+effect: an open defect, recorded for the incident registry.)
 
 ### 9. Source-of-truth consistency
 
-For each tool in the tool registry (`/tool-registry` skill):
-- Verify the install command matches what the corresponding `setup-*.sh/.ps1`
-  script actually runs.
-- Verify all 6 lifecycle fields (Platform Status, Concurrency, Post-Install
-  Config, Dependencies, Invocation, Last verified version) are present.
-- Verify Platform Status uses 3-platform format (`macOS: ... | Windows: ... | Linux: ...`).
-- Verify Last verified version is populated for the current platform (not `pending` indefinitely).
+The script counts registry tools that have `lifecycle.platformStatus` (WARN when
+it cannot read any). The deeper checks (install command vs setup script, every
+lifecycle field, per-platform status values) are manual: run them through the
+`/tool-registry` skill.
 
 ### 10. Protected files inventory
 
-Every file in the `.claude/rules/sources-of-truth.md` protected table exists on
-disk. Every file matching the glob patterns (`.claude/rules/*.md`,
-`.cursor/rules/*.mdc`, `plans/*.md`) is covered by the table.
+The script checks that 8 key protected files exist (`registries/tool-registry.json`,
+`reference/tool-evaluation-criteria.md`, `reference/tool-evaluation-playbook.md`,
+`CLAUDE.md`, `shared/claude-shared.md`, `ROADMAP.md`,
+`reference/tool-ops-claude-code.md`, `reference/user-repo.md`). Table coverage of
+the globs is not checked.
 
 ### 11. Cross-platform pairing
 
@@ -104,9 +110,8 @@ Every `scripts/setup-*.sh` has a matching `.ps1` (and vice versa). Same for
 
 ### 13. Reference link audit
 
-Every `@reference/` import in `CLAUDE.md` points to a file that exists.
-Every file in `reference/` that is imported is up to date (not stale or
-contradicting CLAUDE.md).
+Every `@reference/` import in `CLAUDE.md` points to a file that exists
+(existence only; CLAUDE.md has no `@reference/` imports today).
 
 ### 14. Line ending audit
 
@@ -179,20 +184,51 @@ For `@latest` / remote tools (MCP servers):
 - PASS: Both source scripts include the call in the exit section.
 - FAIL: Missing from one or both source scripts.
 
+### 17b. Hook schema validation
+
+Validates the hook entries in `~/.claude/settings.json` (node). SKIP when
+settings.json is missing or node is unavailable.
+
+### 23. Script standards compliance
+
+Runs `scripts/check-script-compliance.sh`; FAIL when any of its checks fails,
+SKIP when the script is missing.
+
+### 24. Summary panel DETAIL support
+
+Verifies the `DETAIL` summary category exists in the lib and the scripts.
+
+### 25. CLI tools table sync
+
+Compares the registry's invocation commands with the Managed CLI Tools table in
+`shared/claude-shared.md`; WARN lists the commands missing from the table.
+
+### 26. Deploy scripts list sync
+
+Looks for a `build-deploy.sh ... generates` line in `CLAUDE.md`. CLAUDE.md has
+none today, so the step always SKIPs ("could not find deploy reference in
+CLAUDE.md") until the list returns or the step is retired.
+
+### 27. Build prerequisites installed
+
+When cargo is installed, verifies the build prerequisites are present; WARN
+names the missing ones.
+
+### 28. Deploy state integrity (retired)
+
+Always SKIP: managed files keep no deploy state.
+
 ### 29. Deployment menu parity audit
 
-Extract interactive menu choice patterns (`[letter]`) from both
-`scripts/aitools-lib.ps1` (Prompt-DiffReview) and `scripts/aitools-lib.sh`
-(prompt_diff_review). Verify identical choice letters and order in auto-merge
-menu and fallback menu. Flag mismatches.
+Collects every `[letter]` printed by a menu in `scripts/aitools-lib.ps1` and
+`scripts/aitools-lib.sh` and compares the two sorted sets. Order is not
+compared.
 
 ### 30. Return value coverage audit
 
-Extract all return values from `Deploy-ManagedFile` / `deploy_managed_file`.
-For each caller file (`setup-user-claude`, `setup-user-mcp`,
-`setup-user-hooks`), verify a case/switch branch exists for every return value.
-Also verify `Record-DeployOutcome` / `deploy_tracker_record` handles every
-value.
+For the inline-handling caller (`setup-user-claude.sh`), verify every
+`MANAGED_FILE_RESULT` value appears. Skills, hooks, rules and harness files
+delegate to `deploy_tracker_record`, covered by step 31.
 
 ### 31. Deployment state machine sync
 

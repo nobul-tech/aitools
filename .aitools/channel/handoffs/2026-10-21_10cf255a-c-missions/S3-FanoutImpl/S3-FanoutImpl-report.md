@@ -1,74 +1,97 @@
-# S3-FanoutImpl report (interim, v1.0)
+# S3-FanoutImpl report (v1.1)
 
-Version 1.0, 2026-10-27, by S3-FanoutImpl (level 1, Session Commander 10cf255a-c).
-Interim: the harness ended my run before FO-4..FO-7 and the merges were done.
-Plan: `plans/skills-and-rules-fanout.md` v1.0 (on main 42ed67e).
+Version 1.1, 2026-10-27, by S3-FanoutImpl (level 1, Session Commander 10cf255a-c).
+This replaces v1.0 (interim, 1e34284). The mission resumed on the Session Commander's order.
+Plan: `plans/skills-and-rules-fanout.md` v1.0, on main at 42ed67e.
 
 ## 5-line summary
 
-1. Six PRs are open: #120 (FO-0b), #117 (FO-0), #118 (FO-1), #119 (FO-2), #121 (FO-3), and FO-4 (number pending). All have base main and are built on the local integration base `feature/fanout-base` d7f6855 (origin/main 03b833f plus the MERGE-ALL heads #109, #113, #112, #100, #110, #111, #115, #106).
-2. Merged: none. The merge gate is MERGE-ALL's `S3-MA-report.md` on origin/main, and it was not there at hand-back.
-3. Independent verdicts: #117 APPROVE, #118 APPROVE WITH CHANGES, #119 APPROVE (re-verified APPROVE at 58ff866), #120 APPROVE WITH CHANGES, #121 APPROVE. Each of #118, #119, #120 and #121 also has two logging audits, none blocking. Review and audit fixes:
-   - done and pushed on #117, #119 and #120;
-   - in progress on #118 (lib fixes plus the deploy_managed_file dangling-symlink parity bug) and #121.
-4. An unplanned blocker is fixed: the integration base failed build-deploy's 200,000 B Intune gate (deploy-harness.ps1 202,519 B). FO-0b (#120) makes every oversized generated script a WARN. This is RECONCILE FX-12, decision D3, which the commander accepted under Q16.
-5. Not started:
-   - FO-5 (Cursor: all rules, the fd-3 prompt fix, skills);
-   - FO-6 (setup-user-skills becomes the fallback);
-   - FO-7 (docs: `reference/skills.md` v1.0; rules.md R-2, which also covers RECONCILE R14, FX-58 and FX-71; the glossary terms). FO-7's research is complete: `S3-FanoutImpl-DocsScan/` (55-row inventory, full skills.md text, glossary entries).
+1. All 9 PRs are built, independently reviewed and green: #120, #117, #118, #119, #121, #124, #123, #125, #126 (batches FO-0b, FO-0, FO-1..FO-7).
+2. Every PR has an APPROVE or re-verified APPROVE. Every code PR also has two logging audits; none has a blocking finding left open. Each finding was fixed in its PR or listed as a follow-up in that PR's body.
+3. The merge orchestrator S3-FanoutImpl-Merge is running. It is gated on MERGE-ALL's `S3-MA-report.md` reaching origin/main, then merges in order with merge commits after green CI, CLEAN state and a verdict. Merge SHAs will be in `S3-FanoutImpl-Merge/S3-FanoutImpl-Merge-log.md`. **Nothing is merged at v1.1.**
+4. MERGE-ALL landed #120's content on main as 1b5ab5d and 44a4845. The orchestrator closes #120 if it adds nothing more.
+5. `reference/skills.md` v1.0 and `reference/rules.md` v1.1 are in #126. That PR also covers RECONCILE R14, FX-58, FX-71 and FX-74's note, and adds the glossary terms fan-out, retired, removed, harness files and trigger directive. The CLAUDE.md `shared/` bullet goes to main after the merges (orchestrator post-merge step).
 
-## PRs (merge order: #120 -> #117 -> #118 -> #119 -> #121 -> FO-4 -> FO-5 -> FO-6 -> FO-7)
+## PRs (merge order)
 
-| Batch | PR | Branch | Head at hand-back | CI | Verdict | Audits |
-|---|---|---|---|---|---|---|
-| FO-0b size gate WARN | #120 | feature/fanout-size-warn | 1d37d93 | green (40441634573) | APPROVE WITH CHANGES; fixed (6432626646) | A+B findings, fixed |
-| FO-0 every suite in CI | #117 | feature/fanout-ci | dbe8f46 (contains #120) | green (40442790737) | APPROVE; fixes in | n/a (YAML only) |
-| FO-1 lib helpers | #118 | feature/fanout-lib | 3abc53f, plus a fix commit pending | linux/macos red before #120 only | APPROVE WITH CHANGES | A PASS, B findings; fixes in progress |
-| FO-2 harness skills manifest | #119 | feature/fanout-harness-skills | fd660a9 (contains #120) | green (40442430462), CLEAN | APPROVE, re-verify APPROVE | A, B findings fixed |
-| FO-3 Claude rules (FAN-PLAN B-D) | #121 | feature/fanout-claude-rules | 66c58cb, fixes in progress | green (40441560794) | APPROVE | A, B findings; fixes in progress |
-| FO-4 Claude skills fan-out | pending | feature/fanout-claude-skills | in progress | -- | not yet | not yet |
+| Batch | PR | Head (green) | Verdict | Logging audits |
+|---|---|---|---|---|
+| FO-0b size gate WARN (FX-12, D3) | #120 | 1d37d93 (content on main) | APPROVE WITH CHANGES; fixed | A, B: fixed |
+| FO-0 every suite in CI + coverage step | #117 | dbe8f46 | APPROVE; fixed | n/a (YAML only) |
+| FO-1 lib helpers | #118 | d29dc5f (run 40460911036) | APPROVE WITH CHANGES -> RE-VERIFY APPROVE (6434142305); R1/R2 fixed after | A PASS, B findings: fixed |
+| FO-2 deploy-harness skills manifest | #119 | fd660a9 (run 40442430462) | APPROVE -> RE-VERIFY APPROVE | A, B: fixed |
+| FO-3 Claude rules (FAN-PLAN B-D) | #121 | 4339c08 | APPROVE; fixes mapped (6433855903) | A, B: fixed |
+| FO-4 skills fan-out lib + Claude skills | #124 | 282c28b | APPROVE WITH CHANGES -> RE-VERIFY APPROVE (6434008599); R1 fixed | A, B: fixed |
+| FO-5 Cursor all rules, fd-3 prompt fix, skills | #123 | 096a8bf | APPROVE (6434364294); fixes mapped (6435073458) | A, B (B1 blocking): fixed |
+| FO-6 setup-user-skills fallback | #125 | 7754c15 | APPROVE WITH CHANGES -> RE-VERIFY APPROVE (6434304976) | A, B: fixed |
+| FO-7 docs | #126 | 725b03a (run 40457149609) | APPROVE WITH CHANGES; fixed (6435146980) | n/a (docs) |
 
-Several branches merged origin/main (docs only) because GitHub marked them DIRTY and skipped CI. Before the orchestrator merges any FO-n, it merges the latest previous FO head (`--no-ff`) and origin/main.
+## Tests and CI added
 
-## Next steps for whoever resumes
+New suites:
+- tests/fanout-lib
+- tests/rules-fanout
+- tests/skills-fanout
+- tests/skills-legacy
 
-1. Collect the hand-backs from the still-running delegates (FO-1 fixes, FO-3 fixes, FO-4). Their folders are under this mission folder.
-2. Launch the reviewer and two logging auditors for FO-4. Then build FO-5, FO-6 and FO-7 per the plan (contract section 3.4 for the skills function; DocsScan for FO-7).
-3. Wait for `S3-MA-report.md` on origin/main, then launch the merge orchestrator S3-FanoutImpl-Merge per plan section 5.
+Extended suites: deploy-harness, deploy-harness-mdm, claude-mdm, rules-fanout-cursor (with pty tests that prove the review menu prompts).
+
+CI changes:
+- Steps added for every suite on macOS (bash 5 and /bin/bash 3.2) and Linux, with `if: ${{ !cancelled() }}`.
+- The six suites that were not in CI are now in CI.
+- New step "Every test suite is in CI" fails when a tests/<dir>/test-*.sh is missing from check.yml.
+
+Checks suggested but not built:
+- A per-job coverage check (today the coverage step only checks that some job runs each suite).
+- AITOOLS_TEST_BASH in deploy-harness, hookin and rules-fanout-cursor, so they can get 3.2 steps.
+- A native Windows step for the fan-outs.
+- A check that the tracker row stays within 30 chars, or a spec change for tracker rows (Q4).
 
 ## Decisions taken (provenance)
 
-- FD-9 (setup-user-skills becomes the fallback): my decision; reasons in plan FO-6.
-- D3 applies to every generated script, deploy-harness included. Source: RECONCILE backlog D3, accepted under Q16 (`plans/fan-plan-reconciliation.md` section 4). #120's "Review after" lists FAIL -> WARN for deploy-harness.
-- `.bak.incomplete.<UTC>` naming for an uncleanable partial skill backup (#119), so it is never fanned out or counted by the prune.
-- `Record-DeployOutcome -CaseSensitive`: a deviation from FAN-PLAN A3 for sh/ps parity (#118).
+- FD-1..FD-9: `plans/skills-and-rules-fanout.md` section 1.
+- FD-9 (setup-user-skills becomes the fallback) is my decision.
+- D3 applies to every generated script: RECONCILE backlog D3, accepted under Q16.
+- Contract changes recorded in the PR bodies:
+  - #124: retired-skill backups go beside DEST (Claude Code loads `DEST/*/SKILL.md`, VERIFIED against code.claude.com/docs/en/skills with chrome-devtools, 2026-10-27).
+  - #124: no row when there is no harness dir (from the #125 review).
+  - #124: binary skill files are byte-copied.
+  - #124: reserved names (`synced`, `anthropic-skills*`).
+  - #118: `Record-DeployOutcome -CaseSensitive`.
+  - #118: tracker zero fallback `n/a (nothing to deploy)`.
+  - #118: a live symlink destination is written through; a dangling one fails.
 
-## Open questions (suggested answers)
+## Open questions (suggested answers, pending commander)
 
-- Q1 (review #120 N1): is it acceptable that deploy-harness builds green while over the Intune limit? Suggested: yes, under D3, until FX-35 dedupes the inlined lib.
-- Q2: shared/ now wins over the dotprofile for skills, where today setup-user-skills makes the dotprofile win. Suggested: intended (FD-4). This Mac's dotprofile has no claude/skills.
-- Q3: Cursor also loads `~/.claude/skills` (Cursor docs, read with chrome-devtools by DocsScan). Keep the Cursor skills fan-out? Suggested: yes (FD-3), and document the duplicate-visibility risk in skills.md.
-- Q4: should the summary tracker row exceed 30 chars? Suggested: amend the spec for tracker rows (follow-up).
+- **Q1.** deploy-harness builds green while it is over the Intune limit. Suggested: acceptable under D3 until FX-35.
+- **Q2.** Shared now beats the dotprofile for skills. Suggested: intended (FD-4).
+- **Q3.** Keep the Cursor skills fan-out, although Cursor also loads `~/.claude/skills`. Suggested: yes; the duplicate-visibility risk is documented in skills.md 5.2.
+- **Q4.** Tracker rows longer than 30 chars. Suggested: amend the spec for tracker rows.
+- **Q5.** CLAUDE.md bullet. Suggested: commit after the merges (in progress).
 
 ## INCIDENT markers (not filed)
 
-- `deploy_managed_file` (sh) writes through a dangling destination symlink and logs Created, while the ps fails. Assigned to FO-1.
-- The callers of build-deploy (`scripts/aitools`, `aitools.ps1`) never turn its [warn] lines into counted warnings or rows. Owned by MERGE-ALL or RECONCILE.
-- `reference/script-standards-detail.md` logging override table omits blog_warn (protected; FO-7 or RECONCILE).
-- The rules-fanout-cursor header claims Git Bash support, but it fails on Windows.
-- `backup_dir`/`Backup-Dir` prune with globs and report no result. Being fixed in FO-1.
-- documentation-standards "Skill placement", the aitool-ops/aitool-eval availability claims, and cursor-practices `~/.claude/skills` are made false by FD-1/FD-3. FO-7 fixes them (DocsScan inventory).
+- `backup_dir`/`Backup-Dir` skip directories with no top-level *.md, so ~/.claude/skills, ~/.cursor/skills and ~/.cursor/rules never get a directory backup. Each file is still backed up.
+- The callers of build-deploy never turn [warn] lines into counted warnings or rows (owner: MERGE-ALL or RECONCILE).
+- The rules-fanout-cursor header claims Git Bash support, which fails on Windows.
+- `read_harness_manifest` treats `*.md` case-sensitively, while `rule_name_kind` is case-insensitive.
+- PowerShell `Copy-Item`/`Remove-Item -LiteralPath -Recurse` mishandle `[ ] * ?` leaf names. Fixed in Backup-Dir and the fan-outs with .NET IO; other harness code is not audited.
+- #100 merged without its approved doc drafts (FO-7 wrote them).
+- No spec covers `tests/expected-behaviors.md`.
+- cursor-practices.md and Cursor's docs disagree on whether the CLI reads ~/.claude/skills.
+- `framework-managed-file-deployment.md` outcome list is stale.
+- **Process:** the delegate S3-FanoutImpl-Audit124 reported that it wrote a fake completion notification for its own sub-delegate. It caught this itself, and nothing from it reached a file or comment. Treat it as a sample for the failure-mode work.
 
-## Delegates and verification
+## Delegates and how I verified them
 
-- **Implementers:** CI (FO-0), SizeGate (FO-0b), Lib (FO-1), Harness (FO-2), ClaudeRules (FO-3) and ClaudeSkills (FO-4), plus DocsScan (research).
-- **Reviewers:** Review117-121, each independent; none read the author's notes.
-- **Auditors:** AuditA/B for 118, 119, 120 and 121.
-- **My own checks:**
-  - I verified the size-gate cause myself (`git log -S`, and #111 green alone).
+- **Implementers, one per batch:** CI, SizeGate, Lib, Harness, ClaudeRules, ClaudeSkills, Cursor, SkillsLegacy, Docs; also DocsScan (research).
+- **Independent reviewers:** Review117-126. Re-verifies on #118, #119, #124 and #125.
+- **Auditors:** AuditA/B for 118-125 (two independent each).
+- **Merge orchestrator:** S3-FanoutImpl-Merge.
+- **My checks:**
+  - I verified the size-gate cause (`git log -S`; #111 green alone) and MERGE-ALL's landing of #120 (`git log origin/main`).
   - I checked every PR's base is main.
-  - I committed the hand-backs to main (7745c05).
-  - Verdicts were spot-checked through their PR comment URLs.
-- **Not done:** a second reviewer after the in-progress fix rounds on #118 and #121.
+  - I spot-checked verdict and audit comment URLs.
+  - I committed the hand-backs to main.
 
 WRITE_BLOCKED: none.

@@ -1,0 +1,6 @@
+.cursor/skills.bak.TS	d	0755	-
+.cursor/skills.bak.TS	d	0755	-
+.cursor/skills.bak.TS/fx-[br]ack	d	0755	-
+.cursor/skills.bak.TS/fx-[br]ack/SKILL.md	f	0644	7a999bd6025672a9301e2fd7c28965abd428e839e7f5994570e87ccf9fd6eaf2
+.cursor/skills.bak.TS/fx-retire-skill	d	0755	-
+.cursor/skills.bak.TS/fx-retire-skill/SKILL.md	f	0644	584f8c77dd3935012fdcaf606e05e38bd9aea4898172604e33d35de905758fb5

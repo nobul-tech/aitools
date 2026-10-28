@@ -20,6 +20,12 @@
 #
 # Usage: bash scripts/build-deploy.sh   (run from repo root)
 #
+# Safety (incident #86): the build runs in a temp dir. Before it, the current
+# <dotprofile>/deploy/ is copied to <dotprofile>/deploy.bak.<UTC>/ (at most 5 kept,
+# oldest pruned); the new tree replaces deploy/ only when the whole build succeeded,
+# by rename (stale generated files go with the old tree). A failed build leaves the
+# old deploy/ and its backup. Tested by tests/build-deploy/test-build-deploy-backup.sh.
+#
 # CROSS-PLATFORM NOTE: This script is intentionally bash-only (no .ps1 variant).
 # It's a build step that produces platform-independent output (both .sh and .ps1
 # deploy scripts). The result is committed to git, so both platforms get identical
@@ -630,6 +636,81 @@ EMBED_CLEANUP_PS1='Remove-AitoolsEmbed   # embedded resolver temp dir + environm
 # ... and the line after that footer that closes the embed block's "try {": the
 # cleanup also runs on an early exit (S3-MF-Audit A-19). Checked per file below.
 EMBED_FINALLY_PS1='} finally { Remove-AitoolsEmbed }   # closes the try { of the embedded profile resolver (build-deploy, A-19)'
+
+# --- Back up the current deploy/ before building (incident #86) ---
+# <dotprofile>/deploy.bak.<UTC>/ (config-file-safety.md "Backup before overwrite":
+# directories keep at most 5, oldest pruned). Taken before the build, so a build that
+# fails later leaves both the old deploy/ and its backup. Unlike the general rule, a
+# backup that cannot be made stops the build here, with deploy/ untouched: deploy/ is
+# never replaced without one (commander, 2026-10-26: "do a backup of the deploy and
+# then do a rm -rf if necessary"). Dotprofiles made by `aitools user init` ignore the
+# backups (`*.bak.*` in their .gitignore); a dotprofile that does not gets a warning.
+DEPLOY_BACKUP_KEEP=5
+DEPLOY_BACKUP=""
+if [ -e "$DEPLOY_DIR" ]; then
+    _bk_ts=$(date -u +%Y-%m-%dT%H%M%SZ)
+    DEPLOY_BACKUP="$_urp/deploy.bak.$_bk_ts"
+    _bk_n=1
+    while [ -e "$DEPLOY_BACKUP" ]; do
+        _bk_n=$((_bk_n + 1))
+        DEPLOY_BACKUP="$_urp/deploy.bak.$_bk_ts-$_bk_n"
+    done
+    blog "Backing up $DEPLOY_DIR to $DEPLOY_BACKUP"
+    if ! cp -Rp "$DEPLOY_DIR" "$DEPLOY_BACKUP"; then
+        blog_error "Could not back up $DEPLOY_DIR to $DEPLOY_BACKUP -- nothing built, deploy/ left as it was"
+        if [ -e "$DEPLOY_BACKUP" ] && ! rm -rf "$DEPLOY_BACKUP"; then
+            blog_warn "Could not remove the partial backup $DEPLOY_BACKUP"
+        fi
+        exit 1
+    fi
+    # diff -rq: 0 identical, 1 differences, 2 trouble. Anything but 0 = no usable backup.
+    _bk_rc=0
+    _bk_diff=$(diff -rq "$DEPLOY_DIR" "$DEPLOY_BACKUP" 2>&1) || _bk_rc=$?
+    if [ "$_bk_rc" -ne 0 ]; then
+        blog_error "Backup $DEPLOY_BACKUP does not match $DEPLOY_DIR (diff exit $_bk_rc) -- nothing built, deploy/ left as it was"
+        while IFS= read -r _bk_line; do
+            if [ -n "$_bk_line" ]; then blog_error "  $_bk_line"; fi
+        done <<< "$_bk_diff"
+        exit 1
+    fi
+    blog_ok "Backed up deploy/ to $DEPLOY_BACKUP (verified identical)"
+    if command -v git >/dev/null 2>&1 && [ -e "$_urp/.git" ]; then
+        # check-ignore: 0 ignored, 1 not ignored, 128 error
+        _bk_ign=0
+        git -C "$_urp" check-ignore -q "${DEPLOY_BACKUP##*/}/" || _bk_ign=$?
+        case "$_bk_ign" in
+            0) : ;;
+            1) blog_warn "The dotprofile does not ignore ${DEPLOY_BACKUP##*/}/ -- add 'deploy.bak.*/' (or '*.bak.*') to $_urp/.gitignore so backups are never committed" ;;
+            *) blog_warn "git check-ignore failed in $_urp (exit $_bk_ign) -- could not confirm the backups are ignored" ;;
+        esac
+    fi
+    # Prune: keep the newest $DEPLOY_BACKUP_KEEP. Names sort by their UTC timestamp.
+    _bk_all=""
+    if ! _bk_all=$(find "$_urp" -maxdepth 1 -type d -name 'deploy.bak.*' | LC_ALL=C sort); then
+        blog_warn "Could not list the deploy/ backups in $_urp -- old backups not pruned"
+        _bk_all=""
+    fi
+    _bk_total=0
+    if [ -n "$_bk_all" ]; then
+        _bk_total=$(printf '%s\n' "$_bk_all" | wc -l | tr -d ' ')
+    fi
+    _bk_drop=$((_bk_total - DEPLOY_BACKUP_KEEP))
+    if [ "$_bk_drop" -gt 0 ]; then
+        while IFS= read -r _bk_old; do
+            [ -n "$_bk_old" ] || continue
+            if [ "$_bk_drop" -le 0 ]; then break; fi
+            _bk_drop=$((_bk_drop - 1))
+            if rm -rf "$_bk_old"; then
+                blog "Pruned old deploy/ backup: $_bk_old"
+            else
+                blog_warn "Could not prune old deploy/ backup: $_bk_old"
+            fi
+        done <<< "$_bk_all"
+    fi
+    blog "deploy/ backups: $_bk_total found, keeping at most $DEPLOY_BACKUP_KEEP"
+else
+    blog "No deploy/ in the dotprofile yet -- nothing to back up (first build)"
+fi
 
 # Build into a staging dir; it replaces <dotprofile>/deploy only at the very end, so
 # a build that fails anywhere (inputs, extraction, PS1 validation) leaves the
@@ -2564,14 +2645,60 @@ for _sz_f in "$DEPLOY_DIR"/*.ps1 "$DEPLOY_DIR"/*.sh; do
     fi
 done
 
-# Swap the staged build in
-if ! rm -rf "$DEPLOY_DIR_FINAL"; then
-    blog_error "Could not remove $DEPLOY_DIR_FINAL -- deploy/ not replaced"
+# Swap the staged build in (incident #86). The build first moves into a swap directory next to
+# deploy/ (same file system, so the renames after it are atomic); the old deploy/ is
+# renamed aside, the new one renamed in, and only then is the old tree deleted, so
+# stale generated files go with it. Any failure leaves the old deploy/ in place (put
+# back if it was already moved) and keeps the backup. The swap directory's name
+# matches `*.bak.*`, so a dotprofile made by `aitools user init` ignores it if a
+# killed run leaves it behind.
+_bk_note="backup: ${DEPLOY_BACKUP:-none (first build)}"
+if ! _swap_dir=$(mktemp -d "$_urp/deploy.swap.bak.XXXXXX"); then
+    blog_error "Could not create a swap directory in $_urp -- deploy/ not replaced ($_bk_note)"
     exit 1
 fi
-if ! mv "$DEPLOY_DIR" "$DEPLOY_DIR_FINAL"; then
-    blog_error "Could not move the build into $DEPLOY_DIR_FINAL"
+blog "Swapping the new build into $DEPLOY_DIR_FINAL (via $_swap_dir)"
+if ! mv "$DEPLOY_DIR" "$_swap_dir/new"; then
+    blog_error "Could not move the build next to $DEPLOY_DIR_FINAL -- deploy/ not replaced ($_bk_note)"
+    if ! rm -rf "$_swap_dir"; then
+        blog_warn "Could not remove the swap directory $_swap_dir"
+    fi
     exit 1
+fi
+_swap_had_old=false
+if [ -e "$DEPLOY_DIR_FINAL" ]; then
+    if ! mv "$DEPLOY_DIR_FINAL" "$_swap_dir/old"; then
+        blog_error "Could not move the old $DEPLOY_DIR_FINAL aside -- deploy/ not replaced ($_bk_note)"
+        if ! rm -rf "$_swap_dir"; then
+            blog_warn "Could not remove the swap directory $_swap_dir"
+        fi
+        exit 1
+    fi
+    _swap_had_old=true
+fi
+if ! mv "$_swap_dir/new" "$DEPLOY_DIR_FINAL"; then
+    blog_error "Could not move the new build into $DEPLOY_DIR_FINAL ($_bk_note)"
+    if $_swap_had_old; then
+        if mv "$_swap_dir/old" "$DEPLOY_DIR_FINAL"; then
+            blog "Old deploy/ put back in $DEPLOY_DIR_FINAL"
+        else
+            blog_error "Could not put the old deploy/ back: it is in $_swap_dir/old ($_bk_note)"
+            exit 1
+        fi
+    fi
+    if ! rm -rf "$_swap_dir"; then
+        blog_warn "Could not remove the swap directory $_swap_dir"
+    fi
+    exit 1
+fi
+if rm -rf "$_swap_dir"; then
+    if $_swap_had_old; then
+        blog_ok "Replaced deploy/ (old tree removed; $_bk_note)"
+    else
+        blog_ok "Created deploy/ (first build)"
+    fi
+else
+    blog_warn "deploy/ replaced, but the swap directory $_swap_dir (old tree) could not be removed -- delete it by hand"
 fi
 DEPLOY_DIR="$DEPLOY_DIR_FINAL"
 
