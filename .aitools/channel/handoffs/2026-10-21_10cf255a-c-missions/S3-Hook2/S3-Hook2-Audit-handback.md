@@ -1,4 +1,4 @@
-# S3-Hook2-Audit handback (v1.1, 2026-10-28)
+# S3-Hook2-Audit handback (v1.2, 2026-10-28)
 
 Mission HOOK2-AUDIT, delegated by S3-Hook2. Branch `fix/hook2-hook-stderr`
 (nobul-tech/aitools), PR base `main`. Audience: S3-Hook2 and the commander.
@@ -18,6 +18,53 @@ Mission HOOK2-AUDIT, delegated by S3-Hook2. Branch `fix/hook2-hook-stderr`
 5. 107 tests (4 files + runner) pass on bash 5.3 and /bin/bash 3.2.57; the
    changed-hook tests fail against the origin/main hooks; CI (macOS bash 5 +
    3.2, Linux, Windows Git Bash) is green on PR #134 head 31147cd.
+
+## v1.2: review and logging-audit fixes (commit 48e72da) and the merge of main
+
+S3-Hook2 relayed the PR #134 review (#issuecomment-6476042349, APPROVE) and two
+logging audits (LogA #issuecomment-6475829610, LogB #issuecomment-6475837135).
+All their findings were non-blocking. Fixed on this branch; no exit code or
+mode changed:
+
+1. `harness-db-sessionend.sh` now checks each of its four helper calls. The
+   status line says "ended, events processed, JSON exported" only when all
+   four succeed. Otherwise it says "end incomplete (harness-db.py <steps>
+   failed; see the output above)" and writes a line to
+   `~/.aitools/logs/harness-db-sessionend.log` (LogA 1, LogB 1).
+2. The "NOT registered" line in the SessionStart hooks now points at the
+   harness-db.py output above it, where the cause is. It used to point at
+   harness-db.log, which never receives the failure. The two merged calls also
+   run with `PYTHONUNBUFFERED=1`, which keeps the traceback in order with the
+   stdout lines (Review 5 and 6, LogA 2).
+3. `sh-file-fixup.sh` now captures git's stderr and quotes its first line in
+   the report. The git+x remedy is quoted with `printf %q`, and a
+   git-mode-check failure gets its own remedy, `git -C <dir> status`
+   (Review 2, LogA 3, LogB 5).
+4. `json_escape` now writes every control character below 0x20 as `\u00XX`
+   (Review 1, LogA 5, LogB 6).
+5. `file_path` handling changed in four ways (Review 3, LogB 2):
+   - It is read escape-aware and JSON-unescaped (`\\`, `\"`, `\/`).
+   - A Windows path goes through `cygpath -u`.
+   - A relative path resolves against the payload's cwd.
+   - git gets `-C <dir>` plus the base name.
+   Under bash 3.2 a literal `\/` in a replacement string is kept as is, so the
+   replacements now come from variables (probed on 3.2.57 and 5.3.15).
+6. Test library changes (Review 4, LogA 4, LogB 3 and 4):
+   - `ctx_is` and `ctx_has` without a JSON parser now count as skip, not ok,
+     and a self-test covers it.
+   - `run_hook` also isolates `USERPROFILE`.
+   - The `|| echo none` sentinels have comments.
+7. Merged origin/main (PR #122) with `--no-ff`. git merged check.yml
+   automatically and both sets of steps are present. `test-delegation-duty-guard.sh`
+   passes 50/50 on bash 5 and 3.2.
+
+Tests: 142 per bash version, up from 107: sh-file-fixup 46, glossary 12,
+SessionStart 40, smoke 44. The new order and pointer checks fail against the
+`31147cd` SessionStart hook. Left as follow-ups, per S3-Hook2, because they
+fall outside this diff: the silent excepts in `intelligence-stop.py`, the
+unchecked perl and chmod writes in `sh-file-fixup.sh`, the unescaped
+telemetry name in `glossary-skill-guard.sh:41`, and the uncommented telemetry
+`2>/dev/null || true` lines.
 
 ## Sources
 
