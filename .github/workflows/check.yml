@@ -113,6 +113,9 @@ jobs:
           fi
           echo "All .py files passed syntax validation"
 
+      - name: harness-db delegation score tests (Python)
+        run: python3 tests/harness-db/test-delegation-score.py
+
       - name: Logging unit tests (bash)
         run: bash tests/logging/test-logging.sh
 
@@ -308,6 +311,9 @@ jobs:
             scripts/setup-user-hooks.ps1 \
             scripts/build-deploy.sh
 
+      - name: harness-db delegation score tests (Python)
+        run: python3 tests/harness-db/test-delegation-score.py
+
       - name: Logging unit tests (bash)
         run: bash tests/logging/test-logging.sh
 
@@ -428,6 +434,10 @@ jobs:
               exit 1
           }
           Write-Host "All .ps1 files passed syntax validation"
+
+      - name: harness-db delegation score tests (Python, native)
+        shell: pwsh
+        run: python tests/harness-db/test-delegation-score.py
 
       - name: Logging unit tests (bash, via Git Bash)
         shell: bash

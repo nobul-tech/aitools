@@ -7,7 +7,7 @@
       "scope": "Operational metadata and governance modes only. NOT the ops knowledge itself. NOT install/versions. NOT incidents. NOT the framework definition",
       "audience": "/tool-ops skill, /audit skill, tool-ops-session-audit.sh hook, setup scripts"
     },
-    "lastUpdated": "2026-10-22"
+    "lastUpdated": "2026-10-28"
   },
   "tools": {
     "claude-code": {
@@ -41,7 +41,7 @@
         { "name": "hookFireRate", "source": "hook logs", "unit": "fires/session" },
         { "name": "guardBlocks", "source": "hook logs", "unit": "blocks/session" },
         { "name": "versionDepDrift", "source": "check script", "unit": "stale items" },
-        { "name": "delegationDutyScore", "source": "delegation-duty-guard.sh events (session events.jsonl)", "unit": "elements present / 7" }
+        { "name": "delegationDutyScore", "source": "delegation-duty-guard.sh events (session events.jsonl), aggregated by harness-db.py process-events into delegation.avgScore / delegation.minScore", "unit": "fraction 0..1 of the event's elements present (score / total per event; an event without total counts as / 6; checked:0 events excluded)" }
       ],
       "verifications": [
         {

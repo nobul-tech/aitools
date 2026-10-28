@@ -1208,6 +1208,88 @@ def cmd_status(args: argparse.Namespace) -> int:
     return 0
 
 
+# Elements a delegation event scored out of when it carries no "total" key.
+# Every delegation-duty-guard.sh that omitted "total" checked 6 elements:
+# "total" first appears in commit ced624b (2026-10-04, PR #47), which moved
+# the hook from 6 to 7 elements, and the frozen deploy/setup-user-hooks.sh
+# still embeds the 6-element hook that emits {"score":N,"missing":...}.
+DELEGATION_DEFAULT_TOTAL = 6
+
+
+def _as_number(value: Any) -> float | None:
+    """Return value as a finite float if it is a JSON number, else None.
+
+    Strings, booleans, null, NaN and infinities are not numbers here: the
+    hooks emit bare JSON numbers, so anything else is a malformed event."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    number = float(value)
+    if number != number or number in (float("inf"), float("-inf")):
+        return None
+    return number
+
+
+def delegation_score_metrics(delegations: list[dict[str, Any]]) -> dict[str, float]:
+    """Compute delegation compliance KPIs, normalised by each event's total.
+
+    Scale: every metric value is a fraction from 0.0 to 1.0 (score / total
+    for one event), so events scored out of 6, 7 or 8 elements (or any
+    later count) are comparable. Before 2026-10-28 the metrics were the raw
+    mean and min of "score" (0..6, 0..7 or 0..8 depending on the hook).
+
+    Per event (type "delegation", detail in "d"):
+      - "checked" == 0: the hook checked nothing (no delegation text, or no
+        perl); the event is skipped -- its score 0 is not a measurement.
+      - "score" must be a JSON number; "total" must be a JSON number > 0.
+        An event without a "total" key uses DELEGATION_DEFAULT_TOTAL (6).
+        A present but unusable "total" (0, negative, string, null) skips
+        the event: guessing a total for a broken emitter would be wrong.
+      - score is clamped to 0..total.
+
+    Returns delegation.avgScore, delegation.minScore and delegation.count
+    (the number of scored events) when at least one event is scored, else
+    an empty dict. Skipped events are counted by reason in harness-db.log.
+    """
+    fractions: list[float] = []
+    skipped: dict[str, int] = {}
+
+    def skip(reason: str) -> None:
+        skipped[reason] = skipped.get(reason, 0) + 1
+
+    for event in delegations:
+        detail = event.get("d")
+        if not isinstance(detail, dict) or "score" not in detail:
+            skip("no-score")
+            continue
+        if "checked" in detail and _as_number(detail["checked"]) == 0:
+            skip("unchecked")
+            continue
+        score = _as_number(detail["score"])
+        if score is None:
+            skip("bad-score")
+            continue
+        if "total" in detail:
+            total = _as_number(detail["total"])
+            if total is None or total <= 0:
+                skip("bad-total")
+                continue
+        else:
+            total = float(DELEGATION_DEFAULT_TOTAL)
+        fractions.append(min(max(score, 0.0), total) / total)
+
+    if skipped:
+        reasons = ", ".join(f"{k}={v}" for k, v in sorted(skipped.items()))
+        _log_detail(f"delegation score: skipped {sum(skipped.values())} event(s): {reasons}")
+
+    if not fractions:
+        return {}
+    return {
+        "delegation.avgScore": sum(fractions) / len(fractions),
+        "delegation.minScore": min(fractions),
+        "delegation.count": float(len(fractions)),
+    }
+
+
 def process_session_events(
     session_dir: Path, session_id: str, harness_db_path: Path
 ) -> dict[str, Any]:
@@ -1271,20 +1353,9 @@ def process_session_events(
     delegations = [e for e in events if e.get("type") == "delegation"]
     metrics["session.subagentCount"] = float(len(delegations))
 
-    # 5. Delegation compliance scores
-    if delegations:
-        scores = []
-        for d in delegations:
-            detail = d.get("d", {})
-            if isinstance(detail, dict) and "score" in detail:
-                try:
-                    scores.append(float(detail["score"]))
-                except (ValueError, TypeError):
-                    pass
-        if scores:
-            metrics["delegation.avgScore"] = sum(scores) / len(scores)
-            metrics["delegation.minScore"] = min(scores)
-            metrics["delegation.count"] = float(len(scores))
+    # 5. Delegation compliance scores: fractions 0..1, score / total per
+    # event (see delegation_score_metrics for the rules and the default).
+    metrics.update(delegation_score_metrics(delegations))
 
     # 6. Session duration (from first to last event)
     all_timestamps = sorted(t for e in events if (t := e.get("t")) is not None)
