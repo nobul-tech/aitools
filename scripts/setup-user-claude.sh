@@ -450,6 +450,28 @@ if [ "$RULES_GO" = "true" ]; then
 "
     done
 
+    # Deploy in ordinal (byte) order, the order the .ps1 uses (CompareOrdinal).
+    # The glob sorts by the locale's collation (LC_COLLATE): a.md before A.md
+    # under en_US, after it under C. Of two case-only duplicates the first is
+    # deployed and the second fails, so bash and pwsh deployed different files
+    # whenever the locales disagreed (ubuntu-24.04 image 20261025.353.1).
+    if [ -n "$RULE_SOURCES" ]; then
+        if sort_out=$(printf '%s' "$RULE_SOURCES" | LC_ALL=C sort); then
+            RULE_SOURCES="${sort_out}
+"
+        else
+            log_warn "Could not sort the harness rules (sort failed): deploying them in directory order"
+        fi
+    fi
+    if [ -n "$RULE_BROKEN" ]; then
+        if sort_out=$(printf '%s' "$RULE_BROKEN" | LC_ALL=C sort); then
+            RULE_BROKEN="${sort_out}
+"
+        else
+            log_warn "Could not sort the dangling harness rules (sort failed): reporting them in directory order"
+        fi
+    fi
+
     if [ -z "$RULE_SOURCES" ] && [ -z "$RULE_BROKEN" ] && [ -z "$RETIRED_NAMES" ]; then
         log "No rules in $(display_path "$RULES_SRC") -- skipping"
         # An unreadable manifest already wrote this tool's ERROR row
@@ -649,8 +671,22 @@ if [ "$RULES_GO" = "true" ]; then
         if ! rules_dir_listable "$RULES_DEST"; then
             log_warn "Cannot list $(display_path "$RULES_DEST") for the preserved report: permission denied"
         fi
+        # Ordinal order, as the .ps1 (see the RULE_SOURCES sort above)
+        preserved_list=""
         for existing in "$RULES_DEST"/*; do
             [ -f "$existing" ] || continue
+            preserved_list="${preserved_list}${existing}
+"
+        done
+        if [ -n "$preserved_list" ]; then
+            if sort_out=$(printf '%s' "$preserved_list" | LC_ALL=C sort); then
+                preserved_list="$sort_out"
+            else
+                log_warn "Could not sort $(display_path "$RULES_DEST") (sort failed): preserved rules reported in directory order"
+            fi
+        fi
+        while IFS= read -r existing <&3; do
+            [ -n "$existing" ] || continue
             exist_name=$(basename "$existing")
             case "$(rule_name_kind "$exist_name")" in
                 rule) ;;
@@ -660,7 +696,7 @@ if [ "$RULES_GO" = "true" ]; then
                 log "Preserved unmanaged rule: $exist_name"
                 deploy_tracker_record "preserved" "claude rules" "$exist_name"
             fi
-        done
+        done 3<<< "$preserved_list"
 
         # Post-write validation: each deployed file is non-empty (a file whose
         # deploy failed is already reported; the library left it as it was)

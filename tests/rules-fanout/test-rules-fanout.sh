@@ -422,7 +422,10 @@ parity bracket
 if $CASE_SENSITIVE_FS; then
     seed_dupcase() { harness a.md 'lower'; harness A.md 'upper'; }
     case_run dupcase seed_dupcase
+    # The first in ordinal (byte) order wins on every locale: A.md (0x41) before
+    # a.md (0x61). Parity then requires pwsh to deploy the same file.
     check "case-only duplicate: the first wins, the second failed" "[ \"\$(rc)\" = 1 ] && [ \"\$(nondetail)\" = 'ERROR|claude rules|1 failed' ]"
+    check "case-only duplicate: ordinal order, A.md deployed and a.md failed" "[ -f '$(R)/A.md' ] && [ ! -e '$(R)/a.md' ] && row 'DETAIL|claude rules|failed: a.md'"
     parity dupcase
 else
     skip "case-only duplicate (case-insensitive file system)"
