@@ -1,0 +1,2 @@
+02f3ccf6b28f8cc5bb3a3a3ae7436607860c8787a13e98ea92536f373b8f5db9  /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/fx/home/.cursor/rules/fx-shared.mdc
+0925afd2c7608d49b25f5dc7ad0489d5c784040ea66927f30b316972fb49878b  /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/fx/home/.cursor/skills/fx-skill-b/SKILL.md
