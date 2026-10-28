@@ -1,4 +1,6 @@
-# S3-Merge3 shared delegate brief v1.0
+# S3-Merge3 shared delegate brief v1.1
+
+v1.1 (2026-10-28): NEVER write GitHub close keywords (close/closes/closed, fix/fixes/fixed, resolve/resolves/resolved) followed by `#N` or a PR/issue URL in any commit message, merge message or PR body that can land on main: write "PR 123" or "pull 123" instead. Mission commit 2f7ccdb said "fixed #123" and auto-closed PR 123 (reopened). Check every message before you commit.
 
 Every delegate of mission MERGE-3 (orchestrator S3-Merge3, delegated by Session
 Commander 10cf255a-c) reads this file IN FULL before other work, together with
