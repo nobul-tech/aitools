@@ -173,6 +173,12 @@ jobs:
       - name: delegation-duty-guard hook tests (macOS /bin/bash 3.2)
         run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/hooks/test-delegation-duty-guard.sh
 
+      - name: workflow-delegation-guard hook tests (bash 5)
+        run: bash tests/hooks/test-workflow-delegation-guard.sh
+
+      - name: workflow-delegation-guard hook tests (macOS /bin/bash 3.2)
+        run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/hooks/test-workflow-delegation-guard.sh
+
       - name: build-deploy backup + swap tests (incident #86)
         run: bash tests/build-deploy/test-build-deploy-backup.sh
 
@@ -353,6 +359,9 @@ jobs:
       - name: delegation-duty-guard hook tests
         run: bash tests/hooks/test-delegation-duty-guard.sh
 
+      - name: workflow-delegation-guard hook tests
+        run: bash tests/hooks/test-workflow-delegation-guard.sh
+
       - name: build-deploy backup + swap tests (incident #86)
         run: bash tests/build-deploy/test-build-deploy-backup.sh
 
@@ -465,6 +474,10 @@ jobs:
       - name: delegation-duty-guard hook tests (via Git Bash)
         shell: bash
         run: bash tests/hooks/test-delegation-duty-guard.sh
+
+      - name: workflow-delegation-guard hook tests (via Git Bash)
+        shell: bash
+        run: bash tests/hooks/test-workflow-delegation-guard.sh
 
       - name: Profile resolver (PowerShell, native machine id and hostname)
         shell: pwsh
