@@ -1,4 +1,9 @@
-# S3-Hook2 spec v1.0 (2026-10-28): workflow-delegation-guard
+# S3-Hook2 spec v1.1 (2026-10-28): workflow-delegation-guard
+
+v1.1 (approved by S3-Hook2 as spec owner, fix batch for PR #135, review N3,
+N8 and LogA 1): a script with no `agent(` call is "nothing to check", not a
+fallback (4.6, 6, 7); events carry `why` (7); the timing contract names the
+call-site-dense stress case (9). v1.0: commit bc89834.
 
 **Intent**: **Purpose**: The contract for the per-`agent()` delegation check on
 Workflow tool calls, shared by its builder (S3-Hook2-Parser) and its reviewer.
@@ -94,8 +99,11 @@ cross-platform.md), and a test fails when the two blocks differ.
    at most 60 characters.
 5. A static call site counts once, even inside a loop or `map()`.
 6. Fallback to the whole-script check (one score, as PR #122 does) when the
-   lexer fails (unterminated string, template or comment), when no
-   `agent(` call is found, or on the time guard (Perl `alarm`, 2 s).
+   lexer fails (unterminated string, template or comment; nesting too deep),
+   when the resolution budget is exceeded, or on the time guard (Perl
+   `alarm`, 2 s). A script with no `agent(` call is **nothing to check**
+   (v1.1): no score, the reminder plus a note, never a block (a script may
+   delegate only through child `workflow()` calls, which no hook sees).
 
 ## 5. Scoring
 
@@ -121,14 +129,21 @@ text. Content:
    element missing in any prompt.
 4. In fallback: `[workflow-guard] per-agent() extraction failed (<reason>);
    the script was checked as one text: <s>/8, missing <...>.`
+5. Nothing to check (no script or scriptPath, scriptPath unreadable, no
+   `agent(` call): `[workflow-guard] Workflow: <reason>; duty elements not
+   checked.` (v1.1: no `agent(` call is one of these). Enforce exits 2 only
+   for a scored prompt or a fallback score with a gap, never for unresolved
+   prompts or nothing to check.
 
 ## 7. Telemetry (session `events.jsonl`, src `wdg`, as delegation-duty-guard)
 
 One `delegation` event per resolved prompt:
 `{"score":s,"total":8,"missing":"...","mode":"observe","tool":"Workflow","checked":1,"scope":"agent","agent":"<label>"}`;
 an unresolved prompt: `score 0, checked 0, scope agent`; fallback: one event
-with `scope "script"`, `checked 1`. Nothing to check: one event,
-`checked 0`.
+with `scope "script"`, `checked 1`. Nothing to check (v1.1: including no
+`agent(` call): one event, `checked 0`, `scope "script"`. v1.1: an
+unresolved, fallback or nothing-to-check event also carries `"why"`, the
+reason sanitised to `[A-Za-z0-9 :#._/()-]`, at most 80 characters.
 
 ## 8. Limits to document in the header
 
@@ -139,7 +154,11 @@ it; prompts built by functions are unresolved; only the first 512 KB parsed.
 ## 9. Performance and robustness
 
 Under 100 ms for a 500 KB script, best of 5, macOS bash 5 and /bin/bash
-3.2 (advisory on Git Bash). Never crashes, never hangs, never blocks in
+3.2 (advisory on Git Bash). v1.1: this holds for a 500 KB script with one
+large prompt and for the adversarial case; a script dense with call sites
+(270 `agent()` prompts in 500 KB) measured about 80 ms locally and 130 ms on
+the GitHub macOS runner, so that stress case WARNs between 100 and 250 ms and
+fails at 250 ms (a 2x regression). Never crashes, never hangs, never blocks in
 observe; perl absent: reminder only.
 
 ## 10. Tests (`tests/hooks/test-workflow-delegation-guard.sh`)
