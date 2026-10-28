@@ -12,7 +12,7 @@ harness-db.log is written there, and the harness DB is a temp file. Nothing
 touches the real ~/.aitools or any repo .aitools/harness.db.
 
 Usage: python3 tests/harness-db/test-delegation-score.py   (python on Windows)
-Exit: 0 all tests pass, 1 any failure (unittest).
+Exit: 0 all tests pass, 1 any failure or no test ran.
 Safe to re-run. Platform: macOS, Windows, Linux (stdlib only).
 """
 
@@ -104,6 +104,11 @@ class DelegationScoreMetrics(unittest.TestCase):
             ev(score=True, total=8),         # boolean score
             ev(score=json.loads("NaN"), total=8),
             ev(score=5, total=json.loads("Infinity")),
+            ev(score=10**400, total=8),      # int too large for a float
+            ev(score=5, total=10**400),
+            ev(score=0, total=8, checked=False),  # checked not a number
+            ev(score=0, total=8, checked="0"),
+            ev(score=0, total=8, checked=None),
             ev(missing="no score key"),
             {"type": "delegation", "d": "not a dict"},
             {"type": "delegation"},
@@ -121,15 +126,39 @@ class DelegationScoreMetrics(unittest.TestCase):
             self.assertGreaterEqual(value, 0.0)
             self.assertLessEqual(value, 1.0)
 
+    def test_overflow_is_not_a_number(self) -> None:
+        self.assertIsNone(hdb._as_number(10**400))
+        self.assertEqual(hdb._as_number(8), 8.0)
+
+    def test_bad_checked_is_skipped_with_reason(self) -> None:
+        skips: dict[str, int] = {}
+        m = hdb.delegation_score_metrics(
+            [ev(score=0, total=8, checked=False), ev(score=0, total=8, checked="0"),
+             ev(score=0, total=8, checked=None), ev(score=0, total=8, checked=0),
+             ev(score=4, total=8, checked=1)],
+            skips,
+        )
+        self.assertEqual(skips, {"bad-checked": 3, "unchecked": 1})
+        self.assertEqual(m["delegation.count"], 1.0)
+
     def test_no_events(self) -> None:
         self.assertEqual(self.metrics([]), {})
 
-    def test_skips_are_logged(self) -> None:
-        self.metrics([ev(score=5, total=0), ev(score=0, total=8, checked=0)])
+    def log_text(self) -> str:
         log = TMP_HOME / ".aitools" / "logs" / "harness-db.log"
         self.assertTrue(log.exists(), f"{log} not written")
-        text = log.read_text(encoding="utf-8")
-        self.assertIn("delegation score: skipped 2 event(s): bad-total=1, unchecked=1", text)
+        return log.read_text(encoding="utf-8")
+
+    def test_skips_are_logged(self) -> None:
+        self.metrics([ev(score=5, total=0), ev(score=0, total=8, checked=0)])
+        self.assertIn(
+            "delegation score: skipped 2 event(s): bad-total=1, unchecked=1; clamped=0",
+            self.log_text(),
+        )
+
+    def test_clamped_are_logged(self) -> None:
+        self.metrics([ev(score=-1, total=8), ev(score=9, total=8), ev(score=8, total=8)])
+        self.assertIn("delegation score: skipped 0 event(s): none; clamped=2", self.log_text())
 
 
 class ProcessSessionEvents(unittest.TestCase):
@@ -151,7 +180,9 @@ class ProcessSessionEvents(unittest.TestCase):
         text = "\n".join(json.dumps(x) for x in lines) + "\nnot json\n"
         (work / "events.jsonl").write_text(text, encoding="utf-8")
 
-        metrics = hdb.process_session_events(work, "h2db-test-session", db_path)
+        skips: dict[str, int] = {}
+        metrics = hdb.process_session_events(work, "h2db-test-session", db_path, skips)
+        self.assertEqual(skips, {"unchecked": 1})
         self.assertAlmostEqual(metrics["delegation.avgScore"], 0.75)
         self.assertAlmostEqual(metrics["delegation.minScore"], 0.5)
         self.assertEqual(metrics["delegation.count"], 3.0)
@@ -178,4 +209,7 @@ if __name__ == "__main__":
         _TMP.cleanup()
     except OSError as exc:  # e.g. a SQLite file still locked on Windows
         print(f"warning: temp dir not removed: {exc}", file=sys.stderr)
+    if result.testsRun == 0:
+        print("error: no tests ran", file=sys.stderr)
+        sys.exit(1)
     sys.exit(0 if result.wasSuccessful() else 1)

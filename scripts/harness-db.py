@@ -1219,17 +1219,24 @@ DELEGATION_DEFAULT_TOTAL = 6
 def _as_number(value: Any) -> float | None:
     """Return value as a finite float if it is a JSON number, else None.
 
-    Strings, booleans, null, NaN and infinities are not numbers here: the
-    hooks emit bare JSON numbers, so anything else is a malformed event."""
+    Strings, booleans, null, NaN, infinities and integers too large for a
+    float are not numbers here: the hooks emit small bare JSON numbers, so
+    anything else is a malformed event."""
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return None
-    number = float(value)
+    try:
+        number = float(value)
+    except OverflowError:  # e.g. 10**400: the caller counts it as malformed
+        return None
     if number != number or number in (float("inf"), float("-inf")):
         return None
     return number
 
 
-def delegation_score_metrics(delegations: list[dict[str, Any]]) -> dict[str, float]:
+def delegation_score_metrics(
+    delegations: list[dict[str, Any]],
+    skipped_out: dict[str, int] | None = None,
+) -> dict[str, float]:
     """Compute delegation compliance KPIs, normalised by each event's total.
 
     Scale: every metric value is a fraction from 0.0 to 1.0 (score / total
@@ -1240,18 +1247,23 @@ def delegation_score_metrics(delegations: list[dict[str, Any]]) -> dict[str, flo
     Per event (type "delegation", detail in "d"):
       - "checked" == 0: the hook checked nothing (no delegation text, or no
         perl); the event is skipped -- its score 0 is not a measurement.
+        A present "checked" that is not a JSON number (false, "0", null)
+        skips the event as bad-checked.
       - "score" must be a JSON number; "total" must be a JSON number > 0.
         An event without a "total" key uses DELEGATION_DEFAULT_TOTAL (6).
         A present but unusable "total" (0, negative, string, null) skips
         the event: guessing a total for a broken emitter would be wrong.
-      - score is clamped to 0..total.
+      - score is clamped to 0..total; clamped events are counted.
 
     Returns delegation.avgScore, delegation.minScore and delegation.count
     (the number of scored events) when at least one event is scored, else
-    an empty dict. Skipped events are counted by reason in harness-db.log.
+    an empty dict. Skipped events (by reason) and the clamped count go to
+    one harness-db.log line; when skipped_out is given, the skip counts
+    are also added to it (cmd_process_events prints them).
     """
     fractions: list[float] = []
     skipped: dict[str, int] = {}
+    clamped = 0
 
     def skip(reason: str) -> None:
         skipped[reason] = skipped.get(reason, 0) + 1
@@ -1261,9 +1273,14 @@ def delegation_score_metrics(delegations: list[dict[str, Any]]) -> dict[str, flo
         if not isinstance(detail, dict) or "score" not in detail:
             skip("no-score")
             continue
-        if "checked" in detail and _as_number(detail["checked"]) == 0:
-            skip("unchecked")
-            continue
+        if "checked" in detail:
+            checked = _as_number(detail["checked"])
+            if checked is None:
+                skip("bad-checked")
+                continue
+            if checked == 0:
+                skip("unchecked")
+                continue
         score = _as_number(detail["score"])
         if score is None:
             skip("bad-score")
@@ -1275,11 +1292,19 @@ def delegation_score_metrics(delegations: list[dict[str, Any]]) -> dict[str, flo
                 continue
         else:
             total = float(DELEGATION_DEFAULT_TOTAL)
+        if score < 0.0 or score > total:
+            clamped += 1
         fractions.append(min(max(score, 0.0), total) / total)
 
-    if skipped:
-        reasons = ", ".join(f"{k}={v}" for k, v in sorted(skipped.items()))
-        _log_detail(f"delegation score: skipped {sum(skipped.values())} event(s): {reasons}")
+    if skipped or clamped:
+        reasons = ", ".join(f"{k}={v}" for k, v in sorted(skipped.items())) or "none"
+        _log_detail(
+            f"delegation score: skipped {sum(skipped.values())} event(s): {reasons}; "
+            f"clamped={clamped}"
+        )
+    if skipped_out is not None:
+        for reason, count in skipped.items():
+            skipped_out[reason] = skipped_out.get(reason, 0) + count
 
     if not fractions:
         return {}
@@ -1291,7 +1316,10 @@ def delegation_score_metrics(delegations: list[dict[str, Any]]) -> dict[str, flo
 
 
 def process_session_events(
-    session_dir: Path, session_id: str, harness_db_path: Path
+    session_dir: Path,
+    session_id: str,
+    harness_db_path: Path,
+    delegation_skips: dict[str, int] | None = None,
 ) -> dict[str, Any]:
     """Process events.jsonl from a session into KPI metrics.
 
@@ -1309,6 +1337,8 @@ def process_session_events(
         session_dir: Path to the session scratch directory.
         session_id: The session ID string.
         harness_db_path: Path to the harness DB.
+        delegation_skips: Optional dict that receives the skipped delegation
+            events by reason (see delegation_score_metrics).
 
     Returns:
         Dict of computed metrics (metric_name -> metric_value).
@@ -1355,7 +1385,7 @@ def process_session_events(
 
     # 5. Delegation compliance scores: fractions 0..1, score / total per
     # event (see delegation_score_metrics for the rules and the default).
-    metrics.update(delegation_score_metrics(delegations))
+    metrics.update(delegation_score_metrics(delegations, delegation_skips))
 
     # 6. Session duration (from first to last event)
     all_timestamps = sorted(t for e in events if (t := e.get("t")) is not None)
@@ -1576,8 +1606,16 @@ def cmd_process_events(args: argparse.Namespace) -> int:
         _log_detail("Harness DB not found. Run 'harness-db.py init' first.")
         return 1
 
-    metrics = process_session_events(session_dir, session_id, harness_db_path)
+    delegation_skips: dict[str, int] = {}
+    metrics = process_session_events(
+        session_dir, session_id, harness_db_path, delegation_skips
+    )
 
+    if delegation_skips:
+        print(
+            f"{sum(delegation_skips.values())} delegation event(s) not scored "
+            f"(see {_log_path()})"
+        )
     if metrics:
         print(f"Processed {len(metrics)} metrics from events.jsonl:")
         for name, value in sorted(metrics.items()):
