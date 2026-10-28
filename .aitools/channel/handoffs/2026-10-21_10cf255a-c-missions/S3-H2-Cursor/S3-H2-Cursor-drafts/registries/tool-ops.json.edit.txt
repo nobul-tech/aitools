@@ -1,0 +1,9 @@
+DRAFT (S3-H2-Cursor, 2026-10-22) -- protected file, needs commander approval.
+Target: registries/tool-ops.json, tools.cursor (added by open PR #99), field
+"deployedBy". Write through the /tool-ops skill after #99 and this PR merge.
+
+--- Old (as in PR #99) ---
+"deployedBy": "setup-user-cursor step 4 (fan-out of ~/.aitools/rules, .md converted to .mdc)",
+
+--- New ---
+"deployedBy": "setup-user-cursor step 4 (fan-out of the user-level rules in ~/.aitools/rules -- manifest source shared or dotprofile -- .md converted to .mdc with an aitools-fanout marker; the .mdc of an aitools or retired rule is removed when the fan-out created it)",

@@ -39,10 +39,12 @@ How the incident was found:
 ### 2. Triage
 
 Assess severity and blast radius:
-- **Critical**: deployment broken, data loss, security exposure
-- **High**: silent wrong behavior, propagated to other machines
-- **Medium**: wrong but contained, no user impact
-- **Low**: cosmetic, style, cleanup
+- **Critical**: deployment, data loss, security, cross-machine propagation
+- **High**: silent wrong behavior, rule violations in production code
+- **Medium**: documentation drift, minor behavioral inconsistency
+- **Low**: cleanup, style, future-proofing
+
+(Same scale as `.claude/rules/incident-governance.md` "Severity".)
 
 Does this need immediate mitigation? If so, fix first, investigate after.
 
@@ -150,7 +152,7 @@ After implementing the corrective action:
 Record the incident so others (and future sessions) learn from it:
 - **Effectiveness tracker**: Add incident entry (I-number, description,
   RCA, remediation, corrective action)
-- **Coaching item**: If behavioral, add to CLAUDE.md coaching section
+- **Coaching item**: If behavioral, add to CLAUDE.md coaching section (only on first occurrence; any recurrence escalates to a structural fix)
 - **Incident filing**: If a spec deviation, file via `/incident`
 - **Rule/hook update**: If structural, commit the change
 
@@ -232,4 +234,4 @@ but logging them in the session helps `/audit` identify trends.
 
 - Framework: `@reference/framework-incident-investigation.md`
 - Three-layer governance: `@reference/framework-three-layer-governance.md`
-- Incident filing: `.claude/skills/incident/SKILL.md`
+- Incident filing: `shared/skills/incident/SKILL.md`

@@ -122,8 +122,10 @@ branch and PR URL (D-DEL4). Its documents are versions, not drafts (D-DEL5).
     "Shipping"). Design-only and research missions do not ship code, but
     they may commit their documents where the repo allows direct commits.
 13. **Check against the table above** before launching. In Claude Code the
-    `delegation-duty-guard` hook checks the same elements and reminds you to
-    load this skill on every Agent and Workflow call.
+    `delegation-duty-guard` hook (observe mode, PreToolUse on `Agent` only)
+    checks seven of the eight elements (not conflict priority) and prints the
+    missing ones; it does not fire on Workflow calls. Open PR #122 extends it
+    to eight elements and Workflow.
 
 ### Conflict priority (D-DEL6, commander decision 2026-10-26)
 
@@ -223,9 +225,10 @@ main's CI checked after each merge). A denied push or PR is `WRITE_BLOCKED`.
 Where the repo allows it (aitools: CLAUDE.md "Channel exception" -- plans/,
 handoffs, relay.md, CLAUDE.md), documents go straight to main. From a
 checkout other missions share, do not push their unpushed commits: commit
-onto `origin/main` through a temporary index (aitools helper:
-`.scratch/session-10cf255a-c/commit-onto-origin.sh <msg> <path>=<src> ...`),
-rerun if the push is rejected because main moved, then
+onto `origin/main` through a temporary index (`GIT_INDEX_FILE=<tmp> git
+read-tree origin/main`, `git update-index --add --cacheinfo`, `git write-tree`,
+`git commit-tree -p origin/main`, `git push origin <sha>:main`; written as a
+scratch script), rerun if the push is rejected because main moved, then
 `git pull --ff-only`. Stage only your own paths; never `git add -A`.
 
 ### Reviews
@@ -373,7 +376,7 @@ the shape in /delegate "Final response shape".
 ## Environment limits that shape delegation
 
 Verify these before relying on them; versions move. Source of record:
-`/aitool-ops` skill and aitools `reference/tool-ops-claude-code.md`.
+`/tool-ops` skill and aitools `reference/tool-ops-claude-code.md`.
 
 - **Nesting depth.** Claude Code caps sub-agent nesting with
   `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` (documented default 3). The Claude
@@ -433,8 +436,10 @@ section travels with the skill).
   relay.md, CLAUDE.md. Everything else: worktree + PR.
 - **Never run** `aitools`, `aitools install`, `setup-user-*`, `deploy-harness`
   or `scripts/build-deploy.sh` against the real `HOME`: isolated `HOME` under
-  the worktree scratch (build-deploy deletes and rebuilds the real dotprofile
-  `deploy/`). Only a prompt quoting the commander's order may run one against
+  the worktree scratch (build-deploy replaces the real dotprofile `deploy/`:
+  it backs the old tree up to `deploy.bak.<UTC>/` and swaps the new one in
+  only on success, but the result is still a change to the commander's
+  dotprofile). Only a prompt quoting the commander's order may run one against
   the real HOME.
 - **Checks**: `bash scripts/check-pre-commit.sh`, `check-pre-push.sh`,
   `check-post-push.sh` from the worktree by absolute path. Known
@@ -500,7 +505,7 @@ names so provenance survives the chain (`S4-A`, prefix `S4-A-`).
 - Governing rule: `~/.claude/rules/delegation.md` (source: dotprofile
   `claude/rules/delegation.md`)
 - Detection hook: `delegation-duty-guard.sh` (aitools `shared/hooks/`)
-- Claude Code limits: `/aitool-ops` skill
+- Claude Code limits: `/tool-ops` skill
 - Handoff delegations: `/handoff` skill
 - Mission monitoring: `/mission-control` skill
 - Session strategy: `/planning` skill

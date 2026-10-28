@@ -148,10 +148,12 @@ read_config_key() {
 # machine-id) is rewritten to 2 first (_aitlib_profile_run).
 # ---------------------------------------------------------------------------
 
-# _aitlib_rm_tmp FILE -- remove a temp file of the runner; a failure is a detail
-# line (never silent; not a warning, which would promote the caller's OK rows)
+# _aitlib_rm_tmp FILE [WHO] -- remove a temp file of the lib (the runner's stderr
+# capture, the relay's exit-code file); a failure is a detail line naming WHO
+# (default "aitools-profile") -- never silent; not a warning, which would promote
+# the caller's OK rows
 _aitlib_rm_tmp() {
-    if [ -e "$1" ] && ! rm -f "$1"; then log_detail "aitools-profile: could not remove temp file $1"; fi
+    if [ -e "$1" ] && ! rm -f "$1"; then log_detail "${2:-aitools-profile}: could not remove temp file $1"; fi
     return 0
 }
 
@@ -369,6 +371,8 @@ resolve_machine_profile() {
     if ! _aitlib_profile_run resolve --environment "$AITOOLS_ENVIRONMENT"; then
         log_error "machine profile: resolver aitools-profile not found next to aitools-lib.sh"
         write_summary ERROR "machine profile" "resolver missing"
+        # Same text as resolve_user_repo_path's: one ACTION per run for a missing resolver
+        _aitlib_action_once "see deploy.log -- the dotprofile could not be resolved"
         return 3
     fi
     AITLIB_MACHINE_ALIAS=$(_aitlib_profile_tag alias)
@@ -503,7 +507,8 @@ tool_exception_record() {
 # and errors.
 #   jsonl_record TS SCRIPT LEVEL MSG   append one deploy.jsonl record
 #   relay_child_log TEXT               relay captured child output (all lines)
-#   run_child_relayed LABEL CMD ARGS   run CMD ARGS, relay each line as it comes
+#   run_child_relayed [--summary-tool TOOL] LABEL CMD ARGS
+#                                      run CMD ARGS, relay each line as it comes
 # Results (set by relay_child_log and run_child_relayed, read after the call):
 #   AITLIB_CHILD_WARNINGS  the child's warn lines (the exit footer
 #                          "COMPLETED with N warning(s)" is relayed, not counted)
@@ -512,6 +517,14 @@ tool_exception_record() {
 # Every counted warning also increments WARNINGS (it promotes the parent's OK
 # rows, as the child's own rows are). Errors are not added to ERRORS line by
 # line: run_child_relayed logs one log_error for a failed child.
+# Summary rows: the child writes its own. With --summary-tool TOOL, a failed
+# child (non-zero exit, or error lines with exit 0, or not run at all) that
+# wrote no ERROR row of its own -- it died before its write_summary (a set -e
+# abort, exit 127, a crash) -- gets one: "ERROR|TOOL|script failed (exit N)",
+# "aborted (exit 2)" (D-TS13), "logged errors (exit 0)", or "not run (...)".
+# A child that wrote an ERROR row (any tool) gets no second one -- also when it
+# crashed after writing it: the panel then shows the child's row, and the crash
+# is the relay's log_error in deploy.log.
 # Private caches (JSON-escaped): AITLIB_RUN_ID, AITLIB_JSONL_HOST, AITLIB_JSONL_OS.
 # ---------------------------------------------------------------------------
 
@@ -556,15 +569,22 @@ _aitlib_jsonl_init() {
 # jsonl_record TS SCRIPT LEVEL MSG -- append one record to deploy.jsonl in the log
 # directory (logging_init's LOG_DIR). Key order: ts, host, os, script, run_id,
 # level, msg (the installers' order). run_id = AITOOLS_RUN_ID, else one random id
-# per process. A failed write is logged at detail and otherwise ignored: logging
-# must not break the run it records (logging.md section 5).
+# per process. Logging must not break the run it records (logging.md section 5):
+# the first failed write is one log_warn (audit A-16: the run goes on, and the
+# warning says why its records are missing); later calls write nothing
+# (AITLIB_JSONL_FAILED=true, set before the warning so an installer whose log()
+# calls jsonl_record does not recurse). Returns 0.
 jsonl_record() {
     local f="${LOG_DIR:-$AITOOLS_LOG_DIR}/deploy.jsonl" ts sc lv msg
+    if [ "${AITLIB_JSONL_FAILED:-false}" = "true" ]; then return 0; fi
     _aitlib_jsonl_init
     _aitlib_json_esc ts "$1"; _aitlib_json_esc sc "$2"; _aitlib_json_esc lv "$3"; _aitlib_json_esc msg "$4"
+    # 2>/dev/null: the shell's own "cannot open" message; the failure is reported by
+    # the log_warn below (the if is the result check)
     if ! printf '{"ts":"%s","host":"%s","os":"%s","script":"%s","run_id":"%s","level":"%s","msg":"%s"}\n' \
-        "$ts" "$AITLIB_JSONL_HOST" "$AITLIB_JSONL_OS" "$sc" "$AITLIB_RUN_ID" "$lv" "$msg" >> "$f"; then
-        log_detail "deploy.jsonl: write failed ($f)"
+        "$ts" "$AITLIB_JSONL_HOST" "$AITLIB_JSONL_OS" "$sc" "$AITLIB_RUN_ID" "$lv" "$msg" 2>/dev/null >> "$f"; then
+        AITLIB_JSONL_FAILED=true
+        log_warn "deploy.jsonl: cannot write $(display_path "$f") -- structured log records are skipped for the rest of this run"
     fi
     return 0
 }
@@ -605,46 +625,100 @@ relay_child_log() {
     return 0
 }
 
-# run_child_relayed LABEL CMD [ARGS...] -- run a child script (e.g.
-# run_child_relayed "Step 5: setup-user-config.sh" "${BASH:-bash}" "$writer" ...)
-# and relay its stdout line by line as it arrives, so its log lines show before
-# any prompt it reads from /dev/tty. stdin and stderr are the caller's. CMD runs
-# in a subshell: it must be a separate process (a script), not a function that
-# changes the caller's variables. The child writes its own summary rows. Sets
-# AITLIB_CHILD_RC, AITLIB_CHILD_WARNINGS, AITLIB_CHILD_ERRORS. Returns 0 when the
-# child exited 0 with no error line; otherwise 1 after one log_error naming LABEL
-# (call it as: run_child_relayed ... || rc=$?). No CMD (e.g. an empty array) is
-# a failure, not a no-op. It returns when every process holding the child's
-# stdout has closed it (a background grandchild keeps it waiting).
+# _aitlib_summary_errors VAR -- set VAR to the number of ERROR rows in the run
+# summary (AITOOLS_SUMMARY_FILE; 0 without one). An unreadable summary counts 0
+# and is a detail line. VAR must not be one of this function's locals
+# (_aitlib_se_*): printf -v would set the local, not the caller's variable.
+_aitlib_summary_errors() {
+    local _aitlib_se_n=0 _aitlib_se_l _aitlib_se_f="${AITOOLS_SUMMARY_FILE:-}"
+    if [ -n "$_aitlib_se_f" ] && [ -f "$_aitlib_se_f" ]; then
+        if [ -r "$_aitlib_se_f" ]; then
+            while IFS= read -r _aitlib_se_l || [ -n "$_aitlib_se_l" ]; do
+                case "$_aitlib_se_l" in "ERROR|"*) _aitlib_se_n=$((_aitlib_se_n + 1)) ;; esac
+            done < "$_aitlib_se_f"
+        else
+            log_detail "run summary unreadable ($_aitlib_se_f) -- its ERROR rows are not counted"
+        fi
+    fi
+    printf -v "$1" '%s' "$_aitlib_se_n"
+}
+
+# _aitlib_child_row TOOL BEFORE DETAIL -- for a failed child: write the row
+# "ERROR|TOOL|DETAIL" unless TOOL is "" or the child wrote an ERROR row of its own
+# (the run summary now holds more than BEFORE ERROR rows)
+_aitlib_child_row() {
+    local _aitlib_cr_now=0
+    if [ -z "$1" ]; then return 0; fi
+    _aitlib_summary_errors _aitlib_cr_now
+    if [ "$_aitlib_cr_now" -gt "$2" ]; then
+        log_detail "$1: the child wrote its own ERROR row -- none added"
+        return 0
+    fi
+    write_summary ERROR "$1" "$3"
+}
+
+# run_child_relayed [--summary-tool TOOL] LABEL CMD [ARGS...] -- run a child
+# script (e.g. run_child_relayed --summary-tool "aitools config"
+# "Step 5: setup-user-config.sh" "${BASH:-bash}" "$writer" ...) and relay its
+# stdout line by line as it arrives (not captured until the end). A prompt the
+# child writes to /dev/tty can still overtake its last few lines when it follows
+# them with no work in between (review B n-1). Only complete lines are relayed: a
+# child whose prompt goes to stdout without a newline (e.g. pwsh [Console]::Write
+# under Git Bash) must not be relayed while it prompts. stdin and stderr are the
+# caller's. CMD runs in a
+# subshell: it must be a separate process (a script), not a function that
+# changes the caller's variables. The child writes its own summary rows; TOOL
+# names the row for a failed child that wrote none (see the section comment).
+# Sets AITLIB_CHILD_RC, AITLIB_CHILD_WARNINGS, AITLIB_CHILD_ERRORS. Returns 0 when
+# the child exited 0 with no error line; otherwise 1 after one log_error naming
+# LABEL (call it as: run_child_relayed ... || rc=$?). No CMD (e.g. an empty
+# array) is a failure, not a no-op. It returns when every process holding the
+# child's stdout has closed it (a background grandchild keeps it waiting).
 run_child_relayed() {
-    local label="$1"; shift
-    local line rcf="" rc=""
+    local tool="" label line rcf="" rc="" errs0=0 detail
     AITLIB_CHILD_RC=0; AITLIB_CHILD_WARNINGS=0; AITLIB_CHILD_ERRORS=0
+    if [ "${1:-}" = "--summary-tool" ]; then
+        if [ "$#" -lt 2 ]; then
+            AITLIB_CHILD_RC=1
+            log_error "run_child_relayed: --summary-tool needs a value"
+            return 1
+        fi
+        tool="$2"; shift 2
+    fi
+    label="${1:-child script}"
+    if [ "$#" -gt 0 ]; then shift; fi
     if [ "$#" -eq 0 ]; then
         AITLIB_CHILD_RC=1
         log_error "$label: not run (no command given)"
+        if [ -n "$tool" ]; then write_summary ERROR "$tool" "not run (no command)"; fi
         return 1
     fi
     if ! rcf="$(mktemp)"; then
         AITLIB_CHILD_RC=1
         log_error "$label: not run (mktemp failed)"
+        if [ -n "$tool" ]; then write_summary ERROR "$tool" "not run (mktemp failed)"; fi
         return 1
     fi
+    _aitlib_summary_errors errs0
     while IFS= read -r line || [ -n "$line" ]; do
         _aitlib_relay_line "$line"
     done < <(_aitlib_rc=0; "$@" || _aitlib_rc=$?; printf '%s\n' "$_aitlib_rc" > "$rcf")
+    # a failed read leaves rc empty: the case below counts it as a failure
     rc="$(cat "$rcf")" || rc=""
-    rm -f "$rcf"
+    _aitlib_rm_tmp "$rcf" "$label"
     case "$rc" in
         ''|*[!0-9]*) log_detail "$label: exit code not recorded -- counted as a failure"; rc=1 ;;
     esac
     AITLIB_CHILD_RC="$rc"
     if [ "$rc" -ne 0 ]; then
-        log_error "$label failed (exit $rc) -- see $(display_path "$LOG_FILE")"
+        if [ "$rc" -eq 2 ]; then detail="aborted (exit 2)"; else detail="script failed (exit $rc)"; fi
+        log_error "$label ${detail#script } -- see $(display_path "$LOG_FILE")"
+        _aitlib_child_row "$tool" "$errs0" "$detail"
         return 1
     fi
     if [ "$AITLIB_CHILD_ERRORS" -gt 0 ]; then
         log_error "$label logged $AITLIB_CHILD_ERRORS error(s) but exited 0 -- see $(display_path "$LOG_FILE")"
+        _aitlib_child_row "$tool" "$errs0" "logged errors (exit 0)"
         return 1
     fi
     return 0

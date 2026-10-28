@@ -3,7 +3,8 @@
 #
 # Installs/updates gh CLI, configures repos directory, auto-detects Google
 # Drive mounts, writes ~/.aitools/config.json, installs the
-# aitools command to ~/.local/bin/, adds shell integration, and deploys
+# aitools command to ~/.local/bin/, adds shell integration, deploys the
+# harness to ~/.aitools (deploy-harness.ps1, Step 8b), and deploys
 # all configuration scripts.
 
 param(
@@ -47,12 +48,6 @@ if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
     exit 1
 }
 
-# JSONL logging (extends standard pattern with structured JSON)
-$logJsonl = Join-Path $logDir "deploy.jsonl"
-$runId = if ($env:AITOOLS_RUN_ID) { $env:AITOOLS_RUN_ID } else { -join ((1..6) | ForEach-Object { '{0:x2}' -f (Get-Random -Max 256) }) }
-$hostName = $env:COMPUTERNAME
-$osName = "Windows"
-
 if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir -Force | Out-Null }
 
 # Env passthrough from parent (aitools CLI)
@@ -60,65 +55,88 @@ if ($env:AITOOLS_DRY_RUN -eq "1") { $DryRun = [switch]::Present }
 if ($DryRun) { $env:AITOOLS_DRY_RUN = "1" }
 
 # --- BEGIN install log helpers (tests/profile/test-config.sh extracts this block) ---
-# Write-JsonlRecord TS SCRIPT LEVEL MSG -- append one deploy.jsonl record (same key
-# order as the bash installer; ConvertTo-Json escapes the message).
-function Write-JsonlRecord($ts, $scriptLabel, $level, $msg) {
-    $json = [ordered]@{ ts=$ts; host=$hostName; os=$osName; script=$scriptLabel; run_id=$runId; level=$level; msg=[string]$msg } | ConvertTo-Json -Compress
-    Add-Content -Path $logJsonl -Value $json
-}
-
-# Send-ChildLogLine RECORD -- one console line of a child script that logs through
-# aitools-lib (setup-user-config.ps1, its Write-Host output redirected with 6>&1):
-# print it, mirror a structured line ("[ts] [script] [level] msg") to deploy.jsonl --
-# the child already wrote it to deploy.log -- and count its warnings in
-# $script:warnings. Its errors are not counted line by line: a child with errors
-# exits non-zero and the caller logs one error for it.
-function Send-ChildLogLine($record) {
-    $line = [string]$record
-    if (-not $line) { return }
-    $m = [regex]::Match($line, '^\[([^\]]+)\] \[([^\]]+)\] \[([a-z]+)\] (.*)$')
-    if (-not $m.Success) { Write-Host $line; return }
-    $level = $m.Groups[3].Value
-    switch ($level) {
-        "error" { Write-Host $line -ForegroundColor Red }
-        "warn"  { Write-Host $line -ForegroundColor Yellow }
-        default { Write-Host $line }
-    }
-    Write-JsonlRecord $m.Groups[1].Value $m.Groups[2].Value $level $m.Groups[4].Value
-    # The child's exit footer ("COMPLETED with N warning(s)", logged at warn) restates
-    # the warnings already counted: relayed, not counted
-    if ($level -eq "warn" -and $m.Groups[4].Value -notmatch '^(COMPLETED|FAILED) with ') { $script:warnings++ }
-}
+# deploy.jsonl records (Write-JsonlRecord) and the child relay (Invoke-ChildRelayed)
+# come from aitools-lib: one copy for the installers, user init and deploy-harness
+# (audit A-1). A record that cannot be written is one warning and the run goes on
+# (A-16). This block keeps only the installer's own Step 3 / Step 5 helpers.
 
 # Invoke-ConfigWriter WRITER ARGS -- Step 5: run setup-user-config.ps1 in-process
-# (it logs and writes its own summary rows; it never prompts), relay its log lines,
-# record a non-zero exit or a throw as one error.
+# through the lib relay. The writer logs and writes its own summary rows; the relay
+# shows and mirrors its lines to deploy.jsonl, counts its warnings, logs one error
+# for a failed writer (exit code or throw) and writes "ERROR|aitools config|..."
+# when the writer died before a row of its own (A-1, A-18). Returns nothing.
 function Invoke-ConfigWriter([string]$Writer, [hashtable]$WriterArgs) {
-    $global:LASTEXITCODE = 0
-    $rc = 0
-    try {
-        & $Writer @WriterArgs 6>&1 | ForEach-Object { Send-ChildLogLine $_ }
-        $rc = $LASTEXITCODE
-    } catch {
-        LogError "Step 5: setup-user-config.ps1 failed: $_"
-        Write-Summary "ERROR" "aitools config" "script failed (exception)"
-        return
-    }
-    if ($rc -and $rc -ne 0) {
-        LogError "Step 5: setup-user-config.ps1 failed (exit $rc) -- see $logFile"
+    $writerRc = Invoke-ChildRelayed "Step 5: setup-user-config.ps1" $Writer $WriterArgs "aitools config"
+    if ($writerRc -ne 0) {
+        LogDetail "Step 5: config writer step failed (exit $($script:AitLibChildRc); logged and counted by the relay)"
     }
 }
 
 # Get-AbsoluteReposPath PATH -- PATH as an absolute path. A relative answer is taken
 # relative to the current location, where Step 3 creates it (the pre-#79 installer
-# kept it relative; the config writer accepts absolute paths only).
+# kept it relative; the config writer accepts absolute paths only). "" when it
+# cannot be resolved (the reason is a detail line).
 function Get-AbsoluteReposPath([string]$Path) {
     if ([IO.Path]::IsPathRooted($Path)) { return $Path }
-    return [IO.Path]::GetFullPath($Path, (Get-Location).Path)
+    try {
+        return [IO.Path]::GetFullPath($Path, (Get-Location).Path)
+    } catch {
+        LogDetail "Repos path '$Path': $($_.Exception.Message)"
+        return ""
+    }
+}
+
+# Resolve-ReposDir PATH -- Step 3: make PATH absolute (relative to the current
+# location) and create it. Returns the absolute path, or "" after LogError and one
+# ERROR row "aitools config" when it cannot be resolved or created; the caller then
+# skips Step 5, whose writer accepts absolute paths only (audit A-17).
+function Resolve-ReposDir([string]$Path) {
+    $abs = $Path
+    if (-not [IO.Path]::IsPathRooted($Path)) {
+        $abs = Get-AbsoluteReposPath $Path
+        if (-not $abs) {
+            LogError "Repos path '$Path' is relative and could not be resolved -- config.json will not be written"
+            Write-Summary "ERROR" "aitools config" "repos path not absolute"
+            return ""
+        }
+        Log "Repos path '$Path' is relative -- using $abs (relative to the current directory)"
+    }
+    if (-not (Test-Path -LiteralPath $abs -PathType Container)) {
+        # [IO.Directory]::CreateDirectory throws on failure; New-Item -Force was seen
+        # to return $null without an error when a parent is a file (pwsh 7, macOS).
+        # The Test-Path after it is the result check either way.
+        $why = "not created"
+        try {
+            $null = [IO.Directory]::CreateDirectory($abs)
+        } catch {
+            $why = $_.Exception.Message -replace '\s*\r?\n\s*', ' '
+        }
+        if (-not (Test-Path -LiteralPath $abs -PathType Container)) {
+            LogDetail "Repos directory '$abs': $why"
+            LogError "Repos directory '$abs' could not be created -- config.json will not be written"
+            Write-Summary "ERROR" "aitools config" "repos dir not created"
+            return ""
+        }
+    }
+    return $abs
 }
 # --- END install log helpers ---
 
-# Override: JSONL dual-format (human-readable + structured JSON)
+# --- BEGIN install log override (tests/profile/test-install.sh extracts this block) ---
+# One run id for this installer's deploy.jsonl records and every relayed child's
+# (the lib's Write-JsonlRecord reads AITOOLS_RUN_ID; a child that relays its own
+# children passes it on). 6 random bytes as hex, the lib's form. Set only when the
+# caller did not set it ($script:InstallSetRunId), and then removed again at the exit
+# footer, so an in-process run does not leave it in the session (review B m-2).
+$script:InstallSetRunId = $false
+if (-not $env:AITOOLS_RUN_ID) {
+    $env:AITOOLS_RUN_ID = -join ((1..6) | ForEach-Object { '{0:x2}' -f (Get-Random -Maximum 256) })
+    $script:InstallSetRunId = $true
+}
+
+# Override: JSONL dual-format (human-readable + structured JSON). The record goes
+# through the lib's Write-JsonlRecord: escaped, one run_id for the installer's own
+# lines and its relayed children's, and an unwritable deploy.jsonl is one warning (A-16).
 function Log($msg, $level = "info") {
     $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
     $line = "[$ts] [$scriptName] [$level] $msg"
@@ -129,6 +147,7 @@ function Log($msg, $level = "info") {
 function LogOk($msg)    { Log $msg "ok" }
 function LogError($msg) { Log $msg "error"; $script:errors++ }
 function LogWarn($msg)  { Log $msg "warn"; $script:warnings++ }
+# --- END install log override ---
 
 # --- Summary file init (if not already set by parent aitools invocation) ---
 if (-not $env:AITOOLS_SUMMARY_FILE) {
@@ -174,6 +193,36 @@ function Invoke-ValidatedScript {
         LogError "$name failed (exit $scriptRc)"
         Write-Summary "ERROR" ($name -replace '\.ps1$', '') "script failed (exit $scriptRc)"
     }
+}
+
+# Invoke-HarnessStep SCRIPT [ARGS] -- Step 8b: run deploy-harness.ps1 (SCRIPT) with the
+# ARGS hashtable (the caller passes @{ SkipConfig = $true } when Step 5 ran the config
+# writer) in-process and relayed (aitools-lib Invoke-ChildRelayed: its Write-Host lines go to the console and
+# deploy.jsonl; the review menu reads and writes the console directly). A parse error
+# throws, which the lib reports as a failure (exit 1), never as an abort. Returns 2
+# when deploy-harness exited 2 (the user chose [x]abort, D-TS13; the caller stops the
+# install), else 0. Exit 1 (errors): the lib logged the error; this adds the ERROR
+# row and the install continues. Parity: run_harness_step in aitools-install.sh.
+function Invoke-HarnessStep([string]$Harness, [hashtable]$HarnessArgs = @{}) {
+    if (-not (Test-Path -LiteralPath $Harness)) {
+        LogWarn "deploy-harness.ps1 not found -- skipping (MDM deploy)"
+        Write-Summary "WARN" "harness files" "deploy-harness.ps1 not found"
+        return 0
+    }
+    $harnessRc = Invoke-ChildRelayed "Step 8b: deploy-harness.ps1" $Harness $HarnessArgs "harness files"
+    if ($harnessRc -eq 0) { return 0 }
+    if ($script:AitLibChildRc -eq 2) {
+        Log "Step 8b: aborted by user at a review menu -- install stopped (exit 2)"
+        Write-Summary "WARN" "harness files" "aborted by user"
+        return 2
+    }
+    # Exit 0 with error lines: the lib logged them and returned 1
+    if ($script:AitLibChildRc -eq 0) {
+        Write-Summary "ERROR" "harness files" "errors logged (exit 0)"
+    } else {
+        Write-Summary "ERROR" "harness files" "script failed (exit $($script:AitLibChildRc))"
+    }
+    return 0
 }
 
 # --- Post-write JSON validation ---
@@ -334,15 +383,14 @@ if (-not $resolvedReposPath) {
     }
 }
 
-if (-not [IO.Path]::IsPathRooted($resolvedReposPath)) {
-    $reposAbs = Get-AbsoluteReposPath $resolvedReposPath
-    Log "Repos path '$resolvedReposPath' is relative -- using $reposAbs (relative to the current directory)"
+$reposOk = $true
+$reposAbs = Resolve-ReposDir $resolvedReposPath
+if ($reposAbs) {
     $resolvedReposPath = $reposAbs
+    LogOk "Repos directory: $resolvedReposPath"
+} else {
+    $reposOk = $false   # logged with its ERROR row; Step 5 is skipped
 }
-if (-not (Test-Path $resolvedReposPath)) {
-    New-Item -ItemType Directory -Path $resolvedReposPath -Force | Out-Null
-}
-LogOk "Repos directory: $resolvedReposPath"
 
 # ============================================================
 # 4. Detect Google Drive mounts
@@ -384,7 +432,10 @@ Log "Step 5: Writing config"
 # config.json has one writer: setup-user-config.ps1 (bootstrap keys from this
 # installer + values derived from profile.json; no node needed, P-Q3).
 $configWriter = Join-Path $PSScriptRoot "setup-user-config.ps1"
-if (-not (Test-Path $configWriter)) {
+$configWriterRan = $false   # true: Step 8b passes -SkipConfig (the writer runs once)
+if (-not $reposOk) {
+    Log "Step 5: skipped -- the repos path is unusable (see the error above); config.json not written"
+} elseif (-not (Test-Path $configWriter)) {
     LogError "Failed: setup-user-config.ps1 not found next to the installer -- config.json not written"
     Write-Summary "ERROR" "aitools config" "writer missing"
 } else {
@@ -394,6 +445,7 @@ if (-not (Test-Path $configWriter)) {
     if ($DryRun) { $writerArgs["DryRun"] = $true }
     # In-process like Invoke-ValidatedScript: reset the exit code, catch a throw
     Invoke-ConfigWriter $configWriter $writerArgs
+    $configWriterRan = $true
 }
 
 # ============================================================
@@ -433,31 +485,7 @@ if (Test-Path $hhPs1Src) {
     LogWarn "hh.ps1 not found -- skipping"
 }
 
-# Harness Python CLIs -> ~/.aitools/bin (deployed copy, called by hooks via
-# absolute path so every project's hooks resolve them -- not run from the repo).
-# These are sole-owned generated artifacts (the user never edits the deployed
-# copy), so per config-file-safety.md we back up + overwrite, with NO
-# interactive review. Deploy-ManagedFile's prompt is for user-customizable
-# files only.
-$aitoolsBin = Join-Path $env:USERPROFILE ".aitools\bin"
-if (-not (Test-Path $aitoolsBin)) { New-Item -ItemType Directory -Path $aitoolsBin -Force | Out-Null }
-$hbinDeployed = 0
-foreach ($hcli in @("harness-db.py", "read-session.py", "read-session-full.py")) {
-    $hsrc = Join-Path $PSScriptRoot $hcli
-    $hdst = Join-Path $aitoolsBin $hcli
-    if (-not (Test-Path $hsrc)) {
-        LogWarn "$hcli not found (MDM deploy -- skipping)"
-        continue
-    }
-    if ((Test-Path $hdst) -and -not (Compare-Object (Get-Content $hsrc) (Get-Content $hdst))) {
-        continue  # identical -- nothing to deploy
-    }
-    if (Test-Path $hdst) { Backup-File $hdst }
-    Copy-Item $hsrc $hdst -Force
-    LogOk "Deployed $hcli -> $hdst"
-    $hbinDeployed++
-}
-Write-Summary "OK" "harness bin" "$hbinDeployed deployed to ~/.aitools/bin"
+# The harness Python CLIs (.aitools\bin) are deployed by deploy-harness (Step 8b).
 
 # ============================================================
 # 7. Shell integration
@@ -561,6 +589,23 @@ if (Get-Command node -ErrorAction SilentlyContinue) {
         LogError "Node.js install failed (restart terminal and re-run)"
         Write-Summary "ERROR" "node.js" "install failed (restart terminal)"
     }
+}
+
+# ============================================================
+# 8b. Deployed harness (%USERPROFILE%\.aitools) -- deploy-harness.ps1
+# ============================================================
+# After Node (Step 8). deploy-harness fills .aitools\{reference,registries,hooks,
+# rules,skills,bin} (bin was this installer's own step before). When Step 5 ran the
+# config writer, deploy-harness gets -SkipConfig, so the writer runs once per
+# install (OK "config.json" "n/a (written by installer)"). When Step 5 skipped it
+# (repos path unusable, writer missing), deploy-harness runs the writer itself.
+Log "Step 8b: Deployed harness"
+
+$harnessStepArgs = if ($configWriterRan) { @{ SkipConfig = $true } } else { @{} }
+$harnessStepRc = Invoke-HarnessStep (Join-Path $PSScriptRoot "deploy-harness.ps1") $harnessStepArgs
+if ($harnessStepRc -eq 2) {
+    if (-not $env:AITOOLS_SUPPRESS_SUMMARY_DISPLAY) { Show-Summary }
+    exit 2
 }
 
 # ============================================================
@@ -813,6 +858,12 @@ if (Test-Path $syncPy) {
 
 # --- Cleanup ---
 if ($DryRun) { Remove-Item Env:\AITOOLS_DRY_RUN -ErrorAction SilentlyContinue }
+# The run id this installer set (review B m-2); the footer below keeps it (the lib
+# cached it at the first record)
+if ($script:InstallSetRunId) {
+    Remove-Item Env:\AITOOLS_RUN_ID -ErrorAction SilentlyContinue
+    if (Test-Path Env:\AITOOLS_RUN_ID) { LogDetail "AITOOLS_RUN_ID could not be cleared" }
+}
 
 if (-not $env:AITOOLS_SUPPRESS_SUMMARY_DISPLAY) { Show-Summary }
 

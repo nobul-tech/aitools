@@ -18,8 +18,9 @@ during deploy — see `@.claude/rules/managed-file-deployment.md`).
 **Inbound (pull):** `aitools` / `hh` runs `git pull` on the aitools clone, then
 deploy and relay → `AGENTS.md` when Python is available.
 
-**Outbound (commit + push):** Only the commander (or a shell with credentials)
-can publish. After **`aitools`** or **`hh -n`**, the harness may show a
+**Outbound (commit + push):** `relay.md` goes directly to main (CLAUDE.md
+"Channel exception"): any agent with push credentials commits it from the main
+checkout. After **`aitools`** or **`hh -n`**, the harness may show a
 **`[RELAY]`** prompt when:
 
 - `relay.md` has **uncommitted** changes, or
@@ -33,7 +34,8 @@ Script sources: `scripts/relay-outbound-prompt.sh` (bash / Git Bash),
 short hint only (or set `RELAY_PROMPT_FORCE=1` to force the full prompt when a
 TTY exists).
 
-**Agent behavior:** If you edited `relay.md`, propose **`git add` / `git commit` /
-`git push`** with a **`channel:`** subject (see relay.md). Do not claim push
-succeeded without evidence. Do not put tokens or secrets in relay or commit
-messages.
+**Agent behavior:** If you edited `relay.md`, run `git pull --ff-only`, stage
+only `relay.md`, commit with a **`channel:`** subject (see relay.md), and push to
+main. If the pull is not a fast-forward, leave it uncommitted and tell the
+commander. Do not claim the push succeeded without evidence. Do not put tokens
+or secrets in relay or commit messages.

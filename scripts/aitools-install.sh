@@ -4,7 +4,8 @@
 #
 # Installs/updates gh CLI, configures repos directory, auto-detects Google
 # Drive mounts, writes ~/.aitools/config.json, installs the
-# aitools command to ~/.local/bin/, adds shell integration, and deploys
+# aitools command to ~/.local/bin/, adds shell integration, deploys the
+# harness to ~/.aitools (deploy-harness.sh, Step 8b), and deploys
 # all configuration scripts.
 
 set -euo pipefail
@@ -120,67 +121,32 @@ case "$(uname -s)" in
         ;;
 esac
 
-# JSONL logging (extends standard pattern with structured JSON)
-LOG_JSONL="$LOG_DIR/deploy.jsonl"
-RUN_ID="${AITOOLS_RUN_ID:-$(head -c 6 /dev/urandom | od -An -tx1 | tr -d ' \n')}"
-HOST_NAME="$(hostname -s 2>/dev/null || hostname)"
 OS_NAME="$(uname -s)"
 
 if $DRY_RUN; then export AITOOLS_DRY_RUN=1; fi
 
 # --- BEGIN install log helpers (tests/profile/test-config.sh extracts this block) ---
-# jsonl_write TS SCRIPT LEVEL MSG -- append one deploy.jsonl record. The message is
-# JSON-escaped (backslash, quote, tab, newline); every other control character
-# (CR, ESC colour codes, ...) is dropped, so each record is one valid JSON line.
-jsonl_write() {
-    local m="$4"
-    m="${m//\\/\\\\}"
-    m="${m//\"/\\\"}"
-    m="${m//$'\t'/\\t}"
-    m="${m//$'\n'/\\n}"
-    m="${m//[[:cntrl:]]/}"
-    printf '{"ts":"%s","host":"%s","os":"%s","script":"%s","run_id":"%s","level":"%s","msg":"%s"}\n' \
-        "$1" "$HOST_NAME" "$OS_NAME" "$2" "$RUN_ID" "$3" "$m" >> "$LOG_JSONL"
-}
+# deploy.jsonl records and the child relay come from aitools-lib (jsonl_record,
+# run_child_relayed: one copy for the installers, user init and deploy-harness;
+# audit A-1). A record that cannot be written is one warning and the run goes on
+# (A-16). This block keeps only the installer's own Step 3 / Step 5 helpers.
 
-# relay_child_log TEXT -- the console output of a child script that logs through
-# aitools-lib (setup-user-config.sh): print each line, mirror each structured line
-# ("[ts] [script] [level] msg", colour codes removed) to deploy.jsonl -- the child
-# already wrote it to deploy.log -- and count its warnings in WARNINGS. The child's
-# exit footer ("COMPLETED with N warning(s)", logged at warn) is relayed but not
-# counted: it restates the warnings already counted. Its errors are not counted
-# line by line: a child with errors exits non-zero and the caller logs one error.
-relay_child_log() {
-    local line clean level esc=$'\033'
-    local re='^\[([^]]+)\] \[([^]]+)\] \[([a-z]+)\] (.*)$'
-    while IFS= read -r line; do
-        if [ -z "$line" ]; then continue; fi
-        printf '%s\n' "$line"
-        clean="${line//"${esc}[31m"/}"
-        clean="${clean//"${esc}[33m"/}"
-        clean="${clean//"${esc}[0m"/}"
-        if [[ "$clean" =~ $re ]]; then
-            level="${BASH_REMATCH[3]}"
-            jsonl_write "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}" "$level" "${BASH_REMATCH[4]}"
-            case "${BASH_REMATCH[4]}" in
-                "COMPLETED with "*|"FAILED with "*) ;;
-                *) if [ "$level" = "warn" ]; then WARNINGS=$((WARNINGS + 1)); fi ;;
-            esac
-        fi
-    done <<< "$1"
-}
+# jsonl_write TS SCRIPT LEVEL MSG -- the lib's jsonl_record under the installer's
+# former name (tests/profile/test-config.sh calls it; no logic of its own)
+jsonl_write() { jsonl_record "$@"; }
 
-# run_config_writer WRITER ARGS... -- Step 5: run setup-user-config.sh (it logs and
-# writes its own summary rows), relay its log lines, record a non-zero exit as one
-# error. Its stdout is only log lines (it never prompts); stderr is not captured.
+# run_config_writer WRITER ARGS... -- Step 5: run setup-user-config.sh through the
+# lib relay. The writer logs and writes its own summary rows; the relay shows and
+# mirrors its lines to deploy.jsonl, counts its warnings, logs one error for a
+# failed writer and writes "ERROR|aitools config|script failed (exit N)" when the
+# writer died before a row of its own (A-1, A-18). Returns 0 (the relay counted
+# a failure).
 run_config_writer() {
     local writer="$1"; shift
-    local out="" rc=0
-    out=$("${BASH:-bash}" "$writer" "$@") || rc=$?
-    relay_child_log "$out"
-    if [ "$rc" -ne 0 ]; then
-        log_error "Step 5: setup-user-config.sh failed (exit $rc) -- see $(display_path "$LOG_FILE")"
+    if ! run_child_relayed --summary-tool "aitools config" "Step 5: setup-user-config.sh" "${BASH:-bash}" "$writer" "$@"; then
+        log_detail "Step 5: config writer step failed (exit $AITLIB_CHILD_RC; logged and counted by the relay)"
     fi
+    return 0
 }
 
 # absolute_repos_path PATH -- print PATH as an absolute path. A relative PATH must
@@ -194,18 +160,64 @@ absolute_repos_path() {
         *)  (CDPATH='' cd -- "$1" && pwd) ;;
     esac
 }
+
+# resolve_repos_dir PATH -- Step 3: create PATH and make it absolute (relative to
+# the current directory). Sets REPOS_PATH. Returns 1 after log_error and one ERROR
+# row "aitools config" when PATH cannot be created or resolved; the caller then
+# skips Step 5, whose writer accepts absolute paths only (audit A-17).
+resolve_repos_dir() {
+    local p="$1" abs="" mkerr=""
+    REPOS_PATH="$p"
+    if ! mkerr=$(mkdir -p "$p" 2>&1); then
+        log_detail "Repos directory '$p': ${mkerr:-mkdir failed}"
+        log_error "Repos directory '$p' could not be created -- config.json will not be written"
+        write_summary ERROR "aitools config" "repos dir not created"
+        return 1
+    fi
+    case "$p" in
+        /*) ;;
+        *)
+            if abs=$(absolute_repos_path "$p") && [ -n "$abs" ]; then
+                log "Repos path '$p' is relative -- using $abs (relative to the current directory)"
+                REPOS_PATH="$abs"
+            else
+                log_error "Repos path '$p' is relative and could not be resolved -- config.json will not be written"
+                write_summary ERROR "aitools config" "repos path not absolute"
+                return 1
+            fi ;;
+    esac
+    return 0
+}
 # --- END install log helpers ---
 
-# Override: JSONL dual-format (human-readable + structured JSON)
+# --- BEGIN install log override (tests/profile/test-install.sh extracts this block) ---
+# One run id for this installer's deploy.jsonl records and every relayed child's
+# (the lib's jsonl_record reads AITOOLS_RUN_ID; a child that relays its own children
+# passes it on). 6 random bytes as hex, the lib's form; when that fails it stays
+# unset and the lib picks one id for this process. Exported to children only (a
+# bash process cannot change its caller's environment).
+if [ -z "${AITOOLS_RUN_ID:-}" ]; then
+    if _run_id="$(od -An -N6 -tx1 /dev/urandom | tr -d ' \n')" && [ -n "$_run_id" ]; then
+        export AITOOLS_RUN_ID="$_run_id"
+    else
+        log_detail "deploy.jsonl: no random run id (od failed) -- the lib picks one for this process"
+    fi
+fi
+
+# Override: JSONL dual-format (human-readable + structured JSON). The record goes
+# through the lib's jsonl_record: escaped, one run_id for the installer's own
+# lines and its relayed children's, and an unwritable deploy.jsonl is one warning,
+# not the end of the installer under set -e (A-16).
 log() {
     local level="${2:-info}"
     local ts; ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     printf '[%s] [%s] [%s] %s\n' "$ts" "$SCRIPT_NAME" "$level" "$1" | tee -a "$LOG_FILE"
-    jsonl_write "$ts" "$SCRIPT_NAME" "$level" "$1"
+    jsonl_record "$ts" "$SCRIPT_NAME" "$level" "$1"
 }
 log_ok()    { log "$1" "ok"; }
 log_error() { log "$1" "error"; ERRORS=$((ERRORS + 1)); }
 log_warn()  { log "$1" "warn"; WARNINGS=$((WARNINGS + 1)); }
+# --- END install log override ---
 
 # --- Summary file init (if not already set by parent aitools invocation) ---
 if [ -z "${AITOOLS_SUMMARY_FILE:-}" ]; then
@@ -237,6 +249,49 @@ validate_and_run() {
         log_error "$name failed (exit $script_rc)"
         write_summary ERROR "${name%.sh}" "script failed (exit $script_rc)"
     fi
+}
+
+# run_harness_step SCRIPT [ARGS...] -- Step 8b: run deploy-harness.sh (SCRIPT) with
+# ARGS (the caller passes --skip-config when Step 5 ran the config writer) relayed
+# (aitools-lib run_child_relayed: its stdout goes to the console and deploy.jsonl;
+# stdin stays the terminal, the review menu reads /dev/tty). Checked with bash -n
+# first: bash exits 2 on a syntax error, which would read as an abort. Returns 2 when
+# deploy-harness exited 2 (the user chose [x]abort, D-TS13; the caller stops the
+# install), else 0. Exit 1 (errors): the lib logged the error; this adds the ERROR
+# row and the install continues. Parity: Invoke-HarnessStep in aitools-install.ps1.
+run_harness_step() {
+    local harness="$1"
+    shift
+    local syntax_out syntax_rc=0 syntax_line
+    if [ ! -f "$harness" ]; then
+        log_warn "deploy-harness.sh not found -- skipping (MDM deploy)"
+        write_summary WARN "harness files" "deploy-harness.sh not found"
+        return 0
+    fi
+    syntax_out=$(bash -n "$harness" 2>&1) || syntax_rc=$?
+    if [ "$syntax_rc" -ne 0 ]; then
+        while IFS= read -r syntax_line; do
+            if [ -n "$syntax_line" ]; then log_detail "deploy-harness.sh syntax: $syntax_line"; fi
+        done <<< "$syntax_out"
+        log_error "deploy-harness.sh has syntax errors -- skipped (see $(display_path "$LOG_FILE"))"
+        write_summary ERROR "harness files" "syntax errors -- skipped"
+        return 0
+    fi
+    if run_child_relayed "Step 8b: deploy-harness.sh" "${BASH:-bash}" "$harness" "$@"; then
+        return 0
+    fi
+    if [ "$AITLIB_CHILD_RC" -eq 2 ]; then
+        log "Step 8b: aborted by user at a review menu -- install stopped (exit 2)"
+        write_summary WARN "harness files" "aborted by user"
+        return 2
+    fi
+    # Exit 0 with error lines: the lib logged them and returned 1
+    if [ "$AITLIB_CHILD_RC" -eq 0 ]; then
+        write_summary ERROR "harness files" "errors logged (exit 0)"
+    else
+        write_summary ERROR "harness files" "script failed (exit $AITLIB_CHILD_RC)"
+    fi
+    return 0
 }
 
 # display_path is provided by aitools-lib.sh
@@ -418,19 +473,12 @@ if [ -z "$REPOS_PATH" ]; then
     fi
 fi
 
-mkdir -p "$REPOS_PATH"
-case "$REPOS_PATH" in
-    /*) ;;
-    *)
-        REPOS_ABS=""
-        if REPOS_ABS=$(absolute_repos_path "$REPOS_PATH") && [ -n "$REPOS_ABS" ]; then
-            log "Repos path '$REPOS_PATH' is relative -- using $REPOS_ABS (relative to the current directory)"
-            REPOS_PATH="$REPOS_ABS"
-        else
-            log_error "Repos path '$REPOS_PATH' is relative and could not be resolved -- config.json will not be written"
-        fi ;;
-esac
-log_ok "Repos directory: $REPOS_PATH"
+REPOS_OK=true
+if resolve_repos_dir "$REPOS_PATH"; then
+    log_ok "Repos directory: $REPOS_PATH"
+else
+    REPOS_OK=false   # logged with its ERROR row; Step 5 is skipped
+fi
 
 # ============================================================
 # 4. Detect Google Drive mounts
@@ -498,13 +546,17 @@ fi
 # config.json has one writer: setup-user-config.sh (bootstrap keys from this
 # installer + values derived from profile.json; no node needed, P-Q3).
 CONFIG_WRITER="$SCRIPT_DIR/setup-user-config.sh"
-if [ ! -f "$CONFIG_WRITER" ]; then
+CONFIG_WRITER_RAN=false   # true: Step 8b passes --skip-config (the writer runs once)
+if ! $REPOS_OK; then
+    log "Step 5: skipped -- the repos path is unusable (see the error above); config.json not written"
+elif [ ! -f "$CONFIG_WRITER" ]; then
     log_error "Failed: setup-user-config.sh not found next to the installer -- config.json not written"
     write_summary ERROR "aitools config" "writer missing"
 else
     writer_args=(--repos-path "$REPOS_PATH_NATIVE" --repo-path "$AITOOLS_NATIVE" --drives-json "$DRIVES_JSON")
     if $DRY_RUN; then writer_args+=(--dry-run); fi
     run_config_writer "$CONFIG_WRITER" "${writer_args[@]}"
+    CONFIG_WRITER_RAN=true
 fi
 
 
@@ -535,34 +587,7 @@ else
     log_warn "hh.sh not found — skipping"
 fi
 
-# Harness Python CLIs -> ~/.aitools/bin (deployed copy, called by hooks via
-# absolute path so every project's hooks resolve them — not run from the repo).
-# These are sole-owned generated artifacts (the user never edits the deployed
-# copy), so per config-file-safety.md we back up + diff-log + overwrite, with
-# NO interactive review. deploy_managed_file's prompt is for user-customizable
-# files only.
-AITOOLS_BIN="$HOME/.aitools/bin"
-mkdir -p "$AITOOLS_BIN"
-_hbin_deployed=0
-for _hcli in harness-db.py read-session.py read-session-full.py; do
-    _src="$SCRIPT_DIR/$_hcli"
-    _dst="$AITOOLS_BIN/$_hcli"
-    if [ ! -f "$_src" ]; then
-        log_warn "$_hcli not found at $(display_path "$_src") (MDM deploy — skipping)"
-        continue
-    fi
-    if [ -f "$_dst" ] && diff -q "$_src" "$_dst" >/dev/null 2>&1; then
-        continue  # identical — nothing to deploy
-    fi
-    if [ -f "$_dst" ]; then
-        backup_file "$_dst"                                  # backup + rotate (aitools-lib)
-        diff -u "$_dst" "$_src" >> "$LOG_FILE" 2>/dev/null || true  # log diff before overwrite
-    fi
-    cp "$_src" "$_dst"
-    log_ok "Deployed $_hcli -> $(display_path "$_dst")"
-    _hbin_deployed=$((_hbin_deployed + 1))
-done
-write_summary OK "harness bin" "$_hbin_deployed deployed to ~/.aitools/bin"
+# The harness Python CLIs (~/.aitools/bin) are deployed by deploy-harness (Step 8b).
 
 # ============================================================
 # 7. Shell integration
@@ -637,6 +662,27 @@ else
             write_summary WARN "node.js" "install manually (https://nodejs.org)"
             ;;
     esac
+fi
+
+# ============================================================
+# 8b. Deployed harness (~/.aitools) -- deploy-harness.sh
+# ============================================================
+# After Node (Step 8). deploy-harness fills ~/.aitools/{reference,registries,hooks,
+# rules,skills,bin} (bin was this installer's own step before). When Step 5 ran the
+# config writer, deploy-harness gets --skip-config, so the writer runs once per
+# install (OK "config.json" "n/a (written by installer)"). When Step 5 skipped it
+# (repos path unusable, writer missing), deploy-harness runs the writer itself.
+log "Step 8b: Deployed harness"
+
+harness_rc=0
+if $CONFIG_WRITER_RAN; then
+    run_harness_step "$SCRIPT_DIR/deploy-harness.sh" --skip-config || harness_rc=$?
+else
+    run_harness_step "$SCRIPT_DIR/deploy-harness.sh" || harness_rc=$?
+fi
+if [ "$harness_rc" -eq 2 ]; then
+    if [ -z "${AITOOLS_SUPPRESS_SUMMARY_DISPLAY:-}" ]; then show_summary; fi
+    exit 2
 fi
 
 # ============================================================
