@@ -35,3 +35,4 @@ reference/managed-file-deployment.md|.claude/hooks/|deploy-harness hook source, 
 
 # Conventions, not repo paths
 reference/cursor-practices.md|.cursor/skills/|describes Cursor's project skill directory convention
+reference/tool-ops-claude-code.md|.claude/settings.json|describes Claude Code's project-scope settings file in any folder (item #28 contrast with ~/.claude/settings.json; one line is a verbatim docs quote)

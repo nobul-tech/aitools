@@ -1,0 +1,1 @@
+[REVIEW][0m /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-sh/fx/home/.cursor/rules/fx-shared.mdc differs from source. -> answered x
