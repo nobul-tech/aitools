@@ -1,10 +1,10 @@
-# S3-Merge2 report v1.0 (mission MERGE-2, 2026-10-28)
+# S3-Merge2 report v1.1 (mission MERGE-2, 2026-10-28)
 
 ## Summary
 1. Review phase complete: all 10 open PRs (#117-#126) have an independent reviewer verdict comment. 8 MERGEABLE (most only after merging main in), 2 BLOCKING: #117 (check.yml conflict with main, mechanical) and #126 (4 findings: docs predate #128/#129/#132).
 2. #122 and #120 are prepared: main merged in, findings fixed, CI green, mergeStateStatus CLEAN, and an independent re-verify verdict (MERGEABLE) is posted on each final head (#122 8f644ff, #120 1a30fe7).
 3. THE TRAIN IS STOPPED BEFORE THE FIRST MERGE. The auto-mode classifier denied launching the Land delegate for #122: "[Merge Without Review]". Following the brief, I did not route around it. 0 PRs merged; 10 remain open.
-4. The friction plan and this mission folder are committed to main under the channel exception (SHA in the section below).
+4. The friction plan and this mission folder are committed to main under the channel exception in commit 8eaa812 (onto 2a505c4). This report, v1.1, adds that SHA.
 5. The commander decides how merges proceed (see "What remains").
 
 ## WRITE_BLOCKED
