@@ -81,20 +81,20 @@ fi
 # 2>&1: warnings reach Claude on stdout (see header). A failure never
 # blocks the session; it is reported on the status line below.
 hdb_failed=""
-if ! "$PYTHON" "$HELPER" init 2>&1; then
+if ! PYTHONUNBUFFERED=1 "$PYTHON" "$HELPER" init 2>&1; then
     hdb_failed="init"
 fi
 
 # Register this session (pass the resolved project root so it is recorded
 # in the session table — avoids delegations hardcoding per-machine paths)
-if ! "$PYTHON" "$HELPER" session start --id "$SESSION_ID" --project-dir "$PROJECT_ROOT" 2>&1; then
+if ! PYTHONUNBUFFERED=1 "$PYTHON" "$HELPER" session start --id "$SESSION_ID" --project-dir "$PROJECT_ROOT" 2>&1; then
     hdb_failed="${hdb_failed:+$hdb_failed, }session start"
 fi
 
 if [ -z "$hdb_failed" ]; then
     printf 'Harness DB: session %s registered\n' "$SESSION_ID"
 else
-    printf 'Harness DB: session %s NOT registered (harness-db.py %s failed; see the output above and ~/.aitools/logs/harness-db.log)\n' "$SESSION_ID" "$hdb_failed"
+    printf 'Harness DB: session %s NOT registered (harness-db.py %s failed; the cause is in the harness-db.py output above)\n' "$SESSION_ID" "$hdb_failed"
 fi
 
 SHORT_ID="${SESSION_ID:0:10}"

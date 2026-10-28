@@ -116,9 +116,27 @@ run_hook "$H" "$P" "$NOGIT"
 check "no helper: exit 0, no output" quiet0
 if [ -n "$PYBIN" ]; then
     mkdir -p "$TEST_HOME/.aitools/bin"
-    printf 'import sys\nsys.stderr.write("helper failed\\n")\nsys.exit(1)\n' > "$TEST_HOME/.aitools/bin/harness-db.py"
-    run_hook "$H" "$P" "$NOGIT"
-    check "helper fails: exit 0 (never blocks session end)" [ "$RC" -eq 0 ]
+    # Fake helper: exits 1 for the subcommands listed in FAKE_FAIL (comma list)
+    cat > "$TEST_HOME/.aitools/bin/harness-db.py" <<'PYEOF'
+import os, sys
+cmd = sys.argv[1] if len(sys.argv) > 1 else ""
+if cmd in os.environ.get("FAKE_FAIL", "").split(","):
+    sys.stderr.write("helper failed: " + cmd + "\n")
+    sys.exit(1)
+print("ok: " + cmd)
+PYEOF
+    SE_LOG="$TEST_HOME/.aitools/logs/harness-db-sessionend.log"
+    run_hook "$H" "$P" "$NOGIT" FAKE_FAIL=
+    check "all steps ok: exit 0" [ "$RC" -eq 0 ]
+    check "all steps ok: says ended, events processed, JSON exported" contains "$OUT" "session $SID ended, events processed, JSON exported"
+    check "all steps ok: no hook log line" [ ! -f "$SE_LOG" ]
+    run_hook "$H" "$P" "$NOGIT" FAKE_FAIL=session,export
+    check "two steps fail: exit 0 (never blocks session end)" [ "$RC" -eq 0 ]
+    check "two steps fail: status names them" contains "$OUT" "session $SID end incomplete (harness-db.py session end, export failed"
+    check "two steps fail: never claims JSON exported" eval '! contains "$OUT" "JSON exported"'
+    check "two steps fail: helper stderr kept for the user" contains "$ERR" "helper failed: export"
+    # cat fails when the log is missing; the "none" sentinel then fails contains
+    check "two steps fail: hook log line" contains "$(cat "$SE_LOG" 2>/dev/null || echo none)" "[harness-db-sessionend] [warn] session $SID: harness-db.py session end, export failed"
     rm -f "$TEST_HOME/.aitools/bin/harness-db.py"
 fi
 
@@ -129,6 +147,7 @@ cp "$HOOKS/block-claude-code-guide.sh" "$TEST_HOME/.claude/hooks/"
 printf '{"session_id":"%s","hook_event_name":"SessionEnd"}' "$SID" > "$P"
 run_hook "$H" "$P" "$NOGIT" AITOOLS_REPO_PATH="$REPO"
 check "exit 0, no output" quiet0
+# cat fails when the log is missing; the "none" sentinel then fails contains
 check "audit line logged with 2 passes, 0 failures" contains "$(cat "$TEST_HOME/.claude/hooks/logs/tool-ops-audit.jsonl" 2>/dev/null || echo none)" '"test_pass":2,"test_fail":0'
 
 echo "== SessionEnd/SessionStart shims without ait-harvest.py =="
@@ -137,7 +156,23 @@ for h in session-archive.sh harvest-session.sh session-catchup.sh; do
     run_hook "$HOOKS/$h" "$P" "$NOGIT"
     check "$h: exit 0, no output" quiet0
     log="$TEST_HOME/.aitools/logs/${h%.sh}.log"
+    # cat fails when the log is missing; the "none" sentinel then fails contains
     check "$h: fallback log line" contains "$(cat "$log" 2>/dev/null || echo none)" "[${h%.sh}] [warn]"
 done
+
+echo "== hook-test-lib self-test: no JSON parser counts as skip, never ok =="
+printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"x"}}' > "$WORK/out.txt"
+OUT="$(cat "$WORK/out.txt")"
+_pass=$PASS
+_skip=$SKIP
+export HOOK_TEST_NO_JSON=1
+check "ctx_is without a parser (expected: skip)" ctx_is PreToolUse "x"
+check "ctx_has without a parser (expected: skip)" ctx_has PreToolUse "x"
+unset HOOK_TEST_NO_JSON
+_skipped=$((SKIP - _skip))
+_passed=$((PASS - _pass))
+SKIP=$_skip  # the two simulated skips are the subject of this test, not real skips
+check "the two checks were skipped, not passed" [ "$_skipped" -eq 2 ]
+check "no pass was counted for them" [ "$_passed" -eq 0 ]
 
 finish_tests "test-hooks-smoke"

@@ -43,23 +43,32 @@ bad()  {  # on failure, also show the last hook run's exit code and output
     printf '       stderr=%.300s\n' "$ERR"
 }
 skip() { SKIP=$((SKIP + 1)); printf '  skip %s\n' "$1"; }
-check() {  # check <description> <command...>: ok if the command succeeds
-    local d="$1"
+SKIP_RC=3  # a check command returns this when it cannot verify (no JSON parser)
+check() {  # check <description> <command...>: ok on 0, skip on SKIP_RC, else FAIL
+    local d="$1" rc=0
     shift
-    if "$@"; then ok "$d"; else bad "$d"; fi
+    "$@" || rc=$?
+    if [ "$rc" -eq 0 ]; then
+        ok "$d"
+    elif [ "$rc" -eq "$SKIP_RC" ]; then
+        skip "$d (no JSON parser: python3/python or perl JSON::PP)"
+    else
+        bad "$d"
+    fi
 }
 
 OUT=""
 ERR=""
 RC=0
 # run_hook <hook file> <payload file> <cwd> [VAR=value ...]
-#   -> RC (exit code), OUT (stdout), ERR (stderr). HOME is TEST_HOME unless
-#   a HOME=... assignment is passed.
+#   -> RC (exit code), OUT (stdout), ERR (stderr). HOME (and USERPROFILE,
+#   which Windows Python's Path.home() reads) is TEST_HOME unless a HOME=...
+#   assignment is passed.
 run_hook() {
     local hook="$1" payload="$2" dir="$3"
     shift 3
     RC=0
-    (cd "$dir" && env HOME="$TEST_HOME" "$@" "$BASH_BIN" "$hook" \
+    (cd "$dir" && env HOME="$TEST_HOME" USERPROFILE="$(native_path "$TEST_HOME")" "$@" "$BASH_BIN" "$hook" \
         < "$payload" > "$WORK/out.txt" 2> "$WORK/err.txt") || RC=$?
     OUT="$(cat "$WORK/out.txt")"
     ERR="$(cat "$WORK/err.txt")"
@@ -72,6 +81,10 @@ run_hook() {
 # is available (the caller skips).
 json_ctx() {
     local event="$1"
+    # HOOK_TEST_NO_JSON=1 simulates a machine without a parser (lib self-test)
+    if [ "${HOOK_TEST_NO_JSON:-0}" = "1" ]; then
+        return 2
+    fi
     if [ -n "$PYBIN" ]; then
         printf '%s' "$OUT" | "$PYBIN" -c '
 import json, sys
@@ -108,7 +121,7 @@ ctx_is() {
     local rc=0
     json_ctx "$1" || rc=$?
     if [ "$rc" -eq 2 ]; then
-        return 0  # no JSON parser on this machine: covered by other platforms
+        return "$SKIP_RC"  # no JSON parser here: check counts it as skip, never ok
     fi
     [ "$rc" -eq 0 ] && [ "$(cat "$WORK/ctx.txt")" = "$2" ]
 }
@@ -118,7 +131,7 @@ ctx_has() {
     local rc=0
     json_ctx "$1" || rc=$?
     if [ "$rc" -eq 2 ]; then
-        return 0
+        return "$SKIP_RC"  # no JSON parser here: check counts it as skip, never ok
     fi
     [ "$rc" -eq 0 ] && case "$(cat "$WORK/ctx.txt")" in *"$2"*) true ;; *) false ;; esac
 }
@@ -135,6 +148,10 @@ native_path() {
 }
 
 contains() { case "$1" in *"$2"*) true ;; *) false ;; esac; }
+# in_order <text> <first> <second>: both occur and <first> comes before <second>
+in_order() {
+    case "$1" in *"$2"*"$3"*) true ;; *) false ;; esac
+}
 quiet0() { [ "$RC" -eq 0 ] && [ -z "$OUT" ] && [ -z "$ERR" ]; }  # exit 0, no output
 
 finish_tests() {

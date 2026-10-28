@@ -37,6 +37,7 @@ import os, sys
 mode = os.environ.get("FAKE_HDB", "ok")
 cmd = sys.argv[1] if len(sys.argv) > 1 else ""
 if cmd == "init":
+    print("init: starting")  # stdout before the stderr traceback (order check)
     if mode == "fail-init":
         sys.stderr.write("Traceback (most recent call last):\nsqlite3.OperationalError: disk I/O error\n")
         sys.exit(1)
@@ -77,6 +78,9 @@ for HOOK in "$HDB_HOOK" "$SI_HOOK"; do
     check "$name fail-init: error text on stdout" contains "$OUT" "disk I/O error"
     check "$name fail-init: NOT registered, names init" contains "$OUT" "session $SID NOT registered (harness-db.py init failed"
     check "$name fail-init: never claims registered" eval '! contains "$OUT" "session $SID registered"'
+    check "$name fail-init: points at the output above, not harness-db.log" contains "$OUT" "failed; the cause is in the harness-db.py output above)"
+    check "$name fail-init: no harness-db.log pointer" eval '! contains "$OUT" "harness-db.log"'
+    check "$name fail-init: helper stdout and stderr in order (PYTHONUNBUFFERED)" in_order "$OUT" "init: starting" "Traceback"
 
     run_hook "$HOOK" "$WORK/p.json" "$PROJ" FAKE_HDB=fail-start
     check "$name fail-start: NOT registered, names session start" contains "$OUT" "NOT registered (harness-db.py session start failed"
