@@ -122,10 +122,10 @@ branch and PR URL (D-DEL4). Its documents are versions, not drafts (D-DEL5).
     "Shipping"). Design-only and research missions do not ship code, but
     they may commit their documents where the repo allows direct commits.
 13. **Check against the table above** before launching. In Claude Code the
-    `delegation-duty-guard` hook (observe mode, PreToolUse on `Agent` only)
-    checks seven of the eight elements (not conflict priority) and prints the
-    missing ones; it does not fire on Workflow calls. Open PR #122 extends it
-    to eight elements and Workflow.
+    `delegation-duty-guard` hook (observe mode, PreToolUse on
+    `Agent|Workflow`) reminds the caller to load /delegate on every call and
+    checks all eight elements (for Workflow, the script as one text); its
+    output, with the missing elements, reaches Claude as `additionalContext`.
 
 ### Conflict priority (D-DEL6, commander decision 2026-10-26)
 
