@@ -159,9 +159,11 @@ jobs:
         run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/profile/test-user-init.sh --bash-only
 
       - name: Installer Step 3/5 relay tests (bash 5 + pwsh)
+        if: ${{ !cancelled() }}
         run: bash tests/profile/test-install.sh
 
       - name: Installer Step 3/5 relay tests (macOS /bin/bash 3.2)
+        if: ${{ !cancelled() }}
         run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/profile/test-install.sh --bash-only
 
       - name: setup-user-claude dev + MDM tests (bash 5 + pwsh)
@@ -204,15 +206,19 @@ jobs:
         run: TEST_BASH=/bin/bash /bin/bash tests/build-package/test-cli.sh
 
       - name: delegation-duty-guard hook tests (bash 5)
+        if: ${{ !cancelled() }}
         run: bash tests/hooks/test-delegation-duty-guard.sh
 
       - name: delegation-duty-guard hook tests (macOS /bin/bash 3.2)
+        if: ${{ !cancelled() }}
         run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/hooks/test-delegation-duty-guard.sh
 
       - name: build-deploy backup + swap tests (incident #86)
+        if: ${{ !cancelled() }}
         run: bash tests/build-deploy/test-build-deploy-backup.sh
 
       - name: build-deploy backup + swap tests (macOS /bin/bash 3.2)
+        if: ${{ !cancelled() }}
         run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/build-deploy/test-build-deploy-backup.sh
 
       - name: Build deploy scripts
@@ -427,6 +433,7 @@ jobs:
         run: bash tests/profile/test-user-init.sh
 
       - name: Installer Step 3/5 relay tests (bash + pwsh)
+        if: ${{ !cancelled() }}
         run: bash tests/profile/test-install.sh
 
       - name: setup-user-claude dev + MDM tests (bash + pwsh)
@@ -457,9 +464,11 @@ jobs:
         run: bash tests/build-package/test-cli.sh
 
       - name: delegation-duty-guard hook tests
+        if: ${{ !cancelled() }}
         run: bash tests/hooks/test-delegation-duty-guard.sh
 
       - name: build-deploy backup + swap tests (incident #86)
+        if: ${{ !cancelled() }}
         run: bash tests/build-deploy/test-build-deploy-backup.sh
 
       - name: Build deploy scripts
@@ -569,6 +578,7 @@ jobs:
         run: pwsh -NoProfile -File tests/managed-files/test-adopt-push.ps1
 
       - name: delegation-duty-guard hook tests (via Git Bash)
+        if: ${{ !cancelled() }}
         shell: bash
         run: bash tests/hooks/test-delegation-duty-guard.sh
 
