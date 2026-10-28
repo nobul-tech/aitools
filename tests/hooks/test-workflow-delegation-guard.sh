@@ -18,11 +18,14 @@
 # the real fixtures of session 10cf255a-c with their per-agent counts; timing
 # (500 KB, best of 5, < 100 ms on macOS; advisory on Linux and Windows Git Bash).
 # Platform: macOS, Linux, Windows Git Bash; bash 3.2 compatible. Safe to re-run.
+# Also (fix batch, review of PR #135): a Strawberry-style PERLIO=:unix:crlf
+# layer (enforce still exits 2, Bash stays silent, last guidance kept); a
+# nested "script" decoy in tool_input; no agent( call = nothing to check
+# (spec v1.1); resolution and scoring budgets; a CRLF backslash line
+# continuation; the "why" telemetry field. Without python3 the JSON checks
+# are SKIPs (counted), and timing WARNs are counted.
 # Usage: bash tests/hooks/test-workflow-delegation-guard.sh
 #        AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/hooks/test-workflow-delegation-guard.sh
-# Env:   AITOOLS_TEST_DDG_REF=<path to a delegation-duty-guard.sh with the
-#        eight-element block> for the parity check when shared/hooks/
-#        delegation-duty-guard.sh has no block markers yet.
 
 set -euo pipefail
 
@@ -31,7 +34,7 @@ HOOK="$REPO/shared/hooks/workflow-delegation-guard.sh"
 DDG="$REPO/shared/hooks/delegation-duty-guard.sh"
 FX="$REPO/tests/hooks/fixtures/workflow"
 WORK="$(mktemp -d)"
-cleanup() { rm -rf "$WORK"; }
+cleanup() { cd /; rm -rf "$WORK"; }
 trap cleanup EXIT
 BASH_BIN="${AITOOLS_TEST_BASH:-bash}"
 BASH_ABS="$(command -v "$BASH_BIN")"
@@ -42,9 +45,11 @@ cd "$WORK"
 PASS=0
 FAIL=0
 SKIP=0
+WARN=0
 ok()   { PASS=$((PASS + 1)); printf '  ok   %s\n' "$1"; }
 bad()  { FAIL=$((FAIL + 1)); printf '  FAIL %s\n' "$1"; }
 skip() { SKIP=$((SKIP + 1)); printf '  SKIP %s\n' "$1"; }
+warn() { WARN=$((WARN + 1)); printf '  WARN %s\n' "$1"; }
 
 REMINDER="[workflow-guard] Load /delegate before every Workflow call; every agent() prompt is a delegation prompt and needs all eight elements."
 
@@ -99,12 +104,16 @@ run_js() {
 has() { case "$ERR" in *"$1"*) return 0 ;; esac; return 1; }
 summary() { printf '[workflow-guard] Workflow: %s agent() prompts, %s with all eight, %s unresolved.' "$1" "$2" "$3"; }
 
-# ctx_matches: stdout is one hookSpecificOutput JSON (python3 json.load) whose
-# additionalContext equals the stderr text and is at most 4,000 characters.
+# ctx_check <name>: stdout is one hookSpecificOutput JSON (python3 json.load)
+# whose additionalContext equals the stderr text and is at most 4,000
+# characters. Without python3 the check is a counted SKIP, never a pass.
 HAVE_PY=false
 if command -v python3 >/dev/null 2>&1; then HAVE_PY=true; fi
+ctx_check() {
+    if ! $HAVE_PY; then skip "$1 (python3 not found)"; return 0; fi
+    if ctx_matches; then ok "$1"; else bad "$1: stdout=[$OUT]"; fi
+}
 ctx_matches() {
-    if ! $HAVE_PY; then return 0; fi
     printf '%s' "$OUT" | python3 -c 'import json,sys; json.load(sys.stdin)' || return 1
     printf '%s' "$OUT" | python3 -c '
 import json, sys
@@ -135,12 +144,12 @@ run_hook "$WORK/p.json"
 echo "== Per-agent scoring =="
 run_js "agent('$FULL', { label: 'full' })"
 if [ "$RC" -eq 0 ] && [ "$ERR" = "$REMINDER"$'\n'"$(summary 1 1 0)" ]; then ok "string literal 8/8: reminder + summary only"; else bad "string 8/8: rc=$RC [$ERR]"; fi
-ctx_matches && ok "stdout is JSON; additionalContext = stderr" || bad "ctx: [$OUT]"
+ctx_check "stdout is JSON; additionalContext = stderr"
 run_js "const a = await agent('$FULL', { label: 'full' })
 const b = await agent('$(prompt_without WRITE_BLOCKED)', { label: 'gap-wb', phase: 'X' })"
 has "$(summary 2 1 0)" && has "  gap-wb 7/8 missing WRITE_BLOCKED" && has "WRITE_BLOCKED: on a denied write" \
     && ok "violation: per-agent line names the prompt and the element; guidance" || bad "violation: [$ERR]"
-ctx_matches && ok "violation: stdout JSON = stderr" || bad "violation ctx: [$OUT]"
+ctx_check "violation: stdout JSON = stderr"
 run_js "agent('$E_identity $E_rules $E_skills $E_OL', { label: 'half-a' })
 agent('$E_conflict $E_WRITE_BLOCKED $E_access $E_mdprefix', { label: 'half-b' })"
 has "$(summary 2 0 0)" && has "  half-a 4/8 missing conflict,WRITE_BLOCKED,access,md-prefix" && has "  half-b 4/8 missing identity,rules,skills,OL" \
@@ -204,7 +213,26 @@ agent()"
 has "$(summary 4 0 4)" && has "  probe:default unresolved (call)" && has "  agent@L4 unresolved (member access)" \
     && has "  agent@L7 unresolved (constant cycle at A)" && has "  agent@L8 unresolved (no prompt)" \
     && ok "unresolved: call, member access (non-literal label), const cycle, no argument" || bad "unresolved: [$ERR]"
-[ "$RC" -eq 0 ] && ok "unresolved only: exit 0, no guidance" || bad "unresolved rc=$RC"
+[ "$RC" -eq 0 ] && ! has "Guidance:" && ok "unresolved only: exit 0, no guidance" || bad "unresolved rc=$RC [$ERR]"
+run_js "const A = '$FULL', B = '$FULL'
+class K { agent(p) { return p } }
+agent(B, { label: 'second-declarator' })"
+has "$(summary 2 0 2)" && has "  second-declarator unresolved (identifier B is not a string constant)" && has "agent@L2 unresolved" \
+    && ok "documented limits: second declarator and a class method named agent are unresolved" || bad "limits: [$ERR]"
+printf "agent('You are S3-X. \\\\\r\n%s', { label: 'crlf' })\r\n" "$(prompt_without identity)" > "$WORK/s.js"
+wf_payload "$WORK/s.js" > "$WORK/p.json"
+run_hook "$WORK/p.json"
+has "$(summary 1 1 0)" && ok "CRLF file with a backslash line continuation in a string: 8/8" || bad "crlf continuation: [$ERR]"
+
+echo "== Budgets =="
+perl -e 'my $p = shift; print "const COMMON = `$p ", "x" x 20000, "`\n"; print "agent(COMMON, { label: \"s$_\" })\n" for 1..500;' "$FULL" > "$WORK/s.js"
+wf_payload "$WORK/s.js" > "$WORK/p.json"
+run_hook "$WORK/p.json"
+has "$(summary 500 500 0)" && ok "20 KB constant at 500 sites: charged once, all 500 scored (was a fallback)" || bad "budget once: [$(printf '%s\n' "$ERR" | sed -n '2p')]"
+perl -e 'my $p = shift; print "const COMMON = `$p ", "x" x 200000, "`\n"; print "agent(COMMON, { label: \"s$_\" })\n" for 1..100;' "$FULL" > "$WORK/s.js"
+wf_payload "$WORK/s.js" > "$WORK/p.json"
+run_hook "$WORK/p.json"
+has "$(summary 100 83 17)" && has "unresolved (scoring budget exceeded)" && ok "200 KB constant at 100 sites: 16 MB scoring budget, the rest unresolved" || bad "scoring budget: [$(printf '%s\n' "$ERR" | sed -n '2,3p')]"
 
 echo "== scriptPath and no script =="
 printf "agent('%s', { label: 'file' })\n" "$FULL" > "$WORK/wf-full.js"
@@ -226,7 +254,17 @@ printf '{"tool_name":"Workflow","tool_input":{}}' > "$WORK/p.json"
 run_hook "$WORK/p.json"
 [ "$RC" -eq 0 ] && [ "$ERR" = "$REMINDER"$'\n'"[workflow-guard] Workflow: no script or scriptPath in the input; duty elements not checked." ] \
     && ok "no script and no scriptPath: reminder, not checked" || bad "no script: [$ERR]"
-ctx_matches && ok "not-checked output: stdout JSON = stderr" || bad "none ctx: [$OUT]"
+ctx_check "not-checked output: stdout JSON = stderr"
+printf '{"tool_name":"Workflow","tool_input":{"args":{"script":"agent(\\u0027decoy\\u0027)","n":[1,{"x":"}"}]},"script":"agent(\\u0027%s\\u0027, { label: \\u0027real\\u0027 })"}}' "$FULL" > "$WORK/p.json"
+run_hook "$WORK/p.json"
+has "$(summary 1 1 0)" && ! has "decoy" && ok "nested args.script decoy before the real script: only the top-level key counts" || bad "decoy: [$ERR]"
+printf '{"tool_name":"Workflow","tool_input":{"args":{"scriptPath":"/nope.js"},"name":"saved-flow"}}' > "$WORK/p.json"
+run_hook "$WORK/p.json"
+has "no script or scriptPath in the input" && ok "nested args.scriptPath only (saved workflow by name): not checked" || bad "nested scriptPath: [$ERR]"
+run_js "const x = '$FULL'
+return x"
+[ "$RC" -eq 0 ] && [ "$ERR" = "$REMINDER"$'\n'"[workflow-guard] Workflow: no agent() call in the script; duty elements not checked." ] \
+    && ok "no agent( call: nothing to check (spec v1.1), not a fallback" || bad "no agent: [$ERR]"
 
 echo "== Fallback: whole-script score =="
 run_js "agent(\`You are S3-X. $E_rules"
@@ -238,14 +276,11 @@ has "extraction failed (unterminated string)" && ok "unterminated string: fallba
 run_js "/* $FULL
 agent('x')"
 has "extraction failed (unterminated comment); the script was checked as one text: 8/8, missing none." && ok "unterminated comment: fallback 8/8" || bad "unterminated comment: [$ERR]"
-run_js "const x = '$FULL'
-return x"
-has "extraction failed (no agent() call found); the script was checked as one text: 8/8" && ok "no agent( call: fallback" || bad "no agent: [$ERR]"
 perl -e 'print "agent(`", "\${`" x 5000, "\n"' > "$WORK/deep.js"
 wf_payload "$WORK/deep.js" > "$WORK/p.json"
 run_hook "$WORK/p.json"
 [ "$RC" -eq 0 ] && has "extraction failed (nesting too deep)" && ok "5000 nested templates: fallback (nesting too deep), exit 0" || bad "deep: rc=$RC [$ERR]"
-ctx_matches && ok "fallback output: stdout JSON = stderr" || bad "fallback ctx: [$OUT]"
+ctx_check "fallback output: stdout JSON = stderr"
 
 echo "== Context cap =="
 : > "$WORK/many.js"
@@ -257,7 +292,7 @@ done
 wf_payload "$WORK/many.js" > "$WORK/p.json"
 run_hook "$WORK/p.json"
 has "$(summary 60 0 0)" && has "  ... and 55 more" && ok "60 gaps: at most 5 listed, then '... and 55 more'" || bad "many: [$ERR]"
-ctx_matches && ok "additionalContext <= 4000 characters" || bad "cap ctx"
+ctx_check "additionalContext <= 4000 characters"
 
 echo "== Telemetry =="
 mkdir -p "$WORK/repo/.scratch/session-t"
@@ -273,21 +308,27 @@ grep -q '"type":"delegation","src":"wdg","d":{"score":8,"total":8,"missing":"","
     && ok "8/8 event: score 8, scope agent, agent label" || bad "full event: $(sed -n '1p' "$EV")"
 grep -q '"d":{"score":7,"total":8,"missing":"conflict","mode":"observe","tool":"Workflow","checked":1,"scope":"agent","agent":"gap"}' "$EV" \
     && ok "gap event: score 7, missing conflict" || bad "gap event: $(sed -n '2p' "$EV")"
-grep -q '"d":{"score":0,"total":8,"missing":"","mode":"observe","tool":"Workflow","checked":0,"scope":"agent","agent":"un"}' "$EV" \
-    && ok "unresolved event: score 0, checked 0" || bad "un event: $(sed -n '3p' "$EV")"
-printf "const x = 1\n" > "$WORK/t.js"
+grep -q '"d":{"score":0,"total":8,"missing":"","mode":"observe","tool":"Workflow","checked":0,"scope":"agent","agent":"un","why":"call"}' "$EV" \
+    && ok "unresolved event: score 0, checked 0, why call" || bad "un event: $(sed -n '3p' "$EV")"
+printf "agent(\`You are S3-X.\n" > "$WORK/t.js"
 wf_payload "$WORK/t.js" > "$WORK/p.json"
 (cd "$WORK/repo" && "$BASH_BIN" "$HOOK" < "$WORK/p.json" >/dev/null 2>&1)
 printf '{"tool_name":"Workflow","tool_input":{}}' > "$WORK/p.json"
 (cd "$WORK/repo" && "$BASH_BIN" "$HOOK" < "$WORK/p.json" >/dev/null 2>&1)
+printf "const x = 1\n" > "$WORK/t.js"
+wf_payload "$WORK/t.js" > "$WORK/p.json"
+(cd "$WORK/repo" && "$BASH_BIN" "$HOOK" < "$WORK/p.json" >/dev/null 2>&1)
 printf '{"tool_name":"Bash","tool_input":{"command":"ls"}}' > "$WORK/p.json"
 (cd "$WORK/repo" && "$BASH_BIN" "$HOOK" < "$WORK/p.json" >/dev/null 2>&1)
 n="$(sed -n '$=' "$EV" 2>/dev/null || echo 0)"
-[ "$n" = "5" ] && ok "fallback: 1 event, nothing to check: 1 event, Bash: none" || bad "event count after fallback/none/Bash=$n"
-sed -n '4p' "$EV" | grep -q '"checked":1,"scope":"script"}' && ok "fallback event: scope script, checked 1" || bad "fallback event: $(sed -n '4p' "$EV")"
-sed -n '5p' "$EV" | grep -q '"score":0,.*"checked":0,"scope":"script"}' && ok "nothing-to-check event: checked 0" || bad "none event: $(sed -n '5p' "$EV")"
+[ "$n" = "6" ] && ok "fallback: 1 event, no script: 1, no agent(: 1, Bash: none" || bad "event count after fallback/none/Bash=$n"
+sed -n '4p' "$EV" | grep -q '"score":1,.*"checked":1,"scope":"script","why":"unterminated template"}' && ok "fallback event: scope script, checked 1, why" || bad "fallback event: $(sed -n '4p' "$EV")"
+sed -n '5p' "$EV" | grep -q '"score":0,.*"checked":0,"scope":"script","why":"no script or scriptPath in the input"}' && ok "no-script event: checked 0, why" || bad "none event: $(sed -n '5p' "$EV")"
+sed -n '6p' "$EV" | grep -q '"checked":0,"scope":"script","why":"no agent() call in the script"}' && ok "no-agent( event: checked 0, why" || bad "no-agent event: $(sed -n '6p' "$EV")"
 if $HAVE_PY; then
     python3 -c 'import json,sys; [json.loads(l) for l in open(sys.argv[1])]' "$EV" && ok "events are valid JSON" || bad "events not valid JSON"
+else
+    skip "events are valid JSON (python3 not found)"
 fi
 
 echo "== Enforce mode =="
@@ -301,11 +342,33 @@ run_hook "$WORK/p.json" "$WORK/enforce.sh"
 run_js "agent(mk())"
 run_hook "$WORK/p.json" "$WORK/enforce.sh"
 [ "$RC" -eq 0 ] && ok "enforce + unresolved only: exit 0" || bad "enforce unresolved rc=$RC"
+run_js "const x = 1"
+run_hook "$WORK/p.json" "$WORK/enforce.sh"
+[ "$RC" -eq 0 ] && ok "enforce + no agent( call: exit 0 (never blocks)" || bad "enforce no agent rc=$RC"
+
+echo "== Strawberry-style CRLF output layer (PERLIO=:unix:crlf) =="
+# run_crlf <payload> [hook]: the hook under a :crlf PerlIO layer, as
+# Strawberry Perl defaults to (review N1, PR #135).
+run_crlf() {
+    local h="${2:-$HOOK}"
+    RC=0
+    PERLIO=:unix:crlf "$BASH_BIN" "$h" < "$1" > "$WORK/out.txt" 2> "$WORK/err.txt" || RC=$?
+    OUT="$(cat "$WORK/out.txt")"
+    ERR="$(cat "$WORK/err.txt")"
+}
+run_js "agent('$E_identity $E_rules $E_skills $E_conflict $E_WRITE_BLOCKED $E_access', { label: 'crlf-gap' })"
+run_crlf "$WORK/p.json" "$WORK/enforce.sh"
+[ "$RC" -eq 2 ] && has "  crlf-gap 6/8 missing OL,md-prefix" && ok "crlf layer, enforce copy + gap: exit 2" || bad "crlf enforce: rc=$RC [$ERR]"
+run_crlf "$WORK/p.json"
+[ "$RC" -eq 0 ] && has "Name prefix (D-DEL1): tell the delegate" && ok "crlf layer: guidance for the last missing element (md-prefix) kept" || bad "crlf guidance: [$ERR]"
+printf '{"tool_name":"Bash","tool_input":{"command":"ls"}}' > "$WORK/p.json"
+run_crlf "$WORK/p.json"
+[ "$RC" -eq 0 ] && [ -z "$ERR" ] && [ -z "$OUT" ] && ok "crlf layer, Bash payload: silent" || bad "crlf Bash: rc=$RC [$ERR]"
 
 echo "== perl absent =="
 case "$(uname -s)" in
     MINGW*|MSYS*|CYGWIN*)
-        printf '  skip perl absent (Windows Git Bash: perl shares /usr/bin with the tools the hook needs)\n' ;;
+        skip "perl absent (Windows Git Bash: perl shares /usr/bin with the tools the hook needs)" ;;
     *)
         mkdir -p "$WORK/bin"
         for t in cat date; do ln -sf "$(command -v "$t")" "$WORK/bin/$t"; done
@@ -321,21 +384,24 @@ case "$(uname -s)" in
 esac
 
 echo "== Element-block parity with delegation-duty-guard.sh =="
-# block_of <file>: the lines between the markers; ref_block_of <file>: the
-# "# 1. Identity" .. md-prefix check lines of an unmarked eight-element hook.
-block_of() { perl -ne 'print if /# --- BEGIN delegation elements block ---/ .. /# --- END delegation elements block ---/' "$1" | perl -ne 'print unless /# --- (BEGIN|END) delegation elements block ---/'; }
-ref_block_of() { perl -ne 'print if /^\s*# 1\. Identity \(role name\)/ .. /\$check->\("md-prefix", \$mdp\);/' "$1"; }
+# block_of <file>: the lines between the markers (empty when a marker or the
+# file is missing). A missing block in either hook FAILS: it is the drift
+# guarantee both hook headers promise (review N9, PR #135).
+block_of() {
+    [ -f "$1" ] || return 0
+    perl -ne 'print if /# --- BEGIN delegation elements block ---/ .. /# --- END delegation elements block ---/' "$1" \
+        | perl -ne 'print unless /# --- (BEGIN|END) delegation elements block ---/'
+}
 block_of "$HOOK" > "$WORK/blk-wdg.txt"
-[ -s "$WORK/blk-wdg.txt" ] && grep -q 'md-prefix' "$WORK/blk-wdg.txt" && ok "workflow guard carries the marked block" || bad "workflow guard block missing"
-REF_DDG="${AITOOLS_TEST_DDG_REF:-/Users/new-jose/repos/aitools/.claude/worktrees/ddghook/shared/hooks/delegation-duty-guard.sh}"
-if grep -q '# --- BEGIN delegation elements block ---' "$DDG" 2>/dev/null; then
-    block_of "$DDG" > "$WORK/blk-ddg.txt"
-    cmp -s "$WORK/blk-wdg.txt" "$WORK/blk-ddg.txt" && ok "marked blocks identical (shared/hooks/delegation-duty-guard.sh)" || { bad "element blocks differ:"; diff "$WORK/blk-ddg.txt" "$WORK/blk-wdg.txt" || true; }
-elif [ -f "$REF_DDG" ] && grep -q '"md-prefix"' "$REF_DDG"; then
-    ref_block_of "$REF_DDG" > "$WORK/blk-ddg.txt"
-    cmp -s "$WORK/blk-wdg.txt" "$WORK/blk-ddg.txt" && ok "block identical to the eight-element reference ($REF_DDG)" || { bad "element block differs from $REF_DDG:"; diff "$WORK/blk-ddg.txt" "$WORK/blk-wdg.txt" || true; }
+block_of "$DDG" > "$WORK/blk-ddg.txt"
+grep -q '"md-prefix"' "$WORK/blk-wdg.txt" && ok "workflow guard carries the marked block" || bad "workflow guard: marked block missing"
+grep -q '"md-prefix"' "$WORK/blk-ddg.txt" && ok "delegation-duty-guard carries the marked block" || bad "delegation-duty-guard ($DDG): file or marked block missing"
+if cmp -s "$WORK/blk-wdg.txt" "$WORK/blk-ddg.txt"; then
+    ok "marked blocks identical (shared/hooks/delegation-duty-guard.sh)"
 else
-    skip "parity: shared/hooks/delegation-duty-guard.sh has no block markers and no eight-element reference is available (set AITOOLS_TEST_DDG_REF)"
+    bad "element blocks differ:"
+    # diff exits 1 when the files differ (expected here); its output is the evidence.
+    diff "$WORK/blk-ddg.txt" "$WORK/blk-wdg.txt" || true
 fi
 
 echo "== Real fixtures (session 10cf255a-c) =="
@@ -375,43 +441,53 @@ s011="$(fixture_scores "$FX/workflow-011.json")"
 [ "$s011" = "Probe-L1 workflow=1 " ] && ok "workflow-011: Probe-L1 1/8" || bad "011 scores: [$s011]"
 
 echo "== Timing (500 KB, best of 5) =="
-best_ms() {  # best_ms <payload>
+# best_ms <payload>: best of 5 runs in ms; prints "rc=<n>" instead when any
+# run exits with a status other than 0 (a crash must not pass as fast).
+best_ms() {
     perl -MTime::HiRes=time -e '
         my ($bash, $hook, $in) = @ARGV; my $best = 1e9;
-        for (1..5) { my $t = time; system("\"$bash\" \"$hook\" < \"$in\" >/dev/null 2>&1"); my $d = (time - $t) * 1000; $best = $d if $d < $best; }
+        for (1..5) {
+            my $t = time; system("\"$bash\" \"$hook\" < \"$in\" >/dev/null 2>&1");
+            my $rc = $? >> 8;
+            if ($? != 0) { print "rc=$rc"; exit 0; }
+            my $d = (time - $t) * 1000; $best = $d if $d < $best;
+        }
         printf "%d", $best;' "$BASH_ABS" "$HOOK" "$1"
 }
-timing() {  # timing <name> <payload> [hard limit ms, default 100]
-    local ms size hard="${3:-100}"
+timing() {  # timing <name> <payload> <expected stderr text> [hard limit ms, default 100]
+    local ms size hard="${4:-100}"
+    run_hook "$2"
+    if [ "$RC" -ne 0 ] || ! has "$3"; then bad "$1: output check failed: rc=$RC [$(printf '%s\n' "$ERR" | sed -n '2p')]"; return 0; fi
     ms="$(best_ms "$2")"
+    case "$ms" in rc=*) bad "$1: a timed run exited with $ms"; return 0 ;; esac
     size="$(wc -c < "$2" | tr -d ' ')"
-    # The budget (spec v1.0 section 9: 100 ms for a 500 KB script) is hard on
+    # The budget (spec v1.1 section 9: 100 ms for a 500 KB script) is hard on
     # macOS; elsewhere it is advisory (Windows process start-up alone can
     # exceed it; Linux CI runners vary). A stress case may pass a higher hard
-    # limit: between 100 ms and it, the result is a WARN.
+    # limit: between 100 ms and it, the result is a (counted) WARN.
     case "$(uname -s)" in
         Darwin)
             if [ "$ms" -lt 100 ]; then ok "$1 ($size bytes): best of 5 = ${ms} ms"
-            elif [ "$ms" -lt "$hard" ]; then printf '  WARN %s: %s ms (>= 100, < %s hard limit)\n' "$1" "$ms" "$hard"
+            elif [ "$ms" -lt "$hard" ]; then warn "$1: $ms ms (>= 100, < $hard hard limit)"
             else bad "$1: ${ms} ms (>= $hard)"; fi ;;
         *)
-            if [ "$ms" -lt 100 ]; then ok "$1 ($size bytes): best of 5 = ${ms} ms"; else printf '  WARN %s: %s ms (>= 100; advisory on %s)\n' "$1" "$ms" "$(uname -s)"; fi ;;
+            if [ "$ms" -lt 100 ]; then ok "$1 ($size bytes): best of 5 = ${ms} ms"; else warn "$1: $ms ms (>= 100; advisory on $(uname -s))"; fi ;;
     esac
 }
 perl -e 'local $/; open(my $f, "<", $ARGV[0]) or die; my $s = <$f>; my $o = ""; $o .= $s while length($o) < 512000; $o = substr($o, 0, 520000); $o =~ s/[^\n]*\z//; print $o;' "$FX/merge-all-prs.js" > "$WORK/big.js"
 wf_payload "$WORK/big.js" > "$WORK/big.json"
-run_hook "$WORK/big.json"
-has "$(summary 270 0 0)" && ok "500 KB of merge-all-prs.js copies: 270 prompts parsed" || bad "big: [$(printf '%s\n' "$ERR" | sed -n '2p')]"
 # Stress case (19 merge-all scripts in one): ~80 ms on an M-series Mac, 126 ms
 # on the GitHub macOS runner (PR #135 CI); 250 ms catches a 2x regression.
-timing "500 KB script, 270 agent() prompts (stress)" "$WORK/big.json" 250
+timing "500 KB script, 270 agent() prompts (stress)" "$WORK/big.json" "$(summary 270 0 0)" 250
 perl -e 'my $p = shift; print "const COMMON = `$p ", "lorem ipsum dolor sit amet " x 18000, "`\n", "// padding\n" x 2000, "agent(COMMON, { label: q })\n"' "$FULL" > "$WORK/one.js"
 wf_payload "$WORK/one.js" > "$WORK/one.json"
-timing "500 KB script, one 486 KB prompt" "$WORK/one.json"
-perl -e 'print "agent(`", "name prefix " x 45000, "`)\n"' > "$WORK/adv.js"
+timing "500 KB script, one 486 KB prompt" "$WORK/one.json" "$(summary 1 1 0)"
+# Adversarial: under the 512 KB cap (so the template closes and the prompt is
+# scored per agent), with ".md" hits so the bounded md-prefix loop runs.
+perl -e 'print "agent(`", "name prefix x.md " x 28000, "`)\n"' > "$WORK/adv.js"
 wf_payload "$WORK/adv.js" > "$WORK/adv.json"
-timing "adversarial 500 KB 'name prefix' prompt" "$WORK/adv.json"
+timing "adversarial 476 KB 'name prefix x.md' prompt" "$WORK/adv.json" "$(summary 1 0 0)"
 
 echo
-printf 'workflow-delegation-guard: %d passed, %d failed, %d skipped (bash: %s)\n' "$PASS" "$FAIL" "$SKIP" "$("$BASH_BIN" -c 'echo $BASH_VERSION')"
+printf 'workflow-delegation-guard: %d passed, %d failed, %d skipped, %d warnings (bash: %s)\n' "$PASS" "$FAIL" "$SKIP" "$WARN" "$("$BASH_BIN" -c 'echo $BASH_VERSION')"
 [ "$FAIL" -eq 0 ]

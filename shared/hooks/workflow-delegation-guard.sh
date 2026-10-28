@@ -14,7 +14,7 @@
 # prompt rewriter. NOT the Agent-tool check (delegation-duty-guard.sh).
 # Consumed by: Claude Code PreToolUse(Workflow), registered via
 # hooks-manifest.json; rollout governed by .claude/rules/hook-rollout.md.
-# Contract: .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-Hook2/S3-Hook2-spec.md (v1.0)
+# Contract: .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-Hook2/S3-Hook2-spec.md (v1.1)
 #
 # OBSERVE mode (MODE_WF_DUTY="observe"): always allows (exit 0). On every
 # Workflow call it emits the reminder line, a per-agent() summary, the worst
@@ -32,7 +32,8 @@
 #   - Script text: tool_input.script (JSON-unescaped); else the file named by
 #     tool_input.scriptPath (relative paths resolve against the payload's
 #     "cwd"; a readable regular file of at most 512 KB, read as is); else
-#     nothing is checked, but the reminder still prints.
+#     nothing is checked, but the reminder still prints. Only keys at the top
+#     level of tool_input count (a "script" key nested in args is ignored).
 #   - A Perl lexer (\G /gc regexes: comments, '...' and "..." strings,
 #     template literals with nested ${...}, regex literals by the
 #     previous-token heuristic) finds every agent( call site (a whole
@@ -50,17 +51,30 @@
 #     "delegation elements block" markers; a test fails when they differ).
 #   - Fallback to ONE whole-script score (as delegation-duty-guard did) when
 #     the lexer fails (unterminated string, template or comment; nesting too
-#     deep), when no agent( call is found, or on the 2 s time guard.
+#     deep), when the resolution budget (8 MB of resolved text) is exceeded,
+#     or on the 2 s time guard.
+#   - A script with no agent( call is "nothing to check" (spec v1.1): the
+#     reminder plus a note, a checked-0 event, never a block.
 #   - Any other tool: silent, exit 0. Without perl: the reminder only.
 #
 # LIMITS (by design):
 #   - Static call sites, not runtime calls: an agent( inside a loop or map()
 #     counts once, whatever the number of agents it starts.
 #   - Runtime values (${l.k}, ${BRIEF}) are left as text: they can neither add
-#     nor hide an element unless their literal text names it.
+#     nor hide an element unless their literal text names it (a member name
+#     such as ${cfg.WRITE_BLOCKED} does count).
 #   - Prompts built by functions (agent(makePrompt(x))), member access
 #     (agent(r.prompt)) or ternaries are "unresolved" and not scored.
-#   - A constant name defined twice keeps its first string definition.
+#   - A constant name defined twice keeps its first string definition; in
+#     "const A = '...', B = '...'" only A is captured (agent(B) unresolved).
+#   - A class or object method named agent(p) { ... } counts as an
+#     (unresolved) call site.
+#   - A "/" after ")" is read as division, so a regex literal there (e.g.
+#     if (ok) /`/.test(s)) is misread; the lexer then usually fails and the
+#     whole-script fallback applies.
+#   - Not seen at all: a saved workflow launched by tool_input.name (no
+#     script or scriptPath: "not checked"), and child workflows started from
+#     a script with workflow(...) (their agent() prompts reach no hook).
 #   - Only the first 512 KB of the script text is parsed.
 #
 # Eight delegation duty elements (/delegate v2.0; detail and patterns in
@@ -72,18 +86,28 @@
 #   - Receives JSON on stdin (tool_name, tool_input, cwd, ...)
 #   - Exit 0 = allow (OBSERVE mode); exit 2 = block (ENFORCE mode only)
 #   - stdout -> hookSpecificOutput JSON (exit 0 only); stderr -> text
-#   - Must be fast (< 100 ms for a 500 KB script, macOS)
-#   - Must never crash or hang (perl time guard: alarm, 2 s)
+#   - Must be fast: < 100 ms for a 500 KB script on macOS (one large prompt,
+#     or an adversarial one); a script dense with call sites may take longer
+#     (270 prompts in 500 KB: ~80 ms on an M-series Mac, ~130 ms on the
+#     GitHub macOS runner; the suite fails it at 250 ms)
+#   - Must never crash or hang. The 2 s perl time guard (alarm) covers
+#     extraction and per-prompt scoring; the whole-script fallback score runs
+#     after it, unguarded, and relies on the bounded element regexes (the
+#     md-prefix window). Perl's deferred signals cannot interrupt a single
+#     regex op, so every regex here is linear or bounded.
 #   - Standalone: loads no shared library (deployed hooks cannot)
+#   - perl runs with PERLIO=:perlio: Strawberry Perl's default :crlf layer
+#     would end every output line in \r (reference/cross-platform-detail.md);
+#     the bash side also strips a trailing \r from each header line
 #
 # KPI definitions (logged to harness DB via session events.jsonl, src "wdg";
 # "delegation" events):
 #   - one event per agent() call site: score, total (8), missing (csv),
 #     mode, tool "Workflow", checked (1 scored, 0 unresolved), scope "agent",
-#     agent (the label)
-#   - fallback: one event, scope "script", checked 1
-#   - nothing to check (no script, no perl, checker failure): one event,
-#     scope "script", checked 0
+#     agent (the label); an unresolved one also carries why (the reason)
+#   - fallback: one event, scope "script", checked 1, why
+#   - nothing to check (no script, no agent( call, no perl, checker
+#     failure): one event, scope "script", checked 0, why
 #
 # Framework: reference/framework-hook-rollout.md (observe-then-enforce)
 # Platform: macOS + Linux + Windows Git Bash (bash 3.2 compatible)
@@ -102,9 +126,11 @@ REMINDER="[workflow-guard] Load /delegate before every Workflow call; every agen
 # git may be absent or the cwd may not be a repo: both yield no session
 # dir, and telemetry is skipped (the hook itself still runs).
 _SESSION_DIR=""
-_cs_file="$(git rev-parse --show-toplevel 2>/dev/null || echo "")/.scratch/.current-session"
-if [ -f "$_cs_file" ]; then
-    _SESSION_DIR=$(cat "$_cs_file" 2>/dev/null || true)
+_top="$(git rev-parse --show-toplevel 2>/dev/null || echo "")"
+if [ -n "$_top" ] && [ -f "$_top/.scratch/.current-session" ]; then
+    # An unreadable file leaves _SESSION_DIR empty: telemetry is skipped
+    # (best effort), checked by the [ -n ] in emit_hook_event.
+    _SESSION_DIR=$(cat "$_top/.scratch/.current-session" 2>/dev/null || true)
 fi
 _TS=""
 
@@ -137,8 +163,10 @@ finish() {
     exit "$rc"
 }
 
+# none_event <why>: the reason is a fixed ASCII text from this script
+# (JSON-safe as written).
 none_event() {
-    emit_hook_event "delegation" "{\"score\":0,\"total\":$DUTY_TOTAL,\"missing\":\"\",\"mode\":\"$MODE_WF_DUTY\",\"tool\":\"Workflow\",\"checked\":0,\"scope\":\"script\"}"
+    emit_hook_event "delegation" "{\"score\":0,\"total\":$DUTY_TOTAL,\"missing\":\"\",\"mode\":\"$MODE_WF_DUTY\",\"tool\":\"Workflow\",\"checked\":0,\"scope\":\"script\",\"why\":\"$1\"}"
 }
 
 # --- Only Workflow launches are checked ---
@@ -150,7 +178,7 @@ if ! command -v perl >/dev/null 2>&1; then
     if ! [[ "$input" =~ $_tool_re ]]; then
         exit 0
     fi
-    none_event
+    none_event "perl not found"
     finish 0 "$REMINDER"$'\n'"[workflow-guard] perl not found: duty elements not checked."
 fi
 
@@ -167,10 +195,14 @@ IFS= read -r -d '' WDG_PERL <<'WDG_PERL_EOF' || true
 use strict;
 my ($MAXB, $CHARS, $MODE) = ($ENV{WDG_MAX}, $ENV{WDG_CHARS}, $ENV{WDG_MODE});
 my @EV;
+sub why_clean { my ($x) = @_; $x = substr($x // "", 0, 80); $x =~ s/[^A-Za-z0-9 :#._\/()-]//g; return $x; }
+# ev(score, missing, checked, scope, [label], [why]): every value is JSON-safe
+# (labels and reasons are sanitised to [A-Za-z0-9 :#._/()-]).
 sub ev {
-    my ($s, $m, $c, $scope, $label) = @_;
+    my ($s, $m, $c, $scope, $label, $why) = @_;
     my $j = "{\"score\":$s,\"total\":8,\"missing\":\"$m\",\"mode\":\"$MODE\",\"tool\":\"Workflow\",\"checked\":$c,\"scope\":\"$scope\"";
     $j .= ",\"agent\":\"$label\"" if defined $label;
+    $j .= ",\"why\":\"" . why_clean($why) . "\"" if defined $why;
     push @EV, "$j}";
 }
 sub out {
@@ -196,15 +228,41 @@ $in = "" unless defined $in;
 out("skip", 0, "") if $in !~ /"tool_name"\s*:\s*"Workflow"/;
 
 # --- Script text: tool_input.script, else the scriptPath file ---
-my $tip = ($in =~ /"tool_input"\s*:\s*\{/g) ? pos($in) : 0;
-sub jfield {
-    my ($name) = @_;
-    pos($in) = $tip;
-    return undef unless $in =~ /"\Q$name\E"\s*:\s*"/g;
-    my $s = pos($in);
-    1 while $in =~ /\G(?:[^"\\]+|\\.)/gcs;
-    return substr($in, $s, pos($in) - $s);
+# Only the top-level keys of tool_input count (review N2, PR #135): a key
+# named "script" inside args must not stand in for the real one. One pass
+# over the object records the raw (still escaped) text of each top-level
+# string value; nested objects and arrays are skipped, strings included.
+my %TI;
+sub jstr_end { 1 while $in =~ /\G(?:[^"\\]+|\\.)/gcs; }
+if ($in =~ /"tool_input"\s*:\s*\{/g) {
+    while (1) {
+        $in =~ /\G[\s,]*/gc;
+        last unless $in =~ /\G"/gc;
+        my $ks = pos($in);
+        jstr_end();
+        my $key = substr($in, $ks, pos($in) - $ks);
+        last unless $in =~ /\G"\s*:\s*/gc;
+        if ($in =~ /\G"/gc) {
+            my $vs = pos($in);
+            jstr_end();
+            $TI{$key} //= substr($in, $vs, pos($in) - $vs);
+            last unless $in =~ /\G"/gc;
+        } elsif ($in =~ /\G[{\[]/gc) {
+            my $d = 1;
+            while ($d > 0) {
+                if ($in =~ /\G[^"{}\[\]]+/gc) { next; }
+                if ($in =~ /\G"/gc) { jstr_end(); last unless $in =~ /\G"/gc; next; }
+                if ($in =~ /\G[{\[]/gc) { $d++; next; }
+                if ($in =~ /\G[}\]]/gc) { $d--; next; }
+                last;
+            }
+            last if $d > 0;
+        } else {
+            $in =~ /\G[^,}\]]*/gc;
+        }
+    }
 }
+sub jfield { return $TI{ $_[0] }; }
 my %JE = (n => "\n", t => "\t", r => "\r", b => "\b", f => "\f");
 sub junesc {
     my ($t) = @_;
@@ -236,7 +294,7 @@ if (defined $raw) {
 }
 if (!defined $src) {
     $status ||= "none:no script text";
-    ev(0, "", 0, "script");
+    ev(0, "", 0, "script", undef, substr($status, 5));
     out($status, 0, "");
 }
 $src = substr($src, 0, $MAXB);
@@ -328,8 +386,10 @@ sub lex {
         if ($src =~ /\G(['"])/gc) {
             my $q = $1;
             my $s = pos($src);
-            if ($q eq "'") { 1 while $src =~ /\G(?:[^'\\\n]+|\\.)/gcs; }
-            else           { 1 while $src =~ /\G(?:[^"\\\n]+|\\.)/gcs; }
+            # \\\r\n first: a backslash line continuation in a CRLF file
+            # (review N6, PR #135)
+            if ($q eq "'") { 1 while $src =~ /\G(?:[^'\\\n]+|\\\r\n|\\.)/gcs; }
+            else           { 1 while $src =~ /\G(?:[^"\\\n]+|\\\r\n|\\.)/gcs; }
             my $e = pos($src);
             $src =~ /\G\Q$q\E/gc or die "unterminated string\n";
             push @t, ["str", jsdecode(substr($src, $s, $e - $s)), $p, pos($src)];
@@ -384,12 +444,20 @@ sub lex_tpl {
 
 # --- Constants and resolution ---
 my (%const, %memo);
+# Resolution budget: 8 MB of resolved text, charged where text is first built
+# (literal chunks); a memoised constant's text is charged once, when it is
+# resolved, not again at every site that uses it (review N5, PR #135).
+# Scoring budget: 16 MB of prompt text scored in all; sites past either
+# budget are reported unresolved instead of dropping the whole result.
 my $budget = 8 * 1048576;
+my $sbudget = 16 * 1048576;
 sub is_p { my ($tk, $v) = @_; return $tk && $tk->[0] eq "p" && $tk->[1] eq $v; }
 sub add_text {
-    my ($out, $v) = @_;
-    $budget -= length($v);
-    die "resolution budget exceeded\n" if $budget < 0;
+    my ($out, $v, $charged) = @_;
+    if (!$charged) {
+        $budget -= length($v);
+        die "resolution budget exceeded\n" if $budget < 0;
+    }
     $$out .= $v if length($$out) < $MAXB;
 }
 # parse_expr(tokens, index, resolve?, const depth, seen, paren depth)
@@ -401,7 +469,7 @@ sub parse_expr {
     while (1) {
         my $tk = $A->[$j];
         return ("un", "no prompt", $j) unless $tk;
-        my $v = "";
+        my ($v, $charged) = ("", 0);
         if ($tk->[0] eq "str") { $v = $tk->[1]; $j++; }
         elsif ($tk->[0] eq "tpl") { $v = tpl_text($tk, $d, $seen) if $res; $j++; }
         elsif ($tk->[0] eq "id") {
@@ -413,7 +481,7 @@ sub parse_expr {
             if ($res) {
                 my ($st, $tx) = resolve($tk->[1], $d + 1, $seen);
                 return ("un", $tx, $j) if $st ne "ok";
-                $v = $tx;
+                ($v, $charged) = ($tx, 1);
             }
             $j++;
         }
@@ -421,13 +489,16 @@ sub parse_expr {
             my ($st, $tx, $k) = parse_expr($A, $j + 1, $res, $d, $seen, $pd + 1);
             return ($st, $tx, $k) if $st ne "ok";
             return ("un", "expression", $k) unless is_p($A->[$k], ")");
-            $v = $tx;
+            ($v, $charged) = ($tx, 1);
             $j = $k + 1;
         }
         elsif (is_p($tk, "{")) { return ("un", "object argument", $j); }
         elsif (is_p($tk, ")") && $out eq "") { return ("un", "no prompt", $j); }
         else { return ("un", "expression", $j); }
-        add_text(\$out, $v) if $res;
+        # str: charged here; tpl, constant and (...) text: already charged
+        # where it was built
+        $charged = 1 if $tk->[0] eq "tpl";
+        add_text(\$out, $v, $charged) if $res;
         my $nx = $A->[$j];
         if (is_p($nx, "+")) { $j++; next; }
         return ("un", "ternary", $j) if is_p($nx, "?");
@@ -443,7 +514,12 @@ sub resolve {
     return ("un", "constant cycle at $n") if $seen->{$n};
     local $seen->{$n} = 1;
     my ($st, $tx) = parse_expr($c->[0], $c->[1], 1, $d, $seen, 0);
-    $memo{$n} = $tx if $st eq "ok";
+    if ($st eq "ok") {
+        # A constant's full text is charged once, when it is memoised.
+        $budget -= length($tx);
+        die "resolution budget exceeded\n" if $budget < 0;
+        $memo{$n} = $tx;
+    }
     return ($st, $tx);
 }
 sub tpl_text {
@@ -451,12 +527,12 @@ sub tpl_text {
     my $out = "";
     for my $part (@{ $tk->[1] }) {
         if ($part->[0] eq "lit") { add_text(\$out, $part->[1]); next; }
-        my $v = "\${" . $part->[1] . "}";
+        my ($v, $charged) = ("\${" . $part->[1] . "}", 0);
         if ($part->[1] =~ /^\s*([A-Za-z_\$][\w\$]*)\s*$/ && $1 !~ $KW_RE) {
             my ($st, $tx) = resolve($1, $d + 1, $seen);
-            $v = $tx if $st eq "ok";
+            ($v, $charged) = ($tx, 1) if $st eq "ok";
         }
-        add_text(\$out, $v);
+        add_text(\$out, $v, $charged);
     }
     return $out;
 }
@@ -530,7 +606,13 @@ my $ok = eval {
             next unless $tk->[0] eq "id" && $tk->[1] eq "agent" && is_p($A->[$i + 1], "(");
             my $pv = $i > 0 ? $A->[$i - 1] : undef;
             next if $pv && (is_p($pv, ".") || is_p($pv, "?.") || ($pv->[0] eq "id" && $pv->[1] eq "function"));
-            my ($st, $tx, $k) = parse_expr($A, $i + 2, 1, 0, {}, 0);
+            # A resolution-budget overrun marks this site unresolved; any
+            # other die (time guard, parser) propagates to the outer eval.
+            my ($st, $tx, $k) = eval { parse_expr($A, $i + 2, 1, 0, {}, 0) };
+            if (!defined $st) {
+                die $@ unless ($@ // "") =~ /^resolution budget exceeded/;
+                ($st, $tx, $k) = ("un", "resolution budget exceeded", $i + 2);
+            }
             if ($st eq "ok" && !(is_p($A->[$k], ",") || is_p($A->[$k], ")"))) {
                 ($st, $tx) = ("un", is_p($A->[$k], "?") ? "ternary" : "expression");
             }
@@ -548,7 +630,12 @@ my $ok = eval {
             }
             $label = clean(defined $label ? $label : "", 60);
             $label = "agent\@L" . line_of($tk->[2]) if $label eq "";
-            my %r = (label => $label, ok => ($st eq "ok" ? 1 : 0), reason => clean($tx, 80));
+            if ($st eq "ok") {
+                my $len = length($tx) < $CHARS ? length($tx) : $CHARS;
+                if ($sbudget < $len) { ($st, $tx) = ("un", "scoring budget exceeded"); }
+                else { $sbudget -= $len; }
+            }
+            my %r = (label => $label, ok => ($st eq "ok" ? 1 : 0), reason => why_clean($tx));
             if ($r{ok}) { @r{qw(score missing)} = score_text($tx); }
             push @sites, \%r;
         }
@@ -558,12 +645,18 @@ my $ok = eval {
 };
 alarm 0;
 if (!$ok) { ($fail = $@ || "parser error") =~ s/\s+$//; @sites = (); }
-elsif (!@sites) { $fail = "no agent() call found"; }
+elsif (!@sites) {
+    # Spec v1.1 (review N3, PR #135): no agent( call is nothing to check,
+    # not a failed extraction; it never blocks (a script may delegate only
+    # through child workflow() calls, which no hook sees).
+    ev(0, "", 0, "script", undef, "no agent() call in the script");
+    out("none:no agent() call in the script", 0, "");
+}
 
 if ($fail ne "") {
     my ($s, $m) = score_text($src);
-    (my $why = substr($fail, 0, 80)) =~ s/[^A-Za-z0-9 :#._\/()-]//g;
-    ev($s, $m, 1, "script");
+    my $why = why_clean($fail);
+    ev($s, $m, 1, "script", undef, $why);
     out("fallback:$why", ($s < 8 ? 1 : 0), $m,
         "[workflow-guard] per-agent() extraction failed ($why); the script was checked as one text: $s/8, missing " . ($m eq "" ? "none" : $m) . ".");
 }
@@ -576,7 +669,7 @@ for my $r (@sites) {
         ev($r->{score}, $r->{missing}, 1, "agent", $r->{label});
     } else {
         $un++;
-        ev(0, "", 0, "agent", $r->{label});
+        ev(0, "", 0, "agent", $r->{label}, $r->{reason});
     }
 }
 my @L = ("[workflow-guard] Workflow: $n agent() prompts, $full with all eight, $un unresolved.");
@@ -591,7 +684,7 @@ my @order = qw(identity rules skills OL conflict WRITE_BLOCKED access md-prefix)
 out("agents", (%miss ? 1 : 0), join(",", grep { $miss{$_} } @order), @L);
 WDG_PERL_EOF
 if [ -z "$WDG_PERL" ]; then
-    none_event
+    none_event "checker source missing"
     finish 0 "$REMINDER"$'\n'"[workflow-guard] checker source missing: duty elements not checked."
 fi
 
@@ -600,8 +693,13 @@ fi
 _events=""
 [ -z "$_SESSION_DIR" ] || _events="$_SESSION_DIR/events.jsonl"
 rc=0
-result=$(WDG_MAX="$SCRIPT_MAX_BYTES" WDG_CHARS="$CHECK_MAX_CHARS" WDG_MODE="$MODE_WF_DUTY" \
+# PERLIO=:perlio: no CRLF translation under Strawberry Perl (review N1, PR
+# #135; reference/cross-platform-detail.md "Strawberry Perl text mode").
+result=$(PERLIO=:perlio WDG_MAX="$SCRIPT_MAX_BYTES" WDG_CHARS="$CHECK_MAX_CHARS" WDG_MODE="$MODE_WF_DUTY" \
     WDG_EVENTS="$_events" perl -e "$WDG_PERL" 2>/dev/null) || rc=$?
+# Belt and braces: drop every \r (the checker prints none on purpose; a
+# :crlf layer that ignores PERLIO would otherwise break "1\r" = "1").
+result="${result//$'\r'/}"
 
 # Header: status, gap, union (one line each), then the message lines.
 status="${result%%$'\n'*}"
@@ -613,7 +711,7 @@ lines=""
 case "$rest" in *$'\n'*) lines="${rest#*$'\n'}" ;; esac
 
 if [ "$rc" -ne 0 ] || [ -z "$status" ] || [ "$status" = "$result" ]; then
-    none_event
+    none_event "checker failed (perl exit $rc)"
     finish 0 "$REMINDER"$'\n'"[workflow-guard] the checker failed (perl exit $rc): duty elements not checked."
 fi
 

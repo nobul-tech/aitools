@@ -155,8 +155,10 @@ fi
 # Output lines: status (checked | none:<reason>), score, missing, present.
 # perl failure falls back to "all missing" (|| printf ...), which the
 # score check below treats as 0/8 -- visible, never a silent pass.
+# PERLIO=:perlio: no CRLF translation under Strawberry Perl (review N1, PR
+# #135; reference/cross-platform-detail.md "Strawberry Perl text mode").
 result=$(printf '%s' "$input" | \
-    DDG_CHARS="$CHECK_MAX_CHARS" perl -0777 -ne '
+    PERLIO=:perlio DDG_CHARS="$CHECK_MAX_CHARS" perl -0777 -ne '
         my $in = $_;
         # Search only inside tool_input when it is present.
         my $ti = ($in =~ /"tool_input"\s*:\s*\{/g) ? substr($in, pos($in)) : $in;
@@ -233,7 +235,9 @@ result=$(printf '%s' "$input" | \
         print join(",", @present) . "\n";
     ' 2>/dev/null || printf 'checked\n0\n%s\n\n' "$ALL_ELEMENTS")
 
-# Parse result (bash 3.2 compatible: no mapfile)
+# Parse result (bash 3.2 compatible: no mapfile). Every \r is dropped first:
+# a :crlf layer that ignores PERLIO would otherwise turn "7" into "7\r".
+result="${result//$'\r'/}"
 status=$(printf '%s\n' "$result" | sed -n '1p')
 score=$(printf '%s\n' "$result" | sed -n '2p')
 missing=$(printf '%s\n' "$result" | sed -n '3p')

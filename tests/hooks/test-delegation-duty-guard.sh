@@ -23,10 +23,13 @@ set -euo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 HOOK="$REPO/shared/hooks/delegation-duty-guard.sh"
 WORK="$(mktemp -d)"
-cleanup() { rm -rf "$WORK"; }
+cleanup() { cd /; rm -rf "$WORK"; }
 trap cleanup EXIT
 BASH_BIN="${AITOOLS_TEST_BASH:-bash}"
 BASH_ABS="$(command -v "$BASH_BIN")"
+# Run every hook call from a directory outside any git repo, so no real
+# session's events.jsonl ever receives test telemetry (review of PR #135).
+cd "$WORK"
 
 PASS=0
 FAIL=0
@@ -232,6 +235,26 @@ run_hook "$WORK/p.json" "$WORK/enforce.sh"
 agent_payload Agent "$(prompt_without none)" > "$WORK/p.json"
 run_hook "$WORK/p.json" "$WORK/enforce.sh"
 [ "$RC" -eq 0 ] && ok "enforce + 8/8: exit 0" || bad "enforce full rc=$RC"
+
+echo "== Strawberry-style CRLF output layer (PERLIO=:unix:crlf) =="
+# The hook runs its perl with PERLIO=:perlio and drops \r before parsing
+# (review N1 and LogB 1, PR #135); without that, "7\r" failed the score check
+# and every element was reported missing.
+run_crlf() {  # run_crlf <payload> [hook]
+    local h="${2:-$HOOK}"
+    RC=0
+    PERLIO=:unix:crlf "$BASH_BIN" "$h" < "$1" > "$WORK/out.txt" 2> "$WORK/err.txt" || RC=$?
+    OUT="$(cat "$WORK/out.txt")"
+    ERR="$(cat "$WORK/err.txt")"
+}
+agent_payload Agent "$(prompt_without mdprefix)" > "$WORK/p.json"
+run_crlf "$WORK/p.json" "$WORK/enforce.sh"
+case "$ERR" in *"Agent: 7/8 duty elements. Missing: md-prefix."*) [ "$RC" -eq 2 ] && ok "crlf layer, enforce + gap: exit 2, 7/8 (not 0/8)" || bad "crlf enforce rc=$RC" ;; *) bad "crlf enforce: rc=$RC [$ERR]" ;; esac
+run_crlf "$WORK/p.json"
+case "$ERR" in *"Name prefix (D-DEL1): tell the delegate"*) ok "crlf layer: guidance for the last missing element kept" ;; *) bad "crlf guidance: [$ERR]" ;; esac
+printf '{"tool_name":"Bash","tool_input":{"command":"ls"}}' > "$WORK/p.json"
+run_crlf "$WORK/p.json"
+[ "$RC" -eq 0 ] && [ -z "$ERR" ] && [ -z "$OUT" ] && ok "crlf layer, Bash payload: silent" || bad "crlf Bash: rc=$RC [$ERR]"
 
 echo "== Timing (large prompt) =="
 # Bound with headroom for shared CI runners (measured 40-54 ms on 2026-10-27/28).
