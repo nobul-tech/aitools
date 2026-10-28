@@ -2855,13 +2855,19 @@ _fanout_is_binary() {
     # a surrogate, a code point above U+10FFFF, an overlong or truncated
     # sequence and FE/FF bytes are not text; noncharacters (U+FFFE) are text.
     # (utf8::decode is lax; Encode's strict UTF-8 also rejects noncharacters.)
+    # A \G loop walks the file one sequence per match: one anchored match with
+    # (...)* hits perl's repeat limit on a large multi-byte file and fails
+    # silently, which would call valid text binary (PR 124 review NB1).
     perl -e '
         open my $fh, "<:raw", $ARGV[0] or do { print "cannot read $ARGV[0]: $!\n"; exit 2 };
         local $/; my $c = <$fh>; close $fh;
         $c = "" unless defined $c;
         exit 0 if index($c, "\0") >= 0;
-        my $ok = $c =~ /\A(?:[\x00-\x7F]+|[\xC2-\xDF][\x80-\xBF]|\xE0[\xA0-\xBF][\x80-\xBF]|[\xE1-\xEC\xEE\xEF][\x80-\xBF]{2}|\xED[\x80-\x9F][\x80-\xBF]|\xF0[\x90-\xBF][\x80-\xBF]{2}|[\xF1-\xF3][\x80-\xBF]{3}|\xF4[\x80-\x8F][\x80-\xBF]{2})*\z/;
-        exit($ok ? 1 : 0);
+        pos($c) = 0;
+        1 while $c =~ /\G(?:[\x00-\x7F]+|[\xC2-\xDF][\x80-\xBF]|\xE0[\xA0-\xBF][\x80-\xBF]|[\xE1-\xEC\xEE\xEF][\x80-\xBF]{2}|\xED[\x80-\x9F][\x80-\xBF]|\xF0[\x90-\xBF][\x80-\xBF]{2}|[\xF1-\xF3][\x80-\xBF]{3}|\xF4[\x80-\x8F][\x80-\xBF]{2})/gc;
+        my $end = pos($c);
+        $end = 0 unless defined $end;
+        exit($end == length($c) ? 1 : 0);
     ' "$1"
 }
 

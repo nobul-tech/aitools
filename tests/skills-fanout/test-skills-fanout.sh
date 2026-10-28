@@ -549,6 +549,25 @@ for lang in sh ps; do
 done
 parity utf8edge
 
+# Large valid UTF-8 files stay text in sh as in ps (review NB1: one anchored
+# regex with (...)* hit perl's repeat limit and called them binary)
+seed_utf8large() {
+    manifest 'w|shared'
+    hskill w SKILL.md 'skill w'
+    perl -e 'print "\303\251" x 100000, "\n"' > "$H/.aitools/skills/w/eacute.txt"   # 200 KB of e-acute
+    perl -e 'print "a\303\251" x 40000, "\n"' > "$H/.aitools/skills/w/mixed.txt"    # 120 KB, ASCII between
+    perl -e 'print "a\303\251" x 40000, "\377\n"' > "$H/.aitools/skills/w/badtail.txt"  # the same, FF at the end
+}
+case_run utf8large seed_utf8large
+for lang in sh ps; do
+    if [ "$lang" = ps ] && [ "$HAVE_PWSH" != "true" ]; then continue; fi
+    for f in eacute mixed; do
+        check "utf8 large $lang: $f.txt is text (review path), bytes identical" "logged 'Created: w/$f.txt ->' $lang && ! logged 'Created: w/$f.txt (binary)' $lang && cmp -s '$C/$lang/.aitools/skills/w/$f.txt' '$C/$lang/.claude/skills/w/$f.txt'"
+    done
+    check "utf8 large $lang: badtail.txt (invalid byte after 120 KB) is binary" "logged 'Created: w/badtail.txt (binary)' $lang && cmp -s '$C/$lang/.aitools/skills/w/badtail.txt' '$C/$lang/.claude/skills/w/badtail.txt'"
+done
+parity utf8large
+
 # Names Claude Code owns (synced, anthropic-skills*): never written, never removed
 seed_reserved() {
     manifest 'a|shared' 'anthropic-skills-old|retired'
