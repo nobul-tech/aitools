@@ -361,6 +361,16 @@ fix-forward PR or revert-forward, then continue.
 
 ## 8. Open questions (suggested answers taken; listed for the commander)
 
+**Commander answers, 2026-10-28 (session 10cf255a-c; binding) to the
+hand-back's Q1-Q4:**
+
+| Q | Answer (commander's words) | Effect |
+|---|---|---|
+| Hand-back Q1: deploy-harness builds green while over the Intune size limit | "7) accept the deploy-harness" | Accepted (WARN under D3) until FX-35 dedupes the inlined lib |
+| Hand-back Q2: shared/ beats the dotprofile for skills | "8) shared/ wins" | Accepted (FD-4) |
+| Hand-back Q3: keep a Cursor skills fan-out although Cursor also loads `~/.claude/skills` | "9) setup-cursor-cli should do the fan-out for cursor skills/rules" (clarified: setup-user-cursor, verify) | setup-user-cursor owns the Cursor rules and skills fan-out (FO-5, #123); mission CURSOR-VERIFY verifies it end to end |
+| Hand-back Q4: tracker rows over 30 characters | "10) yes" | Amend the spec for tracker rows (follow-up) |
+
 - Q1: dotprofile `claude/skills` as a third skills source? Taken: yes (FD-4
   names the order with dotprofile; setup-user-skills reads it today).
 - Q2: whole skill directories or SKILL.md only? Taken: every tracked file

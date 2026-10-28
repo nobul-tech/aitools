@@ -51,6 +51,13 @@ None.
 
 None filed. Observation: the end-of-build list prefixes each message with two spaces, so a grep for `[warn] deploy/<f>` matches only the inline line; tests should match the message text.
 
+## Follow-up round (v1.1, review + audits A/B on PR #120)
+
+- Commit cdad49f fixes review N2/N3/N4 and audits A2/A3/A4/B2/B4/B5/B6 plus the chmod `|| true` at build-deploy.sh:2511. The PR body has "Review after" (FAIL -> WARN, D3/Q16, FX-35) and follow-ups for audit 1 (the callers in aitools/aitools.ps1) and audit 7 (`blog_warn` is missing from script-standards-detail.md).
+- The mapping comment is https://github.com/nobul-tech/aitools/pull/120#issuecomment-6432626646
+- After the cdad49f push GitHub reported the PR as CONFLICTING, against a stale base 91d06b7, and skipped CI. Locally `git merge-tree` was clean against both 91d06b7 and origin/main. I merged origin/main c412377 with no-ff (docs only) into head 1d37d93, which triggered CI. CI run 40441634573 is all green.
+- Tests at cdad49f: deploy-harness-mdm 65/0; claude-mdm 34/0 on bash 5.3 and 34/0 on bash 3.2. A mutation run with the gate disabled gives 63/2, with both size-gate checks failing.
+
 ## Open questions
 
 - Q: Should the within-5% WARN apply to every generated script, not only deploy-harness? Suggested: no (seven `.ps1` are already over; near-limit noise adds nothing until FX-35).

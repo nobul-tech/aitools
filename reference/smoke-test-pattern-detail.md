@@ -3,7 +3,7 @@
 ## Single script (Windows / PS1)
 
 ```bash
-pwsh -NoProfile -ExecutionPolicy Bypass -File "C:\Users\jdpal\repos\aitools\scripts\setup-foo.ps1" > .scratch/smoke-foo.log 2>&1
+pwsh -NoProfile -ExecutionPolicy Bypass -File "$USERPROFILE\repos\aitools\scripts\setup-foo.ps1" > .scratch/smoke-foo.log 2>&1
 echo "exit: $?"
 ```
 
@@ -17,7 +17,7 @@ echo "exit: $?"
 ## Platform dispatch
 
 On Windows (Git Bash), always use `pwsh -File` for `.ps1`. Never run `.sh`
-setup scripts on Windows (PSO: platform-native dispatch).
+setup scripts on Windows (`@.claude/rules/cross-platform.md` "OS guard + dispatch rule").
 
 On macOS, run `.sh` directly. PS1 validation via `pwsh -File` if pwsh is
 installed (managed tool).
@@ -31,7 +31,7 @@ If exit == 0 and you need to verify specific output, use Grep on the log file.
 
 ```bash
 # Windows
-pwsh -NoProfile -ExecutionPolicy Bypass -File "C:\Users\jdpal\repos\aitools\scripts\aitools-install.ps1" > .scratch/smoke-install.log 2>&1
+pwsh -NoProfile -ExecutionPolicy Bypass -File "$USERPROFILE\repos\aitools\scripts\aitools-install.ps1" > .scratch/smoke-install.log 2>&1
 echo "exit: $?"
 
 # macOS
@@ -45,7 +45,9 @@ Then verify with Grep:
 
 ## Cleanup
 
-Delete log files after reading: `rm .scratch/smoke-*.log`
+Leave the logs in the session scratch directory; the SessionEnd harvester
+classifies them as ephemeral. Never `rm` with a glob from the Bash tool (USO
+"Simple Bash commands only").
 
 ## Why not inline?
 
