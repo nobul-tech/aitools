@@ -532,7 +532,10 @@ if (-not (Test-Path -LiteralPath $harnessRulesDir -PathType Container)) {
     Write-Summary "OK" "cursor rules" "n/a (no harness rules)"
 } else {
     try {
-        $entries = @(Get-ChildItem -LiteralPath $harnessRulesDir -ErrorAction Stop | Sort-Object Name)
+        $entries = @(Get-ChildItem -LiteralPath $harnessRulesDir -ErrorAction Stop)
+        # Ordinal order, as the .sh (LC_ALL=C sort): Sort-Object compares by culture
+        # (a.md before A.md), the .sh glob by LC_COLLATE, so they could disagree
+        [Array]::Sort($entries, [Comparison[object]]{ param($x, $y) [string]::CompareOrdinal($x.Name, $y.Name) })
         $rulesGo = $true
     } catch {
         LogError "Cannot list $harnessRulesDir -- $_"
@@ -861,7 +864,10 @@ if ($rulesGo) {
         # Preserved: files in .cursor\rules not produced from .aitools\rules
         $destEntries = @()
         try {
-            $destEntries = @(Get-ChildItem -LiteralPath $cursorRulesDir -File -ErrorAction Stop | Sort-Object Name)
+            $destEntries = @(Get-ChildItem -LiteralPath $cursorRulesDir -File -ErrorAction Stop)
+            # Ordinal order, as the .sh (LC_ALL=C sort): Sort-Object compares by culture
+            # (a.md before A.md), the .sh glob by LC_COLLATE, so they could disagree
+            [Array]::Sort($destEntries, [Comparison[object]]{ param($x, $y) [string]::CompareOrdinal($x.Name, $y.Name) })
         } catch {
             # Detail only (the .sh glob matches nothing in an unlistable directory)
             LogDetail "cursor rules: cannot list $cursorRulesDir for the preserved report: $_"

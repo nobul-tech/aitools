@@ -283,7 +283,10 @@ if [ "$(ls "$H/.aitools/rules" | wc -l | tr -d ' ')" -lt 2 ]; then
 else
     run_script
     check "dupcase: exit 1" "[ \"\$(rc)\" = 1 ]"
-    check "dupcase: duplicate reported" "grep -Eq 'Skipped duplicate: (foo\.md -> foo\.mdc|Foo\.md -> Foo\.mdc)' '$C/out'"
+    # Ordinal (byte) order on every locale: Foo.md (0x46) is deployed, foo.md
+    # (0x66) is the duplicate (until the fix the glob's LC_COLLATE order decided)
+    check "dupcase: duplicate reported" "grep -q 'Skipped duplicate: foo\.md -> foo\.mdc' '$C/out'"
+    check "dupcase: Foo.md deployed (ordinal order)" "[ -f '$H/.cursor/rules/Foo.mdc' ] && [ ! -e '$H/.cursor/rules/foo.mdc' ]"
     check "dupcase: ERROR row" "grep -qxF 'ERROR|cursor rules|1 failed' '$C/summary'"
 fi
 
