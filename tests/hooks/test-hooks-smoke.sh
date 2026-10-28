@@ -78,7 +78,9 @@ echo "== command-channel-stop.sh and intelligence-stop.sh =="
 PROJ="$WORK/proj"
 mkdir -p "$PROJ/.aitools/sessions"
 git -C "$PROJ" init -q
-printf '{"session_id":"%s","cwd":"%s","transcript_path":"","hook_event_name":"Stop","stop_hook_active":false}' "$SID" "$PROJ" > "$P"
+# cwd as Claude Code sends it (native path): intelligence-stop.py resolves it
+# with Python's os.path, which cannot open an MSYS /tmp/... path on Windows.
+printf '{"session_id":"%s","cwd":"%s","transcript_path":"","hook_event_name":"Stop","stop_hook_active":false}' "$SID" "$(native_path "$PROJ")" > "$P"
 run_hook "$HOOKS/command-channel-stop.sh" "$P" "$PROJ"
 check "command-channel, no session DB: exit 0, no output" quiet0
 run_hook "$HOOKS/intelligence-stop.sh" "$P" "$PROJ"

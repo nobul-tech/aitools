@@ -36,7 +36,12 @@ PASS=0
 FAIL=0
 SKIP=0
 ok()   { PASS=$((PASS + 1)); printf '  ok   %s\n' "$1"; }
-bad()  { FAIL=$((FAIL + 1)); printf '  FAIL %s\n' "$1"; }
+bad()  {  # on failure, also show the last hook run's exit code and output
+    FAIL=$((FAIL + 1))
+    printf '  FAIL %s\n' "$1"
+    printf '       last run: rc=%s stdout=%.300s\n' "$RC" "$OUT"
+    printf '       stderr=%.300s\n' "$ERR"
+}
 skip() { SKIP=$((SKIP + 1)); printf '  skip %s\n' "$1"; }
 check() {  # check <description> <command...>: ok if the command succeeds
     local d="$1"
@@ -116,6 +121,17 @@ ctx_has() {
         return 0
     fi
     [ "$rc" -eq 0 ] && case "$(cat "$WORK/ctx.txt")" in *"$2"*) true ;; *) false ;; esac
+}
+
+# native_path <path>: the path as Claude Code would send it in a payload.
+# On Windows Git Bash that is a Windows path (mixed form C:/..., JSON-safe):
+# a native program such as Windows Python cannot open an MSYS /tmp/... path.
+native_path() {
+    if command -v cygpath >/dev/null 2>&1; then
+        cygpath -m "$1"
+    else
+        printf '%s' "$1"
+    fi
 }
 
 contains() { case "$1" in *"$2"*) true ;; *) false ;; esac; }
