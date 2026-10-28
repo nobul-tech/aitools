@@ -26,9 +26,10 @@ aitools-lib. See `reference/agentic-framework.md` for the full spec and
 
 ## Incident Context
 
-These patterns were established after Incident #24 (2026-03-11), where the AI merge
+These patterns were established after legacy incident #24 (2026-03-11; the v0.50-era
+tracker, not registry incident #24 or GitHub `nobul-tech/aitools` #24), where the AI merge
 feature (v0.50.1) corrupted `~/.claude/rules/concurrent-agents.md` by writing Claude's
-conversational response instead of merged content. See GitHub issue #24.
+conversational response instead of merged content. See RELEASE_NOTES.md v0.50.2 item 1.
 
 Subsequent improvements:
 - v0.50.2: Validation checks, refinement loop

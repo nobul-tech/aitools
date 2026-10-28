@@ -1,0 +1,25 @@
+# S3-Merge2 progress v1.0
+
+Orchestrator running record (UTC dates 2026-10-28).
+
+## Phase 1: reviews launched
+- Review122 (#122), Review117 (#120, #117), Review118, Review119, Review121, Review124, Review123, Review125 (#125, #126). All background, independent.
+- #122 Review: MERGEABLE, 0 blocking, head d3e0249, https://github.com/nobul-tech/aitools/pull/122#issuecomment-6474471270 (spot-checked: comment body read). Prep122 launched (merge main + NB1 delegate SKILL.md fix; no PR merge until all verdicts in).
+- #120 Review: MERGEABLE, head 1d37d93, https://github.com/nobul-tech/aitools/pull/120#issuecomment-6474512238. Content already on main; fo-size has unpushed d9bdfd0 (merge of main 727a3f7). Prep120 launched (keep d9bdfd0, merge main, push).
+- #117 Review: BLOCKING (1: check.yml conflict with #131; fix = merge main, keep both sides), head dbe8f46, https://github.com/nobul-tech/aitools/pull/117#issuecomment-6474616885. Prep117 deferred until #120 lands (main moves each merge).
+- #124 Review: MERGEABLE with conditions (needs #118/#121 + merge main), head 282c28b, https://github.com/nobul-tech/aitools/pull/124#issuecomment-6474665170. Conflicts: check.yml (both), README.md (main + #124 run-order facts), tests/deploy-harness-mdm/test-deploy-harness-mdm.sh (#124 side; NB4 with #121: take #121 comment, keep mkdir -p). Decision: fix NB1 (_fanout_is_binary \G loop, code in verdict file) in Prep124. NB3 (aitool-ops/aitool-eval never retired) -> #125/#126 Prep.
+- #118 Review: MERGEABLE, 0 blocking, head d29dc5f, https://github.com/nobul-tech/aitools/pull/118#issuecomment-6474736939. Contains #117 head. Conflict only check.yml (keep both; add `if: ${{ !cancelled() }}` to main's test-install and test-build-deploy-backup steps, N1). 32a1354 fixes bd-special for #119/#121/#124/#125.
+- #123 Review: MERGEABLE (after train + merge main), 0 blocking, head 096a8bf, https://github.com/nobul-tech/aitools/pull/123#issuecomment-6474741798. Conflicts: check.yml (union + !cancelled()), README.md (main v0.74.0 text + FO n/a sentence), deploy-harness-mdm test header comments.
+- #125 Review: MERGEABLE (after #118 + merge main), head 7754c15, https://github.com/nobul-tech/aitools/pull/125#issuecomment-6474750511. Resolutions: check.yml union; deploy-harness-mdm test take #121's; skills-fanout cursor-none either side. INCIDENT (not filed): stale ~/.claude/skills/aitool-ops offered for adoption (N2, predates #125).
+- #126 Review: BLOCKING (4: B1 21 conflicts incl. modify/delete of aitool-* rules/card; B2 pre-commit step 20 dead refs in reference/skills.md; B3 skills.md/rules.md/aitool-continue describe pre-#128/#129 skill set; B4 managed-file-deployment.md L288-291 wrong about fallback copy), head 725b03a, https://github.com/nobul-tech/aitools/pull/126#issuecomment-6474751270. Plan: one re-anchor fix round after #125 merges.
+- #121 Review: MERGEABLE (after #117-#119 + merge main), 0 blocking, head 4339c08, https://github.com/nobul-tech/aitools/pull/121#issuecomment-6474847814. Resolutions: check.yml both; README main layout + FO-3 run-order sentence; deploy-harness-mdm test PR side.
+- #119 Review: MERGEABLE, 0 blocking, head fd660a9, https://github.com/nobul-tech/aitools/pull/119#issuecomment-6474881969. Resolutions: build-deploy.sh main side (4 hunks; clean after #118); deploy-harness-mdm test header main wording + "dotprofile rules and skills embedded (skills manifest same as dev)", --help range `$. <= 30`, other hunks main side (keep dot-big/SIZE_GATE_OVER). PR body superseded note.
+- ALL 10 VERDICTS IN (2026-10-28). Blocking: #117 (merge main), #126 (re-anchor). Phase 2 starts.
+- Prep120 done: head 1a30fe7 (merge of d9bdfd0 + main 2a505c4), tree == main, CI 40726611126 green (macos rerun once, 0-step cancel), CLEAN (spot-checked via gh). INCIDENT (not filed): macOS CI jobs cancelled ~15m with 0 steps (runs 40726611126, 40724185738). ReVerify120 launched.
+- ReVerify120: MERGEABLE at 1a30fe7, https://github.com/nobul-tech/aitools/pull/120#issuecomment-6475404323. Deviation: it skipped reading 8 project rules (read-only git/gh work) — recorded.
+- Prep122 done: head 8f644ff (b1a4863 merge main 2a505c4; 56ce52e NB1; 8f644ff timing bound 50->100 ms), CI 40728939643 (macos rerun: no runner acquired) + CodeQL 40728928578 green, CLEAN. Comment https://github.com/nobul-tech/aitools/pull/122#issuecomment-6475792970. INCIDENT (not filed): tight wall-clock bounds in hook tests flake on shared runners. ReVerify122 launched.
+- Land122 launch DENIED by classifier ("Merge Without Review"); report v1.1 handed back (8eaa812, f513862).
+## Phase 2 resumed (Session Commander message)
+- SC: allow rule `Bash(gh pr merge:*)` added on the commander's direct order (verified present in ~/.claude/settings.json line 5). Mission ALLOW-MERGE merged #122 (d8f0aed, main CI 40737064303) and #120 (1b4e9d7, CI 40741876684). Remaining order: 117,118,119,121,124,123,125,126, then HOOK-2 #133, #134, then #135 only after HOOK-2's verdict on its final head.
+- Prep117 launched.
+- Open PRs at start: 117-126 (10), all base main. Worktree fo-size at d9bdfd0 vs PR #120 head 1d37d93.

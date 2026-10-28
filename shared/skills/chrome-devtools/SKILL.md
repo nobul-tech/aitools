@@ -11,13 +11,14 @@ retrieval, element inspection, accordion expansion, and documentation
 reading shortcuts. **Scope**: Browser automation patterns and
 troubleshooting guidance only. NOT accessibility-specific workflows
 (see `/a11y-debugging`). NOT MCP server installation or configuration
-(see `/tool-ops` skill for chrome-devtools MCP entry). **Audience**:
+(see the `/tool-registry` skill, `mcpServers.chrome-devtools-mcp`, and
+`setup-user-mcp`). **Audience**:
 Any agent using the chrome-devtools MCP server for page inspection,
 browser automation, or official documentation reading.
 
 ## Core Concepts
 
-**Browser lifecycle**: Browser starts automatically on first tool call using a persistent Chrome profile. Configure via CLI args in the MCP server configuration: `npx chrome-devtools-mcp@latest --help`.
+**Browser lifecycle**: Browser starts automatically on first tool call. The harness registers the server with `--isolated` (a fresh temporary profile per server start; no saved logins), plus `--headless --chromeArg=--no-sandbox` in Claude Code web (D-CHR2). Other options: `npx chrome-devtools-mcp@latest --help`.
 
 **Page selection**: Tools operate on the currently selected page. Use `list_pages` to see available pages, then `select_page` to switch context.
 

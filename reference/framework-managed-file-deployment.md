@@ -24,10 +24,12 @@ options, and track outcomes.
 - **Adoption flow** → user modifications flow back to source (adopt),
   preventing fork divergence
 - **Backup before write** → every deployment backs up the target
-- **Three-outcome tracking** → every deployment resolves to created,
-  updated, or unchanged — no silent ambiguity
-- **Non-interactive fallback** → `AITOOLS_FORCE` env var and
-  non-terminal stdin auto-select overwrite for CI/MDM
+- **Outcome tracking** → every deployment resolves to one governed
+  outcome (`created`, `updated`, `verified`, `accept & adopt`, `skipped`,
+  `failed`), recorded by the deploy tracker; `failed` is an ERROR row and
+  the run continues
+- **Non-interactive fallback** → `AITOOLS_FORCE`, non-terminal stdin and
+  EOF at a prompt select overwrite (SOURCE wins)
 
 ## How It's Maintained
 

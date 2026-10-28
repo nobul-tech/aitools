@@ -5,8 +5,8 @@ tracking in the harness -- why every knowledge item tracks its basis,
 how invalidation propagates, and how provenance connects to the
 broader self-evolution loop. **Scope**: Discipline source, adoption
 rationale, architectural decisions, and maintenance guidance. NOT the
-provenance data itself (future `/aitool-provenance` user-level skill,
-`/provenance` project-level skill in aitools repo). NOT the schema
+provenance data itself (future `/provenance` skill; user level, since
+reference cards are retired). NOT the schema
 details (`reference/harness-db-schema.sql`). NOT the governance
 principle (future `.claude/rules/provenance.md`). **Audience**: Agents
 producing or consuming knowledge items, harness architects extending
@@ -188,18 +188,20 @@ the previous cycle's outputs. An agent reading OL-2 in a future
 session can see: what it was based on, whether any of those bases have
 been invalidated, and whether any nogood sets apply.
 
-## How It's Maintained
+## How It's Maintained (today: manual, through `scripts/harness-db.py`)
 
-- Knowledge items promoted at session boundaries by SessionEnd hook
-  processing
-- Provenance edges constructed from `derived_from_ids` annotations
-  and read-before-write inference
-- Staleness checked at SessionStart: items past their `warn_after`
-  or `error_after` thresholds are flagged
-- Nogood sets checked when new knowledge items are created: if the
-  new item's basis includes a known nogood combination, warn the agent
-- Invalidation propagation runs at session boundaries when any item's
-  `t_invalid` is set
+The architecture above is the design. What runs today is a set of manual
+CLI commands:
+
+- `harness-db.py knowledge add` records an item (`--warn-after` /
+  `--error-after`, defaults 30/90 days); `edge add` records a dependency;
+  `nogood add` / `nogood check` record and test contradiction sets.
+- `knowledge invalidate <id>` sets `t_invalid` and propagates to every
+  dependent item at once.
+- `knowledge list --stale` reports items past `warn_after_days`.
+- Not automated yet: promotion at SessionEnd, staleness checks at
+  SessionStart, read-before-write inference (see "Implementing Artifacts",
+  Future).
 
 ## Implementing Artifacts
 
@@ -207,12 +209,13 @@ been invalidated, and whether any nogood sets apply.
   and adoption rationale)
 - `reference/harness-db-schema.sql` (`knowledge_items`,
   `provenance_edges`, `nogood_sets` tables)
+- `scripts/harness-db.py` (`knowledge`, `edge`, `nogood` and `export`
+  commands)
 - Future: `.claude/rules/provenance.md` (governance rule -- always in
   context)
-- Future: `.claude/skills/provenance/SKILL.md` (project-level CRUD
-  access to provenance data in aitools repo)
-- Future: `shared/skills/aitool-provenance/SKILL.md` (user-level
-  reference card -- read-only provenance knowledge for all projects)
+- Future: `shared/skills/provenance/SKILL.md` (user-level access to
+  provenance data; no separate reference card, since reference cards are
+  retired)
 - Future: SessionEnd hook extension for provenance extraction
 - Future: SessionStart hook extension for staleness checking
 
@@ -220,11 +223,12 @@ been invalidated, and whether any nogood sets apply.
 
 - Harness definition: `@reference/harness.md`
 - Self-evolution proposals (ascending spiral, safety mechanisms):
-  `.scratch/session-RnTOD5XJFi/self-evolution-proposals.md`
-- Provenance investigation (pattern inventory, schema design):
-  `.scratch/session-c0dc2ddc-f/provenance-and-infrastructure-findings.md`
+  session scratch of RnTOD5XJFi; not preserved in the repo (the session
+  archive in the dotprofile `sessions/aitools/` holds the transcript)
+- Provenance investigation (pattern inventory, schema design): session
+  scratch of c0dc2ddc-f; not preserved in the repo (same archive)
 - Consolidated operational learning (OL-1 through OL-21):
-  `.scratch/session-c0dc2ddc-f/consolidated-operational-learning.md`
+  `harvesting/2026-03-25_session-c0dc2ddc-f_consolidated-operational-learning.md`
 - Three-layer governance: `@reference/framework-three-layer-governance.md`
 - Framework adoption process: `@reference/framework-adoption.md`
 - Governed data access: `@reference/framework-governed-data-access.md`

@@ -46,7 +46,10 @@ use `-not $IsWindows` (catches macOS AND Linux), never `$IsMacOS` alone.
 **Bash:** `case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*)` — exits on Windows.
 
 Exemptions: libraries (aitools-lib, check-lib, init-logging), hooks, build
-scripts, scratch files. Full table in `.claude/rules/cross-platform.md`.
+scripts (build-deploy, build-package), scratch files, and (pending approval)
+bootstrap/hh/relay-outbound-prompt/init-hh-hooks entry points, helper modules
+(aitools-json.ps1, _validate-ps1.ps1) and analyze-session.sh. Full table in
+`.claude/rules/cross-platform.md`.
 
 Dead code rule: Do not write platform branches for the rejected platform
 below an OS guard. Branch on capability, not identity (`IS_MACOS`,
@@ -58,6 +61,10 @@ below an OS guard. Branch on capability, not identity (`IS_MACOS`,
 ### Cross-language script calls require explicit approval
 
 Every script gets a native variant for each platform. Crossing languages (e.g., PowerShell calling bash) is an exception -- ask the user first. See approved exceptions in `.claude/rules/cross-platform.md`.
+
+### Hook portability
+
+Hooks (`shared/hooks/*.sh`) run in bash on macOS, Linux and Git Bash. Never `grep -P`, `find -printf`, or the chain `stat -f %m f || stat -c %Y f` (GNU `stat -f` means --file-system and corrupts the variable); dispatch on `uname -s`. All hooks use `set -euo pipefail`. Detail: `.claude/rules/cross-platform.md` "Hook portability".
 
 ### PowerShell 7 baseline
 

@@ -13,7 +13,10 @@
 #               (Node) and Step 9 on both platforms; the sync deploy lists start with
 #               deploy-harness and no longer list setup-user-config
 #   install  -- deploy-harness runs once, bin is deployed by it, one run id in
-#               deploy.jsonl, the writer runs at Step 5 and once inside Step 8b
+#               deploy.jsonl, the writer runs once (Step 5); Step 8b passes
+#               --skip-config (OK "config.json" "n/a (written by installer)")
+#   install no Step 5 -- the repos path is unusable, Step 5 skips the writer:
+#               Step 8b runs it (bare, once) and passes no --skip-config
 #   install exit 1 -- a duplicate rule: ERROR row, the install continues, exit 1
 #   install abort  -- [x]abort at a review menu (pty): exit 2, Step 9 not reached
 #   loop     -- deploy_configs (extracted from scripts/aitools): writer runs once,
@@ -133,9 +136,9 @@ run_env() {
     [ -f "$LOG" ] || : > "$LOG"
 }
 
-run_install() {  # run_install [input]
+run_install() {  # run_install [input] [repos path]
     # SUPPRESS: as under `aitools install` -- show_summary would render and delete the file
-    run_env "${1:-}" -- env AITOOLS_SUPPRESS_SUMMARY_DISPLAY=1 bash "$R/scripts/aitools-install.sh" --skip-gh-auth --skip-drive-detection --repos-path "$C/repos"
+    run_env "${1:-}" -- env AITOOLS_SUPPRESS_SUMMARY_DISPLAY=1 bash "$R/scripts/aitools-install.sh" --skip-gh-auth --skip-drive-detection --repos-path "${2:-$C/repos}"
 }
 
 # The loop driver: deploy_abort + deploy_configs extracted from scripts/aitools
@@ -174,6 +177,10 @@ LOOP_STUBS="setup-user-claude setup-user-mcp setup-user-skills setup-cursor-ide-
 # Static checks (both platforms' files)
 # ---------------------------------------------------------------------------
 C=""
+check "static: aitools-install.sh Step 8b passes --skip-config after Step 5 ran the writer" \
+    "grep -qE '^ +run_harness_step \"\\\$SCRIPT_DIR/deploy-harness.sh\" --skip-config ' '$ROOT/scripts/aitools-install.sh' && grep -qE '^ +CONFIG_WRITER_RAN=true\$' '$ROOT/scripts/aitools-install.sh'"
+check "static: aitools-install.ps1 Step 8b passes SkipConfig after Step 5 ran the writer" \
+    "grep -qF 'if (\$configWriterRan) { @{ SkipConfig = \$true } }' '$ROOT/scripts/aitools-install.ps1' && grep -qE '^ +\\\$configWriterRan = \\\$true' '$ROOT/scripts/aitools-install.ps1'"
 for f in aitools-install.sh aitools-install.ps1; do
     check "static: $f has no harness bin step" \
         "! grep -qE 'harness bin|_hbin_deployed|hbinDeployed' '$ROOT/scripts/$f'"
@@ -198,14 +205,23 @@ check "install: deploy-harness ran once (one summary row)" "[ \"\$(count '|harne
 check "install: bin deployed by deploy-harness, executable" \
     "[ -x '$H/.aitools/bin/harness-db.py' ] && [ -x '$H/.aitools/bin/read-session.py' ] && [ -x '$H/.aitools/bin/read-session-full.py' ]"
 check "install: no harness bin row" "! grep -q 'harness bin' '$C/summary'"
-check "install: writer at Step 5 (flags) and once bare inside Step 8b" \
-    "[ \"\$(count '^called --repos-path' '$H/writer-calls')\" = 1 ] && [ \"\$(count '^called \$' '$H/writer-calls')\" = 1 ] && [ \"\$(wc -l < '$H/writer-calls' | tr -d ' ')\" = 2 ]"
+check "install: writer runs once, at Step 5 (flags); not inside Step 8b" \
+    "[ \"\$(count '^called --repos-path' '$H/writer-calls')\" = 1 ] && [ \"\$(wc -l < '$H/writer-calls' | tr -d ' ')\" = 1 ]"
+check "install: Step 8b config row n/a (written by installer)" "row 'OK|config.json|n/a (written by installer)'"
 check "install: deploy-harness lines relayed to deploy.jsonl" "grep -q '\"script\":\"deploy-harness\"' '$C/logs/deploy.jsonl'"
 check "install: one run id in deploy.jsonl" \
     "perl -ne '\$r{\$1}=1 if /\"run_id\":\"([^\"]*)\"/; END { exit(keys(%r) == 1 ? 0 : 1) }' '$C/logs/deploy.jsonl'"
 check "install: Step 21 scripts ran" "[ \"\$(calls)\" = '$ALL_STUBS' ]"
 run_install
 check "install rerun: verified" "[ \"\$(rc)\" = 0 ] && row 'OK|harness files|7 verified'"
+
+setup_case install-nostep5
+printf 'not a directory\n' > "$C/blocker"
+run_install "" "$C/blocker/repos"
+check "install no Step 5: writer not run at Step 5, run once bare inside Step 8b" \
+    "grep -q 'Step 5: skipped' '$C/out' && [ \"\$(count '^called \$' '$H/writer-calls')\" = 1 ] && [ \"\$(wc -l < '$H/writer-calls' | tr -d ' ')\" = 1 ]"
+check "install no Step 5: no n/a config row, deploy-harness ran" \
+    "! grep -q '^OK|config.json|n/a' '$C/summary' && row 'OK|harness files|7 added'"
 
 setup_case install-err
 add_duplicate_rule
@@ -260,8 +276,12 @@ fi
 # (aitools-install.ps1), loaded from the real files by hookin-driver.ps1
 # ---------------------------------------------------------------------------
 DRIVER="$ROOT/tests/hookin/hookin-driver.ps1"
-run_ps() {  # run_ps MODE [input]
-    run_env "${2:-}" -- env USERPROFILE="$H" pwsh -NoProfile -File "$DRIVER" -Mode "$1" -ScriptsDir "$R/scripts" -RepoRoot "$ROOT"
+run_ps() {  # run_ps MODE [input] [extra driver switch, e.g. -SkipConfig]
+    if [ -n "${3:-}" ]; then
+        run_env "${2:-}" -- env USERPROFILE="$H" pwsh -NoProfile -File "$DRIVER" -Mode "$1" -ScriptsDir "$R/scripts" -RepoRoot "$ROOT" "$3"
+    else
+        run_env "${2:-}" -- env USERPROFILE="$H" pwsh -NoProfile -File "$DRIVER" -Mode "$1" -ScriptsDir "$R/scripts" -RepoRoot "$ROOT"
+    fi
 }
 if command -v pwsh >/dev/null 2>&1; then
     check "ps: driver guard check (fixture deploy-harness.ps1 guard disabled)" \
@@ -286,6 +306,13 @@ if command -v pwsh >/dev/null 2>&1; then
     run_ps step
     check "ps step: returns 0, one OK row" "grep -qx 'STEP rc=0' '$C/out' && row 'OK|harness files|7 added' && [ \"\$(count '|harness files|' '$C/summary')\" = 1 ]"
     check "ps step: bin deployed" "[ -f '$H/.aitools/bin/harness-db.py' ]"
+    check "ps step (no SkipConfig): writer runs once inside deploy-harness" \
+        "[ \"\$(wc -l < '$H/writer-calls' | tr -d ' ')\" = 1 ]"
+
+    setup_case ps-step-skip
+    run_ps step "" -SkipConfig
+    check "ps step -SkipConfig: returns 0, writer not run, OK config.json n/a (written by installer)" \
+        "grep -qx 'STEP rc=0' '$C/out' && [ ! -s '$H/writer-calls' ] && row 'OK|config.json|n/a (written by installer)' && row 'OK|harness files|7 added'"
 
     setup_case ps-step-err
     add_duplicate_rule
