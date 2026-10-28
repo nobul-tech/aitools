@@ -12,7 +12,17 @@
 #   - PostToolUse on Write|Edit (runs AFTER the tool completes)
 #   - Receives JSON on stdin with tool_input.file_path
 #   - Exit 0 always (PostToolUse must never block)
-#   - Stderr feedback is shown to Claude
+#   - When something was fixed (or a fix failed), the report goes out twice:
+#       stdout: {"hookSpecificOutput":{"hookEventName":"PostToolUse",
+#               "additionalContext":"..."}} -- the channel Claude reads
+#               on exit 0; it arrives next to the tool result, so Claude
+#               knows the file on disk changed after its Write/Edit.
+#       stderr: the same text, for the transcript and tests.
+#     Claude never sees stderr from a hook that exits 0 (Claude Code hooks
+#     reference, "Exit code 0"; 935 transcript records of this hook up to
+#     2026-10-28 carried the report on stderr only, so none reached Claude).
+#   - Nothing to fix: no output.
+# Platform: macOS + Linux + Windows Git Bash (bash 3.2 compatible)
 
 set -euo pipefail
 
@@ -63,19 +73,41 @@ if [ ! -x "$file_path" ]; then
 fi
 
 # Fix git index executable bit (if inside a git work tree)
+failed=""
 dir=$(dirname "$file_path")
 if git -C "$dir" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     mode=$(git -C "$dir" ls-files -s "$file_path" 2>/dev/null | cut -c1-6)
     if [ "$mode" = "100644" ]; then
-        git update-index --chmod=+x "$file_path" 2>/dev/null || true
-        fixed="${fixed}git+x "
+        # -C "$dir": the index of the repo that holds the file, not the cwd's.
+        # A failure (index lock held, ...) is reported, not hidden.
+        if git -C "$dir" update-index --chmod=+x "$file_path" >/dev/null 2>&1; then
+            fixed="${fixed}git+x "
+        else
+            failed="${failed}git+x "
+        fi
     fi
 fi
 
-# Report what was fixed (stderr → shown to Claude as feedback)
-if [ -n "$fixed" ]; then
-    echo "sh-file-fixup: $(basename "$file_path") — fixed: ${fixed% }" >&2
-    emit_hook_event "hook_fire" "{\"file\":\"$(basename "$file_path")\",\"action\":\"${fixed% }\"}"
+# --- Report: stdout additionalContext JSON (Claude) + stderr text ---
+# json_escape <text>: escape for a JSON string value (bash 3.2: no ${x@Q}).
+json_escape() {
+    local s="$1"
+    s="${s//\\/\\\\}"
+    s="${s//\"/\\\"}"
+    s="${s//$'\n'/\\n}"
+    s="${s//$'\r'/\\r}"
+    s="${s//$'\t'/\\t}"
+    printf '%s' "$s"
+}
+
+if [ -n "$fixed" ] || [ -n "$failed" ]; then
+    name=$(basename "$file_path")
+    msg="sh-file-fixup: ${name}"
+    [ -z "$fixed" ] || msg="${msg} — fixed: ${fixed% } (applied after the tool ran)"
+    [ -z "$failed" ] || msg="${msg} — fix failed: ${failed% }; run: git -C ${dir} update-index --chmod=+x ${file_path}"
+    printf '%s\n' "$msg" >&2
+    printf '{"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":"%s"}}\n' "$(json_escape "$msg")"
+    emit_hook_event "hook_fire" "{\"file\":\"$(json_escape "$name")\",\"action\":\"$(json_escape "${fixed% }")\",\"failed\":\"$(json_escape "${failed% }")\"}"
 fi
 
 exit 0

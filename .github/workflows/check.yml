@@ -173,6 +173,12 @@ jobs:
       - name: build-deploy backup + swap tests (macOS /bin/bash 3.2)
         run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/build-deploy/test-build-deploy-backup.sh
 
+      - name: Hook output-channel tests (bash 5)
+        run: bash tests/hooks/run-hook-tests.sh
+
+      - name: Hook output-channel tests (macOS /bin/bash 3.2)
+        run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/hooks/run-hook-tests.sh
+
       - name: Build deploy scripts
         run: |
           echo "::group::Running build-deploy.sh"
@@ -347,6 +353,9 @@ jobs:
       - name: build-deploy backup + swap tests (incident #86)
         run: bash tests/build-deploy/test-build-deploy-backup.sh
 
+      - name: Hook output-channel tests
+        run: bash tests/hooks/run-hook-tests.sh
+
       - name: Build deploy scripts
         run: bash scripts/build-deploy.sh
 
@@ -491,6 +500,10 @@ jobs:
           # The runner appends `exit $LASTEXITCODE` to pwsh steps; the expected
           # exit 1 from resolve would otherwise fail the step.
           exit 0
+
+      - name: Hook output-channel tests (via Git Bash)
+        shell: bash
+        run: bash tests/hooks/run-hook-tests.sh
 
       - name: Build deploy scripts (via Git Bash)
         shell: bash
