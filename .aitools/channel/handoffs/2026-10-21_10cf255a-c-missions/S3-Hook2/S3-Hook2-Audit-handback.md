@@ -1,4 +1,4 @@
-# S3-Hook2-Audit handback (v1.0, 2026-10-28)
+# S3-Hook2-Audit handback (v1.1, 2026-10-28)
 
 Mission HOOK2-AUDIT, delegated by S3-Hook2. Branch `fix/hook2-hook-stderr`
 (nobul-tech/aitools), PR base `main`. Audience: S3-Hook2 and the commander.
@@ -15,9 +15,9 @@ Mission HOOK2-AUDIT, delegated by S3-Hook2. Branch `fix/hook2-hook-stderr`
    "registered" on failure; fixed (2>&1, honest status line).
 4. Two files only had wrong channel comments (`harness-db-sessionend.sh`,
    `intelligence-stop.py`); corrected. No exit code changed anywhere.
-5. 103 tests (4 files + runner) pass on bash 5.3 and /bin/bash 3.2.57; the
-   changed-hook tests fail against the origin/main hooks; CI steps added on
-   macOS (5 + 3.2), Linux and Windows Git Bash.
+5. 107 tests (4 files + runner) pass on bash 5.3 and /bin/bash 3.2.57; the
+   changed-hook tests fail against the origin/main hooks; CI (macOS bash 5 +
+   3.2, Linux, Windows Git Bash) is green on PR #134 head 31147cd.
 
 ## Sources
 
@@ -47,7 +47,7 @@ continuation).
 
 | Hook | Event (matcher) | Output before | Who saw it | Change | Test |
 |---|---|---|---|---|---|
-| sh-file-fixup.sh | PostToolUse (Write\|Edit) | fix report on stderr, exit 0 | Nobody (L535). 935 records, all exit 0, stderr non-empty, content empty | stdout `hookSpecificOutput.additionalContext` (PostToolUse) + same text on stderr; `git -C <file dir> update-index` (from a cwd outside the file's repo it failed silently and was reported as `git+x` fixed, on every later write too); a failure is reported as `fix failed` | test-sh-file-fixup.sh (22) |
+| sh-file-fixup.sh | PostToolUse (Write\|Edit) | fix report on stderr, exit 0 | Nobody (L535). 935 records, all exit 0, stderr non-empty, content empty | stdout `hookSpecificOutput.additionalContext` (PostToolUse) + same text on stderr; `git -C <file dir> update-index` (from a cwd outside the file's repo it failed silently and was reported as `git+x` fixed, on every later write too); a failure is reported as `fix failed`; a failing `git ls-files` (exit 128, seen on Windows) no longer aborts the hook under pipefail before it reports (v1.1) | test-sh-file-fixup.sh (26) |
 | glossary-skill-guard.sh | PreToolUse (Read\|Grep) | stdout JSON without `hookEventName`, exit 0 | Nobody: 7/7 records `hook_non_blocking_error` "hookSpecificOutput is missing required field hookEventName" | `"hookEventName":"PreToolUse"` added; hook contract comment | test-glossary-skill-guard.sh (12) |
 | harness-db-sessionstart.sh | SessionStart | stdout status (reaches Claude); harness-db.py stderr passed through at exit 0; "registered" printed even when harness-db.py failed (`\|\| true`) | stdout: Claude (8 records, content non-empty). stderr: never Claude (L535, L667) | harness-db.py with `2>&1`; "registered" only when both calls exit 0, else "NOT registered (harness-db.py <step> failed; ...)" | test-sessionstart-harness-db.sh (15 of 34) |
 | scratch-init.sh | SessionStart | same harness-db.py pattern | same (8 records) | same change | test-sessionstart-harness-db.sh (19 of 34) |
@@ -100,11 +100,18 @@ commander, not done here.
 
 ## Verification
 
-- `bash tests/hooks/run-hook-tests.sh`: 103 passed (bash 5.3.15).
-- `AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/hooks/run-hook-tests.sh`: 103 passed (3.2.57).
+- `bash tests/hooks/run-hook-tests.sh`: 107 passed (bash 5.3.15).
+- `AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/hooks/run-hook-tests.sh`: 107 passed (3.2.57).
+- CI on PR #134 head 31147cd (run 40730357870): macos, linux and windows pass; the
+  macOS "Hook output-channel tests" steps (bash 5, /bin/bash 3.2) both succeed.
+  Windows failed on the first two runs, for two reasons. One was a test
+  artifact: Windows Python cannot open an MSYS /tmp cwd, so the payload now
+  uses the native path. The other was a real crash: `git ls-files` exited 128
+  under pipefail. The hook is fixed and a test with a corrupt index covers it;
+  the origin/main hook exits 128 on that test.
 - Regression: with `TEST_HOOK_OVERRIDE` / `TEST_HDB_HOOK_OVERRIDE` /
   `TEST_SI_HOOK_OVERRIDE` pointing at the origin/main versions, the tests fail
-  7 (sh-file-fixup), 3 (glossary) and 14 (SessionStart) checks.
+  10 (sh-file-fixup), 3 (glossary) and 14 (SessionStart) checks.
 - JSON is checked with python3 `json` (perl JSON::PP fallback); additionalContext
   must equal the stderr text.
 - `bash -n` and `/bin/bash -n` on every changed script; `python3 -m py_compile`
