@@ -1,0 +1,4 @@
+72c72
+< if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
+---
+> if ($PSVersionTable.PSVersion.Major -ge 6 -and $false) {

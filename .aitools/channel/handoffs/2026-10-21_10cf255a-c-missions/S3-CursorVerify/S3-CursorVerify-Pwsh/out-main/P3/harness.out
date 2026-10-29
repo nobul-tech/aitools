@@ -1,0 +1,158 @@
+[2026-10-29T03:41:52Z] [deploy-harness] [info] [DRY RUN] Preview mode -- no files will be written
+[2026-10-29T03:41:52Z] [deploy-harness] [info] config.json: setup-user-config.ps1 not run (written by installer)
+[2026-10-29T03:41:52Z] [deploy-harness] [info] Source .claude/hooks not found (/Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/fx-main/aitools/.claude/hooks) -- skipped
+[2026-10-29T03:41:52Z] [deploy-harness] [error] Duplicate skills name: fx-dupskill in .claude/skills (/Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/fx-main/aitools/.claude/skills/fx-dupskill) skipped; kept fx-dupskill from shared/skills (first source wins)
+[2026-10-29T03:41:52Z] [deploy-harness] [error] Duplicate rules name: fx-dup.md in dotprofile (/Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/fx-main/dotprofile/claude/rules/fx-dup.md) skipped; kept fx-dup.md from shared/rules (first source wins)
+[2026-10-29T03:41:52Z] [deploy-harness] [error] Duplicate rules name: fx-dup2.md in dotprofile (/Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/fx-main/dotprofile/claude/rules/fx-dup2.md) skipped; kept fx-dup2.md from .claude/rules (first source wins)
+[2026-10-29T03:41:52Z] [deploy-harness] [error] Duplicate skills name: fx-dupskill in dotprofile/skills (/Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/fx-main/dotprofile/claude/skills/fx-dupskill) skipped; kept fx-dupskill from shared/skills (first source wins)
+[2026-10-29T03:41:52Z] [deploy-harness] [error] Duplicate skills name: fx-dupskill2 in dotprofile/skills (/Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/fx-main/dotprofile/claude/skills/fx-dupskill2) skipped; kept fx-dupskill2 from .claude/skills (first source wins)
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: reference/README.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: reference/agentic-framework.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: reference/agentic-prompt-patterns.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: reference/ait-shellintegration.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: reference/claude-code-effectiveness.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: reference/cross-platform-detail.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: reference/cursor-practices.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: reference/do-what-feels-right.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: reference/evaluations/claude-code-macos-2026-10-21.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: reference/evaluations/google-chrome-linux-2026-10-05.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: reference/framework-adoption.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: reference/framework-artifact-harvesting.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: reference/framework-governed-data-access.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: reference/framework-governed-vocabulary.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: reference/framework-hook-rollout.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: reference/framework-incident-governance.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: reference/framework-incident-investigation.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: reference/framework-intent-documentation.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: reference/framework-managed-file-deployment.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: reference/framework-provenance.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: reference/framework-source-of-truth.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: reference/framework-three-layer-governance.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: reference/framework-tool-lifecycle.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: reference/framework-tool-ops.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: reference/harness-db-schema.sql
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: reference/harness.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: reference/incident-020-process-discipline.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: reference/logging.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: reference/managed-file-deployment.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: reference/path-targeted-hooks-analysis.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: reference/plan-execution-detail.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: reference/post-push-checklist.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: reference/pre-commit-checklist.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: reference/pre-push-checklist.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: reference/rules.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: reference/script-standards-detail.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: reference/smoke-test-pattern-detail.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: reference/tool-evaluation-criteria.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: reference/tool-evaluation-playbook.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: reference/tool-ops-claude-code.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: reference/tool-ops-cursor.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: reference/tool-ops-google-chrome.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: reference/tool-registry.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: reference/tool-support-decision-tree.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: reference/user-repo.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: registries/framework-registry.json
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: registries/glossary.json
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: registries/incidents.json
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: registries/tool-ops.json
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: registries/tool-registry.json
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: hooks/block-claude-code-guide.sh
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: hooks/block-explore-agent.sh
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: hooks/command-channel-stop.sh
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: hooks/dashboard-serve.sh
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: hooks/delegation-duty-guard.sh
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: hooks/failure-mode-identity-stop.sh
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: hooks/failure-mode-verify-stop.sh
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: hooks/glossary-skill-guard.sh
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: hooks/harness-db-sessionend.sh
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: hooks/harness-db-sessionstart.sh
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: hooks/harvest-session.sh
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: hooks/hooks-manifest.json
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: hooks/intelligence-stop.py
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: hooks/intelligence-stop.sh
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: hooks/scratch-init.sh
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: hooks/session-archive.sh
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: hooks/session-catchup.sh
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: hooks/sh-file-fixup.sh
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: hooks/standing-order-guard.sh
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: hooks/tool-ops-session-audit.sh
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: skills/a11y-debugging/SKILL.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: skills/aitool-continue/SKILL.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: skills/chrome-devtools/SKILL.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: skills/delegate/SKILL.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: skills/delegate/tests/expected-behaviors.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: skills/frameworks/SKILL.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: skills/fx-[br]ack/SKILL.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: skills/fx-dupskill/SKILL.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: skills/fx-retire-skill/SKILL.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Would update: skills/fx-skill-a/SKILL.md -> /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/fx-main/home/.aitools/skills/fx-skill-a/SKILL.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: skills/fx-skill-a/scripts/run.sh
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: skills/glossary/SKILL.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: skills/handoff/SKILL.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: skills/harvest/SKILL.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: skills/incident/SKILL.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: skills/incident/tests/expected-behaviors.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: skills/intent-audit/SKILL.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: skills/intent-writing/SKILL.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: skills/investigate/SKILL.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: skills/investigate/tests/expected-behaviors.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: skills/mission-control/SKILL.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: skills/optimize-plan/SKILL.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: skills/optimize-plan/tests/expected-behaviors.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: skills/planning/SKILL.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: skills/planning/tests/expected-behaviors.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: skills/scratch/SKILL.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: skills/tool-adopt/SKILL.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: skills/tool-eval/SKILL.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: skills/tool-ops/SKILL.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: skills/tool-ops/tests/expected-behaviors.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: skills/tool-registry/SKILL.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: skills/audit/SKILL.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: skills/audit/tests/expected-behaviors.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: skills/fx-dupskill2/SKILL.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: skills/fx-skill-b/SKILL.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: skills/governed-data/SKILL.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: rules/fx-[br].md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: rules/fx-dup.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: rules/fx-retire.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: rules/fx-retire2.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Would update: rules/fx-shared.md -> /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/fx-main/home/.aitools/rules/fx-shared.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: rules/hook-lifecycle.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: rules/scratch.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: rules/agentic-standards.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: rules/aitools-workspace.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: rules/artifact-harvesting.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: rules/config-file-safety.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: rules/cross-platform.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: rules/deploy-paths.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: rules/documentation-standards.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: rules/frameworks.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: rules/fx-dup2.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: rules/fx-project.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: rules/git-safety.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: rules/glossary.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: rules/governed-data-access.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: rules/hook-rollout.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: rules/incident-governance.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: rules/interactive-menus.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: rules/managed-file-deployment.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: rules/plan-execution.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: rules/relay-outbound.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: rules/script-standards.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: rules/smoke-test-pattern.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: rules/sources-of-truth.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: rules/tool-evaluation.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: rules/tool-lifecycle.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: rules/tool-ops.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: rules/web-sources.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: rules/FX-Upper.MD
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: rules/fx-dot.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: skills/fx-dot-skill/SKILL.md
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: bin/harness-db.py
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: bin/read-session.py
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Unchanged: bin/read-session-full.py
+[2026-10-29T03:41:53Z] [deploy-harness] [warn] Rules manifest /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/fx-main/home/.aitools/rules/.aitools-rules-manifest: line ignored: FX-Upper.MD<TAB>dotprofile
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Would write /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/fx-main/home/.aitools/rules/.aitools-rules-manifest (35 rule line(s))
+[2026-10-29T03:41:53Z] [deploy-harness] [info] [DRY RUN] Would write /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/fx-main/home/.aitools/skills/.aitools-skills-manifest (29 skill line(s))
+[2026-10-29T03:41:53Z] [deploy-harness] [info] harness files: 145 planned, 0 added, 0 updated, 0 accepted, 145 verified, 0 skipped, 0 failed, 0 preserved, 0 retired, 0 would retire (dry run), 5 duplicate(s)
+[2026-10-29T03:41:53Z] [deploy-harness] [error] FAILED with 5 error(s). See log: /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/fx-main/home/.aitools/logs/deploy.log

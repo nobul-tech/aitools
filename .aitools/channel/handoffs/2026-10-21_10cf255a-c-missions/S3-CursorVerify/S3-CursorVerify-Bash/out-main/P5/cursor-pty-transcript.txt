@@ -1,0 +1,52 @@
+[2026-10-29T03:42:19Z] [setup-user-cursor] [info] Step 1: ripgrep (rg)
+[2026-10-29T03:42:19Z] [setup-user-cursor] [ok] Already installed: ripgrep 14.1.0
+[2026-10-29T03:42:19Z] [setup-user-cursor] [info] Step 2: Cursor CLI (agent)
+[2026-10-29T03:42:19Z] [setup-user-cursor] [ok] Already installed: 2026.05.21-stub
+[2026-10-29T03:42:19Z] [setup-user-cursor] [info] Step 3: cli-config.json
+[2026-10-29T03:42:19Z] [setup-user-cursor] [info] Backed up /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-sh/fx-main/home/.cursor/cli-config.json
+[2026-10-29T03:42:19Z] [setup-user-cursor] [ok] Already up to date: /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-sh/fx-main/home/.cursor/cli-config.json
+[2026-10-29T03:42:19Z] [setup-user-cursor] [info] Step 4: Cursor user rules
+
+[33m[REVIEW][0m /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-sh/fx-main/home/.cursor/rules/fx-shared.mdc differs from source.
+
+  red - = only on this machine   green + = only in the repo
+
+--- this machine  /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-sh/fx-main/home/.cursor/rules/fx-shared.mdc
++++ repo          source (embedded)
+@@ -6,4 +6,3 @@ alwaysApply: true
+ 
+ Fixture shared rule.
+ P3 edit: shared rule changed.
+-P5 local edit (rule).
+
+  [o]verwrite       : this machine gets the green + lines (backup kept)
+  [s]kip            : nothing written; asked again next run
+  [x]abort          : stop this script (exit 2)
+  choice [o/s/x]: s
+  >> skipped: local file unchanged
+[33m[2026-10-29T03:42:20Z] [setup-user-cursor] [warn] Skipped: fx-shared.mdc (local differs from source; reviewed again next run)[0m
+[2026-10-29T03:42:20Z] [setup-user-cursor] [info] Preserved unmanaged rule: user-own.mdc
+[2026-10-29T03:42:21Z] [setup-user-cursor] [ok] Cursor rules: 31 verified, 1 preserved in /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-sh/fx-main/home/.cursor/rules
+[2026-10-29T03:42:21Z] [setup-user-cursor] [info] Step 5: Cursor user skills
+
+[33m[REVIEW][0m /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-sh/fx-main/home/.cursor/skills/fx-skill-b/SKILL.md differs from source.
+
+  red - = only on this machine   green + = only in the repo
+
+--- this machine  /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-sh/fx-main/home/.cursor/skills/fx-skill-b/SKILL.md
++++ repo          source (embedded)
+@@ -6,4 +6,3 @@ description: aitools .claude/skills
+ # fx-skill-b
+ 
+ Fixture skill from aitools .claude/skills.
+-P5 local edit (skill).
+
+  [o]verwrite       : this machine gets the green + lines (backup kept)
+  [s]kip            : nothing written; asked again next run
+  [x]abort          : stop this script (exit 2)
+  choice [o/s/x]: s
+  >> skipped: local file unchanged
+[33m[2026-10-29T03:42:22Z] [setup-user-cursor] [warn] Skipped: fx-skill-b/SKILL.md (local differs from source; reviewed again next run)[0m
+[2026-10-29T03:42:22Z] [setup-user-cursor] [info] Preserved unmanaged skill: user-skill
+[2026-10-29T03:42:22Z] [setup-user-cursor] [ok] Skills (cursor skills): 35 verified, 1 preserved in /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-sh/fx-main/home/.cursor/skills
+[33m[2026-10-29T03:42:22Z] [setup-user-cursor] [warn] COMPLETED with 2 warning(s)[0m

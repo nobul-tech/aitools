@@ -1,0 +1,46 @@
+[2026-10-29T03:41:59Z] [setup-user-cursor] [info] Step 4: Cursor user rules
+[2026-10-29T03:41:59Z] [setup-user-cursor] [warn] Rules manifest /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/fx-main/home/.aitools/rules/.aitools-rules-manifest: line ignored: FX-Upper.MD<TAB>dotprofile -- Run aitools to rebuild ~/.aitools/rules and its manifest
+
+[REVIEW] /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/fx-main/home/.cursor/rules/fx-shared.mdc differs from source.
+
+  red - = only on this machine   green + = only in the repo
+
+--- this machine  /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/fx-main/home/.cursor/rules/fx-shared.mdc
++++ repo          source (embedded)
+@@ -7,4 +7,3 @@ alwaysApply: true
+ Fixture shared rule.
+ 
+ P3 edit: added line.
+-Local edit P5 (rule).
+
+  [o]verwrite       : this machine gets the green + lines (backup kept)
+  [s]kip            : nothing written; asked again next run
+  [x]abort          : stop this script (exit 2)
+  choice [o/s/x]: s
+s
+  >> skipped: local file unchanged
+[2026-10-29T03:41:59Z] [setup-user-cursor] [warn] Skipped: fx-shared.mdc (local differs from source; reviewed again next run)
+[2026-10-29T03:41:59Z] [setup-user-cursor] [info] Preserved unmanaged rule: user-own.mdc
+[2026-10-29T03:41:59Z] [setup-user-cursor] [ok] Cursor rules: 32 verified, 1 preserved in /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/fx-main/home/.cursor/rules
+[2026-10-29T03:41:59Z] [setup-user-cursor] [info] Step 5: Cursor user skills
+
+[REVIEW] /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/fx-main/home/.cursor/skills/fx-skill-b/SKILL.md differs from source.
+
+  red - = only on this machine   green + = only in the repo
+
+--- this machine  /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/fx-main/home/.cursor/skills/fx-skill-b/SKILL.md
++++ repo          source (embedded)
+@@ -6,4 +6,3 @@ description: aitools .claude/skills
+ # fx-skill-b
+ 
+ Fixture skill from aitools .claude/skills.
+-Local edit P5 (skill).
+
+  [o]verwrite       : this machine gets the green + lines (backup kept)
+  [s]kip            : nothing written; asked again next run
+  [x]abort          : stop this script (exit 2)
+  choice [o/s/x]: s
+  >> skipped: local file unchanged
+[2026-10-29T03:41:59Z] [setup-user-cursor] [warn] Skipped: fx-skill-b/SKILL.md (local differs from source; reviewed again next run)
+[2026-10-29T03:41:59Z] [setup-user-cursor] [info] Preserved unmanaged skill: user-skill
+[2026-10-29T03:41:59Z] [setup-user-cursor] [ok] Skills (cursor skills): 35 verified, 1 preserved in /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/fx-main/home/.cursor/skills

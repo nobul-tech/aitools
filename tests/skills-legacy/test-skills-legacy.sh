@@ -7,7 +7,9 @@
 #   fallback     no ~/.aitools/skills: shared + dotprofile skills deployed to
 #                ~/.claude/skills and ~/.cursor/skills ("claude skills" and
 #                "cursor skills" rows), no "skills" row; reverse discovery finds
-#                a user-created skill
+#                a user-created skill; old aitool-ops / aitool-eval copies
+#                (retired by PR 129, in no manifest) are not offered (both
+#                modes)
 #   fanned-out   ~/.aitools/skills exists: nothing written, only the row
 #                OK "skills" "n/a (fanned out)"; reverse discovery ignores
 #                harness names (directory entries, manifest lines of every
@@ -49,7 +51,7 @@
 set -uo pipefail
 
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
-    perl -ne 'print if $. >= 2 && $. <= 47' "$0"
+    perl -ne 'print if $. >= 2 && $. <= 49' "$0"
     exit 0
 fi
 
@@ -172,6 +174,21 @@ seed_harness() {
     skill "$cs" gone "retired, kept by the fan-out"
     skill "$cs" "gone.bak.20261020T000000Z" "fan-out backup"
     skill "$cs" mine "user-created"
+    retired_copies "$cs"
+}
+# retired_copies DIR: old aitools copies of skills PR 129 retired before the
+# skills manifest existed (one in another case): never offered for adoption
+retired_copies() {
+    skill "$1" aitool-ops "old aitools copy"
+    skill "$1" Aitool-Eval "old aitools copy, other case"
+}
+# retired_not_offered CASE: neither copy offered, the log says why (same text
+# in .sh and .ps1)
+retired_not_offered() {
+    ! found_any_of "$1" aitool-ops Aitool-Eval \
+        && ! grep -q 'Would offer to adopt [Aa]itool-' "$TMP_ROOT/$1.out" \
+        && found_log "$1" 'Not offered for adoption: aitool-ops (an aitools skill retired before the skills manifest existed; delete ~/.claude/skills/aitool-ops if you no longer use it)' \
+        && found_log "$1" 'Not offered for adoption: Aitool-Eval (an aitools skill retired before the skills manifest existed; delete ~/.claude/skills/Aitool-Eval if you no longer use it)'
 }
 
 # run_skills LANG CASE [stub] [args...] -- LANG sh|ps; HOME = $TMP_ROOT/CASE;
@@ -238,12 +255,15 @@ for lang in sh ps; do
     # fallback: no ~/.aitools/skills
     c="$lang-fallback"
     skill "$TMP_ROOT/$c/.claude/skills" mine "user-created"
+    retired_copies "$TMP_ROOT/$c/.claude/skills"
     run_skills "$lang" "$c" live
     check "$lang fallback: exit 0, claude skills and cursor skills rows, no skills row" \
         "[ \"\$(rc_of $c)\" = 0 ] && row $c 'OK|claude skills|3 added' && row $c 'OK|cursor skills|3 added' && no_rows_for $c skills"
     check "$lang fallback: shared and dotprofile skills deployed to both tools" \
         "grep -q 'shared alpha' '$TMP_ROOT/$c/.claude/skills/alpha/SKILL.md' && grep -q 'dotprofile skill' '$TMP_ROOT/$c/.cursor/skills/dpskill/SKILL.md' && [ -f '$TMP_ROOT/$c/.cursor/skills/beta/SKILL.md' ]"
     check "$lang fallback: reverse discovery finds the user-created skill" "found $c mine"
+    check "$lang fallback: retired aitool-ops / aitool-eval copies not offered, kept, logged" \
+        "retired_not_offered $c && [ -f '$TMP_ROOT/$c/.claude/skills/aitool-ops/SKILL.md' ]"
     rows_of "$c" > "$TMP_ROOT/$lang-r1.rows"
 
     # fanned out: ~/.aitools/skills exists
@@ -259,13 +279,15 @@ for lang in sh ps; do
     check "$lang fanned out: harness names (entry, manifest, other case) and backups not offered" \
         "! found_any_of $c alpha aitskill caseskill gone gone.bak.20261020T000000Z"
     check "$lang fanned out: reverse discovery still finds the user-created skill" "found $c mine"
+    check "$lang fanned out: retired aitool-ops / aitool-eval copies not offered, kept, logged" \
+        "retired_not_offered $c && [ -f '$TMP_ROOT/$c/.claude/skills/Aitool-Eval/SKILL.md' ]"
     rows_of "$c" > "$TMP_ROOT/$lang-r2.rows"
 
     c="$lang-fandry"
     seed_harness "$TMP_ROOT/$c"
     run_skills "$lang" "$c" live "$DRY"
     check "$lang fanned out, dry run: n/a row only, nothing written, adoption only previewed" \
-        "[ \"\$(rc_of $c)\" = 0 ] && [ \"\$(rows_of $c)\" = '$FANOUT_ROW' ] && [ ! -e '$TMP_ROOT/$c/.cursor/skills' ] && grep -q 'Would offer to adopt mine' '$OUT' && ! grep -q 'Would offer to adopt alpha' '$OUT'"
+        "[ \"\$(rc_of $c)\" = 0 ] && [ \"\$(rows_of $c)\" = '$FANOUT_ROW' ] && [ ! -e '$TMP_ROOT/$c/.cursor/skills' ] && grep -q 'Would offer to adopt mine' '$OUT' && ! grep -q 'Would offer to adopt alpha' '$OUT' && ! grep -q 'Would offer to adopt [Aa]itool-' '$OUT'"
 
     # header-bad manifest: directory names still count, manifest-only names do not
     c="$lang-hbad"
