@@ -9,4 +9,7 @@ PR 134 (fix/hook2-hook-stderr), worktree /Users/new-jose/repos/aitools/.claude/w
 - Local: coverage 22/22; hook suites 46/12/40/44 + ddg 50 on bash 5.3.15 and /bin/bash 3.2.57. pre-commit step 6 FAIL (20 x 100644 .sh from main: 19 S3-CursorVerify scripts + known harvesting file); pre-push step 7 FAIL (known).
 - CI run 40791176446 green; CodeQL 40791168982; CLEAN. Comment issuecomment-6484471141. PR body updated with the phase A section.
 
-## Phase B -- waiting for PR 133 merge + green main CI
+## Phase B -- stopped at the 6 h cap (brief v1.2), not started
+- During the wait, PRs 121, 124, 123 and 125 merged. When the wait was stopped, 126, 133, 135 and 137 (not in the train) were still open.
+- At the stop: head 5ea6fdb, mergeStateStatus CLEAN, `git merge-tree origin/main HEAD` clean (no conflicts), worktree clean and equal to origin.
+- To resume: wait for PR 133 MERGED and green main CI on its merge commit (scratch `wait-133.sh`), then `git merge --no-ff origin/main`, re-run hook suites and FO-0 coverage, push, green, CLEAN twice, post "PREP DONE: head <sha>".
