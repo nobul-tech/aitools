@@ -1,9 +1,9 @@
 # Managed File Deployment
 
 Specification for the interactive file deployment system used by setup scripts
-(`setup-user-claude`, `setup-user-skills`, `setup-user-hooks`,
-`setup-user-cursor` (Cursor user rules), `deploy-harness` (`~/.aitools`), and
-the skill and harness blocks that `build-deploy.sh` generates).
+(`deploy-harness` (`~/.aitools`), `setup-user-claude`, `setup-user-cursor`,
+`setup-user-skills` (fallback), `setup-user-hooks`, the library's skills
+fan-out, and the skill and harness blocks that `build-deploy.sh` generates).
 
 ## Overview
 
@@ -32,8 +32,15 @@ merge". This file is the implementation detail.
 | `Prompt-DiffReview` | `prompt_diff_review` | Text files: show the diff and the review menu, return the choice (and the merged content for merge) |
 | `Review-JsonFields` | `review_json_fields` | JSON files: review field by field; SOURCE owns every field; write adopted values into the adopt target |
 | `Initialize-DeployTracker` | `deploy_tracker_init` | Reset the outcome counters before a deploy loop |
-| `Record-DeployOutcome` | `deploy_tracker_record` | Count one outcome (including `failed`) and write its DETAIL row |
-| `Write-DeployTrackerSummary` | `deploy_tracker_summary` | Write the loop's summary row (ERROR when any file failed) |
+| `Record-DeployOutcome` | `deploy_tracker_record` | Count one outcome (including `failed`, and `removed` for a deployed copy a fan-out consumer backed up and deleted) and write its DETAIL row; an unknown outcome is logged with `log_error` and counted as `failed` (outcomes are matched case-sensitively) |
+| `Write-DeployTrackerSummary` | `deploy_tracker_summary` | Write the loop's summary row: ERROR `N failed` when any file failed, WARN `N skipped (user review)` when any was skipped, else OK with the non-zero counts `N added, N updated, N accepted, N removed, N verified, N failed` (no count at all: `n/a (nothing to deploy)`, PR #118 at f69e2db) |
+| `Read-HarnessManifest` | `read_harness_manifest` | Read the rules or skills manifest (`-Kind` / KIND `rules` or `skills`): each name's source or `retired`, invalid lines reported, a bad header reported as `header-bad`; `Read-RulesManifest` / `read_rules_manifest` wrap it for rules |
+| `Get-RuleNameKind` | `rule_name_kind` | Classify a name in `~/.aitools/rules`, case-insensitively: `hidden`, `backup` (`*.bak.*`), `rule` (`*.md`), `other` |
+| `Get-SkillNameKind` | `skill_name_kind` | Classify a name in `~/.aitools/skills`, case-insensitively: `hidden`, `backup` (`*.bak.*`), `skill` |
+| `Test-FanoutTextEqual` | `fanout_text_equal` | 0 equal ignoring trailing CR/LF, 1 differ, 2 unreadable |
+| `Test-FanoutDirMatches` | `fanout_dir_matches` | 0 when every file of a deployed skill directory matches a harness copy (`*.bak.*` ignored, symlinks and special files rejected), 1 otherwise, 2 unreadable |
+| `Backup-Dir` | `backup_dir` | Copy a directory to `<dir>.bak.<UTC>` (`-<n>` on a name clash) and keep the newest 5 (old backups matched by literal name); reports `BACKUP_DIR_OK` / `$script:BackupDirOk`, the path and the reason (`no directory`, `no top-level *.md`, `cannot list`, `copy failed`). A half-made copy is removed, or renamed `<dir>.bak.incomplete.<UTC>` (never pruned) when that fails. Skips a directory with no top-level `*.md` (extension case-insensitive), so it never copies `~/.claude/skills`, `~/.cursor/skills` or `~/.cursor/rules` (PR #118 at ec6c4ac) |
+| `Invoke-HarnessSkillsFanout` | `fanout_harness_skills` | Fan `~/.aitools/skills` out to one tool's skills directory (`claude skills`, `cursor skills`): deploy every file of every non-retired skill, adopt target from the manifest, retired prune, summary row (`@reference/skills.md` section 6) |
 | `Adopt-ManagedFile` | `adopt_managed_file` | Back up and write an adopt target. Used inside `deploy_managed_file` for review adopts; called directly only by reverse discovery of user-created hooks and skills (no SOURCE; see "Shell Script Deployment Detail") |
 | `Sync-ManagedJson` | `sync_managed_json` | Profile-mirror regime for `settings.json` (see "JSON Config Review Detail"); unchanged |
 | `Prompt-JsonFieldReview` | `prompt_json_field_review` | Per-leaf prompt used by `sync_managed_json`; unchanged |
@@ -268,6 +275,10 @@ continues with the next file.
 | `skipped` | No | Record (summary WARN) |
 | `failed` | No (library restored and logged) | Record (summary ERROR) |
 
+`removed` is not a `deploy_managed_file` value: a fan-out consumer records it
+itself after it backed up its own copy of a retired rule or skill (the backup
+verified) and deleted it.
+
 - **Single-file callers** without a tracker loop (CLAUDE.md) write the
   equivalent `write_summary` row themselves; `failed` is an ERROR row.
 - **Dotprofile writes are committed and pushed** (N-Q2, approved
@@ -303,11 +314,18 @@ continues with the next file.
     ACTION rows are written once per run (`_aitlib_action_once` /
     `Write-AitLibActionOnce`). A failed commit or push never changes the
     deploy result: it stays `accept & adopt` and the run continues.
-- **Several LOCALs for one SOURCE** (skills: `~/.claude/skills` and
-  `~/.cursor/skills`): each LOCAL goes through `deploy_managed_file`. After
-  an accept & adopt into one LOCAL, `setup-user-skills` backs up and copies
-  that LOCAL to the other targets (`deploy_skill`), so they match the adopted
-  SOURCE without a second review; a failed copy is an ERROR row
+- **Several LOCALs for one SOURCE** (a harness rule or skill file and its
+  Claude Code and Cursor copies): each LOCAL goes through
+  `deploy_managed_file` in its own fan-out (`setup-user-claude`,
+  `setup-user-cursor`). Only the Claude Code fan-out offers adopt; it writes
+  the repo source, and `~/.aitools` keeps the old copy until the next
+  `deploy-harness` run, so the Cursor copy follows one run later. The fan-outs
+  never copy one LOCAL to another. In the fallback (`setup-user-skills`, no
+  `~/.aitools/skills`; `~/.claude/skills` and `~/.cursor/skills`) each LOCAL
+  also goes through `deploy_managed_file`, but after an accept & adopt into
+  one LOCAL, `setup-user-skills` backs up and copies that LOCAL to the other
+  targets (`deploy_skill` / `Deploy-Skill`), so they match the adopted SOURCE
+  without a second review; a failed copy is an ERROR row
   `sync failed: <skill>`.
 - **Adopting into a protected file** (any path in the
   `.claude/rules/sources-of-truth.md` table) is allowed; the library writes
@@ -354,29 +372,37 @@ in review strategy, not in importance or priority. See
 
 ### Markdown files
 
-**Files**: CLAUDE.md, `~/.claude/rules/*.md`, skill `SKILL.md` files,
-`~/.cursor/rules/*.mdc` (converted from `~/.aitools/rules`, no adopt
-target), and the text files under `~/.aitools/`.
+**Files**: CLAUDE.md, `~/.claude/rules/*.md`, `~/.cursor/rules/*.mdc`
+(converted from `~/.aitools/rules`, no adopt target), every file of a skill
+directory (the skills fan-out; the fallback `setup-user-skills` deploys
+`SKILL.md` only), and the text files under `~/.aitools/`.
 
 **Pattern**: `deploy_managed_file` / `Deploy-ManagedFile` in
 `@scripts/aitools-lib.sh` / `@scripts/aitools-lib.ps1`.
 Compare → review menu → backup → write → validate. Full state machine above.
 
-**Content source**: CLAUDE.md and rules from dotprofile repo (primary) or
-`shared/claude-shared.md` (fallback). Skills from `shared/skills/`, or the
-dotprofile's `claude/skills/` when it has the skill. Template tokens
+**Content source**: CLAUDE.md from dotprofile repo (primary) or
+`shared/claude-shared.md` (fallback); rules from `~/.aitools/rules/` and
+skills from `~/.aitools/skills/` (the fan-outs; first source wins there:
+`shared/`, then `.claude/`, then the dotprofile). Without `~/.aitools/skills`
+the fallback `setup-user-skills` deploys `shared/skills/`, or the dotprofile's
+`claude/skills/` when it has the skill. Template tokens
 (`{{PLACEHOLDER}}`) interpolated from `profile.json`. See
-`@reference/user-repo.md` "Template Resolution" and "User Rules Deployment".
+`@reference/user-repo.md` "Template Resolution", "User Rules Deployment" and
+`@reference/skills.md`.
 
-**Adopt target**: CLAUDE.md and user rules: the dotprofile file
-(`<userRepoPath>/claude/CLAUDE.md`, `<userRepoPath>/claude/rules/<name>.md`),
-also when the CLAUDE.md template was read from the `shared/claude-shared.md`
-fallback; no dotprofile = no adopt target (adopt and merge not offered).
-Skills: the `SKILL.md` actually read (the dotprofile copy, else
-`shared/skills/<name>/SKILL.md` in the aitools repo; adopting into `shared/`
-writes the working tree only and logs a WARN when the file is protected; the
-review gate applies at commit and PR). Hooks: `shared/hooks/<file>` (see
-"Shell Script Deployment Detail").
+**Adopt target**: CLAUDE.md: the dotprofile file
+(`<userRepoPath>/claude/CLAUDE.md`), also when the template was read from the
+`shared/claude-shared.md` fallback; no dotprofile = no adopt target (adopt
+and merge not offered). A rule or skill file from the fan-out: the source
+file the manifest names (none without a manifest, none for Cursor, none when
+the script does not run from a git checkout). Fallback skills
+(`setup-user-skills`, no `~/.aitools/skills`): the `SKILL.md` actually read
+(the dotprofile copy, else `shared/skills/<name>/SKILL.md` in the aitools
+repo). Adopting into a protected file (`shared/claude-shared.md`, a file
+under `shared/`) is allowed: it writes the working tree only and logs a WARN
+naming the file; the review gate applies at commit and PR. Hooks:
+`shared/hooks/<file>` (see "Shell Script Deployment Detail").
 
 **CLAUDE.md is a template** (S3-SpecRewrite Q1, approved 2026-10-21):
 LOCAL is the template with `{{PLACEHOLDER}}` tokens interpolated plus a
@@ -390,10 +416,10 @@ everything from `## Machine-Specific` on and turns profile values back into
 content before writing `ADOPT_PATH`.
 
 **Scripts**:
-- `setup-user-claude.sh/.ps1` — CLAUDE.md + rules
-- `setup-user-skills.sh/.ps1` — skill SKILL.md files
-- `setup-user-cursor.sh/.ps1` — Cursor user rules (fan-out of `~/.aitools/rules`)
-- `deploy-harness.sh/.ps1` — `~/.aitools/{reference,registries,hooks,rules,skills,bin}`
+- `setup-user-claude.sh/.ps1` — CLAUDE.md, the rules fan-out (`claude rules`), the skills fan-out (`claude skills`)
+- `setup-user-cursor.sh/.ps1` — the rules fan-out (converted `.mdc`, `cursor rules`), the skills fan-out (`cursor skills`)
+- `setup-user-skills.sh/.ps1` — fallback skill deployer (SKILL.md only) when `~/.aitools/skills` does not exist; reverse discovery
+- `deploy-harness.sh/.ps1` — `~/.aitools/{reference,registries,hooks,rules,skills,bin}` (`harness files`)
 
 ### JSON config files
 
@@ -439,19 +465,22 @@ variants needed.
 
 ## Content Sources
 
-Deployed content originates from two repos. The dotprofile repo takes
-priority when present; the aitools `shared/` directory is the fallback.
+Deployed content originates from two repos. For templates and profile
+values the dotprofile repo takes priority when present and the aitools
+`shared/` directory is the fallback. Rules and skills are the exception:
+they go through `~/.aitools`, where the first source wins (`shared/`, then
+`.claude/`, then the dotprofile).
 
 | Content | Primary source | Fallback |
 |---------|---------------|----------|
 | CLAUDE.md template | `<userRepoPath>/claude/CLAUDE.md` | `shared/claude-shared.md` |
-| User rules | `<userRepoPath>/claude/rules/*.md` | (none — no rules deployed) |
+| User rules | `~/.aitools/rules/*.md` (deploy-harness fills it from `shared/rules/`, `.claude/rules/` and `<userRepoPath>/claude/rules/`, first source wins); `setup-user-claude` and `setup-user-cursor` take every non-retired rule | (none — `~/.aitools/rules` absent: no rules deployed, target untouched) |
 | Claude settings | `<userRepoPath>/profile.json` `claude.settings` (every settings.json key except `hooks`) | none: without a dotprofile or profile.json the sync is skipped (WARN `not synced: no dotprofile` / `profile.json missing`) |
 | Cursor preferences | `<userRepoPath>/profile.json` `cursor.cli` section | defaults (vimMode: false, model: auto) |
 | Identity (git name/email) | `<userRepoPath>/profile.json` `identity` section | (required — no fallback) |
 | Machine profile | `<userRepoPath>/profile.json` `profiles[<machine id>]`, chosen by the one resolver (`aitools-profile.sh` / `.ps1`: override, environment, id, config `machineId`, 2.1 alias cache, hostname) | none: no match is an ERROR row `machine profile` `no machine match`; another machine's profile is never used (`@reference/user-repo.md` "Which machine profile") |
 | Hook scripts | `shared/hooks/*.sh` | (required — no fallback) |
-| Skills | `<userRepoPath>/claude/skills/*/SKILL.md` when present | `shared/skills/*/SKILL.md` |
+| Skills | `~/.aitools/skills/<name>/**` (deploy-harness fills it from `shared/skills/`, `.claude/skills/` and `<userRepoPath>/claude/skills/`, first source wins); `setup-user-claude` and `setup-user-cursor` take every non-retired skill | `setup-user-skills` when `~/.aitools/skills` is absent: `<userRepoPath>/claude/skills/*/SKILL.md` when present, else `shared/skills/*/SKILL.md` |
 | MCP server configs | hardcoded in setup scripts | (required — no fallback) |
 
 The adopt target per content type is listed under each deployment type above.
@@ -470,17 +499,23 @@ and each skipped duplicate is a `log_error` plus an ERROR row.
 | `~/.aitools/reference/**` | `reference/**` |
 | `~/.aitools/registries/**` | `registries/**` |
 | `~/.aitools/hooks/` (flat) | `shared/hooks/`, `.claude/hooks/` |
-| `~/.aitools/skills/<name>/` | `shared/skills/`, `.claude/skills/` |
-| `~/.aitools/rules/` (flat, `*.md`) | `shared/rules/`, `.claude/rules/`, `<userRepoPath>/claude/rules/` |
+| `~/.aitools/skills/<name>/` (+ `.aitools-skills-manifest`) | `shared/skills/`, `.claude/skills/`, `<userRepoPath>/claude/skills/` |
+| `~/.aitools/rules/` (flat, `*.md`; + `.aitools-rules-manifest`) | `shared/rules/`, `.claude/rules/`, `<userRepoPath>/claude/rules/` |
 | `~/.aitools/bin/` | `scripts/harness-db.py`, `scripts/read-session.py`, `scripts/read-session-full.py` |
 | `~/.aitools/config.json` | generated from `profile.json` by `setup-user-config` (called by deploy-harness) |
 | `~/.aitools/rules/.aitools-rules-manifest` | written every run (sole owner): one `<file name><TAB><source>` line per rule, source `shared` \| `aitools` \| `dotprofile` \| `retired` |
 
-A rule in the previous manifest that no listed source has any more is
-backed up and removed from `~/.aitools/rules` (retired). `--skip-config`
-(installer Step 8b, after Step 5 ran the writer) skips `setup-user-config`
-and writes OK `config.json` `n/a (written by installer)`. The MDM variant
-passes no adopt target.
+Rules and skills reach the tools from here: `setup-user-claude` fans them out
+to `~/.claude/rules/` and `~/.claude/skills/`, `setup-user-cursor` to
+`~/.cursor/rules/` (converted to `.mdc`) and `~/.cursor/skills/`, every name
+except the retired ones. Conflict handling and its assumptions:
+`@reference/harness.md` "Deployed harness (`~/.aitools`)".
+
+A rule or skill in the previous manifest that no listed source has any more
+is backed up and removed from `~/.aitools/rules` / `~/.aitools/skills`
+(retired). `--skip-config` (installer Step 8b, after Step 5 ran the writer)
+skips `setup-user-config` and writes OK `config.json`
+`n/a (written by installer)`. The MDM variant passes no adopt target.
 
 **Dotprofile resolution**: the setup scripts ask the one resolver
 (`resolve_user_repo_path` / `Resolve-UserRepoPath`: `AITOOLS_USER_REPO_PATH`,
@@ -553,7 +588,8 @@ also finds user-created hooks, a `*.sh` in `~/.claude/hooks/` with no SOURCE
 outside the review-menu model: there is no SOURCE to compare. It does not
 conflict with SD-2, which covers manifest hooks only. `setup-user-skills`
 does the same for user-created skills (target
-`<userRepoPath>/claude/skills/<name>/SKILL.md`). Prompts, non-interactive
+`<userRepoPath>/claude/skills/<name>/SKILL.md`); a name in `~/.aitools/skills`
+or its manifest is never treated as user-created (FD-9). Prompts, non-interactive
 and EOF behavior: user rule `hook-lifecycle.md` "User-created hooks" and
 "Prompts in the hook deploy".
 
@@ -620,6 +656,17 @@ refuse to write a corrupt file, or a merge that would lose fields, without
 | `cli-config.json` | Script-owned | `profile.json` `cursor.cli` | (not adoptable) |
 | `mcp.json` | Script-owned | hardcoded server configs | (not adoptable) |
 | JSON deployed via `deploy_managed_file` | SOURCE owns every field | the repo JSON file | `ADOPT_PATH` |
+
+**Script-owned text: the rules manifest and the skills manifest.**
+deploy-harness writes `~/.aitools/rules/.aitools-rules-manifest` and
+`~/.aitools/skills/.aitools-skills-manifest` on every run without review
+(it is their sole owner; temp file then move; a failure is `log_error` + an
+ERROR row). They are not deployed through `deploy_managed_file`: they are
+generated, not copied from a source. Each lists a name's source or
+`retired`; retired rules and skill directories are backed up and removed by
+deploy-harness and by the fan-out consumers. Format and rules:
+`@reference/harness.md` "Rules manifest and retired rules", "Skills manifest
+and retired skills".
 
 ## Diff Mechanism Detail
 

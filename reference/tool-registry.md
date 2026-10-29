@@ -224,11 +224,12 @@ Windows variant uses `"command": "cmd", "args": ["/c", "npx", "-y", "chrome-devt
 when `AITOOLS_ENVIRONMENT=claude-code-web`. Claude Code's default args lack `-y`
 (drift, see `/incident` skill).
 
-**Skills** (deployed by `setup-user-mcp`):
+**Skills** (deployed by the skills fan-out):
 
 Vendored in `shared/skills/` from the upstream repo. Deployed to `~/.claude/skills/` (Claude Code)
-and `~/.cursor/skills/` (Cursor Agent CLI) by `setup-user-mcp.sh/.ps1`.
-Deploy scripts embed content inline (self-contained).
+and `~/.cursor/skills/` (Cursor) by the skills fan-out (`setup-user-claude`,
+`setup-user-cursor`; `reference/skills.md`), or by `setup-user-skills` when
+`~/.aitools/skills` does not exist (fallback; its MDM copy embeds the content inline).
 When updating vendored skills, re-fetch from the GitHub repo URLs below.
 
 - `chrome-devtools` -- browser automation & debugging
@@ -246,7 +247,7 @@ Standalone skills + our user-scope MCP config provide the same functionality wit
 - **Platform Status:** macOS: supported | Windows: supported | Linux: evaluating
 - **Environments:** Claude Code web: approved (D-CHR2) -- args `-y chrome-devtools-mcp@latest --isolated --headless --chromeArg=--no-sandbox`, Chrome runs as root without its sandbox. See `reference/tool-ops-google-chrome.md`.
 - **Concurrency:** **Yes with `--isolated`**; No without (Chrome profile lock prevents concurrent sessions)
-- **Post-Install Config:** Skills deployed automatically by `setup-user-mcp`. No auth required.
+- **Post-Install Config:** Skills deployed automatically by the skills fan-out (`reference/skills.md`). No auth required.
 - **Dependencies:** Node.js (npx), Google Chrome (see "Google Chrome" below)
 - **Invocation:** N/A (MCP server; launched via npx in server config)
 - **Last reviewed:** 2026-10-05 (chrome-devtools-mcp 1.10.1: `--headless` defaults to false for the MCP server; `--chromeArg` is repeatable; `--executablePath` overrides the stable-channel path `/opt/google/chrome/chrome`)

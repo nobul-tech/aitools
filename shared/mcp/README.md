@@ -78,8 +78,10 @@ For Cursor, this runs `agent mcp enable` or falls back to project `.cursor/mcp.j
 
 **Skills:** Chrome DevTools skills (`chrome-devtools`, `a11y-debugging`) are vendored
 in `shared/skills/` and deployed to `~/.claude/skills/` (Claude Code) and
-`~/.cursor/skills/` (Cursor Agent CLI) by `setup-user-mcp`.
-Deploy scripts embed the skill content inline (self-contained, no repo needed).
+`~/.cursor/skills/` (Cursor) by the skills fan-out (`setup-user-claude`,
+`setup-user-cursor`; `reference/skills.md`). The fallback `setup-user-skills`
+(used when `~/.aitools/skills` does not exist) embeds the skill content inline
+in its MDM copy (self-contained, no repo needed).
 Source: https://github.com/ChromeDevTools/chrome-devtools-mcp/tree/main/skills
 
 ## Post-setup
