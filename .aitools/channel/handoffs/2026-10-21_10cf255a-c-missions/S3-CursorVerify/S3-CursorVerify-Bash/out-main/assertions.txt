@@ -1,0 +1,37 @@
+== P2 snapshot diff
+80,81c80,81
+< .aitools/rules	d	0755	-	1793245304.748414278
+< .aitools/rules/.aitools-rules-manifest	f	0644	d02d83c6106ac1a55fb9205acc794ac8e6fe7630469be2823cacebbb2c4bf88b	1793245304.746254683
+---
+> .aitools/rules	d	0755	-	1793245312.491152048
+> .aitools/rules/.aitools-rules-manifest	f	0644	d02d83c6106ac1a55fb9205acc794ac8e6fe7630469be2823cacebbb2c4bf88b	1793245312.488721609
+116,117c116,117
+< .aitools/skills	d	0755	-	1793245304.763738394
+< .aitools/skills/.aitools-skills-manifest	f	0644	cbf5b1f153063e95a0adedd031abb2ca7128a67198fb0e11adf45dbaee17d8a0	1793245304.761344671
+---
+> .aitools/skills	d	0755	-	1793245312.507125854
+> .aitools/skills/.aitools-skills-manifest	f	0644	cbf5b1f153063e95a0adedd031abb2ca7128a67198fb0e11adf45dbaee17d8a0	1793245312.505100727
+192a193
+> .cursor/cli-config.json.bak.2026-10-29T034152Z	f	0644	48c665854ff15ad659fd52ab99d9ce0d9c2f080b38dc59408ea8046fba680794	1793245312.686440945
+== P3 snapshot diff
+== P4 cursor WARN/ACTION rows
+0
+== P4 fx-retire2 log
+24:[2026-10-29T03:42:14Z] [deploy-harness] [info] Retired rule: fx-retire2.md (was shared; no source has it now)
+25:[2026-10-29T03:42:14Z] [deploy-harness] [info] Backed up /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-sh/fx-main/home/.aitools/rules/fx-retire2.md
+26:[2026-10-29T03:42:14Z] [deploy-harness] [info] Removed /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-sh/fx-main/home/.aitools/rules/fx-retire2.md (retired rule; backup kept)
+48:[2026-10-29T03:42:16Z] [setup-user-cursor] [info] Backed up /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-sh/fx-main/home/.cursor/rules/fx-retire2.mdc
+49:[2026-10-29T03:42:16Z] [setup-user-cursor] [info] Removed fx-retire2.mdc (retired rule; aitools-fanout marker; backup kept)
+== P5 prompts
+[REVIEW][0m /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-sh/fx-main/home/.cursor/rules/fx-shared.mdc differs from source. -> answered s
+[REVIEW][0m /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-sh/fx-main/home/.cursor/skills/fx-skill-b/SKILL.md differs from source. -> answered s
+== P5 edits survived
+1
+1
+== P5x
+cursor-pty-x	2
+absent (not written): /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-sh/fx-main/home/.cursor/rules/git-safety.mdc
+absent (not written): /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-sh/fx-main/home/.cursor/skills/fx-skill-a/SKILL.md
+== P5x restored vs P5
+== shell errors
+== end

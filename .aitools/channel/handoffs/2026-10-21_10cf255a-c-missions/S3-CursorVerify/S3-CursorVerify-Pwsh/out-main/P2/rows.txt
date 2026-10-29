@@ -1,0 +1,9 @@
+ERROR|harness files|fx-dupskill: dup in .claude...
+ERROR|harness files|fx-dup.md: dup in dotprofile
+ERROR|harness files|fx-dup2.md: dup in dotprofile
+ERROR|harness files|fx-dupskill: dup in dotprof...
+ERROR|harness files|fx-dupskill2: dup in dotpro...
+WARN|harness files|145 verified
+ACTION||Run aitools to rebuild ~/.aitools/rules and its manifest
+WARN|cursor rules|35 verified
+WARN|cursor skills|37 verified
