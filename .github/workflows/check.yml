@@ -116,6 +116,9 @@ jobs:
       # "Every test suite is in CI" runs once, in the linux job: the check is
       # static (reads git ls-files and this file), so one copy is enough.
 
+      - name: harness-db delegation score tests (Python)
+        run: python3 tests/harness-db/test-delegation-score.py
+
       - name: Logging unit tests (bash)
         run: bash tests/logging/test-logging.sh
 
@@ -181,6 +184,30 @@ jobs:
         if: ${{ !cancelled() }}
         run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/claude-mdm/test-claude-mdm.sh
 
+      - name: Claude rules fan-out tests (bash 5 + pwsh parity)
+        if: ${{ !cancelled() }}
+        run: bash tests/rules-fanout/test-rules-fanout.sh
+
+      - name: Claude rules fan-out tests (macOS /bin/bash 3.2)
+        if: ${{ !cancelled() }}
+        run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/rules-fanout/test-rules-fanout.sh --bash-only
+
+      - name: setup-user-skills fallback dev + MDM tests (bash 5 + pwsh parity)
+        if: ${{ !cancelled() }}
+        run: bash tests/skills-legacy/test-skills-legacy.sh
+
+      - name: setup-user-skills fallback dev + MDM tests (macOS /bin/bash 3.2)
+        if: ${{ !cancelled() }}
+        run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/skills-legacy/test-skills-legacy.sh
+
+      - name: Claude skills fan-out tests (bash 5 + pwsh parity)
+        if: ${{ !cancelled() }}
+        run: bash tests/skills-fanout/test-skills-fanout.sh
+
+      - name: Claude skills fan-out tests (macOS /bin/bash 3.2)
+        if: ${{ !cancelled() }}
+        run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/skills-fanout/test-skills-fanout.sh --bash-only
+
       - name: Dotprofile resolver consumer tests (bash 5 + pwsh)
         if: ${{ !cancelled() }}
         run: bash tests/b8-consumers/test-b8-consumers.sh
@@ -204,6 +231,10 @@ jobs:
       - name: Cursor rules fan-out tests (bash 5 + pwsh parity)
         if: ${{ !cancelled() }}
         run: bash tests/rules-fanout-cursor/test-rules-fanout-cursor.sh
+
+      - name: Cursor rules fan-out tests (macOS /bin/bash 3.2)
+        if: ${{ !cancelled() }}
+        run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/rules-fanout-cursor/test-rules-fanout-cursor.sh --bash-only
 
       - name: build-package CLI tests (bash 5)
         if: ${{ !cancelled() }}
@@ -236,6 +267,40 @@ jobs:
       - name: build-deploy backup + swap tests (macOS /bin/bash 3.2)
         if: ${{ !cancelled() }}
         run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/build-deploy/test-build-deploy-backup.sh
+
+      # Hook output-channel tests: one step per suite (not run-hook-tests.sh),
+      # so the "Every test suite is in CI" step sees each test-*.sh.
+      - name: Hook output-channel tests, sh-file-fixup (bash 5)
+        if: ${{ !cancelled() }}
+        run: bash tests/hooks/test-sh-file-fixup.sh
+
+      - name: Hook output-channel tests, glossary-skill-guard (bash 5)
+        if: ${{ !cancelled() }}
+        run: bash tests/hooks/test-glossary-skill-guard.sh
+
+      - name: Hook output-channel tests, SessionStart harness-db (bash 5)
+        if: ${{ !cancelled() }}
+        run: bash tests/hooks/test-sessionstart-harness-db.sh
+
+      - name: Hook output-channel tests, smoke (bash 5)
+        if: ${{ !cancelled() }}
+        run: bash tests/hooks/test-hooks-smoke.sh
+
+      - name: Hook output-channel tests, sh-file-fixup (macOS /bin/bash 3.2)
+        if: ${{ !cancelled() }}
+        run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/hooks/test-sh-file-fixup.sh
+
+      - name: Hook output-channel tests, glossary-skill-guard (macOS /bin/bash 3.2)
+        if: ${{ !cancelled() }}
+        run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/hooks/test-glossary-skill-guard.sh
+
+      - name: Hook output-channel tests, SessionStart harness-db (macOS /bin/bash 3.2)
+        if: ${{ !cancelled() }}
+        run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/hooks/test-sessionstart-harness-db.sh
+
+      - name: Hook output-channel tests, smoke (macOS /bin/bash 3.2)
+        if: ${{ !cancelled() }}
+        run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/hooks/test-hooks-smoke.sh
 
       - name: Build deploy scripts
         run: |
@@ -418,6 +483,9 @@ jobs:
             scripts/setup-user-hooks.ps1 \
             scripts/build-deploy.sh
 
+      - name: harness-db delegation score tests (Python)
+        run: python3 tests/harness-db/test-delegation-score.py
+
       - name: Logging unit tests (bash)
         run: bash tests/logging/test-logging.sh
 
@@ -459,6 +527,18 @@ jobs:
       - name: setup-user-claude dev + MDM tests (bash + pwsh)
         run: bash tests/claude-mdm/test-claude-mdm.sh
 
+      - name: Claude rules fan-out tests (bash + pwsh parity)
+        if: ${{ !cancelled() }}
+        run: bash tests/rules-fanout/test-rules-fanout.sh
+
+      - name: setup-user-skills fallback dev + MDM tests (bash + pwsh parity)
+        if: ${{ !cancelled() }}
+        run: bash tests/skills-legacy/test-skills-legacy.sh
+
+      - name: Claude skills fan-out tests (bash + pwsh parity)
+        if: ${{ !cancelled() }}
+        run: bash tests/skills-fanout/test-skills-fanout.sh
+
       - name: Dotprofile resolver consumer tests (bash + pwsh)
         if: ${{ !cancelled() }}
         run: bash tests/b8-consumers/test-b8-consumers.sh
@@ -494,6 +574,23 @@ jobs:
       - name: build-deploy backup + swap tests (incident #86)
         if: ${{ !cancelled() }}
         run: bash tests/build-deploy/test-build-deploy-backup.sh
+
+      # Hook output-channel tests: one step per suite (see the macos job).
+      - name: Hook output-channel tests, sh-file-fixup
+        if: ${{ !cancelled() }}
+        run: bash tests/hooks/test-sh-file-fixup.sh
+
+      - name: Hook output-channel tests, glossary-skill-guard
+        if: ${{ !cancelled() }}
+        run: bash tests/hooks/test-glossary-skill-guard.sh
+
+      - name: Hook output-channel tests, SessionStart harness-db
+        if: ${{ !cancelled() }}
+        run: bash tests/hooks/test-sessionstart-harness-db.sh
+
+      - name: Hook output-channel tests, smoke
+        if: ${{ !cancelled() }}
+        run: bash tests/hooks/test-hooks-smoke.sh
 
       - name: Build deploy scripts
         run: bash scripts/build-deploy.sh
@@ -577,6 +674,10 @@ jobs:
           }
           Write-Host "All .ps1 files passed syntax validation"
 
+      - name: harness-db delegation score tests (Python, native)
+        shell: pwsh
+        run: python tests/harness-db/test-delegation-score.py
+
       - name: Logging unit tests (bash, via Git Bash)
         shell: bash
         run: bash tests/logging/test-logging.sh
@@ -649,6 +750,27 @@ jobs:
           # The runner appends `exit $LASTEXITCODE` to pwsh steps; the expected
           # exit 1 from resolve would otherwise fail the step.
           exit 0
+
+      # Hook output-channel tests: one step per suite (see the macos job).
+      - name: Hook output-channel tests, sh-file-fixup (via Git Bash)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: bash tests/hooks/test-sh-file-fixup.sh
+
+      - name: Hook output-channel tests, glossary-skill-guard (via Git Bash)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: bash tests/hooks/test-glossary-skill-guard.sh
+
+      - name: Hook output-channel tests, SessionStart harness-db (via Git Bash)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: bash tests/hooks/test-sessionstart-harness-db.sh
+
+      - name: Hook output-channel tests, smoke (via Git Bash)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: bash tests/hooks/test-hooks-smoke.sh
 
       # tests/rules-fanout-cursor is not run here: its header lists Git Bash, but
       # its manifest cases run setup-user-cursor.sh, whose OS guard exits on

@@ -1,0 +1,3 @@
+retire	0
+harness	1
+cursor	0

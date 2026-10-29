@@ -5,8 +5,8 @@ Purpose: Fire at every agentic turn to provide intelligence carry-forward.
   Three functions:
   1. Parse JSONL transcript for context utilization and turn metrics.
   2. Query session SQLite DB for new OL, decisions, observations.
-  3. Inject summary via stderr when new intelligence found or context
-     threshold crossed.
+  3. Inject summary via stderr + exit 2 when new intelligence is found
+     (the context-threshold warning is inert, see format_context_warning).
 
 Scope: Stop hook only. Reads session DB (read-only) and transcript (read-only).
   Writes only: marker file (.intelligence-last-check) and events.jsonl.
@@ -14,8 +14,13 @@ Audience: Claude Code Stop hook system -- fires after every assistant response.
 
 Hook contract:
   - Receives JSON on stdin: session_id, transcript_path, cwd
-  - Exit 0 = allow (intel injected via stdout JSON additionalContext if present)
-  - Exit 2 = block (context warning via stderr, forces agent to address fear)
+  - Exit 0, no output = nothing new (Claude stops normally)
+  - Exit 2 + stderr = new intelligence: Claude Code feeds the stderr text to
+    Claude as the reason to continue (Stop exit 2 "prevents Claude from
+    stopping, continues the conversation", hooks reference 2026-10-28). The
+    code never printed stdout JSON; an earlier version of this docstring
+    said it did. Exit 2 is kept as the delivery channel (HOOK2-AUDIT,
+    2026-10-28: blocking behaviour unchanged).
   - Must complete in <50ms (SQLite WAL read + JSONL tail)
   - Must never crash or hang (would break Claude Code)
 
@@ -398,9 +403,9 @@ def main() -> int:
             emit_event(events_path, metrics, len(intel_items))
 
         # --- Function 3: Build injection output ---
-        # Intelligence: inject via stdout JSON (informational, exit 0)
-        # Context warnings: inject via stderr (blocking, exit 2)
-        # Both: stdout JSON for intel + stderr for warning, exit 2
+        # Intelligence and (inert) context warnings: stderr + exit 2, the
+        # Stop channel Claude reads (stderr of an exit-0 hook never reaches
+        # Claude).
 
         intel_block = ""
         if intel_items:

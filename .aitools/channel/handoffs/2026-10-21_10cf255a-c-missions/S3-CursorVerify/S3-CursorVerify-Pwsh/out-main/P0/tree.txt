@@ -1,0 +1,3 @@
+.cursor/rules/user-own.mdc	f	0644	a3bb89a8792b543a6cfcf7de540eb30dec64d4f121b5379bfa748f1f06363f2a
+.cursor/skills/user-skill	d	0755	-
+.cursor/skills/user-skill/SKILL.md	f	0644	b1e42b9d62d673be62c83a56efe28dc4c2321ededef91d42cd965097a4ffc8d9

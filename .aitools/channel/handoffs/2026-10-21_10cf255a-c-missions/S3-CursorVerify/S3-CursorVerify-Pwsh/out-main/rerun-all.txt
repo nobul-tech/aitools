@@ -1,0 +1,201 @@
+
+===== bash /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cverify/build-fixture.sh build /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/fx-main 207f1a6c7db92227e9c3ae3c5d44e8e6f6b19126
+[2026-10-29T03:41:44Z] [build-fixture] [info] cloning /Users/new-jose/repos/aitools at 207f1a6c7db92227e9c3ae3c5d44e8e6f6b19126 (207f1a6c7db92227e9c3ae3c5d44e8e6f6b19126)
+[2026-10-29T03:41:45Z] [build-fixture] [info] built: /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/fx-main (aitools 1dd8297)
+----- rc=0
+
+===== git -C /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/fx-main/aitools log --oneline -2
+1dd8297 fixture: rules and skills
+207f1a6 Merge pull request #123 from nobul-tech/feature/fanout-cursor
+----- rc=0
+
+===== perl /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/gen-tree.pl /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/fx-main/home /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/out-main/P0
+tree.txt 3 lines, tree-ext.txt 0 lines, snap.txt 6 lines
+----- rc=0
+
+===== bash /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/main/run-phase.sh P1
+[2026-10-29T03:41:48Z] [run-phase] [info] harness exit 1
+[2026-10-29T03:41:49Z] [run-phase] [info] cursor exit 0
+rows.txt 81 rows
+tree.txt 223 lines, tree-ext.txt 0 lines, snap.txt 306 lines
+harness 1
+cursor 0
+----- rc=0
+
+===== bash /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/main/check-sources.sh
+== skill names (union of shared/skills, .claude/skills, dotprofile claude/skills)
+a11y-debugging
+aitool-continue
+audit
+chrome-devtools
+delegate
+frameworks
+fx-[br]ack
+fx-dot-skill
+fx-dupskill
+fx-dupskill2
+fx-retire-skill
+fx-skill-a
+fx-skill-b
+glossary
+governed-data
+handoff
+harvest
+incident
+intent-audit
+intent-writing
+investigate
+mission-control
+optimize-plan
+planning
+scratch
+tool-adopt
+tool-eval
+tool-ops
+tool-registry
+      29
+== rule names (union, top-level *.md, any case)
+      35
+----- rc=0
+
+===== bash /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/main/run-phase.sh P2
+[2026-10-29T03:41:51Z] [run-phase] [info] harness exit 1
+[2026-10-29T03:41:52Z] [run-phase] [info] cursor exit 0
+rows.txt 9 rows
+tree.txt 223 lines, tree-ext.txt 0 lines, snap.txt 306 lines
+harness 1
+cursor 0
+----- rc=0
+
+===== bash /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/main/p3-edit.sh
+33987d6 fixture P3: edit fx-shared and fx-skill-a
+----- rc=0
+
+===== bash /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/main/run-phase.sh P3 --dry-run
+[2026-10-29T03:41:53Z] [run-phase] [info] harness exit 1
+[2026-10-29T03:41:53Z] [run-phase] [info] cursor exit 0
+rows.txt 9 rows
+tree.txt 223 lines, tree-ext.txt 0 lines, snap.txt 306 lines
+harness 1
+cursor 0
+----- rc=0
+
+===== bash /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/main/run-phase.sh P3b
+[2026-10-29T03:41:55Z] [run-phase] [info] harness exit 1
+[2026-10-29T03:41:56Z] [run-phase] [info] cursor exit 0
+rows.txt 11 rows
+tree.txt 227 lines, tree-ext.txt 0 lines, snap.txt 310 lines
+harness 1
+cursor 0
+----- rc=0
+
+===== bash /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/main/p4-prep.sh
+
+Fixture rule retired in phase 2 (user edits its .mdc first).
+User edit: keep this rule.
+[2026-10-29T03:41:56Z] [build-fixture] [info] retired sources committed in /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/fx-main/aitools
+b8e39f0 fixture: retire fx-retire, fx-retire2, fx-retire-skill
+----- rc=0
+
+===== bash /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/main/run-phase.sh P4
+[2026-10-29T03:41:58Z] [run-phase] [info] harness exit 1
+[2026-10-29T03:41:59Z] [run-phase] [info] cursor exit 0
+rows.txt 15 rows
+tree.txt 225 lines, tree-ext.txt 3 lines, snap.txt 311 lines
+harness 1
+cursor 0
+----- rc=0
+
+===== bash /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/main/p5.sh prep
+02f3ccf6b28f8cc5bb3a3a3ae7436607860c8787a13e98ea92536f373b8f5db9  /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/fx-main/home/.cursor/rules/fx-shared.mdc
+0925afd2c7608d49b25f5dc7ad0489d5c784040ea66927f30b316972fb49878b  /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/fx-main/home/.cursor/skills/fx-skill-b/SKILL.md
+----- rc=0
+
+===== bash /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/main/p5.sh run-s
+rows.txt 5 rows
+tree.txt 225 lines, tree-ext.txt 3 lines, snap.txt 311 lines
+PROMPT 'choice [o/s/x]: ' for /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/fx-main/home/.cursor/rules/fx-shared.mdc -> answered 's'
+PROMPT 'choice [o/s/x]: ' for /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/fx-main/home/.cursor/skills/fx-skill-b/SKILL.md -> answered 's'
+prompts=2 exit=0
+exit 0
+----- rc=0
+
+===== bash /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/main/p5.sh prep-x
+ls: /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/fx-main/home/.cursor/rules/web-sources.mdc: No such file or directory
+ls: /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/fx-main/home/.cursor/skills/tool-ops/SKILL.md: No such file or directory
+----- rc=1
+
+===== bash /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/main/p5.sh run-x
+rows.txt 1 rows
+tree.txt 223 lines, tree-ext.txt 3 lines, snap.txt 309 lines
+PROMPT 'choice [o/s/x]: ' for /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/fx-main/home/.cursor/rules/fx-shared.mdc -> answered 'x'
+prompts=1 exit=2
+exit 2
+----- rc=0
+
+===== ls /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/fx-main/home/.cursor/rules/web-sources.mdc /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/fx-main/home/.cursor/skills/tool-ops/SKILL.md
+ls: /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/fx-main/home/.cursor/rules/web-sources.mdc: No such file or directory
+ls: /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/fx-main/home/.cursor/skills/tool-ops/SKILL.md: No such file or directory
+----- rc=1
+
+===== shasum -a 256 /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/fx-main/home/.cursor/rules/fx-shared.mdc /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/fx-main/home/.cursor/skills/fx-skill-b/SKILL.md
+02f3ccf6b28f8cc5bb3a3a3ae7436607860c8787a13e98ea92536f373b8f5db9  /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/fx-main/home/.cursor/rules/fx-shared.mdc
+0925afd2c7608d49b25f5dc7ad0489d5c784040ea66927f30b316972fb49878b  /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/fx-main/home/.cursor/skills/fx-skill-b/SKILL.md
+----- rc=0
+
+===== bash /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/main/p6x-retire-br.sh
+935777f fixture X: retire fx-[br].md and fx-[br]ack
+no [br] sources left
+----- rc=0
+
+===== bash /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/main/run-phase.sh PX-br
+[2026-10-29T03:42:02Z] [run-phase] [info] harness exit 1
+[2026-10-29T03:42:03Z] [run-phase] [info] cursor exit 0
+rows.txt 17 rows
+tree.txt 225 lines, tree-ext.txt 6 lines, snap.txt 314 lines
+harness 1
+cursor 0
+----- rc=0
+
+===== bash /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/main/p7x-br-update.sh restore
+6a612f5 fixture X: restore fx-[br].md and fx-[br]ack
+shared/rules/fx-[br].md
+shared/skills/fx-[br]ack/SKILL.md
+----- rc=0
+
+===== bash /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/main/run-phase.sh PX-br-restore
+[2026-10-29T03:42:05Z] [run-phase] [info] harness exit 1
+[2026-10-29T03:42:05Z] [run-phase] [info] cursor exit 0
+rows.txt 11 rows
+tree.txt 231 lines, tree-ext.txt 6 lines, snap.txt 320 lines
+harness 1
+cursor 0
+----- rc=0
+
+===== bash /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/main/p7x-br-update.sh edit
+9e06ec1 fixture X: edit fx-[br].md and fx-[br]ack
+shared/rules/fx-[br].md
+shared/skills/fx-[br]ack/SKILL.md
+----- rc=0
+
+===== bash /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/main/run-phase.sh PX-br-update
+[2026-10-29T03:42:07Z] [run-phase] [info] harness exit 1
+[2026-10-29T03:42:08Z] [run-phase] [info] cursor exit 0
+rows.txt 11 rows
+tree.txt 235 lines, tree-ext.txt 6 lines, snap.txt 324 lines
+harness 1
+cursor 0
+----- rc=0
+
+===== bash /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/main/p8x-upper-retire.sh
+3fa5bb6 fixture X: remove FX-Upper.MD
+----- rc=0
+
+===== bash /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/main/run-phase.sh PX-upper
+[2026-10-29T03:42:10Z] [run-phase] [info] harness exit 1
+[2026-10-29T03:42:11Z] [run-phase] [info] cursor exit 0
+rows.txt 8 rows
+tree.txt 235 lines, tree-ext.txt 6 lines, snap.txt 324 lines
+harness 1
+cursor 0
+----- rc=0

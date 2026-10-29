@@ -10,7 +10,8 @@
 #
 # deploy/deploy-harness.sh/.ps1 (the MDM path of scripts/deploy-harness.*) embed a
 # snapshot of every harness source file (~/.aitools); MDM runs it first, before
-# setup-user-cursor, whose rules fan-out reads ~/.aitools/rules. Its config.json
+# setup-user-claude and setup-user-cursor, whose rules fan-outs read
+# ~/.aitools/rules (the only way dotprofile rules reach an endpoint). Its config.json
 # writer (setup-user-config + aitools-profile + aitools-json) is copied alongside.
 #
 # Relay → ~/.cursor/AGENTS.md: NOT embedded here. That step needs the live repo file
@@ -237,28 +238,16 @@ DEPLOY_DIR="$_urp/deploy"
 blog "Dotprofile: $_urp (via $_urp_via)"
 blog "Build target: $DEPLOY_DIR (dotprofile repo)"
 
-# --- User rules (embedded as a fallback; see "Embedded dotprofile content") ---
-USER_RULE_COUNT=0
-declare -a USER_RULE_FILES=()
-if [ -d "$_urp/claude/rules" ]; then
-    for rf in "$_urp/claude/rules"/*.md; do
-        [ -f "$rf" ] || continue
-        USER_RULE_FILES+=("$rf")
-        USER_RULE_COUNT=$((USER_RULE_COUNT + 1))
-    done
-fi
-if [ "$USER_RULE_COUNT" -gt 0 ]; then
-    blog "User rules: $USER_RULE_COUNT files from $_urp/claude/rules"
-else
-    blog "No user rules in the dotprofile -- the deploy scripts embed none (a machine with the dotprofile still uses its own claude/rules/)"
-fi
+# Dotprofile rules are not embedded in setup-user-claude: they reach an endpoint
+# through deploy/deploy-harness.* (its snapshot includes <dotprofile>/claude/rules),
+# and setup-user-claude fans out ~/.aitools/rules (rules fan-out, 2026-10-22).
 
 # --- Embedded dotprofile content: fallbacks, resolved per machine at RUNTIME ---
 # deploy/ is committed once and used by every machine of this user, so no machine's
 # values are interpolated here (M3 B5: the cross-machine defect, decision 4). The
 # generated setup-user-claude.* resolve this machine's profile when they run: from
 # the live dotprofile on that machine when it has one (what scripts/ reads), else
-# from the build-time template, profile snapshot and rules embedded below.
+# from the build-time template and profile snapshot embedded below.
 TEMPLATE_FILE="$CLAUDE_SHARED"
 TEMPLATE_LABEL="shared/claude-shared.md"
 if [ -f "$_urp/claude/CLAUDE.md" ]; then
@@ -514,7 +503,7 @@ embed_file_ps1() {
 }
 
 # write_resolver_block_bash OUT [claude] -- the bash embed block; "claude" adds the
-# dotprofile fallbacks (template, profile snapshot, rules).
+# dotprofile fallbacks (template, profile snapshot).
 write_resolver_block_bash() {
     local out="$1" with_claude="${2:-}" f i
     {
@@ -534,7 +523,7 @@ trap _aitools_embed_cleanup EXIT
 if ! _AITOOLS_EMBED_DIR=$(mktemp -d "${TMPDIR:-/tmp}/aitools-embed.XXXXXX"); then
     _AITOOLS_EMBED_DIR=""
     _AITOOLS_EMBED_ERR="mktemp -d failed"
-elif ! mkdir -p "$_AITOOLS_EMBED_DIR/claude" "$_AITOOLS_EMBED_DIR/shared" "$_AITOOLS_EMBED_DIR/rules"; then
+elif ! mkdir -p "$_AITOOLS_EMBED_DIR/claude" "$_AITOOLS_EMBED_DIR/shared"; then
     _AITOOLS_EMBED_ERR="mkdir failed in $_AITOOLS_EMBED_DIR"
 fi
 BLOCK
@@ -548,10 +537,6 @@ BLOCK
             if [ -n "$PROFILE_SNAPSHOT" ]; then
                 embed_file_bash "profile.json" "$BUILD_TMP/profile-snapshot.json"
             fi
-            for i in $(seq 0 $((USER_RULE_COUNT - 1))); do
-                [ "$USER_RULE_COUNT" -gt 0 ] || break
-                embed_file_bash "rules/$(basename "${USER_RULE_FILES[$i]}")" "${USER_RULE_FILES[$i]}"
-            done
         fi
         cat <<'BLOCK'
 if [ -z "$_AITOOLS_EMBED_ERR" ]; then
@@ -600,10 +585,6 @@ BLOCK
             if [ -n "$PROFILE_SNAPSHOT" ]; then
                 embed_file_ps1 "profile.json" "$BUILD_TMP/profile-snapshot.json"
             fi
-            for i in $(seq 0 $((USER_RULE_COUNT - 1))); do
-                [ "$USER_RULE_COUNT" -gt 0 ] || break
-                embed_file_ps1 "rules/$(basename "${USER_RULE_FILES[$i]}")" "${USER_RULE_FILES[$i]}"
-            done
         fi
         cat <<'BLOCK'
 try {
@@ -744,24 +725,32 @@ mkdir -p "$DEPLOY_DIR"
 blog "Generating deploy/setup-user-claude.sh"
 
 # Pure extract from scripts/setup-user-claude.sh (template interpolation, footer,
-# managed-file deploy, rules logic: no duplicated logic, I6), plus two generated
-# parts: the profile/template source on this machine (before the body) and the
-# rules fallback (between the rules source selection and the rules logic).
+# managed-file deploy, rules and skills fan-outs: no duplicated logic, I6), plus one
+# generated part: the profile/template source on this machine (before the body).
+# The rules and skills come from ~/.aitools/rules and ~/.aitools/skills, which
+# deploy/deploy-harness.sh fills (run it first).
 {
     echo '#!/usr/bin/env bash'
     echo "$HEADER_COMMENT_BASH"
     cat <<'BLOCK'
-# setup-user-claude.sh -- Creates user-level ~/.claude/CLAUDE.md and deploys user rules
+# setup-user-claude.sh -- Creates user-level ~/.claude/CLAUDE.md and fans out the harness rules and skills
 # Self-contained (MDM-ready): the profile resolver and build-time copies of the
-# dotprofile's CLAUDE.md template, profile snapshot and rules are embedded below.
+# dotprofile's CLAUDE.md template and profile snapshot are embedded below.
 # This machine's profile is resolved when the script runs, never at build time. On a
-# machine with the dotprofile, its live template, profile.json and rules are used
+# machine with the dotprofile, its live template and profile.json are used
 # (as by scripts/setup-user-claude.sh); the embedded copies are the fallback.
+# Run deploy-harness.sh first: the rules and skills fan-outs read ~/.aitools/rules
+# and ~/.aitools/skills, which it fills.
 # Safe to re-run.
 #
 # Managed: ~/.claude/CLAUDE.md (sole owner, overwrite)
-# Managed: ~/.claude/rules/*.md (additive deploy from the rules source)
-# Preserved: ~/.claude/rules/ files not in the rules source
+# Managed: ~/.claude/rules/*.md fanned out from ~/.aitools/rules (additive; the
+#   copy of a rule the rules manifest retires is backed up and removed)
+# Preserved: ~/.claude/rules/ files not in ~/.aitools/rules
+# Managed: ~/.claude/skills/<name>/** fanned out from ~/.aitools/skills (additive;
+#   the copy of a skill the skills manifest retires is backed up to
+#   ~/.claude/skills.bak.<UTC>/ and removed)
+# Preserved: ~/.claude/skills/ directories and symlinks not deployed from ~/.aitools/skills
 
 set -euo pipefail
 
@@ -810,19 +799,10 @@ BLOCK
         '^# --- END preamble' '^# --- BEGIN rules deployment'
     extract_between "$SCRIPTS_DIR/setup-user-claude.sh" \
         '^# --- BEGIN rules deployment' '^# --- BEGIN rules deploy logic'
-    if [ "$USER_RULE_COUNT" -gt 0 ]; then
-        cat <<'BLOCK'
-# --- Rules fallback (generated by build-deploy.sh): the build-time copy when this
-# machine has no dotprofile (a dotprofile without claude/rules/ deploys none, as
-# scripts/ does; review m3) ---
-if [ "$_DP_RC" -ne 0 ] && [ -z "$RULES_SRC" ] && [ -n "$_AITOOLS_EMBED_DIR" ] && [ -d "$_AITOOLS_EMBED_DIR/rules" ]; then
-    RULES_SRC="$_AITOOLS_EMBED_DIR/rules"
-    log "Rules source: embedded build-time copy (no dotprofile on this machine)"
-fi
-BLOCK
-    fi
     extract_between "$SCRIPTS_DIR/setup-user-claude.sh" \
         '^# --- BEGIN rules deploy logic' '^# --- END rules deploy logic'
+    extract_between "$SCRIPTS_DIR/setup-user-claude.sh" \
+        '^# --- BEGIN skills fan-out' '^# --- END skills fan-out'
     extract_between "$SCRIPTS_DIR/setup-user-claude.sh" \
         '^# --- BEGIN exit' '^# --- END exit'
 } | inline_lib_bash "$BUILD_TMP/resolver-claude.sh.blk" > "$DEPLOY_DIR/setup-user-claude.sh"
@@ -835,22 +815,29 @@ GENERATED=$((GENERATED + 1))
 # ============================================================
 blog "Generating deploy/setup-user-claude.ps1"
 
-# Pure extract from scripts/setup-user-claude.ps1, plus the same two generated parts
-# as the .sh (parity).
+# Pure extract from scripts/setup-user-claude.ps1, plus the same generated part as
+# the .sh (parity).
 {
     echo "$HEADER_COMMENT_PS1"
     cat <<'BLOCK'
-# setup-user-claude.ps1 -- Creates user-level ~/.claude/CLAUDE.md and deploys user rules
+# setup-user-claude.ps1 -- Creates user-level ~/.claude/CLAUDE.md and fans out the harness rules and skills
 # Self-contained (MDM-ready): the profile resolver and build-time copies of the
-# dotprofile's CLAUDE.md template, profile snapshot and rules are embedded below.
+# dotprofile's CLAUDE.md template and profile snapshot are embedded below.
 # This machine's profile is resolved when the script runs, never at build time. On a
-# machine with the dotprofile, its live template, profile.json and rules are used
+# machine with the dotprofile, its live template and profile.json are used
 # (as by scripts/setup-user-claude.ps1); the embedded copies are the fallback.
+# Run deploy-harness.ps1 first: the rules and skills fan-outs read .aitools\rules
+# and .aitools\skills, which it fills.
 # Safe to re-run.
 #
 # Managed: ~/.claude/CLAUDE.md (sole owner, overwrite)
-# Managed: ~/.claude/rules/*.md (additive deploy from the rules source)
-# Preserved: ~/.claude/rules/ files not in the rules source
+# Managed: ~/.claude/rules/*.md fanned out from ~/.aitools/rules (additive; the
+#   copy of a rule the rules manifest retires is backed up and removed)
+# Preserved: ~/.claude/rules/ files not in ~/.aitools/rules
+# Managed: ~/.claude/skills/<name>/** fanned out from ~/.aitools/skills (additive;
+#   the copy of a skill the skills manifest retires is backed up to
+#   ~/.claude/skills.bak.<UTC>/ and removed)
+# Preserved: ~/.claude/skills/ directories and symlinks not deployed from ~/.aitools/skills
 
 param(
     [string]$SharedPath = "",
@@ -904,20 +891,10 @@ BLOCK
         '^# --- END preamble' '^# --- BEGIN rules deployment' --crlf
     extract_between "$SCRIPTS_DIR/setup-user-claude.ps1" \
         '^# --- BEGIN rules deployment' '^# --- BEGIN rules deploy logic' --crlf
-    if [ "$USER_RULE_COUNT" -gt 0 ]; then
-        cat <<'BLOCK'
-# --- Rules fallback (generated by build-deploy.sh): the build-time copy when this
-# machine has no dotprofile (a dotprofile without claude/rules/ deploys none, as
-# scripts/ does; review m3) ---
-$aitoolsEmbedRules = Join-Path $aitoolsEmbedDir "rules"
-if ($aitoolsDpRc -ne 0 -and -not $rulesSrc -and (Test-Path -LiteralPath $aitoolsEmbedRules)) {
-    $rulesSrc = $aitoolsEmbedRules
-    Log "Rules source: embedded build-time copy (no dotprofile on this machine)"
-}
-BLOCK
-    fi
     extract_between "$SCRIPTS_DIR/setup-user-claude.ps1" \
         '^# --- BEGIN rules deploy logic' '^# --- END rules deploy logic' --crlf
+    extract_between "$SCRIPTS_DIR/setup-user-claude.ps1" \
+        '^# --- BEGIN skills fan-out' '^# --- END skills fan-out' --crlf
     printf '%s\n' "$EMBED_CLEANUP_PS1"
     extract_between "$SCRIPTS_DIR/setup-user-claude.ps1" \
         '^# --- BEGIN exit' '^# --- END exit' --crlf
@@ -1426,6 +1403,10 @@ deploy_embedded_skill() {
 
 DEPLOY_SKILL_FUNC
 
+    # FD-9 (FO-6): the extracted body's harness check set SKILLS_FANNED_OUT
+    # (and wrote OK "skills" "n/a (fanned out ...)") when ~/.aitools/skills
+    # exists; the fan-out then owns both rows, so the embedded deploy is skipped.
+    echo 'if [ "$SKILLS_FANNED_OUT" != "true" ]; then'
     # Dynamically discover and embed all skills from shared/skills/
     _embedded_skills=""
     echo '_skill_tmp=$(mktemp -d)'
@@ -1471,6 +1452,7 @@ DEPLOY_SKILL_FUNC
     echo 'fi'
     echo ''
     echo 'rm -rf "$_skill_tmp"'
+    echo 'fi  # SKILLS_FANNED_OUT'
     echo ''
 
     # Emit exit footer from source
@@ -1517,6 +1499,9 @@ function Deploy-EmbeddedSkill {
 
 DEPLOY_SKILL_PS1_FUNC
 
+    # FD-9 (FO-6): skip the embedded deploy when the extracted body's harness
+    # check set $skillsFannedOut (~/.aitools/skills exists; same as the .sh)
+    echo 'if (-not $skillsFannedOut) {'
     # Dynamically discover and embed all skills from shared/skills/
     _embedded_skills=""
     for _skill_dir in "$SHARED_DIR/skills"/*/; do
@@ -1564,6 +1549,7 @@ DEPLOY_SKILL_PS1_FUNC
     echo '} else {'
     echo '    Write-Summary "ERROR" "cursor skills" "deploy failed"'
     echo '}'
+    echo '}  # skillsFannedOut'
     echo ''
 
     # Emit exit footer from source (CRLF for PS1)
@@ -1819,7 +1805,8 @@ GENERATED=$((GENERATED + 1))
 #     in config.json (aitools-install has not run) the writer is skipped with
 #     OK "config.json" "n/a (no bootstrap)" -- the --skip-config path (Q3);
 #   - the "dotprofile lookup" span (section 2) is replaced: dotprofile rules are
-#     the build-time dotprofile's, as with setup-user-claude's embedded rules;
+#     the build-time dotprofile's (an endpoint gets them only this way: the
+#     setup-user-claude and setup-user-cursor fan-outs read ~/.aitools/rules);
 #   - the adopt target is "" (the source is the embed, not a repo file), as for
 #     the embedded skills (contract default #9).
 HARNESS_SH="$SCRIPTS_DIR/deploy-harness.sh"

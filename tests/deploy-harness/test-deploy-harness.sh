@@ -14,7 +14,10 @@
 # the skills manifest and retired skills (dotprofile skills source, shared vs
 # .claude duplicate, the .claude -> shared move, retire with a verified
 # backup_dir backup, unlisted source, per-kind listing, dry run, failed backup,
-# invalid lines, bad header), run by the .sh and the .ps1 with identical traces.
+# invalid lines, bad header), run by the .sh and the .ps1 with identical traces,
+# and rule names with an upper- or mixed-case .md extension (deployed, listed,
+# no warning, retired; case-only duplicate; .bak. rejected; the lib's manifest
+# reader in both languages).
 # Interactive cases use tests/managed-files/pty-run.py (python3); skipped
 # without it. The config writer is a stub except in the "real writer" case.
 # Platform: macOS, Linux. Exit 1 if any case fails.
@@ -673,6 +676,94 @@ if command -v pwsh >/dev/null 2>&1; then
     if [ -s "$C/trace.diff" ]; then perl -pe 's/^/      | /' "$C/trace.diff" | head -n 40; fi
 else
     printf 'SKIP ps1 skills cases (pwsh not found)\n'; SKIP=$((SKIP + 1))
+fi
+
+# ---------------------------------------------------------------------------
+# Rule names with an upper- or mixed-case .md extension (plan rules-fanout-claude.md
+# F2/R9; D1 "case-insensitive, *.md only, skipping *.bak.*"): deployed as named,
+# listed in the manifest, no warning on the next run, retired when the source
+# goes; a case-only duplicate is one ERROR (first source wins); .bak. names are
+# still rejected. Run by the .sh and the .ps1.
+# ---------------------------------------------------------------------------
+# lsx NAME -- NAME is in ~/.aitools/rules with exactly this case (macOS file
+# systems are case-insensitive, so [ -f ] alone cannot tell X.MD from x.md)
+lsx() { ls "$(A)/rules" | grep -qxF "$1"; }
+no_warn_rows() { ! grep -qE '^(WARN|ACTION)\|' "$C/summary"; }
+upper_cases() {
+    local run="$1" side="$2"
+    printf 'upper rule\n' > "$D/claude/rules/X.MD"
+    printf 'upper backup\n' > "$D/claude/rules/Old.BAK.1.MD"
+    printf 'mixed rule\n' > "$R/shared/rules/Mixed.Md"
+    gitc -C "$D" add -A; gitc -C "$D" commit -q -m upper
+    gitc -C "$R" add -A; gitc -C "$R" commit -q -m upper
+    mkdir -p "$C/logs"; fresh_log; : > "$C/summary"; "$run"
+    check "$side upper: X.MD and Mixed.Md deployed as named, exit 0, no WARN/ACTION row" \
+        "[ \"\$(rc)\" = 0 ] && lsx X.MD && lsx Mixed.Md && grep -qx 'upper rule' '$(A)/rules/X.MD' && no_warn_rows"
+    check "$side upper: listed in the manifest with the winning source" \
+        "grep -qxF 'X.MD${T}dotprofile' '$(M)' && grep -qxF 'Mixed.Md${T}shared' '$(M)'"
+    check "$side upper: .BAK. name (any case) neither deployed nor listed" \
+        "! ls '$(A)/rules' | grep -qi '^old\\.bak' && ! grep -qi '^old\\.bak' '$(M)'"
+
+    fresh_log; : > "$C/summary"; "$run"
+    check "$side upper: rerun -- manifest lines accepted (no 'line ignored', no WARN/ACTION), verified" \
+        "[ \"\$(rc)\" = 0 ] && ! grep -q 'line ignored' '$C/logs/deploy.log' && no_warn_rows && grep -qE '^OK\\|harness files\\|[0-9]+ verified\$' '$C/summary'"
+
+    printf 'shared dup\n' > "$R/shared/rules/dup.md"
+    printf 'dotprofile dup\n' > "$D/claude/rules/DUP.MD"
+    gitc -C "$R" add -A; gitc -C "$R" commit -q -m dup
+    gitc -C "$D" add -A; gitc -C "$D" commit -q -m dup
+    fresh_log; : > "$C/summary"; "$run"
+    check "$side upper: case-only duplicate (dup.md, DUP.MD) -- first source wins, one ERROR row, exit 1" \
+        "[ \"\$(rc)\" = 1 ] && [ \"\$(grep -c '^ERROR|' '$C/summary')\" = 1 ] && row 'ERROR|harness files|DUP.MD: dup in dotprofile' && lsx dup.md && ! lsx DUP.MD && grep -qx 'shared dup' '$(A)/rules/dup.md' && grep -qxF 'dup.md${T}shared' '$(M)' && ! grep -q '^DUP' '$(M)'"
+    gitc -C "$D" rm -q claude/rules/DUP.MD; gitc -C "$D" commit -q -m undup
+
+    printf 'Q.MD.BAK.1\tshared\nq.MD.bak.2\tshared\n' >> "$(M)"
+    fresh_log; : > "$C/summary"; "$run"
+    check "$side upper: manifest names with .bak. (any case) still ignored" \
+        "[ \"\$(rc)\" = 0 ] && [ \"\$(grep -c 'line ignored' '$C/logs/deploy.log')\" = 2 ] && grep -q 'line ignored: Q.MD.BAK.1<TAB>shared' '$C/logs/deploy.log' && ! grep -qi '^q\\.md\\.bak' '$(M)'"
+
+    gitc -C "$D" rm -q claude/rules/X.MD; gitc -C "$D" commit -q -m retire-upper
+    gitc -C "$R" rm -q shared/rules/Mixed.Md; gitc -C "$R" commit -q -m retire-mixed
+    fresh_log; : > "$C/summary"; "$run"
+    check "$side upper: source removed -- retired (backup kept, file removed), DETAIL rows, no WARN" \
+        "[ \"\$(rc)\" = 0 ] && grep -qxF 'X.MD${T}retired' '$(M)' && grep -qxF 'Mixed.Md${T}retired' '$(M)' && ! ls '$(A)/rules' | grep -qix 'x.md' && ! ls '$(A)/rules' | grep -qix 'mixed.md' && ls '$(A)/rules' | grep -q '^X\\.MD\\.bak\\.' && ls '$(A)/rules' | grep -q '^Mixed\\.Md\\.bak\\.' && row 'DETAIL|harness files|retired: rules/X.MD' && row 'DETAIL|harness files|retired: rules/Mixed.Md' && ! grep -q 'line ignored' '$C/logs/deploy.log' && no_warn_rows"
+}
+setup_case uppersh
+upper_cases run_dh_plain sh
+if command -v pwsh >/dev/null 2>&1; then
+    setup_case upperps
+    ps_fixture
+    upper_cases run_sk_ps ps1
+else
+    printf 'SKIP ps1 upper-case cases (pwsh not found)\n'; SKIP=$((SKIP + 1))
+fi
+
+# The lib's manifest reader (read_harness_manifest / Read-HarnessManifest), as
+# setup-user-cursor and setup-user-claude call it: upper- and mixed-case
+# extensions are valid; a case-only duplicate and a .bak. name are invalid.
+setup_case reader
+printf '# aitools rules manifest v1\nX.MD\tdotprofile\nMixed.Md\tshared\nx.md\tshared\nY.MD.bak.1\tshared\n' > "$C/mf"
+printf 'rule\tX.MD\tdotprofile\nrule\tMixed.Md\tshared\ninvalid\tx.md<TAB>shared\ninvalid\tY.MD.bak.1<TAB>shared\n' > "$C/reader.expected"
+printf 'source "$1/scripts/aitools-lib.sh"\nlogging_init "test-deploy-harness-reader"\nread_harness_manifest "$2" rules\n' > "$C/reader.sh"
+env HOME="$H" AITOOLS_LOG_DIR="$C/logs" bash "$C/reader.sh" "$ROOT" "$C/mf" > "$C/reader-sh.out" 2> "$C/reader-sh.err"
+echo $? > "$C/rc"
+check "reader sh: X.MD and Mixed.Md valid; case-only duplicate and .bak. invalid" \
+    "[ \"\$(rc)\" = 0 ] && cmp -s '$C/reader.expected' '$C/reader-sh.out'"
+if command -v pwsh >/dev/null 2>&1; then
+    printf '%s\n' 'param([string]$Repo, [string]$Mf)' \
+        '$ErrorActionPreference = "Stop"' \
+        '. (Join-Path $Repo "scripts/aitools-lib.ps1")' \
+        'Initialize-Logging "test-deploy-harness-reader"' \
+        '$r = Read-HarnessManifest -Path $Mf -Kind "rules"' \
+        '$out = [System.Text.StringBuilder]::new()' \
+        'foreach ($x in $r.Rules) { [void]$out.Append("rule`t$($x.Name)`t$($x.Source)`n") }' \
+        'foreach ($x in $r.Invalid) { [void]$out.Append("invalid`t$x`n") }' \
+        '[Console]::Out.Write($out.ToString())' > "$C/reader.ps1"
+    env HOME="$H" USERPROFILE="$H" AITOOLS_LOG_DIR="$C/logs" pwsh -NoProfile -File "$C/reader.ps1" -Repo "$ROOT" -Mf "$C/mf" > "$C/reader-ps.out" 2> "$C/reader-ps.err"
+    echo $? > "$C/rc"
+    check "reader ps1: same result as the .sh" "[ \"\$(rc)\" = 0 ] && cmp -s '$C/reader.expected' '$C/reader-ps.out'"
+else
+    printf 'SKIP ps1 reader case (pwsh not found)\n'; SKIP=$((SKIP + 1))
 fi
 
 # ---------------------------------------------------------------------------
