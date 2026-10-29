@@ -1,0 +1,5 @@
+ACTION||Run aitools to rebuild ~/.aitools/rules and its manifest
+DETAIL|cursor rules|updated: fx-shared.mdc
+WARN|cursor rules|1 updated, 34 verified
+DETAIL|cursor skills|updated: fx-skill-a/SKILL.md
+WARN|cursor skills|1 updated, 36 verified

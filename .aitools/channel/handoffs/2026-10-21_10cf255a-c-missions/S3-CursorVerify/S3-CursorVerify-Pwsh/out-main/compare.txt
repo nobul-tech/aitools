@@ -1,0 +1,76 @@
+SAME  P0/tree.txt
+SAME  P0/tree-ext.txt
+SAME  P1/tree.txt
+SAME  P1/tree-ext.txt
+SAME  P1/rows.txt
+SAME  P1/exit.txt
+SAME  P2/tree.txt
+SAME  P2/tree-ext.txt
+SAME  P2/rows.txt
+SAME  P2/exit.txt
+SAME  P3/tree.txt
+SAME  P3/tree-ext.txt
+SAME  P3/rows.txt
+SAME  P3/exit.txt
+SAME  P3b/tree.txt
+SAME  P3b/tree-ext.txt
+SAME  P3b/rows.txt
+SAME  P3b/exit.txt
+SAME  P4/tree.txt
+SAME  P4/tree-ext.txt
+SAME  P4/rows.txt
+SAME  P4/exit.txt
+SAME  P5-s/tree.txt
+SAME  P5-s/tree-ext.txt
+SAME  P5-s/rows.txt
+SAME  P5-s/exit.txt
+SAME  P5-x/tree.txt
+SAME  P5-x/tree-ext.txt
+SAME  P5-x/rows.txt
+SAME  P5-x/exit.txt
+SAME  PX-br/tree.txt
+SAME  PX-br/tree-ext.txt
+SAME  PX-br/rows.txt
+SAME  PX-br/exit.txt
+SAME  PX-br-restore/tree.txt
+SAME  PX-br-restore/tree-ext.txt
+SAME  PX-br-restore/rows.txt
+SAME  PX-br-restore/exit.txt
+SAME  PX-br-update/tree.txt
+SAME  PX-br-update/tree-ext.txt
+SAME  PX-br-update/rows.txt
+SAME  PX-br-update/exit.txt
+SAME  PX-upper/tree.txt
+SAME  PX-upper/tree-ext.txt
+SAME  PX-upper/rows.txt
+SAME  PX-upper/exit.txt
+== check-p1 (old vs new, paths normalized)
+33c33
+---
+35c35
+---
+check-p1: same apart from user-file mtimes
+== snapshot P1->P2 (new run)
+81c81
+< .aitools/rules/.aitools-rules-manifest	f	0644	f19e715b1c0dc1d32d637004d100c880
+---
+> .aitools/rules/.aitools-rules-manifest	f	0644	f19e715b1c0dc1d32d637004d100c880
+118c118
+< .aitools/skills/.aitools-skills-manifest	f	0644	cbf5b1f153063e95a0adedd031abb2
+---
+> .aitools/skills/.aitools-skills-manifest	f	0644	cbf5b1f153063e95a0adedd031abb2
+== snapshot P2->P3 dry run (new run; expect empty)
+== user files P0 vs P4 (new run)
+user files identical P0..P4
+== key lines (new run)
+   2 [deploy-harness] [info] Preserved: /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/fx-main/home/.aitools/rules/FX-Upper.MD (no source -- kept)
+   9 [deploy-harness] [warn] Rules manifest /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/fx-main/home/.aitools/rules/.aitools-rules-manifest: line ignored: FX-Upper.MD<TAB>dotprofile
+  10 [setup-user-cursor] [detail] Backup-Dir: /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/fx-main/home/.cursor/rules: not backed up (no top-level *.md file)
+   9 [setup-user-cursor] [detail] Backup-Dir: /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/fx-main/home/.cursor/skills: not backed up (no top-level *.md file)
+   2 [setup-user-cursor] [info] Removed fx-retire-skill (retired skill; same files as fx-retire-skill.bak.2026-10-29T034158Z; backup in /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/fx-main/home/.cursor/skills.bak.2026-10-29T034159Z)
+   2 [setup-user-cursor] [info] Removed fx-retire.mdc (retired rule; aitools-fanout marker; backup kept)
+   2 [setup-user-cursor] [info] Removed fx-retire2.mdc (retired rule; aitools-fanout marker; backup kept)
+  11 [setup-user-cursor] [warn] Rules manifest /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/fx-main/home/.aitools/rules/.aitools-rules-manifest: line ignored: FX-Upper.MD<TAB>dotprofile -- Run aitools to rebuild ~/.aitools/rules and its manifest
+[2026-10-29T03:42:00Z] [setup-user-cursor] [error] Aborted by user
+.aitools/skills/fx-skill-a/scripts/run.sh	f	0644	d4f7fb0da4071a2b922cf5ed0e0206d4ec84de9c1cb6ead3a7a8579b8f8ab7c9
+.cursor/skills/fx-skill-a/scripts/run.sh	f	0644	d4f7fb0da4071a2b922cf5ed0e0206d4ec84de9c1cb6ead3a7a8579b8f8ab7c9
