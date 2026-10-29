@@ -2712,7 +2712,7 @@ skill_name_kind() {
 # kinds) and "invalid<TAB><line, tabs as <TAB>>", or the one line "header-bad"
 # when its first line (a UTF-8 BOM and a CR before the LF ignored) is not the
 # kind's header. A valid line: a name with no / or \ and no .bak. (rules: a *.md
-# name; skills: not starting with a dot), a source of shared, aitools,
+# name, any case; skills: not starting with a dot), a source of shared, aitools,
 # dotprofile or retired, and a name not already listed (compared
 # case-insensitively). Exit codes:
 #   0  read (the output may be "header-bad")
@@ -2739,7 +2739,7 @@ read_harness_manifest() {
         my $head = <$fh>; $head = "" unless defined $head;
         $head =~ s/\A\xEF\xBB\xBF//; $head =~ s/\r?\n\z//;
         if ($head ne $header) { print "header-bad\n"; exit 0 }
-        my $name_re = $kind eq "rules" ? qr/\A[^\/\\]+\.md\z/ : qr/\A[^\/\\.][^\/\\]*\z/;
+        my $name_re = $kind eq "rules" ? qr/\A[^\/\\]+\.[mM][dD]\z/ : qr/\A[^\/\\.][^\/\\]*\z/;
         my %seen;
         while (my $l = <$fh>) {
             $l =~ s/\r?\n\z//;

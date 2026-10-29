@@ -193,7 +193,7 @@ $duplicates = 0
 # Add-Source KIND LABEL SRC_DIR DEST_DIR LAYOUT
 #   LAYOUT tree   : every file, relative paths kept, no conflicts (reference, registries)
 #          flat   : top-level files only; unit = file name (hooks)
-#          flat-md: top-level *.md files only; unit = file name (rules)
+#          flat-md: top-level *.md files only (extension any case); unit = file name (rules)
 #          units  : files inside top-level directories; unit = directory name (skills)
 function Add-Source {
     param([string]$Kind, [string]$Label, [string]$SrcDir, [string]$DestDir, [string]$Layout)
@@ -402,9 +402,9 @@ function Get-HarnessManifestPlan([string]$Kind, [string]$Header, [string]$Prev) 
     $sourceOf = $labels[$Kind]
     $labelOf = @{}
     foreach ($l in $sourceOf.Keys) { $labelOf[$sourceOf[$l]] = $l }
-    # The manifest's name rule per kind (as the .sh): rules "<name>.md", skills no
+    # The manifest's name rule per kind (as the .sh): rules "<name>.md" (extension any case), skills no
     # leading "."; neither a "/" or "\" nor ".bak.".
-    $namePattern = if ($Kind -eq "rules") { '\A[^/\\]+\.md\z' } else { '\A[^/\\.][^/\\]*\z' }
+    $namePattern = if ($Kind -eq "rules") { '\A[^/\\]+\.[mM][dD]\z' } else { '\A[^/\\.][^/\\]*\z' }
     $lines = [System.Collections.Generic.Dictionary[string, string]]::new([StringComparer]::Ordinal)
     $claimed = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
     $actions = [System.Collections.Generic.List[object]]::new()
