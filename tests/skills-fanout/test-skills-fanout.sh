@@ -8,7 +8,9 @@
 # symlinks, a third-party skill) is preserved; the copy of a retired skill removed
 # only when it holds the harness copy's files, after a backup beside ~/.claude/skills;
 # adopt target from the manifest source. One case fills ~/.aitools/skills with the
-# real deploy-harness.sh (FO-2 manifest) from this checkout.
+# real deploy-harness.sh (FO-2 manifest) from this checkout. Cursor cases (FO-5):
+# setup-user-cursor step 5 fans out to ~/.cursor/skills with no adopt target
+# (retired prune, user skill and symlink kept; the .ps1 via step4-driver.ps1).
 #
 # Safe to re-run: every case runs a copy of scripts/ in a temp aitools checkout,
 # under its own temp HOME, with a temp git dotprofile (all removed on exit); the
@@ -27,7 +29,7 @@ set -uo pipefail
 BASH_ONLY=false
 for arg in "$@"; do
     case "$arg" in
-        --help|-h) perl -ne 'print if $. >= 2 && $. <= 23' "$0"; exit 0 ;;
+        --help|-h) perl -ne 'print if $. >= 2 && $. <= 25' "$0"; exit 0 ;;
         --bash-only) BASH_ONLY=true ;;
         *) printf 'Unknown option: %s (see --help)\n' "$arg"; exit 1 ;;
     esac
@@ -638,6 +640,119 @@ parity real
 rerun
 check "real harness rerun: verified" "nondetail | grep -qE '^OK\|claude skills\|[0-9]+ verified$'"
 parity real-rerun
+
+# ---------------------------------------------------------------------------
+# Cursor (FO-5): setup-user-cursor step 5 runs the same fan-out into
+# ~/.cursor/skills with tool "cursor skills" and no adopt target. The .sh runs
+# whole (stub rg/agent on PATH); the .ps1 runs from step 4 to the end of its
+# body through tests/rules-fanout-cursor/step4-driver.ps1 (its OS guard).
+# ---------------------------------------------------------------------------
+cp "$ROOT/scripts/setup-user-cursor.sh" "$A/scripts/setup-user-cursor.sh"
+cp "$ROOT/scripts/setup-user-cursor.ps1" "$A/scripts/setup-user-cursor.ps1"
+CSTUB="$TMP_ROOT/cursor-stubs"
+mkdir -p "$CSTUB"
+printf '#!/usr/bin/env bash\necho "ripgrep 14.1.0"\n' > "$CSTUB/rg"
+printf '#!/usr/bin/env bash\necho "2026.05.21-stub"\n' > "$CSTUB/agent"
+chmod +x "$CSTUB/rg" "$CSTUB/agent"
+CDRIVER="$ROOT/tests/rules-fanout-cursor/step4-driver.ps1"
+
+# run_cursor LANG [FLAG]: setup-user-cursor.<LANG> under $C/<LANG>, non-interactive
+run_cursor() {
+    local lang="$1" flag="${2:-}" h="$C/$1"
+    local e=(env -u AITOOLS_FORCE -u AITOOLS_DRY_RUN -u AITOOLS_USER_REPO_PATH -u AITOOLS_PROFILE_FILE
+        -u AITOOLS_PROFILE_SH -u AITOOLS_PROFILE_PS1
+        HOME="$h" USERPROFILE="$h" AITOOLS_LOG_DIR="$h/logs" AITOOLS_SUMMARY_FILE="$C/$lang.summary"
+        AITOOLS_PROFILE_TEST_ANY_OS=1 GIT_CONFIG_GLOBAL="$h/.gitconfig" GIT_CONFIG_NOSYSTEM=1 PATH="$CSTUB:$PATH")
+    : > "$C/$lang.summary"
+    if [ "$lang" = sh ]; then
+        "${e[@]}" "$TB" "$A/scripts/setup-user-cursor.sh" ${flag:+"$flag"} < /dev/null > "$C/sh.out" 2>&1
+    else
+        "${e[@]}" pwsh -NoProfile -File "$CDRIVER" "$A/scripts/setup-user-cursor.ps1" ${flag:+"$flag"} < /dev/null > "$C/ps.out" 2>&1
+    fi
+    echo $? > "$C/$lang.rc"
+}
+# cursor_case NAME SEED_FN [SH_FLAG PS_FLAG]: as case_run, running setup-user-cursor
+cursor_case() {
+    C="$TMP_ROOT/$1"
+    local seed="$2" shf="${3:-}" psf="${4:-}" lang
+    mkdir -p "$C"
+    for lang in sh ps; do
+        if [ "$lang" = ps ] && [ "$HAVE_PWSH" != "true" ]; then continue; fi
+        H="$C/$lang"
+        mkdir -p "$H/.aitools"
+        printf '{"userRepoPath":"%s","machineAlias":"m1"}\n' "$DP" > "$H/.aitools/config.json"
+        "$seed"
+        if [ "$lang" = sh ]; then run_cursor sh "$shf"; else run_cursor ps "$psf"; fi
+    done
+}
+cnondetail() { grep -F '|cursor skills|' "$C/${1:-sh}.summary" | grep -v '^DETAIL' | tail -n 1; }
+CS() { printf '%s' "$C/${1:-sh}/.cursor/skills"; }
+crows() { grep -E '^(ACTION\||[A-Z]+\|cursor skills\|)' "$1" | LC_ALL=C sort; }
+cparity() {
+    if [ "$HAVE_PWSH" != "true" ]; then skip "parity ps1: $1 (pwsh not on PATH or --bash-only)"; return; fi
+    tree_sig "$(CS sh)" > "$C/tree-sh"; tree_sig "$(CS ps)" > "$C/tree-ps"
+    crows "$C/sh.summary" > "$C/rows-sh"; crows "$C/ps.summary" > "$C/rows-ps"
+    check "parity ps1: $1: exit code" "[ \"\$(rc ps)\" = \"\$(rc sh)\" ] || { tail -n 20 '$C/ps.out'; false; }"
+    check "parity ps1: $1: ~/.cursor/skills" "cmp -s '$C/tree-sh' '$C/tree-ps' || { diff '$C/tree-sh' '$C/tree-ps'; false; }"
+    check "parity ps1: $1: summary rows" "cmp -s '$C/rows-sh' '$C/rows-ps' || { diff '$C/rows-sh' '$C/rows-ps'; false; }"
+}
+cskill() {  # cskill NAME REL TEXT: ~/.cursor/skills/NAME/REL (already there)
+    mkdir -p "$(dirname "$H/.cursor/skills/$1/$2")"; printf '%s\n' "$3" > "$H/.cursor/skills/$1/$2"
+}
+
+seed_cursor() {
+    manifest 'd1|dotprofile' 'gone|retired' 'mine2|retired' 'p1|aitools' 's1|shared'
+    hskill s1 SKILL.md '## shared s1'
+    hskill s1 scripts/run.sh '#!/bin/sh'; chmod 755 "$H/.aitools/skills/s1/scripts/run.sh"
+    hskill p1 SKILL.md '## project p1'
+    hskill d1 SKILL.md '## dot d1'
+    hskill gone.bak.2026-10-25T000000Z SKILL.md 'gone'
+    cskill gone SKILL.md 'gone'                      # the fan-out's copy of a retired skill
+    cskill mine2 SKILL.md 'my own'                   # a user's skill at a retired name
+    cskill mine SKILL.md 'mine'                      # a user's own skill
+    if $CAN_SYMLINK; then
+        mkdir -p "$H/.agents/skills/firecrawl"; printf 'fc\n' > "$H/.agents/skills/firecrawl/SKILL.md"
+        ln -s ../../.agents/skills/firecrawl "$H/.cursor/skills/firecrawl"
+    fi
+}
+cursor_case cursor seed_cursor
+check "cursor: exit 0, row 4 added, 1 removed (WARN: a kept dir still loads)" "[ \"\$(rc)\" = 0 ] && [ \"\$(cnondetail)\" = 'WARN|cursor skills|4 added, 1 removed' ]"
+check "cursor: shared, aitools, dotprofile skills in ~/.cursor/skills, x bit kept" "grep -qx '## shared s1' '$(CS)/s1/SKILL.md' && grep -qx '## project p1' '$(CS)/p1/SKILL.md' && grep -qx '## dot d1' '$(CS)/d1/SKILL.md' && [ -x '$(CS)/s1/scripts/run.sh' ]"
+check "cursor: nothing written to ~/.claude/skills" "[ ! -e '$C/sh/.claude/skills' ]"
+for lang in sh ps; do
+    if [ "$lang" = ps ] && [ "$HAVE_PWSH" != "true" ]; then continue; fi
+    check "cursor $lang: adopt=none for every source" "logged 'cursor skills: s1/SKILL.md source=shared adopt=none' $lang && logged 'cursor skills: p1/SKILL.md source=aitools adopt=none' $lang && logged 'cursor skills: d1/SKILL.md source=dotprofile adopt=none' $lang"
+done
+check "cursor: retired copy removed, backed up beside ~/.cursor/skills" "[ ! -e '$(CS)/gone' ] && b=\$(ls -d '$C/sh/.cursor/'skills.bak.* | head -n 1) && grep -qx gone \"\$b/gone/SKILL.md\" && grep -qxF 'DETAIL|cursor skills|removed: gone' '$C/sh.summary'"
+check "cursor: user skill at a retired name kept, ACTION row" "grep -qx 'my own' '$(CS)/mine2/SKILL.md' && grep -qxF 'ACTION||Cursor still loads retired skills in ~/.cursor/skills: mine2 -- delete them unless you wrote them' '$C/sh.summary'"
+check "cursor: a user's own skill kept" "grep -qx mine '$(CS)/mine/SKILL.md' && grep -q 'Preserved unmanaged skill: mine' '$C/sh.out'"
+if $CAN_SYMLINK; then
+    check "cursor: firecrawl symlink preserved, never followed" "[ -L '$(CS)/firecrawl' ] && [ \"\$(readlink '$(CS)/firecrawl')\" = ../../.agents/skills/firecrawl ] && [ \"\$(ls '$C/sh/.agents/skills/firecrawl')\" = SKILL.md ]"
+fi
+check "cursor: step 5 logged after step 4" "grep -q 'Step 5: Cursor user skills' '$C/sh.out'"
+cparity cursor
+run_cursor sh
+if [ "$HAVE_PWSH" = "true" ]; then run_cursor ps; fi
+check "cursor rerun: 4 verified (WARN: the kept dir)" "[ \"\$(cnondetail)\" = 'WARN|cursor skills|4 verified' ]"
+cparity cursor-rerun
+
+seed_cursor_none() { cskill mine SKILL.md 'mine'; }
+cursor_case cursor-none seed_cursor_none
+# No ~/.aitools/skills: the fan-out logs only and writes no row (FO-6's
+# setup-user-skills owns the row then; contract change in #124 5267e9e)
+check "cursor, no harness skills: no cursor skills row, ~/.cursor/skills untouched" "[ \"\$(rc)\" = 0 ] && [ -z \"\$(cnondetail)\" ] && [ \"\$(ls '$(CS)')\" = mine ]"
+cparity cursor-none
+
+# Only retired names in both manifests, nothing in ~/.cursor: steps 4 and 5
+# write the same row text (review 1 / audit B6)
+seed_cursor_retired_only() {
+    manifest 'gone|retired'
+    mkdir -p "$H/.aitools/rules"
+    printf '# aitools rules manifest v1\nx.md\tretired\n' > "$H/.aitools/rules/.aitools-rules-manifest"
+}
+cursor_case cursor-retired-only seed_cursor_retired_only
+check "cursor, only retired names: both steps write n/a (nothing to deploy)" "[ \"\$(rc)\" = 0 ] && [ \"\$(cnondetail)\" = 'OK|cursor skills|n/a (nothing to deploy)' ] && [ \"\$(grep -F '|cursor rules|' '$C/sh.summary' | grep -v '^DETAIL' | tail -n 1)\" = 'OK|cursor rules|n/a (nothing to deploy)' ]"
+cparity cursor-retired-only
 
 printf '\n%d passed, %d failed, %d skipped\n' "$PASS" "$FAIL" "$SKIP"
 [ "$FAIL" -eq 0 ]
