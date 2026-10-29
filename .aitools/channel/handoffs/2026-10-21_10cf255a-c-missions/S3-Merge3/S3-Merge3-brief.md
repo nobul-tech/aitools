@@ -1,4 +1,10 @@
-# S3-Merge3 shared delegate brief v1.1
+# S3-Merge3 shared delegate brief v1.2
+
+v1.2 (2026-10-28): PARALLEL PREP (commander, 2026-10-28: "can the PR preps be done in parallel? if so, launch delegates now to prep them"). Each Prep works in two phases in its own worktree:
+- Phase A (now): fix the PR's findings (fix + test), `git merge --no-ff origin/main` with the CURRENT main, resolve every conflict, verify locally, push, get CI green (fix issues when they arise). Post a comment "PREP PHASE A DONE: head <sha>".
+- Phase B (gate): wait until the PR just before yours in the train is MERGED and main CI on its merge commit is green (poll with a background until-loop script, every 2-3 min; never a foreground sleep). Then `git merge --no-ff origin/main` again (normally trivial; resolve if not), re-run the suites the new main commits touched, push, CI green, CLEAN twice. Post "PREP DONE: head <sha>". Do NOT merge the PR.
+- Train order: 121, 124, 123, 125, 126, 133, 134, 135. If phase B's wait exceeds 6 hours, stop and report your phase A head.
+- Ordinal ordering: the ubuntu-24.04 runner changed locale sorting; rules/skills fan-out must sort ordinally (`git -C /Users/new-jose/repos/aitools show 9c2d025`: .sh `LC_ALL=C sort`, .ps1 `[string]::CompareOrdinal`). Use byte-identical lines where your file has the same code.
 
 v1.1 (2026-10-28): NEVER write GitHub close keywords (close/closes/closed, fix/fixes/fixed, resolve/resolves/resolved) followed by `#N` or a PR/issue URL in any commit message, merge message or PR body that can land on main: write "PR 123" or "pull 123" instead. Mission commit 2f7ccdb said "fixed #123" and auto-closed PR 123 (reopened). Check every message before you commit.
 
