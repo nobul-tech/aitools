@@ -283,7 +283,10 @@ if [ "$(ls "$H/.aitools/rules" | wc -l | tr -d ' ')" -lt 2 ]; then
 else
     run_script
     check "dupcase: exit 1" "[ \"\$(rc)\" = 1 ]"
-    check "dupcase: duplicate reported" "grep -Eq 'Skipped duplicate: (foo\.md -> foo\.mdc|Foo\.md -> Foo\.mdc)' '$C/out'"
+    # Ordinal (byte) order on every locale: Foo.md (0x46) is deployed, foo.md
+    # (0x66) is the duplicate (until the fix the glob's LC_COLLATE order decided)
+    check "dupcase: duplicate reported" "grep -q 'Skipped duplicate: foo\.md -> foo\.mdc' '$C/out'"
+    check "dupcase: Foo.md deployed (ordinal order)" "[ -f '$H/.cursor/rules/Foo.mdc' ] && [ ! -e '$H/.cursor/rules/foo.mdc' ]"
     check "dupcase: ERROR row" "grep -qxF 'ERROR|cursor rules|1 failed' '$C/summary'"
 fi
 
@@ -472,7 +475,7 @@ setup_case badheader
 seed_badheader
 run_script
 check "badheader: exit 0" "[ \"\$(rc)\" = 0 ]"
-check "badheader: warned" "grep -q '\[warn\] Rules manifest .*the first line is not' '$C/out'"
+check "badheader: warned, with the ACTION's instruction" "grep -q '\[warn\] Rules manifest .*the first line is not.* -- Run aitools to rebuild ~/.aitools/rules and its manifest' '$C/out'"
 check "badheader: ACTION row" "grep -qxF 'ACTION||Run aitools to rebuild ~/.aitools/rules and its manifest' '$C/summary'"
 check "badheader: fanned out (its retired line not read), row WARN 1 added" "[ -f '$H/.cursor/rules/s.mdc' ] && grep -qxF 'WARN|cursor rules|1 added' '$C/summary'"
 parity badheader seed_badheader
@@ -504,6 +507,7 @@ check "invalid: exit 0" "[ \"\$(rc)\" = 0 ]"
 check "invalid: 6 lines ignored with a warning" "[ \"\$(grep -c 'line ignored' '$C/out')\" = 6 ] && grep -q 'line ignored: ../x.md<TAB>shared' '$C/out'"
 check "invalid: name matched case-insensitively" "[ -f '$H/.cursor/rules/lower.mdc' ] && ! grep -q 'Not fanned out: Lower.md is in the rules manifest' '$C/out'"
 check "invalid: WARN row" "grep -qxF 'WARN|cursor rules|1 added' '$C/summary'"
+check "invalid: one ACTION row to rebuild the manifest" "[ \"\$(grep -cxF 'ACTION||Run aitools to rebuild ~/.aitools/rules and its manifest' '$C/summary')\" = 1 ]"
 parity invalid seed_invalid
 
 # D2: an upper-case .MD extension is a rule (rule_name_kind is case-insensitive).
@@ -597,7 +601,7 @@ run_script
 check "bodymark: exit 0" "[ \"\$(rc)\" = 0 ]"
 check "bodymark: retired harness copy not fanned out" "grep -q 'Not fanned out: p.md (retired in the rules manifest)' '$C/out'"
 check "bodymark: user file kept" "grep -q '^mine' '$H/.cursor/rules/p.mdc' && grep -q 'Kept p.mdc' '$C/out'"
-check "bodymark: WARN row and ACTION" "grep -qxF 'WARN|cursor rules|n/a (no harness rules)' '$C/summary' && grep -qxF 'ACTION||Cursor still loads retired rules in ~/.cursor/rules: p.mdc -- delete them unless you wrote them' '$C/summary'"
+check "bodymark: WARN row (nothing to deploy) and ACTION" "grep -qxF 'WARN|cursor rules|n/a (nothing to deploy)' '$C/summary' && grep -qxF 'ACTION||Cursor still loads retired rules in ~/.cursor/rules: p.mdc -- delete them unless you wrote them' '$C/summary'"
 parity bodymark seed_bodymark
 
 # E5 (review finding 4): a manifest ending in a lone CR -- both scripts reject
@@ -635,6 +639,7 @@ run_script
 check "missingsrc: exit 0" "[ \"\$(rc)\" = 0 ]"
 check "missingsrc: warned" "grep -q 'Not fanned out: t.md is in the rules manifest but not in' '$C/out'"
 check "missingsrc: WARN row 1 added" "grep -qxF 'WARN|cursor rules|1 added' '$C/summary'"
+check "missingsrc: ACTION row to rebuild the manifest" "grep -qxF 'ACTION||Run aitools to rebuild ~/.aitools/rules and its manifest' '$C/summary'"
 parity missingsrc seed_missing
 
 # G2: a rule the manifest does not list is fanned out too (Claude parity, FAN-PLAN D1)
@@ -662,6 +667,63 @@ run_script
 check "nocreate: exit 1, ERROR row" "[ \"\$(rc)\" = 1 ] && [ \"\$(row)\" = 'ERROR|cursor rules|cannot create rules dir' ]"
 check "nocreate: the file in the way kept" "grep -qx 'a file' '$H/.cursor/rules'"
 parity nocreate seed_nocreate
+
+# errors COUNT: the number of [error] log lines a run printed (sh: $C/out, ps: $C/out-ps)
+errcount() { perl -ne '$n++ if /\[error\]/; END { print $n + 0 }' "$1"; }
+
+# H1 (audit B1): a dangling symlink at a target name -- the deploy fails once,
+# and validation does not report it a second time (.ps1 Test-Path -PathType Leaf
+# is true for a dangling link); same error count in both shells
+seed_dangtarget() {
+    manifest "s.md|shared" "t.md|shared"
+    printf '## Shared rule\n' > "$H/.aitools/rules/s.md"
+    printf '## Shared rule t\n' > "$H/.aitools/rules/t.md"
+    mkdir -p "$H/.cursor/rules"
+    ln -s "$H/nowhere.mdc" "$H/.cursor/rules/s.mdc"
+}
+setup_case dangtarget
+seed_dangtarget
+run_script
+check "dangtarget: exit 1, ERROR 1 failed, t.mdc deployed" "[ \"\$(rc)\" = 1 ] && [ \"\$(row)\" = 'ERROR|cursor rules|1 failed' ] && [ -f '$H/.cursor/rules/t.mdc' ]"
+check "dangtarget: no second Validation error" "! grep -q 'Validation failed' '$C/out'"
+parity dangtarget seed_dangtarget
+if [ "$HAVE_PWSH" = "true" ]; then
+    check "parity ps1: dangtarget: same number of error lines ($(errcount "$C/out"))" "[ \"\$(errcount '$C/out')\" = \"\$(errcount '$C/out-ps')\" ] && ! grep -q 'Validation failed' '$C/out-ps'"
+fi
+
+# H2 (review 3): a retired name is looked up case-insensitively in ~/.cursor/rules
+# and reported under its on-disk name (Gone.md in the manifest, gone.mdc on disk)
+seed_caseretired() {
+    manifest "Gone.md|retired"
+    mkdir -p "$H/.cursor/rules"
+    printf '## Gone rule\n' > "$C/gone-src.md"
+    conv "$C/gone-src.md" "gone.md" > "$H/.cursor/rules/gone.mdc"
+}
+setup_case caseretired
+seed_caseretired
+run_script
+check "caseretired: removed under its on-disk name" "[ \"\$(rc)\" = 0 ] && [ ! -e '$H/.cursor/rules/gone.mdc' ] && grep -qxF 'DETAIL|cursor rules|removed: gone.mdc' '$C/summary' && grep -qxF 'OK|cursor rules|1 removed' '$C/summary'"
+parity caseretired seed_caseretired
+
+# H3 (audit B3): an unreadable source rule -- the reason is in the log line
+seed_unreadsrc() {
+    manifest "s.md|shared" "t.md|shared"
+    printf '## Shared rule\n' > "$H/.aitools/rules/s.md"
+    printf '## Shared rule t\n' > "$H/.aitools/rules/t.md"
+    chmod 000 "$H/.aitools/rules/s.md"
+}
+setup_case unreadsrc
+seed_unreadsrc
+if [ -r "$H/.aitools/rules/s.md" ]; then
+    printf 'SKIP unreadsrc (chmod 000 does not block reads in this environment)\n'; SKIP=$((SKIP + 1))
+else
+    run_script
+    check "unreadsrc: exit 1, ERROR 1 failed, the other rule deployed" "[ \"\$(rc)\" = 1 ] && [ \"\$(row)\" = 'ERROR|cursor rules|1 failed' ] && [ -f '$H/.cursor/rules/t.mdc' ]"
+    check "unreadsrc: the reason is in the log line, no raw shell error" "grep -q '\[error\] Failed: s.md: cannot read .* -- permission denied' '$C/out' && ! perl -pe 's/\e\[[0-9;]*m//g' '$C/out' | grep -v '^\[' | grep -qi 'permission denied'"
+    parity unreadsrc seed_unreadsrc
+    chmod 644 "$C/home/.aitools/rules/s.md"
+    if [ -f "$C/home-ps/.aitools/rules/s.md" ]; then chmod 644 "$C/home-ps/.aitools/rules/s.md"; fi
+fi
 
 # --- pty: the review menu prompts (deploy list on fd 3) and [x]abort exits 2 --
 # Before the fd-3 fix the bash loop read its list from a here-string on stdin,

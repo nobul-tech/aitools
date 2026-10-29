@@ -738,10 +738,21 @@ cparity cursor-rerun
 
 seed_cursor_none() { cskill mine SKILL.md 'mine'; }
 cursor_case cursor-none seed_cursor_none
-# No row: setup-user-skills (the fallback) owns the cursor skills rows then
-# (PR #125 N2, #124 5267e9e; merged with #123 in #125)
-check "cursor, no harness skills: no cursor skills row, logged, ~/.cursor/skills untouched" "[ \"\$(rc)\" = 0 ] && ! grep -qF '|cursor skills|' '$C/sh.summary' && grep -q 'No harness skills at .*setup-user-skills deploys skills' '$C/sh.out' && [ \"\$(ls '$(CS)')\" = mine ]"
+# No ~/.aitools/skills: the fan-out logs only and writes no row (FO-6's
+# setup-user-skills owns the row then; contract change in #124 5267e9e)
+check "cursor, no harness skills: no cursor skills row, logged, ~/.cursor/skills untouched" "[ \"\$(rc)\" = 0 ] && [ -z \"\$(cnondetail)\" ] && ! grep -qF '|cursor skills|' '$C/sh.summary' && grep -q 'No harness skills at .*setup-user-skills deploys skills' '$C/sh.out' && [ \"\$(ls '$(CS)')\" = mine ]"
 cparity cursor-none
+
+# Only retired names in both manifests, nothing in ~/.cursor: steps 4 and 5
+# write the same row text (review 1 / audit B6)
+seed_cursor_retired_only() {
+    manifest 'gone|retired'
+    mkdir -p "$H/.aitools/rules"
+    printf '# aitools rules manifest v1\nx.md\tretired\n' > "$H/.aitools/rules/.aitools-rules-manifest"
+}
+cursor_case cursor-retired-only seed_cursor_retired_only
+check "cursor, only retired names: both steps write n/a (nothing to deploy)" "[ \"\$(rc)\" = 0 ] && [ \"\$(cnondetail)\" = 'OK|cursor skills|n/a (nothing to deploy)' ] && [ \"\$(grep -F '|cursor rules|' '$C/sh.summary' | grep -v '^DETAIL' | tail -n 1)\" = 'OK|cursor rules|n/a (nothing to deploy)' ]"
+cparity cursor-retired-only
 
 printf '\n%d passed, %d failed, %d skipped\n' "$PASS" "$FAIL" "$SKIP"
 [ "$FAIL" -eq 0 ]
