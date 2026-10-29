@@ -2721,7 +2721,7 @@ function Get-SkillNameKind([string]$Name) {
 # (the same key for both kinds); Invalid = list of ignored lines (tabs shown as
 # <TAB>) }. Status is "header-bad" when the first line (a UTF-8 BOM and a CR
 # before the LF ignored) is not the kind's header. A valid line: a name with no
-# / or \ and no .bak. (rules: a *.md name; skills: not starting with a dot), a
+# / or \ and no .bak. (rules: a *.md name, any case; skills: not starting with a dot), a
 # source of shared, aitools, dotprofile or retired, and a name not already
 # listed (compared case-insensitively). Throws for an unknown Kind (the .sh
 # exits 2) and when the file is missing, unreadable or a directory (the .sh
@@ -2730,7 +2730,7 @@ function Get-SkillNameKind([string]$Name) {
 function Read-HarnessManifest {
     param([string]$Path, [string]$Kind)
     switch -CaseSensitive ($Kind) {
-        "rules"  { $header = $rulesManifestHeader;  $namePattern = '\A[^/\\]+\.md\z' }
+        "rules"  { $header = $rulesManifestHeader;  $namePattern = '\A[^/\\]+\.[mM][dD]\z' }
         "skills" { $header = $skillsManifestHeader; $namePattern = '\A[^/\\.][^/\\]*\z' }
         default  { throw "Read-HarnessManifest: unknown kind `"$Kind`" (rules or skills)" }
     }
