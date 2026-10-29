@@ -6,7 +6,8 @@
 # repo claude/skills/ (personal). Dotprofile skills take priority over shared.
 # Deploys to ~/.claude/skills/ and ~/.cursor/skills/.
 # Reverse discovery: detects user-created skills in deploy target and offers
-# to adopt them to the dotprofile repo.
+# to adopt them to the dotprofile repo. Never offered: aitool-ops and
+# aitool-eval, aitools skills retired (PR 129) before the skills manifest.
 #
 # Fallback deployer (FD-9, plans/skills-and-rules-fanout.md FO-6): when
 # ~/.aitools/skills exists (deploy-harness has run), the fan-out owns the skills
@@ -224,6 +225,17 @@ if [ -n "$SKILL_NAMES" ]; then
 fi
 
 # --- Reverse discovery ---
+# Skills aitools retired before the skills manifest existed: PR 129 deleted
+# aitool-ops and aitool-eval from shared/skills, the old setup-user-skills had
+# deployed them to ~/.claude/skills, and no skills manifest lists them. A copy
+# left there is an old aitools copy, not a user-created skill, so it is never
+# offered for adoption, in either mode (S3-Merge2-Review125 N2). Lower-cased,
+# one per line, each line ending in a newline (in_list). Parity:
+# $retiredSkillNames (.ps1).
+RETIRED_SKILL_NAMES="aitool-eval
+aitool-ops
+"
+
 # Scan deployed skills for user-created skills not in shared or dotprofile
 reverse_discover_skills() {
     local dest_base="$1"
@@ -250,6 +262,11 @@ reverse_discover_skills() {
         if [ "$SKILLS_FANNED_OUT" = "true" ]; then
             [ "$(skill_name_kind "$skill_name")" = "skill" ] || continue
             in_list "$(lower_name "$skill_name")" "$HARNESS_SKILL_NAMES" && continue
+        fi
+        # An aitools skill retired before the manifest existed (both modes)
+        if in_list "$(lower_name "$skill_name")" "$RETIRED_SKILL_NAMES"; then
+            log "Not offered for adoption: $skill_name (an aitools skill retired before the skills manifest existed; delete ~/.claude/skills/$skill_name if you no longer use it)"
+            continue
         fi
         # Skip if in shared
         [ -d "$SKILLS_SRC/$skill_name" ] && continue

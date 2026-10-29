@@ -5,7 +5,8 @@
 # repo claude\skills\ (personal). Dotprofile skills take priority over shared.
 # Deploys to %USERPROFILE%\.claude\skills\ and %USERPROFILE%\.cursor\skills\.
 # Reverse discovery: detects user-created skills in deploy target and offers
-# to adopt them to the dotprofile repo.
+# to adopt them to the dotprofile repo. Never offered: aitool-ops and
+# aitool-eval, aitools skills retired (PR 129) before the skills manifest.
 #
 # Fallback deployer (FD-9, plans/skills-and-rules-fanout.md FO-6): when
 # %USERPROFILE%\.aitools\skills exists (deploy-harness has run), the fan-out
@@ -268,6 +269,15 @@ function Get-HarnessSkillNames {
 }
 
 # --- Reverse discovery ---
+# Skills aitools retired before the skills manifest existed: PR 129 deleted
+# aitool-ops and aitool-eval from shared\skills, the old setup-user-skills had
+# deployed them to .claude\skills, and no skills manifest lists them. A copy
+# left there is an old aitools copy, not a user-created skill, so it is never
+# offered for adoption, in either mode (S3-Merge2-Review125 N2). Compared
+# case-insensitively. Parity: RETIRED_SKILL_NAMES (.sh).
+$retiredSkillNames = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
+foreach ($n in @("aitool-eval", "aitool-ops")) { [void]$retiredSkillNames.Add($n) }
+
 # Scan deployed skills for user-created skills not in shared or dotprofile.
 # Fan-out mode: only with a dotprofile (the adopt target) and the harness names.
 $runReverse = $false
@@ -299,6 +309,11 @@ if ($destSkillDirs.Count -gt 0) {
         if ($skillsFannedOut) {
             if ((Get-SkillNameKind $skillName) -ne "skill") { continue }
             if ($harnessSkillNames.Contains($skillName)) { continue }
+        }
+        # An aitools skill retired before the manifest existed (both modes)
+        if ($retiredSkillNames.Contains($skillName)) {
+            Log "Not offered for adoption: $skillName (an aitools skill retired before the skills manifest existed; delete ~/.claude/skills/$skillName if you no longer use it)"
+            continue
         }
 
         # Skip if in shared
