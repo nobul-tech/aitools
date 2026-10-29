@@ -40,15 +40,15 @@ When you're uncertain, ask — and suggest an answer with the question.
 
 - `.claude/rules/` — behavioral rules, always in context. Check them before assuming.
 - `shared/` — source for user-level configs (skills, hooks, rules, claude-shared) that
-  `aitools install` deploys to `~/.aitools/` (deploy-harness), `~/.claude/` and `~/.cursor/`.
+  `aitools install` deploys to `~/.aitools/` (deploy-harness). setup-user-claude and
+  setup-user-cursor then fan rules and skills out from `~/.aitools/` into `~/.claude/`
+  and `~/.cursor/`; setup-user-skills is the fallback when `~/.aitools/skills` is absent.
 - `scripts/` — the `aitools` CLI, `hh`, setup scripts, checks, `build-deploy.sh`.
 - `registries/` — governed JSON registries (tool registry, tool-ops, incidents,
   glossary, frameworks); read and write them only through their skills.
 - `tests/` — test suites, one directory per area. CI (`.github/workflows/check.yml`)
-  runs logging, managed-files, profile, claude-mdm and build-deploy on macOS and
-  Linux; Windows runs logging and managed-files. hookin, deploy-harness,
-  deploy-harness-mdm, rules-fanout-cursor, build-package and b8-consumers run
-  locally only (run the ones your change touches).
+  runs every suite (`tests/**/test-*.sh`) and fails when one has no CI step (FO-0);
+  the Windows job runs a subset. Run the suites your change touches before pushing.
 - `deploy/` — the frozen, historical shared baseline (no longer regenerated; `aitools`
   resets it to HEAD before each pull). `build-deploy.sh` writes each user's
   personalized MDM scripts to the dotprofile's `deploy/` (`aitools-<user>/deploy/`).
