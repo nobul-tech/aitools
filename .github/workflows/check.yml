@@ -260,6 +260,40 @@ jobs:
         if: ${{ !cancelled() }}
         run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/build-deploy/test-build-deploy-backup.sh
 
+      # Hook output-channel tests: one step per suite (not run-hook-tests.sh),
+      # so the "Every test suite is in CI" step sees each test-*.sh.
+      - name: Hook output-channel tests, sh-file-fixup (bash 5)
+        if: ${{ !cancelled() }}
+        run: bash tests/hooks/test-sh-file-fixup.sh
+
+      - name: Hook output-channel tests, glossary-skill-guard (bash 5)
+        if: ${{ !cancelled() }}
+        run: bash tests/hooks/test-glossary-skill-guard.sh
+
+      - name: Hook output-channel tests, SessionStart harness-db (bash 5)
+        if: ${{ !cancelled() }}
+        run: bash tests/hooks/test-sessionstart-harness-db.sh
+
+      - name: Hook output-channel tests, smoke (bash 5)
+        if: ${{ !cancelled() }}
+        run: bash tests/hooks/test-hooks-smoke.sh
+
+      - name: Hook output-channel tests, sh-file-fixup (macOS /bin/bash 3.2)
+        if: ${{ !cancelled() }}
+        run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/hooks/test-sh-file-fixup.sh
+
+      - name: Hook output-channel tests, glossary-skill-guard (macOS /bin/bash 3.2)
+        if: ${{ !cancelled() }}
+        run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/hooks/test-glossary-skill-guard.sh
+
+      - name: Hook output-channel tests, SessionStart harness-db (macOS /bin/bash 3.2)
+        if: ${{ !cancelled() }}
+        run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/hooks/test-sessionstart-harness-db.sh
+
+      - name: Hook output-channel tests, smoke (macOS /bin/bash 3.2)
+        if: ${{ !cancelled() }}
+        run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/hooks/test-hooks-smoke.sh
+
       - name: Build deploy scripts
         run: |
           echo "::group::Running build-deploy.sh"
@@ -529,6 +563,23 @@ jobs:
         if: ${{ !cancelled() }}
         run: bash tests/build-deploy/test-build-deploy-backup.sh
 
+      # Hook output-channel tests: one step per suite (see the macos job).
+      - name: Hook output-channel tests, sh-file-fixup
+        if: ${{ !cancelled() }}
+        run: bash tests/hooks/test-sh-file-fixup.sh
+
+      - name: Hook output-channel tests, glossary-skill-guard
+        if: ${{ !cancelled() }}
+        run: bash tests/hooks/test-glossary-skill-guard.sh
+
+      - name: Hook output-channel tests, SessionStart harness-db
+        if: ${{ !cancelled() }}
+        run: bash tests/hooks/test-sessionstart-harness-db.sh
+
+      - name: Hook output-channel tests, smoke
+        if: ${{ !cancelled() }}
+        run: bash tests/hooks/test-hooks-smoke.sh
+
       - name: Build deploy scripts
         run: bash scripts/build-deploy.sh
 
@@ -682,6 +733,27 @@ jobs:
           # The runner appends `exit $LASTEXITCODE` to pwsh steps; the expected
           # exit 1 from resolve would otherwise fail the step.
           exit 0
+
+      # Hook output-channel tests: one step per suite (see the macos job).
+      - name: Hook output-channel tests, sh-file-fixup (via Git Bash)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: bash tests/hooks/test-sh-file-fixup.sh
+
+      - name: Hook output-channel tests, glossary-skill-guard (via Git Bash)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: bash tests/hooks/test-glossary-skill-guard.sh
+
+      - name: Hook output-channel tests, SessionStart harness-db (via Git Bash)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: bash tests/hooks/test-sessionstart-harness-db.sh
+
+      - name: Hook output-channel tests, smoke (via Git Bash)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: bash tests/hooks/test-hooks-smoke.sh
 
       # tests/rules-fanout-cursor is not run here: its header lists Git Bash, but
       # its manifest cases run setup-user-cursor.sh, whose OS guard exits on

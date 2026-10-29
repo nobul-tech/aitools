@@ -11,7 +11,12 @@
 #   - Discovers handoffs at .aitools/channel/handoffs/ (R3, #53)
 #   - Registers session in harness SQLite DB if harness-db.py is available
 #   - SQLite integration is OBSERVE mode (log-only, never blocks)
-#   - harness-db.py stderr is NOT suppressed — safety warnings must surface
+#   - Output channel: SessionStart plain stdout is added to Claude's
+#     context; stderr of a hook that exits 0 never reaches Claude (Claude
+#     Code hooks reference, "Exit code 0"). harness-db.py runs with 2>&1 so
+#     its warnings and errors reach Claude, and the "registered" line is
+#     printed only when both calls exited 0 ("NOT registered" otherwise)
+# Platform: macOS + Linux + Windows Git Bash (bash 3.2 compatible)
 
 set -euo pipefail
 
@@ -105,12 +110,22 @@ if [ -n "$SESSION_ID" ]; then
         done
 
         if [ -n "$HELPER" ] && "$PYTHON" -c "import sqlite3" 2>/dev/null; then
-            # Initialize harness databases (creates if missing)
-            # Let stderr through (warnings visible to Claude), but don't block on failure
-            "$PYTHON" "$HELPER" init || true
+            # Initialize harness databases (creates if missing).
+            # 2>&1: warnings reach Claude on stdout (see header). A failure
+            # never blocks the session; the status line below reports it.
+            hdb_failed=""
+            if ! PYTHONUNBUFFERED=1 "$PYTHON" "$HELPER" init 2>&1; then
+                hdb_failed="init"
+            fi
             # Register this session (pass project root so it lands in the session table)
-            "$PYTHON" "$HELPER" session start --id "$SESSION_ID" --project-dir "$PROJECT_ROOT" || true
-            printf 'Harness DB: session %s registered\n' "$SESSION_ID"
+            if ! PYTHONUNBUFFERED=1 "$PYTHON" "$HELPER" session start --id "$SESSION_ID" --project-dir "$PROJECT_ROOT" 2>&1; then
+                hdb_failed="${hdb_failed:+$hdb_failed, }session start"
+            fi
+            if [ -z "$hdb_failed" ]; then
+                printf 'Harness DB: session %s registered\n' "$SESSION_ID"
+            else
+                printf 'Harness DB: session %s NOT registered (harness-db.py %s failed; the cause is in the harness-db.py output above)\n' "$SESSION_ID" "$hdb_failed"
+            fi
         fi
     fi
 fi
