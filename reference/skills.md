@@ -163,16 +163,16 @@ Seven skills carry one (`audit`, `incident`, `tool-ops`, `delegate`,
 (S-5). Its format and who runs it: unknown (no rule or reference governs
 it; see section 10).
 
-### 4.5 Reference-card pattern
+### 4.5 Reference-card pattern (retired)
 
-A shared skill may embed a read-only, dated snapshot of project knowledge
-for use outside aitools: `/aitool-ops`, `/aitool-eval`. "Derived",
-"Read-only", "Self-contained", "Staleness-aware" (`@.claude/rules/aitool-ops.md`
-"Reference-card pattern"). The governing rule says which skill to use in
-which repo. With S-1 the full project skill (`/tool-ops`, `/tool-eval`) is
-listed in every repo too, but works only inside aitools; the rules say so
-(`@.claude/rules/aitool-ops.md`, `@.claude/rules/aitool-eval.md` "Skill
-taxonomy").
+Until PR 129 two shared skills, `/aitool-ops` and `/aitool-eval`, embedded a
+read-only, dated snapshot of project knowledge for use outside aitools
+("Derived", "Read-only", "Self-contained", "Staleness-aware"), each with a
+project trigger rule that said which skill to use in which repo. PR 129
+retired both cards and both rules: `/tool-ops` and `/tool-eval` are user
+level since PR 128 (`shared/skills/`) and each says where its repo paths
+resolve ("Where the files live"; `@.claude/rules/documentation-standards.md`
+"Skill placement", "Governed data"). No skill uses the pattern today.
 
 ## 5. Scopes and loading
 
@@ -466,8 +466,10 @@ the aitools repo). No skill does that today; a decision for later (section 10).
 ## 10. Gaps and contradictions found
 
 Resolved in FO-7 (this PR): `@.claude/rules/documentation-standards.md`
-"Skill placement" (FX-71); `@.claude/rules/aitool-ops.md` /
-`@.claude/rules/aitool-eval.md` "the only available skill"; the content
+"Skill placement" (FX-71); the reference-card rules' "the only available
+skill" (the `aitool-ops` / `aitool-eval` rules and cards were then retired
+by PR 129; `/tool-ops` and `/tool-eval` are in `shared/skills` since PR 128);
+the content
 sources that said the dotprofile wins for skills
 (`@reference/managed-file-deployment.md`, `@.claude/rules/managed-file-deployment.md`);
 the `setup-user-mcp` claims in `@reference/cursor-practices.md`,
@@ -503,7 +505,6 @@ Open (`INCIDENT:` markers for the delegating agent; not filed):
 - Layering and length: `@.claude/rules/documentation-standards.md`
 - Rule-skill governance: `@reference/framework-three-layer-governance.md`
 - Skill-as-capability: `@reference/framework-governed-data-access.md`, `@.claude/rules/governed-data-access.md`
-- Reference cards: `@.claude/rules/aitool-ops.md`, `@.claude/rules/aitool-eval.md`
 - Intent: `/intent-writing` skill
 - Deployed harness and manifests: `@reference/harness.md`; `scripts/deploy-harness.sh` / `.ps1`
 - Managed files: `@.claude/rules/managed-file-deployment.md`, `@reference/managed-file-deployment.md`
