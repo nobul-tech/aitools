@@ -1,0 +1,2 @@
+PROMPT 'choice [o/s/x]: ' for /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-ps/fx/home/.cursor/rules/fx-shared.mdc -> answered 'x'
+prompts=1 exit=2

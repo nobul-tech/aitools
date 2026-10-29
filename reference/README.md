@@ -52,9 +52,13 @@ through their skills, not listed here.
 | `tool-registry.md` | DEPRECATED (T-Q7): use the `/tool-registry` skill (`registries/tool-registry.json`) |
 | `tool-evaluation-criteria.md` | Tool evaluation framework and lifecycle phases |
 | `tool-evaluation-playbook.md` | Install method discovery process |
+| `tool-support-decision-tree.md` | The decision tree every tool setup script follows (design; implementation status at the top) |
 | `tool-ops-claude-code.md` | Claude Code operations: version dependencies, session behavior, workarounds |
+| `tool-ops-cursor.md` | Cursor operations: user rule files, loader behaviour, verification |
+| `tool-ops-google-chrome.md` | Google Chrome for chrome-devtools-mcp, Claude Code web args (D-CHR1-3) |
+| `evaluations/` | Dated install-method evaluation records (`/tool-eval`) |
 | `cursor-practices.md` | Cursor rules system, MCP config, CLI, skills |
 | `agentic-framework.md` | `invoke_ai` / `Invoke-AI`: speed and permission tiers, retries, telemetry |
 | `agentic-prompt-patterns.md` | Prompt patterns for AI CLI calls in scripts |
-| `claude-code-effectiveness.md` | Self-assessment tracker for Claude Code usage |
+| `claude-code-effectiveness.md` | Historical copy (2026-02/03) of the effectiveness tracker; the maintained one is the dotprofile `claude/effectiveness.md` |
 | `do-what-feels-right.md` | The original failure-mode briefing, preserved verbatim |

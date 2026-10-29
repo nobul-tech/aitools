@@ -393,6 +393,38 @@ if (-not $python20) {
 }
 
 # ---------------------------------------------------------------------------
+# 21. Skill levels: one skill name, one level (shared/skills, .claude/skills,
+#     dotprofile claude/skills). See documentation-standards.md "Skill placement".
+# ---------------------------------------------------------------------------
+Write-Host ""
+Write-Host "--- Step 21: Skill levels ---" -ForegroundColor White
+if (-not $python20) {
+    StepFail "21" "Skill levels" "python not found (required to run scripts/check-skill-levels.py)"
+} else {
+    $skillScript = Join-Path $script:RepoRoot "scripts/check-skill-levels.py"
+    $skillArgs = @($skillScript, "--root", $script:RepoRoot)
+    if ($script:UserRepoPath) { $skillArgs += @("--dotprofile", $script:UserRepoPath) }
+    # The helper exits 1 on collisions and 2 on errors; native stderr must not throw.
+    $prevEAP = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        $skillOut = @(& $python20 @skillArgs 2>&1)
+        $skillRc = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $prevEAP
+    }
+    if ($skillRc -eq 0) {
+        StepPass "21" "Skill levels" "no skill name at two levels"
+    } elseif ($skillRc -eq 1) {
+        $skillOut | ForEach-Object { Write-Host "  $_" }
+        StepFail "21" "Skill levels" "same skill name at two levels (keep one: git mv within aitools; delete a dotprofile copy of a shared skill)"
+    } else {
+        $skillOut | ForEach-Object { Write-Host "  $_" }
+        StepFail "21" "Skill levels" "check-skill-levels.py error (exit $skillRc)"
+    }
+}
+
+# ---------------------------------------------------------------------------
 # Summary + exit
 # ---------------------------------------------------------------------------
 PrintSummary

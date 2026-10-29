@@ -11,7 +11,7 @@ coordination, and user collaboration patterns. **Scope**: Session
 planning conventions and execution strategy only. NOT plan file
 creation or content (that is the agent's deliverable). NOT plan
 re-evaluation (see `/optimize-plan`). NOT session handoff (see
-`/handoff`). NOT session resume (see `/aitool-resume`). **Audience**:
+`/handoff`). NOT session resume (Claude Code `/resume`, or `/aitool-continue` for OL context). **Audience**:
 Any agent starting a planning session, deciding session scope,
 coordinating subagents, or managing context budgets.
 
@@ -42,8 +42,8 @@ Override with `model: sonnet` etc. in skill/subagent frontmatter.
 1. Read the plan + incidents.json + relevant rules
 2. Work through implementation steps in order
 3. Surface ambiguities as they arise (surfacing duty)
-4. At 60-70%: stop building, file gaps, update release notes, commit,
-   tag, push
+4. At 60-70%: stop building, record gaps, update release notes, commit
+   and push (tag only on the commander's order)
 5. If more work remains, note where to resume in the commit message
 
 ## Planning Patterns
@@ -99,14 +99,14 @@ unless explicitly reopened.
 
 ### Subagent context gap
 
-Subagents do NOT inherit:
-- Project rules (`.claude/rules/*.md`)
-- Skills from parent conversation
-- CLAUDE.md content
-
-Mitigation: SubagentStart hook injects skills and governance context
-via pre-built cache (when deployed). Until then, include critical rules
-in the subagent prompt.
+What a sub-agent receives varies by type, launch path and version:
+general-purpose Agent-tool delegates receive the CLAUDE.md files;
+Explore, Plan, some built-in types and Workflow `agent()` calls may omit
+them; project rules may attach only when the delegate reads files under
+the repo; skills loaded in the parent are not inherited. There is no
+SubagentStart injection hook. Mitigation: the delegation prompt lists
+every CLAUDE.md and rule to read in full and restates the critical ones
+(`/delegate` element 2).
 
 ### Subagent file access restriction
 
@@ -134,12 +134,13 @@ also perform the same searches yourself.
 
 ### Delegation duty
 
-Every delegation prompt carries seven elements: identity, rules,
-skills, operational learning, the `WRITE_BLOCKED` signal, access
-(explicit paths), and the name prefix -- the delegate writes every
-`*.md` file with its name as a prefix (`S2-report.md`, decision
-D-DEL1). Use the `/delegate` skill to write the prompt and to verify
-what comes back.
+Every delegation prompt carries eight elements (`/delegate` skill):
+identity; rules and CLAUDE.md files; skills (`/delegate` first);
+operational learning; conflict priority (D-DEL6); the `WRITE_BLOCKED`
+signal; access (explicit paths); and the name prefix (D-DEL1,
+`S2-report.md`). Delegates write versions, not drafts (D-DEL5). Load
+`/delegate` before every Agent or Workflow call (D-DEL7), to write the
+prompt and to verify what comes back.
 
 When planning parallel or chained delegation, check the nesting cap
 first: `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` (documented default 3;
@@ -152,8 +153,9 @@ without delegating.
 ### User as co-architect
 
 During planning, actively involve the user:
-- **Present options, not conclusions.** "Here are three approaches,
-  which fits?" beats "I recommend X."
+- **Present options with a recommendation.** "Here are three approaches;
+  I'd pick B because …" — never a bare question, never a conclusion
+  without the alternatives.
 - **Flag uncertainty explicitly.** "I'm not sure about Y — what's your
   take?" instead of guessing.
 - **Ask for domain knowledge.** The user has context that no amount of

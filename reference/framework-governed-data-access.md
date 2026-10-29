@@ -6,7 +6,7 @@ registries. **Scope**: Why we adopted capability-based security,
 document control, and information hiding — and how they map to our
 harness. NOT the operational rules (see
 `@.claude/rules/governed-data-access.md`). NOT which registries
-exist (see `@.claude/rules/frameworks.md` registries table).
+exist (the `/frameworks` skill lists them).
 **Audience**: Agents designing new registries, agents building
 detection hooks, framework adoption work.
 
@@ -101,7 +101,7 @@ Every governed registry has three enforcement layers:
 | Layer | Mechanism | What it catches |
 |-------|-----------|----------------|
 | Prevention | Trigger directive in rule + governed-data-access rule | Agent reads rule, knows to invoke skill. Always in context. |
-| Detection | PreToolUse hook on Read/Edit + pre-commit step 16 | Agent accesses governed data directly — hook injects reminder, pre-commit blocks commit. |
+| Detection | `glossary-skill-guard.sh` (PreToolUse `Read\|Grep`, glossary files only) + pre-commit step 16 (governed JSON paths in `.claude/rules/`, `.cursor/rules/`, `CLAUDE.md`; table rows exempt) | Direct access to the glossary; governed paths in rules. Other registries have no detection hook yet (gap). |
 | Telemetry | KPI: governed data access without skill invocation | Measures whether prevention and detection are working. |
 
 A governed registry without all three layers has gaps:
@@ -113,14 +113,14 @@ A governed registry without all three layers has gaps:
 
 - `@.claude/rules/governed-data-access.md` enforces the access principle
 - Pre-commit step 16 catches capability bypasses at commit time
-- The registries table in `@.claude/rules/frameworks.md` lists all
-  governed registries and their skills
+- The framework registry (`/frameworks` skill) lists all governed
+  registries and their skills
 - New governed registries: use `/governed-data` skill
 
 ## Implementing Artifacts
 
 - `@.claude/rules/governed-data-access.md` (operational rule)
-- `@.claude/rules/frameworks.md` (registries table)
+- `@.claude/rules/frameworks.md` (the three-layer pattern; the inventory is in the `/frameworks` skill)
 - Trigger directives in governing rules (glossary.md, incident-governance.md,
   frameworks.md, tool-evaluation.md)
 - `scripts/check-pre-commit.sh/.ps1` step 16 (capability bypass audit)
@@ -128,7 +128,7 @@ A governed registry without all three layers has gaps:
 ## Cross-References
 
 - Operational rule: `@.claude/rules/governed-data-access.md`
-- Registries table: `@.claude/rules/frameworks.md`
+- Registry inventory: `/frameworks` skill
 - Three-layer governance: `@reference/framework-three-layer-governance.md`
 - Framework registry: `/frameworks` skill
 - Glossary terms: `file classification`, `skill-as-capability`,

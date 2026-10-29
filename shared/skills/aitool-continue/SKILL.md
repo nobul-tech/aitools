@@ -18,7 +18,7 @@ with the full institutional memory of all prior sessions. **Scope**:
 Session initialization, operational learning loading, commander
 profile, delegation principles, rewind detection and integration,
 project-specific context, per-repo awareness. NOT session restoration
-from a specific prior session (that is `/aitool-resume`). NOT handoff
+from a specific prior session (Claude Code `/resume`). NOT handoff
 production (that is `/handoff`). NOT session planning (that is
 `/planning`). NOT artifact harvesting (that is `/harvest`).
 **Audience**: Every agent, every session, every repo.
@@ -124,8 +124,8 @@ exists, it contains:
 - **Part 2: Delegation Principles** -- what works (P1-P7), what
   does not work (anti-patterns 1-4), what propagates errors,
   what catches errors, the delegation duty elements (the
-  consolidated OL lists six; D-DEL1 added a seventh on 2026-10-05,
-  see below)
+  consolidated OL lists six; the current duty has eight, `/delegate`
+  skill; see below)
 - **Part 3: Operational Learning Principles** -- OL-1 through
   OL-14, each with evidence, counter-evidence, and carry-forward
   instructions
@@ -342,14 +342,15 @@ known but actively governing behavior:
 - Do not use Explore agents for delegation
 - Do not launch verifiers without rules context
 
-**From the Seven Delegation Duty Elements (outbound):**
+**From the Eight Delegation Duty Elements (outbound, `/delegate` skill):**
 1. Identity (role: S2, S3, Verifier)
-2. Rules instruction (explicit paths to governing rules)
-3. Skills instruction (which skills to invoke -- MOST MISSING)
+2. Rules and CLAUDE.md files (read in full, absolute paths)
+3. Skills (`/delegate` first, passed down -- MOST MISSING)
 4. Operational learning (carry-forward OL)
-5. WRITE_BLOCKED signal (always include)
-6. Access workaround (explicit file paths)
-7. Name prefix (D-DEL1, 2026-10-05): the delegate writes every `*.md`
+5. Conflict priority (D-DEL6)
+6. WRITE_BLOCKED signal (always include)
+7. Access (explicit file paths)
+8. Name prefix (D-DEL1, 2026-10-05): the delegate writes every `*.md`
    file with its name as a prefix (`S2-report.md`)
 
 **From the Inbound Delegation Duty:**
@@ -358,9 +359,13 @@ known but actively governing behavior:
 3. INCIDENT: markers for deficiencies found
 4. Scope adherence (report gaps, do not expand)
 5. Provenance preservation (cite sources for factual claims)
+6. `CONFLICT:` lines for each resolved conflict (D-DEL6)
+7. Documents as versions, never drafts (D-DEL5)
+8. For a code change: pushed branch and PR URL (D-DEL4)
 
-The duty is governed by the user rule `delegation.md`; the prompt
-skeleton and verification steps are in the `/delegate` skill.
+The user rule `delegation.md` holds the decisions and the trigger
+(D-DEL7); the duty itself, the prompt skeleton and the verification
+steps are in the `/delegate` skill.
 
 **From Commander Correction Patterns:**
 - Corrections are fast, direct, non-repetitive
@@ -380,7 +385,7 @@ likely to be found here (it was produced here). Check:
 
 - `scripts/` for source files
 - `shared/` for configs, hooks, skills, shell aliases
-- `deploy/` for generated deploy scripts (ephemeral)
+- `deploy/` frozen historical baseline (generated MDM scripts live in the dotprofile `deploy/`)
 - `reference/` for detailed reference docs
 - `plans/` for active plans
 - `.claude/rules/` for behavioral rules
@@ -552,13 +557,13 @@ the full chain.
 
 ## What this does NOT do
 
-- Does NOT restore a specific prior session -- use `/aitool-resume`
+- Does NOT restore a specific prior session -- use Claude Code `/resume`
 - Does NOT produce handoff documents -- use `/handoff`
 - Does NOT plan sessions -- use `/planning`
 - Does NOT harvest artifacts -- use `/harvest`
 - Does NOT file incidents -- use `/incident`
-- Does NOT evaluate tools -- use `/aitool-eval`
-- Does NOT check tool operations -- use `/aitool-ops`
+- Does NOT evaluate tools -- use `/tool-eval`
+- Does NOT check tool operations -- use `/tool-ops`
 - Does NOT write delegation prompts -- use `/delegate`
 
 ## Staleness warning
@@ -575,7 +580,6 @@ to add, modify, or retire based on new evidence.
 - Rewind investigation: produced during session c0dc2ddc-f
   (2026-03-25) -- covers session design patterns, DB as time channel,
   delegation optimization, cross-timeline learning formalization
-- /aitool-resume RFC: `rfc-aitool-resume-v7-final.md`
 - Harness DB schema: `reference/harness-db-schema.sql`
 - Provenance framework: `reference/framework-provenance.md`
   (proposed, not yet shipped)

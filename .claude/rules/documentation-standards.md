@@ -21,7 +21,7 @@ paths:
 Each version entry follows this structure:
 
 ```
-## vX.Y -- Title (YYYY-MM-DD)
+## vX.Y.Z -- Title (YYYY-MM-DD)
 
 ### Bug fixes           (table: #, Severity, Fix)
 ### New features        (table: #, Change)
@@ -66,7 +66,10 @@ Create a `plans/*.md` file when work:
 
 ### Layered reference architecture
 
-- **Rules** (`.claude/rules/`) = concise behavioral directives, ~40-100 lines
+- **Rules** (`.claude/rules/`) = concise behavioral directives, target ~40-100
+  lines; a rule over 150 lines should move its detail to `reference/` (today:
+  script-standards, incident-governance, cross-platform, deploy-paths,
+  config-file-safety, agentic-standards)
   (what a rule is, its anatomy, scopes and deployment: `@reference/rules.md`)
 - **Skills** (`.claude/skills/`, `shared/skills/`) = the governed process,
   loaded on demand (what a skill is, its anatomy, scopes and deployment:
@@ -85,24 +88,34 @@ is deployed: every skill in `shared/skills/`, `.claude/skills/` and the
 dotprofile `claude/skills/` is deployed to user scope (`~/.claude/skills/`,
 `~/.cursor/skills/`) through `~/.aitools/skills` (commander, 2026-10-26).
 
-- **Shared** (`shared/skills/`): managed tool patterns, project-agnostic
-  conventions, USO enablement. Content must be factual (patterns, gotchas,
-  platform behavior), not project-specific opinions, and must work in any
-  repo (write aitools paths as "aitools `<path>`").
-- **Project** (`.claude/skills/` in the aitools repo): aitools frameworks,
-  governance workflows, development patterns. Deployed to user scope too,
-  so it is listed in every repo; it may cite aitools repo-relative paths
-  only if it says it works inside aitools only.
+- **Shared** (`shared/skills/`): user level. Managed tool patterns,
+  project-agnostic conventions, USO enablement, and the governance skills
+  useful in a session on any repo, even read-only. Content must be factual
+  (patterns, gotchas, platform behavior), not project-specific opinions,
+  and must work in any repo (write aitools paths as "aitools `<path>`").
+- **Project** (`.claude/skills/` in the aitools repo; today `audit` and
+  `governed-data`): only skills meaningful solely inside the aitools
+  working tree (they edit or audit aitools source). Deployed to user scope
+  too, so they are listed in every repo; a project skill may cite aitools
+  repo-relative paths only if it says it works inside aitools only.
 - **Dotprofile** (`<userRepoPath>/claude/skills/`): the user's own skills.
-- **Unique names**: a skill name must be unique across the three sources
-  (a duplicate is an ERROR on every deploy-harness run; first source wins:
-  shared, then project, then dotprofile). Inside aitools each project skill
-  exists at both levels until the commander removes the project copies,
-  and Claude Code runs the user-level copy, so a branch that edits a
-  project skill sees the old copy until the next `aitools` run.
-- **Split threshold**: A tool needs two skills only when it serves two
-  distinct personas (end user vs developer). Use `<name>` for the shared
-  skill and `<name>-dev` for the project one.
+- **One name, one place**: a skill name exists in exactly one of the
+  three sources. Pre-commit step 21 fails on a collision between
+  `shared/skills/`, `.claude/skills/` and the dotprofile's
+  `claude/skills/`, and a duplicate is an ERROR on every deploy-harness
+  run (first source wins: shared, then project, then dotprofile). Inside
+  aitools the two project skills exist at both levels (the
+  `.claude/skills/` source and the deployed `~/.claude/skills/` copy), and
+  Claude Code runs the user-level copy, so a branch that edits a project
+  skill sees the old copy until the next `aitools` run.
+- **Governed data**: user-level skills say where their repo paths
+  resolve (a "Where the files live" section): the aitools clone, else
+  `repoPath` in `~/.aitools/config.json`, else the read-only
+  `~/.aitools/registries/` copy deploy-harness installs.
+- **Split personas**: a tool needs both user and project skills only
+  when it serves two distinct personas (end user vs developer). Use
+  `<name>` for user-level and `<name>-dev` for project-level. No level
+  prefixes (`aitool-`, `aitools-`) in new names.
 - Anatomy, scopes and deployment: `@reference/skills.md`; inventory and
   architecture: `@plans/governance-and-compliance-framework.md`
 
@@ -116,7 +129,8 @@ dotprofile `claude/skills/` is deployed to user scope (`~/.claude/skills/`,
 - In `CLAUDE.md`: `@path/file.md` IS resolved at load time and pulls the
   file into context. Only use `@` for files you want auto-loaded. Use
   plain paths for references you want to keep lazy (most references)
-- Standardize existing rules files to use `@` for all cross-refs
+- Standardize existing rules files to use `@` for all cross-refs (not yet
+  done: several rules still cite `reference/` paths without `@`)
 
 ### Function and library attribution
 

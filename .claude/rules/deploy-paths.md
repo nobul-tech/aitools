@@ -89,8 +89,10 @@ has not run, the harness files still deploy but the run reports
 2. Run `bash scripts/build-deploy.sh` to regenerate the `<userRepoPath>/deploy/` counterpart
    (it takes the dotprofile from `AITOOLS_USER_REPO_PATH`, else from the resolver;
    an agent runs it only under an isolated `HOME` with a copy of the dotprofile:
-   it deletes and rebuilds `<dotprofile>/deploy/`)
-3. Verify the dotprofile `deploy/` includes the change (the shared `aitools/deploy/` is frozen, so pre-commit deploy-drift steps 3+10 no longer apply to it)
+   it replaces `<dotprofile>/deploy/`. It first copies the old tree to
+   `<dotprofile>/deploy.bak.<UTC>/` (at most 5 kept), builds in a temp dir and swaps
+   the new tree in only on success, so a failed build leaves the old `deploy/` (incident #86))
+3. Verify the dotprofile `deploy/` includes the change. Pre-commit steps 3 and 10 still inspect the frozen `aitools/deploy/` and prove nothing about the dotprofile build (step 3 `--fix` also runs `build-deploy.sh` against the real `HOME`: never pass it from an agent); `check-pre-push` step 7 is the real check
 4. If the script runs on the package path (every script `scripts/aitools-install.*`
    runs), run `bash scripts/build-package.sh stage` and verify the staged payload
    contains the change (from batch B2 of `@plans/build-package/implementation-plan.md`;
@@ -148,7 +150,8 @@ heading or rewording those lines fails the build loudly.
 - `shared/skills/*/SKILL.md` → read at build time into `deploy/setup-user-skills.*`,
   the fallback deployer that runs only when `~/.aitools/skills` does not exist
   (FD-9); on an endpoint the skills normally arrive through
-  `deploy/deploy-harness.*` and the fan-outs
+  `deploy/deploy-harness.*` (which embeds each skill's whole directory, below)
+  and the fan-outs
 - `<userRepoPath>/claude/CLAUDE.md` (else `@shared/claude-shared.md`) → read at
   build time, tokens left in place (the fallback template; resolved at runtime)
 - `<userRepoPath>/profile.json` → its snapshot (`aitools-json.pl snapshot`:
@@ -178,6 +181,8 @@ fails the push, not an endpoint.
 4. Verify `deploy/` output contains the fix (not just the old template output)
 5. Pre-commit step 13 will warn if step 2 was missed
 
-This duplication is a known technical debt item (incident I6, see ROADMAP.md).
-The structural fix is to refactor `build-deploy.sh` to extract setup logic from
-`scripts/` at build time instead of maintaining parallel copies.
+The remaining duplication (hook-script embedding and REGS_JSON injection in
+`setup-user-hooks`) is known technical debt. The general extraction was done in
+v0.25.1 (ROADMAP.md Completed, "Eliminate deploy template duplication"); there is
+no open roadmap item or incident for the rest. File one via the `/incident` skill
+if it needs tracking.

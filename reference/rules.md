@@ -97,10 +97,12 @@ as part of a framework, three artifacts are created together: the skill, the
 trigger directive in the governing rule, and a detection hook spec
 (`@reference/framework-adoption.md` step 7).
 
-**Reference-card pattern.** A user-level skill may carry a read-only,
-self-contained snapshot of project knowledge for use outside aitools
-(`/aitool-ops`, `/aitool-eval`); its rule says which skill to use in which
-repo (`@.claude/rules/aitool-ops.md`, `@.claude/rules/aitool-eval.md`).
+**Reference-card pattern (retired).** A user-level skill used to carry a
+read-only, self-contained snapshot of project knowledge for use outside
+aitools (`/aitool-ops`, `/aitool-eval`), each with a project trigger rule.
+The LAYOUT PR-c re-land retired both cards and their rules: `/tool-ops` and
+`/tool-eval` are user-level skills now, so they load in every repo and the
+snapshots only drifted from their sources.
 
 ## 4. Anatomy of a rule
 
@@ -112,8 +114,8 @@ rule `delegation.md` (dotprofile `claude/rules/delegation.md`, deployed to
 user rule.
 
 1. **Frontmatter `paths:`** (optional). A list of globs; the rule applies when
-   the agent works on matching files (section 5). 9 of the 26
-   `.claude/rules/*.md` have it today (`grep -L '^paths:'` lists the other
+   the agent works on matching files (section 5). 9 of the 24
+   `.claude/rules/*.md` have it (recounted at `e03d490`) (`grep -L '^paths:'` lists the other
    17), plus `shared/rules/hook-lifecycle.md`.
 2. **Title** `## <Name>`. Project rules in aitools end in "(this repo)"
    (every `.claude/rules/*.md`); shared and user rules do not
@@ -261,9 +263,11 @@ too. The duplicate project-level copies are removed by the commander later
 **Known cost** (S3-FanPlan, `@plans/rules-fanout-claude.md` section 8 R1,
 `S3-FanPlan/S3-FanPlan-report.md` summary line 5):
 
-- 17 of the 26 `.claude/rules/*.md` and `shared/rules/scratch.md` have no
-  `paths:`: about **79 KB (79,048 bytes, roughly 20k tokens) of "(this
-  repo)" rules loaded in every session in every repo**.
+- 17 of the 26 `.claude/rules/*.md` and `shared/rules/scratch.md` had no
+  `paths:` when S3-FanPlan measured: about **79 KB (79,048 bytes, roughly
+  20k tokens) of "(this repo)" rules loaded in every session in every
+  repo**. At `e03d490` there are 24 rule files, 15 without `paths:`; the
+  byte count has not been re-measured.
 - Inside aitools every project rule loads **twice** (project + user copy)
   until the duplicates are removed; in a worktree or branch that edits a
   rule, the user copy is stale until the next `aitools` run.

@@ -74,7 +74,15 @@ Document the rationale. If two methods are comparable, prefer the one that:
 
 ### Step 5: Trial Installation
 
-Run the chosen method on the target platform. Record results using this template:
+Run the chosen method on the target platform as a sandbox walkthrough:
+
+1. **Install** -- using the chosen method from Step 4
+2. **Configure** -- any post-install config the tool requires
+3. **Use** -- run the tool's primary function with a realistic input
+4. **Break** -- test edge cases, bad input, missing dependencies
+5. **Deinstall** -- verify clean removal via the package manager
+
+Record results using this template:
 
 ```
 ## Trial: <Tool> on <Platform>
@@ -192,6 +200,133 @@ in a non-elevated context.
 - **Skipping trial installation** -- methods must be tested empirically on the
   target platform. Paths, elevation behavior, and PATH integration can differ
   from documentation.
+- **Evaluating only one platform** -- check macOS, Windows, AND Linux.
+  Platform gaps must be disclosed.
+- **Assuming system-bundled = good enough** -- system tools may be outdated,
+  lack features, or have platform-specific limitations. Evaluate the upgrade path.
+- **Confusing "code is correct" with "feature is operational"** -- a tool that
+  installs but has not been tested on the target platform is not verified.
+
+## Special Evaluation Contexts
+
+### System tool upgrades
+
+When evaluating whether to upgrade a system-bundled tool (e.g., macOS system
+bash, system Python), apply additional considerations:
+
+- **System dependency risk** -- does the OS or other system tools depend on
+  the bundled version?
+- **Side-by-side installation** -- can the upgraded version coexist with the
+  system version? (e.g., `brew install bash` installs to `/opt/homebrew/bin/bash`
+  or `/usr/local/bin/bash`, leaving `/bin/bash` intact)
+- **Shell default changes** -- upgrading a shell requires updating `/etc/shells`
+  and `chsh`; evaluate whether this is appropriate
+- **Evaluation still applies** -- a system tool upgrade is still a tool
+  evaluation. Apply the full `/tool-eval` process to the upgrade method.
+
+### Governed capabilities of existing tools
+
+When evaluating a capability that is part of an existing managed tool (e.g.,
+Python's sqlite3 module, Node.js built-in test runner), the evaluation scope is
+the capability, not the parent tool:
+
+- **Maintenance** -- is the capability actively maintained within the parent
+  project?
+- **Platform support** -- does the capability work on all target platforms?
+  (e.g., Python sqlite3 may link against different system SQLite versions)
+- **Versioning** -- is the capability's version tied to the parent tool's
+  version, or independently versioned?
+- **Alternatives** -- are there standalone packages that provide the same
+  capability with better maintenance or features?
+
+## Exemplar: Deep Cross-Platform Discovery (Perl)
+
+This case study illustrates what thorough cross-platform evaluation looks like
+in practice. The Perl tool lifecycle uncovered four layers of problems that
+surface-level evaluation would miss.
+
+**Discovery timeline:**
+
+1. **Surface**: Git Bash on Windows bundles perl at `/usr/bin/perl` (v5.38.2).
+   Appears to work. Initial evaluation: "perl available, no action needed."
+2. **First failure**: Perl one-liners in setup scripts produce double-CR
+   (`\r\r\n`) on Windows. Investigation reveals Git Bash's bundled perl uses
+   `:unix:perlio` layers, but Strawberry Perl (the managed version installed via
+   winget) defaults to `:unix:crlf`.
+3. **PATH shadowing**: After installing Strawberry Perl via winget, Git Bash's
+   `/usr/bin/perl` still wins in PATH. Managed tool is installed but invisible.
+   Fix: `check-lib.ps1` prepends `C:\Strawberry\perl\bin` to PATH explicitly.
+4. **PERLIO fix**: `export PERLIO=:perlio` disables CRLF translation for
+   Strawberry Perl. Added to `build-deploy.sh` (build-time) and recorded in the
+   registry entry's `platformGotchas.windows` (`/tool-registry` skill).
+
+**Lessons:**
+
+- **Surface evaluation is not evaluation.** `command -v perl` returning true
+  tells you nothing about which perl, what version, or what I/O behavior it has.
+- **Platform-specific I/O layers matter.** The same perl version can behave
+  differently depending on how it was compiled and which PerlIO layers are active.
+- **PATH shadowing is a class of bug.** Any tool that exists in both Git Bash's
+  bundled `/usr/bin/` and a managed location will have this problem. Evaluate
+  PATH ordering for every Windows-managed tool.
+- **The fix chain was 4 steps deep.** A single "install perl" step was not
+  enough. Discovery -> install -> PATH fix -> I/O layer fix.
+
+Carry-forward (as last recorded in the retired `/aitool-eval` card; check the
+registry's perl entry for the current state): perl on macOS was not fully
+evaluated. Is system perl (5.30) adequate for aitools, does Homebrew perl bring
+the same PATH shadowing as Windows, are there PerlIO differences, and should
+aitools manage perl on macOS as it does on Windows?
+
+## Platform-Specific Gotcha Catalog
+
+### macOS
+
+- **System tools are ancient**: bash 3.2.57 (2007, GPLv2 -- Apple will never
+  update), system Python deprecated (removed in recent macOS), system perl 5.30
+  (adequate but not current)
+- **Homebrew PATH ordering**: `/opt/homebrew/bin` (ARM) or `/usr/local/bin`
+  (Intel) must appear before `/usr/bin` for Homebrew-managed tools to take
+  precedence. `#!/usr/bin/env bash` resolves via PATH, so ordering is critical.
+- **SIP (System Integrity Protection)**: `/bin/bash`, `/usr/bin/perl`, and other
+  system binaries cannot be replaced. Side-by-side installation via Homebrew is
+  the only option.
+- **Login shell vs script shell**: macOS default login shell is zsh. Upgrading
+  bash via Homebrew does NOT change the login shell (nor should it -- aitools
+  uses bash for scripts, not interactive use).
+- **Xcode Command Line Tools**: Many build tools (clang, make, git) come from
+  CLT, not Homebrew. Version and availability depend on whether CLT is installed.
+
+### Windows
+
+- **Git Bash PATH shadows managed tools**: Git for Windows includes `/usr/bin/`
+  with perl, python, and other tools. These shadow winget/choco-installed
+  versions. Must explicitly prepend managed tool paths. Affects: perl,
+  potentially node, python.
+- **PowerShell encoding**: Pipeline output uses OEM codepage (CP437). Non-ASCII
+  characters get mangled. Fix: use temp files + `[IO.File]::ReadAllText(..., UTF8)`
+  instead of piped output.
+- **CRLF everywhere**: Git, editors, and Windows tools default to CRLF. Scripts
+  must handle both. `set -euo pipefail` + CRLF input can cause subtle failures.
+  Hook scripts must normalize.
+- **winget vs choco vs scoop**: No single package manager is best for all tools.
+  winget is Microsoft-official but limited catalog. choco has broader catalog.
+  scoop is user-level only. Evaluate per tool.
+- **Long path limit**: Windows 260-char path limit affects cargo, git, node. Must
+  enable `LongPathsEnabled` registry key and `git config --global core.longpaths true`.
+
+### Linux
+
+- **Distro packages lag upstream**: apt/dnf packages are often months or years
+  behind. Evaluate whether the distro version is sufficient or whether an
+  upstream install method (pip, cargo, official repo) is needed.
+- **Distro**: supported Linux is Ubuntu 24.04 and 22.04 (apt). Other families
+  (dnf, pacman, apk) are unsupported: record them in an evaluation only as
+  unsupported. Scripts detect the family with `/etc/os-release` or `command -v apt`.
+- **bash 5.x is usually present**: Unlike macOS, most Linux distros ship bash
+  5.x. Ubuntu 20.04+ has bash 5.0+.
+- **No elevation by default**: Many CI runners and containers run as root, but
+  developer machines require sudo. Install methods must handle both.
 
 ## Relationship to Existing Gates
 

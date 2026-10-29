@@ -8,7 +8,7 @@ alwaysApply: false
 
 ### RELEASE_NOTES.md format
 
-Version header: `## vX.Y -- Title (YYYY-MM-DD)`. Standard sections (include only applicable): Bug fixes, New features, Improvements, Documentation, Files created. Each as a table. End with `**Verified on:**` line.
+Version header: `## vX.Y.Z -- Title (YYYY-MM-DD)`. Standard sections (include only applicable): Bug fixes, New features, Improvements, Documentation, Files created. Each as a table. End with `**Verified on:**` line.
 
 ### Version numbering
 
@@ -28,7 +28,7 @@ Spans multiple sessions, has phased gates, or needs detailed design beyond a roa
 
 ### Layered reference architecture
 
-- **Rules** (`.claude/rules/` / `.cursor/rules/`) = concise behavioral directives, ~40-100 lines
+- **Rules** (`.claude/rules/` / `.cursor/rules/`) = concise behavioral directives, target ~40-100 lines; a rule over 150 lines should move its detail to `reference/`
   (what a rule is, its anatomy, scopes and deployment: `reference/rules.md`)
 - **Skills** (`.claude/skills/`, `shared/skills/`) = the governed process, loaded on demand
   (what a skill is, its anatomy, scopes and deployment: `reference/skills.md`)
@@ -36,7 +36,11 @@ Spans multiple sessions, has phased gates, or needs detailed design beyond a roa
 - **No duplication** — one authoritative location per fact
 - **Tool configs** documented per-tool via the `/tool-registry` skill
 - **Specs vs state** — rules and references are specs; the `/incident` skill tracks out-of-spec code
-- **Cursor parity** — `.cursor/rules/*.mdc` mirrors `.claude/rules/*.md`. See `@.claude/rules/cursor-rule-parity.md`
+- **Cursor parity** — `.cursor/rules/*.mdc` mirrors `.claude/rules/*.md`. See `.cursor/rules/cursor-rule-parity.mdc`
+
+### Skill placement
+
+Folder decides level: `shared/skills/` = user level (deployed to `~/.claude/skills/` and `~/.cursor/skills/`, every repo); `.claude/skills/` = project level (aitools sessions only, never deployed); dotprofile `claude/skills/` = personal. User level if useful in a session on any repo; project level only if meaningful solely inside the aitools tree. One name, one place (pre-commit step 21). No `aitool-`/`aitools-` level prefixes in new names.
 
 ### `@` link convention
 

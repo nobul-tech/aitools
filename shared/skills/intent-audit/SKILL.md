@@ -37,8 +37,8 @@ decisions informed by `@reference/framework-adoption.md`).
 
 Read the file's intent statement (`**Intent**:` block or header
 comment). If the file has no intent statement, flag that as the
-first finding — every file needs one per the Document intent
-design principle (`@CLAUDE.md`).
+first finding — every file needs one per the intent documentation
+framework (`reference/framework-intent-documentation.md`).
 
 ### 1b. Audit the intent itself
 
@@ -126,7 +126,10 @@ Each misalignment is one of:
 After classifying findings, compare the audited intent to the
 current best exemplars (weight recent > old):
 
-**Exemplar ranking** (as of 2026-03-16, most recent first):
+**Exemplar ranking** (as of 2026-03-16, most recent first; newer
+approved intents exist — e.g. `CLAUDE.md` (2026-10-26 rewrite) and
+`shared/skills/delegate/SKILL.md` v2.0 — refresh the list when you next
+rank):
 
 1. `registries/tool-ops.json` meta.intent — approved 2026-03-15
 2. `.claude/rules/tool-ops.md` **Intent** — approved 2026-03-15
@@ -182,12 +185,10 @@ are both protected activities.
 
 ## Detection pairing
 
-This skill is the audit layer for intent. The detection layer is a
-lightweight PreToolUse prompt hook on Write/Edit that reminds:
-"Check target file's intent before writing." The agent already has
-this skill in context (injected via SubagentStart cache) to know
-what that means. The hook spec lives in
-`@plans/governance-and-compliance-framework.md` step 8.
+This skill is the audit layer for intent. A detection layer (a
+PreToolUse reminder on Write/Edit: "Check target file's intent before
+writing.") is specified in `@plans/governance-and-compliance-framework.md`
+step 8 but not built; no hook checks intent today.
 
 ## Anti-patterns
 

@@ -474,9 +474,13 @@ function ConvertTo-AitLibJsonlText($Value) {
 # Write-JsonlRecord TS SCRIPT LEVEL MSG -- append one record to deploy.jsonl in the
 # log directory ($script:logDir, set by Initialize-Logging). Key order: ts, host,
 # os, script, run_id, level, msg (the installers' order). run_id = AITOOLS_RUN_ID,
-# else one random id per process. A failed write is logged at detail and
-# otherwise ignored: logging must not break the run it records (logging.md section 5).
+# else one random id per process. Logging must not break the run it records
+# (logging.md section 5): the first failed write is one LogWarn (audit A-16: the
+# run goes on, and the warning says why its records are missing); later calls
+# write nothing ($script:AitLibJsonlFailed, set before the warning so an
+# installer whose Log calls Write-JsonlRecord does not recurse). Parity: jsonl_record.
 function Write-JsonlRecord($Ts, $ScriptLabel, $Level, $Msg) {
+    if ($script:AitLibJsonlFailed) { return }
     Initialize-AitLibJsonl
     $rec = [ordered]@{
         ts = (ConvertTo-AitLibJsonlText $Ts); host = (ConvertTo-AitLibJsonlText $script:AitLibJsonlHost)
@@ -484,11 +488,14 @@ function Write-JsonlRecord($Ts, $ScriptLabel, $Level, $Msg) {
         run_id = (ConvertTo-AitLibJsonlText $script:AitLibRunId); level = (ConvertTo-AitLibJsonlText $Level)
         msg = (ConvertTo-AitLibJsonlText $Msg)
     }
+    $f = "deploy.jsonl"
     try {
         $f = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath((Join-Path $script:logDir "deploy.jsonl"))
         [IO.File]::AppendAllText($f, (($rec | ConvertTo-Json -Compress) + "`n"), [System.Text.UTF8Encoding]::new($false))
     } catch {
-        LogDetail "deploy.jsonl: write failed ($($_.Exception.Message))"
+        $script:AitLibJsonlFailed = $true
+        LogDetail "deploy.jsonl: $($_.Exception.Message -replace '\s*\r?\n\s*', ' ')"
+        LogWarn "deploy.jsonl: cannot write $f -- structured log records are skipped for the rest of this run"
     }
 }
 
@@ -888,10 +895,14 @@ function Backup-File {
 #                            top-level *.md", "cannot list", "copy failed"
 # Skip rule (kept: its callers, the setup-user-claude and setup-user-cursor
 # rules fan-outs, back up only a directory that holds a top-level *.md file):
-# no top-level regular *.md file (case-sensitive, as the .sh) -> no copy, a
-# detail log line, reason "no top-level *.md". A failed copy is non-fatal
-# (warn, return; config-file-safety.md "Backup before overwrite"): callers that
-# must not write without a backup check BackupDirOk. Old backups are matched by
+# no top-level regular *.md file (the extension compared case-insensitively,
+# as the .sh: X.MD counts) -> no copy, a detail log line, reason "no top-level
+# *.md". A failed copy is non-fatal (warn, return; config-file-safety.md
+# "Backup before overwrite"): callers that must not write without a backup
+# check BackupDirOk. A half-made copy is removed (or, when that fails, renamed
+# to <dir>.bak.incomplete.<UTC>, which the prune never matches). A symlink
+# inside the directory is copied as its content (Copy-DirectoryTree; the .sh's
+# cp -R copies it as a link). Old backups are matched by
 # literal name (the base name + ".bak." + the UTC stamp, optional "-<n>"),
 # never a wildcard, so names with [ ] * ? work and another directory's backups
 # are never pruned. Parity: backup_dir in aitools-lib.sh.
@@ -900,27 +911,60 @@ $script:BackupDirOk = $false
 $script:BackupDirPath = ""
 $script:BackupDirReason = ""
 
-# Copy-DirectoryTree Source Dest: copy a directory tree with .NET calls, as
-# cp -R does (a symlink is copied as a symlink, never followed). Not
-# Copy-Item -Recurse: with a source name holding [ ] * ? and a sibling that
-# the name matches as a wildcard, it creates Dest but copies nothing into it
-# (pwsh 7.6, macOS). Throws on the first failure. Both paths absolute.
-function Copy-DirectoryTree([string]$Source, [string]$Dest) {
+# Copy-DirectoryTree Source Dest: copy a directory tree with .NET calls. A
+# symlink inside it is copied as its content (a file link as a file, a
+# directory link as a directory), as Copy-Item -Recurse did: no Windows
+# symlink privilege needed. A dangling link, or more than 64 levels (a link
+# loop), throws. Not Copy-Item -Recurse: with a source name holding [ ] * ? and
+# a sibling that the name matches as a wildcard, it creates Dest but copies
+# nothing into it (pwsh 7.6, macOS). Throws on the first failure. Both paths
+# absolute. (The .sh uses cp -R, which copies a link as a link.)
+function Copy-DirectoryTree([string]$Source, [string]$Dest, [int]$Depth = 0) {
+    if ($Depth -gt 64) { throw "more than 64 directory levels under $Source (a symlink loop?)" }
     $reparse = [System.IO.FileAttributes]::ReparsePoint
     [System.IO.Directory]::CreateDirectory($Dest) | Out-Null
     foreach ($e in [System.IO.DirectoryInfo]::new($Source).GetFileSystemInfos()) {
         $to = [System.IO.Path]::Combine($Dest, $e.Name)
+        $isDir = $e -is [System.IO.DirectoryInfo]
         if ($e.Attributes -band $reparse) {
-            if ($e -is [System.IO.DirectoryInfo]) {
-                [System.IO.Directory]::CreateSymbolicLink($to, $e.LinkTarget) | Out-Null
-            } else {
-                [System.IO.File]::CreateSymbolicLink($to, $e.LinkTarget) | Out-Null
-            }
-        } elseif ($e -is [System.IO.DirectoryInfo]) {
-            Copy-DirectoryTree -Source $e.FullName -Dest $to
+            $final = $e.ResolveLinkTarget($true)
+            if ($null -eq $final -or -not $final.Exists) { throw "dangling symlink $($e.FullName)" }
+            $isDir = $final -is [System.IO.DirectoryInfo]
+        }
+        if ($isDir) {
+            Copy-DirectoryTree -Source $e.FullName -Dest $to -Depth ($Depth + 1)
         } else {
             [System.IO.File]::Copy($e.FullName, $to, $false)
         }
+    }
+}
+
+# Remove-IncompleteBackup Dest Full Ts: remove a half-made backup copy (ReadOnly
+# attributes cleared first); when it cannot be removed, rename it to
+# <Full>.bak.incomplete.<Ts>[-n], a name the prune never matches. Logged either
+# way. Parity: _backup_dir_discard in aitools-lib.sh.
+function Remove-IncompleteBackup([string]$Dest, [string]$Full, [string]$Ts) {
+    if (-not [System.IO.Directory]::Exists($Dest)) { return }
+    $ro = [System.IO.FileAttributes]::ReadOnly
+    try {
+        foreach ($i in [System.IO.DirectoryInfo]::new($Dest).EnumerateFileSystemInfos("*", [System.IO.SearchOption]::AllDirectories)) {
+            if ($i.Attributes -band $ro) { $i.Attributes = $i.Attributes -band (-bnot $ro) }
+        }
+        [System.IO.Directory]::Delete($Dest, $true)
+        if ([System.IO.Directory]::Exists($Dest)) { throw "still present after the delete" }
+        Log "Removed the incomplete backup copy $Dest"
+        return
+    } catch {
+        LogDetail "Backup-Dir: cannot remove the incomplete backup copy ${Dest}: $_"
+    }
+    $alt = "${Full}.bak.incomplete.${Ts}"
+    $n = 0
+    while ([System.IO.Directory]::Exists($alt) -or [System.IO.File]::Exists($alt)) { $n++; $alt = "${Full}.bak.incomplete.${Ts}-$n" }
+    try {
+        [System.IO.Directory]::Move($Dest, $alt)
+        LogWarn "Could not remove the incomplete backup copy -- renamed it to $alt"
+    } catch {
+        LogWarn "Could not remove or rename the incomplete backup copy ${Dest}: $_"
     }
 }
 
@@ -938,7 +982,7 @@ function Backup-Dir {
     $full = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($dir)
     try {
         $mdCount = @([System.IO.DirectoryInfo]::new($full).GetFiles() | Where-Object {
-            $_.Name.EndsWith(".md", [StringComparison]::Ordinal) -and -not ($_.Attributes -band $reparse)
+            $_.Name.EndsWith(".md", [StringComparison]::OrdinalIgnoreCase) -and -not ($_.Attributes -band $reparse)
         }).Count
     } catch {
         $script:BackupDirReason = "cannot list"
@@ -959,9 +1003,10 @@ function Backup-Dir {
     } catch {
         $script:BackupDirReason = "copy failed"
         LogWarn "Could not back up $dir -- proceeding without backup: $_"
+        Remove-IncompleteBackup -Dest $dest -Full $full -Ts $ts
         return
     }
-    if (-not (Test-Path -LiteralPath $dest -PathType Container)) {
+    if (-not [System.IO.Directory]::Exists($dest)) {
         $script:BackupDirReason = "copy failed"
         LogWarn "Could not back up $dir -- proceeding without backup (no copy at $dest)"
         return
@@ -2619,7 +2664,9 @@ function Write-DeployTrackerSummary {
     if ($script:dtRemoved -gt 0)   { $parts += "$($script:dtRemoved) removed" }
     if ($script:dtVerified -gt 0)  { $parts += "$($script:dtVerified) verified" }
     if ($script:dtFailed -gt 0)    { $parts += "$($script:dtFailed) failed" }
-    $text = if ($parts.Count -gt 0) { $parts -join ", " } else { "verified" }
+    # Every count 0 (nothing recorded, or only skipped/preserved items): not
+    # "verified", which would claim a check that never ran
+    $text = if ($parts.Count -gt 0) { $parts -join ", " } else { "n/a (nothing to deploy)" }
     $script:deployTrackerText = $text
 
     if ($script:dtFailed -gt 0) {

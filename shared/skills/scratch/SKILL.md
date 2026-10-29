@@ -100,8 +100,9 @@ Only names that start with `commit-msg`, end in `.log` or `.tmp`, or are
 `.md` files whose name contains `log`, `output` or `dump` count as
 ephemeral. A commit message named `msg-fix.txt` is harvested as an
 artifact. Avoid `log`, `output` and `dump` in the name of a `.md` you
-want kept (`S2-Catalog.md` is treated as ephemeral). Files in
-subdirectories of the session dir are never harvested.
+want kept (`S2-Catalog.md` is treated as ephemeral). `.json` files named
+`package-lock*`, `node_modules*`, `tsconfig*` or `*.config.json` are also
+ephemeral. Files in subdirectories of the session dir are never harvested.
 
 ## Commit message pattern
 

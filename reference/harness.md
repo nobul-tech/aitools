@@ -8,7 +8,8 @@ themselves users working on both aitools and other projects.
 **Intent**: **Purpose**: Define the harness, its components, and how
 they relate. **Scope**: Architecture and component definitions only.
 NOT artifact roles — what each artifact type is for and what it must
-not contain (see `/artifact-roles` skill). NOT how to adopt new
+not contain (rules, skills, references and registries:
+`@reference/rules.md` sections 2-3). NOT how to adopt new
 frameworks (`@reference/framework-adoption.md`). NOT operational
 guides for any specific component (see implementing artifacts).
 **Audience**: Any agent working within the harness, framework
@@ -51,11 +52,13 @@ across machines and users. This includes:
   (`@reference/managed-file-deployment.md`)
 - Build pipeline generating self-contained deploy scripts
   (`@.claude/rules/git-safety.md`)
-- Package build generating installable packages for a fleet (the
-  package path, `build-package`: Windows `.intunewin`, macOS `.pkg`,
-  Linux `.deb`), a distribution parallel to the dev and MDM paths that
-  runs the same `scripts/` from a payload of the aitools tree
-  (`@plans/build-package/design.md`)
+- Package build (`scripts/build-package.sh`, planned: v1.0 scaffolding on
+  main, where staging and the Windows `.intunewin`, macOS `.pkg` and Linux
+  `.deb` builds are stubs that log ERROR `not implemented` and exit 1;
+  `--dry-run` prints the plan), a distribution parallel to the dev and MDM
+  paths that will run the same `scripts/` from a payload of the aitools
+  tree. Design: `@plans/build-package/design.md`; batches:
+  `@plans/build-package/implementation-plan.md`
 - Setup scripts, shared libraries, entry points, verification
   checklists, AI-assisted operations, incident tracking (via
   `/incident` skill), plans, and reference files
@@ -117,9 +120,13 @@ produces provenance data).
 `~/.aitools` (Windows `%USERPROFILE%\.aitools`) from the repos. Every
 file goes through `deploy_managed_file()` in `@scripts/aitools-lib.sh` /
 `Deploy-ManagedFile` in `@scripts/aitools-lib.ps1`, with the summary tool
-name `harness files` and the repo file it came from as the adopt target.
-`config.json` is generated from `profile.json` by calling the only config
-writer, `scripts/setup-user-config.sh` / `.ps1`.
+name `harness files` and the repo file it came from as the adopt target
+(the generated MDM copy passes no adopt target: its source is the
+build-time embed). `config.json` is generated from `profile.json` by
+calling the only config writer, `scripts/setup-user-config.sh` / `.ps1`,
+unless `--skip-config` / `-SkipConfig` is given (installer Step 8b passes it
+after Step 5 ran the writer, so it runs once per install; row OK
+`config.json` `n/a (written by installer)`).
 
 | Deployed to | Sources, in order | Layout | Conflict unit |
 |-------------|-------------------|--------|---------------|
@@ -129,6 +136,10 @@ writer, `scripts/setup-user-config.sh` / `.ps1`.
 | `skills/` | `shared/skills/`, `.claude/skills/`, `<dotprofile>/claude/skills/` | one directory per skill | skill directory name |
 | `rules/` | `shared/rules/`, `.claude/rules/`, `<dotprofile>/claude/rules/` | flat (top-level `*.md`) | file name |
 | `bin/` | `scripts/harness-db.py`, `read-session.py`, `read-session-full.py` | flat | none (fixed list) |
+| `rules/.aitools-rules-manifest` | written every run (sole owner) | `<file name><TAB><source>` per rule, sorted; first line `# aitools rules manifest v1` | -- |
+
+The fan-out consumers read the manifest: `setup-user-cursor` deploys
+`shared` and `dotprofile` rules only (R-2) and prunes retired ones.
 
 ### Conflict handling
 
@@ -183,7 +194,9 @@ writer, `scripts/setup-user-config.sh` / `.ps1`.
   one newline.
 - **Adopt** writes the winning source file only. Adopting into a file in
   its repo's protected-files table (`@.claude/rules/sources-of-truth.md`)
-  logs a WARN naming the file; the library never commits or pushes.
+  logs a WARN naming the file. The library commits and pushes an adopt
+  target only when it is in the dotprofile (`dotprofile_commit_push`, N-Q2);
+  an aitools-repo target stays a working-tree change.
 
 ### Rules manifest and retired rules
 
@@ -296,7 +309,7 @@ manifest; one planner and one writer serve both kinds
 
 - Glossary definition: `/glossary` skill (term: harness)
 - How the harness grows: `@reference/framework-adoption.md`
-- Artifact roles: `/artifact-roles` skill
+- Artifact roles: `@reference/rules.md` "What a rule is" and "The layering"
 - Governed vocabulary: `@reference/framework-governed-vocabulary.md`
 - Registry convention: `@reference/framework-three-layer-governance.md`
 - Framework rule: `@.claude/rules/frameworks.md`

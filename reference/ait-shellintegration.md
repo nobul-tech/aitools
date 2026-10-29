@@ -89,7 +89,7 @@ before, regardless of how messy the rest of the profile is.
 
 | | |
 |---|---|
-| **Owns** | The marked block in the login profile; PATH precedence within it; the `agent → cursor-agent` shim (POSIX) |
+| **Owns** | The marked block in the login profile (`setup-user-shell`); PATH precedence within it. The `agent → cursor-agent` symlink in `~/.local/bin` is owned by `setup-user-cursor` (step 2b) |
 | **Preserves** | Everything outside the markers — user aliases, unmanaged installer lines, completions, prompt config |
 
 The interactive `*.rc` (`~/.bashrc`) keeps only the `source aliases.sh`
@@ -99,9 +99,12 @@ line; PATH ownership lives in the login profile, not the rc.
 
 | Platform | Login profile (managed block) | Interactive rc (aliases) |
 |----------|-------------------------------|--------------------------|
-| macOS/Linux (bash) | `~/.bash_profile` | `~/.bashrc` |
-| macOS/Linux (zsh fallback) | `~/.zprofile` | `~/.zshrc` |
+| macOS/Linux (bash) | `~/.bash_profile` (the only file `setup-user-shell.sh` writes) | `~/.bashrc` |
 | Windows (PowerShell) | `$PROFILE` | `$PROFILE` |
+
+zsh is not handled: a zsh login shell (macOS default) does not read
+`~/.bash_profile`, so the managed block does not apply there; the harness's
+own non-interactive contexts use `harness_python` (below). (Gap, not decided.)
 
 On Windows there is no brew; the managed block prepends `$HOME\.local\bin`
 (the aitools/uv bin dir) for the session. The macOS/Linux login shell is

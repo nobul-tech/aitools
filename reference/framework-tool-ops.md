@@ -58,7 +58,7 @@ Three disciplines converge:
 ## Implementing Artifacts
 
 - `.claude/rules/tool-ops.md` (governance rule — always in context)
-- `.claude/skills/tool-ops/SKILL.md` (governed access to registry)
+- `shared/skills/tool-ops/SKILL.md` (governed access to registry)
 - Tool-ops registry (per-tool metadata, via `/tool-ops` skill)
 - `reference/tool-ops-*.md` (per-tool ops references — full detail)
 - `shared/hooks/tool-ops-session-audit.sh` (SessionEnd drift telemetry)
