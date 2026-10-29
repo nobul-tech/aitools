@@ -51,8 +51,8 @@ User-scoped (`~/.aitools/`):
 | `reference/` | Copy of the aitools repo `reference/` tree (git-tracked files, same relative paths) — deployed by `deploy-harness` |
 | `registries/` | Copy of the aitools repo `registries/` (the registries stay in the repo; SD-8-reg) — deployed by `deploy-harness` |
 | `hooks/` | Hook scripts from `shared/hooks/` and `.claude/hooks/`, one flat directory — deployed by `deploy-harness` (settings.json still points at `~/.claude/hooks`) |
-| `rules/` | Rules from `shared/rules/`, `.claude/rules/` and the dotprofile `claude/rules/`, one flat directory (first source wins) — deployed by `deploy-harness`; `setup-user-cursor` fans them out to `~/.cursor/rules`. `setup-user-claude` does not fan out yet: it deploys `~/.claude/rules` from the dotprofile `claude/rules/` only |
-| `skills/` | Skill directories from `shared/skills/` and `.claude/skills/` — deployed by `deploy-harness` |
+| `rules/` | Rules from `shared/rules/`, `.claude/rules/` and the dotprofile `claude/rules/`, one flat directory, plus `.aitools-rules-manifest` (each rule's source, or `retired`) — deployed by `deploy-harness`; every non-retired rule is copied to `~/.claude/rules/` by `setup-user-claude` and converted into `~/.cursor/rules/*.mdc` by `setup-user-cursor` |
+| `skills/` | Skill directories from `shared/skills/`, `.claude/skills/` and the dotprofile `claude/skills/`, plus `.aitools-skills-manifest` (each skill's source, or `retired`) — deployed by `deploy-harness`; every non-retired skill is copied to `~/.claude/skills/` by `setup-user-claude` and to `~/.cursor/skills/` by `setup-user-cursor` |
 | `bin/` | Deployed harness Python CLIs (`harness-db.py`, `read-session.py`, `read-session-full.py`) — deployed by `deploy-harness` (installer Step 8b), called by hooks via absolute path so every project resolves them |
 | `logs/` | Unified component logs (`deploy.log`, `checks.log`, `ait-harvest.log`, `harness-db.log`), 5 MB × 5 rotation — see `@reference/logging.md` |
 | `auth/` | Per-user credentials (proposed) |

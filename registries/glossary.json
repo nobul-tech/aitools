@@ -7,7 +7,7 @@
       "scope": "Definitions, facets, and abbreviation mappings only. NOT the word list (glossary rule). NOT the composition convention (framework-governed-vocabulary.md). NOT usage guidance (/glossary skill)",
       "audience": "/glossary skill, /audit skill, agents resolving terminology questions"
     },
-    "lastUpdated": "2026-10-21"
+    "lastUpdated": "2026-10-27"
   },
   "facets": {
     "scopeModifiers": {
@@ -21,8 +21,8 @@
       "claude": "CLAUDE.md file at the given scope",
       "config": "JSON configuration file (settings.json, config.json, mcp.json)",
       "hook": "Hook script (.sh in shared/hooks/ or ~/.claude/hooks/)",
-      "rule": "Claude Code rule file (.md in .claude/rules/ or ~/.claude/rules/)",
-      "skill": "Skill definition (SKILL.md in .claude/skills/, shared/skills/, or ~/.claude/skills/)"
+      "rule": "Rule file: .md in .claude/rules/, shared/rules/, the dotprofile claude/rules/, ~/.aitools/rules/ (deployed harness) or ~/.claude/rules/; converted to .mdc in ~/.cursor/rules/",
+      "skill": "Skill directory with a SKILL.md: in .claude/skills/, shared/skills/, the dotprofile claude/skills/, ~/.aitools/skills/ (deployed harness), ~/.claude/skills/ or ~/.cursor/skills/"
     }
   },
   "terms": {
@@ -289,7 +289,7 @@
       "source": "shared/skills/intent-audit/SKILL.md"
     },
     "skill": {
-      "definition": "A Claude Code mechanism providing specialized knowledge loaded on demand or by auto-trigger. Lives in .claude/skills/ (project, auto-discovered) or ~/.claude/skills/ (user, deployed by setup-user-skills). Part of the prevention layer.",
+      "definition": "A Claude Code mechanism providing specialized knowledge loaded on demand or by auto-trigger. Lives in .claude/skills/ (project, auto-discovered) or ~/.claude/skills/ (user, fanned out from ~/.aitools/skills by setup-user-claude; setup-user-skills is the fallback when ~/.aitools/skills does not exist). Part of the prevention layer.",
       "source": "reference/framework-three-layer-governance.md"
     },
     "state audit": {
@@ -446,6 +446,26 @@
     "machine alias": {
       "definition": "The human-readable name of a machine profile (its 'alias' field, for example nobul-mac). Since profile.json revision 2.2 it is a label, not the key: machine profiles are keyed by machine id. Chosen at aitools user init (non-interactively with --alias), selectable with --alias or AITOOLS_MACHINE_ALIAS, and written to ~/.aitools/config.json machineAlias as a display value. In a revision 2.1 profile.json the alias was the key. Not the base artifact 'alias' (a shell alias file).",
       "source": "reference/user-repo.md \"Profile Schema\"; decisions P-Q12 and commander decision 5 of 2026-10-22 (plans/tool-support-and-machine-profile.md)"
+    },
+    "fan-out": {
+      "definition": "The deployment step that copies the deployed harness's rules and skills (~/.aitools/rules, ~/.aitools/skills) into each tool's own user location: setup-user-claude to ~/.claude/rules and ~/.claude/skills (adopt target: the source file the manifest names), setup-user-cursor to ~/.cursor/rules (converted to .mdc) and ~/.cursor/skills (no adopt). Every name except the retired ones is fanned out; the fan-out updates its own copies, removes its own copies of retired names (outcome: removed), and preserves every other file. Distinct from deploy-harness, which fills ~/.aitools from the repos, and from setup-user-skills, the fallback skills deployer when ~/.aitools/skills does not exist.",
+      "source": "reference/rules.md section 6; reference/skills.md section 6; plans/skills-and-rules-fanout.md FD-1..FD-4, FD-9 (2026-10-26)"
+    },
+    "retired": {
+      "definition": "Manifest state of a rule or skill: its name was in the previous rules or skills manifest and no source listed on this deploy-harness run has it. deploy-harness backs up and removes its ~/.aitools copy; each fan-out consumer backs up and removes its own deployed copy when that copy matches a harness copy (outcome: removed), and keeps any other file of that name with a warning. Only a source listed on the run retires its names. A manifest state, not a deployment outcome.",
+      "source": "reference/harness.md \"Rules manifest and retired rules\", \"Skills manifest and retired skills\"; PR #100; plans/skills-and-rules-fanout.md contract 3.2"
+    },
+    "removed": {
+      "definition": "Deployment outcome: a deployed copy was backed up (backup verified) and deleted because its source retired it. Recorded by a fan-out consumer with deploy_tracker_record / Record-DeployOutcome and counted as 'N removed' in the tracker's summary row. Not a deploy_managed_file return value. A copy that does not match a harness copy is kept with a warning and an ACTION row instead.",
+      "source": "reference/managed-file-deployment.md (Functions, Caller Responsibilities); plans/rules-fanout-claude.md Q7 and Batch A; PR #118"
+    },
+    "harness files": {
+      "definition": "The summary tool name of deploy-harness: the files it deploys into ~/.aitools (reference, registries, hooks, skills, rules, bin) and the rules and skills manifests it writes. Its OK / WARN / ERROR rows cover that whole step, including name conflicts between sources, manifest writes and retired copies it could not remove; config.json has its own row. Distinct from harness (the whole aitools system).",
+      "source": "reference/harness.md \"Deployed harness (~/.aitools)\"; scripts/deploy-harness.sh/.ps1 (TOOL)"
+    },
+    "trigger directive": {
+      "definition": "The section of a rule that states when to invoke its skill, headed '### When to invoke /<skill>': 'Invoke the /<skill> skill when ANY of these arise:' plus a bullet list ending with the user naming the skill. A rule without one for its skill is a governance gap. Distinct from trigger (the event that starts the DTCC).",
+      "source": "reference/framework-three-layer-governance.md \"Rule-skill governance\"; reference/rules.md section 4 item 7"
     }
   }
 }

@@ -5,7 +5,26 @@
 # repo claude\skills\ (personal). Dotprofile skills take priority over shared.
 # Deploys to %USERPROFILE%\.claude\skills\ and %USERPROFILE%\.cursor\skills\.
 # Reverse discovery: detects user-created skills in deploy target and offers
-# to adopt them to the dotprofile repo.
+# to adopt them to the dotprofile repo. Never offered: aitool-ops and
+# aitool-eval, aitools skills retired (PR 129) before the skills manifest.
+#
+# Fallback deployer (FD-9, plans/skills-and-rules-fanout.md FO-6): when
+# %USERPROFILE%\.aitools\skills exists (deploy-harness has run), the fan-out
+# owns the skills -- setup-user-claude writes .claude\skills (row "claude
+# skills") and setup-user-cursor writes .cursor\skills (row "cursor skills").
+# This script then deploys nothing, writes neither row, writes OK "skills"
+# "n/a (fanned out)" and keeps reverse discovery, which treats every name in
+# .aitools\skills (an entry or a manifest line, any source) and every backup or
+# hidden name as not user-created. Reverse discovery's own rows (a failed
+# adopt, an unreadable directory) then use the tool "skills" too. A resolver
+# error, or an unreadable .aitools\skills, manifest or .claude\skills, means
+# reverse discovery does not run (its adopt target is the dotprofile): ERROR
+# "skills" "no adopt: <reason>". Without .aitools\skills it deploys as before (an MDM endpoint run
+# before deploy-harness, or a machine where deploy-harness failed). The check
+# sits in the extracted body, so the generated MDM script (build-deploy)
+# carries it. Same rows as setup-user-skills.sh (parity).
+# Platform: Windows; macOS/Linux use setup-user-skills.sh.
+# Tool data: /tool-registry skill.
 
 # --- BEGIN skills body (extracted by build-deploy) ---
 param(
@@ -28,6 +47,22 @@ if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
 
 if ($DryRun) { Log "[DRY RUN] Preview mode -- no files will be written" }
 
+# --- Harness check (FD-9): one writer per skill file ---
+# .aitools\skills exists -> the setup-user-claude / setup-user-cursor fan-out
+# deploys the skills, so this script does not (no second review menu, no second
+# adopt target for one file). In the extracted body: the MDM script has it too.
+# $skillsRowTool: the summary tool for reverse discovery's rows ("skills" when
+# fanned out: the two fan-out tool names belong to the fan-out scripts).
+$skillsHarnessDir = Join-Path (Join-Path $env:USERPROFILE ".aitools") "skills"
+$skillsFannedOut = $false
+$skillsRowTool = "claude skills"
+if (Test-Path -LiteralPath $skillsHarnessDir -PathType Container) {
+    $skillsFannedOut = $true
+    $skillsRowTool = "skills"
+    Log "Skills are fanned out from ~/.aitools/skills by setup-user-claude (claude skills) and setup-user-cursor (cursor skills): not deploying them here"
+    Write-Summary "OK" "skills" "n/a (fanned out)"
+}
+
 # --- BEGIN skill discovery (replaced by build-deploy) ---
 
 # --- Resolve paths ---
@@ -48,9 +83,16 @@ $userRepoPath = $script:AitLibUserRepoPath
 $skillsBlocked = $false
 if ($urpRc -ne 0 -and $urpRc -ne 1) {
     $skillsBlocked = $true
-    LogError "Dotprofile unresolved (resolver error above) -- skills not deployed, so shared copies cannot replace dotprofile versions"
-    Write-Summary "ERROR" "claude skills" "not deployed: dotprofile error"
-    Write-Summary "ERROR" "cursor skills" "not deployed: dotprofile error"
+    if ($skillsFannedOut) {
+        # The fan-out deploys; reverse discovery adopts into the dotprofile, so
+        # it cannot run. Reported under "skills": the two fan-out rows are not ours.
+        LogError "Dotprofile unresolved (resolver error above) -- reverse discovery not run, so no skill can be adopted to the dotprofile"
+        Write-Summary "ERROR" "skills" "no adopt: dotprofile error"
+    } else {
+        LogError "Dotprofile unresolved (resolver error above) -- skills not deployed, so shared copies cannot replace dotprofile versions"
+        Write-Summary "ERROR" "claude skills" "not deployed: dotprofile error"
+        Write-Summary "ERROR" "cursor skills" "not deployed: dotprofile error"
+    }
 }
 $dotprofileSkills = $null
 if ($userRepoPath) {
@@ -68,6 +110,8 @@ $allSkillDests = @($skillsDest, $skillsDestCursor)
 $skillNames = @()
 if ($skillsBlocked) {
     # resolver error: nothing is discovered, deployed or offered for adoption
+} elseif ($skillsFannedOut) {
+    # the fan-out deploys: nothing is discovered for deployment here
 } elseif (Test-Path $skillsSrc) {
     foreach ($skillDir in Get-ChildItem -Path $skillsSrc -Directory) {
         if (Test-Path (Join-Path $skillDir.FullName "SKILL.md")) {
@@ -76,7 +120,7 @@ if ($skillsBlocked) {
     }
 }
 # Add dotprofile skills not already in shared
-if ($dotprofileSkills) {
+if ($dotprofileSkills -and -not $skillsFannedOut) {
     foreach ($skillDir in Get-ChildItem -Path $dotprofileSkills -Directory) {
         if ((Test-Path (Join-Path $skillDir.FullName "SKILL.md")) -and ($skillDir.Name -notin $skillNames)) {
             $skillNames += $skillDir.Name
@@ -84,7 +128,7 @@ if ($dotprofileSkills) {
     }
 }
 
-if ($skillNames.Count -eq 0 -and -not $skillsBlocked) {
+if ($skillNames.Count -eq 0 -and -not $skillsBlocked -and -not $skillsFannedOut) {
     LogWarn "No skills found in shared\skills\ or dotprofile"
     Write-Summary "WARN" "claude skills" "no skills found"
 }
@@ -174,12 +218,103 @@ if ($skillNames.Count -gt 0) {
     }
 }
 
+# --- Harness skill names (fan-out mode only) ---
+# Every name in .aitools\skills, as an entry or as a manifest line (any source,
+# retired included), is a harness skill: the fan-out put it in .claude\skills,
+# so it is never offered for adoption. Compared case-insensitively (HashSet,
+# OrdinalIgnoreCase). Returns $false after LogError + ERROR "skills" when
+# .aitools\skills or its manifest cannot be read: reverse discovery is then
+# not run, so a harness skill is never mistaken for a user-created one. A
+# manifest with a bad header adds no names (the fan-out reports it); its
+# directory names still count. Parity: collect_harness_skill_names (.sh).
+$harnessSkillNames = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
+function Get-HarnessSkillNames {
+    try {
+        $entries = @(Get-ChildItem -LiteralPath $skillsHarnessDir -Force -ErrorAction Stop)
+    } catch {
+        LogError "Cannot read ~/.aitools/skills -- reverse discovery not run, so no harness skill is offered for adoption: $($_.Exception.Message)"
+        Write-Summary "ERROR" "skills" "no adopt: harness unreadable"
+        return $false
+    }
+    foreach ($entry in $entries) {
+        if ((Get-SkillNameKind $entry.Name) -eq "skill") { [void]$harnessSkillNames.Add($entry.Name) }
+    }
+    $manifest = Join-Path $skillsHarnessDir ".aitools-skills-manifest"
+    if (Test-Path -LiteralPath $manifest) {
+        $m = $null
+        $why = $null
+        if (Test-Path -LiteralPath $manifest -PathType Container) {
+            # Read-HarnessManifest would report "access denied": say what the .sh says
+            $why = "is a directory"
+        } else {
+            try {
+                $m = Read-HarnessManifest -Path $manifest -Kind "skills"
+            } catch {
+                $why = $_.Exception.Message
+            }
+        }
+        if ($null -ne $why) {
+            LogError "Cannot read the skills manifest ~/.aitools/skills/.aitools-skills-manifest -- reverse discovery not run, so no harness skill is offered for adoption: $why"
+            Write-Summary "ERROR" "skills" "no adopt: manifest unreadable"
+            return $false
+        }
+        if ($m.Status -eq "header-bad") {
+            Log "Skills manifest header not recognised: harness skill names taken from ~/.aitools/skills only"
+            return $true
+        }
+        foreach ($r in $m.Rules) { [void]$harnessSkillNames.Add($r.Name) }
+        foreach ($inv in $m.Invalid) { LogDetail "skills manifest: ignored line $inv" }
+    }
+    return $true
+}
+
 # --- Reverse discovery ---
-# Scan deployed skills for user-created skills not in shared or dotprofile
-if (-not $skillsBlocked -and (Test-Path $skillsDest)) {
-    foreach ($skillDir in Get-ChildItem -Path $skillsDest -Directory) {
+# Skills aitools retired before the skills manifest existed: PR 129 deleted
+# aitool-ops and aitool-eval from shared\skills, the old setup-user-skills had
+# deployed them to .claude\skills, and no skills manifest lists them. A copy
+# left there is an old aitools copy, not a user-created skill, so it is never
+# offered for adoption, in either mode (S3-Merge2-Review125 N2). Compared
+# case-insensitively. Parity: RETIRED_SKILL_NAMES (.sh).
+$retiredSkillNames = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
+foreach ($n in @("aitool-eval", "aitool-ops")) { [void]$retiredSkillNames.Add($n) }
+
+# Scan deployed skills for user-created skills not in shared or dotprofile.
+# Fan-out mode: only with a dotprofile (the adopt target) and the harness names.
+$runReverse = $false
+if ($skillsBlocked) {
+    # resolver error: no adopt target (logged and reported above)
+} elseif (-not $skillsFannedOut) {
+    $runReverse = $true
+} elseif ($userRepoPath) {
+    $runReverse = [bool](Get-HarnessSkillNames)
+}
+# No adopt target: nothing would be offered, so the scan is not needed (as the .sh)
+$destSkillDirs = @()
+if ($runReverse -and $userRepoPath -and (Test-Path -LiteralPath $skillsDest -PathType Container)) {
+    try {
+        $destSkillDirs = @(Get-ChildItem -LiteralPath $skillsDest -Directory -ErrorAction Stop)
+    } catch {
+        LogError "Cannot read ~/.claude/skills -- reverse discovery not run, so no user-created skill is offered for adoption: $($_.Exception.Message)"
+        Write-Summary "ERROR" $skillsRowTool "no adopt: target unreadable"
+        $destSkillDirs = @()
+    }
+}
+if ($destSkillDirs.Count -gt 0) {
+    foreach ($skillDir in $destSkillDirs) {
         $skillName = $skillDir.Name
         if (-not (Test-Path (Join-Path $skillDir.FullName "SKILL.md"))) { continue }
+
+        # Fan-out mode: the fan-out's own backup and hidden names, and every
+        # harness skill, are not user-created
+        if ($skillsFannedOut) {
+            if ((Get-SkillNameKind $skillName) -ne "skill") { continue }
+            if ($harnessSkillNames.Contains($skillName)) { continue }
+        }
+        # An aitools skill retired before the manifest existed (both modes)
+        if ($retiredSkillNames.Contains($skillName)) {
+            Log "Not offered for adoption: $skillName (an aitools skill retired before the skills manifest existed; delete ~/.claude/skills/$skillName if you no longer use it)"
+            continue
+        }
 
         # Skip if in shared
         if (Test-Path (Join-Path $skillsSrc $skillName)) { continue }
@@ -207,7 +342,7 @@ if (-not $skillsBlocked -and (Test-Path $skillsDest)) {
                         $adoptedCount = Adopt-ManagedFile -SourceFile (Join-Path $skillDir.FullName "SKILL.md") `
                             -Targets @(Join-Path $userRepoPath "claude\skills\$skillName\SKILL.md")
                         if ($errors -gt $errorsBeforeAdopt -or -not $adoptedCount) {
-                            Write-Summary "ERROR" "claude skills" "adopt failed: $skillName"
+                            Write-Summary "ERROR" $skillsRowTool "adopt failed: $skillName"
                         }
                     }
                     default {
