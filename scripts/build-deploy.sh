@@ -725,26 +725,32 @@ mkdir -p "$DEPLOY_DIR"
 blog "Generating deploy/setup-user-claude.sh"
 
 # Pure extract from scripts/setup-user-claude.sh (template interpolation, footer,
-# managed-file deploy, rules fan-out: no duplicated logic, I6), plus one generated
-# part: the profile/template source on this machine (before the body). The rules
-# come from ~/.aitools/rules, which deploy/deploy-harness.sh fills (run it first).
+# managed-file deploy, rules and skills fan-outs: no duplicated logic, I6), plus one
+# generated part: the profile/template source on this machine (before the body).
+# The rules and skills come from ~/.aitools/rules and ~/.aitools/skills, which
+# deploy/deploy-harness.sh fills (run it first).
 {
     echo '#!/usr/bin/env bash'
     echo "$HEADER_COMMENT_BASH"
     cat <<'BLOCK'
-# setup-user-claude.sh -- Creates user-level ~/.claude/CLAUDE.md and fans out the harness rules
+# setup-user-claude.sh -- Creates user-level ~/.claude/CLAUDE.md and fans out the harness rules and skills
 # Self-contained (MDM-ready): the profile resolver and build-time copies of the
 # dotprofile's CLAUDE.md template and profile snapshot are embedded below.
 # This machine's profile is resolved when the script runs, never at build time. On a
 # machine with the dotprofile, its live template and profile.json are used
 # (as by scripts/setup-user-claude.sh); the embedded copies are the fallback.
-# Run deploy-harness.sh first: the rules fan-out reads ~/.aitools/rules, which it fills.
+# Run deploy-harness.sh first: the rules and skills fan-outs read ~/.aitools/rules
+# and ~/.aitools/skills, which it fills.
 # Safe to re-run.
 #
 # Managed: ~/.claude/CLAUDE.md (sole owner, overwrite)
 # Managed: ~/.claude/rules/*.md fanned out from ~/.aitools/rules (additive; the
 #   copy of a rule the rules manifest retires is backed up and removed)
 # Preserved: ~/.claude/rules/ files not in ~/.aitools/rules
+# Managed: ~/.claude/skills/<name>/** fanned out from ~/.aitools/skills (additive;
+#   the copy of a skill the skills manifest retires is backed up to
+#   ~/.claude/skills.bak.<UTC>/ and removed)
+# Preserved: ~/.claude/skills/ directories and symlinks not deployed from ~/.aitools/skills
 
 set -euo pipefail
 
@@ -796,6 +802,8 @@ BLOCK
     extract_between "$SCRIPTS_DIR/setup-user-claude.sh" \
         '^# --- BEGIN rules deploy logic' '^# --- END rules deploy logic'
     extract_between "$SCRIPTS_DIR/setup-user-claude.sh" \
+        '^# --- BEGIN skills fan-out' '^# --- END skills fan-out'
+    extract_between "$SCRIPTS_DIR/setup-user-claude.sh" \
         '^# --- BEGIN exit' '^# --- END exit'
 } | inline_lib_bash "$BUILD_TMP/resolver-claude.sh.blk" > "$DEPLOY_DIR/setup-user-claude.sh"
 
@@ -812,19 +820,24 @@ blog "Generating deploy/setup-user-claude.ps1"
 {
     echo "$HEADER_COMMENT_PS1"
     cat <<'BLOCK'
-# setup-user-claude.ps1 -- Creates user-level ~/.claude/CLAUDE.md and fans out the harness rules
+# setup-user-claude.ps1 -- Creates user-level ~/.claude/CLAUDE.md and fans out the harness rules and skills
 # Self-contained (MDM-ready): the profile resolver and build-time copies of the
 # dotprofile's CLAUDE.md template and profile snapshot are embedded below.
 # This machine's profile is resolved when the script runs, never at build time. On a
 # machine with the dotprofile, its live template and profile.json are used
 # (as by scripts/setup-user-claude.ps1); the embedded copies are the fallback.
-# Run deploy-harness.ps1 first: the rules fan-out reads .aitools\rules, which it fills.
+# Run deploy-harness.ps1 first: the rules and skills fan-outs read .aitools\rules
+# and .aitools\skills, which it fills.
 # Safe to re-run.
 #
 # Managed: ~/.claude/CLAUDE.md (sole owner, overwrite)
 # Managed: ~/.claude/rules/*.md fanned out from ~/.aitools/rules (additive; the
 #   copy of a rule the rules manifest retires is backed up and removed)
 # Preserved: ~/.claude/rules/ files not in ~/.aitools/rules
+# Managed: ~/.claude/skills/<name>/** fanned out from ~/.aitools/skills (additive;
+#   the copy of a skill the skills manifest retires is backed up to
+#   ~/.claude/skills.bak.<UTC>/ and removed)
+# Preserved: ~/.claude/skills/ directories and symlinks not deployed from ~/.aitools/skills
 
 param(
     [string]$SharedPath = "",
@@ -880,6 +893,8 @@ BLOCK
         '^# --- BEGIN rules deployment' '^# --- BEGIN rules deploy logic' --crlf
     extract_between "$SCRIPTS_DIR/setup-user-claude.ps1" \
         '^# --- BEGIN rules deploy logic' '^# --- END rules deploy logic' --crlf
+    extract_between "$SCRIPTS_DIR/setup-user-claude.ps1" \
+        '^# --- BEGIN skills fan-out' '^# --- END skills fan-out' --crlf
     printf '%s\n' "$EMBED_CLEANUP_PS1"
     extract_between "$SCRIPTS_DIR/setup-user-claude.ps1" \
         '^# --- BEGIN exit' '^# --- END exit' --crlf

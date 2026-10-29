@@ -12,8 +12,12 @@
 # Managed: ~/.claude/rules/*.md fanned out from ~/.aitools/rules (additive; the
 #   copy of a rule the rules manifest retires is backed up and removed)
 # Preserved: ~/.claude/rules/ files not in ~/.aitools/rules
-# Rules come from ~/.aitools/rules only (deploy-harness fills it: run it first);
-# the dotprofile's claude/rules reaches Claude Code through it.
+# Managed: ~/.claude/skills/<name>/** fanned out from ~/.aitools/skills (additive;
+#   the copy of a skill the skills manifest retires is backed up to
+#   ~/.claude/skills.bak.<UTC>/ and removed)
+# Preserved: ~/.claude/skills/ directories and symlinks not deployed from ~/.aitools/skills
+# Rules and skills come from ~/.aitools only (deploy-harness fills it: run it
+# first); the dotprofile's claude/rules and claude/skills reach Claude Code through it.
 
 param(
     [string]$SharedPath = (Join-Path $PSScriptRoot "..\shared\claude-shared.md"),
@@ -699,6 +703,16 @@ if ($rulesGo) {
 }
 # --- END rules deploy logic (extracted by build-deploy) ---
 # --- END rules deployment (extracted by build-deploy) ---
+
+# --- BEGIN skills fan-out (extracted by build-deploy) ---
+# Skills fan-out: .aitools\skills -> .claude\skills (lib
+# Invoke-HarnessSkillsFanout; plans/skills-and-rules-fanout.md section 3.4).
+# Every skill deploy-harness collected there except the retired ones; a user's
+# own skill (a directory or symlink the fan-out did not deploy) is never
+# touched. Adopt targets: this aitools checkout ($rulesAitoolsRepo, a git
+# checkout only) and the dotprofile. Parity: setup-user-claude.sh.
+Invoke-HarnessSkillsFanout -ToolName "claude skills" -DestDir (Join-Path $claudeDir "skills") -AitoolsRepo $rulesAitoolsRepo -Dotprofile $userRepoPath
+# --- END skills fan-out (extracted by build-deploy) ---
 
 # --- BEGIN exit (extracted by build-deploy) ---
 if ($errors -gt 0) {

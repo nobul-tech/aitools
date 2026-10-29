@@ -224,6 +224,7 @@ check "size gate: a generated script over its Intune limit is a WARN, not a buil
 DOT_BIG="$TMP_ROOT/dot-big"
 cp -Rp "$DOT" "$DOT_BIG"
 rm -rf "$DOT_BIG/deploy"
+mkdir -p "$DOT_BIG/claude"
 perl -e 'print "\n## Padding (size-gate test)\n\n"; print "x" x 99, "\n" for 1 .. 12000' >> "$DOT_BIG/claude/CLAUDE.md"
 gitc -C "$DOT_BIG" add -A
 gitc -C "$DOT_BIG" commit -q -m padding
