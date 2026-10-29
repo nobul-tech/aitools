@@ -32,3 +32,9 @@ PR 135 (feature/hook2-workflow-agents), worktree hook2. Commander, 2026-10-28:
 ## Phase B
 - Gate (scratch gate-b.sh, background, 180 s poll, 6 h cap) started after
   phase A: PR 134 MERGED + main CI green on its merge commit.
+- 2026-10-29T06:46:19Z: gate TIMEOUT after 6 h (brief v1.2 limit). Train state
+  then: 121, 124, 123, 125, 126 merged (126 at 06:06:30Z); 133 and 134 OPEN.
+  Phase B not started; stopped per brief. PR 135 head stays 8b476db, CLEAN,
+  MERGEABLE (re-read 06:47Z). Main has moved past add7a09, so phase B (merge
+  main, Merge-note line for tool-ops.json, re-verify, CI, CLEAN twice, "PREP
+  DONE") is still owed after PR 134 lands.
