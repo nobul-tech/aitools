@@ -26,7 +26,8 @@ as built by the FO batches; the Claude Code rule-loading facts are verified
 carried.
 
 Every claim cites the file it comes from. "Today" means `origin/main` at
-`672c1f9` (2026-10-27) plus the FO pull requests #117-#125 (FO-0..FO-6),
+`add7a09` (2026-10-28: FO-0, FO-0b, FO-1 and FO-2 merged as PRs 117, 120,
+118 and 119) plus the open FO pull requests 121, 124, 123 and 125 (FO-3..FO-6),
 which this version describes as built; until each merges, section 6.1 names
 it. Where the repo does not say, this file says "unknown".
 
@@ -115,8 +116,8 @@ user rule.
 
 1. **Frontmatter `paths:`** (optional). A list of globs; the rule applies when
    the agent works on matching files (section 5). 9 of the 24
-   `.claude/rules/*.md` have it (recounted at `e03d490`) (`grep -L '^paths:'` lists the other
-   17), plus `shared/rules/hook-lifecycle.md`.
+   `.claude/rules/*.md` have it (recounted at `add7a09`; `grep -L '^paths:'`
+   lists the other 15), plus `shared/rules/hook-lifecycle.md`.
 2. **Title** `## <Name>`. Project rules in aitools end in "(this repo)"
    (every `.claude/rules/*.md`); shared and user rules do not
    (`shared/rules/*.md`, `delegation.md`). The suffix is a convention seen
@@ -223,11 +224,11 @@ aitools .claude/rules/     ─┼─ deploy-harness ─▶ ~/.aitools/rules/ (fl
 |------|-------|-------|
 | deploy-harness fills `~/.aitools/rules` | `scripts/deploy-harness.sh/.ps1`: `add_source rules` for `shared/rules`, `.claude/rules`, dotprofile `claude/rules` in that order; git-tracked files only, `*.bak.*` never, flat `*.md` only, case-insensitive conflicts (`@reference/harness.md` "Deployed harness"). MDM: generated `deploy/deploy-harness.*` | #88, #93 (main) |
 | Rules manifest | `~/.aitools/rules/.aitools-rules-manifest` (`<name><TAB>shared\|aitools\|dotprofile\|retired`); retired rules backed up and removed from `~/.aitools/rules` (`@reference/harness.md` "Rules manifest and retired rules") | #100 (main, 89e2953) |
-| Something runs deploy-harness | Installer Step 8b and first in `deploy_configs` of the `aitools` entry points, before every setup script | #106 (open; MERGE-ALL) |
-| Lib helpers | tracker outcome `removed`; `read_harness_manifest` / `Read-HarnessManifest` (with `read_rules_manifest` wrappers), `rule_name_kind`, `fanout_text_equal` (`@reference/managed-file-deployment.md` "Functions") | #118 (FO-1, open) |
-| Claude fan-out | setup-user-claude fans out every non-retired `~/.aitools/rules/*.md` into `~/.claude/rules/` (summary tool `claude rules`), adopt target mapped from the manifest source when the script runs from a git checkout, retired copies pruned after a text match and a verified backup (tracker `removed`); no manifest: every rule, nothing removed; no `~/.aitools/rules`: `n/a (no harness rules)`, target untouched. MDM: no rules embedded; they arrive through `deploy/deploy-harness.*` | #121 (FO-3, open) = `@plans/rules-fanout-claude.md` Batches B-D |
-| Cursor fan-out | setup-user-cursor step 4 converts every non-retired `~/.aitools/rules/*.md` (all three sources, R-6) to `~/.cursor/rules/<name>.mdc` (`alwaysApply: true` without `paths:`, anchored globs otherwise); adopt not offered; retired copies pruned when they carry the fan-out marker or the legacy content, after a verified same-text backup (tracker `removed`); the bash review menu prompts (deploy list on fd 3) | #87, #110 (main: user-level only, prune); R-6 and the prompt fix: #123 (FO-5, open) |
-| CI | every `tests/<dir>/test-*.sh` suite in CI, checked by a CI step; `tests/rules-fanout`, `tests/rules-fanout-cursor`, `tests/fanout-lib` | #117 (FO-0), #118, #121, #123 (open) |
+| Something runs deploy-harness | Installer Step 8b and first in `deploy_configs` of the `aitools` entry points, before every setup script | #106 (main) |
+| Lib helpers | tracker outcome `removed` (nothing counted: `n/a (nothing to deploy)`); `read_harness_manifest` / `Read-HarnessManifest` (with `read_rules_manifest` wrappers), `rule_name_kind`, `fanout_text_equal` (`@reference/managed-file-deployment.md` "Functions") | PR 118 (FO-1, main) |
+| Claude fan-out | setup-user-claude fans out every non-retired `~/.aitools/rules/*.md` into `~/.claude/rules/` (summary tool `claude rules`), in ordinal (byte) order in both shells (`LC_ALL=C sort`, `[string]::CompareOrdinal`), adopt target mapped from the manifest source when the script runs from a git checkout, retired copies pruned after a text match and a verified backup (tracker `removed`); no manifest: every rule, nothing removed; no `~/.aitools/rules`: `n/a (no harness rules)`, target untouched. MDM: no rules embedded; they arrive through `deploy/deploy-harness.*` | PR 121 (FO-3, open) = `@plans/rules-fanout-claude.md` Batches B-D |
+| Cursor fan-out | setup-user-cursor step 4 converts every non-retired `~/.aitools/rules/*.md` (all three sources, R-6) to `~/.cursor/rules/<name>.mdc` (`alwaysApply: true` without `paths:`, anchored globs otherwise), in ordinal order; adopt not offered; retired copies pruned when they carry the fan-out marker or the legacy content, after a verified same-text backup (tracker `removed`), the retired `.mdc` found case-insensitively and reported under its on-disk name; only retired names: `n/a (nothing to deploy)`; a bad manifest header, invalid manifest lines or listed-but-missing rules write one ACTION row; the dry-run row is ERROR when errors were logged; the bash review menu prompts (deploy list on fd 3) | #87, #110 (main: user-level only, prune); R-6, the prompt fix and the rest: PR 123 (FO-5, open) |
+| CI | every `tests/<dir>/test-*.sh` suite in CI, checked by a CI step; `tests/fanout-lib` (main); `tests/rules-fanout`, `tests/rules-fanout-cursor` | PR 117 (FO-0, main), PR 118 (main), PR 121, PR 123 (open) |
 
 ### 6.2 Rules for deploying rules
 
@@ -266,8 +267,9 @@ too. The duplicate project-level copies are removed by the commander later
 - 17 of the 26 `.claude/rules/*.md` and `shared/rules/scratch.md` had no
   `paths:` when S3-FanPlan measured: about **79 KB (79,048 bytes, roughly
   20k tokens) of "(this repo)" rules loaded in every session in every
-  repo**. At `e03d490` there are 24 rule files, 15 without `paths:`; the
-  byte count has not been re-measured.
+  repo**. Re-measured at `add7a09` (`wc -c`): 24 rule files, 15 without
+  `paths:`, 74,633 bytes, plus `shared/rules/scratch.md` 3,573 bytes =
+  78,206 bytes, roughly 19.5k tokens.
 - Inside aitools every project rule loads **twice** (project + user copy)
   until the duplicates are removed; in a worktree or branch that edits a
   rule, the user copy is stale until the next `aitools` run.
@@ -290,8 +292,9 @@ too. The duplicate project-level copies are removed by the commander later
   rule and its condensed twin).
 
 **Skills**: deployed the same way (R-7): `@reference/skills.md`, with the
-measured cost of project skills at user scope (about 1.7 KB, ~440 tokens of
-descriptions per session, section 7 there).
+measured cost of project skills at user scope (since PR 128 only two
+project skills are left; their descriptions add about 250 bytes, ~60
+tokens, per session, section 7 there).
 
 ## 8. Writing or changing a rule
 
@@ -335,13 +338,14 @@ skill). Resolved in v1.1 (FO-7):
 - "trigger directive", "fan-out", "harness files", "retired" and "removed"
   are governed terms now (`/glossary` skill).
 
+Resolved on main by the v0.74.0 docs scrub (PR 132), re-checked at
+`add7a09`: `@reference/cursor-practices.md` lists the user rule files and
+the account-stored User Rules separately, and cites the parity rule as
+`.cursor/rules/cursor-rule-parity.mdc`; `@reference/harness.md` no longer
+cites an `/artifact-roles` skill.
+
 Carried:
 
-- `@reference/cursor-practices.md` says Cursor user rules are UI/SQLite only
-  (it now also lists the `~/.cursor/rules/*.mdc` user rule files) and lists
-  `.claude/rules/cursor-rule-parity.md`, which does not exist. <!-- path-ref: ignore (cited because it is missing) -->
-- `@reference/harness.md` cites an `/artifact-roles` skill that is in neither
-  `shared/skills/` nor `.claude/skills/`.
 - Whether Claude Code discovers user-level rules recursively, and whether it
   loads an upper-case `.MD` rule: unknown (item #28).
 

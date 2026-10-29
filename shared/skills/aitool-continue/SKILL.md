@@ -109,9 +109,11 @@ skills, and context.
 
 If this is the aitools repo, you have access to the full harness.
 If this is another repo, you have the user-level skills
-(`~/.claude/skills/`): every aitools skill, including the project ones
-(`tool-ops`, `incident`, `glossary`, ...), which cite aitools repo paths
-and work only inside the aitools repo.
+(`~/.claude/skills/`): every aitools skill. The governance skills
+(`tool-ops`, `incident`, `glossary`, ...) reach aitools files through the
+clone named by `repoPath` in `~/.aitools/config.json` (each skill's "Where
+the files live"); the two project skills (`audit`, `governed-data`) cite
+aitools repo paths and work only inside the aitools repo.
 
 ### Step 2: Load operational learning
 
@@ -417,8 +419,9 @@ Key marse-specific patterns (M1-M4) apply.
 
 ### In any other repo
 
-You have the user-level skills (every aitools skill; the ones that cite
-aitools repo paths work only inside aitools). Check for:
+You have the user-level skills (every aitools skill; `audit` and
+`governed-data` work only inside aitools, the others read aitools files
+through `repoPath`). Check for:
 - `CLAUDE.md` for project instructions
 - `.claude/rules/` for project rules
 - `.claude/skills/` for project skills

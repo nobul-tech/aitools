@@ -21,9 +21,11 @@ research by S3-FanoutImpl-DocsScan. A version, not a draft (D-DEL5). The
 intent above is new and protected (`@.claude/rules/sources-of-truth.md`
 "Intent statements"); it is listed for review in its PR.
 
-Every claim cites its source. "Built" means on `origin/main` (`672c1f9`,
-2026-10-27) or in an open FO pull request, named; the FO PRs merge in plan
-order (FO-0..FO-7). Where nothing says, this file says "unknown".
+Every claim cites its source. "Built" means on `origin/main` (`add7a09`,
+2026-10-28: FO-0, FO-0b, FO-1 and FO-2 merged as PRs 117, 120, 118 and 119)
+or in an open FO pull request, named (PRs 121, 124, 123 and 125); the FO PRs
+merge in plan order (FO-0..FO-7). Where nothing says, this file says
+"unknown".
 
 ## 1. Decisions
 
@@ -34,7 +36,7 @@ order (FO-0..FO-7). Where nothing says, this file says "unknown".
 | S-3 | Skill conflicts: first source wins (`shared/`, then `.claude/`, then the dotprofile); each skipped duplicate is `log_error` + an ERROR row; a skills manifest records each skill's source; a user's own skill in `~/.claude/skills` or `~/.cursor/skills` is never overwritten or pruned unless the fan-out created it | 2026-10-26 | commander | FD-4 |
 | S-4 | setup-user-skills stops deploying once `~/.aitools/skills` exists; it keeps reverse discovery and stays the fallback deployer | 2026-10-26 | S3-FanoutImpl (orchestrator), listed for the commander | FD-9, plan section 8 Q4 |
 | S-5 | Whole skill directories (every tracked file), not SKILL.md only; Cursor gets no adopt | 2026-10-26 | S3-FanoutImpl, suggested answers taken | plan section 8 Q2, Q3 |
-| S-6 | SD-8 (extended): 7 governance skills (`tool-ops`, `tool-eval`, `tool-registry`, `harvest`, `incident`, `glossary`, `frameworks`) move from `.claude/skills/` to `shared/skills/` | 2026-10-21 | commander | `SC-mission-packet.md` section 6; re-land of #74/#75 by MERGE-ALL (not on main at 672c1f9: all 9 project skills are still in `.claude/skills/`) |
+| S-6 | SD-8 (extended): 7 governance skills (`tool-ops`, `tool-eval`, `tool-registry`, `harvest`, `incident`, `glossary`, `frameworks`) move from `.claude/skills/` to `shared/skills/` | 2026-10-21 | commander | `SC-mission-packet.md` section 6; re-landed by MERGE-ALL as PR 128 (main `72c94c3`: the seven moved, `audit` and `governed-data` stay in `.claude/skills/`) and PR 129 (main `a63ad2d`: the `/aitool-ops` and `/aitool-eval` reference cards and their rules retired) |
 
 S-1's measured cost is in section 7.
 
@@ -59,9 +61,9 @@ What a skill is not:
   Claude Code's own guidance is "Keep the body itself concise. Once a skill
   loads, its content stays in context across turns, so every line is a
   recurring token cost" (code.claude.com/docs/en/skills).
-- Not data. A skill reads a registry; it does not embed one, except the
-  **reference-card pattern** (section 4.5), which embeds a dated snapshot on
-  purpose.
+- Not data. A skill reads a registry; it does not embed one (the retired
+  **reference-card pattern**, section 4.5, embedded a dated snapshot on
+  purpose).
 
 ## 3. The layering, seen from the skill
 
@@ -82,15 +84,16 @@ convention for registry skills: write `/<singular>`, read `/<plural>`
 
 ## 4. Anatomy of a skill
 
-Built from the 24 skills on `origin/main` (15 in `shared/skills/`, 9 in
-`.claude/skills/`; `git ls-tree origin/main shared/skills/ .claude/skills/`).
+Built from the 22 skills on `origin/main` (20 in `shared/skills/`, 2 in
+`.claude/skills/`; `git ls-tree origin/main shared/skills/ .claude/skills/`,
+`add7a09`).
 
 ### 4.1 Directory
 
 ```
 <name>/
 ├── SKILL.md                    required
-└── tests/                      optional: expected-behaviors.md (7 of 24 have it today)
+└── tests/                      optional: expected-behaviors.md (7 of 22 have it today)
 ```
 
 - The directory name is the skill name. Every harness skill today has a
@@ -182,7 +185,7 @@ Scope modifiers compose with the base artifact `skill` (`/glossary` skill;
 | Scope | Where | What belongs there | Reaches the tools how |
 |-------|-------|--------------------|-----------------------|
 | shared skill | aitools `shared/skills/<name>/` | Harness process for every agent in every repo | deploy-harness → `~/.aitools/skills` → fan-out (section 6) |
-| project skill | `.claude/skills/<name>/` in a repo | That repo's frameworks and governance | Loaded by Claude Code from the repo; for aitools also through the fan-out (S-1) |
+| project skill | `.claude/skills/<name>/` in a repo | What is meaningful only inside that repo (aitools: `audit`, `governed-data`) | Loaded by Claude Code from the repo; for aitools also through the fan-out (S-1) |
 | dotprofile skill | `<userRepoPath>/claude/skills/<name>/` | The user's own skills | deploy-harness → fan-out (last source: a shared or project skill of the same name wins) |
 | user skill | `~/.claude/skills/<name>/`, `~/.cursor/skills/<name>/` | Deployed copies, plus the user's own and third-party skills | -- (the target) |
 
@@ -243,8 +246,10 @@ From cursor.com/docs/skills (read with chrome-devtools, 2026-10-27):
   inside aitools, `.claude/skills/`. How Cursor resolves the same name from
   several locations, and whether it lists the skill more than once: unknown
   (not stated). This was already the case with `setup-user-skills`, which
-  writes both directories. The Cursor fan-out is kept (S-2; open question
-  Q3 of the FO-7 PR, suggested answer pending the commander).
+  writes both directories. The Cursor fan-out is kept (S-2; the commander,
+  2026-10-28: "setup-cursor-cli should do the fan-out for cursor
+  skills/rules", clarified as setup-user-cursor; `@plans/skills-and-rules-fanout.md`
+  section 8, hand-back Q3).
 - **Cloud**: `~/.cursor/skills/` stays local unless "Sync Skills for Cloud
   Agents" is on; `~/.agents/skills/` never syncs.
 
@@ -253,9 +258,11 @@ From cursor.com/docs/skills (read with chrome-devtools, 2026-10-27):
 `@.claude/rules/documentation-standards.md` "Skill placement": the source
 directory decides what the skill is written for, not whether it is deployed
 (all three are deployed, S-1/S-2). Shared: factual, project-agnostic, works
-in any repo. Project: aitools frameworks and governance; may cite aitools
-paths if it says it works inside aitools only. Dotprofile: the user's own.
-Names unique across the three.
+in any repo, including the governance skills useful in any repo (PR 128).
+Project: only what is meaningful solely inside the aitools working tree
+(today `audit`, `governed-data`); may cite aitools paths if it says it
+works inside aitools only. Dotprofile: the user's own. Names unique across
+the three (pre-commit step 21).
 
 ## 6. Deployment
 
@@ -272,14 +279,14 @@ aitools .claude/skills/<name>/     ─┼─ deploy-harness ─▶ ~/.aitools/sk
 
 | Step | Built | Where |
 |------|-------|-------|
-| deploy-harness fills `~/.aitools/skills` | `shared/skills`, `.claude/skills`, dotprofile `claude/skills` → `~/.aitools/skills/<name>/**`, first source wins, git-tracked files only; skill directories named `.*` or `*.bak.*` not deployed; manifest `~/.aitools/skills/.aitools-skills-manifest` (`# aitools skills manifest v1`, `<name><TAB>shared\|aitools\|dotprofile\|retired`); retired skill directories copied by deploy-harness itself (`cp -R` to `<name>.bak.<UTC>/`, `diff -r -q`, then `rm -rf`; the newest 5 backups kept; an unremovable half copy renamed `<name>.bak.incomplete.<UTC>`; not `backup_dir`) and removed (`@reference/harness.md` "Skills manifest and retired skills") | `shared` and `.claude` sources: #88 (main); the rest: #119 (FO-2, open) |
-| something runs deploy-harness | Installer Step 8b and first in `deploy_configs` | #106 (open; MERGE-ALL) |
-| lib helpers | `skill_name_kind`, `read_harness_manifest` (rules and skills), `fanout_text_equal`, `fanout_dir_matches`, `backup_dir` result flags, tracker `removed` (sh and ps1) | #118 (FO-1, open) |
-| lib fan-out | `fanout_harness_skills TOOL DEST AITOOLS_REPO DOTPROFILE` / `Invoke-HarnessSkillsFanout -ToolName -DestDir -AitoolsRepo -Dotprofile` in `@scripts/aitools-lib.sh` / `@scripts/aitools-lib.ps1` | #124 (FO-4, open) |
-| Claude Code skills | `setup-user-claude` calls the lib fan-out in its `skills fan-out` span (extracted by build-deploy, so MDM runs it too): summary tool `claude skills`; adopt target from the manifest source (`shared` → `<aitools>/shared/skills/...`, `aitools` → `<aitools>/.claude/skills/...`, `dotprofile` → `<dotprofile>/claude/skills/...`) when the file exists and the script runs from a git checkout | #124 (FO-4, open) |
-| Cursor skills | `setup-user-cursor` step 5: `fanout_harness_skills "cursor skills" "$CURSOR_DIR/skills" "" ""`, no adopt | #123 (FO-5, open; step 5 is commit c5d1bd8) |
-| setup-user-skills | when `~/.aitools/skills` exists: `OK skills n/a (fanned out)`, no `claude skills` / `cursor skills` rows; reverse discovery kept, every name in `~/.aitools/skills` or its manifest (and every `*.bak.*` or hidden name) not user-created; otherwise the old behaviour (fallback). MDM: the generated `deploy/setup-user-skills.*` carry the check | #125 (FO-6, open) |
-| CI | every `tests/<dir>/test-*.sh` in CI, checked by a CI step; `tests/fanout-lib`, `tests/skills-fanout`, `tests/skills-legacy` | #117 (FO-0), #118, #124, #125 (open) |
+| deploy-harness fills `~/.aitools/skills` | `shared/skills`, `.claude/skills`, dotprofile `claude/skills` → `~/.aitools/skills/<name>/**`, first source wins, git-tracked files only; skill directories named `.*` or `*.bak.*` not deployed; manifest `~/.aitools/skills/.aitools-skills-manifest` (`# aitools skills manifest v1`, `<name><TAB>shared\|aitools\|dotprofile\|retired`); retired skill directories copied by deploy-harness itself (`cp -R` to `<name>.bak.<UTC>/`, `diff -r -q`, then `rm -rf`; the newest 5 backups kept; an unremovable half copy renamed `<name>.bak.incomplete.<UTC>`; not `backup_dir`) and removed (`@reference/harness.md` "Skills manifest and retired skills") | `shared` and `.claude` sources: #88 (main); the rest: PR 119 (FO-2, main `fac2dbc`) |
+| something runs deploy-harness | Installer Step 8b and first in `deploy_configs` | #106 (main) |
+| lib helpers | `skill_name_kind`, `read_harness_manifest` (rules and skills), `fanout_text_equal`, `fanout_dir_matches`, `backup_dir` result flags (a half-made backup discarded or renamed `<dir>.bak.incomplete.<UTC>`), tracker `removed` and `n/a (nothing to deploy)` when nothing was counted (sh and ps1) | PR 118 (FO-1, main `b5a881a`) |
+| lib fan-out | `fanout_harness_skills TOOL DEST AITOOLS_REPO DOTPROFILE` / `Invoke-HarnessSkillsFanout -ToolName -DestDir -AitoolsRepo -Dotprofile` in `@scripts/aitools-lib.sh` / `@scripts/aitools-lib.ps1` | PR 124 (FO-4, open) |
+| Claude Code skills | `setup-user-claude` calls the lib fan-out in its `skills fan-out` span (extracted by build-deploy, so MDM runs it too): summary tool `claude skills`; adopt target from the manifest source (`shared` → `<aitools>/shared/skills/...`, `aitools` → `<aitools>/.claude/skills/...`, `dotprofile` → `<dotprofile>/claude/skills/...`) when the file exists and the script runs from a git checkout | PR 124 (FO-4, open) |
+| Cursor skills | `setup-user-cursor` step 5: `fanout_harness_skills "cursor skills" "$CURSOR_DIR/skills" "" ""`, no adopt | PR 123 (FO-5, open; step 5 is commit c5d1bd8) |
+| setup-user-skills | when `~/.aitools/skills` exists: `OK skills n/a (fanned out)`, no `claude skills` / `cursor skills` rows; reverse discovery kept, every name in `~/.aitools/skills` or its manifest (and every `*.bak.*` or hidden name) not user-created; otherwise the old behaviour (fallback). MDM: the generated `deploy/setup-user-skills.*` carry the check | PR 125 (FO-6, open) |
+| CI | every `tests/<dir>/test-*.sh` in CI, checked by a CI step; `tests/fanout-lib` (main); `tests/skills-fanout`, `tests/skills-legacy` | PR 117 (FO-0, main), PR 118 (main), PR 124, PR 125 (open) |
 
 ### 6.3 Rules for deploying skills (`fanout_harness_skills`; contract `@plans/skills-and-rules-fanout.md` 3.4 as shipped in #124)
 
@@ -350,14 +357,15 @@ aitools .claude/skills/<name>/     ─┼─ deploy-harness ─▶ ~/.aitools/sk
 
 ### 7.1 What changes
 
-The 9 aitools `.claude/skills` (`audit`, `frameworks`, `glossary`,
-`governed-data`, `harvest`, `incident`, `tool-eval`, `tool-ops`,
-`tool-registry`) reach `~/.claude/skills/` and `~/.cursor/skills/` and are
-listed in every repo on the machine. After the #74/#75 re-land (S-6) seven
-of them come from `shared/skills/` instead; the cost below does not depend
-on which source they come from, only on the deployment.
+Since PR 128 (S-6) the aitools `.claude/skills` hold two skills, `audit`
+and `governed-data`; the seven governance skills that used to be project
+skills (`frameworks`, `glossary`, `harvest`, `incident`, `tool-eval`,
+`tool-ops`, `tool-registry`) are in `shared/skills/` and reach user scope
+as shared skills. With S-1 the two project skills also reach
+`~/.claude/skills/` and `~/.cursor/skills/` and are listed in every repo on
+the machine.
 
-Inside aitools each of them exists twice (project `.claude/skills/` and
+Inside aitools each of the two exists twice (project `.claude/skills/` and
 user `~/.claude/skills/`) until the commander removes the project copies.
 Claude Code runs the user copy ("personal over project",
 code.claude.com/docs/en/skills), so on a branch or worktree that edits a
@@ -367,58 +375,58 @@ unknown (the page names which one runs, not the listing).
 
 ### 7.2 Measured cost
 
-Measured on `origin/main` 42ed67e by S3-FanoutImpl-DocsScan with
-`skill-cost.pl` (bytes of the frontmatter `name` + `description` values;
-Claude Code puts the description, capped at 1,536 characters, in context
-per skill; tokens estimated at 4 bytes per token). The skill set is the
-same at 672c1f9.
+Measured on `origin/main` `add7a09` (2026-10-28) with `skill-cost.pl` from
+S3-FanoutImpl-DocsScan (bytes of the frontmatter `name` + `description`
+values; Claude Code puts the description, capped at 1,536 characters, in
+context per skill; tokens estimated at 4 bytes per token). This PR's
+`aitool-continue` edit changes only its body (the whole-file column: 25,683
+bytes here against 25,236 on main).
 
 | Set | Skills | name + description | ~tokens | whole SKILL.md (loaded only when invoked) |
 |-----|--------|--------------------|---------|-------------------------------------------|
-| shared (already at user scope before the fan-out) | 15 | 4,378 B | ~1,100 | 192,416 B |
-| aitools project, new at user scope | 9 | 2,001 B | ~500 | 43,797 B |
-| of which `audit` (`disable-model-invocation: true`: not in context) | 1 | 258 B | -- | 4,053 B |
-| **added to every session in every repo by S-1** | 8 | **1,743 B** | **~440** | -- |
-| all harness skills | 24 | 6,379 B | ~1,600 | 236,213 B |
+| shared (already at user scope before the fan-out) | 20 | 6,061 B | ~1,500 | 216,034 B |
+| aitools project, new at user scope | 2 | 510 B | ~130 | 8,453 B |
+| of which `audit` (`disable-model-invocation: true`: not in context) | 1 | 258 B | -- | 4,398 B |
+| **added to every session in every repo by S-1** (`governed-data`) | 1 | **252 B** | **~60** | -- |
+| all harness skills | 22 | 6,571 B | ~1,640 | 224,487 B |
 
-Compared with rules: S-1's rules half adds about 79 KB (~20k tokens) every
-session (`@reference/rules.md` section 7); the skills half adds about
-1.7 KB (~440 tokens), because only descriptions load. The largest
-descriptions: `tool-adopt` 506 B, `delegate` 442 B, `scratch` 359 B,
-`mission-control` 334 B. No description is near the 1,536-character cap.
-Cursor's cost: unknown (its docs do not say what is in context per skill;
-it may see a skill from up to three locations, section 5.2).
+Compared with rules: S-1's rules half adds about 78 KB (~19.5k tokens)
+every session (`@reference/rules.md` section 7); the skills half adds about
+250 bytes (~60 tokens), because only descriptions load and only one
+project skill is model-invocable. Before PR 128 the same decision cost about
+1.7 KB (~440 tokens, 8 skills, measured at `42ed67e`). The largest
+descriptions: `delegate` 619 B, `tool-adopt` 506 B, `tool-ops` 463 B,
+`tool-eval` 447 B. No description is near the 1,536-character cap. Cursor's
+cost: unknown (its docs do not say what is in context per skill; it may see
+a skill from up to three locations, section 5.2).
 
 ### 7.3 Skills that cite repo-relative paths
 
 A skill used outside aitools cannot open aitools `registries/`,
-`reference/`, `plans/`, `scripts/` or `.claude/rules/` paths (plan risk
-R3). Counts of distinct such paths in each SKILL.md body (`skill-cost.pl`;
-a mention in prose counts, so this is an upper bound of what breaks):
+`reference/`, `plans/`, `scripts/` or `.claude/rules/` paths by a relative
+path (plan risk R3). Counts of distinct such paths in each SKILL.md body
+(`skill-cost.pl` at `add7a09`; a mention in prose counts, so this is an
+upper bound of what breaks):
 
 | Skill | Source | Paths | Examples | Outside aitools |
 |-------|--------|-------|----------|-----------------|
-| audit | .claude | 5 | incidents registry, `.claude/rules/*.md` | does not work |
-| frameworks | .claude | 9 | framework registry, `reference/framework-*.md` | does not work |
-| glossary | .claude | 4 | glossary registry, `.claude/rules/glossary.md` | does not work |
+| audit | .claude | 6 | incidents registry, `.claude/rules/*.md` | does not work |
 | governed-data | .claude | 5 | `.claude/rules/governed-data-access.md`, `scripts/check-pre-commit.sh/.ps1` | does not work |
-| harvest | .claude | 6 | `.claude/rules/artifact-harvesting.md`, `scripts/check-*.sh` | partly (the harvesting folder is per repo) |
-| incident | .claude | 4 | incidents registry | does not work |
-| tool-eval | .claude | 5 | `reference/tool-evaluation-playbook.md`, `reference/evaluations/` | does not work (use `/aitool-eval`) |
-| tool-ops | .claude | 7 | tool-ops registry, `reference/tool-ops-*.md` | does not work (use `/aitool-ops`) |
-| tool-registry | .claude | 6 | tool registry, `scripts/setup-*` | does not work |
+| frameworks, glossary, incident, tool-eval, tool-ops, tool-registry | shared (PR 128) | 4-9 | the registries, `reference/framework-*.md`, `reference/tool-ops-*.md`, `reference/evaluations/` | works: "Where the files live" resolves the paths in the clone named by `repoPath` (reads from `origin/main`), else the read-only `~/.aitools/registries/` copy |
+| harvest | shared (PR 128) | 6 | `.claude/rules/artifact-harvesting.md`, `scripts/check-*.sh` | partly (the harvesting folder is per repo; "Where the files live") |
 | tool-adopt | shared | 19 | `.claude/rules/tool-lifecycle.md`, `reference/evaluations/` | says "In the aitools repo: run every step": partly |
 | aitool-continue | shared | 6 | `.aitools/channel/handoffs/`, `reference/harness.md` | branches on the repo (by design) |
 | handoff | shared | 6 | `plans/*/handoff-prompt.md`, `.aitools/channel/handoffs/` | relative to the current repo (by design) |
-| intent-audit | shared | 8 | glossary and incidents registries | partly |
-| aitool-eval, aitool-ops | shared | 5 each | `reference/tool-evaluation-*.md`, `reference/tool-ops-*.md` | reference cards: cite as provenance, content embedded |
-| intent-writing, investigate, mission-control, optimize-plan, planning, scratch | shared | 1-3 | `reference/framework-adoption.md`, `scripts/ait-harvest.py`, `plans/*.md` | mostly prose pointers |
-| a11y-debugging, chrome-devtools, delegate | shared | 0 | -- | works |
+| intent-audit | shared | 9 | glossary and incidents registries | partly |
+| delegate | shared | 8 | `.claude/rules/sources-of-truth.md`, `scripts/check-pre-commit.sh` | mostly prose pointers |
+| intent-writing, investigate, mission-control, optimize-plan, planning, scratch | shared | 1-4 | `reference/framework-adoption.md`, `scripts/ait-harvest.py`, `plans/*.md` | mostly prose pointers |
+| a11y-debugging, chrome-devtools | shared | 0 | -- | works |
 
 `~/.aitools/reference/` and `~/.aitools/registries/` hold copies of these
-trees (`@reference/harness.md` "Deployed harness"), so a skill could cite
-`~/.aitools/<path>` to work in any repo (read-only; writes must still go to
-the aitools repo). No skill does that today; a decision for later (section 10).
+trees (`@reference/harness.md` "Deployed harness"); since PR 128 the
+governance skills use the registries copy as their last read-only fallback
+("Where the files live"). Whether the two project skills should do the
+same: undecided (section 10).
 
 ## 8. Writing or changing a skill
 
@@ -469,20 +477,32 @@ Resolved in FO-7 (this PR): `@.claude/rules/documentation-standards.md`
 "Skill placement" (FX-71); the reference-card rules' "the only available
 skill" (the `aitool-ops` / `aitool-eval` rules and cards were then retired
 by PR 129; `/tool-ops` and `/tool-eval` are in `shared/skills` since PR 128);
-the content
-sources that said the dotprofile wins for skills
+the content sources that said the dotprofile wins for skills
 (`@reference/managed-file-deployment.md`, `@.claude/rules/managed-file-deployment.md`);
 the `setup-user-mcp` claims in `@reference/cursor-practices.md`,
 `@reference/tool-registry.md` and `shared/mcp/README.md`; the governed terms
 `fan-out`, `retired`, `removed`, `harness files`, `trigger directive` and
 the base artifact `skill` (`/glossary` skill).
 
+Answered by the commander on 2026-10-28 (`@plans/skills-and-rules-fanout.md`
+section 8): a dotprofile skill that shares a name with a shared or project
+skill stops reaching the tools and is an ERROR row on every run (before,
+`setup-user-skills` let the dotprofile win): "8) shared/ wins" (S-3). The
+Cursor skills fan-out stays (section 5.2).
+
 Open (`INCIDENT:` markers for the delegating agent; not filed):
 
-- Behaviour change: a dotprofile skill that shares a name with a shared or
-  project skill stops reaching the tools and is an ERROR row on every run
-  (before, `setup-user-skills` let the dotprofile win). Intended by S-3;
-  open question Q2 of the FO-7 PR (suggested answer pending the commander).
+- Skills deleted before a machine's first skills manifest are never
+  retired. `aitool-ops` and `aitool-eval` (deleted by PR 129) were deployed
+  to `~/.claude/skills/` and `~/.cursor/skills/` by the old
+  `setup-user-skills` but never listed in a `~/.aitools/skills` manifest,
+  so the manifest-based prune never removes them: the fan-out counts them
+  as `preserved` and Claude Code and Cursor keep loading them. In fan-out
+  mode `setup-user-skills` reverse discovery does not know them as harness
+  names either, so an interactive run offers them for adoption into the
+  dotprofile as user-created (S3-Merge2 reviews of PR 124, NB3, and PR 125,
+  N2). PR 125 does not change this; the copies must be removed by hand
+  (back them up first) until a follow-up seeds the retired names.
 - `@reference/cursor-practices.md` said the Cursor agent CLI does not read
   `~/.claude/skills/`; Cursor's docs say Cursor loads it. Which holds for the
   CLI: unknown.
@@ -493,11 +513,12 @@ Open (`INCIDENT:` markers for the delegating agent; not filed):
 - `backup_dir` / `Backup-Dir` skip a directory without a top-level `*.md`,
   so no directory backup is ever taken of `~/.claude/skills`,
   `~/.cursor/skills` or `~/.cursor/rules` (per-file backups still happen;
-  PR #118 / #123 follow-ups).
+  PR 118 / PR 123 follow-ups).
 - In fallback mode `setup-user-skills` still offers a `*.bak.*` directory in
-  `~/.claude/skills` for adoption (PR #125 follow-up).
-- No skill cites `~/.aitools/<path>` for read-only lookups outside aitools
-  (section 7.3); whether project skills should: undecided.
+  `~/.claude/skills` for adoption (PR 125 follow-up).
+- The two project skills (`audit`, `governed-data`) cite aitools repo paths
+  only; whether they should read through `repoPath` or `~/.aitools/<path>`
+  like the governance skills (section 7.3): undecided.
 
 ## 11. Cross-references
 
