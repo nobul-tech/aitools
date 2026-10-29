@@ -740,7 +740,7 @@ seed_cursor_none() { cskill mine SKILL.md 'mine'; }
 cursor_case cursor-none seed_cursor_none
 # No ~/.aitools/skills: the fan-out logs only and writes no row (FO-6's
 # setup-user-skills owns the row then; contract change in #124 5267e9e)
-check "cursor, no harness skills: no cursor skills row, ~/.cursor/skills untouched" "[ \"\$(rc)\" = 0 ] && [ -z \"\$(cnondetail)\" ] && [ \"\$(ls '$(CS)')\" = mine ]"
+check "cursor, no harness skills: no cursor skills row, logged, ~/.cursor/skills untouched" "[ \"\$(rc)\" = 0 ] && [ -z \"\$(cnondetail)\" ] && ! grep -qF '|cursor skills|' '$C/sh.summary' && grep -q 'No harness skills at .*setup-user-skills deploys skills' '$C/sh.out' && [ \"\$(ls '$(CS)')\" = mine ]"
 cparity cursor-none
 
 # Only retired names in both manifests, nothing in ~/.cursor: steps 4 and 5
