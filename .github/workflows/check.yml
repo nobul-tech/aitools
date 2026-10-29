@@ -229,11 +229,39 @@ jobs:
         if: ${{ !cancelled() }}
         run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/build-deploy/test-build-deploy-backup.sh
 
-      - name: Hook output-channel tests (bash 5)
-        run: bash tests/hooks/run-hook-tests.sh
+      # Hook output-channel tests: one step per suite (not run-hook-tests.sh),
+      # so the "Every test suite is in CI" step sees each test-*.sh.
+      - name: Hook output-channel tests, sh-file-fixup (bash 5)
+        if: ${{ !cancelled() }}
+        run: bash tests/hooks/test-sh-file-fixup.sh
 
-      - name: Hook output-channel tests (macOS /bin/bash 3.2)
-        run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/hooks/run-hook-tests.sh
+      - name: Hook output-channel tests, glossary-skill-guard (bash 5)
+        if: ${{ !cancelled() }}
+        run: bash tests/hooks/test-glossary-skill-guard.sh
+
+      - name: Hook output-channel tests, SessionStart harness-db (bash 5)
+        if: ${{ !cancelled() }}
+        run: bash tests/hooks/test-sessionstart-harness-db.sh
+
+      - name: Hook output-channel tests, smoke (bash 5)
+        if: ${{ !cancelled() }}
+        run: bash tests/hooks/test-hooks-smoke.sh
+
+      - name: Hook output-channel tests, sh-file-fixup (macOS /bin/bash 3.2)
+        if: ${{ !cancelled() }}
+        run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/hooks/test-sh-file-fixup.sh
+
+      - name: Hook output-channel tests, glossary-skill-guard (macOS /bin/bash 3.2)
+        if: ${{ !cancelled() }}
+        run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/hooks/test-glossary-skill-guard.sh
+
+      - name: Hook output-channel tests, SessionStart harness-db (macOS /bin/bash 3.2)
+        if: ${{ !cancelled() }}
+        run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/hooks/test-sessionstart-harness-db.sh
+
+      - name: Hook output-channel tests, smoke (macOS /bin/bash 3.2)
+        if: ${{ !cancelled() }}
+        run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/hooks/test-hooks-smoke.sh
 
       - name: Build deploy scripts
         run: |
@@ -489,8 +517,22 @@ jobs:
         if: ${{ !cancelled() }}
         run: bash tests/build-deploy/test-build-deploy-backup.sh
 
-      - name: Hook output-channel tests
-        run: bash tests/hooks/run-hook-tests.sh
+      # Hook output-channel tests: one step per suite (see the macos job).
+      - name: Hook output-channel tests, sh-file-fixup
+        if: ${{ !cancelled() }}
+        run: bash tests/hooks/test-sh-file-fixup.sh
+
+      - name: Hook output-channel tests, glossary-skill-guard
+        if: ${{ !cancelled() }}
+        run: bash tests/hooks/test-glossary-skill-guard.sh
+
+      - name: Hook output-channel tests, SessionStart harness-db
+        if: ${{ !cancelled() }}
+        run: bash tests/hooks/test-sessionstart-harness-db.sh
+
+      - name: Hook output-channel tests, smoke
+        if: ${{ !cancelled() }}
+        run: bash tests/hooks/test-hooks-smoke.sh
 
       - name: Build deploy scripts
         run: bash scripts/build-deploy.sh
@@ -642,9 +684,26 @@ jobs:
           # exit 1 from resolve would otherwise fail the step.
           exit 0
 
-      - name: Hook output-channel tests (via Git Bash)
+      # Hook output-channel tests: one step per suite (see the macos job).
+      - name: Hook output-channel tests, sh-file-fixup (via Git Bash)
+        if: ${{ !cancelled() }}
         shell: bash
-        run: bash tests/hooks/run-hook-tests.sh
+        run: bash tests/hooks/test-sh-file-fixup.sh
+
+      - name: Hook output-channel tests, glossary-skill-guard (via Git Bash)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: bash tests/hooks/test-glossary-skill-guard.sh
+
+      - name: Hook output-channel tests, SessionStart harness-db (via Git Bash)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: bash tests/hooks/test-sessionstart-harness-db.sh
+
+      - name: Hook output-channel tests, smoke (via Git Bash)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: bash tests/hooks/test-hooks-smoke.sh
 
       # tests/rules-fanout-cursor is not run here: its header lists Git Bash, but
       # its manifest cases run setup-user-cursor.sh, whose OS guard exits on
