@@ -83,7 +83,7 @@ aitools dashboard [--stop|--status|--snapshot|--background]  # Mission control d
 
 ### Deploy to a machine (no repo clone needed)
 
-`build-deploy.sh` generates self-contained, MDM-ready scripts in your dotprofile repo's `deploy/` (`aitools-<user>/deploy/`). Copy that directory to the endpoint and run `deploy-harness` **first**: it fills `~/.aitools` (rules, reference, registries, hooks, skills, bin, config.json). The other scripts read from it: the rules fan-outs in `setup-user-claude` and `setup-user-cursor` read `~/.aitools/rules`, and run before `deploy-harness` they report `n/a (no harness rules)` and deploy no rules.
+`build-deploy.sh` generates self-contained, MDM-ready scripts in your dotprofile repo's `deploy/` (`aitools-<user>/deploy/`). Copy that directory to the endpoint and run `deploy-harness` **first**: it fills `~/.aitools` (rules, reference, registries, hooks, skills, bin, config.json). The other scripts read from it. The rules fan-outs in `setup-user-claude` and `setup-user-cursor` read `~/.aitools/rules`: run before `deploy-harness`, they report `n/a (no harness rules)` and deploy no rules.
 
 macOS/Linux:
 ```bash
