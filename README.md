@@ -83,17 +83,17 @@ aitools dashboard [--stop|--status|--snapshot|--background]  # Mission control d
 
 ### Deploy to a machine (no repo clone needed)
 
-`build-deploy.sh` generates self-contained, MDM-ready scripts in your dotprofile repo's `deploy/` (`aitools-<user>/deploy/`). Copy that directory to the endpoint and run `deploy-harness` **first**: it fills `~/.aitools` (rules, reference, registries, hooks, skills, bin, config.json). The other scripts read from it.
+`build-deploy.sh` generates self-contained, MDM-ready scripts in your dotprofile repo's `deploy/` (`aitools-<user>/deploy/`). Copy that directory to the endpoint and run `deploy-harness` **first**: it fills `~/.aitools` (rules, reference, registries, hooks, skills, bin, config.json). The other scripts read from it: the rules and skills fan-outs in `setup-user-claude` and `setup-user-cursor` read `~/.aitools/rules` and `~/.aitools/skills`. Run before it, the rules fan-outs report `n/a (no harness rules)` and deploy no rules, and `setup-user-skills` deploys skills as the fallback (with `~/.aitools/skills` present it deploys nothing and reports `n/a (fanned out)`).
 
 macOS/Linux:
 ```bash
 bash deploy/deploy-harness.sh          # ~/.aitools harness files (run first)
-bash deploy/setup-user-claude.sh       # Claude Code CLAUDE.md + rules
+bash deploy/setup-user-claude.sh       # Claude Code CLAUDE.md + rules + skills fan-out
 bash deploy/setup-user-settings.sh     # settings.json <-> profile.json
 bash deploy/setup-user-hooks.sh        # Claude Code hooks
-bash deploy/setup-user-skills.sh       # skills
+bash deploy/setup-user-skills.sh       # skills fallback (no ~/.aitools/skills) + reverse discovery
 bash deploy/setup-user-mcp.sh          # Claude Code MCP servers
-bash deploy/setup-user-cursor.sh       # Cursor CLI config + rules fan-out
+bash deploy/setup-user-cursor.sh       # Cursor CLI config + rules + skills fan-out
 bash deploy/setup-cursor-ide-mcp.sh    # Cursor MCP servers
 bash deploy/setup-<tool>.sh            # one per managed tool (gh-cli, pandoc, rust, typst, uv, python, go, modal, datadog, perl, bash, google-chrome, vercelcli)
 ```
@@ -101,13 +101,13 @@ bash deploy/setup-<tool>.sh            # one per managed tool (gh-cli, pandoc, r
 Windows (PowerShell):
 ```powershell
 .\deploy\deploy-harness.ps1            # ~/.aitools harness files (run first)
-.\deploy\setup-user-claude.ps1
-.\deploy\setup-user-settings.ps1
-.\deploy\setup-user-hooks.ps1
-.\deploy\setup-user-skills.ps1
-.\deploy\setup-user-mcp.ps1
-.\deploy\setup-user-cursor.ps1
-.\deploy\setup-cursor-ide-mcp.ps1
+.\deploy\setup-user-claude.ps1         # Claude Code CLAUDE.md + rules + skills fan-out
+.\deploy\setup-user-settings.ps1       # settings.json <-> profile.json
+.\deploy\setup-user-hooks.ps1          # Claude Code hooks
+.\deploy\setup-user-skills.ps1         # skills fallback (no ~/.aitools/skills) + reverse discovery
+.\deploy\setup-user-mcp.ps1            # Claude Code MCP servers
+.\deploy\setup-user-cursor.ps1         # Cursor CLI config + rules + skills fan-out
+.\deploy\setup-cursor-ide-mcp.ps1      # Cursor MCP servers
 .\deploy\setup-<tool>.ps1              # one per managed tool
 ```
 

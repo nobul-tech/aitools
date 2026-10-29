@@ -1,0 +1,14 @@
+ERROR|harness files|fx-dupskill: dup in .claude...
+ERROR|harness files|fx-dup.md: dup in dotprofile
+ERROR|harness files|fx-dup2.md: dup in dotprofile
+ERROR|harness files|fx-dupskill: dup in dotprof...
+ERROR|harness files|fx-dupskill2: dup in dotpro...
+DETAIL|harness files|retired: rules/fx-retire.md
+DETAIL|harness files|retired: rules/fx-retire2.md
+DETAIL|harness files|retired: skills/fx-retire-s...
+OK|harness files|141 verified
+DETAIL|cursor rules|removed: fx-retire.mdc
+DETAIL|cursor rules|removed: fx-retire2.mdc
+OK|cursor rules|2 removed, 32 verified
+DETAIL|cursor skills|removed: fx-retire-skill
+OK|cursor skills|1 removed, 36 verified

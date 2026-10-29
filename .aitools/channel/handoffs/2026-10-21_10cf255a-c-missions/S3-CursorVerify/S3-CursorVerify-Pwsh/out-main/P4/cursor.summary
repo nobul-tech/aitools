@@ -1,0 +1,6 @@
+ACTION||Run aitools to rebuild ~/.aitools/rules and its manifest
+DETAIL|cursor rules|removed: fx-retire.mdc
+DETAIL|cursor rules|removed: fx-retire2.mdc
+WARN|cursor rules|2 removed, 33 verified
+DETAIL|cursor skills|removed: fx-retire-skill
+WARN|cursor skills|1 removed, 36 verified

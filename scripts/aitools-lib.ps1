@@ -2721,7 +2721,7 @@ function Get-SkillNameKind([string]$Name) {
 # (the same key for both kinds); Invalid = list of ignored lines (tabs shown as
 # <TAB>) }. Status is "header-bad" when the first line (a UTF-8 BOM and a CR
 # before the LF ignored) is not the kind's header. A valid line: a name with no
-# / or \ and no .bak. (rules: a *.md name; skills: not starting with a dot), a
+# / or \ and no .bak. (rules: a *.md name, any case; skills: not starting with a dot), a
 # source of shared, aitools, dotprofile or retired, and a name not already
 # listed (compared case-insensitively). Throws for an unknown Kind (the .sh
 # exits 2) and when the file is missing, unreadable or a directory (the .sh
@@ -2730,7 +2730,7 @@ function Get-SkillNameKind([string]$Name) {
 function Read-HarnessManifest {
     param([string]$Path, [string]$Kind)
     switch -CaseSensitive ($Kind) {
-        "rules"  { $header = $rulesManifestHeader;  $namePattern = '\A[^/\\]+\.md\z' }
+        "rules"  { $header = $rulesManifestHeader;  $namePattern = '\A[^/\\]+\.[mM][dD]\z' }
         "skills" { $header = $skillsManifestHeader; $namePattern = '\A[^/\\.][^/\\]*\z' }
         default  { throw "Read-HarnessManifest: unknown kind `"$Kind`" (rules or skills)" }
     }
@@ -2904,6 +2904,672 @@ function Test-FanoutDirMatches([string]$Target, [string]$Candidate) {
     if ($err) { return 2 }
     if ($bad -or $n -eq 0) { return 1 }
     return 0
+}
+
+# Get-FanoutSortedNames Path: the entry names of directory Path, sorted
+# ordinally (byte order for ASCII, as perl's sort in the .sh). Throws when Path
+# cannot be listed. Used by Invoke-HarnessSkillsFanout.
+function Get-FanoutSortedNames([string]$Path) {
+    [string[]]$names = @([System.IO.DirectoryInfo]::new($Path).GetFileSystemInfos() | ForEach-Object { $_.Name })
+    [Array]::Sort($names, [StringComparer]::Ordinal)
+    return , $names
+}
+
+# Test-FanoutBinary Path: $true when the file holds a NUL byte or is not valid
+# UTF-8 (reading it as text would corrupt it), $false when it is text. Throws
+# when it cannot be read. Parity: _fanout_is_binary in aitools-lib.sh.
+function Test-FanoutBinary([string]$Path) {
+    $bytes = [System.IO.File]::ReadAllBytes($Path)
+    if ([Array]::IndexOf($bytes, [byte]0) -ge 0) { return $true }
+    try {
+        $null = [System.Text.UTF8Encoding]::new($false, $true).GetString($bytes)
+    } catch [System.Text.DecoderFallbackException] {
+        return $true
+    }
+    return $false
+}
+
+# Copy-FanoutBinary Source Dest ItemName: deploy a non-text file byte for byte
+# (no review menu: a binary has no line diff; SOURCE wins, as on a
+# non-interactive run). Equal bytes -> "verified". Otherwise an existing Dest
+# is backed up (Backup-File; no backup -> "failed", nothing written), Source is
+# copied to a temp file beside Dest, compared, and moved over Dest. Returns
+# created / updated / verified / failed (failed: LogError with the reason).
+# Honors $DryRun. Parity: _fanout_copy_binary in aitools-lib.sh.
+function Copy-FanoutBinary([string]$Source, [string]$Dest, [string]$ItemName) {
+    $srcBytes = [System.IO.File]::ReadAllBytes($Source)
+    $exists = [System.IO.File]::Exists($Dest)
+    if ($exists) {
+        try {
+            $destBytes = [System.IO.File]::ReadAllBytes($Dest)
+            if ([System.Linq.Enumerable]::SequenceEqual($srcBytes, $destBytes)) { return "verified" }
+        } catch {
+            LogDetail "Copy-FanoutBinary: cannot read ${Dest}: $($_.Exception.Message) (it is replaced)"
+        }
+    }
+    if ($DryRun) {
+        if ($exists) { Log "[DRY RUN] Would update: $ItemName (binary) -> $Dest" }
+        else { Log "[DRY RUN] Would create: $ItemName (binary) -> $Dest" }
+        return "verified"
+    }
+    try {
+        [System.IO.Directory]::CreateDirectory([System.IO.Path]::GetDirectoryName($Dest)) | Out-Null
+    } catch {
+        LogError "Failed: ${ItemName}: cannot create the directory of ${Dest}: $($_.Exception.Message)"
+        return "failed"
+    }
+    if ($exists) {
+        Backup-File -FilePath $Dest
+        if (-not $script:BackupFileOk) {
+            LogError "Failed: ${ItemName}: backup of $Dest failed -- nothing written"
+            return "failed"
+        }
+    }
+    $tmp = "$Dest.aitools-tmp.$PID"
+    try {
+        [System.IO.File]::Copy($Source, $tmp, $true)
+        if (-not [System.Linq.Enumerable]::SequenceEqual($srcBytes, [System.IO.File]::ReadAllBytes($tmp))) { throw "the copy differs from the source" }
+        [System.IO.File]::Move($tmp, $Dest, $true)
+        if (-not [System.Linq.Enumerable]::SequenceEqual($srcBytes, [System.IO.File]::ReadAllBytes($Dest))) { throw "the written file differs from the source" }
+    } catch {
+        if ([System.IO.File]::Exists($tmp)) {
+            try { [System.IO.File]::Delete($tmp) } catch { LogDetail "Copy-FanoutBinary: cannot remove ${tmp}: $($_.Exception.Message)" }
+        }
+        LogError "Failed: ${ItemName}: cannot write $Dest (binary): $($_.Exception.Message)"
+        return "failed"
+    }
+    if ($exists) {
+        LogOk "Updated: $ItemName (binary, no review: source wins; backup kept) -> $Dest"
+        return "updated"
+    }
+    LogOk "Created: $ItemName (binary) -> $Dest"
+    return "created"
+}
+
+# Test-FanoutSkillReserved Name: $true when Name is a skills directory name
+# Claude Code owns (synced, anthropic-skills*; case-insensitive): the fan-out
+# never writes or removes it. Parity: _fanout_skill_reserved in aitools-lib.sh.
+function Test-FanoutSkillReserved([string]$Name) {
+    $lc = $Name.ToLowerInvariant()
+    return ($lc -ceq "synced" -or $lc.StartsWith("anthropic-skills", [StringComparison]::Ordinal))
+}
+
+# Test-FanoutDirMatchesIgnoringJunk Target Candidate: Test-FanoutDirMatches on
+# a temp copy of Target without OS junk files (.DS_Store, Thumbs.db,
+# desktop.ini, any depth, case-insensitive), so a Finder or Explorer file never
+# blocks a retired prune. Same return codes; 2 also when the temp copy fails
+# (detail log). Parity: _fanout_matches_ignoring_junk in aitools-lib.sh.
+function Test-FanoutDirMatchesIgnoringJunk([string]$Target, [string]$Candidate) {
+    $tmpd = Join-Path ([System.IO.Path]::GetTempPath()) ("aitools-fanout-" + [guid]::NewGuid().ToString("N"))
+    try {
+        Copy-DirectoryTree -Source $Target -Dest (Join-Path $tmpd "t")
+        $reparse = [System.IO.FileAttributes]::ReparsePoint
+        foreach ($f in [System.IO.Directory]::EnumerateFiles((Join-Path $tmpd "t"), "*", [System.IO.SearchOption]::AllDirectories)) {
+            $info = [System.IO.FileInfo]::new($f)
+            if ($info.Attributes -band $reparse) { continue }
+            if ($info.Name.ToLowerInvariant() -in @(".ds_store", "thumbs.db", "desktop.ini")) { [System.IO.File]::Delete($f) }
+        }
+    } catch {
+        LogDetail "fanout: cannot copy $Target to compare it: $($_.Exception.Message)"
+        if ([System.IO.Directory]::Exists($tmpd)) {
+            try { [System.IO.Directory]::Delete($tmpd, $true) } catch { LogDetail "fanout: cannot remove ${tmpd}: $($_.Exception.Message)" }
+        }
+        return 2
+    }
+    $rc = Test-FanoutDirMatches (Join-Path $tmpd "t") $Candidate
+    try { [System.IO.Directory]::Delete($tmpd, $true) } catch { LogDetail "fanout: cannot remove ${tmpd}: $($_.Exception.Message)" }
+    return $rc
+}
+
+# Remove-FanoutOldDestBackups DestDir Keep: remove all but the newest Keep
+# DestDir.bak.<UTC>[-n] directories beside DestDir (literal name match, never a
+# wildcard; the pattern Backup-Dir prunes). Failures are warnings.
+# Parity: _fanout_prune_dest_backups in aitools-lib.sh.
+function Remove-FanoutOldDestBackups([string]$DestDir, [int]$Keep) {
+    $reparse = [System.IO.FileAttributes]::ReparsePoint
+    $parent = [System.IO.Path]::GetDirectoryName($DestDir)
+    $pattern = '\A' + [regex]::Escape([System.IO.Path]::GetFileName($DestDir)) + '\.bak\.[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{6}Z(?:-[0-9]+)?\z'
+    try {
+        [string[]]$names = @([System.IO.DirectoryInfo]::new($parent).GetDirectories() | Where-Object {
+            $_.Name -cmatch $pattern -and -not ($_.Attributes -band $reparse)
+        } | ForEach-Object { $_.Name })
+    } catch {
+        LogWarn "Could not prune old backups of $DestDir -- cannot list ${parent}: $($_.Exception.Message)"
+        return
+    }
+    [Array]::Sort($names, [StringComparer]::Ordinal)
+    [Array]::Reverse($names)
+    for ($i = $Keep; $i -lt $names.Count; $i++) {
+        $old = Join-Path $parent $names[$i]
+        try {
+            [System.IO.Directory]::Delete($old, $true)
+            Log "Pruned old backup: $old"
+        } catch {
+            LogWarn "Could not prune old backup ${old}: $($_.Exception.Message)"
+        }
+    }
+}
+
+# ---------------------------------------------------------------------------
+# Invoke-HarnessSkillsFanout -ToolName -DestDir -AitoolsRepo -Dotprofile
+# Skills fan-out (plans/skills-and-rules-fanout.md section 3.4): every skill
+# directory in .aitools\skills (deploy-harness fills it, first source wins,
+# and writes the skills manifest) except the ones the manifest retires ->
+# DestDir\<name>\** through Deploy-ManagedFile, one item per file
+# ("<name>/<rel>"). Callers: setup-user-claude ("claude skills",
+# .claude\skills) and setup-user-cursor ("cursor skills", .cursor\skills).
+#   -ToolName     summary tool name
+#   -DestDir      the tool's skills directory (created when missing)
+#   -AitoolsRepo  the aitools git checkout (adopt targets of shared and
+#                 aitools skills); "" = none (deploy/ copy, package payload,
+#                 Cursor)
+#   -Dotprofile   the dotprofile (adopt target of dotprofile skills); "" = none
+# Behaviour: names compared case-insensitively; hidden and *.bak.* entries
+# skipped (also *.bak.* file names inside a skill); a top-level file ignored
+# with a log line; a dangling symlink, a case-only duplicate name and an
+# unexpected deploy result are failed items; the executable bit follows the
+# harness copy (not on Windows). DestDir\<name> that is a symlink or a file is
+# never written (preserved, WARN, one ACTION row), nor is any directory in
+# DestDir the fan-out did not deploy this run (third-party skills, the
+# firecrawl symlinks). The copy of a retired skill is removed only when
+# Test-FanoutDirMatches says it holds the harness copy's files
+# (.aitools\skills\<name> or a <name>.bak.* backup there), after a verified
+# backup to DestDir.bak.<UTC>\<name>\ beside DestDir (not in DestDir, where the
+# tool would still load it as a skill); else kept, WARN and one ACTION row;
+# OS junk files (.DS_Store, Thumbs.db, desktop.ini) in the copy do not block
+# it; the newest 5 DestDir.bak.<UTC> directories are kept. A file with a NUL
+# byte or invalid UTF-8 is copied byte for byte (no review menu, backup kept).
+# The names synced and anthropic-skills* belong to Claude Code: a harness
+# skill of that name is a failed item, never written, and is never removed
+# from DestDir. No .aitools\skills: info log only, no row (setup-user-skills,
+# the fallback, owns the ToolName rows then). $DryRun writes nothing. Returns nothing (failures are LogError + an ERROR
+# row, counted in $errors for the caller's exit footer); [x]abort at a review
+# exits 2 from the library. .NET IO for every name (no wildcard paths: a
+# name with [ ] * ? works). Parity: fanout_harness_skills in aitools-lib.sh.
+# ---------------------------------------------------------------------------
+function Invoke-HarnessSkillsFanout {
+    param([string]$ToolName, [string]$DestDir, [string]$AitoolsRepo = "", [string]$Dotprofile = "")
+    $reparse = [System.IO.FileAttributes]::ReparsePoint
+    $homeDir = if ($env:USERPROFILE) { $env:USERPROFILE } else { $HOME }
+    $fsSrc = Join-Path (Join-Path $homeDir ".aitools") "skills"
+    $fsManifest = Join-Path $fsSrc ".aitools-skills-manifest"
+    if (-not $ToolName -or -not $DestDir) {
+        LogError "Invoke-HarnessSkillsFanout: -ToolName and -DestDir are required (caller bug)"
+        $shownTool = if ($ToolName) { $ToolName } else { "skills" }
+        Write-Summary "ERROR" $shownTool "fan-out not run (caller bug)"
+        return
+    }
+    if ($DestDir.Length -gt 1) { $DestDir = $DestDir.TrimEnd('/', '\') }
+    $who = switch -CaseSensitive ($ToolName) {
+        "claude skills" { "Claude Code" }
+        "cursor skills" { "Cursor" }
+        default { $ToolName }
+    }
+    # DestDir as the ACTION rows show it: ~/... under the home directory, forward slashes
+    $shown = $DestDir
+    if ($homeDir -and $DestDir.StartsWith($homeDir + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
+        $shown = "~/" + $DestDir.Substring($homeDir.Length + 1)
+    }
+    $shown = $shown -replace '\\', '/'
+
+    if (-not (Test-Path -LiteralPath $fsSrc -PathType Container)) {
+        # No row: setup-user-skills (the fallback deployer, FO-6) owns this
+        # tool's rows when .aitools\skills does not exist (PR #125 review N2)
+        Log "No harness skills at $fsSrc (deploy-harness has not run) -- skipping; setup-user-skills deploys skills"
+        return
+    }
+    try {
+        $entries = Get-FanoutSortedNames $fsSrc
+    } catch {
+        LogError "Cannot list $fsSrc ($($_.Exception.Message))"
+        Write-Summary "ERROR" $ToolName "cannot read harness skills"
+        return
+    }
+
+    # Skills manifest: each skill's source (adopt target) and the retired names.
+    # Without one every skill is fanned out, none is retired, adopt not offered.
+    $mOk = $false
+    $mFailed = $false
+    $sourceOf = @{}   # name -> source; hashtable keys are case-insensitive
+    $retired = New-Object System.Collections.Generic.List[string]
+    $retiredSet = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
+    if (-not (Test-Path -LiteralPath $fsManifest)) {
+        Log "No skills manifest at $fsManifest -- every skill fanned out, none retired, adopt not offered"
+    } else {
+        $manifest = $null
+        try {
+            $manifest = Read-HarnessManifest -Path $fsManifest -Kind "skills"
+        } catch {
+            LogError "Cannot read the skills manifest ${fsManifest}: $($_.Exception.Message) -- every skill fanned out, none retired"
+            Write-Summary "ERROR" $ToolName "cannot read skills manifest"
+            $mFailed = $true
+        }
+        if ($manifest -and $manifest.Status -eq "header-bad") {
+            LogWarn "Skills manifest ${fsManifest}: the first line is not `"$skillsManifestHeader`" -- every skill fanned out, none retired, adopt not offered -- Run aitools to rebuild ~/.aitools/skills and its manifest"
+            Write-Summary "ACTION" "" "Run aitools to rebuild ~/.aitools/skills and its manifest"
+        } elseif ($manifest) {
+            $mOk = $true
+            foreach ($bad in $manifest.Invalid) { LogWarn "Skills manifest ${fsManifest}: line ignored: $bad -- Run aitools to rebuild ~/.aitools/skills and its manifest" }
+            if ($manifest.Invalid.Count -gt 0) { Write-Summary "ACTION" "" "Run aitools to rebuild ~/.aitools/skills and its manifest" }
+            foreach ($r in $manifest.Rules) {
+                if ($r.Source -ceq "retired") {
+                    $retired.Add($r.Name); [void]$retiredSet.Add($r.Name)
+                } else {
+                    $sourceOf[$r.Name] = $r.Source
+                }
+            }
+        }
+    }
+
+    # Skill directories: every entry whose kind is "skill", not retired
+    $skills = New-Object System.Collections.Generic.List[string]
+    $broken = New-Object System.Collections.Generic.List[string]
+    foreach ($ent in $entries) {
+        if ((Get-SkillNameKind $ent) -ne "skill") { continue }   # hidden (the manifest), *.bak.* (deploy-harness backups)
+        if ($retiredSet.Contains($ent)) {
+            Log "Not fanned out: $ent (retired in the skills manifest)"
+            continue
+        }
+        $entPath = Join-Path $fsSrc $ent
+        try {
+            $type = Get-FanoutEntryType -Path $entPath -Follow
+        } catch {
+            LogDetail "${ToolName}: cannot stat ${entPath}: $($_.Exception.Message)"
+            $type = "missing"
+        }
+        if ($type -eq "missing") { $broken.Add($ent); continue }
+        if ($type -ne "dir") {
+            Log "Ignoring non-skill file in harness skills: $ent (only skill directories are fanned out)"
+            continue
+        }
+        $skills.Add($ent)
+    }
+
+    if ($skills.Count -eq 0 -and $broken.Count -eq 0 -and $retired.Count -eq 0) {
+        Log "No skills in $fsSrc -- skipping"
+        # An unreadable manifest already wrote this tool's ERROR row
+        if (-not $mFailed) { Write-Summary "OK" $ToolName "n/a (no harness skills)" }
+        return
+    }
+    if ($DryRun) {
+        # The dry run predicts the real run's outcome for a DestDir that is not a directory
+        if ((Test-Path -LiteralPath $DestDir) -and -not (Test-Path -LiteralPath $DestDir -PathType Container)) {
+            LogError "Cannot create $DestDir (a file is in the way) [DRY RUN]"
+            Write-Summary "ERROR" $ToolName "cannot create skills dir"
+            return
+        }
+    } else {
+        Backup-Dir -DirPath $DestDir
+        if (-not (Test-Path -LiteralPath $DestDir -PathType Container)) {
+            $mkdirError = ""
+            try {
+                [System.IO.Directory]::CreateDirectory($DestDir) | Out-Null
+            } catch {
+                $mkdirError = $_.Exception.Message
+            }
+            # Re-check: a file in the way (parity with mkdir -p in the .sh)
+            if (-not (Test-Path -LiteralPath $DestDir -PathType Container)) {
+                if (-not $mkdirError) { $mkdirError = "not a directory" }
+                LogError "Cannot create $DestDir ($mkdirError)"
+                Write-Summary "ERROR" $ToolName "cannot create skills dir"
+                return
+            }
+        }
+    }
+
+    Initialize-DeployTracker
+    $errorsBefore = $script:errors
+    if ($mFailed) {
+        Record-DeployOutcome -Outcome "failed" -ToolName $ToolName -ItemName ".aitools-skills-manifest"
+    }
+    foreach ($b in $broken) {
+        LogError "Failed: ${b}: dangling symlink in $fsSrc"
+        Record-DeployOutcome -Outcome "failed" -ToolName $ToolName -ItemName $b
+    }
+
+    # Per skill: claim the name, check DestDir\<name>, list its files
+    $owned = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
+    $kept = New-Object System.Collections.Generic.List[string]
+    $list = New-Object System.Collections.Generic.List[object]   # @{ Name; Rel }
+    foreach ($ent in $skills) {
+        # A name Claude Code owns in its skills directory: never written
+        if (Test-FanoutSkillReserved $ent) {
+            LogError "Not fanned out: $ent (a reserved skills directory name: synced and anthropic-skills* belong to Claude Code) -- rename the harness skill"
+            Record-DeployOutcome -Outcome "failed" -ToolName $ToolName -ItemName $ent
+            continue
+        }
+        # Two harness skills whose names differ only in case (possible on a
+        # case-sensitive file system) map to one directory here: the first wins
+        if ($owned.Contains($ent)) {
+            LogError "Skipped duplicate: $ent (a harness skill whose name differs only in case was already fanned out)"
+            Record-DeployOutcome -Outcome "failed" -ToolName $ToolName -ItemName $ent
+            continue
+        }
+        [void]$owned.Add($ent)
+        $destEnt = Join-Path $DestDir $ent
+        # A symlink (dangling too: LinkTarget is set) or a file (not a directory)
+        $destIsLink = $null -ne ([System.IO.FileInfo]::new($destEnt)).LinkTarget
+        if ($destIsLink -or [System.IO.File]::Exists($destEnt)) {
+            LogWarn "Kept ${ent}: not a directory this fan-out owns ($destEnt is a symlink or a file) -- the harness copy is not deployed; move it aside to get the aitools copy"
+            Record-DeployOutcome -Outcome "preserved" -ToolName $ToolName -ItemName $ent
+            $kept.Add($ent)
+            continue
+        }
+        # Files under the skill: real directories walked (symlinked ones not
+        # followed), regular files (or symlinks to one) listed, *.bak.* base
+        # names skipped
+        $files = New-Object System.Collections.Generic.List[object]   # @{ Rel; IsFile }
+        $walkError = ""
+        $stack = New-Object System.Collections.Generic.Stack[string]
+        $stack.Push("")
+        $root = Join-Path $fsSrc $ent
+        while ($stack.Count -gt 0 -and -not $walkError) {
+            $rel = $stack.Pop()
+            $dir = if ($rel -eq "") { $root } else { Join-Path $root $rel }
+            try {
+                $children = @([System.IO.DirectoryInfo]::new($dir).GetFileSystemInfos())
+            } catch {
+                $walkError = "cannot list ${dir}: $($_.Exception.Message)"
+                break
+            }
+            foreach ($c in $children) {
+                $r = if ($rel -eq "") { $c.Name } else { "$rel/$($c.Name)" }
+                if ($c -is [System.IO.DirectoryInfo] -and -not ($c.Attributes -band $reparse)) { $stack.Push($r); continue }
+                if ($c.Name -like "*.bak.*") { continue }
+                try {
+                    $ctype = Get-FanoutEntryType -Path $c.FullName -Follow
+                } catch {
+                    LogDetail "${ToolName}: cannot stat $($c.FullName): $($_.Exception.Message)"
+                    $ctype = "other"
+                }
+                $files.Add(@{ Rel = $r; IsFile = ($ctype -eq "file") })
+            }
+        }
+        if ($walkError) {
+            LogError "Failed: ${ent}: $walkError"
+            Record-DeployOutcome -Outcome "failed" -ToolName $ToolName -ItemName $ent
+            continue
+        }
+        [string[]]$rels = @($files | ForEach-Object { $_.Rel })
+        [object[]]$fileArr = $files.ToArray()
+        [Array]::Sort($rels, $fileArr, [StringComparer]::Ordinal)
+        foreach ($f in $fileArr) {
+            if ($f.IsFile) { $list.Add(@{ Name = $ent; Rel = $f.Rel }) }
+            else { Log "Ignoring non-file in harness skills: $ent/$($f.Rel)" }
+        }
+    }
+
+    # Deploy loop. [x]abort exits 2 from the library here: no ToolName row is
+    # written.
+    $deployed = New-Object System.Collections.Generic.List[string]   # deployed file paths (validation)
+    foreach ($item in $list) {
+        $name = $item.Name
+        $rel = $item.Rel
+        $itemName = "$name/$rel"
+        $srcFile = Join-Path (Join-Path $fsSrc $name) $rel
+        $destFile = Join-Path (Join-Path $DestDir $name) $rel
+        $mSrc = ""
+        $adopt = ""
+        if ($mOk -and $sourceOf.ContainsKey($name)) {
+            $mSrc = $sourceOf[$name]
+            $aBase = ""
+            if ($mSrc -ceq "shared" -and $AitoolsRepo) {
+                $aBase = Join-Path (Join-Path $AitoolsRepo "shared") "skills"
+            } elseif ($mSrc -ceq "aitools" -and $AitoolsRepo) {
+                $aBase = Join-Path (Join-Path $AitoolsRepo ".claude") "skills"
+            } elseif ($mSrc -ceq "dotprofile" -and $Dotprofile) {
+                $aBase = Join-Path (Join-Path $Dotprofile "claude") "skills"
+            }
+            if ($aBase) {
+                $aCand = Join-Path (Join-Path $aBase $name) $rel
+                if (Test-Path -LiteralPath $aCand -PathType Leaf) { $adopt = $aCand }
+            }
+        }
+        $mSrcShown = if ($mSrc) { $mSrc } else { "unknown" }
+        $adoptShown = if ($adopt) { $adopt } else { "none" }
+        LogDetail "${ToolName}: $itemName source=$mSrcShown adopt=$adoptShown"
+        # A file with a NUL byte or invalid UTF-8 is copied byte for byte
+        # (reading it as text would corrupt it); text goes through the review menu
+        try {
+            $isBinary = Test-FanoutBinary $srcFile
+            $content = if ($isBinary) { "" } else { [System.IO.File]::ReadAllText($srcFile, [System.Text.UTF8Encoding]::new($false)) }
+        } catch {
+            LogError "Cannot read harness skill file ${srcFile}: $($_.Exception.Message)"
+            Record-DeployOutcome -Outcome "failed" -ToolName $ToolName -ItemName $itemName
+            continue
+        }
+        if ($isBinary) {
+            try {
+                $res = Copy-FanoutBinary $srcFile $destFile $itemName
+            } catch {
+                LogError "Failed: ${itemName}: $($_.Exception.Message)"
+                $res = "failed"
+            }
+        } else {
+            if (-not $DryRun) {
+                # The library creates a missing parent with New-Item -Path (a
+                # wildcard path): create it here with .NET so [ ] in a name works
+                try {
+                    [System.IO.Directory]::CreateDirectory([System.IO.Path]::GetDirectoryName($destFile)) | Out-Null
+                } catch {
+                    LogDetail "${ToolName}: cannot create the directory of ${destFile}: $($_.Exception.Message) (the deploy reports it)"
+                }
+            }
+            $res = Deploy-ManagedFile -Content $content -DestPath $destFile -ToolName $ToolName -ItemName $itemName -AdoptPath $adopt
+        }
+        if ($res -notin @("created", "updated", "verified", "accept & adopt", "skipped", "failed")) {
+            LogError "Unexpected deploy result for ${itemName}: $res"
+            $res = "failed"
+        }
+        # The executable bit follows the harness copy (a skill may ship scripts);
+        # Windows has no executable bit
+        if (-not $DryRun -and -not $IsWindows -and $res -in @("created", "updated", "verified", "accept & adopt") -and
+                (Test-Path -LiteralPath $destFile -PathType Leaf)) {
+            $xBits = [System.IO.UnixFileMode]::UserExecute -bor [System.IO.UnixFileMode]::GroupExecute -bor [System.IO.UnixFileMode]::OtherExecute
+            $xVerb = "set"
+            try {
+                $srcX = ([System.IO.File]::GetUnixFileMode($srcFile) -band [System.IO.UnixFileMode]::UserExecute) -ne 0
+                $destMode = [System.IO.File]::GetUnixFileMode($destFile)
+                $destX = ($destMode -band [System.IO.UnixFileMode]::UserExecute) -ne 0
+                if ($srcX -and -not $destX) {
+                    [System.IO.File]::SetUnixFileMode($destFile, ($destMode -bor $xBits))
+                } elseif (-not $srcX -and $destX) {
+                    $xVerb = "clear"
+                    [System.IO.File]::SetUnixFileMode($destFile, [System.IO.UnixFileMode]([int]$destMode -band (-bnot [int]$xBits)))
+                }
+            } catch {
+                LogError "Failed: ${itemName}: cannot $xVerb the executable bit on ${destFile}: $($_.Exception.Message)"
+                $res = "failed"
+            }
+        }
+        $deployed.Add($destFile)
+        Record-DeployOutcome -Outcome $res -ToolName $ToolName -ItemName $itemName
+    }
+    if ($kept.Count -gt 0) {
+        Write-Summary "ACTION" "" "$who skills in $shown not updated (a symlink or a file, not a directory the fan-out owns): $($kept -join ', ') -- move them aside to get the aitools copy"
+    }
+
+    # Retired skills: the copy in DestDir is backed up and removed when it holds
+    # this fan-out's files -- those of the harness copy or of a backup
+    # deploy-harness made when it retired the skill. Any other directory of that
+    # name may be the user's own: kept, with a warning.
+    $rmKept = New-Object System.Collections.Generic.List[string]
+    $bakRoot = ""
+    $dList = @()
+    $unlisted = $false
+    $rmSeen = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
+    if ($retired.Count -gt 0 -and (Test-Path -LiteralPath $DestDir -PathType Container)) {
+        try {
+            $dList = Get-FanoutSortedNames $DestDir
+        } catch {
+            LogWarn "Cannot list $DestDir for the retired skills -- $($_.Exception.Message) -- check its permissions"
+            $dList = @()
+            $unlisted = $true
+        }
+    }
+    foreach ($rm in $retired) {
+        # Deployed this run under a name that differs only in case
+        if ($owned.Contains($rm)) { continue }
+        # A name Claude Code owns is never removed
+        if (Test-FanoutSkillReserved $rm) { continue }
+        # The copy in DestDir, found case-insensitively; a real directory only
+        $rmPath = ""
+        foreach ($n in $dList) {
+            if (-not [string]::Equals($n, $rm, [StringComparison]::OrdinalIgnoreCase)) { continue }
+            $cand = Join-Path $DestDir $n
+            if ([System.IO.Directory]::Exists($cand) -and $null -eq ([System.IO.FileInfo]::new($cand)).LinkTarget) { $rmPath = $cand; break }
+        }
+        if (-not $rmPath) { continue }
+        $rmDir = [System.IO.Path]::GetFileName($rmPath)
+        # Reported here (kept, failed or removed): not counted again as preserved
+        [void]$rmSeen.Add($rmDir)
+        $cands = New-Object System.Collections.Generic.List[string]
+        $cands.Add((Join-Path $fsSrc $rm))
+        try {
+            foreach ($n in (Get-FanoutSortedNames $fsSrc)) {
+                if ($n.StartsWith("$rm.bak.", [StringComparison]::Ordinal)) { $cands.Add((Join-Path $fsSrc $n)) }
+            }
+        } catch {
+            LogWarn "Cannot list the backups of $rm in ${fsSrc}: $($_.Exception.Message)"
+        }
+        $why = ""
+        foreach ($cand in $cands) {
+            if (-not (Test-Path -LiteralPath $cand -PathType Container)) { continue }
+            # OS junk files (.DS_Store, Thumbs.db, desktop.ini) in the copy do not count
+            $rc = Test-FanoutDirMatchesIgnoringJunk $rmPath $cand
+            if ($rc -eq 0) {
+                $why = "same files as $([System.IO.Path]::GetFileName($cand))"
+                break
+            }
+            if ($rc -ne 1) { LogWarn "Cannot compare $rmPath with $cand" }
+        }
+        if (-not $why) {
+            LogWarn "Kept ${rmDir}: the skills manifest retires $rm, but this directory matches no harness copy (it may be your own) -- $who still loads it; delete it if it is an old fan-out copy"
+            $rmKept.Add($rmDir)
+            continue
+        }
+        if ($DryRun) {
+            Log "[DRY RUN] Would back up and remove $rmDir (retired skill; $why)"
+            continue
+        }
+        # Backup beside DestDir (DestDir.bak.<UTC>\<name>), one directory per run
+        if (-not $bakRoot) {
+            $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHHmmssZ")
+            $bakRoot = "${DestDir}.bak.${ts}"
+            $bn = 0
+            while (Test-Path -LiteralPath $bakRoot) { $bn++; $bakRoot = "${DestDir}.bak.${ts}-$bn" }
+            $bakMade = $false
+            try {
+                [System.IO.Directory]::CreateDirectory($bakRoot) | Out-Null
+                $bakMade = $true
+            } catch {
+                LogWarn "Cannot create the backup directory ${bakRoot}: $($_.Exception.Message)"
+            }
+            # Keep the newest 5 DestDir.bak.<UTC> directories (this one included)
+            if ($bakMade) { Remove-FanoutOldDestBackups $DestDir 5 }
+        }
+        $bakDir = Join-Path $bakRoot $rmDir
+        $backed = $false
+        $bakWhy = "no backup directory"
+        if ((Test-Path -LiteralPath $bakRoot -PathType Container) -and -not (Test-Path -LiteralPath $bakDir)) {
+            try {
+                Copy-DirectoryTree -Source $rmPath -Dest $bakDir
+                # Directory modes as cp -R keeps them (the .sh), not the default
+                if (-not $IsWindows) {
+                    $rootFull = [System.IO.Path]::GetFullPath($rmPath)
+                    foreach ($d in @($rootFull) + @([System.IO.Directory]::EnumerateDirectories($rootFull, "*", [System.IO.SearchOption]::AllDirectories))) {
+                        $to = Join-Path $bakDir ([System.IO.Path]::GetRelativePath($rootFull, $d))
+                        if ([System.IO.Directory]::Exists($to) -and $null -eq ([System.IO.FileInfo]::new($to)).LinkTarget) {
+                            [System.IO.File]::SetUnixFileMode($to, [System.IO.File]::GetUnixFileMode($d))
+                        }
+                    }
+                }
+                $bakWhy = "the copy differs"
+                $backed = ((Test-FanoutDirMatches $rmPath $bakDir) -eq 0)
+            } catch {
+                $bakWhy = $_.Exception.Message
+                $backed = $false
+            }
+        }
+        if (-not $backed) {
+            LogError "Not removed: $rmDir (retired skill): backup to $bakRoot failed: $bakWhy"
+            Record-DeployOutcome -Outcome "failed" -ToolName $ToolName -ItemName $rmDir
+            continue
+        }
+        $rmWhy = ""
+        try {
+            [System.IO.Directory]::Delete($rmPath, $true)
+        } catch {
+            $rmWhy = $_.Exception.Message
+        }
+        if ($rmWhy -or (Test-Path -LiteralPath $rmPath)) {
+            if (-not $rmWhy) { $rmWhy = "still present" }
+            LogError "Cannot remove $rmPath (retired skill; it may be partly removed; backup in ${bakDir}): $rmWhy"
+            Record-DeployOutcome -Outcome "failed" -ToolName $ToolName -ItemName $rmDir
+            continue
+        }
+        Log "Removed $rmDir (retired skill; $why; backup in $bakRoot)"
+        Record-DeployOutcome -Outcome "removed" -ToolName $ToolName -ItemName $rmDir
+    }
+    if ($rmKept.Count -gt 0) {
+        Write-Summary "ACTION" "" "$who still loads retired skills in ${shown}: $($rmKept -join ', ') -- delete them unless you wrote them"
+    }
+
+    if ($DryRun) {
+        if ($unlisted) {
+            Write-Summary "ACTION" "" "$who skills in $shown cannot be listed: retired skills not checked -- check its permissions"
+        }
+        if ($script:dtFailed -gt 0) {
+            Write-Summary "ERROR" $ToolName "$($script:dtFailed) failed (dry run)"
+        } else {
+            Write-Summary "OK" $ToolName "dry run (no files written)"
+        }
+        return
+    }
+
+    # Preserved: skills in DestDir this fan-out did not deploy this run
+    # (directories and symlinks; never touched)
+    $destNames = @()
+    try {
+        $destNames = Get-FanoutSortedNames $DestDir
+    } catch {
+        LogWarn "Cannot list $DestDir for the preserved report -- $($_.Exception.Message) -- check its permissions"
+        $unlisted = $true
+    }
+    if ($unlisted) {
+        Write-Summary "ACTION" "" "$who skills in $shown cannot be listed: retired skills not checked and other skills not counted -- check its permissions"
+    }
+    foreach ($n in $destNames) {
+        if ((Get-SkillNameKind $n) -ne "skill") { continue }
+        $p = Join-Path $DestDir $n
+        # A directory or a symlink (dangling too); not a plain file
+        if (-not [System.IO.Directory]::Exists($p) -and $null -eq ([System.IO.FileInfo]::new($p)).LinkTarget) { continue }
+        if ($rmSeen.Contains($n)) { continue }
+        if (-not $owned.Contains($n)) {
+            Log "Preserved unmanaged skill: $n"
+            Record-DeployOutcome -Outcome "preserved" -ToolName $ToolName -ItemName $n
+        }
+    }
+
+    # Post-write validation: each deployed file is non-empty (a file whose
+    # deploy failed is already reported; the library left it as it was)
+    foreach ($f in $deployed) {
+        if ((Test-Path -LiteralPath $f -PathType Leaf) -and (Get-Item -LiteralPath $f).Length -eq 0) {
+            LogError "Validation failed: $f is empty after deploy"
+        }
+    }
+
+    $pres = if ($unlisted) { "preserved count unknown (cannot list)" } else { "$($script:dtPreserved) preserved" }
+    if ($script:dtFailed -gt 0) {
+        # Write-DeployTrackerSummary writes the ERROR row ("N failed")
+        Write-DeployTrackerSummary -ToolName $ToolName
+        Log "Skills (${ToolName}): $($script:deployTrackerText), $pres in $DestDir"
+    } elseif ($script:errors -eq $errorsBefore) {
+        Write-DeployTrackerSummary -ToolName $ToolName
+        LogOk "Skills (${ToolName}): $($script:deployTrackerText), $pres in $DestDir"
+    } else {
+        Write-Summary "ERROR" $ToolName "validation failed"
+    }
 }
 
 # ---------------------------------------------------------------------------

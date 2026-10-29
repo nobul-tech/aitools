@@ -68,8 +68,10 @@ list with indented `  - ` items; items at column 0 are not read.
 
 ### Harness deployment
 
-`setup-user-cursor` step 4 fans `~/.aitools/rules` out here. It converts each
-Claude Code `<name>.md` to `<name>.mdc`:
+`setup-user-cursor` step 4 fans `~/.aitools/rules` out here: every rule
+except the ones the rules manifest retires (shared, aitools and dotprofile
+sources alike; `@reference/rules.md` R-6). It converts each Claude Code
+`<name>.md` to `<name>.mdc`:
 
 - A rule without frontmatter gets `alwaysApply: true`.
 - A Claude Code `paths:` key (any form) becomes an anchored `globs:` block

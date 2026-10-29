@@ -10,6 +10,7 @@ through their skills, not listed here.
 |------|-------|
 | `harness.md` | Harness definition: the components and how they relate |
 | `rules.md` | Rules: what a rule governs, the rule / skill / reference / registry layering, scopes, deployment to user scope |
+| `skills.md` | Skills: what a skill is, the layering, anatomy, scopes, deployment to user scope and its cost |
 | `framework-adoption.md` | Discovery-to-continuation cycle (DTCC) and the cross-reference convention |
 | `framework-artifact-harvesting.md` | Artifact harvesting: source discipline and adoption |
 | `framework-governed-data-access.md` | Skill-gated access to governed registries |

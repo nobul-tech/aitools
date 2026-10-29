@@ -210,7 +210,7 @@ seen_winner() {
 # add_source KIND LABEL SRC_DIR DEST_DIR LAYOUT
 #   LAYOUT tree   : every file, relative paths kept, no conflicts (reference, registries)
 #          flat   : top-level files only; unit = file name (hooks)
-#          flat-md: top-level *.md files only; unit = file name (rules)
+#          flat-md: top-level *.md files only (extension any case); unit = file name (rules)
 #          units  : files inside top-level directories; unit = directory name (skills)
 add_source() {
     local kind="$1" label="$2" src_dir="$3" dest_dir="$4" layout="$5"
@@ -248,7 +248,7 @@ add_source() {
                 esac
                 if [ "$layout" = "flat-md" ]; then
                     case "$rel" in
-                        *.md) ;;
+                        *.[mM][dD]) ;;
                         *) log_detail "skip non-.md file in a rules source: $label/$rel"; continue ;;
                     esac
                 fi
@@ -430,7 +430,7 @@ harness_manifest_plan() {
             skills => { "shared/skills" => "shared", ".claude/skills" => "aitools", "dotprofile/skills" => "dotprofile" },
         );
         my %name_ok = (
-            rules  => sub { $_[0] =~ /\A[^\/\\]+\.md\z/ && $_[0] !~ /\.bak\./i },
+            rules  => sub { $_[0] =~ /\A[^\/\\]+\.[mM][dD]\z/ && $_[0] !~ /\.bak\./i },
             skills => sub { $_[0] =~ /\A[^\/\\.][^\/\\]*\z/ && $_[0] !~ /\.bak\./i },
         );
         die "unknown manifest kind: $kind\n" unless $labels{$kind};

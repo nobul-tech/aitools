@@ -16,7 +16,7 @@ only in merge strategy.
 
 | Type | Merge strategy | Files |
 |------|---------------|-------|
-| Markdown | Interactive diff review via `deploy_managed_file` (SOURCE is the source of truth; one menu: overwrite / accept & adopt / merge & adopt / skip / abort) | CLAUDE.md, `~/.claude/rules/*.md`, skill SKILL.md files |
+| Markdown | Interactive diff review via `deploy_managed_file` (SOURCE is the source of truth; one menu: overwrite / accept & adopt / merge & adopt / skip / abort) | CLAUDE.md, `~/.claude/rules/*.md`, `~/.cursor/rules/*.mdc` (converted, no adopt), every file of a skill directory (`~/.claude/skills/<name>/**`, `~/.cursor/skills/<name>/**`) |
 | JSON config | Read-then-merge on managed fields. Profile-sourced fields (settings.json) use granular field-level review (`sync_managed_json` / `Sync-ManagedJson`: auto-adopt when profile silent, per-leaf overwrite/adopt/skip/abort on divergence); harness-managed keys (e.g. `hooks`) reconcile silently. JSON deployed through `deploy_managed_file` is reviewed field by field with SOURCE owning every field (`review_json_fields` / `Review-JsonFields`; no merge) | settings.json, cli-config.json, mcp.json, deployed JSON |
 | Shell script | Interactive diff review via `deploy_managed_file` (same menu as markdown) | Hook scripts (`~/.claude/hooks/*.sh`) |
 
@@ -45,14 +45,14 @@ Deployed content originates from two repos:
 
 | Source | Priority | What it provides |
 |--------|----------|-----------------|
-| Dotprofile repo (`aitools-<username>`) | Primary (wins if present) | CLAUDE.md template, user rules, profile.json (preferences, identity, machine profiles) |
+| Dotprofile repo (`aitools-<username>`) | Primary (wins if present) | CLAUDE.md template, profile.json (preferences, identity, machine profiles); user rules and user skills too, but through `~/.aitools` (row below), where `shared/` and `.claude/` win a name conflict |
 | aitools repo (`shared/`) | Fallback | claude-shared.md template, hook scripts, skills, shell aliases |
-| aitools repo + dotprofile -> `~/.aitools/` (`deploy-harness`) | First source wins on a name conflict: `shared/`, then `.claude/`, then dotprofile `claude/rules/` | reference, registries, hooks, skills, rules (one flat directory), bin; config.json generated from profile.json. Rules reach Cursor through the `setup-user-cursor` fan-out; `setup-user-claude` does not fan out yet (it deploys the dotprofile `claude/rules/` only). Detail: `@reference/harness.md` "Deployed harness (`~/.aitools`)" |
+| aitools repo + dotprofile -> `~/.aitools/` (`deploy-harness`) | First source wins on a name conflict: `shared/`, then `.claude/`, then the dotprofile `claude/rules/` / `claude/skills/` | reference, registries, hooks, skills (one directory per skill), rules (one flat directory), bin, and a manifest for rules and one for skills; config.json generated from profile.json. Rules and skills reach the tools through the `setup-user-claude` / `setup-user-cursor` fan-outs: each tool gets every name except the retired ones. Detail: `@reference/harness.md` "Deployed harness (`~/.aitools`)", `@reference/rules.md`, `@reference/skills.md` |
 
 - **Template interpolation**: `{{PLACEHOLDER}}` tokens in CLAUDE.md replaced with this machine's profile values when the setup script runs on that machine (dev path and generated deploy/ scripts alike)
 - **Machine profile selection**: one resolver (`aitools-profile.sh` / `.ps1`, through `resolve_machine_profile` / `Resolve-MachineProfile`): override → environment → `profiles[<machine id>]` → config.json `machineId` (only when the id cannot be detected) → config.json `machineAlias` (2.1 profiles only) → hostname (warns) → no match = ERROR, never another machine's profile. Order and failure behaviour: `@reference/user-repo.md` "Resolution"
-- **Rules**: additive deploy from `<userRepoPath>/claude/rules/` — managed files updated, unmanaged files in target preserved
-- **Skills**: user-level skills in `shared/skills/` (aitools-authored; `chrome-devtools` and `a11y-debugging` vendored from upstream) and personal skills in the dotprofile `claude/skills/` (wins on a name clash), deployed by `setup-user-skills` to `~/.claude/skills/` and `~/.cursor/skills/`; `deploy-harness` also copies `shared/skills/` and `.claude/skills/` to `~/.aitools/skills/`
+- **Rules**: deploy-harness collects `shared/rules/`, `.claude/rules/` and `<userRepoPath>/claude/rules/` into `~/.aitools/rules/` (first source wins) and writes `~/.aitools/rules/.aitools-rules-manifest` (each rule's source, or `retired`). The fan-out consumers copy from there, every rule except the retired ones: `setup-user-claude` into `~/.claude/rules/` (adopt target: the rule's source file, when it is on the machine), `setup-user-cursor` into `~/.cursor/rules/` (converted to `.mdc`, no adopt). Both update managed files, preserve unmanaged files, and back up and remove their own copy of a retired rule. Detail: `@reference/harness.md` "Rules manifest and retired rules"
+- **Skills**: user-level skills in `shared/skills/` (aitools-authored; `chrome-devtools` and `a11y-debugging` vendored from upstream), project skills in `.claude/skills/` and personal skills in the dotprofile `claude/skills/`. deploy-harness collects the three into `~/.aitools/skills/<name>/` (first source wins) and writes `~/.aitools/skills/.aitools-skills-manifest` (each skill's source, or `retired`). `setup-user-claude` fans out every non-retired skill directory to `~/.claude/skills/` (adopt target: the source file), `setup-user-cursor` to `~/.cursor/skills/` (no adopt). A skill directory the fan-out did not create (a user's own skill, a symlink) is never overwritten or removed. `setup-user-skills` deploys only when `~/.aitools/skills` does not exist (fallback: `shared/skills/` and the dotprofile `claude/skills/`, the dotprofile wins on a name clash) and keeps reverse discovery. Detail: `@reference/skills.md`
 - **Hooks**: canonical source in `shared/hooks/`, deployed to `~/.claude/hooks/`
 
 Full spec: `@reference/user-repo.md`
@@ -77,7 +77,10 @@ These apply equally regardless of file type:
    outcome and report via `write_summary`.
    `deploy_managed_file` results (created, updated, verified, accept &
    adopt, skipped, failed) are recorded with the deploy tracker; `failed`
-   is an ERROR row and the run continues with the next file.
+   is an ERROR row and the run continues with the next file. A fan-out
+   consumer that backs up and deletes its copy of a retired rule or skill
+   records `removed`; an outcome the tracker does not know is logged and
+   counted as `failed`.
 
 ### Platform-specific config values
 

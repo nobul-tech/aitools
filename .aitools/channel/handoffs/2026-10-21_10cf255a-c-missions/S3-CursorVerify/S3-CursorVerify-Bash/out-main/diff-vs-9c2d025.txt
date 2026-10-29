@@ -1,0 +1,24 @@
+== P1/tree.txt
+== P1/rows.txt
+== P1/exit.txt
+== P2/tree.txt
+== P2/rows.txt
+== P2/exit.txt
+== P3/tree.txt
+== P3/rows.txt
+== P3/exit.txt
+== P3b/tree.txt
+== P3b/rows.txt
+== P3b/exit.txt
+== P4/tree.txt
+== P4/rows.txt
+== P4/exit.txt
+== P5/tree.txt
+== P5/rows.txt
+== P5/exit.txt
+== P5x/tree.txt
+== P5x/rows.txt
+== P5x/exit.txt
+== P1-bash32/tree.txt vs out-main/P1
+== P1-bash32/rows.txt vs out-main/P1
+== P1-bash32/exit.txt vs out-main/P1

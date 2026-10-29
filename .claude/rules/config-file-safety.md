@@ -104,11 +104,16 @@ When a script manages a directory of files (not a single file), use the additive
 pattern — deploy managed files, preserve everything else:
 
 1. Declare managed scope in script header (e.g., `# Managed: ~/.claude/rules/*.md
-   matching <userRepoPath>/claude/rules/`)
+   fanned out from ~/.aitools/rules`)
 2. Back up target directory (see "Backup before overwrite")
 3. For each source file: compare with target, add new, update changed (with diff
    logging), skip unchanged
-4. Preserve unmanaged files (in target but not in source), log each
+4. Preserve unmanaged files (in target but not in source), log each. One
+   exception: a rule or skill directory the source retires (a `retired` line
+   in the rules or skills manifest) is backed up and removed when it is the
+   script's own copy (its content matches a harness copy or its backup); any
+   other file or directory of that name is kept with a warning and an ACTION
+   row
 5. Validate each deployed file (non-empty)
 6. Log counts: added, updated, unchanged, preserved
 7. If source directory is empty or missing: log info, leave target untouched

@@ -14,6 +14,7 @@
 #   A-20  build-deploy output has no colour codes when stderr is not a terminal,
 #         and the standalone child resolver's console lines are not repeated in
 #         it (they are in deploy.log once); on a terminal both stay visible
+#   FO-4  the generated MDM copies fan out ~/.aitools/skills (.sh and .ps1)
 #
 # Safe to re-run: every case runs under its own temp HOME (never the real HOME
 # or a real dotprofile), removed on exit. The .ps1 dev script runs as a copy with
@@ -27,7 +28,7 @@
 set -uo pipefail
 
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
-    perl -ne 'print if $. >= 2 && $. <= 26' "$0"
+    perl -ne 'print if $. >= 2 && $. <= 27' "$0"
     exit 0
 fi
 
@@ -273,6 +274,9 @@ if $HAVE_PWSH; then
     perl -pe 's/-and -not \$IsWindows\)/-and \$false)/' "$G/setup-user-claude.ps1" > "$PSG/setup-user-claude.ps1"
     T="$TMP_ROOT/tmp-full"; mkdir -p "$T"
     h="$TMP_ROOT/gps-full"; write_config "$h"
+    mkdir -p "$h/.aitools/skills/sk1"
+    printf 'skill one\n' > "$h/.aitools/skills/sk1/SKILL.md"
+    printf '# aitools skills manifest v1\nsk1\tdotprofile\n' > "$h/.aitools/skills/.aitools-skills-manifest"
     OUT="$TMP_ROOT/gps-full.out"; : > "$TMP_ROOT/gps-full.summary"
     env -u AITOOLS_PROFILE_FILE HOME="$h" USERPROFILE="$h" TMPDIR="$T/" AITOOLS_LOG_DIR="$h/logs" \
         AITOOLS_SUMMARY_FILE="$TMP_ROOT/gps-full.summary" AITOOLS_PROFILE_PS1="$W/stub-host.ps1" AITOOLS_PROFILE_TEST_ANY_OS=1 \
@@ -280,6 +284,8 @@ if $HAVE_PWSH; then
     echo $? > "$TMP_ROOT/gps-full.rc"
     check "MDM ps1 full run: exit 0, footer stub-host, claude.md row, temp dir removed" \
         "[ \"\$(rc_of gps-full)\" = 0 ] && grep -qF '(stub-host; profile m1)' '$h/.claude/CLAUDE.md' && grep -q '^OK|claude.md|created' '$TMP_ROOT/gps-full.summary' && no_embed '$T'"
+    check "MDM ps1 full run: skills fanned out from ~/.aitools/skills" \
+        "grep -qx 'skill one' '$h/.claude/skills/sk1/SKILL.md' && grep -qxF 'OK|claude skills|1 added' '$TMP_ROOT/gps-full.summary'"
 else
     skip "A-19 runtime and MDM .ps1 cases (pwsh not found)"
 fi
@@ -299,9 +305,28 @@ run_mdm_sh() {  # run_mdm_sh CASE [args...] -- HOME = $TMP_ROOT/CASE
 run_mdm_sh mdm-sh --dry-run
 check "MDM sh dry run: exit 0, 'dry-run: would create', nothing written" \
     "[ \"\$(rc_of mdm-sh)\" = 0 ] && [ \"\$(claude_rows mdm-sh)\" = 'OK|claude.md|dry-run: would create' ] && [ ! -e \"\$(md_of mdm-sh)\" ]"
+check "MDM sh dry run without ~/.aitools/rules: claude rules n/a, rules not embedded" \
+    "row mdm-sh 'OK|claude rules|n/a (no harness rules)' && ! grep -q 'Rules fallback' '$G/setup-user-claude.sh' && ! grep -q 'Rules fallback' '$G/setup-user-claude.ps1'"
+# The rules reach ~/.claude/rules through ~/.aitools/rules, which deploy-harness
+# fills first on an endpoint: seed it as deploy-harness would (manifest included)
+mkdir -p "$TMP_ROOT/mdm-sh/.aitools/rules"
+printf 'rule one\n' > "$TMP_ROOT/mdm-sh/.aitools/rules/r1.md"
+printf '# aitools rules manifest v1\nr1.md\tdotprofile\n' > "$TMP_ROOT/mdm-sh/.aitools/rules/.aitools-rules-manifest"
+check "MDM sh dry run without ~/.aitools/skills: no claude skills row (setup-user-skills owns it)" \
+    "! grep -qF '|claude skills|' '$TMP_ROOT/mdm-sh.summary'"
+# The skills likewise reach ~/.claude/skills through ~/.aitools/skills (FO-4)
+seed_mdm_skills() {  # seed_mdm_skills HOME_DIR: one skill, a nested file, the skills manifest
+    mkdir -p "$1/.aitools/skills/sk1/tests"
+    printf 'skill one\n' > "$1/.aitools/skills/sk1/SKILL.md"
+    printf 'nested\n' > "$1/.aitools/skills/sk1/tests/t.md"
+    printf '# aitools skills manifest v1\nsk1\tdotprofile\n' > "$1/.aitools/skills/.aitools-skills-manifest"
+}
+seed_mdm_skills "$TMP_ROOT/mdm-sh"
 run_mdm_sh mdm-sh
-check "MDM sh run: exit 0, created, footer hostname = resolver's ($LIVE_HOST), rules deployed" \
-    "[ \"\$(rc_of mdm-sh)\" = 0 ] && row mdm-sh 'OK|claude.md|created' && grep -qF '($LIVE_HOST; profile m1)' \"\$(md_of mdm-sh)\" && grep -qx 'rule one' '$TMP_ROOT/mdm-sh/.claude/rules/r1.md'"
+check "MDM sh run: exit 0, created, footer hostname = resolver's ($LIVE_HOST), rules fanned out from ~/.aitools/rules" \
+    "[ \"\$(rc_of mdm-sh)\" = 0 ] && row mdm-sh 'OK|claude.md|created' && grep -qF '($LIVE_HOST; profile m1)' \"\$(md_of mdm-sh)\" && grep -qx 'rule one' '$TMP_ROOT/mdm-sh/.claude/rules/r1.md' && row mdm-sh 'OK|claude rules|1 added'"
+check "MDM sh run: skills fanned out from ~/.aitools/skills" \
+    "grep -qx 'skill one' '$TMP_ROOT/mdm-sh/.claude/skills/sk1/SKILL.md' && grep -qx nested '$TMP_ROOT/mdm-sh/.claude/skills/sk1/tests/t.md' && row mdm-sh 'OK|claude skills|2 added'"
 run_mdm_sh mdm-sh --dry-run
 check "MDM sh dry run after the deploy: 'verified'" \
     "[ \"\$(rc_of mdm-sh)\" = 0 ] && [ \"\$(claude_rows mdm-sh)\" = 'OK|claude.md|verified' ]"
