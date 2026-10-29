@@ -26,8 +26,8 @@ as built by the FO batches; the Claude Code rule-loading facts are verified
 carried.
 
 Every claim cites the file it comes from. "Today" means `origin/main` at
-`add7a09` (2026-10-28: FO-0, FO-0b, FO-1 and FO-2 merged as PRs 117, 120,
-118 and 119) plus the open FO pull requests 121, 124, 123 and 125 (FO-3..FO-6),
+`3e00085` (2026-10-28: FO-0, FO-0b, FO-1, FO-2 and FO-3 merged as PRs 117,
+120, 118, 119 and 121) plus the open FO pull requests 124, 123 and 125 (FO-4..FO-6),
 which this version describes as built; until each merges, section 6.1 names
 it. Where the repo does not say, this file says "unknown".
 
@@ -226,9 +226,9 @@ aitools .claude/rules/     ─┼─ deploy-harness ─▶ ~/.aitools/rules/ (fl
 | Rules manifest | `~/.aitools/rules/.aitools-rules-manifest` (`<name><TAB>shared\|aitools\|dotprofile\|retired`); retired rules backed up and removed from `~/.aitools/rules` (`@reference/harness.md` "Rules manifest and retired rules") | #100 (main, 89e2953) |
 | Something runs deploy-harness | Installer Step 8b and first in `deploy_configs` of the `aitools` entry points, before every setup script | #106 (main) |
 | Lib helpers | tracker outcome `removed` (nothing counted: `n/a (nothing to deploy)`); `read_harness_manifest` / `Read-HarnessManifest` (with `read_rules_manifest` wrappers), `rule_name_kind`, `fanout_text_equal` (`@reference/managed-file-deployment.md` "Functions") | PR 118 (FO-1, main) |
-| Claude fan-out | setup-user-claude fans out every non-retired `~/.aitools/rules/*.md` into `~/.claude/rules/` (summary tool `claude rules`), in ordinal (byte) order in both shells (`LC_ALL=C sort`, `[string]::CompareOrdinal`), adopt target mapped from the manifest source when the script runs from a git checkout, retired copies pruned after a text match and a verified backup (tracker `removed`); no manifest: every rule, nothing removed; no `~/.aitools/rules`: `n/a (no harness rules)`, target untouched. MDM: no rules embedded; they arrive through `deploy/deploy-harness.*` | PR 121 (FO-3, open) = `@plans/rules-fanout-claude.md` Batches B-D |
+| Claude fan-out | setup-user-claude fans out every non-retired `~/.aitools/rules/*.md` into `~/.claude/rules/` (summary tool `claude rules`), in ordinal (byte) order in both shells (`LC_ALL=C sort`, `[string]::CompareOrdinal`), adopt target mapped from the manifest source when the script runs from a git checkout, retired copies pruned after a text match and a verified backup (tracker `removed`); no manifest: every rule, nothing removed; no `~/.aitools/rules`: `n/a (no harness rules)`, target untouched. MDM: no rules embedded; they arrive through `deploy/deploy-harness.*` | PR 121 (FO-3, main `3e00085`) = `@plans/rules-fanout-claude.md` Batches B-D |
 | Cursor fan-out | setup-user-cursor step 4 converts every non-retired `~/.aitools/rules/*.md` (all three sources, R-6) to `~/.cursor/rules/<name>.mdc` (`alwaysApply: true` without `paths:`, anchored globs otherwise), in ordinal order; adopt not offered; retired copies pruned when they carry the fan-out marker or the legacy content, after a verified same-text backup (tracker `removed`), the retired `.mdc` found case-insensitively and reported under its on-disk name; only retired names: `n/a (nothing to deploy)`; a bad manifest header, invalid manifest lines or listed-but-missing rules write one ACTION row; the dry-run row is ERROR when errors were logged; the bash review menu prompts (deploy list on fd 3) | #87, #110 (main: user-level only, prune); R-6, the prompt fix and the rest: PR 123 (FO-5, open) |
-| CI | every `tests/<dir>/test-*.sh` suite in CI, checked by a CI step; `tests/fanout-lib` (main); `tests/rules-fanout`, `tests/rules-fanout-cursor` | PR 117 (FO-0, main), PR 118 (main), PR 121, PR 123 (open) |
+| CI | every `tests/<dir>/test-*.sh` suite in CI, checked by a CI step; `tests/fanout-lib`, `tests/rules-fanout` (main); `tests/rules-fanout-cursor` | PR 117 (FO-0, main), PR 118, PR 121 (main), PR 123 (open) |
 
 ### 6.2 Rules for deploying rules
 

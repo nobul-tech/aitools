@@ -21,9 +21,9 @@ research by S3-FanoutImpl-DocsScan. A version, not a draft (D-DEL5). The
 intent above is new and protected (`@.claude/rules/sources-of-truth.md`
 "Intent statements"); it is listed for review in its PR.
 
-Every claim cites its source. "Built" means on `origin/main` (`add7a09`,
-2026-10-28: FO-0, FO-0b, FO-1 and FO-2 merged as PRs 117, 120, 118 and 119)
-or in an open FO pull request, named (PRs 121, 124, 123 and 125); the FO PRs
+Every claim cites its source. "Built" means on `origin/main` (`3e00085`,
+2026-10-28: FO-0, FO-0b, FO-1, FO-2 and FO-3 merged as PRs 117, 120, 118, 119
+and 121) or in an open FO pull request, named (PRs 124, 123 and 125); the FO PRs
 merge in plan order (FO-0..FO-7). Where nothing says, this file says
 "unknown".
 
