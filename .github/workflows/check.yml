@@ -252,6 +252,14 @@ jobs:
         if: ${{ !cancelled() }}
         run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/hooks/test-delegation-duty-guard.sh
 
+      - name: workflow-delegation-guard hook tests (bash 5)
+        if: ${{ !cancelled() }}
+        run: bash tests/hooks/test-workflow-delegation-guard.sh
+
+      - name: workflow-delegation-guard hook tests (macOS /bin/bash 3.2)
+        if: ${{ !cancelled() }}
+        run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/hooks/test-workflow-delegation-guard.sh
+
       - name: build-deploy backup + swap tests (incident #86)
         if: ${{ !cancelled() }}
         run: bash tests/build-deploy/test-build-deploy-backup.sh
@@ -559,6 +567,10 @@ jobs:
         if: ${{ !cancelled() }}
         run: bash tests/hooks/test-delegation-duty-guard.sh
 
+      - name: workflow-delegation-guard hook tests
+        if: ${{ !cancelled() }}
+        run: bash tests/hooks/test-workflow-delegation-guard.sh
+
       - name: build-deploy backup + swap tests (incident #86)
         if: ${{ !cancelled() }}
         run: bash tests/build-deploy/test-build-deploy-backup.sh
@@ -694,6 +706,11 @@ jobs:
         if: ${{ !cancelled() }}
         shell: bash
         run: bash tests/hooks/test-delegation-duty-guard.sh
+
+      - name: workflow-delegation-guard hook tests (via Git Bash)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: bash tests/hooks/test-workflow-delegation-guard.sh
 
       - name: Profile resolver (PowerShell, native machine id and hostname)
         shell: pwsh

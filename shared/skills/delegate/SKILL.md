@@ -121,11 +121,12 @@ branch and PR URL (D-DEL4). Its documents are versions, not drafts (D-DEL5).
 12. **Set the shipping terms (D-DEL4)** for code-change missions (section
     "Shipping"). Design-only and research missions do not ship code, but
     they may commit their documents where the repo allows direct commits.
-13. **Check against the table above** before launching. In Claude Code the
-    `delegation-duty-guard` hook (observe mode, PreToolUse on
-    `Agent|Workflow`) reminds the caller to load /delegate on every call and
-    checks all eight elements (for Workflow, the script as one text); its
-    output, with the missing elements, reaches Claude as `additionalContext`.
+13. **Check against the table above** before launching. In Claude Code two
+    hooks check the eight elements, in observe mode, and remind you to load
+    /delegate: `delegation-duty-guard` (PreToolUse on `Agent`, the prompt)
+    and `workflow-delegation-guard` (PreToolUse on `Workflow`, each
+    `agent()` prompt of the script). Their output, with the missing
+    elements, reaches Claude as `additionalContext`.
 
 ### Conflict priority (D-DEL6, commander decision 2026-10-26)
 

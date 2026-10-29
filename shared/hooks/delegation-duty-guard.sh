@@ -1,18 +1,21 @@
 #!/usr/bin/env bash
-# delegation-duty-guard.sh — Claude Code PreToolUse hook (matcher: Agent|Workflow)
-# Reminds the caller to load the /delegate skill on EVERY Agent and
-# Workflow call, and checks the delegation prompt (Agent) or workflow
-# script (Workflow) for the eight duty elements of /delegate v2.0.
+# delegation-duty-guard.sh — Claude Code PreToolUse hook (matcher: Agent)
+# Reminds the caller to load the /delegate skill on EVERY Agent call, and
+# checks the delegation prompt for the eight duty elements of /delegate
+# v2.0. Workflow calls are checked per agent() prompt by
+# workflow-delegation-guard.sh (since 2026-10-28), which carries the same
+# eight-element block (between the "delegation elements block" markers
+# below; tests/hooks/test-workflow-delegation-guard.sh fails when the two
+# copies differ).
 #
 # Intent: Detect delegation prompts that omit delegation-duty elements
 # and remind the delegating agent of the duty on every launch (detection
 # layer for the user rule delegation.md, D-DEL7, and the /delegate
 # skill). NOT the duty itself (rule + skill). NOT a prompt rewriter.
-# Consumed by: Claude Code PreToolUse(Agent|Workflow), registered via
+# Consumed by: Claude Code PreToolUse(Agent), registered via
 # hooks-manifest.json; rollout governed by .claude/rules/hook-rollout.md.
 #
-# OBSERVE mode: always allows (exit 0). On every Agent/Task/Workflow
-# call it emits one reminder line, plus per-element guidance when
+# OBSERVE mode: always allows (exit 0). On every Agent/Task call it emits one reminder line, plus per-element guidance when
 # elements are missing, two ways:
 #   - stdout: {"hookSpecificOutput":{"hookEventName":"PreToolUse",
 #     "additionalContext":"..."}} -- the channel Claude reads on exit 0
@@ -27,13 +30,8 @@
 # What is checked (only the delegation text, never the whole payload:
 # the payload's cwd / transcript_path fields always hold absolute paths):
 #   - Agent (and Task, its former name): tool_input.prompt.
-#   - Workflow: tool_input.script; else the file named by
-#     tool_input.scriptPath (relative paths resolve against the payload's
-#     "cwd"; must be a readable regular file of at most 512 KB); else
-#     nothing is checked, but the reminder still prints.
-#     LIMIT: a workflow script holds many agent() prompts; the script is
-#     checked as ONE text, so an element present in any agent() prompt
-#     counts for all of them. The hook does not check each agent() prompt.
+#   - Workflow: not here (workflow-delegation-guard.sh, one score per
+#     agent() prompt); a Workflow payload is silent, like any other tool.
 #   - Only the first 256 KB of the text is checked (keeps the regexes
 #     inside the time budget; real prompts are far smaller).
 #   - Any other tool: silent, exit 0.
@@ -54,9 +52,8 @@
 #   7. access        Explicit paths: "explicit paths", "absolute path(s)",
 #                    "Glob/Grep", "cross-repo", "OL-O12", or an absolute
 #                    path (/Users/, /home/, /root/, /tmp/, ~/, or a drive
-#                    path C:/ or C:\). JSON string values (prompt, script)
-#                    are unescaped before matching; a scriptPath file is
-#                    matched as read.
+#                    path C:/ or C:\). The JSON prompt value is unescaped
+#                    before matching.
 #   8. md-prefix     Markdown name prefix (D-DEL1, 2026-10-05): "D-DEL1",
 #                    or a name-prefix phrase within 160 characters of
 #                    ".md"/"markdown" (either order). Name-prefix phrase:
@@ -68,7 +65,7 @@
 #                    "date prefix") does not count.
 #
 # Hook contract:
-#   - PreToolUse hook, matcher: Agent|Workflow
+#   - PreToolUse hook, matcher: Agent
 #   - Receives JSON on stdin (tool_name, tool_input, cwd, ...)
 #   - Exit 0 = allow (OBSERVE mode); exit 2 = block (ENFORCE mode only)
 #   - stdout -> hookSpecificOutput JSON (exit 0 only); stderr -> text
@@ -78,10 +75,10 @@
 #   - Without perl the reminder still prints; elements are not checked
 #
 # KPI definitions (logged to harness DB via session events.jsonl; one
-# "delegation" event per Agent/Task/Workflow call):
+# "delegation" event per Agent/Task call, src "ddg"):
 #   - delegation.score: duty elements present (of "total", now 8)
 #   - delegation.missing: comma-separated list of missing elements
-#   - tool: Agent, Task or Workflow; checked: 1 when elements were
+#   - tool: Agent or Task; checked: 1 when elements were
 #     checked, 0 when there was nothing to check (or no perl)
 #
 # Framework: reference/framework-hook-rollout.md (observe-then-enforce)
@@ -92,7 +89,6 @@ set -euo pipefail
 MODE_DUTY="observe"
 DUTY_TOTAL=8
 ALL_ELEMENTS="identity,rules,skills,OL,conflict,WRITE_BLOCKED,access,md-prefix"
-SCRIPT_MAX_BYTES=524288
 CHECK_MAX_CHARS=262144
 
 REMINDER="[delegation-guard] Load /delegate before every Agent and Workflow call; the prompt must tell the delegate to read every user- and project-scope rule and CLAUDE.md, load /delegate, and pass both on."
@@ -136,10 +132,11 @@ finish() {
 input=$(cat)
 
 # --- Only delegation launches are checked ---
-# The manifest matcher is Agent|Workflow; this guard keeps a
-# mis-registered or manually piped payload of another tool silent.
+# The manifest matcher is Agent; this guard keeps a mis-registered or
+# manually piped payload of another tool (Workflow included: see
+# workflow-delegation-guard.sh) silent.
 # "Task" is the Agent tool's former name. Pure bash (no perl needed).
-_tool_re='"tool_name"[[:space:]]*:[[:space:]]*"(Agent|Task|Workflow)"'
+_tool_re='"tool_name"[[:space:]]*:[[:space:]]*"(Agent|Task)"'
 if [[ "$input" =~ $_tool_re ]]; then
     tool="${BASH_REMATCH[1]}"
 else
@@ -154,13 +151,14 @@ fi
 # --- Check duty elements using Perl (portable, no grep -P) ---
 # -0777 slurps the whole input so a pretty-printed (multi-line) JSON
 # payload is read as one text. Only the delegation text is checked:
-# tool_input.prompt (Agent/Task) or tool_input.script / the scriptPath
-# file (Workflow). A truncated payload is read to its end.
+# tool_input.prompt. A truncated payload is read to its end.
 # Output lines: status (checked | none:<reason>), score, missing, present.
 # perl failure falls back to "all missing" (|| printf ...), which the
 # score check below treats as 0/8 -- visible, never a silent pass.
+# PERLIO=:perlio: no CRLF translation under Strawberry Perl (review N1, PR
+# #135; reference/cross-platform-detail.md "Strawberry Perl text mode").
 result=$(printf '%s' "$input" | \
-    DDG_TOOL="$tool" DDG_MAX="$SCRIPT_MAX_BYTES" DDG_CHARS="$CHECK_MAX_CHARS" perl -0777 -ne '
+    PERLIO=:perlio DDG_CHARS="$CHECK_MAX_CHARS" perl -0777 -ne '
         my $in = $_;
         # Search only inside tool_input when it is present.
         my $ti = ($in =~ /"tool_input"\s*:\s*\{/g) ? substr($in, pos($in)) : $in;
@@ -168,45 +166,13 @@ result=$(printf '%s' "$input" | \
             my ($name) = @_;
             return ($ti =~ /"\Q$name\E"\s*:\s*"((?:[^"\\]|\\.)*)/s) ? $1 : undef;
         };
-        my $text;
         my $status = "checked";
-
-        if ($ENV{DDG_TOOL} eq "Workflow") {
-            $text = $field->("script");
-            if (!defined $text) {
-                my $p = $field->("scriptPath");
-                if (defined $p) {
-                    $p =~ s/\\(["\\\/])/$1/g;
-                    if ($p !~ m{^(?:/|~|[A-Za-z]:[\\/])} && $in =~ /"cwd"\s*:\s*"((?:[^"\\]|\\.)*)"/) {
-                        my $cwd = $1;
-                        $cwd =~ s/\\(["\\\/])/$1/g;
-                        $p = "$cwd/$p";
-                    }
-                    $p =~ s{^~(?=/)}{$ENV{HOME} // ""}e;
-                    if (-f $p && -r _ && -s _ <= $ENV{DDG_MAX}) {
-                        if (open(my $fh, "<", $p)) {
-                            local $/;
-                            $text = <$fh> // "";
-                            close($fh);
-                        } else {
-                            $status = "none:scriptPath unreadable";
-                        }
-                    } else {
-                        $status = "none:scriptPath missing, unreadable or over 512 KB";
-                    }
-                } else {
-                    $status = "none:no script or scriptPath in the input";
-                }
-            }
-        } else {
-            $text = $field->("prompt");
-            $status = "none:no prompt in the input" unless defined $text;
-        }
-        my $from_file = ($ENV{DDG_TOOL} eq "Workflow" && !defined $field->("script")) ? 1 : 0;
+        my $text = $field->("prompt");
+        $status = "none:no prompt in the input" unless defined $text;
 
         # A JSON string value is matched unescaped (review N8, PR #122): a
         # literal "\n" before a path or a word must not hide it.
-        if (defined $text && !$from_file) {
+        if (defined $text) {
             my %esc = (n => "\n", t => "\t", r => "\r", b => "\b", f => "\f");
             $text =~ s/\\(?:u([0-9a-fA-F]{4})|(.))/defined $1 ? chr(hex $1) : (exists $esc{$2} ? $esc{$2} : $2)/gse;
         }
@@ -224,6 +190,7 @@ result=$(printf '%s' "$input" | \
             if ($ok) { $score++; push @present, $name; } else { push @missing, $name; }
         };
 
+        # --- BEGIN delegation elements block ---
         # 1. Identity (role name)
         $check->("identity", /you\s+are|your\s+identity|your\s+role/i || /(?<![A-Za-z0-9])S[1-9](?![A-Za-z0-9])/);
 
@@ -261,13 +228,16 @@ result=$(printf '%s' "$input" | \
                 || $w =~ /name.{0,80}?$md.{0,80}?prefix/is || $w =~ /prefix.{0,80}?$md.{0,80}?name/is;
         }
         $check->("md-prefix", $mdp);
+        # --- END delegation elements block ---
 
         print "checked\n$score\n";
         print join(",", @missing) . "\n";
         print join(",", @present) . "\n";
     ' 2>/dev/null || printf 'checked\n0\n%s\n\n' "$ALL_ELEMENTS")
 
-# Parse result (bash 3.2 compatible: no mapfile)
+# Parse result (bash 3.2 compatible: no mapfile). Every \r is dropped first:
+# a :crlf layer that ignores PERLIO would otherwise turn "7" into "7\r".
+result="${result//$'\r'/}"
 status=$(printf '%s\n' "$result" | sed -n '1p')
 score=$(printf '%s\n' "$result" | sed -n '2p')
 missing=$(printf '%s\n' "$result" | sed -n '3p')
@@ -328,9 +298,6 @@ case ",$missing," in
     *,md-prefix,*)
         guidance="${guidance} Name prefix (D-DEL1): tell the delegate to start every .md file name with its name, e.g. 'S2-report.md'." ;;
 esac
-if [ "$tool" = "Workflow" ]; then
-    guidance="${guidance} (Workflow: the script is checked as one text; every agent() prompt needs all eight.)"
-fi
 
 msg="$REMINDER"$'\n'"${reminder}${guidance} See the /delegate skill."
 

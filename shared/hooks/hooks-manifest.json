@@ -3,7 +3,7 @@
     "schemaVersion": "1.0",
     "purpose": "Single source of truth for Claude Code hook registration. Consumed by setup-user-hooks.sh (node block), setup-user-hooks.ps1 (MergeHookEntry loop), build-deploy.sh (required-file check + embed list), and check-post-push step 32 (parity audit). Each entry registers one hook script under one event with an optional matcher. The 'deploy' list names extra files that must be copied to ~/.claude/hooks/ but are not directly registered (helper scripts / Python siblings).",
     "reference": "plans/harvest-archive-resilience.md §5",
-    "lastUpdated": "2026-10-26"
+    "lastUpdated": "2026-10-28"
   },
   "hooks": [
     { "file": "session-archive.sh",            "event": "SessionEnd",   "matcher": "" },
@@ -18,7 +18,8 @@
     { "file": "glossary-skill-guard.sh",       "event": "PreToolUse",   "matcher": "Read|Grep" },
     { "file": "block-claude-code-guide.sh",    "event": "PreToolUse",   "matcher": "Agent" },
     { "file": "block-explore-agent.sh",        "event": "PreToolUse",   "matcher": "Agent" },
-    { "file": "delegation-duty-guard.sh",      "event": "PreToolUse",   "matcher": "Agent|Workflow" },
+    { "file": "delegation-duty-guard.sh",      "event": "PreToolUse",   "matcher": "Agent" },
+    { "file": "workflow-delegation-guard.sh",  "event": "PreToolUse",   "matcher": "Workflow" },
     { "file": "sh-file-fixup.sh",              "event": "PostToolUse",  "matcher": "Write|Edit" },
     { "file": "command-channel-stop.sh",       "event": "Stop",         "matcher": "" },
     { "file": "failure-mode-identity-stop.sh", "event": "Stop",         "matcher": "" },

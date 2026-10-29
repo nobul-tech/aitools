@@ -27,9 +27,15 @@
         },
         {
           "event": "PreToolUse",
-          "matcher": "Agent|Workflow",
+          "matcher": "Agent",
           "script": "delegation-duty-guard.sh",
-          "purpose": "Remind the caller to load /delegate on every Agent and Workflow call (D-DEL7), and check the delegation prompt (Agent) or workflow script (Workflow script / scriptPath, as one text) for the eight /delegate v2.0 elements (identity, rules and CLAUDE.md, skills with /delegate, operational learning, D-DEL6 conflict priority, WRITE_BLOCKED, access, D-DEL1 Markdown name prefix); per-element guidance on gaps, observe mode"
+          "purpose": "Remind the caller to load /delegate on every Agent call (D-DEL7), and check the delegation prompt for the eight /delegate v2.0 elements (identity, rules and CLAUDE.md, skills with /delegate, operational learning, D-DEL6 conflict priority, WRITE_BLOCKED, access, D-DEL1 Markdown name prefix); per-element guidance on gaps, observe mode. Matcher Agent|Workflow 2026-10-26 to 2026-10-28; Workflow calls now go to workflow-delegation-guard.sh"
+        },
+        {
+          "event": "PreToolUse",
+          "matcher": "Workflow",
+          "script": "workflow-delegation-guard.sh",
+          "purpose": "Remind the caller to load /delegate on every Workflow call, parse the workflow script (tool_input.script or the scriptPath file) and score each static agent() call site's prompt for the eight /delegate v2.0 elements, with the element block shared verbatim with delegation-duty-guard.sh; unresolved prompts reported, fallback to one whole-script score when parsing fails; per-agent summary and guidance, observe mode (MODE_WF_DUTY)"
         }
       ],
       "contextInjection": {
@@ -41,7 +47,7 @@
         { "name": "hookFireRate", "source": "hook logs", "unit": "fires/session" },
         { "name": "guardBlocks", "source": "hook logs", "unit": "blocks/session" },
         { "name": "versionDepDrift", "source": "check script", "unit": "stale items" },
-        { "name": "delegationDutyScore", "source": "delegation-duty-guard.sh events (session events.jsonl), aggregated by harness-db.py process-events into delegation.avgScore / delegation.minScore", "unit": "fraction 0..1 of the event's elements present (score / total per event; an event without total counts as / 6; checked:0 events excluded)" }
+        { "name": "delegationDutyScore", "source": "delegation-duty-guard.sh events (src ddg, one per Agent call) and workflow-delegation-guard.sh events (src wdg, one per agent() call site, scope agent; scope script for a whole-script fallback) in session events.jsonl", "unit": "elements present / 8 (7 before 2026-10-26; each event carries its total)" }
       ],
       "verifications": [
         {
@@ -77,13 +83,43 @@
               "expectStderr": "Agent: 7/8 duty elements. Missing: md-prefix"
             },
             {
-              "input": {"tool_name":"Workflow","tool_input":{"script":"agent({prompt: 'You are S2-Audit. Write notes to notes.md.'})"}},
+              "input": {"tool_name":"Workflow","tool_input":{"script":"agent('You are S2-Audit. Write notes to notes.md.')"}},
               "expectExit": 0,
-              "expectStdout": "hookSpecificOutput.*additionalContext",
-              "expectStderr": "Workflow: 1/8 duty elements. Missing: rules,skills,OL,conflict,WRITE_BLOCKED,access,md-prefix"
+              "expectStdout": null,
+              "expectStderr": null
             },
             {
               "input": {"tool_name":"Bash","tool_input":{"command":"git status"}},
+              "expectExit": 0,
+              "expectStdout": null,
+              "expectStderr": null
+            }
+          ]
+        },
+        {
+          "type": "mock-json-pipe",
+          "target": "workflow-delegation-guard.sh",
+          "cases": [
+            {
+              "input": {"tool_name":"Workflow","tool_input":{"script":"const COMMON = 'Read CLAUDE.md and .claude/rules/ by explicit path. Load /delegate first. Operational learning (carry forward): none. Conflict priority (D-DEL6): commander, then prompt, then skills. Name every .md file you write with your name as the prefix. If Write is denied, output WRITE_BLOCKED. Access: explicit paths only.'\nawait agent(`You are S2-Audit. ${COMMON}`, { label: 'audit' })\nawait agent('Write notes to notes.md.', { label: 'notes' })"}},
+              "expectExit": 0,
+              "expectStdout": "hookSpecificOutput.*additionalContext",
+              "expectStderr": "Workflow: 2 agent\\(\\) prompts, 1 with all eight, 0 unresolved\\.\\n  notes 0/8 missing identity,rules,skills,OL,conflict,WRITE_BLOCKED,access,md-prefix"
+            },
+            {
+              "input": {"tool_name":"Workflow","tool_input":{"script":"const p = await agent(makePrompt(1), { label: 'built' })"}},
+              "expectExit": 0,
+              "expectStdout": "hookSpecificOutput.*additionalContext",
+              "expectStderr": "Workflow: 1 agent\\(\\) prompts, 0 with all eight, 1 unresolved\\.\\n  built unresolved \\(call\\)"
+            },
+            {
+              "input": {"tool_name":"Workflow","tool_input":{"script":"agent(`You are S2-Audit."}},
+              "expectExit": 0,
+              "expectStdout": "hookSpecificOutput.*additionalContext",
+              "expectStderr": "per-agent\\(\\) extraction failed \\(unterminated template\\); the script was checked as one text: 1/8"
+            },
+            {
+              "input": {"tool_name":"Agent","tool_input":{"prompt":"You are S2-Audit."}},
               "expectExit": 0,
               "expectStdout": null,
               "expectStderr": null
