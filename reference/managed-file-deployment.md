@@ -319,15 +319,13 @@ verified) and deleted it.
   `deploy_managed_file` in its own fan-out (`setup-user-claude`,
   `setup-user-cursor`). Only the Claude Code fan-out offers adopt; it writes
   the repo source, and `~/.aitools` keeps the old copy until the next
-  `deploy-harness` run, so the Cursor copy follows one run later. In the
-  fallback (`setup-user-skills`, no `~/.aitools/skills`) the old rule holds:
-  after an adopt into the first LOCAL the caller reads SOURCE again for the
-  next, which then verifies. Callers do not copy one LOCAL to another.
-- **Several LOCALs for one SOURCE** (skills: `~/.claude/skills` and
-  `~/.cursor/skills`): each LOCAL goes through `deploy_managed_file`. After
-  an accept & adopt into one LOCAL, `setup-user-skills` backs up and copies
-  that LOCAL to the other targets (`deploy_skill`), so they match the adopted
-  SOURCE without a second review; a failed copy is an ERROR row
+  `deploy-harness` run, so the Cursor copy follows one run later. The fan-outs
+  never copy one LOCAL to another. In the fallback (`setup-user-skills`, no
+  `~/.aitools/skills`; `~/.claude/skills` and `~/.cursor/skills`) each LOCAL
+  also goes through `deploy_managed_file`, but after an accept & adopt into
+  one LOCAL, `setup-user-skills` backs up and copies that LOCAL to the other
+  targets (`deploy_skill` / `Deploy-Skill`), so they match the adopted SOURCE
+  without a second review; a failed copy is an ERROR row
   `sync failed: <skill>`.
 - **Adopting into a protected file** (any path in the
   `.claude/rules/sources-of-truth.md` table) is allowed; the library writes
