@@ -8,7 +8,7 @@ Version 1.0, 2026-10-29, by S3-CursorVerify-Fix (delegated by S3-CursorVerify).
 2. The rules-name regex for the manifest accepts any case of the extension in all four places: `harness_manifest_plan` (deploy-harness.sh), `Get-HarnessManifestPlan` (deploy-harness.ps1), `read_harness_manifest` (aitools-lib.sh) and `Read-HarnessManifest` (aitools-lib.ps1).
 3. On both paths, an `X.MD` rule is now deployed, listed in the manifest with no WARN or ACTION, fanned out to Cursor as `X.mdc`, and retired (backed up, then removed) when its source goes.
 4. The new tests in tests/deploy-harness pass on both scripts and both lib readers. Against origin/main's scripts, 9 of the new checks fail.
-5. Shipped as https://github.com/nobul-tech/aitools/pull/137 on branch `fix/cursor-fanout-md-case` (head 193f51c946aae5c6b171880ce050d1f854b96bfe).
+5. Shipped as https://github.com/nobul-tech/aitools/pull/137 on branch `fix/cursor-fanout-md-case` (my commit 193f51c946aae5c6b171880ce050d1f854b96bfe; another session then pushed merge 38c1edb, "Merge origin/main (63dff19)", which brings in two docs-only channel commits). CI on 38c1edb: all green (linux, macos, windows, CodeQL, Analyze x4); mergeStateStatus CLEAN.
 
 ## Evidence (verified on origin/main 207f1a6 before the change)
 
