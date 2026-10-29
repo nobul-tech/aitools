@@ -21,10 +21,9 @@ research by S3-FanoutImpl-DocsScan. A version, not a draft (D-DEL5). The
 intent above is new and protected (`@.claude/rules/sources-of-truth.md`
 "Intent statements"); it is listed for review in its PR.
 
-Every claim cites its source. "Built" means on `origin/main` (`3e00085`,
-2026-10-28: FO-0, FO-0b, FO-1, FO-2 and FO-3 merged as PRs 117, 120, 118, 119
-and 121) or in an open FO pull request, named (PRs 124, 123 and 125); the FO PRs
-merge in plan order (FO-0..FO-7). Where nothing says, this file says
+Every claim cites its source. "Built" means on `origin/main` (`40777f8`,
+2026-10-29: FO-0..FO-6 merged in plan order as PRs 117, 120, 118, 119, 121,
+124, 123 and 125); section 6.2 names the PR that built each step. Where nothing says, this file says
 "unknown".
 
 ## 1. Decisions
@@ -86,7 +85,7 @@ convention for registry skills: write `/<singular>`, read `/<plural>`
 
 Built from the 22 skills on `origin/main` (20 in `shared/skills/`, 2 in
 `.claude/skills/`; `git ls-tree origin/main shared/skills/ .claude/skills/`,
-`add7a09`).
+`40777f8`; the skill set is the same as at `add7a09`).
 
 ### 4.1 Directory
 
@@ -282,11 +281,11 @@ aitools .claude/skills/<name>/     ─┼─ deploy-harness ─▶ ~/.aitools/sk
 | deploy-harness fills `~/.aitools/skills` | `shared/skills`, `.claude/skills`, dotprofile `claude/skills` → `~/.aitools/skills/<name>/**`, first source wins, git-tracked files only; skill directories named `.*` or `*.bak.*` not deployed; manifest `~/.aitools/skills/.aitools-skills-manifest` (`# aitools skills manifest v1`, `<name><TAB>shared\|aitools\|dotprofile\|retired`); retired skill directories copied by deploy-harness itself (`cp -R` to `<name>.bak.<UTC>/`, `diff -r -q`, then `rm -rf`; the newest 5 backups kept; an unremovable half copy renamed `<name>.bak.incomplete.<UTC>`; not `backup_dir`) and removed (`@reference/harness.md` "Skills manifest and retired skills") | `shared` and `.claude` sources: #88 (main); the rest: PR 119 (FO-2, main `fac2dbc`) |
 | something runs deploy-harness | Installer Step 8b and first in `deploy_configs` | #106 (main) |
 | lib helpers | `skill_name_kind`, `read_harness_manifest` (rules and skills), `fanout_text_equal`, `fanout_dir_matches`, `backup_dir` result flags (a half-made backup discarded or renamed `<dir>.bak.incomplete.<UTC>`), tracker `removed` and `n/a (nothing to deploy)` when nothing was counted (sh and ps1) | PR 118 (FO-1, main `b5a881a`) |
-| lib fan-out | `fanout_harness_skills TOOL DEST AITOOLS_REPO DOTPROFILE` / `Invoke-HarnessSkillsFanout -ToolName -DestDir -AitoolsRepo -Dotprofile` in `@scripts/aitools-lib.sh` / `@scripts/aitools-lib.ps1` | PR 124 (FO-4, open) |
-| Claude Code skills | `setup-user-claude` calls the lib fan-out in its `skills fan-out` span (extracted by build-deploy, so MDM runs it too): summary tool `claude skills`; adopt target from the manifest source (`shared` → `<aitools>/shared/skills/...`, `aitools` → `<aitools>/.claude/skills/...`, `dotprofile` → `<dotprofile>/claude/skills/...`) when the file exists and the script runs from a git checkout | PR 124 (FO-4, open) |
-| Cursor skills | `setup-user-cursor` step 5: `fanout_harness_skills "cursor skills" "$CURSOR_DIR/skills" "" ""`, no adopt | PR 123 (FO-5, open; step 5 is commit c5d1bd8) |
-| setup-user-skills | when `~/.aitools/skills` exists: `OK skills n/a (fanned out)`, no `claude skills` / `cursor skills` rows; reverse discovery kept, every name in `~/.aitools/skills` or its manifest (and every `*.bak.*` or hidden name) not user-created; otherwise the old behaviour (fallback). MDM: the generated `deploy/setup-user-skills.*` carry the check | PR 125 (FO-6, open) |
-| CI | every `tests/<dir>/test-*.sh` in CI, checked by a CI step; `tests/fanout-lib` (main); `tests/skills-fanout`, `tests/skills-legacy` | PR 117 (FO-0, main), PR 118 (main), PR 124, PR 125 (open) |
+| lib fan-out | `fanout_harness_skills TOOL DEST AITOOLS_REPO DOTPROFILE` / `Invoke-HarnessSkillsFanout -ToolName -DestDir -AitoolsRepo -Dotprofile` in `@scripts/aitools-lib.sh` / `@scripts/aitools-lib.ps1` | PR 124 (FO-4, main `ba8ec2c`) |
+| Claude Code skills | `setup-user-claude` calls the lib fan-out in its `skills fan-out` span (extracted by build-deploy, so MDM runs it too): summary tool `claude skills`; adopt target from the manifest source (`shared` → `<aitools>/shared/skills/...`, `aitools` → `<aitools>/.claude/skills/...`, `dotprofile` → `<dotprofile>/claude/skills/...`) when the file exists and the script runs from a git checkout | PR 124 (FO-4, main `ba8ec2c`) |
+| Cursor skills | `setup-user-cursor` step 5: `fanout_harness_skills "cursor skills" "$CURSOR_DIR/skills" "" ""`, no adopt | PR 123 (FO-5, main `207f1a6`; step 5 is commit c5d1bd8) |
+| setup-user-skills | when `~/.aitools/skills` exists: `OK skills n/a (fanned out)`, no `claude skills` / `cursor skills` rows; reverse discovery kept, every name in `~/.aitools/skills` or its manifest (and every `*.bak.*` or hidden name) not user-created; otherwise the old behaviour (fallback). the retired `aitool-ops` / `aitool-eval` names are never offered for adoption (44cdcb2, section 10). MDM: the generated `deploy/setup-user-skills.*` carry the check | PR 125 (FO-6, main `40777f8`) |
+| CI | every `tests/<dir>/test-*.sh` in CI, checked by a CI step; `tests/fanout-lib`, `tests/skills-fanout`, `tests/skills-legacy` | PR 117 (FO-0), PR 118, PR 124, PR 125 (all on main) |
 
 ### 6.3 Rules for deploying skills (`fanout_harness_skills`; contract `@plans/skills-and-rules-fanout.md` 3.4 as shipped in #124)
 
@@ -375,7 +374,7 @@ unknown (the page names which one runs, not the listing).
 
 ### 7.2 Measured cost
 
-Measured on `origin/main` `add7a09` (2026-10-28) with `skill-cost.pl` from
+Measured on `origin/main` `40777f8` (2026-10-29; the same skill set as `add7a09`) with `skill-cost.pl` from
 S3-FanoutImpl-DocsScan (bytes of the frontmatter `name` + `description`
 values; Claude Code puts the description, capped at 1,536 characters, in
 context per skill; tokens estimated at 4 bytes per token). This PR's
@@ -405,7 +404,7 @@ a skill from up to three locations, section 5.2).
 A skill used outside aitools cannot open aitools `registries/`,
 `reference/`, `plans/`, `scripts/` or `.claude/rules/` paths by a relative
 path (plan risk R3). Counts of distinct such paths in each SKILL.md body
-(`skill-cost.pl` at `add7a09`; a mention in prose counts, so this is an
+(`skill-cost.pl` at `40777f8`; a mention in prose counts, so this is an
 upper bound of what breaks):
 
 | Skill | Source | Paths | Examples | Outside aitools |
@@ -497,12 +496,17 @@ Open (`INCIDENT:` markers for the delegating agent; not filed):
   to `~/.claude/skills/` and `~/.cursor/skills/` by the old
   `setup-user-skills` but never listed in a `~/.aitools/skills` manifest,
   so the manifest-based prune never removes them: the fan-out counts them
-  as `preserved` and Claude Code and Cursor keep loading them. In fan-out
-  mode `setup-user-skills` reverse discovery does not know them as harness
-  names either, so an interactive run offers them for adoption into the
-  dotprofile as user-created (S3-Merge2 reviews of PR 124, NB3, and PR 125,
-  N2). PR 125 does not change this; the copies must be removed by hand
-  (back them up first) until a follow-up seeds the retired names.
+  as `preserved` and Claude Code and Cursor keep loading them (S3-Merge2
+  reviews of PR 124, NB3, and PR 125, N2). PR 125 (commit 44cdcb2) stops
+  `setup-user-skills` reverse discovery from offering them for adoption, in
+  fallback and fan-out mode: an entry named `aitool-ops` or `aitool-eval`
+  (case-insensitive) is skipped with the log line "Not offered for
+  adoption: <name> (an aitools skill retired before the skills manifest
+  existed; delete ~/.claude/skills/<name> if you no longer use it)". Nothing
+  removes the stale copies: in fan-out mode `setup-user-skills` does not
+  write `~/.claude/skills` (FD-9), and no harness copy exists to prove a
+  copy is unmodified. Delete them by hand (back them up first) until a
+  follow-up retires them.
 - `@reference/cursor-practices.md` said the Cursor agent CLI does not read
   `~/.claude/skills/`; Cursor's docs say Cursor loads it. Which holds for the
   CLI: unknown.

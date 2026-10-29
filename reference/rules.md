@@ -26,10 +26,8 @@ as built by the FO batches; the Claude Code rule-loading facts are verified
 carried.
 
 Every claim cites the file it comes from. "Today" means `origin/main` at
-`3e00085` (2026-10-28: FO-0, FO-0b, FO-1, FO-2 and FO-3 merged as PRs 117,
-120, 118, 119 and 121) plus the open FO pull requests 124, 123 and 125 (FO-4..FO-6),
-which this version describes as built; until each merges, section 6.1 names
-it. Where the repo does not say, this file says "unknown".
+`40777f8` (2026-10-29: FO-0..FO-6 merged as PRs 117, 120, 118, 119, 121,
+124, 123 and 125); section 6.1 names the PR that built each step. Where the repo does not say, this file says "unknown".
 
 ## 1. Decisions
 
@@ -116,7 +114,7 @@ user rule.
 
 1. **Frontmatter `paths:`** (optional). A list of globs; the rule applies when
    the agent works on matching files (section 5). 9 of the 24
-   `.claude/rules/*.md` have it (recounted at `add7a09`; `grep -L '^paths:'`
+   `.claude/rules/*.md` have it (recounted at `40777f8`; `grep -L '^paths:'`
    lists the other 15), plus `shared/rules/hook-lifecycle.md`.
 2. **Title** `## <Name>`. Project rules in aitools end in "(this repo)"
    (every `.claude/rules/*.md`); shared and user rules do not
@@ -227,8 +225,8 @@ aitools .claude/rules/     ─┼─ deploy-harness ─▶ ~/.aitools/rules/ (fl
 | Something runs deploy-harness | Installer Step 8b and first in `deploy_configs` of the `aitools` entry points, before every setup script | #106 (main) |
 | Lib helpers | tracker outcome `removed` (nothing counted: `n/a (nothing to deploy)`); `read_harness_manifest` / `Read-HarnessManifest` (with `read_rules_manifest` wrappers), `rule_name_kind`, `fanout_text_equal` (`@reference/managed-file-deployment.md` "Functions") | PR 118 (FO-1, main) |
 | Claude fan-out | setup-user-claude fans out every non-retired `~/.aitools/rules/*.md` into `~/.claude/rules/` (summary tool `claude rules`), in ordinal (byte) order in both shells (`LC_ALL=C sort`, `[string]::CompareOrdinal`), adopt target mapped from the manifest source when the script runs from a git checkout, retired copies pruned after a text match and a verified backup (tracker `removed`); no manifest: every rule, nothing removed; no `~/.aitools/rules`: `n/a (no harness rules)`, target untouched. MDM: no rules embedded; they arrive through `deploy/deploy-harness.*` | PR 121 (FO-3, main `3e00085`) = `@plans/rules-fanout-claude.md` Batches B-D |
-| Cursor fan-out | setup-user-cursor step 4 converts every non-retired `~/.aitools/rules/*.md` (all three sources, R-6) to `~/.cursor/rules/<name>.mdc` (`alwaysApply: true` without `paths:`, anchored globs otherwise), in ordinal order; adopt not offered; retired copies pruned when they carry the fan-out marker or the legacy content, after a verified same-text backup (tracker `removed`), the retired `.mdc` found case-insensitively and reported under its on-disk name; only retired names: `n/a (nothing to deploy)`; a bad manifest header, invalid manifest lines or listed-but-missing rules write one ACTION row; the dry-run row is ERROR when errors were logged; the bash review menu prompts (deploy list on fd 3) | #87, #110 (main: user-level only, prune); R-6, the prompt fix and the rest: PR 123 (FO-5, open) |
-| CI | every `tests/<dir>/test-*.sh` suite in CI, checked by a CI step; `tests/fanout-lib`, `tests/rules-fanout` (main); `tests/rules-fanout-cursor` | PR 117 (FO-0, main), PR 118, PR 121 (main), PR 123 (open) |
+| Cursor fan-out | setup-user-cursor step 4 converts every non-retired `~/.aitools/rules/*.md` (all three sources, R-6) to `~/.cursor/rules/<name>.mdc` (`alwaysApply: true` without `paths:`, anchored globs otherwise), in ordinal order; adopt not offered; retired copies pruned when they carry the fan-out marker or the legacy content, after a verified same-text backup (tracker `removed`), the retired `.mdc` found case-insensitively and reported under its on-disk name; only retired names: `n/a (nothing to deploy)`; a bad manifest header, invalid manifest lines or listed-but-missing rules write one ACTION row; the dry-run row is ERROR when errors were logged; the bash review menu prompts (deploy list on fd 3) | #87, #110 (user-level only, prune); R-6, the prompt fix and the rest: PR 123 (FO-5, main `207f1a6`) |
+| CI | every `tests/<dir>/test-*.sh` suite in CI, checked by a CI step; `tests/fanout-lib`, `tests/rules-fanout`, `tests/rules-fanout-cursor` | PR 117 (FO-0), PR 118, PR 121, PR 123 (all on main) |
 
 ### 6.2 Rules for deploying rules
 
@@ -267,7 +265,7 @@ too. The duplicate project-level copies are removed by the commander later
 - 17 of the 26 `.claude/rules/*.md` and `shared/rules/scratch.md` had no
   `paths:` when S3-FanPlan measured: about **79 KB (79,048 bytes, roughly
   20k tokens) of "(this repo)" rules loaded in every session in every
-  repo**. Re-measured at `add7a09` (`wc -c`): 24 rule files, 15 without
+  repo**. Re-measured at `40777f8` with this PR's rule edits (`wc -c`): 24 rule files, 15 without
   `paths:`, 74,633 bytes, plus `shared/rules/scratch.md` 3,573 bytes =
   78,206 bytes, roughly 19.5k tokens.
 - Inside aitools every project rule loads **twice** (project + user copy)
@@ -339,7 +337,7 @@ skill). Resolved in v1.1 (FO-7):
   are governed terms now (`/glossary` skill).
 
 Resolved on main by the v0.74.0 docs scrub (PR 132), re-checked at
-`add7a09`: `@reference/cursor-practices.md` lists the user rule files and
+`40777f8`: `@reference/cursor-practices.md` lists the user rule files and
 the account-stored User Rules separately, and cites the parity rule as
 `.cursor/rules/cursor-rule-parity.mdc`; `@reference/harness.md` no longer
 cites an `/artifact-roles` skill.
