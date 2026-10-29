@@ -299,9 +299,16 @@ run_mdm_sh() {  # run_mdm_sh CASE [args...] -- HOME = $TMP_ROOT/CASE
 run_mdm_sh mdm-sh --dry-run
 check "MDM sh dry run: exit 0, 'dry-run: would create', nothing written" \
     "[ \"\$(rc_of mdm-sh)\" = 0 ] && [ \"\$(claude_rows mdm-sh)\" = 'OK|claude.md|dry-run: would create' ] && [ ! -e \"\$(md_of mdm-sh)\" ]"
+check "MDM sh dry run without ~/.aitools/rules: claude rules n/a, rules not embedded" \
+    "row mdm-sh 'OK|claude rules|n/a (no harness rules)' && ! grep -q 'Rules fallback' '$G/setup-user-claude.sh' && ! grep -q 'Rules fallback' '$G/setup-user-claude.ps1'"
+# The rules reach ~/.claude/rules through ~/.aitools/rules, which deploy-harness
+# fills first on an endpoint: seed it as deploy-harness would (manifest included)
+mkdir -p "$TMP_ROOT/mdm-sh/.aitools/rules"
+printf 'rule one\n' > "$TMP_ROOT/mdm-sh/.aitools/rules/r1.md"
+printf '# aitools rules manifest v1\nr1.md\tdotprofile\n' > "$TMP_ROOT/mdm-sh/.aitools/rules/.aitools-rules-manifest"
 run_mdm_sh mdm-sh
-check "MDM sh run: exit 0, created, footer hostname = resolver's ($LIVE_HOST), rules deployed" \
-    "[ \"\$(rc_of mdm-sh)\" = 0 ] && row mdm-sh 'OK|claude.md|created' && grep -qF '($LIVE_HOST; profile m1)' \"\$(md_of mdm-sh)\" && grep -qx 'rule one' '$TMP_ROOT/mdm-sh/.claude/rules/r1.md'"
+check "MDM sh run: exit 0, created, footer hostname = resolver's ($LIVE_HOST), rules fanned out from ~/.aitools/rules" \
+    "[ \"\$(rc_of mdm-sh)\" = 0 ] && row mdm-sh 'OK|claude.md|created' && grep -qF '($LIVE_HOST; profile m1)' \"\$(md_of mdm-sh)\" && grep -qx 'rule one' '$TMP_ROOT/mdm-sh/.claude/rules/r1.md' && row mdm-sh 'OK|claude rules|1 added'"
 run_mdm_sh mdm-sh --dry-run
 check "MDM sh dry run after the deploy: 'verified'" \
     "[ \"\$(rc_of mdm-sh)\" = 0 ] && [ \"\$(claude_rows mdm-sh)\" = 'OK|claude.md|verified' ]"
