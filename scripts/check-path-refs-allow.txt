@@ -12,12 +12,11 @@ shared/skills/handoff/SKILL.md|plans/mission-command-briefing/handoff-2026-03-19
 
 # History (the text records a file that existed then)
 reference/claude-code-effectiveness.md|.claude/rules/surface-silent-failures.md|history: rule added 2026-02-19, later folded into script-standards
-reference/logging.md|plans/imperative-gliding-newell.md|history: plan removed in v0.54 (03933a5)
+reference/path-targeted-hooks-analysis.md|reference/dependency-map.json|history: a 2026-03-13 proposal that was never built (the file says so)
 
 # Planned files (framework pending adoption)
 reference/framework-provenance.md|.claude/rules/provenance.md|planned artifact of the pending provenance framework
-reference/framework-provenance.md|.claude/skills/provenance/SKILL.md|planned artifact of the pending provenance framework
-reference/framework-provenance.md|shared/skills/aitool-provenance/SKILL.md|planned artifact of the pending provenance framework
+reference/framework-provenance.md|shared/skills/provenance/SKILL.md|planned artifact of the pending provenance framework
 
 # Planned files (tool support, mission M2 B1 -- remove each line when the file lands)
 reference/tool-support-decision-tree.md|scripts/gen-tool-specs.py|planned: the tool spec generator (M2 B1)
@@ -36,9 +35,4 @@ reference/managed-file-deployment.md|.claude/hooks/|deploy-harness hook source, 
 
 # Conventions, not repo paths
 reference/cursor-practices.md|.cursor/skills/|describes Cursor's project skill directory convention
-
-# Follow-up: stale text, needs a reword (not a path repoint)
-.cursor/rules/documentation-standards.mdc|.claude/rules/cursor-rule-parity.md|follow-up: rule deleted in v0.54 (03933a5); the .claude twin has no such line
-reference/cursor-practices.md|.claude/rules/cursor-rule-parity.md|follow-up: parity table lists a rule deleted in v0.54
-reference/tool-ops-claude-code.md|.claude/rules/post-push.md|follow-up: rule removed; now reference/post-push-checklist.md (confirm before repointing)
-reference/tool-ops-claude-code.md|.claude/rules/pre-commit.md|follow-up: rule removed; now reference/pre-commit-checklist.md (confirm before repointing)
+reference/tool-ops-claude-code.md|.claude/settings.json|describes Claude Code's project-scope settings file in any folder (item #28 contrast with ~/.claude/settings.json; one line is a verbatim docs quote)

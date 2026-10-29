@@ -62,7 +62,7 @@ element 6, Access (user rule `delegation.md`).
 |-------|-----------|-------|
 | Prevention | This rule; the `/scratch` skill; USO "Scratch files for complex scripting" | Always in context once deployed |
 | Detection | standing-order-guard hook: blocks Bash commands of 4+ lines and `&&`, `\|\|`, `;`, `$(...)`, backticks | Enforce |
-| Detection | delegation-duty-guard hook: checks the seven delegation elements | Observe; does not yet check for a scratch path |
+| Detection | delegation-duty-guard hook: checks the eight delegation elements | Observe; does not yet check for a scratch path |
 | Audit | SessionEnd and SessionStart harvest of `.scratch/session-*` into `harvesting/` (aitools) | Copies only; never deletes |
 
 ### Cross-references

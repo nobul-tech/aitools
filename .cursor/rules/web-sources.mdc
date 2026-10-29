@@ -24,6 +24,10 @@ WebFetch misses. When accuracy matters, use the real browser.
 - Checking release notes or changelogs for lifecycle field updates
 - Any page whose content will be recorded verbatim in a protected file
 
+Firecrawl is deprecated: do not use its MCP tools or skills for any web
+reading, even when they appear in the tool list (commander decision;
+`/delegate` skill standing orders).
+
 ### When WebFetch is fine
 
 - General web searches and research (use WebSearch for queries)

@@ -215,10 +215,11 @@ check "size gate: a generated script over its Intune limit is a WARN, not a buil
     "[ \"\$(rc_of build-b1)\" = 0 ] && size_gate_warned '$G' '$TMP_ROOT/build-b1.out'"
 
 # Forced over-limit case, independent of the real script sizes: a copy of the
-# fixture dotprofile whose CLAUDE.md template is padded by ~1.2 MB, which
-# build-deploy embeds in the generated setup-user-claude.sh (the fallback
-# template; dotprofile rules are no longer embedded since the rules fan-out),
-# so that .sh is over 1 MB. If the gate were removed or stopped measuring .sh
+# fixture dotprofile whose claude/CLAUDE.md template is padded by ~1.2 MB.
+# build-deploy embeds that template in the generated setup-user-claude.sh (the
+# fallback template), so that .sh is over 1 MB. (Dotprofile rules are no
+# longer embedded there since the rules fan-out, FO-3: they reach endpoints
+# through deploy-harness.) If the gate were removed or stopped measuring .sh
 # files, there would be no WARN and this check fails.
 DOT_BIG="$TMP_ROOT/dot-big"
 cp -Rp "$DOT" "$DOT_BIG"

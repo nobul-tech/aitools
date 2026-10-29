@@ -5,17 +5,19 @@
 #   loop  -- Invoke-DeployAbort + Deploy-Configs from scripts/aitools.ps1, run on
 #            SCRIPTS_DIR; prints "LOOP rc=<errors> aborted=<True|False>"
 #   step  -- Invoke-HarnessStep from scripts/aitools-install.ps1, run on
-#            SCRIPTS_DIR/deploy-harness.ps1; prints "STEP rc=<n>"
+#            SCRIPTS_DIR/deploy-harness.ps1 (with @{ SkipConfig = $true } when
+#            -SkipConfig is given, as Step 8b passes it); prints "STEP rc=<n>"
 # The caller sets USERPROFILE/HOME, AITOOLS_LOG_DIR and AITOOLS_SUMMARY_FILE to an
 # isolated test directory. Platform: any pwsh 7 (the fixture deploy-harness.ps1 has
 # its Windows guard removed by the test). Test helper only: not deployed.
 #
-# Usage: pwsh -NoProfile -File hookin-driver.ps1 -Mode loop|step -ScriptsDir DIR -RepoRoot DIR
+# Usage: pwsh -NoProfile -File hookin-driver.ps1 -Mode loop|step -ScriptsDir DIR -RepoRoot DIR [-SkipConfig]
 
 param(
     [Parameter(Mandatory)][ValidateSet("loop", "step")][string]$Mode,
     [Parameter(Mandatory)][string]$ScriptsDir,
-    [Parameter(Mandatory)][string]$RepoRoot
+    [Parameter(Mandatory)][string]$RepoRoot,
+    [switch]$SkipConfig
 )
 
 . (Join-Path $ScriptsDir "aitools-lib.ps1")
@@ -43,7 +45,8 @@ if ($Mode -eq "loop") {
     [Console]::WriteLine("LOOP rc=$rc aborted=$($script:deployAborted)")
 } else {
     Load-Functions (Join-Path $RepoRoot "scripts/aitools-install.ps1") @("Invoke-HarnessStep")
-    $rc = Invoke-HarnessStep (Join-Path $ScriptsDir "deploy-harness.ps1")
+    $stepArgs = if ($SkipConfig) { @{ SkipConfig = $true } } else { @{} }
+    $rc = Invoke-HarnessStep (Join-Path $ScriptsDir "deploy-harness.ps1") $stepArgs
     [Console]::WriteLine("STEP rc=$rc")
 }
 exit 0

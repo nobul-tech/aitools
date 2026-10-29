@@ -1,0 +1,2 @@
+absent (not written): /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-sh/fx/home/.cursor/rules/git-safety.mdc
+absent (not written): /Users/new-jose/repos/aitools/.claude/worktrees/cverify/.scratch/session-cv-sh/fx/home/.cursor/skills/fx-skill-a/SKILL.md

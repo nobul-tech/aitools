@@ -95,7 +95,7 @@ These increase confidence (but don't skip the checks above):
 
 ## Tool Platform States
 
-Each managed tool has an independent lifecycle state per platform (macOS, Windows):
+Each managed tool has an independent lifecycle state per platform (macOS, Windows, Linux) and, for a non-local environment (Claude Code web), per environment (`lifecycle.environments.<env>.status`):
 
 | State | Meaning | Lifecycle phase |
 |-------|---------|----------------|
@@ -109,7 +109,7 @@ Progression: `evaluating` → `approved` → `supported` (or `n/a` at any point)
 - A tool in `evaluating` on all platforms stays in "Under Evaluation" in the tool registry (`/tool-registry` skill)
 - First platform reaching `approved` promotes the tool to the main section
 - `approved` vs `supported` distinguishes "user said yes" from "fully scripted"
-- Display format in the tool registry (`/tool-registry` skill): inline per entry (e.g., `macOS: supported | Windows: supported`)
+- Display format in the tool registry (`/tool-registry` skill): inline per entry (e.g., `macOS: supported | Windows: supported | Linux: supported`)
 
 ## Special Cases
 

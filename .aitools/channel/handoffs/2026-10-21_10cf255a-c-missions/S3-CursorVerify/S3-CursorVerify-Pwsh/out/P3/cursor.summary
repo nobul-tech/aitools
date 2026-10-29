@@ -1,0 +1,3 @@
+ACTION||Run aitools to rebuild ~/.aitools/rules and its manifest
+WARN|cursor rules|dry run (no files written)
+WARN|cursor skills|dry run (no files written)

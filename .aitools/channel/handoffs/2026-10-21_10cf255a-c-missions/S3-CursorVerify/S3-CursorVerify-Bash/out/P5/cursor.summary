@@ -1,0 +1,5 @@
+OK|cursor cli|verified
+DETAIL|cursor rules|skipped: fx-shared.mdc
+WARN|cursor rules|1 skipped (user review)
+DETAIL|cursor skills|skipped: fx-skill-b/SKILL.md
+WARN|cursor skills|1 skipped (user review)

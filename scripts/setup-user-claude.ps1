@@ -385,7 +385,10 @@ if (-not (Test-Path -LiteralPath $rulesSrc -PathType Container)) {
     Write-Summary "OK" "claude rules" "n/a (no harness rules)"
 } else {
     try {
-        $rulesEntries = @(Get-ChildItem -LiteralPath $rulesSrc -ErrorAction Stop | Sort-Object Name)
+        $rulesEntries = @(Get-ChildItem -LiteralPath $rulesSrc -ErrorAction Stop)
+        # Ordinal order, as the .sh (LC_ALL=C sort): Sort-Object compares by culture
+        # (a.md before A.md), the .sh glob by LC_COLLATE, so they could disagree
+        [Array]::Sort($rulesEntries, [Comparison[object]]{ param($x, $y) [string]::CompareOrdinal($x.Name, $y.Name) })
         $rulesGo = $true
     } catch {
         LogError "Cannot list ${rulesSrc}: $_"
@@ -662,7 +665,10 @@ if ($rulesGo) {
         # Preserved: rules in .claude\rules not fanned out this run
         $destEntries = @()
         try {
-            $destEntries = @(Get-ChildItem -LiteralPath $rulesDest -File -ErrorAction Stop | Sort-Object Name)
+            $destEntries = @(Get-ChildItem -LiteralPath $rulesDest -File -ErrorAction Stop)
+            # Ordinal order, as the .sh (LC_ALL=C sort): Sort-Object compares by culture
+            # (a.md before A.md), the .sh glob by LC_COLLATE, so they could disagree
+            [Array]::Sort($destEntries, [Comparison[object]]{ param($x, $y) [string]::CompareOrdinal($x.Name, $y.Name) })
         } catch {
             LogWarn "Cannot list $rulesDest for the preserved report: $_"
         }
