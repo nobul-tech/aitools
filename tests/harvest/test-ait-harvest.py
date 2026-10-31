@@ -48,7 +48,9 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 AIT_HARVEST_PY = Path(os.environ.get("AIT_HARVEST_PY_OVERRIDE")
                       or REPO_ROOT / "scripts" / "ait-harvest.py")
 
-_TMP = tempfile.TemporaryDirectory(prefix="aith-test-")
+# ignore_cleanup_errors: on Windows git makes .git/objects files read-only, so
+# removing the temp tree at exit can fail; that must not fail the suite.
+_TMP = tempfile.TemporaryDirectory(prefix="aith-test-", ignore_cleanup_errors=True)
 TMP = Path(_TMP.name)
 TMP_HOME = TMP / "home"
 TMP_HOME.mkdir()
@@ -83,10 +85,9 @@ def git(repo: Path, *args: str) -> str:
 
 
 def make_repo(name: str) -> Path:
-    repo = TMP / name
-    if repo.exists():
-        shutil.rmtree(repo)
-    repo.mkdir()
+    """A fresh git repo per call (a new temp dir, never a removed and reused
+    one: on Windows .git/objects files are read-only and rmtree fails)."""
+    repo = Path(tempfile.mkdtemp(prefix=f"{name}-", dir=TMP))
     git(repo, "init", "-q")
     return repo
 

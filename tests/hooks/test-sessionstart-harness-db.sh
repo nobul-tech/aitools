@@ -127,7 +127,11 @@ payload "../escape"
 run_hook "$SI_HOOK" "$WORK/p.json" "$PROJ" FAKE_HDB=ok
 check "unsafe id: exit 0" [ "$RC" -eq 0 ]
 check "unsafe id: no dir outside .scratch" [ ! -d "$WORK/escape" ] && [ ! -d "$PROJ/escape" ]
-check "unsafe id: pointer is a session-* dir in .scratch" contains "$(cat "$PROJ/.scratch/.current-session")" "$PROJ/.scratch/session-"
+# Names, not full paths: the hook writes the git root's form of the path
+# (C:/... on Windows Git Bash, /private/var/... on macOS).
+ptr_parent_base() { local p; p=$(cat "$PROJ/.scratch/.current-session"); p="${p%/*}"; printf '%s' "${p##*/}"; }
+check "unsafe id: pointer is a session-* dir" contains "$(ptr_base)" "session-"
+check "unsafe id: pointer dir is in .scratch" [ "$(ptr_parent_base)" = ".scratch" ]
 
 echo "== scratch-init: dated handoffs are discovered, newest announced (issue #138) =="
 : > "$PROJ/.aitools/channel/handoffs/2026-10-22_10cf255a-c.md"
