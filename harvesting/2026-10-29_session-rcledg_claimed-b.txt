@@ -1,0 +1,132 @@
+########## #97 (open-array)
+  title: aitools user init writes config.json and profile.json without backup_file, and its profile write swallows errors (catch with console.error, no exit code, caller unchecked)
+  status: open
+  severity: medium
+  affected: ['scripts/aitools', 'scripts/aitools.ps1']
+  linked: None
+  observation: scripts/aitools user init writes config.json with node writeFileSync (:1204-1213) after a read-then-merge, with no backup_file call (no 'backup' anywhere in :900-1240); aitools.ps1 user init has no Backup-File either (:850-1200). The Path 2 profile write ends with `catch(e) { console.error('warning: could not update profile: ' + e.message); }` (scripts/aitools:1092, aitools.ps1:1023), which exits 0, and the caller does not check the result.
+  expected: .claude/rules/config-file-safety.md 'Backup before overwrite' and 'Post-write validation'; script-standards.md error handling.
+  suggestedResolution: M3: config.json via setup-user-config only; profile.json machine writes via aitools-profile.js register (temp -> validate -> backup -> move). (Draft plan reference at filing, not an approved tracker: M3 batches B6/B7.)
+  correctiveAction: None
+  updated: 2026-10-21
+########## #76 (open-array)
+  title: Profile selection silently falls back to the first profile when neither machineAlias nor hostname matches, and the spec endorses the silent fallback
+  status: open
+  severity: high
+  affected: ['scripts/build-deploy.sh', 'scripts/setup-user-claude.sh', 'scripts/setup-user-claude.ps1', 'reference/user-repo.md', '.claude/rules/managed-file-deployment.md', '.cursor/rules/managed-file-deployment.mdc', 'reference/managed-file-deployment.md']
+  linked: Mission M3 (S5-Profile)
+  observation: build-deploy.sh:219 and setup-user-claude.sh:118-119 use `profiles[alias] || hostname match || Object.values(p.profiles)[0]`; setup-user-claude.ps1 ~:140-142 the same. Only `Profile interpolation: name=... company=Nobul` is logged at info; nothing records which branch chose the profile. reference/user-repo.md 'Machine matching' documents 'Fallback: hostname match, then first profile'. UPDATED 2026-10-21 (S3-Ledger, origin/main c8573ed): the same fallback is endorsed in .claude/rules/managed-file-deployment.md:37, .cursor/rules/managed-file-deployment.mdc:29 and reference/managed-file-deployment.md:236. UPDATED 2026-10-21 (S3-Incidents, origin/main db4b3c5): in build-deploy.sh the fallback chain is at :220-222 (the cited :219 is the `p.version === 2` test), and when the node reader fails the build keeps hardcoded identity defaults instead (build-deploy.sh:198-201), tracked as #95.
+  expected: .claude/rules/script-standards.md (no silent failures in reusable code; summary coverage rule) -- using another machine's identity is a functional error and must surface as WARN/ERROR with a summary row.
+  suggestedResolution: The M3 resolver returns {alias, via} and logs every selection; no match = log_error + write_summary ERROR + ACTION, never another machine's values. Amend reference/user-repo.md 'Machine matching' (protected) accordingly.
+  correctiveAction: None
+  updated: 2026-10-21
+########## #78 (open-array)
+  title: build-deploy.sh bakes the building machine's per-machine values (profile company/name) into the dotprofile deploy/, which is committed once and shared by all of the user's machines
+  status: open
+  severity: high
+  affected: ['scripts/build-deploy.sh', '.claude/rules/deploy-paths.md', 'reference/user-repo.md']
+  linked: Mission M3 (S5-Profile)
+  observation: build-deploy.sh profile interpolation resolves one profile at build time and substitutes {{PROFILE_COMPANY}}/{{PROFILE_NAME}} into deploy/setup-user-claude.* (dotprofile deploy/setup-user-claude.sh contained '- Company: Nobul' after a build on this Mac; the remote copy built elsewhere said 'nobul-tech'). deploy/ lives in the dotprofile repo and is committed (deploy-paths.md 'MDM path').
+  expected: .claude/rules/deploy-paths.md: dev and MDM paths 'must produce equivalent results'; the dev path resolves the profile per machine at runtime.
+  suggestedResolution: Stop baking per-machine values: embed all profiles (or none) and resolve at runtime with the same resolver logic inlined via inline_lib_*; or drop machine-varying fields from build-time interpolation. Owned by M3.
+  correctiveAction: None
+  updated: 2026-10-21
+########## #95 (open-array)
+  title: build-deploy.sh hardcodes one user's identity (PROFILE_COMPANY="Nobul", IDENTITY_GIT_EMAIL="jose@nobul.tech") as defaults in shared framework code and uses them silently when profile reading fails
+  status: open
+  severity: high
+  affected: ['scripts/build-deploy.sh']
+  linked: None
+  observation: build-deploy.sh:198-201 set PROFILE_NAME="Jose", PROFILE_COMPANY="Nobul", IDENTITY_GIT_EMAIL="jose@nobul.tech" as defaults; the node reader (:209-241) ends with `catch(e) { process.exit(1); }` (:241), its stderr goes to /dev/null and its output is applied only on success (`&& eval "$PROFILE_VALS"`, :242), so a read failure keeps the defaults with no log line.
+  expected: Commander decision SD-7 (approved, handoff 2026-10-21_360aa8f3-8 D.3): profile.json in the dotprofile is the source of truth for user data. .claude/rules/script-standards.md 'Error handling requirements' (2>/dev/null needs a comment and a result check).
+  suggestedResolution: M3 B5.2: profile snapshot, no personal defaults, exit 1 on unreadable profile.json. Related #78 (per-machine values baked into deploy/). (Draft plan reference at filing, not an approved tracker: M3 batch B5.) Related #76: the same node block falls back to the first profile (build-deploy.sh:220-222).
+  correctiveAction: None
+  updated: 2026-10-21
+########## #98 (open-array)
+  title: build-deploy.sh inline_lib_bash replaces every line containing 'source' before aitools-lib.sh, comments included, and inline_lib_ps1 every line that mentions aitools-lib.ps1, so embedded hooks and skills that name the lib ship with the whole lib spliced in
+  status: open
+  severity: medium
+  affected: ['scripts/build-deploy.sh', 'shared/hooks/delegation-duty-guard.sh', 'shared/skills/aitool-ops/SKILL.md']
+  linked: None
+  observation: build-deploy.sh inline_lib_bash (:115-128 on origin/main db4b3c5) replaces each stdin line matching /source.*aitools-lib\.sh/ with the whole lib; inline_lib_ps1 (:132-145) replaces each line matching /aitools-lib\.ps1/, i.e. any mention. The generated setup-user-hooks.sh and setup-user-skills.sh pipe their embedded hooks and skills through inline_lib_bash (build-deploy.sh:1356 and :1155). Two live matches: shared/hooks/delegation-duty-guard.sh:38 '#   - Standalone — cannot source aitools-lib.sh' and shared/skills/aitool-ops/SKILL.md:280 'Hooks cannot source `aitools-lib.sh` ...'. S3-Incidents isolated build on db4b3c5 (.scratch/session-S3-Incidents/build-isolated.sh, exit 0): neither line survives in the generated scripts, each script contains the lib's '_DEPLOY_STATE_DIR=' line twice, and the embedded delegation-duty-guard.sh spans 2,209 lines versus 215 in the source. Run against a sample Agent payload (.scratch/session-S3-Incidents/hook-run.sh) the embedded hook still exits 0 with the same stderr as the source hook, so it now executes the whole lib on every Agent call. Reviewer S5-Profile-A H1 also reproduced corruption of an embedded JS file whose header named the PS1 lib (S5-Profile tests/review/test-inline-embed.sh; not re-run).
+  expected: .claude/rules/deploy-paths.md (MDM output equivalent to dev path).
+  suggestedResolution: Anchor the match: ^\s*source\s.*aitools-lib\.sh and ^\s*\.\s.*aitools-lib\.ps1. M3 B5.2 adds a build guard meanwhile. (Draft plan reference at filing, not an approved tracker: M3 batch B5 (guard); fix itself unassigned.)
+  correctiveAction: None
+  updated: 2026-10-21
+########## #109 (open-array)
+  title: build-deploy.sh evaluates node output with eval "$PROFILE_VALS", so $(...) inside a profile value executes at build time
+  status: open
+  severity: low
+  affected: ['scripts/build-deploy.sh']
+  linked: None
+  observation: build-deploy.sh:242 `... " "$CONFIG" 2>/dev/null) && eval "$PROFILE_VALS"`; the values are JSON.stringify'd (:235-238), i.e. double-quoted strings, so `$(...)` or backticks inside a profile value are expanded when eval runs.
+  expected: script-standards (no evaluation of data as code).
+  suggestedResolution: M3 B5.2 replaces the block with a snapshot (no eval). (Draft plan reference at filing, not an approved tracker: M3 batch B5.2 (removes the eval).)
+  correctiveAction: None
+  updated: 2026-10-21
+########## #110 (open-array)
+  title: Token interpolation corrupts values containing & (bash 5.2 patsub_replacement) or $ (PS1 -replace group references)
+  status: open
+  severity: low
+  affected: ['scripts/setup-user-claude.sh', 'scripts/setup-user-claude.ps1', 'scripts/build-deploy.sh']
+  linked: None
+  observation: setup-user-claude.sh:134-137 and build-deploy.sh:246-247 use ${var//\{\{TOKEN\}\}/$value}; with bash 5.2's default patsub_replacement an '&' in the value is replaced by the matched token (macOS /bin/bash 3.2 is not affected; Homebrew bash and Linux are). setup-user-claude.ps1:176-179 use `-replace [regex]::Escape('{{TOKEN}}'), $value` with the replacement unescaped, so '$1' or '$&' in a value are substitutions.
+  expected: USO Perl for string manipulation.
+  suggestedResolution: Literal replacement (perl with \Q, or [regex]::Escape plus a MatchEvaluator in PS1). (Draft plan reference at filing, not an approved tracker: M3 batch B4.)
+  correctiveAction: None
+  updated: 2026-10-21
+########## #99 (open-array)
+  title: setup-user-claude.sh adopt_claude_md builds its perl program from shell values, so '@' in the email is interpolated as a perl array and '/' in paths breaks the program
+  status: open
+  severity: medium
+  affected: ['scripts/setup-user-claude.sh']
+  linked: None
+  observation: setup-user-claude.sh:168-173 builds a `perl -pe "..."` program by shell interpolation (s/\Q${PROFILE_NAME}\E/{{PROFILE_NAME}}/g; and the same for company, git name and email). Perl interpolates the pattern before \Q applies, so '@nobul' in jose@nobul.tech is read as an (empty) array and the email never maps back to {{IDENTITY_GIT_EMAIL}}; a value containing '/' ends the s/// pattern (S5-Profile-A H6 observed perl exit 255; not re-run by S3-Ledger).
+  expected: USO Perl for string manipulation used safely; script-standards error handling (exit 255 unchecked).
+  suggestedResolution: Pass values through %ENV and use \Q...\E in the perl program (M3 B4). (Draft plan reference at filing, not an approved tracker: M3 batch B4.)
+  correctiveAction: None
+  updated: 2026-10-21
+########## #111 (open-array)
+  title: ait-harvest.py reads config.json with encoding utf-8, so a BOM-prefixed file (PS 5.1) disables session archiving
+  status: open
+  severity: low
+  affected: ['scripts/ait-harvest.py']
+  linked: None
+  observation: scripts/ait-harvest.py read_config_user_repo (:197-213) reads config.json with read_text(encoding="utf-8") (:206); a UTF-8 BOM (written by PowerShell 5.1) makes json.loads raise, which is logged as 'could not read config.json' (:208) and returns None, so archiving is skipped.
+  expected: #32 lineage (silent archive failure); cross-platform PS 5.1 workarounds.
+  suggestedResolution: Use encoding='utf-8-sig'. (Draft plan reference at filing, not an approved tracker: M3 batch B8.)
+  correctiveAction: None
+  updated: 2026-10-21
+########## #144 (open-array)
+  title: PRs #56 and #58 were merged while their independent reviews reported changes needed; #56 shipped a standing-order-guard whose sed check no longer blocks sed edits (sed -i, sed s/// on a file, sed output redirects)
+  status: open
+  severity: high
+  affected: ['shared/skills/delegate/SKILL.md', 'reference/pre-push-checklist.md', 'shared/hooks/standing-order-guard.sh']
+  linked: None
+  observation: PR #56 (merged 2026-10-22T00:43:38Z, bd42ba5) and PR #58 (merged 2026-10-22T00:44:44Z, 2deee01) have no GitHub reviews (gh pr view --json reviews: empty). Per Session Commander 10cf255a-c (launch brief for this mission, 2026-10-21), their independent reviewers S3-Hooks-Review and S3-Gate-Review returned changes-needed verdicts before the merges; those review reports are not in the repo (grep of .aitools, the session scratch and the mission worktrees for the reviewer names found nothing), so the verdict text is not re-verified here. PR #58's own body says 'No independent reviewers. The Agent tool was not provisioned in this session'. Verified consequence on db4b3c5: shared/hooks/standing-order-guard.sh:55 MODE_SED="observe"; S3-Incidents probe `sed -i '' 's/a/b/' file.txt` exits 0 and writes one observe-log line (.scratch/session-S3-Incidents/guard-probe.sh); S3-Incidents-Check found the same for every non-exempt sed form (sed -i.bak, sed 's/a/b/' file, sed -n ... > out, sed -n '1,5w out'). .claude/rules/hook-rollout.md:79 still lists sed under literal "enforce". PR #56 states the observe reset was deliberate (hook-rollout.md 'When to reset to observe'), and the mission packet section 5 holds every `aitools` run until mission HOOKS-FIX merges. Open PR #60 'Restore the sed guard to enforce; fix hook-lifecycle drafts (#82 follow-up)' is that fix.
+  expected: /delegate 'Verifying what comes back' and the D-DEL4 shipping terms (an independent review before merge; the delegate never merges its own PR); USO 'Dedicated tools for file ops' enforced by the guard (sed must not modify files).
+  suggestedResolution: Add a merge checklist item (reference/pre-push-checklist.md or /delegate D-DEL4 terms; protected where applicable) that the PR body names each independent review and its verdict, and that a 'changes needed' verdict blocks the merge until a follow-up review passes. Optionally have reviewers post their verdict as a GitHub review (gh pr review --request-changes) so it is visible on the PR. The sed consequence is fixed by PR #60 (mission HOOKS-FIX).
+  correctiveAction: Consequence only: PR #60 (open) restores MODE_SED to enforce; aitools runs are held until it merges (mission packet section 5).
+  updated: 2026-10-21
+########## #145 (open-array)
+  title: The /scratch skill disagrees with the harness on scratch location, deletion and commit attribution
+  status: open
+  severity: medium
+  affected: ['shared/skills/scratch/SKILL.md']
+  linked: None
+  observation: shared/skills/scratch/SKILL.md (origin/main db4b3c5) places session dirs at `.scratch/session-XXXXXXXXXX/` (:25, :45) while .claude/rules/aitools-workspace.md 'Workspace structure' names `<repo>/.aitools/scratch/`; it says ephemeral files are 'deleted without backup' and the dir is `rm -rf`'d 'after harvesting completes (lines 164-166 of harvest-session.sh)' (:98-111), while .claude/rules/artifact-harvesting.md 'Automation' says harvest-session.sh 'no longer deletes -- v0.64.1' and scripts/ait-harvest.py harvest_scratch (:746-865) copies files and unlinks only .current-session; its commit template uses 'Co-Authored-By: Claude Opus 4.6 (1M context)' (:71). The mission packet section 2 records the skill as 'partly stale'. Mission SCRATCH-RULE is fixing it and will report specifics.
+  expected: .claude/rules/aitools-workspace.md 'Workspace structure'; .claude/rules/artifact-harvesting.md 'Automation'; .claude/rules/documentation-standards.md 'No duplication -- one authoritative location per fact'.
+  suggestedResolution: Mission SCRATCH-RULE: realign the skill with the workspace rule and the v0.64.1 harvest behavior, drop line-number citations (documentation-standards 'Never cite line numbers'), and take the attribution line from the session's attribution reminder instead of hardcoding a model. Update this incident with the mission's specifics when it reports.
+  correctiveAction: None
+  updated: 2026-10-21
+########## #112 (open-array)
+  title: cross-platform.md says Windows repos live under C:\repos\, while CLAUDE.md, the installer and the profile design use %USERPROFILE%\repos
+  status: open
+  severity: low
+  affected: ['.claude/rules/cross-platform.md']
+  linked: None
+  observation: .claude/rules/cross-platform.md:8 'Repos live under ~/repos/ (macOS) / C:\repos\ (Windows)'; ~/.claude/CLAUDE.md and shared/claude-shared.md say %USERPROFILE%\repos\; the installer default reposPath on Windows is %USERPROFILE%\repos (S5-Profile; not re-read by S3-Ledger).
+  expected: .claude/rules/documentation-standards.md 'No duplication — one authoritative location per fact'.
+  suggestedResolution: Change cross-platform.md to %USERPROFILE%\repos\ and cite reference/user-repo.md 'Location convention'.
+  correctiveAction: None
+  updated: 2026-10-21

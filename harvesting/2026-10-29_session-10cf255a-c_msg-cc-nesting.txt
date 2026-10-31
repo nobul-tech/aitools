@@ -1,0 +1,9 @@
+tool-ops-claude-code: launch path decides whether delegates can delegate
+
+Records the 2026-10-21 nesting probe (Claude Code 2.1.307, macOS): an
+Agent-tool chain reaches 3 levels (L3 has no Agent tool); a Workflow
+agent has neither Agent nor Workflow, so it cannot delegate; no delegate
+has Workflow; worktree-isolated agents refuse commands that set HOME.
+Item #27 re-verified. Commander-approved text.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

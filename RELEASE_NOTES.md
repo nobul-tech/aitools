@@ -12,6 +12,39 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.74.1 -- Fix: harvest hooks use scratch names verbatim, re-harvest only what changed, retry archive commits; handoff discovery (2026-10-31)
+
+Not tagged. Gaps G1-G6 of `reference/artifact-harvesting.md` (new: merges the artifact-harvesting rule and its framework reference, with flow diagrams of the hooks) and issue #138.
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 1 | High | G1: `ait-harvest.py` cut every scratch dir name to 10 characters. A delegate dir with a longer name (`session-s3maverify99`) was never found, so catch-up fell back to `.scratch/.current-session`: on every SessionStart it marked the NEW session's dir `.harvested` and deleted its pointer, and the orphan was never harvested. Names are now used verbatim: `scratch-init.sh` creates `session-<full session id>` (reusing a legacy `session-<id[:10]>` of the same session), catch-up passes each dir by path, and a known session id never falls back to the pointer. `intelligence-stop.py` and `harness-db.py process-events` look up the full-id dir, then the legacy one. Session DB names and the Session Commander ID keep 10 characters |
+| 2 | High | G3: an archive commit that failed once was never retried ("already archived"); a stale dotprofile `.git/index.lock` (2 days old) had blocked every commit. Catch-up now commits archive files left uncommitted under `sessions/`, reports an `index.lock` older than 10 minutes in the log and on SessionStart stdout (never deletes it), and such a lock no longer blocks stealing a stale harvest lock. Archive commits use `git commit -- <paths>`, so other staged dotprofile work is never swept in |
+| 3 | High | G4 / issue #138: SessionStart announced only handoffs named `handoff*`, so the newest handoff (`2026-10-22_10cf255a-c.md`, written where the `/handoff` skill says) was never announced; the banner pointed at a June handoff. Discovery now counts every `*.md` in `.aitools/channel/handoffs/` and announces the one with the latest leading date |
+| 4 | Medium | G2: SessionEnd harvested `.harvested`, `.intelligence-last-check` and `events.jsonl`, and re-copied a whole dir when a session was resumed or re-ended. Bookkeeping files and dotfiles are now ephemeral; `.harvested` is a JSON record (size and mtime per file), so a later harvest copies only new or changed files. A pre-fix timestamp marker is honoured |
+| 5 | Medium | G5: an archive was a snapshot and subagent copies were numbered by position. A transcript that grew is re-archived; subagent copies are named after their own files; a byte-identical legacy positional copy is not duplicated |
+| 6 | Medium | G6: `harvest_scratch()` deleted `.current-session` whichever session it named; now only when it names the harvested dir. Catch-up also skips scratch dirs modified in the last 30 minutes |
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 7 | Rules moved: `artifact-harvesting`, `tool-evaluation`, `tool-lifecycle`, `tool-ops`, `web-sources` from `.claude/rules/` to `shared/rules/`; `hook-lifecycle` from `shared/rules/` to `.claude/rules/`. 58 path references rewritten to the new locations |
+| 8 | `plan-execution` rule and its Cursor twin retired (commander, 2026-10-31); `reference/plan-execution-detail.md` keeps the pattern and its five references point there |
+
+### Files created
+
+| File | Purpose |
+|------|---------|
+| `reference/artifact-harvesting.md` | Single harvesting reference: discipline, criteria, hook flow, manifest, channel touchpoints |
+| `tests/harvest/test-ait-harvest.py` | Unit tests for G1-G6 (CI: linux, macOS, Windows) |
+
+**Verified on:** macOS (bash 5.3 and /bin/bash 3.2, Python 3.14). Windows and Linux: CI.
+
+---
+
 ## v0.74.0 -- Deployed harness in ~/.aitools, machine profiles keyed by machine id, managed files with SOURCE as the source of truth, logging conformance (2026-10-27)
 
 Covers 2026-10-03 to 2026-10-27: PRs #35-#131 and the commits made directly on main, including the untagged v0.73.3 (PR #35). Four lines of work land together:

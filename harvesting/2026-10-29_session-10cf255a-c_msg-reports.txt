@@ -1,0 +1,9 @@
+Add MDM-PKG, ANSWER-1A and ANSWER-1B mission reports
+
+Read-only mission outputs: the MDM packaging investigation (limits,
+sizes, options, recommendation), and the answers to the held HARNESS
+and M3 draft questions with provenance from the commander's recorded
+words. Committed directly to main under the channel exception
+(commander, 2026-10-26). Docs only.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

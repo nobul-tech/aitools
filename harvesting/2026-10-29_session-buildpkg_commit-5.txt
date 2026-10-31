@@ -1,0 +1,23 @@
+Add the package path and supported list to the deployment and cross-platform rules
+
+What: applies doc-edits-pending items 1, 4 and 5 now that PR #99 has
+merged: cross-platform.md opening plus a short "Supported platforms and
+environments" pointer section and the macOS/Linux (bash) wording;
+deploy-paths.md "Deployment Paths" with the third, parallel package path,
+an Equivalence section, and a build-package stage step (marked as a stub
+until batch B2); the deploy-paths.mdc twin. Pending items 2 (cursor-cloud,
+P-2) and 3 (exemption rows, P-1) stay pending; status lines updated.
+
+Why: mission BUILD-PKG commander decisions 2026-10-26 (parallel package
+distribution; supported platforms and environments); protected-file
+review waived for this mission's docs.
+
+Verification: no open PR owns the three files (gh pr list --json
+files); git diff clean before edits; OLD blocks matched the merged text
+once each (delegate); orchestrator read the deploy-paths diff and fixed
+two points (stage is a stub until B2; a channel decision id replaced by
+a design.md section name). check-pre-commit: only the known step 6 FAIL.
+
+Not run: no code changed.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

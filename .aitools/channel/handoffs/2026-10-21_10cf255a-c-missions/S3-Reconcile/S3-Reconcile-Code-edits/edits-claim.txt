@@ -1,0 +1,203 @@
+@@@FILE main/aitools E7a ui_register header comment
+@@@OLD
+# Resolver exit 4 (the alias is used by another profile; decision 1): a profile
+# that belongs to no machine is claimed instead (the explicit alias names it);
+# another machine's needs a confirm on a terminal, then --allow-duplicate-alias
+# (that profile is never rewritten); without a terminal it is refused.
+@@@NEW
+# Resolver exit 4 (the alias is used by another profile; decision 1): a profile
+# that belongs to no machine is claimed instead (--claim), only after a confirm on
+# a terminal; another machine's needs a confirm on a terminal, then
+# --allow-duplicate-alias (that profile is never rewritten). Without a terminal
+# both are refused (ERROR + ACTION); a declined confirm skips (WARN).
+@@@END
+@@@FILE main/aitools E7b ui_register: confirm before claiming an unowned profile
+@@@OLD
+        if [ "$owner" = "unregistered" ] && [ -n "$okey" ]; then
+            log "machine profile: alias \"$value\" names profile $okey, which belongs to no machine -- claiming it for this machine"
+            extra+=(--claim "$okey"); mode=claim
+            continue
+        fi
+@@@NEW
+        if [ "$owner" = "unregistered" ] && [ -n "$okey" ]; then
+            # The alias names a profile no machine owns: --claim only after the user
+            # confirms at a terminal (a claim follows a choice at a terminal)
+            if ! ui_can_ask; then
+                log_error "machine profile: alias \"$value\" names profile $okey, which belongs to no machine -- not claimed without a confirm on a terminal; run aitools user init on a terminal, or --alias <another name>"
+                write_summary ERROR "machine profile" "not claimed (no terminal)"
+                ui_action "Run: aitools user init on a terminal to claim $okey (or --alias <another name>)"
+                return 1
+            fi
+            printf 'Alias "%s" names profile %s, which belongs to no machine. Claim it for this machine? [y/N]: ' "$value" "$okey" > /dev/tty
+            read_tty_choice ans "no"
+            case "$ans" in
+                [yY]*)
+                    log "machine profile: alias \"$value\" names profile $okey, which belongs to no machine -- claiming it for this machine (confirmed at the prompt)"
+                    extra+=(--claim "$okey"); mode=claim
+                    continue ;;
+                *)
+                    log_warn "machine profile: alias \"$value\" names profile $okey, which belongs to no machine -- not claimed, registration skipped"
+                    write_summary WARN "machine profile" "skipped"
+                    return 2 ;;
+            esac
+        fi
+@@@END
+@@@FILE main/aitools.ps1 E8 Invoke-UiRegister: confirm before claiming an unowned profile
+@@@OLD
+        if ($owner -ceq "unregistered" -and $okey) {
+            Log "machine profile: alias `"$Value`" names profile $okey, which belongs to no machine -- claiming it for this machine"
+            $extra += @("--claim", $okey); $Mode = "claim"
+            continue
+        }
+@@@NEW
+        if ($owner -ceq "unregistered" -and $okey) {
+            # The alias names a profile no machine owns: --claim only after the user
+            # confirms at a terminal (parity: ui_register)
+            if (-not (Test-UiCanAsk)) {
+                LogError "machine profile: alias `"$Value`" names profile $okey, which belongs to no machine -- not claimed without a confirm on a terminal; run aitools user init on a terminal, or --alias <another name>"
+                Write-Summary "ERROR" "machine profile" "not claimed (no terminal)"
+                Write-UiAction "Run: aitools user init on a terminal to claim $okey (or --alias <another name>)"
+                return 1
+            }
+            [Console]::Write("Alias `"$Value`" names profile $okey, which belongs to no machine. Claim it for this machine? [y/N]: ")
+            $ans = Read-ConsoleChoice "no"
+            if ($ans -match '^[yY]') {
+                Log "machine profile: alias `"$Value`" names profile $okey, which belongs to no machine -- claiming it for this machine (confirmed at the prompt)"
+                $extra += @("--claim", $okey); $Mode = "claim"
+                continue
+            }
+            LogWarn "machine profile: alias `"$Value`" names profile $okey, which belongs to no machine -- not claimed, registration skipped"
+            Write-Summary "WARN" "machine profile" "skipped"
+            return 2
+        }
+@@@END
+@@@FILE main/aitools E9 legacy aiToolingRepoPath: read only, no rewrite (pre-lib)
+@@@OLD
+if raw=$(read_config_key "$config" "repoPath") || raw=$(read_config_key "$config" "aiToolingRepoPath"); then
+    repo_path=$(to_native_path "$raw")
+fi
+repo_path="${repo_path:-$HOME/repos/aitools}"
+
+# Auto-migrate: aiToolingRepoPath -> repoPath (repo renamed ai-tooling -> aitools)
+if read_config_key "$config" "aiToolingRepoPath" >/dev/null 2>&1; then
+    if command -v node &>/dev/null; then
+        migrate_out=$(node -e "
+const fs = require('fs');
+const f = process.argv[1];
+try {
+    const cfg = JSON.parse(fs.readFileSync(f, 'utf8'));
+    if (!cfg.repoPath && cfg.aiToolingRepoPath) {
+        cfg.repoPath = cfg.aiToolingRepoPath.replace(/ai-tooling/g, 'aitools');
+    }
+    delete cfg.aiToolingRepoPath;
+    fs.writeFileSync(f, JSON.stringify(cfg, null, 2) + '\n');
+    console.log('migrated');
+} catch (e) {
+    console.error('config migration failed: ' + e.message);
+    process.exit(1);
+}
+" "$config" 2>&1) || _pre_lib_warnings+=("config key migration failed: $migrate_out")
+        # Re-read repo_path after migration
+        if raw=$(read_config_key "$config" "repoPath"); then
+            repo_path=$(to_native_path "$raw")
+        fi
+    fi
+fi
+@@@NEW
+# A config.json from before the ai-tooling -> aitools rename may have only the
+# legacy key aiToolingRepoPath: read it (ai-tooling -> aitools) for this run. The
+# file is not rewritten here: setup-user-config, the only config.json writer,
+# migrates the key (backup + validation) on its next run.
+if raw=$(read_config_key "$config" "repoPath"); then
+    repo_path=$(to_native_path "$raw")
+elif raw=$(read_config_key "$config" "aiToolingRepoPath"); then
+    repo_path=$(to_native_path "${raw//ai-tooling/aitools}")
+    _pre_lib_warnings+=("config.json has the legacy key aiToolingRepoPath and no repoPath -- using $repo_path until setup-user-config migrates it")
+fi
+repo_path="${repo_path:-$HOME/repos/aitools}"
+@@@END
+@@@FILE main/aitools.ps1 E10 legacy aiToolingRepoPath: read only, no rewrite (pre-lib)
+@@@OLD
+$raw = Read-ConfigKey -File $configFile -Key "repoPath"
+if (-not $raw) { $raw = Read-ConfigKey -File $configFile -Key "aiToolingRepoPath" }
+if ($raw) { $repoPath = $raw }
+if (-not $repoPath) { $repoPath = Join-Path $env:USERPROFILE "repos\aitools" }
+
+# Auto-migrate: aiToolingRepoPath -> repoPath (repo renamed ai-tooling -> aitools)
+$oldKey = Read-ConfigKey -File $configFile -Key "aiToolingRepoPath"
+if ($oldKey) {
+    try {
+        $cfgObj = Get-Content $configFile -Raw | ConvertFrom-Json
+        if (-not $cfgObj.repoPath -and $cfgObj.aiToolingRepoPath) {
+            $newVal = $cfgObj.aiToolingRepoPath -replace 'ai-tooling', 'aitools'
+            $cfgObj | Add-Member -NotePropertyName "repoPath" -NotePropertyValue $newVal -Force
+        }
+        $cfgObj.PSObject.Properties.Remove("aiToolingRepoPath")
+        $json = $cfgObj | ConvertTo-Json -Depth 10
+        $resolved = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($configFile)
+        [System.IO.File]::WriteAllText($resolved, $json + "`n", [System.Text.UTF8Encoding]::new($false))
+        $preLibNotes += "Migrated config: aiToolingRepoPath -> repoPath"
+        # Re-read after migration
+        $repoPath = Read-ConfigKey -File $configFile -Key "repoPath"
+    } catch {
+        $preLibWarnings += "Config key migration failed: $_"
+        # Non-fatal: continue with whatever repoPath was already resolved
+    }
+}
+@@@NEW
+# A config.json from before the ai-tooling -> aitools rename may have only the
+# legacy key aiToolingRepoPath: read it (ai-tooling -> aitools) for this run. The
+# file is not rewritten here: setup-user-config, the only config.json writer,
+# migrates the key (backup + validation) on its next run. Parity: scripts/aitools.
+$raw = Read-ConfigKey -File $configFile -Key "repoPath"
+if ($raw) {
+    $repoPath = $raw
+} else {
+    $raw = Read-ConfigKey -File $configFile -Key "aiToolingRepoPath"
+    if ($raw) {
+        $repoPath = $raw -creplace 'ai-tooling', 'aitools'
+        $preLibWarnings += "config.json has the legacy key aiToolingRepoPath and no repoPath -- using $repoPath until setup-user-config migrates it"
+    }
+}
+if (-not $repoPath) { $repoPath = Join-Path $env:USERPROFILE "repos\aitools" }
+@@@END
+@@@FILE main/setup-user-config.sh E11 migrate the legacy key in the writer
+@@@OLD
+if [ -n "$REPO_PATH_ARG" ]; then op_set string "$REPO_PATH_ARG" repoPath; fi
+@@@NEW
+if [ -n "$REPO_PATH_ARG" ]; then op_set string "$REPO_PATH_ARG" repoPath; fi
+# Legacy key (repo renamed ai-tooling -> aitools, 2026-02): repoPath from
+# aiToolingRepoPath when neither --repo-path nor the file gives one, then the old
+# key is removed -- once, through this writer's backup and validation (formerly
+# the aitools entry points rewrote config.json in place for this)
+if [ "$IN" != "-" ]; then
+    LEGACY_RP=""; EXISTING_RP=""
+    cfg_get LEGACY_RP aiToolingRepoPath
+    if [ -n "$LEGACY_RP" ]; then
+        cfg_get EXISTING_RP repoPath
+        if [ -z "$REPO_PATH_ARG" ] && [ -z "$EXISTING_RP" ]; then
+            op_set string "${LEGACY_RP//ai-tooling/aitools}" repoPath
+        fi
+        OPS="${OPS}del"$'\t'"aiToolingRepoPath"$'\n'
+        log "config: legacy key aiToolingRepoPath migrated to repoPath and removed"
+    fi
+fi
+@@@END
+@@@FILE main/setup-user-config.ps1 E12 migrate the legacy key in the writer
+@@@OLD
+    if ($RepoPath) { Set-JValue $cfg $RepoPath @("repoPath") }
+@@@NEW
+    if ($RepoPath) { Set-JValue $cfg $RepoPath @("repoPath") }
+    # Legacy key (repo renamed ai-tooling -> aitools, 2026-02): repoPath from
+    # aiToolingRepoPath when neither -RepoPath nor the file gives one, then the old
+    # key is removed -- once, through this writer's backup and validation (formerly
+    # the aitools entry points rewrote config.json in place). Parity: setup-user-config.sh.
+    $legacyRp = if ($old) { Get-JText $old @("aiToolingRepoPath") } else { "" }
+    if ($legacyRp) {
+        if (-not $RepoPath -and -not (Get-JText $old @("repoPath"))) {
+            Set-JValue $cfg ($legacyRp -creplace 'ai-tooling', 'aitools') @("repoPath")
+        }
+        $null = $cfg.PSObject.Properties.Remove("aiToolingRepoPath")
+        Log "config: legacy key aiToolingRepoPath migrated to repoPath and removed"
+    }
+@@@END

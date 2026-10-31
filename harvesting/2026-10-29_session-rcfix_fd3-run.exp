@@ -1,0 +1,17 @@
+#!/usr/bin/expect -f
+# fd3-run.exp SCRIPTDIR HOME LOGDIR -- run setup-user-cursor.sh on a pty; answer [s]kip
+# at every review menu. Prints REVIEWED=<n> at the end.
+set timeout 120
+set dir [lindex $argv 0]
+set home [lindex $argv 1]
+set logdir [lindex $argv 2]
+set reviewed 0
+set sh bash
+if {[llength $argv] > 3} { set sh [lindex $argv 3] }
+spawn env HOME=$home AITOOLS_LOG_DIR=$logdir AITOOLS_SUMMARY_FILE=$logdir/summary $sh $dir/setup-user-cursor.sh
+expect {
+    -ex {choice [o/s/x]: } { incr reviewed; send "s\r"; exp_continue }
+    eof {}
+    timeout { puts "TIMEOUT"; exit 3 }
+}
+puts "REVIEWED=$reviewed"

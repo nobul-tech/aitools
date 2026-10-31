@@ -1,0 +1,43 @@
+Merge the mission packet into the /delegate skill (v2.0)
+
+Commander decision 2026-10-26: "the mission packet content should be the
+body of the /delegate skill"; the delegation.md rule holds only the
+decisions and the trigger (D-DEL7, dotprofile 2026-10-26).
+
+shared/skills/delegate/SKILL.md v2.0:
+- Load before EVERY Agent tool call (any subagent_type) and every Workflow
+  call or workflow script, at session start and after a compaction.
+- Eight elements (was seven): identity; rules AND CLAUDE.md files (read
+  every user- and project-scope file in full, by absolute path); skills
+  with /delegate first plus the instruction to load it before delegating
+  further and to pass it down; operational learning; conflict priority
+  (D-DEL6); WRITE_BLOCKED; access; name prefix (D-DEL1).
+- From the packet: standing orders every delegate gets (simple Bash, the
+  guard's blocks, file tools, Perl, cross-platform pairs, worktrees,
+  chrome-devtools not WebFetch, Firecrawl deprecated, untrusted downloads
+  and licences), shipping (own worktree, base main, commit/PR record
+  format, commit after every batch, merges only on a quoted commander
+  order), direct-to-main documents through a temporary index, reviews as
+  PR comments, the final response shape, and an "In the aitools repo"
+  section (files to list, decision records, protected files, channel
+  exception, never the real HOME, checks and known failures, incident ids,
+  scratch naming, mission output folder, pitfalls).
+- Versions, not drafts (D-DEL5): protected files are written as a version
+  and reviewed after; the old "ship drafts, apply after approval" step is
+  gone.
+- Reading the commander's sessions (newest first, read-session.py,
+  AskUserQuestion answers), orchestrate-don't-execute, workflow limits
+  re-verified 2026-10-26 (no Agent/Task/Workflow for any agent type),
+  shared chrome-devtools pageId, check repo names with gh api first.
+- The "share one packet" advice is removed: the skill is the packet. The
+  packet file itself is left as is for the missions already reading it.
+
+shared/claude-shared.md "Delegation Duty": the eight elements and the
+load-before-every-Agent-and-Workflow-call directive (template sync with
+the dotprofile claude/CLAUDE.md).
+
+Docs only. Committed directly to main on the commander's instruction.
+The guard hook change (Workflow matcher, reminder on every call, the
+eight elements) follows separately with tests.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

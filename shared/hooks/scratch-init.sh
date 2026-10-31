@@ -7,8 +7,16 @@
 #   - Silent exit on errors (hook must never break Claude Code)
 #   - Logs stale session dirs older than 24h (no auto-delete after 30-file loss)
 #   - Writes session dir path to .scratch/.current-session for agents
-#   - Uses session_id from CC hook input for deterministic dir names (R1, #53)
-#   - Discovers handoffs at .aitools/channel/handoffs/ (R3, #53)
+#   - Uses session_id from CC hook input for deterministic dir names (R1, #53):
+#     .scratch/session-<full session id> since 2026-10-31. Names are never
+#     cut: the old 10-char cut let ait-harvest.py resolve a longer delegate dir
+#     to the live session (reference/artifact-harvesting.md gap G1). A legacy
+#     session-<id[:10]> dir of the same session (resumed after the upgrade) is
+#     reused, so a resumed session keeps its files in one dir.
+#   - Discovers handoffs at .aitools/channel/handoffs/ (R3, #53): every
+#     top-level *.md (all naming schemes, issue #138); the newest is the one
+#     with the latest leading YYYY-MM-DD date, undated legacy names last
+#     (gap G4: the old handoff* glob missed every dated handoff)
 #   - Registers session in harness SQLite DB if harness-db.py is available
 #   - SQLite integration is OBSERVE mode (log-only, never blocks)
 #   - Output channel: SessionStart plain stdout is added to Claude's
@@ -59,13 +67,23 @@ if [ -d "$SCRATCH_DIR" ]; then
 fi
 
 # --- Create fresh session dir ---
-# Use session_id for deterministic dir name (fixes .current-session race
-# condition for concurrent sessions — M4 AAR P3, verified UA-6).
-# Fallback to mktemp if session_id is empty (defensive).
-SESSION_PREFIX=""
-if [ -n "$SESSION_ID" ]; then
-    SESSION_PREFIX=$(printf '%s' "$SESSION_ID" | cut -c1-10)
-    SESSION_DIR="$SCRATCH_DIR/session-$SESSION_PREFIX"
+# Use the full session_id for a deterministic dir name (fixes the
+# .current-session race for concurrent sessions — M4 AAR P3, verified UA-6;
+# full name since 2026-10-31, see header). An id with characters outside
+# [A-Za-z0-9._-] (never seen from Claude Code; it would nest dirs) or an empty
+# id falls back to mktemp (defensive).
+case "$SESSION_ID" in
+    ""|*[!A-Za-z0-9._-]*) SAFE_ID="" ;;
+    *) SAFE_ID="$SESSION_ID" ;;
+esac
+if [ -n "$SAFE_ID" ]; then
+    SESSION_DIR="$SCRATCH_DIR/session-$SAFE_ID"
+    # Legacy lookup only (dirs created before 2026-10-31): reuse this
+    # session's session-<id[:10]> dir when it exists and the full one does not.
+    LEGACY_DIR="$SCRATCH_DIR/session-$(printf '%s' "$SAFE_ID" | cut -c1-10)"
+    if [ ! -d "$SESSION_DIR" ] && [ -d "$LEGACY_DIR" ] && [ "$LEGACY_DIR" != "$SESSION_DIR" ]; then
+        SESSION_DIR="$LEGACY_DIR"
+    fi
     mkdir -p "$SESSION_DIR"
 else
     SESSION_DIR=$(mktemp -d "$SCRATCH_DIR/session-XXXXXXXXXX")
@@ -75,14 +93,29 @@ fi
 printf '%s' "$SESSION_DIR" > "$SCRATCH_DIR/.current-session"
 
 # --- Discover unconsumed handoffs (R3, issue #53) ---
+# Every top-level *.md is a handoff, whatever its naming scheme (issue #138):
+# <date>_<id>.md (/handoff skill), <date>_session-<id>_<name> (routed from
+# scratch by ait-harvest.py), handoff-<id>.md (legacy). Newest = latest
+# leading YYYY-MM-DD in the name (sorts as text); undated names rank
+# 0000-00-00; a tie goes to the later name in glob order. No stat: mtimes in
+# a git checkout are checkout times, not handoff times.
 HANDOFFS_DIR="$PROJECT_ROOT/.aitools/channel/handoffs"
 if [ -d "$HANDOFFS_DIR" ]; then
     handoff_count=0
     latest_handoff=""
-    for hf in "$HANDOFFS_DIR"/handoff*; do
+    latest_key=""
+    for hf in "$HANDOFFS_DIR"/*.md; do
         [ -f "$hf" ] || continue
         handoff_count=$((handoff_count + 1))
-        latest_handoff="$hf"
+        hf_name=$(basename "$hf")
+        case "$hf_name" in
+            [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]*) hf_key=$(printf '%s' "$hf_name" | cut -c1-10) ;;
+            *) hf_key="0000-00-00" ;;
+        esac
+        if [ -z "$latest_handoff" ] || [ "$hf_key" \> "$latest_key" ] || [ "$hf_key" = "$latest_key" ]; then
+            latest_handoff="$hf"
+            latest_key="$hf_key"
+        fi
     done
     if [ "$handoff_count" -gt 0 ]; then
         printf 'Handoff available: %s (%d total in %s)\n' \

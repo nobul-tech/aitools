@@ -1,0 +1,40 @@
+windows	UNKNOWN STEP	2026-10-23T02:17:16.2817608Z shell: C:\Program Files\Git\bin\bash.EXE --noprofile --norc -e -o pipefail {0}
+windows	UNKNOWN STEP	2026-10-23T02:17:28.5594047Z ^[[36;1m  echo "::error::Git Bash version $BASH_VER is below minimum 4.0"^[[0m
+windows	UNKNOWN STEP	2026-10-23T02:17:28.5603525Z shell: C:\Program Files\Git\bin\bash.EXE --noprofile --norc -e -o pipefail {0}
+windows	UNKNOWN STEP	2026-10-23T02:17:28.6885424Z ##[group]Run errors=0
+windows	UNKNOWN STEP	2026-10-23T02:17:28.6885686Z ^[[36;1merrors=0^[[0m
+windows	UNKNOWN STEP	2026-10-23T02:17:28.6886840Z ^[[36;1m    echo "FAIL: $f"^[[0m
+windows	UNKNOWN STEP	2026-10-23T02:17:28.6887228Z ^[[36;1m    errors=$((errors + 1))^[[0m
+windows	UNKNOWN STEP	2026-10-23T02:17:28.6887721Z ^[[36;1mif [ "$errors" -gt 0 ]; then^[[0m
+windows	UNKNOWN STEP	2026-10-23T02:17:28.6887975Z ^[[36;1m  echo "::error::$errors bash file(s) failed syntax check"^[[0m
+windows	UNKNOWN STEP	2026-10-23T02:17:28.6897085Z shell: C:\Program Files\Git\bin\bash.EXE --noprofile --norc -e -o pipefail {0}
+windows	UNKNOWN STEP	2026-10-23T02:17:30.1312348Z ##[group]Run $errors = 0
+windows	UNKNOWN STEP	2026-10-23T02:17:30.1312620Z ^[[36;1m$errors = 0^[[0m
+windows	UNKNOWN STEP	2026-10-23T02:17:30.1312984Z ^[[36;1m$files = Get-ChildItem -Path "scripts/*.ps1", "deploy/*.ps1" -ErrorAction SilentlyContinue^[[0m
+windows	UNKNOWN STEP	2026-10-23T02:17:30.1313549Z ^[[36;1m    $parseErrors = $null^[[0m
+windows	UNKNOWN STEP	2026-10-23T02:17:30.1314199Z ^[[36;1m        $f.FullName, [ref]$null, [ref]$parseErrors)^[[0m
+windows	UNKNOWN STEP	2026-10-23T02:17:30.1314445Z ^[[36;1m    if ($parseErrors.Count -gt 0) {^[[0m
+windows	UNKNOWN STEP	2026-10-23T02:17:30.1314666Z ^[[36;1m        Write-Host "FAIL: $($f.Name)"^[[0m
+windows	UNKNOWN STEP	2026-10-23T02:17:30.1314890Z ^[[36;1m        $parseErrors | ForEach-Object {^[[0m
+windows	UNKNOWN STEP	2026-10-23T02:17:30.1315628Z ^[[36;1m        $errors++^[[0m
+windows	UNKNOWN STEP	2026-10-23T02:17:30.1316054Z ^[[36;1mif ($errors -gt 0) {^[[0m
+windows	UNKNOWN STEP	2026-10-23T02:17:30.1316282Z ^[[36;1m    Write-Error "$errors ps1 file(s) failed syntax check"^[[0m
+windows	UNKNOWN STEP	2026-10-23T02:17:30.9254505Z shell: C:\Program Files\Git\bin\bash.EXE --noprofile --norc -e -o pipefail {0}
+windows	UNKNOWN STEP	2026-10-23T02:17:31.7489197Z PASS lib: levels ok/warn/error/info recorded
+windows	UNKNOWN STEP	2026-10-23T02:17:31.7814860Z PASS lib: error is red on the console
+windows	UNKNOWN STEP	2026-10-23T02:17:32.0543639Z PASS lib: log_error/log_warn increment ERRORS/WARNINGS
+windows	UNKNOWN STEP	2026-10-23T02:17:34.0259249Z PASS entry: unknown argument shown in the lib's console format (not a bare 'error:')
+windows	UNKNOWN STEP	2026-10-23T02:17:34.8939042Z ---- 24 passed, 0 failed
+windows	UNKNOWN STEP	2026-10-23T02:17:36.1304568Z PASS lib: levels ok/warn/error/info recorded
+windows	UNKNOWN STEP	2026-10-23T02:17:36.8318419Z PASS lib: LogError/LogWarn increment the counters
+windows	UNKNOWN STEP	2026-10-23T02:17:39.2862493Z PASS entry: unknown command logged by the lib ([aitools] [error])
+windows	UNKNOWN STEP	2026-10-23T02:17:40.1749594Z ---- 20 passed, 0 failed, 0 skipped
+windows	UNKNOWN STEP	2026-10-23T02:17:40.3013774Z shell: C:\Program Files\Git\bin\bash.EXE --noprofile --norc -e -o pipefail {0}
+windows	UNKNOWN STEP	2026-10-23T02:17:44.7666948Z PASS tracker: failed -> DETAIL + ERROR row
+windows	UNKNOWN STEP	2026-10-23T02:17:57.1939790Z PASS json: invalid LOCAL -> failed, untouched
+windows	UNKNOWN STEP	2026-10-23T02:17:57.1940453Z 14 passed, 0 failed, 2 skipped
+windows	UNKNOWN STEP	2026-10-23T02:18:00.4168849Z PASS tracker: failed -> DETAIL + ERROR row
+windows	UNKNOWN STEP	2026-10-23T02:18:01.8635882Z PASS json: invalid LOCAL -> failed, untouched
+windows	UNKNOWN STEP	2026-10-23T02:18:02.5133302Z 11 passed, 0 failed, 1 skipped
+windows	UNKNOWN STEP	2026-10-23T02:18:02.6334799Z shell: C:\Program Files\Git\bin\bash.EXE --noprofile --norc -e -o pipefail {0}
+windows	UNKNOWN STEP	2026-10-23T02:18:14.2795441Z PASS push failure: push-failed, committed locally

@@ -1,0 +1,6 @@
+Verified fixed on origin/main 51d895b (S3-MA-Cleanup, mission MERGE-ALL, 2026-10-27).
+
+- `scripts/setup-rust.sh:48-54`: `rustup update` output is captured with `|| update_rc=$?`, every line goes to the log as `log_detail "rustup-update: ..."`, and the ERROR row names the exit code. No `tail -3`. PR #38 (be46ce8).
+- `scripts/setup-rust.ps1:29-33`: same, `LogDetail` per line; no `Select-Object -Last 3`. PR #38 (be46ce8).
+- `scripts/aitools:2074-2077`: on a failed pull the full output is logged line by line as `log_detail "git-pull: ..."` first; the 3-line console preview at :2082 comes after. PR #37 (62442cb).
+- `scripts/aitools.ps1:1968-1971`: same (`LogDetail "git-pull: ..."` before the preview at :1981). PR #37 (62442cb).

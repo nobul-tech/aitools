@@ -1,0 +1,168 @@
+uid=17_0 RootWebArea "Packages • Jamf Pro Documentation 11.33.0 • Jamf Learning Hub" url="https://learn.jamf.com/r/en-US/jamf-pro-documentation-current/Packages"
+  uid=17_1 button "Do Not Sell or Share My Personal Information" haspopup="dialog"
+  uid=17_2 "Do Not Sell or Share My Personal Information"
+  uid=17_3 generic
+  uid=17_4 button "Skip to main content"
+  uid=17_5 banner
+    uid=17_6 link "Jamf Learning Hub" url="https://learn.jamf.com/home"
+    uid=17_9 button "Interface language open trigger menu" expandable haspopup="menu"
+    uid=17_10 generic "Sign In"
+    uid=17_12 button "Theme selector open trigger menu" expandable haspopup="menu"
+  uid=17_13 tree "Packages" orientation="vertical"
+    uid=17_14 button "Expand all table of contents"
+    uid=17_15 link "Jamf Pro Documentation" url="https://learn.jamf.com/r/en-US/jamf-pro-documentation-current/Jamf_Pro_Documentation"
+    uid=17_16 button "Expand Overview of Technologies" expandable
+    uid=17_17 link "Overview of Technologies" url="https://learn.jamf.com/r/en-US/jamf-pro-documentation-current/Overview_of_Technologies"
+    uid=17_18 link "Jamf Platform Services and Capabilities" url="https://learn.jamf.com/r/en-US/jamf-pro-documentation-current/Jamf_Platform_Services_and_Capabilities"
+    uid=17_19 button "Expand Before You Begin" expandable
+    uid=17_20 link "Before You Begin" url="https://learn.jamf.com/r/en-US/jamf-pro-documentation-current/Before_You_Begin"
+    uid=17_21 button "Expand System Settings" expandable
+    uid=17_22 link "System Settings" url="https://learn.jamf.com/r/en-US/jamf-pro-documentation-current/System_Settings"
+    uid=17_23 button "Expand Global Management Settings" expandable
+    uid=17_24 link "Global Management Settings" url="https://learn.jamf.com/r/en-US/jamf-pro-documentation-current/Global_Management_Settings"
+    uid=17_25 button "Expand Jamf Application Integrations" expandable
+    uid=17_26 link "Jamf Application Integrations" url="https://learn.jamf.com/r/en-US/jamf-pro-documentation-current/Jamf_Application_Integrations"
+    uid=17_27 button "Expand Self Service" expandable
+    uid=17_28 link "Self Service" url="https://learn.jamf.com/r/en-US/jamf-pro-documentation-current/Jamf_Self_Service"
+    uid=17_29 button "Expand Server Infrastructure" expandable
+    uid=17_30 link "Server Infrastructure" url="https://learn.jamf.com/r/en-US/jamf-pro-documentation-current/Server_Infrastructure"
+    uid=17_31 button "Expand Network Organization" expandable
+    uid=17_32 link "Network Organization" url="https://learn.jamf.com/r/en-US/jamf-pro-documentation-current/Network_Organization"
+    uid=17_33 button "Expand Enrollment" expandable
+    uid=17_34 link "Enrollment" url="https://learn.jamf.com/r/en-US/jamf-pro-documentation-current/Enrollment_into_Jamf_MDM"
+    uid=17_35 link "Declarative Device Management" url="https://learn.jamf.com/r/en-US/jamf-pro-documentation-current/Declarative_Device_Management"
+    uid=17_36 button "Collapse Managing Computers" expandable expanded
+    uid=17_37 link "Managing Computers" url="https://learn.jamf.com/r/en-US/jamf-pro-documentation-current/Managing_Computers"
+    uid=17_38 button "Expand Building the Framework for Managing Computers" expandable
+    uid=17_39 link "Building the Framework for Managing Computers" url="https://learn.jamf.com/r/en-US/jamf-pro-documentation-current/Building_the_Framework_for_Managing_Computers"
+    uid=17_40 button "Expand Inventory for Computers" expandable
+    uid=17_41 link "Inventory for Computers" url="https://learn.jamf.com/r/en-US/jamf-pro-documentation-current/Inventory_for_Computers"
+    uid=17_42 button "Expand Policies" expandable
+    uid=17_43 link "Policies" url="https://learn.jamf.com/r/en-US/jamf-pro-documentation-current/Policies"
+    uid=17_44 button "Collapse Packages" expandable expanded
+    uid=17_45 link "Packages" url="https://learn.jamf.com/r/en-US/jamf-pro-documentation-current/Packages"
+    uid=17_46 link "Package Management" url="https://learn.jamf.com/r/en-US/jamf-pro-documentation-current/Package_Management"
+    uid=17_47 link "Package Deployment" url="https://learn.jamf.com/r/en-US/jamf-pro-documentation-current/Package_Deployment"
+    uid=17_48 button "Expand Software Title Updates" expandable
+    uid=17_49 link "Software Title Updates" url="https://learn.jamf.com/r/en-US/jamf-pro-documentation-current/Software_Title_Updates"
+    uid=17_50 button "Expand Settings and Security Management for Computers" expandable
+    uid=17_51 link "Settings and Security Management for Computers" url="https://learn.jamf.com/r/en-US/jamf-pro-documentation-current/Settings_and_Security_Management_for_Computers"
+    uid=17_52 button "Expand License Management" expandable
+    uid=17_53 link "License Management" url="https://learn.jamf.com/r/en-US/jamf-pro-documentation-current/License_Management"
+    uid=17_54 button "Expand Usage Management" expandable
+    uid=17_55 link "Usage Management" url="https://learn.jamf.com/r/en-US/jamf-pro-documentation-current/Usage_Management"
+    uid=17_56 link "Unmanaging Computers" url="https://learn.jamf.com/r/en-US/jamf-pro-documentation-current/Unmanaging_Computers"
+    uid=17_57 link "Scripts" url="https://learn.jamf.com/r/en-US/jamf-pro-documentation-current/Scripts"
+    uid=17_58 button "Expand Managing Mobile Devices" expandable
+    uid=17_59 link "Managing Mobile Devices" url="https://learn.jamf.com/r/en-US/jamf-pro-documentation-current/Managing_Mobile_Devices"
+    uid=17_60 button "Expand Managing Users" expandable
+    uid=17_61 link "Managing Users" url="https://learn.jamf.com/r/en-US/jamf-pro-documentation-current/Managing_Users"
+    uid=17_62 button "Expand Group Management" expandable
+    uid=17_63 link "Group Management" url="https://learn.jamf.com/r/en-US/jamf-pro-documentation-current/Group_Management"
+    uid=17_64 button "Expand Managing Apple OS Updates" expandable
+    uid=17_65 link "Managing Apple OS Updates" url="https://learn.jamf.com/r/en-US/jamf-pro-documentation-current/Managing_Apple_OS_Updates"
+    uid=17_66 button "Expand Content Distribution" expandable
+    uid=17_67 link "Content Distribution" url="https://learn.jamf.com/r/en-US/jamf-pro-documentation-current/Content_Distribution"
+    uid=17_68 button "Expand Classroom Management" expandable
+    uid=17_69 link "Classroom Management" url="https://learn.jamf.com/r/en-US/jamf-pro-documentation-current/Classroom_Management"
+    uid=17_70 link "Copyright and Trademarks" url="https://learn.jamf.com/r/en-US/jamf-pro-documentation-current/Copyright"
+  uid=17_71 separator orientation="horizontal" value="50" valuemax="100" valuemin="0" valuetext=""
+  uid=17_72 main
+    uid=17_73 navigation "Breadcrumb"
+      uid=17_74 link "Jamf Pro Documentation 11.33.0" url="https://learn.jamf.com/r/fGf4vp7LTyOAlPIIHEtfdQ/root"
+      uid=17_76 link "Managing Computers" url="https://learn.jamf.com/r/en-US/jamf-pro-documentation-current/Managing_Computers"
+      uid=17_78 "Packages"
+    uid=17_79 button "Open"
+    uid=17_80 search
+      uid=17_81 generic
+        uid=17_82 combobox "Search" autocomplete="list" expandable haspopup="listbox"
+        uid=17_83 generic atomic live="polite" relevant="additions text"
+      uid=17_84 link "Search" url="https://learn.jamf.com/search?content-lang=en-US&value-filters=ft%253ApublicationId~%2522fGf4vp7LTyOAlPIIHEtfdQ%2522&scope=all_topics"
+    uid=17_85 generic
+      uid=17_86 generic
+        uid=17_87 heading "Packages" level="1"
+      uid=17_88 generic "Copy link to clipboard"
+      uid=17_89 generic "ft:lastEdition: May 16, 2024"
+        uid=17_90 "May 16, 2024"
+      uid=17_91 "8"
+      uid=17_92 "minute"
+      uid=17_93 "read"
+      uid=17_94 generic "version: 11.33.0"
+        uid=17_95 "11.33.0"
+      uid=17_96 generic "Content Type: Technical Documentation"
+        uid=17_97 "Technical Documentation"
+      uid=17_98 generic "Portal: Jamf Pro"
+        uid=17_99 "Jamf Pro"
+      uid=17_100 radiogroup "Rate this content"
+        uid=17_101 radio "HELPFUL"
+          uid=17_102 radio "HELPFUL"
+        uid=17_103 radio "NOT HELPFUL"
+          uid=17_104 radio "NOT HELPFUL"
+      uid=17_105 generic
+        uid=17_106 link "Previous section: User Interaction with Policies" url="https://learn.jamf.com/r/en-US/jamf-pro-documentation-current/User_Interaction_with_Policies"
+      uid=17_107 generic
+        uid=17_108 link "Next section: Package Management" url="https://learn.jamf.com/r/en-US/jamf-pro-documentation-current/Package_Management"
+      uid=17_109 button "Open actions menu" expandable haspopup="menu"
+      uid=17_110 "A package is a self-contained group of files that can be deployed to remote computers. "
+      uid=17_111 "Jamf"
+      uid=17_112 " uses the term "Package" to refer to Apple Installer packages (PKGs) and disk images (DMGs) that are used to deploy software and files to computers. You can use Composer or a third-party packaging tool to build packages of software, applications, preference files, or documents. For more information about building packages using Composer, see the "
+      uid=17_113 link "Composer User Guide" url="https://learn.jamf.com/bundle/composer-user-guide-current/page/Composer_Overview.html"
+      uid=17_115 "."
+      uid=17_116 "You can use "
+      uid=17_117 "Jamf Pro"
+      uid=17_118 " to manage packages you plan to deploy to computers in your environment. Managing packages involves adding the package to your distribution point and to "
+      uid=17_119 "Jamf Pro"
+      uid=17_120 ", and configuring settings for the package."
+      uid=17_121 "After a package is added to the distribution point and "
+      uid=17_122 "Jamf Pro"
+      uid=17_123 ", you can deploy the package to computers using a policy in "
+      uid=17_124 "Jamf Pro"
+      uid=17_125 ". You can also download previously added packages directly from "
+      uid=17_126 "Jamf Pro"
+      uid=17_127 "."
+      uid=17_128 "If you need solutions for package synchronization and package metadata editing, consider the open-source "
+      uid=17_129 link "Jamf Sync" url="https://github.com/jamf/JamfSync/releases/latest"
+      uid=17_131 " utility available on Jamf's GitHub repository."
+      uid=17_132 "Note:"
+      uid=17_133 "The apps and other objects provided in the repository are open-source content and are not officially supported by Jamf Support."
+    uid=17_134 link "Package Management" url="https://learn.jamf.com/r/en-US/jamf-pro-documentation-current/Package_Management"
+    uid=17_136 link "Package Deployment" url="https://learn.jamf.com/r/en-US/jamf-pro-documentation-current/Package_Deployment"
+    uid=17_138 generic
+  uid=17_139 contentinfo
+    uid=17_140 "Jamf"
+    uid=17_141 "Jamf's purpose is to simplify work by helping organizations manage and secure an Apple experience that end users love and organizations trust. Jamf is the only company in the world that provides a complete management and security solution for an Apple-first environment that is enterprise secure, consumer simple and protects personal privacy. "
+    uid=17_142 link "Learn about Jamf." url="https://www.jamf.com/about/"
+    uid=17_144 link url="https://www.linkedin.com/company/jamf-software/"
+    uid=17_145 link url="https://www.youtube.com/user/JAMFMedia"
+    uid=17_146 link url="https://www.instagram.com/jamfsoftware/"
+    uid=17_147 link url="https://www.facebook.com/jamfsoftware/"
+    uid=17_148 "Quick links"
+    uid=17_149 link "Jamf Support" url="https://www.jamf.com/support/"
+    uid=17_151 link "Training & Certifications" url="https://www.jamf.com/training/"
+    uid=17_153 link "Jamf Account" url="https://account.jamf.com/"
+    uid=17_155 link "Jamf Resources" url="https://www.jamf.com/resources/"
+    uid=17_157 link "Jamf Integrations" url="https://www.jamf.com/integrations/"
+    uid=17_159 link "Jamf Blog" url="https://www.jamf.com/blog/"
+    uid=17_161 link "Jamf Nation" url="https://community.jamf.com/"
+    uid=17_163 link "Marketplace" url="https://www.jamf.com/community/marketplace/"
+    uid=17_165 link "Become a Partner" url="https://www.jamf.com/partners/"
+    uid=17_167 link "Find a Partner" url="https://www.jamf.com/partners/directory/"
+    uid=17_169 "Solutions"
+    uid=17_170 link "The Jamf platform" url="https://www.jamf.com/solutions/"
+    uid=17_172 link "Zero-touch deployment" url="https://www.jamf.com/solutions/zero-touch-deployment/"
+    uid=17_174 link "Mobile Device Management (MDM)" url="https://www.jamf.com/solutions/device-management/"
+    uid=17_176 link "Application management" url="https://www.jamf.com/solutions/app-lifecycle-management/"
+    uid=17_178 link "Inventory management" url="https://www.jamf.com/solutions/inventory-management/"
+    uid=17_180 link "Self Service" url="https://www.jamf.com/solutions/self-service/"
+    uid=17_182 link "Identity and access management" url="https://www.jamf.com/solutions/identity-based-access/"
+    uid=17_184 link "Endpoint protection" url="https://www.jamf.com/solutions/endpoint-protection/"
+    uid=17_186 link "Threat prevention and remediation" url="https://www.jamf.com/solutions/threat-prevention-remediation/"
+    uid=17_188 link "Content filtering and safe internet" url="https://www.jamf.com/solutions/content-filtering/"
+    uid=17_190 link "Zero Trust Network Access (ZTNA)" url="https://www.jamf.com/solutions/zero-trust-network-access/"
+    uid=17_192 link "Security visibility and compliance" url="https://www.jamf.com/solutions/compliance/"
+    uid=17_194 link "Copyright" url="https://www.jamf.com/copyright-notice/"
+    uid=17_196 link "Privacy" url="https://www.jamf.com/privacy/"
+    uid=17_198 link "Terms of Use" url="https://www.jamf.com/terms-of-use/"
+    uid=17_200 link "Trust" url="https://www.jamf.com/trust-center/"
+    uid=17_202 link "Modern Slavery Act Statement" url="https://www.jamf.com/modern-slavery-act-statement/"
+  uid=17_204 group live="polite" relevant="additions text"

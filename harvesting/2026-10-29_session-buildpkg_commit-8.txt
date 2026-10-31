@@ -1,0 +1,15 @@
+Add the S3-BuildPkg mission report
+
+What: S3-BuildPkg-report.md: summary, commits, files, answers to the
+commander's questions, open questions P-1..P-7 with suggested answers,
+INCIDENT markers, delegates and how each was verified, including the
+independent review verdict (APPROVE WITH CHANGES, all findings fixed).
+
+Why: mission BUILD-PKG deliverable 5; channel exception (straight to
+main).
+
+Verification: commit SHAs from git log; open PR list from gh.
+
+Not run: n/a (report only).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

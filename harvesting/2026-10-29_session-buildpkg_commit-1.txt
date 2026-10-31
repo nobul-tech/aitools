@@ -1,0 +1,32 @@
+Add BUILD-PKG mission brief and wave-1 review and research findings
+
+What: S3-BuildPkg shared delegate brief plus ten delegate files under
+the channel handoff folder S3-BuildPkg/: code reviews of build-deploy and
+deploy-harness (RevBuild), entry points and installers (RevInstall),
+libraries (RevLib), setup-user-* (RevSetup), tool setup scripts
+(RevTools); packaging research for Intune Win32 (PkgWin), macOS PKG for
+Intune and Jamf (PkgMac), Ubuntu .deb and the cloud environments
+(PkgLinux); the language evaluation (Lang); and the docs inventory
+(DocsInv).
+
+Why: mission BUILD-PKG (commander decisions 2026-10-26: parallel
+package-based distribution for a fleet; supported platforms macOS,
+Windows, Linux (Ubuntu), Claude Code web, Cursor cloud; unsigned first;
+commit to main). Channel files go straight to main (channel exception,
+CLAUDE.md).
+
+Verification: orchestrator spot-checks against code and docs:
+deploy-harness.sh add_source git work-tree guard (L182-186);
+Test-IsAdmin has no callers; AITOOLS_LOG_DIR override (aitools-lib.sh
+L72); bootstrap.ps1 L48 runs the installer under powershell 5.1;
+setup-user-claude.sh L178 unguarded $SHELL; check.yml runners
+macos-14/ubuntu-latest/windows-2022; WinGet "not supported in the
+system context" (WebFetch of the troubleshooting page). Dotprofile
+untouched (only the pre-existing sessions/.DS_Store change).
+check-pre-commit: 7 PASS, 12 SKIP, 1 WARN (step 11, pre-existing
+dotprofile .DS_Store), 1 FAIL (step 6, known pre-existing).
+
+Not run: no setup script, installer or package build (one isolated
+build-deploy run by RevBuild under an isolated HOME).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

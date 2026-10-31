@@ -1,0 +1,8 @@
+delegation.md: element 2 requires reading all project and user rules
+
+The delegation prompt must tell the delegate explicitly to read every
+project-scope and user-scope rule not already in its context, each by
+absolute path. Matches the /delegate skill change (nobul-tech/aitools#54).
+Commander-approved text, 2026-10-21.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

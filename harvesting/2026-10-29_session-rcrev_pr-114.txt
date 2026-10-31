@@ -1,0 +1,15 @@
+.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Fix3/S3-MF-Fix3-Review-pr114.md
+.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Fix3/S3-MF-Fix3-report.md
+.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Fix6/S3-MF-Fix6-Review-pr108.md
+.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Fix6/S3-MF-Fix6-drafts/reference/script-standards-detail.md.edit.txt
+.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Fix6/S3-MF-Fix6-report.md
+.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-NoMachine/S3-MF-NoMachine-Review-pr98.md
+.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-NoMachine/S3-MF-NoMachine-report.md
+scripts/aitools-json.pl
+scripts/aitools-json.ps1
+scripts/aitools-profile.ps1
+scripts/aitools-profile.sh
+scripts/setup-user-config.ps1
+scripts/setup-user-config.sh
+tests/profile/test-config.sh
+tests/profile/test-profile.sh

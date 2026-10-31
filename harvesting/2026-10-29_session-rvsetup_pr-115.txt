@@ -1,0 +1,109 @@
+#115 [OPEN] Lib relay: ERROR row for a failed child, machine-profile resolver ACTION (A-2, A-3, A-4)
+FILES: .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Adopt/S3-MF-Adopt-Review-pr103.md, .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Adopt/S3-MF-Adopt-drafts/reference/managed-file-deployment.md.edit.txt, .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Adopt/S3-MF-Adopt-report.md, .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-NoMachine/S3-MF-NoMachine-Review-pr98.md, .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-NoMachine/S3-MF-NoMachine-report.md, .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Relay/S3-MF-Relay-ReviewA-pr115.md, .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Runner/S3-MF-Runner-Review-pr113.md, .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Runner/S3-MF-Runner-plan.md, .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Runner/S3-MF-Runner-report.md, .github/workflows/check.yml, scripts/aitools, scripts/aitools-lib.ps1, scripts/aitools-lib.sh, scripts/aitools.ps1, scripts/setup-user-claude.ps1, scripts/setup-user-claude.sh, scripts/setup-user-config.ps1, scripts/setup-user-config.sh, tests/managed-files/test-adopt-push.ps1, tests/managed-files/test-adopt-push.sh, tests/profile/test-config.sh, tests/profile/test-lib.sh, tests/profile/test-user-init.sh
+
+## Summary
+
+FIX-1 of M3-FINISH item 7: the lib's child relay gives every failed child an ERROR summary row, and the machine-profile wrapper's "resolver missing" path writes its ACTION. Audit findings A-2, A-3 and the `run_child_relayed` part of A-4. No caller passes the new summary tool yet; the installers and user init switch to the relay in FIX-2 (stacked on this branch).
+
+Branch `fix/mf-lib-relay` = origin/main + `--no-ff` merge of #113's head (`origin/fix/mf-lib-runner-result`, which contains #103 and #98), then one commit (4c55ec0).
+
+## Why
+
+- **A-3 (medium):** `run_child_relayed` / `Invoke-ChildRelayed` logged one error for a child that exited non-zero but wrote no summary row. Only a PS throw with SUMMARYTOOL got a row, and bash had no such argument. A child that died before its own `write_summary` (a `set -e` abort, exit 127, a pwsh parse error) disappeared from the end-of-run panel (script-standards-detail "Summary coverage rule").
+- **A-2 (low):** `resolve_machine_profile` / `Resolve-MachineProfile` "resolver missing" wrote ERROR without an ACTION; every other failure path of the four wrappers writes one.
+- **A-4, rest (low):** `rm -f "$rcf"` in `run_child_relayed` was unchecked. The profile-runner part shipped in #113 (`_aitlib_rm_tmp`).
+
+## Changes
+
+**A-3: `scripts/aitools-lib.sh` / `.ps1`, relay section**
+- `run_child_relayed [--summary-tool TOOL] LABEL CMD [ARGS]`. The new optional leading flag matches `Invoke-ChildRelayed`'s 4th parameter. Calls without it behave as before.
+- With a tool, a failed child that wrote **no ERROR row of its own** gets one. The rows, by case:
+
+  | Case | Row (bash and PS) |
+  |---|---|
+  | non-zero exit | `ERROR\|TOOL\|script failed (exit N)` |
+  | exit 2 | `aborted (exit 2)` (D-TS13) |
+  | error lines with exit 0 | `logged errors (exit 0)` |
+  | no command | `not run (no command)` |
+  | mktemp failed (bash) | `not run (mktemp failed)` |
+  | throw or parse error (PS) | `script failed (exception)` |
+
+- The relay counts the ERROR rows in `AITOOLS_SUMMARY_FILE` before and after the child. Helpers: `_aitlib_summary_errors` / `Get-AitLibSummaryErrorCount` and `_aitlib_child_row` / `Write-AitLibChildRow`. An unreadable summary counts as 0 and is logged as a detail line.
+- PS: an empty SCRIPT is now `not run (no command given)`, as in bash. Before, it was a throw with the "exception" row.
+- Counters are unchanged: one `log_error` / `LogError` for a failed child; child error lines are still not added to ERRORS.
+
+**A-2: same files, wrapper section**
+- `resolve_machine_profile` / `Resolve-MachineProfile` "resolver missing" now writes ACTION `see deploy.log -- the dotprofile could not be resolved`. The text is the dotprofile wrapper's, so a run with both wrappers failing gets one ACTION (`_aitlib_action_once`).
+
+**A-4 (rest): bash lib**
+- `run_child_relayed` removes its exit-code file with `_aitlib_rm_tmp FILE LABEL`. A failed removal is a detail line naming the step; a warning would promote the parent's OK rows.
+- `_aitlib_rm_tmp` takes an optional WHO (default `aitools-profile`, so #113's messages are unchanged).
+
+**Tests: `tests/profile/test-lib.sh`**
+- Every relay case now checks the summary rows.
+- New relay cases: crash before any row (bash `false` under `set -e`, PS exit 1), exit 127, abort (exit 2), error lines with exit 0, PS throw, PS parse error, no summary tool, no command with a tool. A child that wrote its own row gets no second one.
+- A-4 cases with `mktemp` stubs on PATH (macOS `mktemp` ignores TMPDIR): mktemp fails; the exit-code file cannot be removed (detail line, nothing else changes).
+- A-2: `rmp-missing`, and `urp-rmp-missing` (one ACTION for both wrappers).
+
+## Assumptions
+
+- **Dedupe rule (design choice):** the relay adds a row only when the child wrote no ERROR row during its run, for any tool. Without it, every well-behaved failing child (log_error + ERROR row + exit 1) would show two ERROR rows. A-3's gap is the child that wrote none. If the commander wants "always one relay row", it is a one-line change in each helper.
+- **Exit 2 detail is `aborted (exit 2)`**, not "failed", per D-TS13 (bare exit 2 = user abort). It is still an ERROR row and one counted error, as the installers count any non-zero exit today (reference/managed-file-deployment.md "[x]abort").
+- **deploy.jsonl scope (I-1 / draft #162, undecided):** unchanged here. FIX-2 uses the audit's suggested answer.
+
+## Merge order
+
+1. #113 (`fix/mf-lib-runner-result`; it contains #103 and #98).
+2. **This PR.**
+3. FIX-2 (`fix/mf-installer-relay`, stacked on this branch).
+
+## Verification (tested: macOS arm64; isolated HOME and AITOOLS_LOG_DIR under the worktree scratch)
+
+- `bash -n` (GNU bash 5.3, /bin/bash 3.2.57) and the pwsh parser on `aitools-lib.sh`, `aitools-lib.ps1` and `test-lib.sh`: clean.
+- Suites (bash 5 + pwsh / /bin/bash 3.2 `--bash-only`):
+
+  | Suite | Before (#113) | After |
+  |---|---|---|
+  | test-lib | 287/0, 122/0 | **361/0, 160/0** (after the review fixes; 353/0, 156/0 at 4c55ec0) |
+  | test-user-init | 229/0, 128/0 | 229/0, 128/0 |
+  | test-config | 269/0, 174/0 | 269/0, 174/0 |
+  | test-profile | 689/0, 498/0 | 689/0, 498/0 |
+  | tests/logging sh | | 24/0 (both) |
+  | tests/logging ps | | 15/0 (5 skipped) |
+  | managed-files sh / ps | | 57/0 / 39/0 |
+  | adopt-push sh / ps | | 28/0 / 23/0 |
+  | deploy-harness | | 45/0 |
+
+- **Negative control:** the new test-lib against the pre-fix lib fails 37 assertions: every new row, the A-2 ACTION and the bash `--summary-tool` flag. It passes the PS throw and parse rows, which the old lib already wrote.
+- **check-pre-commit:** step 6 FAIL (known: harvesting file mode); WARNs on steps 3, 5, 9, 11 (live dotprofile has uncommitted changes, not touched).
+- **check-pre-push** (isolated HOME whose config.json points at the dotprofile; step 7 only `git archive`s it): step 7 FAIL is the known stale dotprofile `deploy/`. The fresh build's resolver consumers dry-ran clean: no "failed a dry run" in the step. Other steps PASS or advisory WARN.
+
+## Review
+
+Independent review by S3-MF-Relay-ReviewA: **approve with minors**, with 0 blocking, 0 major, 1 minor and 4 nits (https://github.com/nobul-tech/aitools/pull/115#issuecomment-6357222386; file `.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Relay/S3-MF-Relay-ReviewA-pr115.md`). The fixes are in 2ae798a:
+
+- **m1:** new case `relay-run-crash-prior-row`. An earlier ERROR row sits in the summary before a crashing child, and both rows must appear. The reviewer's mutant (dedupe compared with 0) now fails it: 159/1 under `--bash-only`.
+- **n2:** for exit 2 the log line uses the row's word: `<label> aborted (exit 2)`.
+- **n1:** the comments state that a child that wrote its own ERROR row and then crashed keeps only its own row.
+- **n3:** `relay-run-rm-fail` is skipped when the test runs as root.
+- **n4:** a comment on the `printf -v` contract.
+
+The reviewer agreed with all three Assumptions.
+
+## Not run
+
+- Windows and Git Bash (process substitution and the rc file, the in-process PS relay on Windows).
+- `build-deploy.sh` against the real dotprofile. The lib is inlined into the generated deploy/ scripts on the next build.
+- A real caller with `--summary-tool`: that is FIX-2.
+
+## Protected-file drafts awaiting approval
+
+None in this PR. The relay section's comments are plain comments, not intent statements.
+
+## Follow-ups
+
+- **FIX-2:** installers and user init use the lib relay (A-1, A-12..A-18).
+- **A-5 (not fixed):** it depends on the undecided I-2 (ACTION pairing) / incident draft #147.
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+

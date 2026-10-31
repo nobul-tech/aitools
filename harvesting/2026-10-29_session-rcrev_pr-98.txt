@@ -1,0 +1,5 @@
+.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-NoMachine/S3-MF-NoMachine-Review-pr98.md
+.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-NoMachine/S3-MF-NoMachine-report.md
+scripts/setup-user-config.ps1
+scripts/setup-user-config.sh
+tests/profile/test-config.sh

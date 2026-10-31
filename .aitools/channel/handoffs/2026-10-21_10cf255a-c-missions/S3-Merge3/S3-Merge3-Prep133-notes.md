@@ -14,3 +14,7 @@ PR 133 (fix/hook2-delegation-score), worktree /Users/new-jose/repos/aitools/.cla
 ## Phase B
 - Gate (prompt): PR 126 MERGED + main CI green on its merge commit (scratch gate-126.sh, 150 s polls, 6 h cap).
 - CONFLICT: prompt (predecessor PR 126) vs orchestrator S3-Merge3 message relaying the Session Commander (new train 125, 126, 137, 133, 134, 135) -- resolved by tier 2 (the delegating agent's newer course correction for this same PR): gate-126 stopped; gate-pr.sh 137 waits for PR 137 MERGED + main CI success with every job having steps.
+- Gate opened: PR 137 merged as 52ce691, main CI run 40836850143 success.
+- a937e2d: merge origin/main (52ce691), no conflicts. Local: own suites + the 8 suites main touched (bash 5.3 + 3.2) all pass; pre-commit step 6 only; pre-push 0 FAIL.
+- CI run 40841055001 + CodeQL 40841051117 green; CLEAN twice. PREP DONE comment: https://github.com/nobul-tech/aitools/pull/133#issuecomment-6492159343
+- Slip, corrected: wait-ci.sh exited early once on "no checks reported" (checks not yet registered); fixed and re-run.

@@ -1,0 +1,95 @@
+=== run 39873612279
+branch=feature/m3-rekey sha=bb43536 title=M3 re-key: machine profiles keyed by machine id
+  job=macos step=User init tests (bash 5 + pwsh parity, pty menus)
+  job=linux step=User init tests (bash + pwsh parity, pty menus)
+macos	User init tests (bash 5 + pwsh parity, pty menus)	2026-10-22T23:50:43.5232090Z error: src refspec main does not match any
+macos	User init tests (bash 5 + pwsh parity, pty menus)	2026-10-22T23:50:43.5236040Z error: failed to push some refs to '/var/folders/s6/5hzmn6lx4dz5nxs7k_0slzph0000gn/T/tmp.hx595Uafef/push-rejected.bash/remote.git'
+macos	User init tests (bash 5 + pwsh parity, pty menus)	2026-10-22T23:50:43.9572140Z ##[error]Process completed with exit code 1.
+linux	User init tests (bash + pwsh parity, pty menus)	2026-10-22T23:48:52.3712849Z error: src refspec main does not match any
+linux	User init tests (bash + pwsh parity, pty menus)	2026-10-22T23:48:52.3713272Z error: failed to push some refs to '/tmp/tmp.F0THd5C1YK/push-rejected.bash/remote.git'
+linux	User init tests (bash + pwsh parity, pty menus)	2026-10-22T23:48:52.5534481Z ##[error]Process completed with exit code 1.
+=== run 39861915512
+branch=feature/m3-rekey sha=c78bf12 title=M3 re-key: machine profiles keyed by machine id
+  job=linux step=Config writer tests (bash + pwsh parity)
+  job=macos step=Config writer tests (bash 5 + pwsh parity)
+linux	UNKNOWN STEP	2026-10-22T22:02:18.8931653Z PASS entry: unknown argument shown in the lib's console format (not a bare 'error:')
+linux	UNKNOWN STEP	2026-10-22T22:06:43.6457324Z   FAIL c1-fresh: no row 'OK|aitools config|created'
+linux	UNKNOWN STEP	2026-10-22T22:06:45.0039540Z   FAIL c2-verified: no row 'OK|aitools config|verified'
+linux	UNKNOWN STEP	2026-10-22T22:06:46.4043177Z   FAIL c3-upgrade: no row 'OK|aitools config|updated'
+linux	UNKNOWN STEP	2026-10-22T22:06:52.7125426Z   FAIL c8-dry-run: no row 'OK|aitools config|dry-run: would update'
+linux	UNKNOWN STEP	2026-10-22T22:07:03.7987943Z ##[error]Process completed with exit code 1.
+macos	UNKNOWN STEP	2026-10-22T22:04:08.5332090Z PASS entry: unknown argument shown in the lib's console format (not a bare 'error:')
+macos	UNKNOWN STEP	2026-10-22T22:08:50.4595040Z   FAIL c1-fresh: no row 'OK|aitools config|created'
+macos	UNKNOWN STEP	2026-10-22T22:08:51.9057850Z   FAIL c2-verified: no row 'OK|aitools config|verified'
+macos	UNKNOWN STEP	2026-10-22T22:08:53.8917570Z   FAIL c3-upgrade: no row 'OK|aitools config|updated'
+macos	UNKNOWN STEP	2026-10-22T22:09:01.4055280Z   FAIL c8-dry-run: no row 'OK|aitools config|dry-run: would update'
+macos	UNKNOWN STEP	2026-10-22T22:09:14.5056830Z ##[error]Process completed with exit code 1.
+=== run 39861809999
+branch=feature/m3-rekey sha=3ce5850 title=M3 re-key: machine profiles keyed by machine id
+  job=linux step=Config writer tests (bash + pwsh parity)
+  job=macos step=Config writer tests (bash 5 + pwsh parity)
+linux	UNKNOWN STEP	2026-10-22T22:01:27.6149023Z PASS entry: unknown argument shown in the lib's console format (not a bare 'error:')
+linux	UNKNOWN STEP	2026-10-22T22:06:10.2631403Z   FAIL c1-fresh: no row 'OK|aitools config|created'
+linux	UNKNOWN STEP	2026-10-22T22:06:12.0731599Z   FAIL c2-verified: no row 'OK|aitools config|verified'
+linux	UNKNOWN STEP	2026-10-22T22:06:13.8632798Z   FAIL c3-upgrade: no row 'OK|aitools config|updated'
+linux	UNKNOWN STEP	2026-10-22T22:06:22.1103304Z   FAIL c8-dry-run: no row 'OK|aitools config|dry-run: would update'
+linux	UNKNOWN STEP	2026-10-22T22:06:36.6988666Z ##[error]Process completed with exit code 1.
+macos	UNKNOWN STEP	2026-10-22T22:01:51.3111490Z PASS entry: unknown argument shown in the lib's console format (not a bare 'error:')
+macos	UNKNOWN STEP	2026-10-22T22:06:43.7566750Z   FAIL c1-fresh: no row 'OK|aitools config|created'
+macos	UNKNOWN STEP	2026-10-22T22:06:45.3944320Z   FAIL c2-verified: no row 'OK|aitools config|verified'
+macos	UNKNOWN STEP	2026-10-22T22:06:47.2323640Z   FAIL c3-upgrade: no row 'OK|aitools config|updated'
+macos	UNKNOWN STEP	2026-10-22T22:06:57.1631440Z   FAIL c8-dry-run: no row 'OK|aitools config|dry-run: would update'
+macos	UNKNOWN STEP	2026-10-22T22:07:10.9954010Z ##[error]Process completed with exit code 1.
+=== run 39859094088
+branch=feature/m3-rekey sha=b70fc64 title=M3 re-key: machine profiles keyed by machine id
+  job=linux step=Config writer tests (bash + pwsh parity)
+  job=macos step=Config writer tests (bash 5 + pwsh parity)
+linux	Config writer tests (bash + pwsh parity)	2026-10-22T21:44:25.1999056Z   FAIL c1-fresh: no row 'OK|aitools config|created'
+linux	Config writer tests (bash + pwsh parity)	2026-10-22T21:44:27.0173439Z   FAIL c2-verified: no row 'OK|aitools config|verified'
+linux	Config writer tests (bash + pwsh parity)	2026-10-22T21:44:28.8383516Z   FAIL c3-upgrade: no row 'OK|aitools config|updated'
+linux	Config writer tests (bash + pwsh parity)	2026-10-22T21:44:37.1278973Z   FAIL c8-dry-run: no row 'OK|aitools config|dry-run: would update'
+linux	Config writer tests (bash + pwsh parity)	2026-10-22T21:44:51.6196571Z ##[error]Process completed with exit code 1.
+macos	Config writer tests (bash 5 + pwsh parity)	2026-10-22T21:46:10.7123180Z   FAIL c1-fresh: no row 'OK|aitools config|created'
+macos	Config writer tests (bash 5 + pwsh parity)	2026-10-22T21:46:12.4539720Z   FAIL c2-verified: no row 'OK|aitools config|verified'
+macos	Config writer tests (bash 5 + pwsh parity)	2026-10-22T21:46:14.2893320Z   FAIL c3-upgrade: no row 'OK|aitools config|updated'
+macos	Config writer tests (bash 5 + pwsh parity)	2026-10-22T21:46:22.0671630Z   FAIL c8-dry-run: no row 'OK|aitools config|dry-run: would update'
+macos	Config writer tests (bash 5 + pwsh parity)	2026-10-22T21:46:35.9153170Z ##[error]Process completed with exit code 1.
+=== run 39720365900
+branch=feature/m3-b1-profile-resolver sha=c1308f6 title=M3 B1: native profile resolver (aitools-profile.sh/.ps1)
+  job=windows step=Profile resolver (PowerShell, native machine id and hostname)
+windows	Profile resolver (PowerShell, native machine id and hostname)	2026-10-22T04:05:25.4024839Z ##[error]Process completed with exit code 1.
+=== run 39719152527
+branch=feature/managed-file-source-of-truth sha=43d8dec title=Managed files: SOURCE is the source of truth; adopt and merge write the repo; per-field JSON review
+  job=linux step=Managed-file tests (PowerShell)
+linux	Managed-file tests (PowerShell)	2026-10-22T03:53:19.5712977Z FAIL EOF at the menu: overwrite
+linux	Managed-file tests (PowerShell)	2026-10-22T03:54:19.3801034Z ##[error]Process completed with exit code 1.
+=== run 39719101997
+branch=feature/managed-file-source-of-truth sha=3213c27 title=Managed files: SOURCE is the source of truth; adopt and merge write the repo; per-field JSON review
+  job=linux step=Managed-file tests (PowerShell)
+linux	UNKNOWN STEP	2026-10-22T03:51:09.5257006Z PASS entry: unknown argument shown in the lib's console format (not a bare 'error:')
+linux	UNKNOWN STEP	2026-10-22T03:52:37.3190974Z FAIL EOF at the menu: overwrite
+linux	UNKNOWN STEP	2026-10-22T03:53:56.0033510Z ##[error]Process completed with exit code 1.
+=== run 27527054612
+branch=main sha=7cc8cb5 title=Fix bootstrap flow: pull dotprofile before building configs
+  job=linux step=Check deploy drift
+  job=macos step=Check deploy drift
+=== run 27526218071
+branch=main sha=fa07e52 title=Add remote bootstrap one-liner + harden fresh-machine install
+  job=macos step=Check deploy drift
+  job=linux step=Check deploy drift
+=== run 27523210139
+branch=main sha=99a9aef title=fix(check): RCA + fix 3 pre-existing post-push failures; v0.68.0 rele…
+  job=macos step=Check deploy drift
+  job=linux step=Check deploy drift
+=== run 27522676750
+branch=main sha=44e1daf title=fix(check): step 32 hook-parity audit was false-failing on Windows
+  job=linux step=Check deploy drift
+  job=macos step=Check deploy drift
+=== run 27522251437
+branch=main sha=bda38a2 title=feat(harvest): resilient session/scratch harvesting + Windows harvest…
+  job=linux step=Check deploy drift
+  job=macos step=Check deploy drift
+=== run 27508321406
+branch=main sha=c2f9705 title=chore(hh,deploy): empty-PWD guard in hh + regenerate deploy
+  job=linux step=Check deploy drift
+  job=macos step=Check deploy drift

@@ -1,0 +1,13 @@
+SOURCE-TRUTH: preserve drafted blocks after the mission hit a usage limit
+
+The S3-SourceTruth commander stopped mid-mission (API usage limit) with its
+work only in the untracked mission folder. Committed by the session
+commander so it survives: 3,249 lines under S3-SourceTruth-blocks/ --
+bash and PS1 replacement blocks for the managed-file library (helpers,
+review menu, deploy_managed_file / Deploy-ManagedFile, tracker, JSON field
+prompt, merge, backup), review-json.js (node per-field JSON review),
+caller edit blocks (setup-user-claude/-skills/-hooks, setup-cursor-ide-mcp,
+build-deploy) as .old/.new pairs, and the apply scripts. No library or
+caller file is changed yet; the mission resumes from here.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

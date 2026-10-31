@@ -1,0 +1,605 @@
+diff --git a/.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Fix6/S3-MF-Fix6-Review-pr108.md b/.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Fix6/S3-MF-Fix6-Review-pr108.md
+new file mode 100644
+index 00000000..43d4e70f
+--- /dev/null
++++ b/.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Fix6/S3-MF-Fix6-Review-pr108.md
+@@ -0,0 +1,72 @@
++# S3-MF-Fix6-Review: independent review of PR #108
++
++**Intent**: **Purpose**: An independent verdict on whether PR #108 fixes S3-MF-Audit findings A-6 (code part), A-7, A-8 and A-9 and changes nothing else, in particular not the resolver's output contract. **Scope**: The PR diff (fix/mf-audit-profile-json at b42f9e1, base origin/main), the four findings, the tests. NOT other audit findings. NOT fixing code. NOT approving or merging. **Audience**: S3-MF-Fix6 (author), Jose.
++
++Reviewer: S3-MF-Fix6-Review (wrote none of this code). Checklist: `S3-MF-Audit-findings.md` (origin/docs/mf-audit) section 2 and section 8 I-3. Reviewed 2026-10-22 on macOS.
++
++## Verdict
++
++**Approve-worthy. 0 blocking findings, 4 non-blocking.** All four findings are fixed in both languages where they apply. The tag protocol and exit codes are unchanged. The only behaviour change beyond the findings is the A-9 case-twin refusal. I think it is justified: it is the smallest rule both engines can follow, and it stops bash from writing a profile.json that PowerShell cannot read.
++
++## Per-finding table
++
++| id | status | evidence (PR head) |
++|---|---|---|
++| A-6 (code) | **fixed** | `die_internal` at aitools-profile.sh:156-162 runs `log_detail "internal error: ..."`, then prints the same stderr text as before and exits 2. The old `'internal error reading %s (engine exit %s)'` and `'internal error %s'` + `"reading $1 (engine exit $__rc)"` are byte-identical. Called from jread :175, jlist :189, jtype :202, jsub :215. Snapshot missing/invalid/engine-failure exits now also log at detail: sh:1205-1215, ps1:1065-1072. PS already had the `trap` LogDetail (ps1:85-89). The PR also checked the other early exits (engine missing sh:144, perl missing sh:149, machine-id sh:799 / ps1:631, hostname sh:811 / ps1:644, usage ps1:208); all of them already log at detail. |
++| A-7 | **fixed** | ps1:972-976: the WriteAllText catch now calls `Remove-TempFile $tmp` before `Complete-Command 2`, as bash does (sh:1116 `remove_tmp`). The new edit catch also removes it (ps1:965-967). Remove-TempFile does nothing when the file is absent (ps1:858), so this adds no spurious warn. |
++| A-8 | **fixed** | `Get-WriteErrorText` (ps1:867-873) unwraps MethodInvocationException and maps UnauthorizedAccess to "Permission denied" and DirectoryNotFound/FileNotFound to "No such file or directory". It is used in exception-set (ps1:973), register (:1257) and migrate (:1357). Other cases fall back to the inner .NET message (a possible parity gap, n-3). Tests a78-exc-ro, a8-mig-ro, a8-reg-ro and a8-reg-nodir check byte parity. |
++| A-9 | **fixed** (with a justified behaviour change) | aitools-json.ps1:105-108 `Find-JProperty` (`-ceq`) and :116-136 `Set-JValue` match exactly, as `Get-JNode` (:50) and perl `setp` do. Both engines refuse a new segment that matches an existing key ignoring case, with the same message: ps1:139-143 `Assert-JNoCaseTwin` and pl:178 `kfold` + :189-202 `$nocase`. `renp` now uses the shared `kfold` (pl:213+); the logic is unchanged and the existing jr-* rename tests still pass. |
++
++## Contract check (nothing else changed)
++
++- **Tag protocol / exit codes**: no `put`/`Put`, `finish`/`Complete-Command` code or exit number changes in the diff, apart from the new PS edit catch (ps1:948-968). That catch turns what used to be a `trap` exit (stderr only, exit 2, no protocol lines) into `result failed` + `error exception-set failed: <msg>` + exit 2. This is the bash shape (sh:1114-1116) and still exit 2, so it brings PS into line with the contract.
++- **Existing messages**: the stderr text of every touched bash exit is unchanged (A-6 row). The PS write-failure text changes on purpose (A-8). No consumer parses any of these texts. `grep -rln -e "cannot write" -e "Exception calling" -e "differs only in case" -e "internal error"` over scripts/ and tests/ finds them only in the resolver, the engines, the tests and unrelated perl in build-deploy.sh, plus one unrelated LogError in aitools.ps1:1706.
++- **A-9 effect on consumers**:
++  - *Resolver register*: an upper-case, hand-written id key is renamed first, so it is not refused. Probe (`probe-register-case.sh`, PR vs origin/main, both impls): all four runs give `result updated`, key `3d4df2a5-...` (lower case), exit 0. Unchanged.
++  - *Resolver exception-set*: a hand-written `ToolExceptions` is refused by both with the same lines and profile.json untouched (test a9-exc-case). Before, perl added a sibling `toolExceptions`, which made the synced profile.json unreadable by `ConvertFrom-Json` on Windows (PR body; I did not re-run that PS 7 error), and PS overwrote the other key.
++  - *setup-user-config*: a config.json with e.g. `MachineId` now gets `ERROR|aitools config|merge failed` in both languages (sh:291-295 / ps1:264-298, both inside the failure branch). The PR body says so. See n-2 for the UX gap.
++  - *user init (scripts/aitools, aitools.ps1)*: it only reads with the engines (aitools:367-374, 536, 739, 780 are get/keys/type/check); writes go through the resolver. No effect.
++  - *setup-user-config.ps1:255* (recovery from an invalid config) calls Set-JValue on a fresh object with six distinct names, so no case twin is possible.
++- **Unicode fold parity** (`probe-fold.sh`): perl `lc` after `utf8::decode` and PS `-ieq` agree on KELVIN SIGN vs `k` (both refuse), `SS` vs `ß` (both accept) and `İ` vs `i` (both accept).
++- **Judgement on A-9**: justified, not overreach. Exact match alone would still diverge: PS `Add-Member` throws on a case twin where perl appends a sibling (PR body). The only rule both engines can apply the same way is to refuse, and it matches the case rule `rename` already had (`jr-exists-case`). It is a new failure mode for hand-edited files, though, and no spec records it (I-5 below).
++
++## Blocking findings
++
++None.
++
++## Non-blocking findings
++
++- **n-1 (test gap, A-6)**: no test reaches `die_internal`, the four internal-error exits that A-6 is about. The new a6-* tests cover only the snapshot paths. These exits are hard to trigger, since they need the engine to fail on an already validated file. The engine path is fixed to `$SCRIPT_DIR` (sh:142), so a test would need a copy of the resolver dir with a stub `aitools-json.pl` that passes `check` and fails `get`. Optional. The code change is small and I read it at each call site.
++- **n-2 (consumer UX, A-9 behaviour change)**: when setup-user-config refuses a case twin, the reason is logged only at detail (sh:293 `log_detail "merge: $MERGE_MSG"`, ps1:293). The console shows only "config merge failed -- existing file left untouched", with no ACTION, so a user with a hand-written `MachineId` does not learn which key to fix unless they read deploy.log. Test-config has no case for it either. Suggest a follow-up in S3-MF-NoMachine's file (not this PR): put the engine message in the log_error, or add `ACTION "Fix <key> in config.json (details in deploy.log)"`.
++- **n-3 (parity residue, A-8)**: `Get-WriteErrorText` maps two exception classes. Any other write failure (disk full, `IOException` "file in use", path too long) still prints the .NET message where bash prints perl's `$!` text. That is acceptable as a documented fallback (ps1:863-866), but A-8 is fully closed only for the two common cases.
++- **n-4 (I-3 draft, for the commander)**: the draft (S3-MF-Fix6-drafts/reference/script-standards-detail.md.edit.txt) is consistent with the code as far as I checked. `set -euo pipefail` is at sh:66, the lib + `logging_init` at sh:69-79, and every early exit listed in the draft logs at detail (A-6 row). The one stderr-only exit is the PS 7 guard (ps1:68-71), and the draft names it as the exception. I did not audit the draft's other block-order items against the PS file: unknown. It is a protected-file draft and does not block this PR.
++
++## Spec deficiency
++
++- `INCIDENT:` (I-5, new) No spec covers how the JSON engines treat key case. Exact segment match, the refusal of a new key that differs only in case, and the reason (PowerShell `ConvertFrom-Json` rejects such files) are written only in the aitools-json.pl header (pl:27-30) and the aitools-json.ps1 comments (ps1:110-115). reference/user-repo.md and reference/cross-platform-detail.md say nothing about it (`grep -i "ignoring case|case-insensitive|differs only in case"`: no hits). A hand-edited profile.json or config.json can now fail a run, and nothing documents that for the user. Suggested: one paragraph in reference/cross-platform-detail.md (PowerShell JSON) or reference/user-repo.md "profile.json"; protected, so draft first.
++
++## Tests run (macOS, isolated HOME and AITOOLS_LOG_DIR under `.scratch/session-mfrev/`, cwd `.scratch/session-mfrev/cwd`)
++
++Script: `.scratch/session-mfrev/run-tests.sh` (logs `<suite>-bash5.log` / `<suite>-bash32.log` beside it).
++
++- `bash -n` (GNU bash 5.3.15) and `/bin/bash -n` (3.2.57) on scripts/aitools-profile.sh and tests/profile/test-profile.sh: clean.
++- `perl -c scripts/aitools-json.pl`: syntax OK.
++- pwsh `Parser::ParseFile` on scripts/aitools-profile.ps1 and scripts/aitools-json.ps1: clean.
++
++| suite | GNU bash 5.3.15 | /bin/bash 3.2.57 (`AITOOLS_TEST_BASH=/bin/bash`) | baseline before PR |
++|---|---|---|---|
++| test-profile | 744 passed, 0 failed (exit 0) | 744 passed, 0 failed (exit 0) | 689/0 (+55 new assertions, as the PR body says) |
++| test-lib | 209 passed, 0 failed (exit 0) | 209 passed, 0 failed (exit 0) | 209/0 |
++| test-config | 190 passed, 0 failed (exit 0) | 190 passed, 0 failed (exit 0) | 190/0 |
++| test-user-init | 200 passed, 0 failed (exit 0) | 200 passed, 0 failed (exit 0) | 200/0 |
++
++The pwsh parity halves ran in every suite (pwsh 7 on macOS).
++
++Probes: `probe-register-case.sh` (register with an upper-case id key, PR head vs origin/main, bash and pwsh), `probe-fold.sh` (Unicode case-fold parity of the two engines).
++
++## Not run
++
++- Windows / Git Bash: the PS side ran under pwsh 7 on macOS through `AITOOLS_PROFILE_TEST_ANY_OS=1` only.
++- check-pre-commit / check-pre-push (the author reports them; known pre-existing failures are step 6 and step 7).
++- `build-deploy.sh` and anything against the real HOME.
++- The PS 7 "keys with different casing" ConvertFrom-Json error on a sibling-key file: I took it from the PR body and did not reproduce it.
+diff --git a/.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Fix6/S3-MF-Fix6-drafts/reference/script-standards-detail.md.edit.txt b/.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Fix6/S3-MF-Fix6-drafts/reference/script-standards-detail.md.edit.txt
+new file mode 100644
+index 00000000..babfabc9
+--- /dev/null
++++ b/.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Fix6/S3-MF-Fix6-drafts/reference/script-standards-detail.md.edit.txt
+@@ -0,0 +1,51 @@
++DRAFT (S3-MF-Fix6, 2026-10-22) -- awaiting commander approval. Protected file:
++reference/script-standards-detail.md. Resolves spec ambiguity I-3 of the
++S3-MF-Audit findings (A-6 spec part). Not applied in PR fix/mf-audit-profile-json.
++
++Open question for the commander (suggested answer first):
++  Should script-standards recognise a "library-style tool" category at all?
++  Suggested: yes, for aitools-profile.sh/.ps1 only (named, not open-ended), so a
++  future script cannot claim the category without a table row. The resolver's
++  stdout protocol is consumed by aitools-lib and user init and cannot carry
++  log lines or summary rows.
++
++=== Edit 1: section "Logging overrides", table -- add one row after build-deploy.sh ===
++
++| `scripts/aitools-profile` | `log` (console line to stderr; file line unchanged) | `Log` (same) | Library-style tool: stdout carries data only (see "Library-style tools") |
++
++=== Edit 2: new section, inserted after "Logging overrides" (before "## End-of-run summary") ===
++
++### Library-style tools
++
++A library-style tool is a script whose stdout is a data protocol read by other
++scripts, not output for a person. Only the scripts in this table qualify;
++adding one requires commander approval.
++
++| Script | Protocol | Consumers |
++|--------|----------|-----------|
++| `scripts/aitools-profile.sh` / `.ps1` | `key<TAB>value` lines, then `warn<TAB>...` / `error<TAB>...` lines (or one JSON object with `--json`); exit 0 ok, 1 not found, 2 error, 3 refused, 4 refused (alias in use) | `aitools-lib` wrappers, `setup-user-config`, `aitools user init`, `build-deploy.sh`, generated `setup-user-claude` |
++
++A library-style tool:
++
++- MUST follow the block order (header, `set -euo pipefail`, source the lib +
++  `logging_init`, OS guard) and the error-handling requirements like any
++  reusable script.
++- MUST NOT write log lines, summary rows or ACTION items to stdout. Its `log` /
++  `Log` override sends console lines to stderr (row in "Logging overrides").
++- MUST NOT call `write_summary` / `Write-Summary` and has no exit footer: it
++  returns every warning and error to its caller as a `warn` / `error` protocol
++  line, and the caller logs each at its level and owns the summary rows and the
++  ERRORS / WARNINGS counters.
++- MUST log every warning, error and exit code to deploy.log at `detail` level
++  (`log_detail` / `LogDetail`), including paths that exit before the protocol
++  is written (usage errors, internal engine errors, `snapshot`, `machine-id`,
++  `hostname`): deploy.log keeps the reason even when a caller discards stderr.
++- MAY print a short `aitools-profile: <reason>` line to stderr on those early
++  exits (no protocol to carry it); it is in addition to the detail line, never
++  instead of it.
++- Exception: a guard that runs before the lib is loaded (the PowerShell 7
++  version check) writes stderr only; nothing else can log there.
++
++Its contract (commands, fields, exit codes) lives in the script header and in
++`reference/user-repo.md` "Resolution"; changing it requires updating every
++consumer in the table in the same change.
+diff --git a/.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Fix6/S3-MF-Fix6-report.md b/.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Fix6/S3-MF-Fix6-report.md
+new file mode 100644
+index 00000000..75d77019
+--- /dev/null
++++ b/.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Fix6/S3-MF-Fix6-report.md
+@@ -0,0 +1,51 @@
++# S3-MF-Fix6 report
++
++PR: https://github.com/nobul-tech/aitools/pull/108. Branch: fix/mf-audit-profile-json, commit b42f9e1 on base origin/main 8a9dcb5.
++
++## Findings
++
++All four were confirmed in the code before fixing; none were rejected.
++
++| id | status | evidence |
++|---|---|---|
++| A-6 (code part) | fixed | Bash: new `die_internal` logs at detail and then prints the unchanged stderr line, used in jread, jlist, jtype and jsub. The bash snapshot exits and the PS snapshot missing/invalid exits now log at detail. The spec part (I-3) is a draft only. |
++| A-7 | fixed | PS exception-set calls `Remove-TempFile $tmp` when the temp write fails. |
++| A-8 | fixed | PS `Get-WriteErrorText` unwraps MethodInvocationException and maps "Permission denied" / "No such file or directory". Used in exception-set, register and migrate. Other OS errors still use the .NET text (reviewer n-3). |
++| A-9 | fixed | `Set-JValue` now matches keys exactly. A key that differs only in case is refused by both engines with the same message. PS exception-set reports an edit failure the way bash does. |
++
++The A-9 change goes beyond the audit's own suggestion. An exact-match loop alone would still leave PS and perl behaving differently. In addition, the perl sibling key makes profile.json unreadable by `ConvertFrom-Json` (I reproduced this with pwsh 7).
++
++## Verification (macOS, isolated HOME)
++
++- `bash -n` (bash 5 and 3.2), `perl -c` and the pwsh parser are clean.
++- test-profile passed 744/0 on bash 5 and on 3.2 (689 before). Against origin/main's scripts, 29 of the new assertions fail.
++- test-lib 209/0, test-config 190/0, test-user-init 200/0 on both bash versions.
++- pre-commit has 1 FAIL, step 6, which was already failing before this change. It also WARNs on step 3 (build), step 5 (ran before the commit), step 9 (release notes) and step 11 (live dotprofile).
++- pre-push has 1 FAIL, step 7: the dotprofile `deploy/` is stale, which was also already failing.
++- CI: windows, CodeQL and Analyze passed. linux and macos were still pending when I handed back.
++
++## Not run
++
++- Windows / Git Bash.
++- build-deploy.sh: the live dotprofile is read-only for this mission.
++- A test for the partial-temp-file case of A-7 (it cannot be reproduced).
++- No test reaches `die_internal` (reviewer n-1).
++
++## Drafts awaiting approval
++
++- S3-MF-Fix6-drafts/reference/script-standards-detail.md.edit.txt (I-3).
++
++## Scope addition: PR #98 review m1
++
++Not done. Splitting the message changes what a consumer does. setup-user-config.sh:204 and setup-user-config.ps1:208 detect a bad profile by matching the substring "is not v2". That file is S3-MF-NoMachine's. I listed it as a follow-up in the PR body and sent the evidence to S3-M3Finish.
++
++## Reviewer (S3-MF-Fix6-Review)
++
++- Its draft file says: approve-worthy, 0 blocking, 4 non-blocking (n-1..n-4).
++- Its test-results table was still the placeholder "TESTS_TABLE", because its own background test run had not finished when I handed back.
++- It had not yet posted its verdict on the PR.
++- I did not commit its file. Commit it once it is complete.
++
++## INCIDENT markers
++
++- `INCIDENT:` (reviewer I-5) No spec documents how the JSON engines treat key case. The exact-match rule and the new refusal exist only in the aitools-json headers.
+diff --git a/scripts/aitools-json.pl b/scripts/aitools-json.pl
+index 4299f419..dc97dc5d 100755
+--- a/scripts/aitools-json.pl
++++ b/scripts/aitools-json.pl
+@@ -24,6 +24,10 @@
+ #   edit IN OUT             apply stdin ops to IN ("-" = {}), write OUT pretty,
+ #                           re-read OUT to validate. Ops (tab-separated):
+ #                           set<TAB>string|number|bool|null|json<TAB>VALUE<TAB>SEG...
++#                             (segments match exactly; a new segment that equals
++#                             an existing key ignoring case is an error, exit 2:
++#                             "set: '<seg>' differs only in case from existing
++#                             key '<key>'", as aitools-json.ps1 Set-JValue)
+ #                           del<TAB>SEG...
+ #                           rename<TAB>NEW<TAB>SEG...  (last SEG = the key to
+ #                             rename; it keeps its position and value). Errors
+@@ -169,19 +173,33 @@ sub nav {
+     }
+     return $v;
+ }
++# kfold KEY -- a key folded for the case-insensitive comparison PowerShell property
++# names use (keys are UTF-8 bytes; Unicode lower case)
++sub kfold { my $s = $_[0]; utf8::decode($s); return lc $s }
++# setp ROOT VALUE SEG... -- segments match exactly; a missing segment is created,
++# unless another key equals it ignoring case: then "set: '<seg>' differs only in
++# case from existing key '<key>'" and nothing is written (a sibling key would make
++# the file unreadable by PowerShell's ConvertFrom-Json; aitools-json.ps1 Set-JValue
++# refuses with the same message)
+ sub setp {
+     my ($root, $val, @segs) = @_;
+     die "set: no key given\n" unless @segs;
+     my $last = pop @segs;
+     my $v = $root;
++    my $nocase = sub {
++        my ($o, $s) = @_;
++        my $f = kfold($s);
++        for my $p (@{$o->[1]}) { die "set: '$s' differs only in case from existing key '$p->[0]'\n" if kfold($p->[0]) eq $f }
++    };
+     for my $s (@segs) {
+         my $n;
+         for my $p (@{$v->[1]}) { if ($p->[0] eq $s) { $n = $p; last } }
+-        if (!$n) { $n = [$s, ['O', []]]; push @{$v->[1]}, $n }
++        if (!$n) { $nocase->($v, $s); $n = [$s, ['O', []]]; push @{$v->[1]}, $n }
+         die "set: '$s' is not an object\n" unless $n->[1][0] eq 'O';
+         $v = $n->[1];
+     }
+     for my $p (@{$v->[1]}) { if ($p->[0] eq $last) { $p->[1] = $val; return } }
++    $nocase->($v, $last);
+     push @{$v->[1]}, [$last, $val];
+ }
+ sub delp {
+@@ -209,11 +227,10 @@ sub renp {
+     for my $p (@{$v->[1]}) { if ($p->[0] eq $old) { $hit = $p; last } }
+     die "rename: '$old' not found\n" unless $hit;
+     return if $new eq $old;
+-    my $fold = sub { my $s = $_[0]; utf8::decode($s); return lc $s };  # keys are UTF-8 bytes
+-    my $want = $fold->($new);
++    my $want = kfold($new);
+     for my $p (@{$v->[1]}) {
+         next if $p == $hit;
+-        die "rename: '$new' already exists\n" if $fold->($p->[0]) eq $want;
++        die "rename: '$new' already exists\n" if kfold($p->[0]) eq $want;
+     }
+     $hit->[0] = $new;
+ }
+diff --git a/scripts/aitools-json.ps1 b/scripts/aitools-json.ps1
+index a3fb873f..afab0e27 100644
+--- a/scripts/aitools-json.ps1
++++ b/scripts/aitools-json.ps1
+@@ -101,22 +101,45 @@ function Get-JItems($Root, [string[]]$Segs) {
+     return @($n.Value | Where-Object { $null -ne $_ -and (Test-JScalar $_) } | ForEach-Object { ConvertTo-JText $_ })
+ }
+ 
+-# Set-JValue ROOT VALUE SEG... -- creates missing objects; new keys are appended
++# Find-JProperty OBJ NAME -- the property named exactly NAME (case-sensitive), or $null
++function Find-JProperty($Obj, [string]$Name) {
++    foreach ($q in $Obj.PSObject.Properties) { if ($q.Name -ceq $Name) { return $q } }
++    return $null
++}
++
++# Set-JValue ROOT VALUE SEG... -- creates missing objects; new keys are appended.
++# Segments match exactly (case-sensitive), as in the perl engine (setp). A new
++# segment that equals an existing key ignoring case is refused with the perl
++# engine's message, "set: '<seg>' differs only in case from existing key '<key>'"
++# (PowerShell property names ignore case: it would otherwise overwrite that key,
++# where perl would add a sibling that ConvertFrom-Json cannot read back).
+ function Set-JValue($Root, $Value, [string[]]$Segs) {
+     $o = $Root
+     for ($i = 0; $i -lt $Segs.Count - 1; $i++) {
+         $s = $Segs[$i]
+-        $p = $o.PSObject.Properties[$s]
++        $p = Find-JProperty $o $s
+         if (-not $p) {
++            Assert-JNoCaseTwin $o $s
+             $o | Add-Member -NotePropertyName $s -NotePropertyValue ([PSCustomObject]@{})
+-            $p = $o.PSObject.Properties[$s]
++            $p = Find-JProperty $o $s
+         }
+         if ($p.Value -isnot [System.Management.Automation.PSCustomObject]) { throw "set: '$s' is not an object" }
+         $o = $p.Value
+     }
+     $last = $Segs[$Segs.Count - 1]
+-    $p = $o.PSObject.Properties[$last]
+-    if ($p) { $p.Value = $Value } else { $o | Add-Member -NotePropertyName $last -NotePropertyValue $Value }
++    $p = Find-JProperty $o $last
++    if ($p) { $p.Value = $Value }
++    else {
++        Assert-JNoCaseTwin $o $last
++        $o | Add-Member -NotePropertyName $last -NotePropertyValue $Value
++    }
++}
++
++# Assert-JNoCaseTwin OBJ NAME -- throw when another key of OBJ equals NAME ignoring case
++function Assert-JNoCaseTwin($Obj, [string]$Name) {
++    foreach ($q in $Obj.PSObject.Properties) {
++        if ($q.Name -ieq $Name) { throw "set: '$Name' differs only in case from existing key '$($q.Name)'" }
++    }
+ }
+ 
+ # Rename-JKey ROOT NEWNAME SEG... -- rename the key named by the last SEG to
+diff --git a/scripts/aitools-profile.ps1 b/scripts/aitools-profile.ps1
+index f6e62033..5b5cf8b2 100644
+--- a/scripts/aitools-profile.ps1
++++ b/scripts/aitools-profile.ps1
+@@ -860,6 +860,18 @@ function Remove-TempFile([string]$Path) {
+     catch { LogDetail "remove ${Path}: $($_.Exception.Message)"; Add-Warn "could not remove $Path" }
+ }
+ 
++# Get-WriteErrorText ERRORRECORD -- why a file write failed, worded as the bash
++# resolver's perl engine words it ($!) for the common cases ("Permission denied",
++# "No such file or directory"); otherwise the .NET reason. A .NET method call wraps
++# the real exception in a MethodInvocationException ("Exception calling ...").
++function Get-WriteErrorText($Err) {
++    $ex = $Err.Exception
++    if ($ex -is [System.Management.Automation.MethodInvocationException] -and $ex.InnerException) { $ex = $ex.InnerException }
++    if ($ex -is [System.UnauthorizedAccessException]) { return "Permission denied" }
++    if ($ex -is [System.IO.DirectoryNotFoundException] -or $ex -is [System.IO.FileNotFoundException]) { return "No such file or directory" }
++    return $ex.Message
++}
++
+ function Invoke-ExceptionSet {
+     Test-Slug
+     if (@("macos", "linux", "windows") -cnotcontains $opt["platform"]) { Stop-Usage "--platform must be macos, linux or windows" }
+@@ -931,27 +943,36 @@ function Invoke-ExceptionSet {
+     # returns the compact JSON of the written entry
+     $writeEntry = {
+         param([string]$When)
+-        if ((Get-JType $p @("profiles", $k, "toolExceptions")) -ne "object") {
+-            Set-JValue $p ([PSCustomObject]@{}) @("profiles", $k, "toolExceptions")
++        # A failed edit (e.g. a key that differs only in case, aitools-json.ps1
++        # Set-JValue) is reported like the bash engine's edit failure
++        try {
++            if ((Get-JType $p @("profiles", $k, "toolExceptions")) -ne "object") {
++                Set-JValue $p ([PSCustomObject]@{}) @("profiles", $k, "toolExceptions")
++            }
++            $detected = [PSCustomObject]@{}
++            $detected | Add-Member -NotePropertyName platform -NotePropertyValue $opt["platform"]
++            $detected | Add-Member -NotePropertyName method -NotePropertyValue $opt["method"]
++            $detected | Add-Member -NotePropertyName path -NotePropertyValue $opt["path"]
++            $detected | Add-Member -NotePropertyName version -NotePropertyValue $opt["version"]
++            $entry = [PSCustomObject]@{}
++            $entry | Add-Member -NotePropertyName decision -NotePropertyValue "keep"
++            $entry | Add-Member -NotePropertyName detected -NotePropertyValue $detected
++            $entry | Add-Member -NotePropertyName decidedAt -NotePropertyValue $When
++            $entry | Add-Member -NotePropertyName decidedBy -NotePropertyValue $opt["by"]
++            $reason = if ($opt["reason"]) { $opt["reason"] } else { $null }
++            $entry | Add-Member -NotePropertyName reason -NotePropertyValue $reason
++            Set-JValue $p $entry @("profiles", $k, "toolExceptions", $slug)
++        } catch {
++            Remove-TempFile $tmp
++            $s.state = "failed"; Add-Err "exception-set failed: $($_.Exception.Message)"; & $putSet; Complete-Command 2
+         }
+-        $detected = [PSCustomObject]@{}
+-        $detected | Add-Member -NotePropertyName platform -NotePropertyValue $opt["platform"]
+-        $detected | Add-Member -NotePropertyName method -NotePropertyValue $opt["method"]
+-        $detected | Add-Member -NotePropertyName path -NotePropertyValue $opt["path"]
+-        $detected | Add-Member -NotePropertyName version -NotePropertyValue $opt["version"]
+-        $entry = [PSCustomObject]@{}
+-        $entry | Add-Member -NotePropertyName decision -NotePropertyValue "keep"
+-        $entry | Add-Member -NotePropertyName detected -NotePropertyValue $detected
+-        $entry | Add-Member -NotePropertyName decidedAt -NotePropertyValue $When
+-        $entry | Add-Member -NotePropertyName decidedBy -NotePropertyValue $opt["by"]
+-        $reason = if ($opt["reason"]) { $opt["reason"] } else { $null }
+-        $entry | Add-Member -NotePropertyName reason -NotePropertyValue $reason
+-        Set-JValue $p $entry @("profiles", $k, "toolExceptions", $slug)
+         # Write path: temp -> validate -> backup -> move (config-file-safety.md)
+         try {
+             [IO.File]::WriteAllText($tmp, (ConvertTo-NodeJson $p) + "`n", $script:Utf8NoBom)
+         } catch {
+-            $s.state = "failed"; Add-Err "exception-set failed: cannot write ${tmp}: $($_.Exception.Message)"; & $putSet; Complete-Command 2
++            $why = Get-WriteErrorText $_
++            Remove-TempFile $tmp
++            $s.state = "failed"; Add-Err "exception-set failed: cannot write ${tmp}: $why"; & $putSet; Complete-Command 2
+         }
+         $v = Read-ResolverJson $tmp
+         if ($v.State -ne "valid" -or (Get-JType $v.Value @("profiles", $k, "toolExceptions", $slug)) -ne "object") {
+@@ -1041,8 +1062,14 @@ function Invoke-DeriveConfig {
+ function Invoke-Snapshot {
+     if (-not $opt["profile"]) { Stop-Usage "snapshot needs --profile" }
+     $r = Read-ResolverJson $opt["profile"]
+-    if ($r.State -eq "missing") { [Console]::Error.WriteLine("aitools-profile: profile.json not found: $($opt['profile'])"); exit 1 }
+-    if ($r.State -eq "invalid") { [Console]::Error.WriteLine("aitools-profile: $($r.Message)"); exit 2 }
++    if ($r.State -eq "missing") {
++        LogDetail "snapshot: profile.json not found: $($opt['profile'])"
++        [Console]::Error.WriteLine("aitools-profile: profile.json not found: $($opt['profile'])"); exit 1
++    }
++    if ($r.State -eq "invalid") {
++        LogDetail "snapshot: $($r.Message)"
++        [Console]::Error.WriteLine("aitools-profile: $($r.Message)"); exit 2
++    }
+     $snap = [ordered]@{}
+     foreach ($k in @("version", "identity", "cursor", "profiles")) {
+         $n = Get-JNode $r.Value @($k)
+@@ -1227,7 +1254,7 @@ function Invoke-Register {
+     try {
+         [IO.File]::WriteAllText($opt["out"], (ConvertTo-NodeJson $p) + "`n", $script:Utf8NoBom)
+     } catch {
+-        $g.state = "failed"; Add-Err "register failed: cannot write $($opt['out']): $($_.Exception.Message)"; & $putReg; Complete-Command 2
++        $g.state = "failed"; Add-Err "register failed: cannot write $($opt['out']): $(Get-WriteErrorText $_)"; & $putReg; Complete-Command 2
+     }
+     $v = Read-ResolverJson $opt["out"]
+     if ($v.State -ne "valid" -or (Get-JType $v.Value @("profiles", $key)) -ne "object") {
+@@ -1327,8 +1354,9 @@ function Invoke-Migrate {
+     try {
+         [IO.File]::WriteAllText($tmp, (ConvertTo-NodeJson $p) + "`n", $script:Utf8NoBom)
+     } catch {
++        $why = Get-WriteErrorText $_
+         Remove-TempFile $tmp
+-        $g.state = "failed"; Add-Err "migrate failed: cannot write ${tmp}: $($_.Exception.Message)"; & $putMig; Complete-Command 2
++        $g.state = "failed"; Add-Err "migrate failed: cannot write ${tmp}: $why"; & $putMig; Complete-Command 2
+     }
+     $v = Read-ResolverJson $tmp
+     if ($v.State -ne "valid") {
+diff --git a/scripts/aitools-profile.sh b/scripts/aitools-profile.sh
+index 079eaf7f..793b3f4d 100755
+--- a/scripts/aitools-profile.sh
++++ b/scripts/aitools-profile.sh
+@@ -153,6 +153,14 @@ fi
+ 
+ pj() { perl "$AITOOLS_JSON_PL" "$@"; }
+ 
++# die_internal MSG -- an engine failure on an already-validated file: logged at
++# detail (deploy.log keeps it even when the caller drops stderr), then stderr, exit 2
++die_internal() {
++    log_detail "internal error: $1"
++    printf 'aitools-profile: internal error %s\n' "$1" >&2
++    exit 2
++}
++
+ # jread VAR FILE SEG... -- VAR = the scalar at the path ("" when absent, null or
+ # not a scalar); JREAD_FOUND=true|false. FILE must already be validated (jcheck);
+ # any other engine failure is an internal error and exits 2 with a message.
+@@ -164,7 +172,7 @@ jread() {
+     case "$__rc" in
+         0) JREAD_FOUND=true ;;
+         1|3) JREAD_FOUND=false; __v="" ;;
+-        *) printf 'aitools-profile: internal error reading %s (engine exit %s)\n' "$1" "$__rc" >&2; exit 2 ;;
++        *) die_internal "reading $1 (engine exit $__rc)" ;;
+     esac
+     printf -v "$__var" '%s' "$__v"
+ }
+@@ -178,7 +186,7 @@ jlist() {
+     case "$__rc" in
+         0) : ;;
+         1|3) __v="" ;;
+-        *) printf 'aitools-profile: internal error listing %s (engine exit %s)\n' "$1" "$__rc" >&2; exit 2 ;;
++        *) die_internal "listing $1 (engine exit $__rc)" ;;
+     esac
+     printf -v "$__var" '%s' "$__v"
+ }
+@@ -191,7 +199,7 @@ jtype() {
+     case "$__rc" in
+         0) : ;;
+         1) __v="" ;;
+-        *) printf 'aitools-profile: internal error typing %s (engine exit %s)\n' "$1" "$__rc" >&2; exit 2 ;;
++        *) die_internal "typing $1 (engine exit $__rc)" ;;
+     esac
+     printf -v "$__var" '%s' "$__v"
+ }
+@@ -204,7 +212,7 @@ jsub() {
+     case "$__rc" in
+         0) : ;;
+         1) __v="" ;;
+-        *) printf 'aitools-profile: internal error reading %s (engine exit %s)\n' "$1" "$__rc" >&2; exit 2 ;;
++        *) die_internal "reading $1 (engine exit $__rc)" ;;
+     esac
+     printf -v "$__var" '%s' "$__v"
+ }
+@@ -1194,12 +1202,15 @@ cmd_snapshot() {
+     if [ -z "$OPT_PROFILE" ]; then usage_error "snapshot needs --profile"; fi
+     jcheck "$OPT_PROFILE"
+     case "$JCHECK_STATE" in
+-        missing) printf 'aitools-profile: profile.json not found: %s\n' "$OPT_PROFILE" >&2; exit 1 ;;
+-        invalid) printf 'aitools-profile: %s\n' "$JCHECK_MSG" >&2; exit 2 ;;
++        missing) log_detail "snapshot: profile.json not found: $OPT_PROFILE"
++                 printf 'aitools-profile: profile.json not found: %s\n' "$OPT_PROFILE" >&2; exit 1 ;;
++        invalid) log_detail "snapshot: $JCHECK_MSG"
++                 printf 'aitools-profile: %s\n' "$JCHECK_MSG" >&2; exit 2 ;;
+     esac
+     local out rc=0
+     out=$(pj snapshot "$OPT_PROFILE") || rc=$?
+     if [ "$rc" -ne 0 ] || [ -z "$out" ]; then
++        log_detail "snapshot failed (engine exit $rc)"
+         printf 'aitools-profile: snapshot failed (engine exit %s)\n' "$rc" >&2; exit 2
+     fi
+     log_detail "snapshot of $OPT_PROFILE"
+diff --git a/tests/profile/test-profile.sh b/tests/profile/test-profile.sh
+index d6530a1b..4c1252d7 100755
+--- a/tests/profile/test-profile.sh
++++ b/tests/profile/test-profile.sh
+@@ -550,6 +550,8 @@ case_fresh() {
+     "$setup"
+     run_impl bash "$OUT" "$@"
+     local brc=$RC
++    # temp file names carry each run's PID (normalised with or without pwsh)
++    if [ "${NORM_TMP:-}" = "1" ]; then perl -pi -e 's/\.tmp\.[0-9]+/.tmp.<pid>/g' "$OUT"; fi
+     cp "$EXC_PF" "$WORK/$name.bash.profile.json" 2>/dev/null || : > "$WORK/$name.bash.profile.json"  # absent profile = empty copy
+     if [ "$brc" -eq "$want" ]; then ok "$name: bash exit $brc"
+     else bad "$name: bash exit $brc, want $want"; sed 's/^/       /' "$OUT" "$OUT.err"; fi
+@@ -559,6 +561,7 @@ case_fresh() {
+         run_impl ps "$pout" "$@"
+         cp "$EXC_PF" "$WORK/$name.ps.profile.json" 2>/dev/null || : > "$WORK/$name.ps.profile.json"  # absent profile = empty copy
+         if [ "$RC" -ne "$brc" ]; then bad "$name: pwsh exit $RC, bash $brc"; sed 's/^/       /' "$pout" "$pout.err"; fi
++        if [ "${NORM_TMP:-}" = "1" ]; then perl -pi -e 's/\.tmp\.[0-9]+/.tmp.<pid>/g' "$pout"; fi
+         if diff "$OUT" "$pout" > "$WORK/$name.diff"; then ok "$name: bash and pwsh output identical"
+         else bad "$name: bash and pwsh output differ"; sed 's/^/       /' "$WORK/$name.diff"; fi
+         if [ "${NORM_AT:-}" = "1" ]; then  # a real clock: the two runs are seconds apart
+@@ -1185,6 +1188,86 @@ printf 'rename\tx\tprofiles\tnope\n' | perl "$JPL" edit "$JW/in.json" "$JW/keep.
+ if [ "$RC" -eq 2 ] && [ "$(cat "$JW/keep.json")" = "sentinel" ]; then ok "jr-keep-out: existing OUT untouched on failure"
+ else bad "jr-keep-out: rc $RC, OUT '$(cat "$JW/keep.json")'"; fi
+ 
++# --- S3-MF-Audit A-6..A-9: write failures, key case, detail logging ------------------
++# JSON engines: a set whose new segment equals an existing key ignoring case is
++# refused by both, with one message (A-9; perl used to add a sibling key that
++# ConvertFrom-Json cannot read, PowerShell overwrote the other key)
++jr_case jr-set-case-last 2 "set\tstring\tv\tprofiles\tNOBUL-MAC\n" "set|v|profiles|NOBUL-MAC"
++jr_msg "set: 'NOBUL-MAC' differs only in case from existing key 'nobul-mac'"
++jr_case jr-set-case-mid 2 "set\tstring\tv\tprofiles\tNOBUL-MAC\talias\n" "set|v|profiles|NOBUL-MAC|alias"
++jr_msg "set: 'NOBUL-MAC' differs only in case from existing key 'nobul-mac'"
++jr_case jr-set-case-top 2 "set\tstring\tv\tProfiles\n" "set|v|Profiles"
++jr_msg "set: 'Profiles' differs only in case from existing key 'profiles'"
++jr_case jr-set-exact 0 "set\tstring\tv\tprofiles\tnobul-mac\tbrand-new\n" "set|v|profiles|nobul-mac|brand-new"
++if [ "$(perl "$JPL" get "$JOUT" profiles nobul-mac brand-new)" = "v" ]; then ok "jr-set-exact: new key written"
++else bad "jr-set-exact: new key missing"; fi
++JR_IN="$JW/uni.json"
++jr_case jr-set-case-unicode 2 "set\tstring\tv\ta\tb\tété\n" "set|v|a|b|été"
++jr_msg "set: 'été' differs only in case from existing key 'Été'"
++JR_IN=""
++
++fresh_home a69
++EXC_DIR="$H/repos/aitools-nobul-jose"
++EXC_PF="$EXC_DIR/profile.json"
++# writable DIR -- undo a read-only fixture so the next setup (rm -rf) can run
++writable() { if [ -d "$1" ]; then chmod u+w "$1"; fi; }
++exc_case_profile() { exc_profile | perl -0pe 's/("hostname": "nobul-mac.local",\n        "os": "darwin"\n      \})/$1,\n      "ToolExceptions": {}/'; }
++setup_a69_case() {
++    writable "$EXC_DIR"; rm -rf "$EXC_DIR"
++    exc_case_profile | write_profile "$EXC_DIR"
++    printf '{ "githubUser": "nobul-jose" }\n' > "$H/.aitools/config.json"
++}
++# exception-set on a profile with a hand-written "ToolExceptions": refused by both,
++# same lines, profile.json untouched
++case_fresh a9-exc-case 2 setup_a69_case "${SET_ARGS[@]}" "${M[@]}"
++expect result failed
++expect_line "^error\\texception-set failed: set: 'toolExceptions' differs only in case from existing key 'ToolExceptions'$"
++if cmp -s "$WORK/a9-exc-case.bash.profile.json" <(exc_case_profile); then ok "a9-exc-case: profile.json untouched"
++else bad "a9-exc-case: profile.json changed"; fi
++
++# A temp file that cannot be written: same message in both (A-8), no temp file left (A-7)
++setup_a69_ro() { writable "$EXC_DIR"; setup_exc_plain; chmod 555 "$EXC_DIR"; }
++NORM_TMP=1 case_fresh a78-exc-ro 2 setup_a69_ro "${SET_ARGS[@]}" "${M[@]}"
++writable "$EXC_DIR"
++expect result failed
++expect_line "^error\\texception-set failed: cannot write $EXC_PF\\.tmp\\.<pid>: Permission denied$"
++if [ -z "$(find "$EXC_DIR" -name 'profile.json.tmp.*')" ]; then ok "a78-exc-ro: no temp file left"
++else bad "a78-exc-ro: temp file left"; fi
++if cmp -s "$WORK/a78-exc-ro.bash.profile.json" <(exc_profile); then ok "a78-exc-ro: profile.json untouched"
++else bad "a78-exc-ro: profile.json changed"; fi
++setup_a69_mig_ro() { writable "$EXC_DIR"; setup_mig_plain; chmod 555 "$EXC_DIR"; }
++NORM_TMP=1 case_fresh a8-mig-ro 2 setup_a69_mig_ro migrate
++writable "$EXC_DIR"
++expect result failed
++expect_line "^error\\tmigrate failed: cannot write $EXC_PF\\.tmp\\.<pid>: Permission denied$"
++# register --out that cannot be written (read-only directory, missing directory)
++exc_profile | write_profile "$H/a8reg"
++mkdir -p "$H/a8ro"
++chmod 555 "$H/a8ro"
++case_run a8-reg-ro 2 register --profile "$H/a8reg/profile.json" --alias nobul-mac --out "$H/a8ro/out.json" "${M[@]}"
++chmod u+w "$H/a8ro"
++expect result failed
++expect_line "^error\\tregister failed: cannot write $H/a8ro/out.json: Permission denied$"
++case_run a8-reg-nodir 2 register --profile "$H/a8reg/profile.json" --alias nobul-mac --out "$H/a8none/sub/out.json" "${M[@]}"
++expect_line "^error\\tregister failed: cannot write $H/a8none/sub/out.json: No such file or directory$"
++
++# snapshot failures reach deploy.log at detail, not only stderr (A-6): one line per
++# implementation run
++A6_RUNS=1
++if $USE_PS; then A6_RUNS=2; fi
++# a6_logged NAME TEXT -- deploy.log has TEXT on A6_RUNS detail lines
++a6_logged() {
++    local n
++    n=$(grep -cF "[detail] $2" "$H/.aitools/logs/deploy.log" || true)  # grep -c exits 1 on 0 matches; count checked below
++    if [ "$n" = "$A6_RUNS" ]; then ok "$1: logged at detail ($n)"
++    else bad "$1: $n detail lines in deploy.log, want $A6_RUNS"; fi
++}
++case_run a6-snap-missing 1 snapshot --profile "$H/a6none/profile.json"
++a6_logged a6-snap-missing "snapshot: profile.json not found: $H/a6none/profile.json"
++printf '{ "version": \n' > "$H/a6bad.json"
++case_run a6-snap-invalid 2 snapshot --profile "$H/a6bad.json"
++a6_logged a6-snap-invalid "snapshot: $H/a6bad.json is invalid JSON"
++
+ # --- usage ------------------------------------------------------------------------
+ case_run usage-unknown 2 resolve --bogus
+ NO_PARITY=1 case_run usage-nocmd 2   # help text names each platform's sources

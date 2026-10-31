@@ -1,0 +1,90 @@
+#112 [OPEN] Fix setup-user-claude hostname/dry-run rows and build-deploy embed cleanup, plain build output (A-19, A-20, A-25, A-26 claude)
+FILES: .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Adopt/S3-MF-Adopt-Review-pr103.md, .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Adopt/S3-MF-Adopt-drafts/reference/managed-file-deployment.md.edit.txt, .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Adopt/S3-MF-Adopt-report.md, .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Fix5/S3-MF-Fix5-Review-pr112.md, .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Fix5/S3-MF-Fix5-report.md, .github/workflows/check.yml, scripts/aitools-lib.ps1, scripts/aitools-lib.sh, scripts/build-deploy.sh, scripts/setup-user-claude.ps1, scripts/setup-user-claude.sh, tests/claude-mdm/test-claude-mdm.sh, tests/managed-files/test-adopt-push.ps1, tests/managed-files/test-adopt-push.sh
+
+## Summary
+
+Fixes S3-MF-Audit findings A-19, A-20, A-25 and the claude part of A-26 in `scripts/setup-user-claude.sh/.ps1` and `scripts/build-deploy.sh`. Adds a new test suite, `tests/claude-mdm/test-claude-mdm.sh`, and runs it in CI.
+
+## Why
+
+These come from S3-MF-Audit (PR #104), M3-FINISH item 7. I checked each finding in the code before fixing it. All four were confirmed and none was rejected:
+
+- **A-25**: setup-user-claude.sh ran `scutil`/`uname` itself (old lines 93-109), and the .ps1 read `COMPUTERNAME` (old lines 171-175). The lib already exposes `AITLIB_MACHINE_HOSTNAME` / `$script:AitLibMachineHostname`. The resolver puts `hostname` in every resolve result, including rc 1.
+- **A-26**: the dry-run branch (sh 216-238, ps1 230-254) wrote no summary row.
+- **A-19**: `Remove-AitoolsEmbed` only ran before the exit footer. On macOS, the generated .ps1 OS-guard exit left `aitools-embed-*` in TMPDIR, and run in-process (`& script`) it left `AITOOLS_PROFILE_PS1` set. The new test reproduces both on the unfixed code. A probe showed pwsh 7 runs `finally` on `exit N` and keeps the exit code.
+- **A-20**: blog_warn/blog_error always printed ANSI codes. The child resolver's console went to build-deploy's stderr, and the entry points append that stderr to deploy.log (`aitools:2055`, `aitools.ps1:2004-2009`). The child's own `logging_init` had already written those lines to deploy.log, so they appeared twice. The new test reproduces both.
+
+## Changes
+
+- **A-25** (`setup-user-claude.sh/.ps1`): the footer hostname is now `AITLIB_MACHINE_HOSTNAME` / `$script:AitLibMachineHostname`, or "unknown" when it is empty. The scripts' own hostname detection is removed, so there is one P-Q5 source.
+- **A-26, claude part** (`setup-user-claude.sh/.ps1`): a dry run now writes one row: `OK|claude.md|dry-run: would create`, `OK|claude.md|verified` or `OK|claude.md|dry-run: would update`. This is the config writer's wording.
+  - The comparison now works the way `deploy_managed_file` / `Deploy-ManagedFile` compares: trailing newlines removed, case-sensitive.
+  - Before, the .ps1 compared `Get-Content -Raw` output, which keeps its trailing newline, using `-eq`. So an up-to-date CLAUDE.md read as "differs", and the new row would have been wrong.
+  - An unreadable CLAUDE.md is now a log_warn / LogWarn in both languages.
+- **A-19** (`build-deploy.sh`): the PowerShell embed block now ends with `try {`.
+  - The three generated .ps1 files that embed the resolver (setup-user-claude, -cursor, -settings) end with `} finally { Remove-AitoolsEmbed }` after their exit footer.
+  - `Remove-AitoolsEmbed` now runs only once (a flag). The call before the footer still counts a failed removal as a warning, and the call in `finally` does nothing after it.
+  - A post-build check fails the build if a resolver-embedding .ps1 does not end with the finally line, or if another .ps1 has that line.
+- **A-20** (`build-deploy.sh`):
+  - blog_warn/blog_error use colour only when stderr is a terminal.
+  - The standalone child resolver's console copy goes only to a terminal, otherwise to /dev/null. Its lines are already in deploy.log, and its stderr is kept.
+  - The entry points are unchanged: they belong to S3-MF-Runner.
+- **Port (deploy-paths.md)**: setup-user-claude is a pure extract in build-deploy, so the A-25/A-26 code reaches deploy/ through the build. I checked the generated output.
+- **Tests**: new `tests/claude-mdm/test-claude-mdm.sh` with 32 checks:
+  - A-25 and A-26 on the dev path, .sh and .ps1, with dry-run row parity between them.
+  - The build-deploy port, A-19 static checks and the A-19 runtime on pwsh (OS-guard exit, in-process run, full run).
+  - Smoke runs of the generated MDM .sh.
+  - A-20 with stderr not a terminal, and on a pty.
+  - The resolver hostname is stubbed through the lib's `AITOOLS_PROFILE_SH` / `AITOOLS_PROFILE_PS1` override.
+  - CI (`.github/workflows/check.yml`) runs it on macOS (bash 5 and /bin/bash 3.2) and Linux.
+
+## Merge order
+
+Merge **after #103** (fix/mf-dotprofile-adopt-push). This branch stacks on it: it merges #103's head, which edited setup-user-claude.sh/.ps1.
+
+## Verification (macOS)
+
+- `bash -n` passes under bash 5 and /bin/bash 3.2 on setup-user-claude.sh, build-deploy.sh, the new test and every generated .sh. The pwsh parser passes on setup-user-claude.ps1, and build-deploy's own pwsh validation passes on every generated .ps1.
+- `tests/claude-mdm/test-claude-mdm.sh`: 32 passed, 0 failed under bash 5 and under `AITOOLS_TEST_BASH=/bin/bash /bin/bash`.
+- **Negative control:** the same test run against the base (547079c, before these commits) fails 23 checks, covering every finding.
+- **build-deploy against a git-archive copy of the live dotprofile:** run under an isolated HOME with `AITOOLS_USER_REPO_PATH`. The live dotprofile was only read.
+  - Exit 0, with no colour codes in the output.
+  - The three .ps1 files end with the finally line.
+  - Generated setup-user-claude has the A-25/A-26 code.
+- **Generated `deploy/setup-user-claude.sh` smoke run** under an isolated HOME with no config.json, three runs:
+  - dry run: `OK|claude.md|dry-run: would create`
+  - run: `OK|claude.md|created` and `OK|claude rules|2 added`, footer `(nobul-mac; profile nobul-mac)`
+  - dry run again: `OK|claude.md|verified`
+- **Existing suites**, run under an isolated HOME and AITOOLS_LOG_DIR:
+
+  | suite | bash 5 (+pwsh) | /bin/bash 3.2 (--bash-only) |
+  |---|---|---|
+  | tests/managed-files/test-managed-files (.sh / .ps1) | 57/0, ps1 39/0 | -- |
+  | tests/managed-files/test-adopt-push (.sh / .ps1) | 28/0, ps1 23/0 | -- |
+  | tests/profile/test-profile.sh | 689/0 | 498/0 |
+  | tests/profile/test-config.sh | 190/0 | 121/0 |
+  | tests/profile/test-lib.sh | 209/0 | 92/0 |
+  | tests/profile/test-user-init.sh | 200/0 | 107/0 |
+  | tests/deploy-harness-mdm | 30/0 | -- |
+  | tests/logging/test-logging.sh | 24/0 | -- |
+
+- `check-pre-commit.sh` (isolated HOME): only the known step 6 FAIL, which is the harvesting file mode; the staged files are 100755. WARNs: step 3, step 5 (the messages do carry `(tested: macOS)`), step 9 and step 11. Step 11 is the live dotprofile's own uncommitted changes, not from this PR.
+- `check-pre-push.sh` (isolated HOME): only the known step 7 FAIL, the stale dotprofile deploy/. WARNs: steps 1, 5 and 6.
+
+## Not run
+
+- Windows / Git Bash. The .ps1 files ran only under pwsh 7 on macOS: the dev script as a copy with its OS guard disabled, and the generated ones as built (their OS guard is the early-exit case).
+- Regenerating the live dotprofile `deploy/`: it stays stale until the next `aitools` run (pre-push step 7).
+
+## Protected-file drafts awaiting approval
+
+None. No protected doc describes the changed behaviour.
+
+## Follow-ups
+
+- **claude rules dry run**: setup-user-claude's rules dry run writes no `claude rules` row either. That is the same summary-coverage rule, but the audit did not list it, so I left it out of scope.
+- **S3-MF-Fix4 (PR #109)**: no build-deploy port is needed. The cursor body is extracted whole, so the cursor dry-run rows reach deploy/ on the next build.
+- **CRLF in the generated claude .ps1**: the generated setup-user-claude.ps1 mixes LF lines (the build-deploy heredoc blocks) with CRLF lines (the extracts). The final `perl` CRLF pass normalizes them. This is pre-existing and harmless.
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+

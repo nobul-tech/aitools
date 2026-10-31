@@ -1,0 +1,132 @@
+########## #129 (open-array)
+  title: A merge the user accepts without adopting (Merge-Conflict [m]erge, or Auto-Merge [a]ccept with no adopt label) is silently reverted to the unchanged source by the next run's auto-deploy
+  status: open
+  severity: high
+  affected: ['scripts/aitools-lib.sh', 'scripts/aitools-lib.ps1', 'reference/managed-file-deployment.md']
+  linked: None
+  observation: deploy_managed_file (scripts/aitools-lib.sh:1080-1189 on origin/main db4b3c5): the `merge` outcome writes the merged content to dest and records it with update_deploy_state (:1173-1179); the source is not changed. On the next run the source still differs from dest, dest's hash equals the recorded state hash, so the 'user didn't edit' branch backs up dest, writes the unchanged source and logs 'Auto-deployed: <item> (no local edits detected)' (:1132-1141). Deploy-ManagedFile in scripts/aitools-lib.ps1 has the same flow (merge :1178-1185, auto-deploy :1139-1150). Reproduced by the Session Commander on 2026-10-21 with .scratch/session-10cf255a-c/merge-revert-test.sh under an isolated HOME: after a simulated merge (source v2 + 'my local note') the next non-interactive run logged 'Auto-deployed: sample.md (no local edits detected)' and the file went back to source v2 (29 bytes); the merged copy survives only as sample.md.bak.2026-10-22T000525Z (43 bytes).
+  expected: reference/managed-file-deployment.md 'State Machine' and 'Menus': [m]erge is an 'AI-assisted merge of source + local' that is deployed ('updated'); nothing in the spec says the merged content is discarded on the next run. Commander-approved managed-file model (2026-10-21, mission packet section 6; text on branch docs/managed-file-choices, not yet merged): SOURCE is the source of truth, no ancestor and no deploy state, and adopt and merge are copied to the repo immediately by the library.
+  suggestedResolution: Mission SOURCE-TRUTH implements the approved managed-file model: merge and merge-and-adopt write the merged content back to the source in the library, so SOURCE and dest agree and no later run can revert it; the deploy state and its auto-deploy branch go away. Until then, either drop the merge-without-adopt option or record it as a skip-like state that the auto-deploy branch respects. Bash and PS1 together; amend reference/managed-file-deployment.md (protected) in the same change.
+  correctiveAction: None
+  updated: 2026-10-21
+########## #130 (open-array)
+  title: Bash deploy state needs node: with node missing, initialize_deploy_state reads node's failure as 'manifest unreadable' and moves a valid manifest.json aside as .corrupt (PS1 uses ConvertFrom-Json, no node)
+  status: open
+  severity: medium
+  affected: ['scripts/aitools-lib.sh', 'scripts/aitools-lib.ps1']
+  linked: nobul-tech/aitools#30
+  observation: scripts/aitools-lib.sh initialize_deploy_state (:443-456 on origin/main db4b3c5) validates the manifest with `if node -e "JSON.parse(...)" "$manifest_path"; then ... else log_warn 'Deploy-state manifest unreadable -- starting fresh (old copy kept as .corrupt)'; mv "$manifest_path" "${manifest_path}.corrupt"`. There is no `command -v node` check, so a missing node (exit 127) takes the 'unreadable' branch and moves a valid manifest aside. get_deploy_state_hash (:458-473) and update_deploy_state (:475-504) also need node. PS1 Initialize-DeployState (scripts/aitools-lib.ps1:404-422) parses with ConvertFrom-Json and has no node dependency. Issue #30 covers the related node handling in get_deploy_state_hash / update_deploy_state (its table row for aitools-lib.sh:379-384, 399-404) but not this branch.
+  expected: .claude/rules/script-standards.md 'Error handling requirements' (a failure must be distinguished and reported, not folded into another case); .claude/rules/cross-platform.md 'Platform targeting principle' (paired scripts behave the same).
+  suggestedResolution: Short term: check `command -v node` first and, when node is missing, log_error + keep the manifest untouched (never rename a file that was not proven corrupt). Fix together with issue #30. Longer term the approved managed-file model removes deploy state entirely (mission SOURCE-TRUTH), which retires these helpers.
+  correctiveAction: None
+  updated: 2026-10-21
+########## #84 (open-array)
+  title: /incident skill points to reference/incidents.json, which moved to registries/incidents.json in v0.69.0
+  status: open
+  severity: medium
+  affected: ['.claude/skills/incident/SKILL.md']
+  linked: None
+  observation: .claude/skills/incident/SKILL.md intent, Step 1 ('Read reference/incidents.json'), Step 5 and Cross-References name reference/incidents.json; the registry is registries/incidents.json (RELEASE_NOTES v0.69.0 'Registries consolidated under registries/'). The skill also self-reports 'outdated and ineffective' in Known Limitations.
+  expected: RELEASE_NOTES v0.69.0: skills repointed to registries/; .claude/rules/governed-data-access.md: the governing skill holds the registry path.
+  suggestedResolution: Repoint every path in the skill to registries/incidents.json; add a check-pre-commit step that greps skills and hooks for reference/*.json registry paths.
+  correctiveAction: None
+  updated: 2026-10-21
+########## #93 (open-array)
+  title: Framework registry 'Tool operations' entry lists reference/tool-ops.json as an artifact, a file removed in v0.69.0
+  status: open
+  severity: low
+  affected: ['registries/framework-registry.json']
+  linked: None
+  observation: registries/framework-registry.json:183 lists reference/tool-ops.json under 'Tool operations'; the file was removed from reference/ in v0.69.0 (RELEASE_NOTES.md:285) and lives at registries/tool-ops.json. Supplementary: the 'Tool lifecycle' entry (:52-67) was last updated 2026-03-15. The S4 draft's second half ('does not list the decision-tree artifacts') is dropped: those artifacts exist only as drafts.
+  expected: .claude/rules/frameworks.md (the framework registry is the source of truth for implementing artifacts); RELEASE_NOTES.md:261 (v0.69.0 consolidation under registries/).
+  suggestedResolution: Via /frameworks: repoint :183 to the registry (S2-Layout PR-a fixes it with the other stale paths, handoff C.1); refresh 'Tool lifecycle' when the M2 artifacts exist. Same class as #59 and #115.
+  correctiveAction: None
+  updated: 2026-10-21
+########## #102 (open-array)
+  title: sources-of-truth.md omits the project skills (.claude/skills/*) and reference/tool-registry.md, while check-post-push step 10 treats reference/tool-registry.md as protected
+  status: open
+  severity: low
+  affected: ['.claude/rules/sources-of-truth.md', 'scripts/check-post-push.sh', 'scripts/check-post-push.ps1']
+  linked: None
+  observation: sources-of-truth.md 'Protected files' table has no .claude/skills row and no reference/tool-registry.md row (it lists registries/tool-registry.json); skill intents are protected only through the 'Intent statements in any file' row. check-post-push.sh:224-238 step 10 'Protected files inventory' lists reference/tool-registry.md among 'key protected files' (check-post-push.ps1:264-274 the same).
+  expected: .claude/rules/sources-of-truth.md purpose (every authoritative file gated).
+  suggestedResolution: Q8: add a .claude/skills/*/SKILL.md row (path subject to S2-Split); decide tool-registry.md per Q7. (Draft plan reference at filing, not an approved tracker: M2 open question Q8.)
+  correctiveAction: None
+  updated: 2026-10-21
+########## #114 (open-array)
+  title: check-post-push.ps1 still reads reference/tool-versions.json, removed in v0.69.0, so on Windows step 10 always fails and step 21 always skips
+  status: open
+  severity: high
+  affected: ['scripts/check-post-push.ps1']
+  linked: None
+  observation: check-post-push.ps1:264-274 step 10 'Protected files inventory' requires reference/tool-versions.json (:268) and calls StepFail when any listed file is missing (:275-286); :520-522 step 21 'Tool version freshness' reads reference/tool-versions.json and calls StepSkip when it is absent. The file was removed from reference/ in v0.69.0 (RELEASE_NOTES.md:285) and lives at registries/tool-versions.json; check-post-push.sh uses the new path (:233, :448). RELEASE_NOTES.md:261 says check-post-push was repointed to registries/.
+  expected: .claude/rules/cross-platform.md 'Platform targeting principle' (paired .sh/.ps1 scripts behave the same; Windows is first-class per CLAUDE.md); RELEASE_NOTES.md:261 (v0.69.0) repoint claim.
+  suggestedResolution: S2-Layout PR-a batch 2: change check-post-push.ps1:268 and :520 to registries/tool-versions.json (to the resolver or shared/registries path once PR-b lands). The path-reference check (#115) keeps the next move from leaving a PS1-only stale path. (Draft plan reference at filing, not an approved tracker: S2-Layout PR-a batch 2.)
+  correctiveAction: None
+  updated: 2026-10-21
+########## #115 (open-array)
+  title: No check verifies that repo paths cited in skills, rules, references, hooks and Cursor rules exist, so the v0.69.0 registry move left dead references for months
+  status: open
+  severity: high
+  affected: ['scripts/check-pre-commit.sh', 'scripts/check-pre-commit.ps1']
+  linked: None
+  observation: On origin/main c8573ed, grep finds 34 references to reference/{incidents,glossary,framework-registry,tool-registry,tool-ops,tool-versions}.json in 17 files: .claude/skills/{audit,frameworks,glossary,incident,tool-ops}/SKILL.md, .claude/skills/tool-ops/tests/expected-behaviors.md, .cursor/rules/{documentation-standards,sources-of-truth,tool-lifecycle}.mdc, reference/path-targeted-hooks-analysis.md, reference/post-push-checklist.md, scripts/check-post-push.ps1, scripts/setup-bash.sh/.ps1, shared/hooks/tool-ops-session-audit.sh, shared/skills/{intent-audit,optimize-plan}/SKILL.md. All six files were removed from reference/ in v0.69.0 (RELEASE_NOTES.md:285). S2-Layout-B tables 1-2 list 52 stale paths of all kinds at 04cbdf0. Incidents #59, #70, #84, #93 and #114 are individual instances. No check-pre-commit or check-post-push step tests that a cited repo path exists; step 16 scans only .claude/rules and CLAUDE.md for governed JSON names (#116).
+  expected: .claude/rules/incident-governance.md 'Surfacing duty': 'Following a cross-reference? Does the target exist and match?'. RELEASE_NOTES.md:261 (v0.69.0): skills, framework docs and check-post-push 'repointed to registries/'.
+  suggestedResolution: S2-Layout PR-a batch 1: a check-pre-commit.sh/.ps1 step 'path references' that extracts backticked and @-prefixed repo paths from .claude/skills, .claude/rules, shared/skills, shared/hooks, reference/ and .cursor/rules and fails when one does not exist, with an allowlist for placeholders such as <userRepoPath> and deliberate examples. Verify that it fails on a seeded bad path on bash and PS1. Batch 2 then fixes the existing references. Alternative: run it in check-post-push only (later detection, less friction). (Draft plan reference at filing, not an approved tracker: S2-Layout PR-a batch 1 (fix/registry-paths).)
+  correctiveAction: None
+  updated: 2026-10-21
+########## #116 (open-array)
+  title: check-pre-commit step 16 (capability bypass audit) misses registries/ on PowerShell, ignores tool-ops.json and tool-versions.json on both platforms, and does not scan the '@-referenced files' its comment claims
+  status: open
+  severity: medium
+  affected: ['scripts/check-pre-commit.sh', 'scripts/check-pre-commit.ps1']
+  linked: None
+  observation: check-pre-commit.sh:339-341 matches '@?(reference|registries)/[a-z0-9-]*\.json' and keeps only lines naming glossary, framework-registry, incidents or tool-registry. check-pre-commit.ps1:336 matches '@?reference/.*\.json' only, so a registries/ path passes on Windows, and :339 keeps the same four names. Neither keeps tool-ops.json or tool-versions.json. Both comments (sh :337, ps1 :326) say 'Scope: .claude/rules/, CLAUDE.md, and any @-referenced files in CLAUDE.md', but both scan only .claude/rules and CLAUDE.md (sh :339, ps1 :328-333). RELEASE_NOTES.md:261 (v0.69.0): 'check-pre-commit step 16 audit extended to also guard registries/'.
+  expected: .claude/rules/governed-data-access.md 'Enforcement': 'Detection: pre-commit step 16 (capability bypass audit)', 'Scope: pre-commit checks .claude/rules/, CLAUDE.md, and any @ referenced files in CLAUDE.md'; paired scripts behave the same (.claude/rules/cross-platform.md).
+  suggestedResolution: S2-Layout PR-a batch 1: one pattern on both platforms ('(reference|registries|shared/registries)/' and all six registry names), implement or drop the '@-referenced files' scope (and update governed-data-access.md if dropped; protected), and add a seeded test case. Related #50 (rules that still cite JSON paths). (Draft plan reference at filing, not an approved tracker: S2-Layout PR-a batch 1.)
+  correctiveAction: None
+  updated: 2026-10-21
+########## #122 (open-array)
+  title: /incident assigns the next id from a read of incidents.json that Read truncates at 2,000 lines and that looks only at the incidents array, not closed
+  status: open
+  severity: medium
+  affected: ['.claude/skills/incident/SKILL.md', '.claude/rules/incident-governance.md']
+  linked: None
+  observation: registries/incidents.json has 2,027 lines on origin/main c8573ed; Read with its default limit stops at line 2,000, inside entry #86. .claude/skills/incident/SKILL.md:48-49: 'Note the highest ID in the incidents array. The new entry gets highest + 1.' Closed ids (13, 14, 52, 53) sit in the separate closed array, which step 1 does not mention. .claude/rules/incident-governance.md:177: '/incident ... determines next ID'. Handoff 2026-10-21_360aa8f3-8 F8 had to add a hard rule against choosing an id from a partial read.
+  expected: .claude/rules/incident-governance.md 'Concurrency': incident IDs are sequential integers and duplicates are a defect for /audit to flag.
+  suggestedResolution: Now: replace skill step 1 with a one-line python3 command that prints the maximum id and the count over both arrays. Later: the planned aitools-registry.py next-id (S2-Layout section 3). Fix in the same PR-a change as #84. (Draft plan reference at filing, not an approved tracker: S2-Layout PR-a (same file as #84); S2-Layout section 3 'next-id'.)
+  correctiveAction: None
+  updated: 2026-10-21
+########## #74 (open-array)
+  title: Machine identity is read from the kernel hostname (gethostname), which macOS derives from the network when HostName is unset, instead of the configured scutil names; PS1 uses COMPUTERNAME
+  status: open
+  severity: high
+  affected: ['scripts/aitools', 'scripts/aitools.ps1', 'scripts/build-deploy.sh', 'scripts/setup-user-claude.sh', 'scripts/setup-user-claude.ps1', 'scripts/profile-check.js', 'scripts/check-lib.sh', 'scripts/aitools-install.sh', 'scripts/check-lib.ps1', 'scripts/aitools-install.ps1']
+  linked: Mission M3 (S5-Profile) design: profile.json -> config.json single writer + machine resolver
+  observation: On nobul-mac (2026-10-21): `scutil --get ComputerName` = nobul-mac, `scutil --get LocalHostName` = nobul-mac, `scutil --get HostName` = not set, `sysctl -n kern.hostname` = Mac, node `os.hostname()` = Mac. Every matcher reads the kernel name: node os.hostname() in scripts/aitools (user init ~:990), aitools.ps1 (~:914), build-deploy.sh:218, setup-user-claude.sh:118, profile-check.js:116; `hostname -s` in check-lib.sh:48, aitools-install.sh:126; PS1 uses $env:COMPUTERNAME (setup-user-claude.ps1:132, check-lib.ps1:49, aitools-install.ps1:53). deploy.jsonl/checks.jsonl `host` shows the kernel name flipping Mac <-> nobul-mac (S2-Host RCA). No script calls scutil.
+  expected: reference/user-repo.md 'Machine matching': config.json machineAlias selects the profile, hostname match is the fallback. No spec defines which hostname source to use; the configured, stable name (macOS ComputerName/LocalHostName via scutil) is the commander-preferred source.
+  suggestedResolution: One machine resolver in aitools-lib (bash + PS1) used by every consumer. macOS: `scutil --get LocalHostName` (or ComputerName); Windows: COMPUTERNAME or registry ComputerName; Linux: /etc/hostname. Better: a stable machine ID (IOPlatformUUID / MachineGuid / /etc/machine-id) stored in profiles.<alias>.machine.id, with hostname as a hint only. Owned by mission M3.
+  correctiveAction: None
+  updated: 2026-10-21
+########## #75 (open-array)
+  title: `aitools user init` never prompts for or persists machineAlias when no profile hostname matches (Path 1: repo already cloned)
+  status: open
+  severity: high
+  affected: ['scripts/aitools', 'scripts/aitools.ps1']
+  linked: Mission M3 (S5-Profile)
+  observation: scripts/aitools user init Path 1 (~:983-999) and aitools.ps1 (~:906-925) set machine_alias only on a hostname match and never prompt; the config write adds machineAlias only when non-empty (scripts/aitools ~:1212). The installer only preserves an existing alias (aitools-install.sh Step 5). ~/.aitools/config.json on this Mac has userRepoPath but no machineAlias. Session archive 46ee1c2b (2026-06-17) shows install printing 'No profile matches this machine (hostname: Mac)' and user init printing no alias line.
+  expected: reference/user-repo.md: 'config.json stores machineAlias on each machine' and 'machineAlias -- selects the profile from profile.json. Set during user init or manually.'
+  suggestedResolution: When no profile matches, user init (and the M3 single config writer) prompts with the existing aliases or 'new', always persists the chosen alias, and logs it; non-interactive runs log_error + write_summary ERROR + ACTION. Bash/PS1 parity.
+  correctiveAction: None
+  updated: 2026-10-21
+########## #77 (open-array)
+  title: Profile-mismatch detection (check_profile / Invoke-ProfileCheck via profile-check.js) is console-only, runs after deploy, recommends a command that cannot fix it, and false-positives when a valid alias is set
+  status: open
+  severity: medium
+  affected: ['scripts/aitools', 'scripts/aitools.ps1', 'scripts/profile-check.js']
+  linked: Mission M3 (S5-Profile)
+  observation: scripts/aitools check_profile and aitools.ps1 Invoke-ProfileCheck print `profile: ...` warnings with printf/Write-Host (not logged, not counted) after deploy_configs has already run, and say 'Run aitools user init to fix' (which does not set the alias -- #75). profile-check.js:116 compares only os.hostname(), so it reports NO_MACHINE_MATCH even when config.json machineAlias is valid (S2-Host).
+  expected: .claude/rules/script-standards.md: logging framework required, no raw echo/Write-Host; warnings counted and in the summary panel.
+  suggestedResolution: Run the profile check before deploy through the M3 resolver; log via log_warn/LogWarn + write_summary; honor machineAlias in profile-check.js; point the ACTION at the command that actually sets the alias.
+  correctiveAction: None
+  updated: 2026-10-21

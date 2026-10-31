@@ -1,0 +1,19 @@
+Add D-DEL6: conflict priority for delegates
+
+Decision D-DEL6 (commander, 2026-10-26): a delegate resolves conflicting
+instructions in this order: 1) the commander's own words, newest first
+(recent session transcripts, and the rules, standing orders and decision
+records that record his words); 2) the delegation prompt; 3) skills. A
+prompt cannot loosen a rule unless it quotes the commander. A mandated
+skill or rule is never dropped silently.
+
+Inbound duty 7 (new): follow the non-conflicting parts of whatever lost and
+report each `CONFLICT: <A> vs <B> -- resolved by <tier>: <what was done>`;
+the delegating agent pre-resolves foreseeable skill conflicts in the
+prompt (aitools /delegate skill writing step 12).
+
+Why: in mission MDM-WINTOOL a delegate silently skipped the mandated
+deep-research skill because its file locations clashed with the prompt
+(aitools incident #171, main 6686c16).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

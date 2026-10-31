@@ -1,0 +1,12 @@
+Record the tool-support gate decisions (95 items) and a ROADMAP row
+
+plans/tool-support-and-machine-profile.md records every commander answer
+from the review page (artifact Mqm6D32Xt5gKGUxPZTMSDY, 95/95) plus the
+chat clarifications that override it: D-TS13 reversed (bare exit 2 = user
+abort, no marker), C.1 (M2 takes over Workstream A's resolver/verification),
+P-Q4 (writer silent), N-Q6 (one preferred method per platform in the
+schema), N-Q2 (dotprofile auto-commit and push). Registries stay in
+registries/ and are copied to ~/.aitools/registries by deploy-harness.
+ROADMAP gains the In Progress row. Commander-directed write, 2026-10-21.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

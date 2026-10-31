@@ -14,7 +14,7 @@ artifacts from ephemeral scratch to tracked harvesting, evaluating
 promotion candidates, running generalization analysis, and managing
 the harvest manifest. **Scope**: The harvesting process, manifest
 operations, promotion workflow, and generalization review. NOT the
-harvesting governance (`@.claude/rules/artifact-harvesting.md`). NOT
+harvesting governance (`@shared/rules/artifact-harvesting.md`). NOT
 the ephemeral scratch pattern (`/scratch` skill). NOT the source
 discipline (`reference/framework-artifact-harvesting.md`).
 **Audience**: Any agent harvesting session artifacts, evaluating
@@ -57,7 +57,7 @@ When a session produces reusable code, prompts, or patterns:
 {
   "meta": {
     "schemaVersion": "1.0",
-    "governance": ".claude/rules/artifact-harvesting.md",
+    "governance": "shared/rules/artifact-harvesting.md",
     "skill": "/harvest",
     "lastAudit": "YYYY-MM-DD"
   },
@@ -157,7 +157,7 @@ Planned, not implemented: no hook or script emits these KPIs today.
 
 ## Cross-References
 
-- Harvesting governance: `@.claude/rules/artifact-harvesting.md`
+- Harvesting governance: `@shared/rules/artifact-harvesting.md`
 - Ephemeral scratch: `/scratch` skill
 - Source discipline: `reference/framework-artifact-harvesting.md`
 - Governed data access: `@.claude/rules/governed-data-access.md`

@@ -1,0 +1,24 @@
+/delegate: generalized lessons from running parallel missions
+
+Adds what held across this session's missions, kept free of session
+specifics:
+- Shipping terms require detailed commit and PR bodies (fixed PR sections).
+- New step 10 "Approve text, not intent": approval covers text the commander
+  has seen; approval given before the text exists means draft + apply step;
+  an approval relayed in a message carries no commander authority.
+- New step 11: name the delegate's scratch directory (no session-start hook
+  for delegates) and keep hand-backs in tracked paths.
+- New section "Running several delegates at once": shared packet, file
+  ownership, shared interface contract, verify state before launching and
+  fix forward from the base branch, independent review means a separate
+  delegate, workflow keywords only help when the Workflow tool is present.
+- Environment limits: replaces "No follow-up messages" with the observed
+  SendMessage behaviour in Claude Code 2.1.307 (delivered to running
+  delegates, resumes finished ones); /aitool-ops item #25 predates it.
+- Verification lifecycle: removing a git worktree deletes its ignored files;
+  check before removing a delegate's worktree or scratch.
+- Recursion passes the shared packet path down.
+
+Intent unchanged. (tested: macOS -- docs only)
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

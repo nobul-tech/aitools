@@ -1,0 +1,8 @@
+Verified fixed on origin/main 51d895b (S3-MA-Cleanup, mission MERGE-ALL, 2026-10-27). Fix option 2 (order-independent) is implemented.
+
+- `scripts/aitools-lib.sh:2840-2852` (`sync_managed_json`): when the live file did not exist, it logs "No ... yet -- creating from profile (N setting(s))" and takes `overwrite` for every leaf without prompting ("(#31)").
+- `scripts/aitools-lib.ps1:2798-2812` (`Sync-ManagedJson`): same.
+- `scripts/setup-user-settings.sh:83-84` / `.ps1:69`: a missing settings.json is not skipped; the `created` outcome reports OK "created" (`.sh:141`, `.ps1:129`).
+- PR #35 (075c3da).
+
+Not found: a unit test that drives the fresh-HOME case; the deploy order still runs setup-user-settings before setup-user-hooks (`scripts/aitools:1120,1173`, `scripts/aitools-install.sh:879`), which no longer matters with option 2.

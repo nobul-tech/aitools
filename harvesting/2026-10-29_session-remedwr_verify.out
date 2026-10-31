@@ -1,0 +1,644 @@
+
+=== BD trap leak 320/1706
+186:# can repair config.json (review H3). The bootstrap flow runs build-deploy only after
+320:trap _cleanup_build_tmp EXIT
+496:# (log_error + ERROR row). The EXIT trap removes the temp dir.
+500:trap _aitools_embed_cleanup EXIT
+1706:trap 'rm -rf "$MDM_TMP"' EXIT
+1916:# config.json, as on the dev path, needs the installer's bootstrap keys
+2066:# config.json, as on the dev path, needs the installer's bootstrap keys
+
+=== BD AITOOLS_USER_REPO_PATH 188-218
+179:# export AITOOLS_USER_REPO_PATH, and check-pre-push step 7 passes its temp copy that
+188:_urp="${AITOOLS_USER_REPO_PATH:-}"
+189:_urp_via="AITOOLS_USER_REPO_PATH"
+616:DEPLOY_DIR_FINAL="$DEPLOY_DIR"
+
+=== BD node skip exit 0 86-89
+# step that installs node. The silent-failure case this preflight closes is node
+# PRESENT but the manifest unparseable -- that is handled (exit 1) just below.
+if ! command -v node >/dev/null 2>&1; then
+    blog_warn "node not found -- skipping deploy build (node is installed by 'aitools install')"
+    exit 0
+fi
+_manifest_files=$(node -e 'const fs=require("fs");const m=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));console.log([...m.hooks.map(h=>h.file),...(m.deploy||[])].join("\n"))' "$HOOKS_MANIFEST") || {
+    blog_error "Failed to parse $HOOKS_MANIFEST"
+    exit 1
+
+=== BD pwsh optional 2279
+614:# a build that fails anywhere (inputs, extraction, PS1 validation) leaves the
+2279:            blog_warn "pwsh not found -- PS1 validation skipped (install: brew install powershell/tap/powershell)"
+
+=== BD chmod 2288
+709:chmod +x "$DEPLOY_DIR/setup-user-claude.sh"
+868:chmod +x "$DEPLOY_DIR/setup-user-cursor.sh"
+921:chmod +x "$DEPLOY_DIR/setup-cursor-ide-mcp.sh"
+940:chmod +x "$DEPLOY_DIR/setup-vercelcli.sh"
+959:chmod +x "$DEPLOY_DIR/setup-pandoc.sh"
+978:chmod +x "$DEPLOY_DIR/setup-rust.sh"
+997:chmod +x "$DEPLOY_DIR/setup-typst.sh"
+1016:chmod +x "$DEPLOY_DIR/setup-gh-cli.sh"
+1035:chmod +x "$DEPLOY_DIR/setup-python.sh"
+1054:chmod +x "$DEPLOY_DIR/setup-uv.sh"
+1073:chmod +x "$DEPLOY_DIR/setup-modal.sh"
+1092:chmod +x "$DEPLOY_DIR/setup-go.sh"
+
+=== BD rm -rf swap 2298
+2298:if ! rm -rf "$DEPLOY_DIR_FINAL"; then
+2302:if ! mv "$DEPLOY_DIR" "$DEPLOY_DIR_FINAL"; then
+
+=== BD resolver lib twice 436-437
+436:RESOLVER_SH_FILES="aitools-profile.sh aitools-lib.sh aitools-json.pl"
+437:RESOLVER_PS1_FILES="aitools-profile.ps1 aitools-lib.ps1 aitools-json.ps1"
+
+=== BD uncommitted warn 1771
+1772:            blog_warn "Harness snapshot: git status failed in $dir ($st) -- cannot tell whether uncommitted changes are embedded"
+1774:            blog_warn "Harness snapshot: $dir has uncommitted changes -- the working tree is what gets embedded"
+
+=== BD version stamp
+0
+
+=== BD size gate
+
+=== BD win pwsh parse 2>/dev/null 2232-2239
+            [ -f "$ps1_file" ] || continue
+            ps1_name=$(basename "$ps1_file")
+            if ! pwsh -NoProfile -Command "
+                \$e = \$null
+                \$null = [System.Management.Automation.Language.Parser]::ParseFile('$(cygpath -w "$ps1_file")', [ref]\$null, [ref]\$e)
+                if (\$e.Count -gt 0) {
+                    foreach (\$err in \$e) { Write-Host \"  line \$(\$err.Extent.StartLineNumber): \$(\$err.Message)\" }
+                    exit 1
+                }
+            " 2>/dev/null; then
+                blog_error "$ps1_name has parse errors on this PowerShell version"
+                PS1_ERRORS=$((PS1_ERRORS + 1))
+
+=== DH add_source git 181-192
+        log "Source $label not found ($(display_path "$src_dir")) -- skipped"
+        return 0
+    fi
+    # 2>/dev/null: rev-parse fails outside a git work tree; that failure is the answer.
+    if ! git -C "$src_dir" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        log_error "Source $label ($(display_path "$src_dir")) is not in a git work tree -- skipped (only git-tracked files are deployed)"
+        write_summary ERROR "$TOOL" "$(short "$label: not a git checkout")"
+        return 0
+    fi
+    local ls="$WORK/ls.z"
+    if ! git -C "$src_dir" ls-files -z > "$ls" 2> "$WORK/ls.err"; then
+        log_error "Source $label: git ls-files failed in $(display_path "$src_dir"): $(cat "$WORK/ls.err")"
+
+=== DH HARNESS_DIR 79
+79:HARNESS_DIR="$HOME/.aitools"
+
+=== DH ps1 HARNESS 78
+1:# deploy-harness.ps1 -- populate %USERPROFILE%\.aitools, the deployed harness, from the repos (Windows)
+3:# Creates %USERPROFILE%\.aitools\{reference,registries,hooks,rules,skills,bin},
+6:# %USERPROFILE%\.aitools\config.json from profile.json by calling the only
+78:$harnessDir = Join-Path $env:USERPROFILE ".aitools"
+
+=== DH ps1 rev-parse LASTEXITCODE 160-176
+        Log "Source $Label not found ($SrcDir) -- skipped"
+        return
+    }
+    # 2>$null: rev-parse fails outside a git work tree; that failure is the answer
+    # ($LASTEXITCODE checked on the next line).
+    $null = & git -C $SrcDir rev-parse --is-inside-work-tree 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        LogError "Source $Label ($SrcDir) is not in a git work tree -- skipped (only git-tracked files are deployed)"
+        Write-Summary "ERROR" $tool (Get-ShortDetail "${Label}: not a git checkout")
+        return
+    }
+    # UTF-8 for git's output (non-ASCII names; cross-platform-detail.md "PowerShell pipeline encoding")
+
+=== DH config.json not generated 104-114
+if [ ! -f "$CONFIG_WRITER" ]; then
+    log_error "config.json: writer not found at $(display_path "$CONFIG_WRITER") -- config.json not generated"
+    write_summary ERROR "$TOOL" "config.json not generated"
+else
+    log "config.json: generating from profile.json (setup-user-config.sh)"
+    CW_RC=0
+    if $DRY_RUN; then
+        "${BASH:-bash}" "$CONFIG_WRITER" --dry-run || CW_RC=$?
+    else
+        "${BASH:-bash}" "$CONFIG_WRITER" || CW_RC=$?
+    fi
+    if [ "$CW_RC" -ne 0 ]; then
+
+=== DH skip-config on main
+0
+
+=== INST unknown option 47-51,76
+            SHOW_HELP=true
+            shift
+            ;;
+        *)
+            log_warn "Unknown option: $1"
+            SHOW_HELP=true
+            shift
+            ;;
+    esac
+done
+[ "${AITOOLS_DRY_RUN:-}" = "1" ] && DRY_RUN=true
+
+
+=== INST exit 0 help 76
+  When stdin is a terminal, prompts for gh login, repos path, and file reviews.
+  When piped or run non-interactively, uses defaults and flags.
+  AITOOLS_FORCE=1 (aitools install --force): no prompts even in a terminal;
+  managed files take the source version (backups kept).
+  When config.json already exists, uses saved values without prompting.
+USAGE
+    exit 0
+fi
+
+
+=== INST Step21 list 831-842
+# 21. Deploy configurations
+# ============================================================
+log "Step 21: Deploy configurations"
+
+DEPLOY_SCRIPTS="setup-user-claude.sh setup-user-cursor.sh setup-user-mcp.sh setup-user-skills.sh setup-cursor-ide-mcp.sh setup-user-settings.sh setup-user-hooks.sh"
+
+for script in $DEPLOY_SCRIPTS; do
+    script_path="$SCRIPT_DIR/$script"
+    if [ -f "$script_path" ]; then
+        validate_and_run "$script_path"
+    else
+        log_warn "$script not found — skipping"
+
+=== SYNC deploy_configs list 1151
+            ;;
+        *)
+            local deploy_scripts="setup-user-config.sh setup-user-claude.sh setup-user-mcp.sh setup-user-skills.sh setup-cursor-ide-mcp.sh setup-user-cursor.sh setup-user-settings.sh setup-user-hooks.sh"
+            for script in $deploy_scripts; do
+                local script_path="$script_dir/$script"
+
+=== SYNC deploy-harness on main
+/Users/new-jose/repos/aitools/scripts/aitools:0
+/Users/new-jose/repos/aitools/scripts/aitools-install.sh:0
+
+=== INST node@22 619
+619:                if ! brew install node@22 2>&1 | while IFS= read -r line; do log "$line"; done; then
+620:                    log_error "brew install node@22 failed"
+
+=== INST lib source 14
+# --- Shared library (first, so flag errors and Windows forwarding are logged) ---
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/aitools-lib.sh"
+logging_init "aitools-install"
+
+
+=== INST touch summary 211-216
+
+# --- Summary file init (if not already set by parent aitools invocation) ---
+if [ -z "${AITOOLS_SUMMARY_FILE:-}" ]; then
+    AITOOLS_SUMMARY_FILE="$HOME/.aitools/run-summary.txt"
+    rm -f "$AITOOLS_SUMMARY_FILE"
+    touch "$AITOOLS_SUMMARY_FILE"
+    export AITOOLS_SUMMARY_FILE
+fi
+
+
+=== INST mkdir aitools 334
+
+=== INST MDM deploy count sh
+13
+
+=== INST MDM deploy count ps1
+13
+
+=== UI create dotprofile ans=y 811
+811:    local dir="$1" out grc=0 ans="y" reg=0 d
+850:        if [ -z "$ans" ]; then ans="y"; fi
+
+=== UI gh repo create
+/Users/new-jose/repos/aitools/scripts/aitools:844:        ui_action "Run: gh repo create $repo_name --private --source $d --push"
+/Users/new-jose/repos/aitools/scripts/aitools:855:            log_warn "user init: GitHub repo not created -- the dotprofile stays local; create it and push: gh repo create $repo_name --private --source $d --push"
+/Users/new-jose/repos/aitools/scripts/aitools:857:            ui_action "Run: gh repo create $repo_name --private --source $d --push"
+/Users/new-jose/repos/aitools/scripts/aitools:862:        out=$(gh repo create "$repo_name" --private --source "$dir" --push 2>&1) || grc=$?
+/Users/new-jose/repos/aitools/scripts/aitools:864:        out=$(GIT_TERMINAL_PROMPT=0 GIT_SSH_COMMAND="${GIT_SSH_COMMAND:-ssh -o BatchMode=yes}" gh repo create "$repo_name" --private --source "$dir" --push 2>&1) || grc=$?
+/Users/new-jose/repos/aitools/scripts/aitools:866:    ui_log_lines "gh repo create: " "$out"
+/Users/new-jose/repos/aitools/scripts/aitools:868:        log_warn "user init: gh repo create failed (exit $grc, see deploy.log) -- the dotprofile stays local; run: gh repo create $repo_name --private --source $d --push"
+/Users/new-jose/repos/aitools/scripts/aitools:870:        ui_action "Run: gh repo create $repo_name --private --source $d --push"
+/Users/new-jose/repos/aitools/scripts/aitools.ps1:1445:    $create = "Run: gh repo create $($script:UiRepoName) --private --source $Dir --push"
+/Users/new-jose/repos/aitools/scripts/aitools.ps1:1459:        LogWarn "user init: GitHub repo not created -- the dotprofile stays local; create it and push: gh repo create $($script:UiRepoName) --private --source $Dir --push"
+/Users/new-jose/repos/aitools/scripts/aitools.ps1:1471:        $out = (& gh repo create $script:UiRepoName --private --source $Dir --push 2>&1 | Out-String)
+/Users/new-jose/repos/aitools/scripts/aitools.ps1:1476:    Write-UiLogLines "gh repo create: " $out
+
+=== PS stamp -replace
+74:    $content = $content -replace '^\xEF\xBB\xBF', ''
+1995:$unixRepoPath = $repoPath -replace '^([A-Za-z]):\\', '/$1/' -replace '\\', '/'
+2032:            $stampedContent = $srcContent -replace '^\$AITOOLS_INSTALLED_VERSION = ".*"', "`$AITOOLS_INSTALLED_VERSION = `"$newVersion`""
+2108:            $latestMinor = [int](($latestTag -replace '^v0\.(\d+)\..*', '$1'))
+2197:        $stampedContent = $srcContent -replace '^\$AITOOLS_INSTALLED_VERSION = ".*"', "`$AITOOLS_INSTALLED_VERSION = `"$newVersion`""
+2207:    $bashStamped = $bashContent -replace '^AITOOLS_INSTALLED_VERSION=".*"', "AITOOLS_INSTALLED_VERSION=`"$newVersion`""
+
+=== PS git bash path 1989
+1989:$bashExe = "$env:ProgramFiles\Git\bin\bash.exe"
+
+=== SYNC git pull 2006 2037
+290:    elif grep -q "pull --rebase" <<< "$(ui_lines warn)"; then ui_action "git pull --rebase, then git push in $d"
+295:# (GIT_TERMINAL_PROMPT=0; ssh BatchMode unless GIT_SSH_COMMAND is set). A push the
+304:        out=$(GIT_TERMINAL_PROMPT=0 GIT_SSH_COMMAND="${GIT_SSH_COMMAND:-ssh -o BatchMode=yes}" git -C "$dir" push 2>&1) || rc=$?
+310:            log_warn "dotprofile push rejected (exit $rc): the remote has newer commits -- run git pull --rebase, then git push in $d"
+311:            ui_action "git pull --rebase, then git push in $d" ;;
+864:        out=$(GIT_TERMINAL_PROMPT=0 GIT_SSH_COMMAND="${GIT_SSH_COMMAND:-ssh -o BatchMode=yes}" gh repo create "$repo_name" --private --source "$dir" --push 2>&1) || grc=$?
+1985:    if pull_out=$(cd "$repo_path" && git pull --tags origin main 2>&1); then
+1996:        log_error "git pull failed (see $LOG_DISPLAY)"
+2006:    if pull_out=$(cd "$repo_path" && git pull origin main 2>&1); then
+2021:            log_warn "git pull failed -- deploying from local checkout (see $LOG_DISPLAY)"
+2024:        write_summary WARN "source" "stale local checkout (git pull failed)"
+
+=== AITOOLS_DEPLOY
+/Users/new-jose/repos/aitools/scripts/aitools.ps1:159:    $env:AITOOLS_DEPLOY = "1"
+/Users/new-jose/repos/aitools/scripts/aitools.ps1:209:    Remove-Item Env:\AITOOLS_DEPLOY -ErrorAction SilentlyContinue
+/Users/new-jose/repos/aitools/scripts/aitools:1099:    export AITOOLS_DEPLOY=1
+/Users/new-jose/repos/aitools/scripts/aitools:1215:    unset AITOOLS_DEPLOY
+
+=== BOOT ps1 powershell 48
+48:& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $aitoolsDir 'scripts\aitools-install.ps1')
+
+=== BOOT sh brew install 32-35
+11:# then clones nobul-tech/aitools and hands off to scripts/aitools-install.sh, which
+34:            /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+76:if bash "$AITOOLS_DIR/scripts/aitools-install.sh" "$@"; then
+
+=== BOOT sh installer result 76-80
+# --- 3. Install toolchain + deploy configs (machine environment, "Tier 1") ---
+say "Running installer..."
+if bash "$AITOOLS_DIR/scripts/aitools-install.sh" "$@"; then
+    say "Installer completed."
+else
+    say "Installer reported issues -- see the log above before continuing."
+fi
+
+# --- 4. Pull the user's authoritative dotprofile, then build FROM it ("Tier 2") ---
+
+=== LIB log dir 72
+# AITOOLS_LOG_DIR override (e.g. for tests).
+# ---------------------------------------------------------------------------
+AITOOLS_LOG_DIR="${AITOOLS_LOG_DIR:-$HOME/.aitools/logs}"
+
+# ---------------------------------------------------------------------------
+
+=== LIB console user grep
+
+=== LIB Test-IsAdmin callers
+/Users/new-jose/repos/aitools/scripts/aitools-lib.ps1:2664:function Test-IsAdmin {
+
+=== LIB install_via helpers
+
+=== LIB env block 41-52
+case "${AITOOLS_ENVIRONMENT:-}" in
+    claude-code-web|local) ;;
+    *)
+        if [ "${CLAUDE_CODE_REMOTE:-}" = "true" ]; then
+            AITOOLS_ENVIRONMENT="claude-code-web"
+        else
+            AITOOLS_ENVIRONMENT="local"
+        fi ;;
+esac
+if [ "$AITOOLS_PLATFORM" != "linux" ]; then
+    AITOOLS_ENVIRONMENT="local"
+fi
+
+=== LIB distro detect
+
+=== LIB HKCU PATH 2794 2907
+/Users/new-jose/repos/aitools/scripts/aitools-lib.ps1:2794:                [Environment]::SetEnvironmentVariable("Path", $newPath, "User")
+/Users/new-jose/repos/aitools/scripts/aitools-lib.ps1:2907:    [Environment]::SetEnvironmentVariable("Path", "$userPath;$gopathBin", "User")
+/Users/new-jose/repos/aitools/scripts/setup-modal.ps1:30:        [Environment]::SetEnvironmentVariable("Path", "$userPath;$scriptsDir", "User")
+
+=== LIB logging_init mkdir 662
+logging_init() {
+    SCRIPT_NAME="${1:?logging_init requires a script name}"
+    LOG_DIR="$AITOOLS_LOG_DIR"
+    LOG_FILE="$LOG_DIR/deploy.log"
+    mkdir -p "$LOG_DIR"
+    _rotate_log "$LOG_FILE"
+    ERRORS=0
+    WARNINGS=0
+    _log_aitools_environment
+
+=== LIB log append 682-699
+log() {
+    local level="${2:-info}"
+    local ts; ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    local line="[$ts] [$SCRIPT_NAME] [$level] $1"
+    printf '%s\n' "$line" >> "$LOG_FILE"
+    case "$level" in
+        error) printf '\033[31m%s\033[0m\n' "$line" ;;
+        warn)  printf '\033[33m%s\033[0m\n' "$line" ;;
+        *)     printf '%s\n' "$line" ;;
+    esac
+}
+log_ok()    { log "$1" "ok"; }
+
+=== LIB ps1 AppendAllText
+459:        [IO.File]::AppendAllText($f, (($rec | ConvertTo-Json -Compress) + "`n"), [System.Text.UTF8Encoding]::new($false))
+593:    [IO.File]::AppendAllText($resolvedLog, "$line`n", [System.Text.UTF8Encoding]::new($false))
+606:    [IO.File]::AppendAllText($resolvedLog, "[$ts] [$scriptName] [detail] $msg`n", [System.Text.UTF8Encoding]::new($false))
+759:        [IO.File]::AppendAllText($resolvedSummary, "${cat}|${tool}|${detail}`n", [System.Text.UTF8Encoding]::new($false))
+
+=== LIB rotate only deploy.log 663
+663:    _rotate_log "$LOG_FILE"
+
+=== LIB sync_managed_json auto-adopt 2546-2555
+        }
+    }
+    // auto-adopts -> mirror
+    for (const a of plan.autoAdopts) {
+        if (a.kind === 'scalar') setPath(mirror, a.path, a.value);
+        else if (a.kind === 'permRule') {
+            if (!mirror.permissions || typeof mirror.permissions !== 'object') mirror.permissions = {};
+            const arr = Array.isArray(mirror.permissions[a.cat]) ? mirror.permissions[a.cat] : [];
+            if (!arr.includes(a.rule)) arr.push(a.rule);
+            mirror.permissions[a.cat] = arr;
+        }
+    }
+
+=== LIB backup_dir *.md 925-928
+backup_dir() {
+    local dir="$1" max_backups=5
+    [ -d "$dir" ] || return 0
+    local file_count
+    file_count=$(find "$dir" -maxdepth 1 -name '*.md' -type f | wc -l | tr -d ' ')
+    if [ "$file_count" -eq 0 ]; then
+        return 0
+    fi
+    local ts
+    ts=$(date -u +%Y-%m-%dT%H%M%SZ)
+
+=== LIB sync mktemp 2449-2450
+
+    local nodescript plan_json decisions_tsv choices_tsv
+    nodescript=$(mktemp) || { log_error "sync_managed_json: mktemp failed"; return 1; }
+    plan_json=$(mktemp); decisions_tsv=$(mktemp); choices_tsv=$(mktemp)
+
+
+=== PROF first profile docs
+/Users/new-jose/repos/aitools/.claude/rules/managed-file-deployment.md:51:- **Machine profile selection**: `config.json` `machineAlias` → `profile.json` `profiles[alias]`. Fallback: hostname match, then first profile
+/Users/new-jose/repos/aitools/reference/user-repo.md:84:- **Machine matching** -- `config.json` stores `"machineAlias"` on each machine. Fallback: hostname match, then first profile.
+/Users/new-jose/repos/aitools/reference/managed-file-deployment.md:393:| Machine profile | `<userRepoPath>/profile.json` `profiles[machineAlias]` section | hostname match, then first profile |
+
+=== PROF no machine error 763
+763:    add_err "no profile matches this machine (machine.id ${THIS_ID:-unavailable}, hostname ${THIS_HOST:-unavailable}) -- run: aitools user init"
+
+=== PROF environment claude-code-web literal
+3
+
+=== SU claude SHELL 178
+
+- Machine: $(uname -s) $(uname -m) (${MACHINE_HOST}; profile ${MACHINE_ALIAS:-unresolved})
+- Shell: $(basename "$SHELL")"
+
+
+=== SU shell bash_profile 39-40
+# --- Target profile (overridable for testing) ---
+PROFILE_DIR="${AITOOLS_PROFILE_DIR:-$HOME}"
+PROFILE="$PROFILE_DIR/.bash_profile"
+
+
+=== SU shell backup 68
+
+# --- Back up before writing (skips if profile does not exist yet) ---
+backup_file "$PROFILE"
+
+
+=== SU shell dry-run
+/Users/new-jose/repos/aitools/scripts/setup-user-shell.sh:0
+/Users/new-jose/repos/aitools/scripts/setup-user-shell.ps1:0
+
+=== SU hooks settings backup
+
+=== SU hooks write 383
+    if (mergedNorm === existingNorm) {
+        console.log('unchanged');
+    } else {
+        fs.writeFileSync(settingsFile, newJson);
+
+        // Post-write validation
+
+=== SU hooks userRepoPath 70
+/Users/new-jose/repos/aitools/scripts/setup-user-hooks.sh:70:USER_REPO_PATH=$(read_config_key "$HOME/.aitools/config.json" "userRepoPath") || true
+/Users/new-jose/repos/aitools/scripts/setup-user-hooks.ps1:58:$userRepoPath = ReadConfigKey -File (Join-Path $env:USERPROFILE ".aitools\config.json") -Key "userRepoPath"
+
+=== HOOK ait-harvest cwd
+/Users/new-jose/repos/aitools/shared/hooks/session-archive.sh:3:# Passes the raw hook stdin to ait-harvest.py `archive`, which copies the
+/Users/new-jose/repos/aitools/shared/hooks/session-archive.sh:63:if [ -n "$PROJECT_ROOT" ] && [ -f "$PROJECT_ROOT/scripts/ait-harvest.py" ]; then
+/Users/new-jose/repos/aitools/shared/hooks/session-archive.sh:64:    HELPER="$PROJECT_ROOT/scripts/ait-harvest.py"
+/Users/new-jose/repos/aitools/shared/hooks/session-archive.sh:65:elif [ -f "$HOME/.claude/hooks/ait-harvest.py" ]; then
+/Users/new-jose/repos/aitools/shared/hooks/session-archive.sh:66:    HELPER="$HOME/.claude/hooks/ait-harvest.py"
+/Users/new-jose/repos/aitools/shared/hooks/session-archive.sh:67:elif [ -f "$HOME/repos/aitools/scripts/ait-harvest.py" ]; then
+/Users/new-jose/repos/aitools/shared/hooks/session-archive.sh:68:    HELPER="$HOME/repos/aitools/scripts/ait-harvest.py"
+/Users/new-jose/repos/aitools/shared/hooks/session-archive.sh:72:    _fallback_log "ait-harvest.py not found; transcript not archived" "warn"
+/Users/new-jose/repos/aitools/shared/hooks/session-archive.sh:91:                "ait-harvest.py archive exited non-zero (detached)" \
+/Users/new-jose/repos/aitools/shared/hooks/session-catchup.sh:5:# All logic, the single-flight lock, and logging live in ait-harvest.py
+/Users/new-jose/repos/aitools/shared/hooks/session-catchup.sh:45:if [ -n "$PROJECT_ROOT" ] && [ -f "$PROJECT_ROOT/scripts/ait-harvest.py" ]; then
+/Users/new-jose/repos/aitools/shared/hooks/session-catchup.sh:46:    HELPER="$PROJECT_ROOT/scripts/ait-harvest.py"
+
+=== SU cursor backup 179-181
+log "Step 3: cli-config.json"
+
+if [ "$DRY_RUN" != "true" ]; then
+    backup_file "$CLI_CONFIG"
+fi
+
+mkdir -p "$CURSOR_DIR"
+
+if ! command -v node &>/dev/null; then
+    log_warn "node not found -- skipping cli-config.json merge"
+
+=== SU cursor model reset 263-274
+
+// Model: only set if profile specifies 'auto' (the only supported value for now)
+if (modelId === 'auto') {
+    config.model = {
+        modelId: 'default',
+        displayModelId: 'auto',
+        displayName: 'Auto',
+        displayNameShort: 'Auto',
+        aliases: ['auto'],
+        maxMode: false
+    };
+    config.hasChangedDefaultModel = true;
+
+=== SU cursor rg brew 85-108
+88:            if rg_out=$(brew install ripgrep 2>&1); then rg_rc=0; else rg_rc=$?; fi
+93:                log_error "brew install ripgrep failed (exit $rg_rc) -- see $(display_path "$LOG_FILE")"
+101:                log_warn "brew install completed but 'rg' not found in PATH. Restart terminal to verify."
+106:            log_warn "Homebrew not found. Install ripgrep manually: brew install ripgrep"
+108:            write_summary WARN "cursor cli" "ripgrep missing (Homebrew not found)"
+
+=== SU cursor fanout ~/.aitools/rules
+10:#   4. Fans the harness rules (~/.aitools/rules) out to Cursor's user rule files
+17:#   Managed: one <name>.mdc per ~/.aitools/rules/<name>.md (converted); *.bak.*
+18:#            backups and non-.md files in ~/.aitools/rules are not fanned out
+19:#   Preserved: ~/.cursor/rules/ files not produced from ~/.aitools/rules
+378:# --- 4. User rules fan-out: ~/.aitools/rules -> ~/.cursor/rules ---
+383:# (cursor_rule_from_md). Adopt is not offered (ADOPT_PATH ""): ~/.aitools/rules
+389:HARNESS_RULES_DIR="$HOME/.aitools/rules"
+591:            # Preserved: files in ~/.cursor/rules not produced from ~/.aitools/rules
+637:                    log_warn "$dest_name: $parse_problem -- fix the source rule in ~/.aitools/rules"
+
+=== SU mcp ps1 exit 33-41
+
+# Check that claude CLI is available
+if (-not (Get-Command claude -ErrorAction SilentlyContinue)) {
+    LogError "'claude' CLI not found in PATH. Install Claude Code first: https://claude.ai/download"
+    exit 1
+}
+
+# Check that Node.js is available (required for Chrome DevTools MCP and settings merge)
+if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
+    LogError "Node.js not found. Install via 'aitools install' or manually: https://nodejs.org"
+    exit 1
+} else {
+
+=== SU mcp npx -y
+/Users/new-jose/repos/aitools/scripts/setup-user-mcp.sh:13:#   local            npx chrome-devtools-mcp@latest --isolated
+/Users/new-jose/repos/aitools/scripts/setup-user-mcp.sh:14:#   claude-code-web  npx -y chrome-devtools-mcp@latest --isolated --headless --chromeArg=--no-sandbox
+/Users/new-jose/repos/aitools/scripts/setup-user-mcp.sh:65:    CHROME_MCP_CMD=(npx -y chrome-devtools-mcp@latest --isolated --headless --chromeArg=--no-sandbox)
+/Users/new-jose/repos/aitools/scripts/setup-user-mcp.sh:68:    CHROME_MCP_CMD=(npx chrome-devtools-mcp@latest --isolated)
+/Users/new-jose/repos/aitools/scripts/setup-user-mcp.ps1:128:        Add-McpServer -Name "chrome-devtools" -AddArgs @("chrome-devtools", "--scope", "user", "cmd", "/c", "npx", "chrome-devtools-mcp@latest", "--", "--isolated")
+/Users/new-jose/repos/aitools/scripts/setup-user-mcp.ps1:130:} elseif (Test-ServerConfigMatches "chrome-devtools" "cmd /c npx chrome-devtools-mcp@latest --isolated") {
+/Users/new-jose/repos/aitools/scripts/setup-user-mcp.ps1:136:        Add-McpServer -Name "chrome-devtools" -AddArgs @("chrome-devtools", "--scope", "user", "cmd", "/c", "npx", "chrome-devtools-mcp@latest", "--", "--isolated")
+
+=== SU config ps1 HOME 113
+
+$configDir = Join-Path $HOME ".aitools"
+$configFile = Join-Path $configDir "config.json"
+
+=== SU config bootstrap 298-330
+/Users/new-jose/repos/aitools/scripts/setup-user-config.sh:329:        log_error "Failed: $(display_path "$CONFIG_FILE"): missing bootstrap $MISSING (run aitools install) -- existing file left untouched"
+/Users/new-jose/repos/aitools/scripts/setup-user-config.sh:330:        write_summary ERROR "aitools config" "missing bootstrap values"
+/Users/new-jose/repos/aitools/scripts/setup-user-config.ps1:326:        LogError "Failed: ${configFile}: missing bootstrap $($missing -join ', ') (run aitools install) -- existing file left untouched"
+/Users/new-jose/repos/aitools/scripts/setup-user-config.ps1:327:        Write-Summary "ERROR" "aitools config" "missing bootstrap values"
+
+=== SU settings no dotprofile 76-78
+64:# suppressed: 0 found, 1 no dotprofile (shared-only mode, expected),
+78:    write_summary WARN "claude settings" "not synced: no dotprofile"
+
+=== SU PS7 guards
+/Users/new-jose/repos/aitools/scripts/setup-user-claude.ps1
+
+=== SU tracked bak
+shared/hooks/harness-db-sessionstart.sh.bak.2026-06-21T203304Z
+shared/hooks/standing-order-guard.sh.bak.2026-06-21T203334Z
+
+=== TOOLS winget --scope
+/Users/new-jose/repos/aitools/scripts/setup-user-mcp.ps1:99:    $removeResult = claude mcp remove $Name --scope user 2>&1
+/Users/new-jose/repos/aitools/scripts/setup-user-mcp.ps1:128:        Add-McpServer -Name "chrome-devtools" -AddArgs @("chrome-devtools", "--scope", "user", "cmd", "/c", "npx", "chrome-devtools-mcp@latest", "--", "--isolated")
+/Users/new-jose/repos/aitools/scripts/setup-user-mcp.ps1:136:        Add-McpServer -Name "chrome-devtools" -AddArgs @("chrome-devtools", "--scope", "user", "cmd", "/c", "npx", "chrome-devtools-mcp@latest", "--", "--isolated")
+/Users/new-jose/repos/aitools/scripts/setup-user-mcp.ps1:145:        Add-McpServer -Name "vercel" -AddArgs @("--transport", "http", "--scope", "user", "vercel", "https://mcp.vercel.com")
+/Users/new-jose/repos/aitools/scripts/setup-user-mcp.ps1:153:        Add-McpServer -Name "vercel" -AddArgs @("--transport", "http", "--scope", "user", "vercel", "https://mcp.vercel.com")
+/Users/new-jose/repos/aitools/scripts/setup-user-mcp.ps1:162:        Add-McpServer -Name "webflow" -AddArgs @("--transport", "http", "--scope", "user", "webflow", "https://mcp.webflow.com/mcp")
+/Users/new-jose/repos/aitools/scripts/setup-user-mcp.ps1:170:        Add-McpServer -Name "webflow" -AddArgs @("--transport", "http", "--scope", "user", "webflow", "https://mcp.webflow.com/mcp")
+
+=== TOOLS winget no --exact go typst
+/Users/new-jose/repos/aitools/scripts/setup-go.ps1:33:            LogWarn "choco uninstall golang failed (exit $chocoRc; may need admin) -- proceeding with winget install. See $logFile"
+/Users/new-jose/repos/aitools/scripts/setup-go.ps1:52:    $wingetOutput = winget upgrade $goWingetId --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
+/Users/new-jose/repos/aitools/scripts/setup-go.ps1:58:        LogError "winget upgrade Go failed (exit $upgradeRc) -- see $logFile"
+/Users/new-jose/repos/aitools/scripts/setup-go.ps1:59:        Write-Summary "ERROR" "go" "winget upgrade failed (exit $upgradeRc)"
+/Users/new-jose/repos/aitools/scripts/setup-go.ps1:78:            LogError "winget upgrade completed but 'go' not found in PATH"
+/Users/new-jose/repos/aitools/scripts/setup-go.ps1:103:    $wingetOutput = winget install $goWingetId --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
+/Users/new-jose/repos/aitools/scripts/setup-go.ps1:109:        LogError "winget install Go failed (exit $installRc) -- see $logFile"
+/Users/new-jose/repos/aitools/scripts/setup-go.ps1:110:        Write-Summary "ERROR" "go" "winget install failed (exit $installRc)"
+/Users/new-jose/repos/aitools/scripts/setup-go.ps1:129:            LogError "winget install completed but 'go' not found in PATH"
+/Users/new-jose/repos/aitools/scripts/setup-typst.ps1:20:# warning (non-blocking -- the winget install below proceeds), with the output logged.
+/Users/new-jose/repos/aitools/scripts/setup-typst.ps1:31:# Cargo typst-cli: different binary path, may shadow winget install
+/Users/new-jose/repos/aitools/scripts/setup-typst.ps1:60:    $wingetOutput = winget upgrade --id Typst.Typst --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
+
+=== TOOLS sudo gh pandoc
+/Users/new-jose/repos/aitools/scripts/setup-gh-cli.sh:48:    { (type -p wget >/dev/null || sudo apt-get install -y wget) \
+/Users/new-jose/repos/aitools/scripts/setup-gh-cli.sh:49:        && sudo mkdir -p -m 755 /etc/apt/keyrings \
+/Users/new-jose/repos/aitools/scripts/setup-gh-cli.sh:50:        && wget -qO- https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null \
+/Users/new-jose/repos/aitools/scripts/setup-gh-cli.sh:51:        && sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
+/Users/new-jose/repos/aitools/scripts/setup-gh-cli.sh:52:        && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null; } 2>&1 \
+/Users/new-jose/repos/aitools/scripts/setup-gh-cli.sh:135:                    if ! { sudo apt-get update -qq && sudo apt-get install -y gh; } 2>&1 | while IFS= read -r line; do log "$line"; done; then
+/Users/new-jose/repos/aitools/scripts/setup-pandoc.sh:104:                        remove_package "sudo port uninstall pandoc" sudo port uninstall pandoc
+/Users/new-jose/repos/aitools/scripts/setup-pandoc.sh:153:                if ! { sudo apt-get update -qq && sudo apt-get install -y pandoc; } 2>&1 | while IFS= read -r line; do log "$line"; done; then
+
+=== TOOLS sudo rm go 104
+/Users/new-jose/repos/aitools/scripts/setup-go.sh:104:            if sudo rm -rf "$CLEANUP_TARGET"; then
+/Users/new-jose/repos/aitools/scripts/setup-pandoc.sh:104:                        remove_package "sudo port uninstall pandoc" sudo port uninstall pandoc
+
+=== TOOLS typst linux
+16:case "$(uname -s)" in
+
+=== TOOLS uv homebrew-only
+/Users/new-jose/repos/aitools/scripts/setup-uv.sh:7:# Linux: Homebrew-only until Linux support lands (nobul-tech/aitools#14).
+/Users/new-jose/repos/aitools/scripts/setup-uv.sh:73:    write_summary ERROR "uv" "Homebrew not found"
+/Users/new-jose/repos/aitools/scripts/setup-go.sh:78:    log_error "Homebrew not found -- cannot install Go via Homebrew (existing installs left untouched)"
+/Users/new-jose/repos/aitools/scripts/setup-go.sh:79:    write_summary ERROR "go" "Homebrew not found"
+
+=== TOOLS datadog cargo
+6:#        Falls back to cargo install when Homebrew is unavailable or the tap
+10:# Windows: Uses cargo install -- see setup-datadog.ps1.
+126:        log_warn "Pup not installed via Homebrew -- trying cargo install fallback..."
+137:            CARGO_OUTPUT=$(cargo install --git https://github.com/datadog-labs/pup 2>&1) || CARGO_EC=$?
+152:                    log_error "cargo install pup also failed (exit code $CARGO_EC)"
+156:                log_ok "Pup installed via cargo install fallback"
+
+=== TOOLS modal pip
+136:        log_error "pip install --user modal failed (exit $pip_rc) -- see $(display_path "$LOG_FILE")"
+137:        write_summary ERROR "modal cli" "pip install failed (exit $pip_rc)"
+143:        log_error "pip install completed but 'modal' not found in PATH"
+
+=== TOOLS cimcp remove/disable
+/Users/new-jose/repos/aitools/scripts/setup-cursor-ide-mcp.sh:9:# Vercel and Webflow are present but disabled via `agent mcp disable`.
+/Users/new-jose/repos/aitools/scripts/setup-cursor-ide-mcp.sh:190:# Cursor's `agent mcp` CLI dropped the `disable`/`enable` subcommands; the current
+/Users/new-jose/repos/aitools/scripts/setup-cursor-ide-mcp.sh:198:        if remove_output=$(agent mcp remove "$server" 2>&1); then
+/Users/new-jose/repos/aitools/scripts/setup-cursor-ide-mcp.ps1:8:# Vercel and Webflow are present but disabled via `agent mcp disable`.
+/Users/new-jose/repos/aitools/scripts/setup-cursor-ide-mcp.ps1:171:        $result = agent mcp disable $server 2>&1
+
+=== TOOLS cimcp node exit 51-53
+# Check that Node.js is available (required for Chrome DevTools MCP)
+if ! command -v node &> /dev/null; then
+    log_error "Node.js not found. Install via 'aitools install' or manually: https://nodejs.org"
+    exit 1
+else
+    log_ok "Node.js $(node --version) found"
+fi
+
+=== TOOLS gh wget 48
+# Returns non-zero if any step fails; output goes to the log.
+add_github_cli_apt_repo() {
+    { (type -p wget >/dev/null || sudo apt-get install -y wget) \
+        && sudo mkdir -p -m 755 /etc/apt/keyrings \
+        && wget -qO- https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null \
+        && sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
+        && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null; } 2>&1 \
+        | while IFS= read -r line; do log "$line"; done
+
+=== TOOLS node linux warn 635
+            fi
+            ;;
+        *)
+            log_warn "Install Node.js manually: https://nodejs.org"
+            write_summary WARN "node.js" "install manually (https://nodejs.org)"
+            ;;
+    esac
+
+=== INTUNE old URLs in repo
+/Users/new-jose/repos/aitools/.claude/worktrees/mdmpkg/.scratch/session-mdmpkg/build/run-pr111/dotprofile/sessions/aitools-nobul-jose/2026-02-21_f7a2c8b6.jsonl
+/Users/new-jose/repos/aitools/.claude/worktrees/mdmpkg/.scratch/session-mdmpkg/build/run-pr112/dotprofile/sessions/aitools-nobul-jose/2026-02-21_f7a2c8b6.jsonl
+/Users/new-jose/repos/aitools/.claude/worktrees/mdmpkg/.scratch/session-mdmpkg/build/run-main/dotprofile/sessions/aitools-nobul-jose/2026-02-21_f7a2c8b6.jsonl
+/Users/new-jose/repos/aitools/.claude/worktrees/mdmpkg/.scratch/session-mdmpkg/build/run-pr106/dotprofile/sessions/aitools-nobul-jose/2026-02-21_f7a2c8b6.jsonl
+/Users/new-jose/repos/aitools/.claude/worktrees/layout-b/.scratch/session-S3RevB/iso/dot/sessions/aitools-nobul-jose/2026-02-21_f7a2c8b6.jsonl
+/Users/new-jose/repos/aitools/.claude/worktrees/layout-b/.scratch/session-S3RevB/iso/dot.tar
+/Users/new-jose/repos/aitools/.claude/worktrees/layout-b/.scratch/session-S3LayoutB/v4/dot/sessions/aitools-nobul-jose/2026-02-21_f7a2c8b6.jsonl
+/Users/new-jose/repos/aitools/.claude/worktrees/layout-b/.scratch/session-S3LayoutB/v4/dot.tar
+/Users/new-jose/repos/aitools/.claude/worktrees/mf-fix5-review/.scratch/session-mf5rev/dp-copy/sessions/aitools-nobul-jose/2026-02-21_f7a2c8b6.jsonl
+/Users/new-jose/repos/aitools/.claude/worktrees/mf-fix5/.scratch/session-mffix5/dp-copy/sessions/aitools-nobul-jose/2026-02-21_f7a2c8b6.jsonl
+/Users/new-jose/repos/aitools/.claude/worktrees/h-mdm/.scratch/session-hmdm/dot/sessions/aitools-nobul-jose/2026-02-21_f7a2c8b6.jsonl
+
+=== POSTPUSH step7 build-deploy
+204:bash "$SCRIPT_DIR/build-deploy.sh" >/dev/null 2>&1
+678:# Extract unique script basenames from build-deploy.sh blog lines
+680:build_script="$REPO_ROOT/scripts/build-deploy.sh"
+682:    step_skip "26" "Deploy scripts list sync" "build-deploy.sh not found"
+689:    claude_deploy=$(grep 'build-deploy.sh.*generates' "$REPO_ROOT/CLAUDE.md" || true)
+825:# build-deploy.sh: manifest-driven preflight/embed, no literal hook filenames
+832:    bd_script="$REPO_ROOT/scripts/build-deploy.sh"

@@ -1,0 +1,71 @@
+#114 [OPEN] Fix audit A-10/A-11 in setup-user-config; split the resolver's not-v2 message
+FILES: .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Fix3/S3-MF-Fix3-Review-pr114.md, .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Fix3/S3-MF-Fix3-report.md, .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Fix6/S3-MF-Fix6-Review-pr108.md, .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Fix6/S3-MF-Fix6-drafts/reference/script-standards-detail.md.edit.txt, .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Fix6/S3-MF-Fix6-report.md, .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-NoMachine/S3-MF-NoMachine-Review-pr98.md, .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-NoMachine/S3-MF-NoMachine-report.md, scripts/aitools-json.pl, scripts/aitools-json.ps1, scripts/aitools-profile.ps1, scripts/aitools-profile.sh, scripts/setup-user-config.ps1, scripts/setup-user-config.sh, tests/profile/test-config.sh, tests/profile/test-profile.sh
+
+## Summary
+
+Fixes S3-MF-Audit findings A-10 and A-11 in the config.json writer, splits the resolver's "not v2 / no profiles" message (PR #98 review m1), and names the key when the merge fails on a case twin (PR #108 review n-2). M3-FINISH item 7.
+
+**Merge order: after #98 and #108.** This branch is origin/main + `--no-ff` merges of `feature/mf-config-no-machine` (#98) and `fix/mf-audit-profile-json` (#108); the diff against main includes theirs until they land.
+
+## Why
+
+- A-10 (medium): on a failed derivation the writer wrote `ERROR|profile.json|invalid (see log)` + ACTION, or `ERROR|machine profile|no machine match` + ACTION, with no log line carrying either instruction (setup-user-config.sh:273-279 / ps1:266-274 on this base).
+- A-11 (low): the bash EXIT trap `cleanup() { rm -rf "$WORK_DIR"; rm -f "$CONFIG_TMP"; }` was unchecked; PowerShell's `Remove-ConfigTmp` LogWarns.
+- #98 m1: the resolver printed one message, "profile.json is not v2 or has no profiles", for two states, and the writer classified it by the substring "is not v2".
+- #108 n-2: a config.json key that differs only in case from a managed key (e.g. `MachineId`) fails the merge, but the reason was logged only at detail.
+
+## Changes
+
+| id | change |
+|---|---|
+| A-10 | `setup-user-config.sh/.ps1`: each section-1 ACTION is paired with one `log_error` / `LogError` naming the row and carrying the instruction: `config: profile.json invalid -- Fix profile.json in the dotprofile (details in deploy.log)`, `config: machine profile: no machine match -- Run: aitools user init (profiles: ...)`. Rows unchanged. |
+| A-11 | `setup-user-config.sh`: `remove_config_tmp` removes a merge result that was not moved, once, after section 2 (before the footer); a failed removal is `log_warn "Could not remove temp file ..."` (PowerShell's text). The EXIT trap checks both removals and logs failures at detail (a warning there would miss the footer). PowerShell unchanged (already checked). |
+| m1 | `aitools-profile.sh/.ps1`, `resolve_machine` / `Resolve-Machine` and `migrate`: `profile.json is not v2` and `profile.json has no profiles object` (version checked first). Tag lines and exit codes unchanged. |
+| m1 | `setup-user-config.sh/.ps1`: both messages classify as an invalid profile.json (`is not v2`, `has no profiles object`, `is invalid JSON`). Outcome unchanged, with or without `--no-machine`. |
+| n-2 | `setup-user-config.sh/.ps1`: on a refused case twin the error line reads `Failed: ...: config merge failed... -- key "MachineId" differs only in case from the managed key "machineId": rename or remove it -- existing file left untouched`. Row unchanged (`ERROR|aitools config|merge failed`), no new ACTION. |
+
+Tests: test-profile `rm-v1` (updated), `rm-v2-no-profiles`, `rm-v2-profiles-array`, `mig-v1`, `mig-no-profiles`; test-config C16 log-line checks, C23-C23e (v1, v2 without profiles, both with `--no-machine`, the no-match ACTION log line), C24 (case twin), C25 (bash only: a stubbed failing `rm`).
+
+## Assumptions
+
+- **ACTION pairing level (I-2 / #147 not decided):** each section-1 ACTION accompanies an ERROR row, so its log line is `log_error` / `LogError`. This counts one more error on those paths (exit was already 1; the footer says "FAILED with N+1 error(s)"). Not `log_warn`: that would count a warning and auto-promote later OK rows. Section 3 keeps its existing `log_warn` pairing (its row is OK/WARN).
+- **No version value in "is not v2":** I tried `(version X)`. A probe of 14 values showed the two engines print some numbers differently (`1e2` -> `1e2` vs `100`, `-0` vs `0`), which would add a parity gap. So the message carries no value.
+- **A v2 file without a profiles object stays "invalid"**, with or without `--no-machine`, as the launch prompt and #98 say. `register` would repair it (it writes `profiles: {}` when the key is not an object), so "Run: aitools user init" is defensible advice; see Follow-ups.
+- **Case twin: no ACTION row.** The error line names the key. An ACTION could co-occur with a section-1 ACTION and break "at most one ACTION".
+
+## Verification
+
+macOS arm64. Isolated HOME and AITOOLS_LOG_DIR under the worktree scratch. pwsh 7 parity halves ran in every suite.
+
+- `bash -n` (GNU bash 5.3 and `/bin/bash` 3.2) on both touched scripts and both touched tests: clean. The pwsh parser on `setup-user-config.ps1` and `aitools-profile.ps1`: clean.
+
+| suite | bash 5 | `/bin/bash` 3.2 (`AITOOLS_TEST_BASH=/bin/bash`) | baseline on this base |
+|---|---|---|---|
+| test-config | 319 / 0 | 319 / 0 | 269 / 0 (#98) |
+| test-profile | 763 / 0 | 763 / 0 | 744 / 0 (#108) |
+| test-lib | 209 / 0 | 209 / 0 | 209 / 0 |
+| test-user-init | 200 / 0 | 200 / 0 | 200 / 0 |
+
+- Probe of the version message (14 version values, both resolvers): it showed why the message carries no value (Assumptions).
+- `check-pre-commit` (isolated HOME): 7 PASS, 13 SKIP, 0 WARN, 1 FAIL. The FAIL is step 6, the known pre-existing `harvesting/2026-07-09_session-ba4c0c12-7_build-deploy-prefix.sh` at mode 100644. Every touched .sh is 100755.
+- `check-pre-push` (isolated HOME, no userRepoPath, so step 7 is skipped): 4 PASS, 2 SKIP, 4 WARN, 0 FAIL. The WARNs are the checklist reminders: step 1 pre-commit checklist, step 5 release notes, step 6 roadmap, step 8 commit count (9, including the #98 and #108 merges).
+
+## Not run
+
+- Windows / Git Bash (pwsh 7 on macOS through `AITOOLS_PROFILE_TEST_ANY_OS=1` only).
+- `build-deploy.sh`: the dotprofile `deploy/` embeds the resolver and stays stale until the next build (live dotprofile is read-only for this mission).
+- The A-11 failing-removal path in PowerShell (C25 is bash only; `Remove-Item` cannot be stubbed on PATH).
+- claude-code-web environment.
+
+## Protected-file drafts awaiting approval
+
+None.
+
+## Follow-ups
+
+- Advice for a v2 profile.json with no `profiles` object: suggest "Run: aitools user init" (and silence it under `--no-machine`) only when `profiles` is absent, not when it has the wrong type, since `register` replaces a non-object `profiles` with `{}`. Commander decision.
+- Pre-existing parity gap found by the probe: `"version": 2.0` (and `20E-1`) is v2 for the PowerShell resolver (`Get-JText` gives `2`) and not v2 for bash (`2.0`). Not changed here.
+- I-2 (#147): once decided, re-check the A-10 pairing level.
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+

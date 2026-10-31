@@ -1,7 +1,7 @@
 # Install Method Discovery Playbook
 
 Step-by-step process for discovering and selecting install methods for managed tools
-and build prerequisites. Referenced by `.claude/rules/tool-lifecycle.md`.
+and build prerequisites. Referenced by `shared/rules/tool-lifecycle.md`.
 
 ## Purpose
 
@@ -331,7 +331,7 @@ aitools manage perl on macOS as it does on Windows?
 ## Relationship to Existing Gates
 
 This playbook feeds INTO:
-- **Install command verification gate** (`.claude/rules/tool-lifecycle.md`) --
+- **Install command verification gate** (`shared/rules/tool-lifecycle.md`) --
   verification of existing commands uses the same discovery process
 - **Phase 1 of the evaluation lifecycle** (`reference/tool-evaluation-criteria.md`) --
   "Evaluate & Record Source of Truth" starts with this playbook's steps

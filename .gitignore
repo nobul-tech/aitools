@@ -37,6 +37,9 @@ ENV/
 .claude/worktrees/
 CLAUDE.local.md
 *.local.md
+# Local backup of the rules dir (commander, 2026-10-31: keep on disk, untracked;
+# a tracked file in a harness source is embedded into the MDM deploy payload)
+.claude/rules/claude-rules.bkup.zip
 # Project MCP configs (machine-local; may embed API keys in server URLs)
 .mcp.json
 .cursor/mcp.json

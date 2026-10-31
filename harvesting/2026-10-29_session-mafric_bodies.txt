@@ -1,0 +1,683 @@
+
+=========== ISSUE 9 ===========
+build-deploy.sh hook preflight drifts from hooks-manifest.json (block-explore-agent.sh missing) -- derive all hook lists from the manifest
+## Observation
+
+`shared/hooks/hooks-manifest.json` declares itself the single source of truth for hook registration, and names `build-deploy.sh (required-file check + embed list)` as a consumer. The embed list is manifest-driven, but the **required-file preflight check is a hardcoded list** (`scripts/build-deploy.sh:66`) — and it has already drifted:
+
+- `block-explore-agent.sh` is registered in the manifest (PreToolUse, matcher `Agent`) but **missing from the preflight list**.
+- If that file went missing, preflight would pass and the embed loop's `blog_error "Hook source not found for embed"` path does `continue`, not `exit` — the build would complete with the hook silently absent from the deploy artifact.
+
+Two more hardcoded hook lists exist in the same file:
+
+- `scripts/build-deploy.sh:88-106` — `HOOK_*=$(cat …)` variables for all 18+1 hook files. **Dead code**: assigned, never referenced (embed loops read files directly from the manifest). A third copy of the hook list to keep in sync.
+- `scripts/build-deploy.sh:72-77` — a separate hardcoded existence check for `ait-harvest.py`, which the manifest already lists under `deploy`.
+
+(Also dead, non-hook: `AITOOLS_LIB_BASH`/`AITOOLS_LIB_PS1` at lines 109-110 — `inline_lib_bash`/`inline_lib_ps1` read the lib files directly.)
+
+## Expected
+
+`shared/hooks/hooks-manifest.json` `meta.purpose`: "Single source of truth for Claude Code hook registration. Consumed by … build-deploy.sh (required-file check + embed list) …". The required-file check should be **derived** from the manifest, not hand-maintained. This is the same drift class that `scripts/check-hook-parity.py` was written to prevent for the setup-user-hooks pair (RCA 2026-06-20) — but that audit does not cover build-deploy.sh, which is why this went undetected.
+
+## Impact
+
+Adding a hook to the manifest without also editing the hardcoded preflight list means the new hook is never preflight-verified; a missing/renamed hook file produces a non-fatal error and a deploy artifact with the hook unregistered — silent wrong behavior on every MDM/endpoint deploy from the dotprofile repo.
+
+## Fix
+
+1. **build-deploy.sh**: replace the hardcoded preflight loop (line 66) and the separate `ait-harvest.py` check with a single loop over `hooks[].file` + `deploy[]` from the manifest, resolving each file against `shared/hooks/` then `scripts/` (same resolution as the embed loops). Fail the build (`exit 1`) on any missing file. Add an explicit `node` requirement with a clear error — the embed loops already hard-depend on node, but today a missing node yields empty process substitutions and a broken artifact instead of an error.
+2. **Remove dead code**: `HOOK_*` variables (88-106) and `AITOOLS_LIB_*` (109-110).
+3. **Detection layer**: extend `scripts/check-hook-parity.py` (and its check-post-push step 32 call sites, bash + ps1) to also verify build-deploy.sh reads the manifest and contains no resurfaced hardcoded hook-file list.
+
+## Discovery context
+
+Found 2026-07-06 while loading `build-deploy.sh` and `hooks-manifest.json` into session context (session ba4c0c12-7); confirmed by grep sweep of `scripts/` + `shared/` for hook filename references. `setup-user-hooks.sh`/`.ps1` verified clean (fully manifest-driven).
+
+
+=========== ISSUE 10 ===========
+Epic: Proper Linux support (apt + dnf) for aitools install
+## Summary
+
+`aitools install` (v0.73.1, `4c027cc`) was run on a Linux machine: a Claude Code web cloud container (Ubuntu 24.04, running as root, no Homebrew). The installer itself reported `FAILED with 6 error(s)`, but the `aitools` wrapper exited 0. The run also **corrupted `~/.aitools/config.json`** and **deleted a working Go toolchain**.
+
+An `/investigate` RCA traced every symptom to code and to gaps in the governance specs. This epic tracks the fixes and making Linux a governed, first-class platform.
+
+Linux is not a defined platform in the governance framework today. `reference/tool-evaluation-criteria.md` defines platform states only for macOS and Windows, yet `reference/tool-registry.md` marks every tool `Linux: supported` while every Linux "Last verified version" entry is `pending`.
+
+## Decisions
+
+- **Install method** is chosen per tool via `/tool-eval`, reading the official docs, as the tool evaluation playbook requires. The default tie-breaker is a **vendor-official** package repo or binary, preferring user-level installs over ones that need sudo.
+- **Distro packages** (apt/dnf default repos) are used only when they track the latest stable release, per evaluation principle 3.
+- **Homebrew on Linux** is installed and managed as a fallback. It's skipped when running as root, because Homebrew refuses to run as root.
+- **Distros:** apt (Debian/Ubuntu) and dnf (Fedora/RHEL).
+- **CI** runs the installer end-to-end, twice, on Ubuntu and Fedora.
+- **Governance specs** are amended to add Linux as a third platform. These are protected files, reviewed before they're written.
+
+## Root-cause issues
+
+**PR A — install safety and correctness (v0.73.2)**
+- [ ] #11 config.json corrupted on re-run (critical)
+- [x] #12 `setup-go.sh` deletes `/usr/local/go` before a replacement is confirmed (critical)
+- [ ] #13 wrapper exits 0 when the installer fails (high)
+- [ ] #15 distro gh installed over an existing gh (medium)
+- [x] #16 `uv python install --upgrade` with an older uv (medium)
+- [ ] #17 false "[ok] installed via Homebrew" (low)
+- [ ] #18 datadog cargo fallback never fires (medium)
+
+**PR B — first-class Linux (v0.74.0)**
+- [ ] #14 brew-only setup scripts have no Linux path (high)
+- [ ] #19 Linux CI never runs the installer; registry claims unverified support (high)
+
+## Phases
+
+1. **PR A** — the fixes listed above.
+2. **PR B**:
+   - spec amendments
+   - `/tool-eval` per tool for its Linux install method
+   - lib helpers (`IS_LINUX`, `detect_pkg_manager`, `as_root`, `install_release_binary`)
+   - Linux and dnf paths in the setup scripts
+   - `setup-brew`
+   - Linuxbrew line in the shell-integration block
+   - `linux-install` CI matrix
+
+Both PRs follow `plan-execution.md`: verbatim edits approved in `plans/*.md` before any code is written, executed in sub-agent batches.
+
+## Acceptance
+
+- Running `aitools install` twice on Ubuntu and on Fedora, non-interactively:
+  - exits 0
+  - logs zero `[error]` lines
+  - leaves a valid `config.json` with all keys preserved
+  - leaves an existing `/usr/local/go` intact
+  - puts every managed tool on PATH
+- CI enforces all of the above.
+- Registry Linux statuses reflect verified reality.
+
+=========== ISSUE 11 ===========
+aitools install corrupts ~/.aitools/config.json on re-run (read_config_drives swallows trailing keys)
+**Severity:** critical (data loss)
+**Platforms:** macOS and Linux (bash path only; the PS1 path parses JSON correctly)
+
+## Repro
+
+1. Have a config where `googleDrives` is an inline empty array followed by more keys. This is exactly what `aitools user init` produces, because its node writer appends `userRepoPath` after `googleDrives`:
+   ```json
+   {
+     "version": 2,
+     "reposPath": "/root/repos",
+     "repoPath": "/root/repos/aitools",
+     "googleDrives": [],
+     "userRepoPath": "/root/repos/aitools-nobul-jose"
+   }
+   ```
+2. Run `aitools install --skip-gh-auth --repos-path /root/repos --skip-drive-detection`.
+
+## Result
+
+Step 5 logs `[error] Validation failed: /root/.aitools/config.json is not valid JSON`, and the file now reads:
+
+```json
+  "userRepoPath": "/root/repos/aitools-nobul-jose",
+  "googleDrives": [],
+  "userRepoPath": "/root/repos/aitools-nobul-jose"
+}
+}
+```
+
+Each later run compounds the damage. It then cascades: Step 21 can't read the profile (`Profile not available -- {{PLACEHOLDER}} tokens will not be resolved`), so the deployed `~/.claude/CLAUDE.md` ships with literal `{{PROFILE_NAME}}`, `{{IDENTITY_GIT_NAME}}` and so on.
+
+## RCA
+
+- **Immediate cause:** `read_config_drives()` (`scripts/aitools-install.sh`) extracts the array with `sed -n '/"googleDrives"/,/^[[:space:]]*\]/p'`. An inline `[]` never produces a line *starting* with `]`, so the range runs to end of file and captures every later key plus the closing `}`. That text becomes `$DRIVES_JSON` and is spliced into the `cat > "$CONFIG_FILE" << CONFIGEOF` heredoc.
+- **Contributing factors:**
+  1. **Prevention:** bash Step 5 violates `.claude/rules/config-file-safety.md`. It uses the heredoc anti-pattern on a co-owned file and has no `backup_file` call. It also contradicts `reference/user-repo.md`'s promise that "re-running the installer preserves existing values". `aitools-install.ps1` does a correct parse-and-merge (parity gap).
+  2. **Detection:** `validate_json_config` catches the corruption, but only logs it. The bad file is already written, and the wrapper exits 0 (see the exit-code sub-issue).
+  3. **Audit:** CI never runs the installer twice on a configured machine.
+- **Root cause:** JSON is regex-parsed and blind-overwritten instead of read, merged and written atomically.
+- **Corrective action (structural):** in Step 5:
+  - `backup_file` first
+  - read-then-merge with `node`, or `python3` if node is absent (mirrors the PS1 logic)
+  - write to a temp file, run `validate_json_config`, then atomic `mv`
+  - on validation failure, keep the old file and pair `log_error` with `write_summary ERROR`
+  - recover an already-corrupt file from its newest valid backup
+- **Recurrence risk:** high. It hits on every second install after `user init`, i.e. the standard bootstrap flow.
+
+## Acceptance
+
+- Install → `user init` → install → install leaves `config.json` valid, with all keys exactly once.
+- A backup file exists after each write.
+- An injected invalid result never replaces the existing file.
+
+=========== ISSUE 14 ===========
+Homebrew-only setup scripts run on Linux (typst, uv, go, datadog): no Linux install path
+**Severity:** high (tools silently missing on Linux)
+**Platform:** Linux
+
+## Result
+
+On Linux without Homebrew, each of these scripts calls `brew` unconditionally:
+
+| Script | Outcome |
+|---|---|
+| `setup-typst.sh` | `brew: command not found`; typst not installed |
+| `setup-uv.sh` | `brew: command not found`. A pre-existing `~/.local/bin/uv` was flagged "non-preferred" and the script still errored |
+| `setup-go.sh` | removed Go, then `brew: command not found` (see the Go deletion sub-issue) |
+| `setup-datadog.sh` | `brew: command not found`; pup not installed (see the datadog fallback sub-issue) |
+
+By contrast, `setup-gh-cli.sh` and `setup-pandoc.sh` already branch `Darwin) brew … ;; *) apt …`.
+
+## RCA
+
+- **Immediate cause:** each OS guard only rejects Windows, and each script body is the macOS brew path.
+- **Contributing factors:**
+  1. **Prevention:** `.claude/rules/cross-platform.md` says `.sh` targets macOS **and Linux**, but nothing requires a Linux code path or tests one.
+  2. **Shared lib:** `aitools-lib.sh` sets `IS_MACOS` and `IS_WINDOWS`, but has no `IS_LINUX` and no package-manager or upstream-binary helpers. Each script reinvents dispatch, or doesn't.
+  3. **Spec:** `reference/tool-registry.md` has no Linux install rows for typst, uv or Go, yet marks them `Linux: supported`.
+  4. **Detection:** Linux CI never runs a setup script (see the CI sub-issue).
+- **Root cause:** Linux was declared supported without an implemented or verified install path per tool.
+- **Corrective action (structural):**
+  - add lib helpers: `IS_LINUX`, `detect_pkg_manager` (apt|dnf|none), `as_root`, and a checksum-verified `install_release_binary`
+  - pick each tool's Linux method via `/tool-eval` from official docs (vendor-official, user-level preferred; Homebrew-on-Linux as fallback)
+  - add Linux branches, including dnf, and record the methods in the registry
+- **Recurrence risk:** high for any new tool until CI covers Linux.
+
+## Acceptance
+
+On Ubuntu and on Fedora without Homebrew, typst, uv, Go and pup install via their documented Linux methods and resolve on PATH. Each script reports truthfully via `write_summary`.
+
+=========== ISSUE 19 ===========
+Linux CI never runs the installer; registry claims "Linux: supported" with every Linux verification pending
+**Severity:** high (process: the gap that let all the sibling sub-issues ship)
+
+## Observation
+
+- The `linux` job in `.github/workflows/check.yml` runs a bash version check, `bash -n` syntax, `py_compile`, `build-deploy.sh`, and a deploy drift check. **It never executes a setup script or the installer.**
+- `reference/tool-registry.md` lists every managed tool as `Linux: supported`. Yet every Linux "Last verified version" entry is `pending`.
+- Per `reference/tool-evaluation-criteria.md`, `supported` means "fully integrated -- setup script + installer entry". That framework only defines platform states for macOS and Windows.
+- Other governance artifacts are also macOS/Windows-only:
+  - the smoke-test pattern (`.claude/rules/smoke-test-pattern.md` + detail)
+  - the pre-commit platform note (`(tested: macOS)` / `(tested: Windows)`)
+  - the managed-file-deployment platform table
+  - the shell-integration managed block (brew only at `/opt/homebrew` and `/usr/local`, not Linuxbrew)
+
+## RCA (Swiss cheese)
+
+| Layer | What failed |
+|---|---|
+| Prevention | Linux isn't a defined platform, so there's no rule requiring a Linux path or verification |
+| Detection | CI has no functional Linux run, so nothing exercises the installer |
+| Audit | Post-push check #9 asks that "Last verified" not stay `pending` indefinitely, but nothing enforces it |
+
+**Root cause:** support was declared without verification, and no layer checks a declaration against reality.
+
+## Corrective action (environmental + spec)
+
+1. **CI:** add a `linux-install` job matrix with `ubuntu-latest` and a `fedora:latest` container, running a smoke script (`.github/scripts/linux-install-smoke.sh`). It should:
+   - pre-seed `/usr/local/go`
+   - pre-seed a config with `googleDrives` before `userRepoPath`
+   - run `aitools install` non-interactively **twice**
+   - assert: exit code 0, zero `[error]` lines, `config.json` parses with all keys, `/usr/local/go/bin/go` survives, and each managed tool is on PATH
+2. **Spec (protected-file review):**
+   - add Linux as a third platform in the evaluation framework
+   - set registry Linux status to `evaluating` until CI verifies each tool
+   - add Linux to the smoke-test recipes, pre-commit platform note, managed-file platform table, and shell-integration block
+
+## Acceptance
+
+The Linux CI job fails on any of the regressions in the sibling sub-issues. Registry Linux statuses match CI-verified reality.
+
+=========== ISSUE 21 ===========
+Epic: Logging and end-of-run summary conformance (script-standards)
+## Why
+
+A logging audit on 2026-10-03 found that `aitools install` can fail without leaving the evidence in `deploy.log`, and that the end-of-run summary panel can miss a failed tool or report it as OK. It ran against branch `claude/fable-status-q9ch93` and checked every `setup-*.sh/.ps1`, both installers, both `aitools` entry points, and the four `*-lib` files against `.claude/rules/script-standards.md`, `reference/script-standards-detail.md` and `reference/logging.md`. An end-to-end Linux install run (#10) confirmed several of the findings live.
+
+Examples:
+- rustup's error was cut down to a 3-line backtrace tail, under a message saying "see log above".
+- `setup-user-settings` died at an interactive prompt with no error line and no summary row.
+- `aitools` logs "exit 0" for every child script that fails.
+
+## Sub-issues: one per root cause
+
+| # | Root cause |
+|---|---|
+| #22 | Install/update output truncated before logging |
+| #23 | Install/uninstall/config output discarded or never logged |
+| #24 | `[ -n ] && log` piped loops abort under `set -e` |
+| #25 | Diagnostics bypass the logging framework |
+| #26 | Failure paths without `write_summary ERROR`; PS1 reports failed validation as OK |
+| #27 | Success decided by grepping output; misleading error pointers |
+| #28 | Entry-point log override clobbered by the later lib source |
+| #29 | Interactive prompts die silently on EOF |
+| #30 | Malformed or misattributed log records |
+
+Found during the same run but not a logging issue: #31 (settings sync ordering on fresh installs).
+
+## Plan
+
+`plans/linux-install-hardening.md`, section "PR C: logging conformance". The fixes go in after PR A merges, in batches of 3 files or fewer, with verbatim edits and an error-handling audit per batch (`plan-execution.md`).
+
+Related: #10, #13, #18.
+
+=========== ISSUE 22 ===========
+Install/update output truncated before logging (rustup tail -3, git pull head -3)
+## Problem
+
+Standard 1 (`reference/script-standards-detail.md`, "Capture output, log it, then check the result") is violated: several scripts keep only a fragment of a command's output, so `deploy.log` lacks the actual error.
+
+| File:line | Code |
+|---|---|
+| `scripts/setup-rust.sh:39` | `printf '%s\n' "$RUSTUP_OUTPUT" \| tail -3 \| while … log "$line"` |
+| `scripts/setup-rust.ps1:26` | `… \| Select-Object -Last 3 \| ForEach-Object { … Log $l }` |
+| `scripts/aitools:1467` | `echo "$pull_out" \| head -3 \| sed 's/^/    /' >&2`: 3 lines, stderr only, nothing logged |
+| `scripts/aitools.ps1:1364` | `$pullOut … \| Select-Object -First 3 \| ForEach-Object { Write-Host … }` |
+
+## Observed (2026-10-03, Linux end-to-end run)
+
+`setup-rust` logged only:
+
+```
+[setup-rust] [info]   13: __libc_start_main_impl
+[setup-rust] [info]              at ./csu/../csu/libc-start.c:360:3
+[setup-rust] [info]   14: <unknown>
+[setup-rust] [error] rustup update reported errors (see log above)
+```
+
+The real message (`error: rustup is not installed at '<HOME>/.cargo'`) appeared only when the command was re-run by hand.
+
+## Fix
+
+- Log every line of the captured output (or `log_detail` / `LogDetail` it).
+- If a console preview is wanted, show it after the full log write.
+
+Part of #21.
+
+=========== ISSUE 23 ===========
+Install/uninstall/config command output discarded or never logged (32 sites, bash + PS1)
+## Problem
+
+Standard 1 and the "install with no exit code check" anti-pattern (`reference/script-standards-detail.md`) are violated. Commands run fire-and-forget, or their output goes to `/dev/null` / `Out-Null`, or it is captured and then never logged. When they fail, the log has no cause.
+
+### Fire-and-forget installs (no capture, no exit check)
+
+- `setup-user-cursor.sh:70` `brew install ripgrep`; `:107` `curl https://cursor.com/install -fsS | bash`
+- `setup-user-cursor.ps1:66` `winget install BurntSushi.ripgrep.MSVC …`; `:103` `Invoke-Expression (Invoke-RestMethod …)`
+- `aitools-install.ps1:517` Claude installer; `:164-165` `git config --global core.longpaths true` followed by an unconditional `LogOk`
+- `aitools-install.sh:91` bootstrap `winget install Microsoft.PowerShell`
+
+### Captured but never logged
+
+- `setup-gh-cli.ps1:28`, `setup-pandoc.ps1:28` (`winget upgrade` output)
+- `setup-go.ps1:29` (`choco uninstall`)
+- `setup-datadog.ps1:75-77,107-109`: cargo output logged only on failure (bash logs it always)
+- `setup-modal.sh:64-66` / `setup-modal.ps1:75-76`: original `uv tool upgrade` output overwritten by the repair before it is logged
+
+### Uninstall/cleanup output discarded
+
+- `setup-rust.sh:32`
+- `setup-typst.sh:26,31` / `.ps1:25,33`
+- `setup-pandoc.sh:68,73`
+- `setup-vercelcli.sh:69`
+- `setup-datadog.sh:43`: untap reason not included in the warning
+
+### Diagnostics thrown away
+
+- `aitools-install.sh:143` and `aitools:335,363`: `bash -n … 2>/dev/null`, so the syntax errors themselves are discarded. The PS1 twin logs each parse error.
+- `setup-user-mcp.sh:108,113`: `claude mcp add` output never logged; "Failed to add" has no reason.
+- `setup-user-claude.sh:342-352` / `.ps1:432-440`: dotprofile commit/push output.
+- `aitools:280-282,1445-1446` / `aitools.ps1:1357`: git push/pull failure output goes to stderr or the host only.
+
+## Fix
+
+Capture `2>&1` with `|| RC=$?` (bash) or `| Out-String` plus `$LASTEXITCODE` (PS1), log every line (`log_detail` for verbose output), and decide on the exit code.
+
+Full table: logging audit 2026-10-03 (RC2), to be attached to the plan. Part of #21.
+
+=========== ISSUE 24 ===========
+`while read; do [ -n "$l" ] && log; done` pipelines abort under set -e before the summary
+## Problem
+
+When the last iteration of a piped `while … read` loop ends with `[ test ] && log` and the test is false (empty or whitespace-only last line, or empty output), the loop returns 1. Under `set -euo pipefail` that aborts the script before `write_summary` and the exit footer, so the tool disappears from the summary panel. That breaks the summary coverage rule.
+
+This was verified empirically:
+- A piped loop aborts.
+- A standalone `[ ] && log` does not.
+- A call made inside an `if` condition does not.
+
+| File:line | Status |
+|---|---|
+| `scripts/setup-rust.sh:39` | Active. Aborts when `rustup update` prints nothing, or when the last kept line is blank. |
+| `scripts/aitools-lib.sh:1523-1525` (`repair_uv_tool_env`) | Latent. Safe today only because its one caller (`setup-modal.sh:64`) calls it inside `if`. |
+
+PR A (#11–#18, `plans/linux-install-hardening.md`) already fixed this pattern in `setup-datadog.sh` and `setup-python.sh`.
+
+## Fix
+
+Rewrite the loop body as `if [ -n "$line" ]; then log "$line"; fi`.
+
+Consider a check-pre-commit grep for `do \[ .* \] && log` so the pattern is caught at commit time.
+
+Part of #21.
+
+=========== ISSUE 25 ===========
+Diagnostics bypass the logging framework (node console.error, bare echo/Write-Host)
+## Problem
+
+`script-standards.md` says: "Logging framework is required -- raw `echo` or `Write-Host` without structured logging is not acceptable in reusable scripts." Several scripts break this, so diagnostics reach the console but never reach `deploy.log`.
+
+**Node merge blocks** capture only node's stdout (`MERGE_RESULT=$(node …)`). Their `console.error` output — validation failures, corrupt-file warnings, dry-run detail — goes to the console raw:
+- `setup-user-cursor.sh:178,189,229-245`
+- `setup-user-hooks.sh:275,342-356,373-397`
+- `setup-cursor-ide-mcp.sh:82,112-125,133`
+
+**Warnings discarded at the source:**
+- `setup-user-claude.sh:73-74` emits "could not read config" and then discards it with `2>/dev/null`, so a corrupt `config.json` silently falls back to the shared template.
+- `aitools-lib.ps1` `ReadConfigKey` prints its parse warning with `Write-Host "      WARN: …"` instead of `LogWarn`, so the warning is neither logged nor counted.
+
+**Bare status lines:**
+- `aitools:186,282-283` / `aitools.ps1:264-266` print the profile-migration push failure with bare `echo` / `Write-Host`. It is not `log_warn`, so it isn't counted.
+- `aitools-install.sh:43,77,87,90,95` print status before `logging_init`.
+
+## Fix
+
+- Node blocks: emit `WARN:` / `DETAIL:` / `ERROR:` prefixed lines on stdout and route them through `log_warn` / `log_detail` / `log_error`, or capture stderr to a temp file and log it.
+- Everything else: replace `echo` / `Write-Host` with the log helpers.
+- Installer: source the lib before flag parsing.
+
+Part of #21.
+
+=========== ISSUE 26 ===========
+Failure paths with no write_summary ERROR; PS1 reports failed validation as OK
+## Problem
+
+Two rules are broken here: the summary coverage rule ("Every code path … must call `write_summary`. A tool that fails must appear as ERROR, not be silently absent.") and the logging-summary pairing rule. A prior `log_error` does **not** stop a later OK row: `write_summary` only promotes OK to WARN when there are warnings.
+
+### a. `log_error` + `exit 1` with no summary row (~23 sites)
+
+- `setup-gh-cli.sh:61-64`, `setup-pandoc.sh:31-34`, `setup-vercelcli.sh:35-38` / `.ps1:20-23`
+- `setup-user-claude.sh:87-88` / `.ps1:86-102`
+- `setup-user-hooks.sh:45-120` (5 exits) / `.ps1:47-49,85-87`
+- `setup-user-mcp.sh:40-48` / `.ps1:33-41`
+- `setup-user-settings.sh:43-45` / `.ps1:36-38`
+- `setup-cursor-ide-mcp.sh:44-46` / `.ps1:37-39`
+
+Correct examples to copy: `setup-bash.sh:60-64`, `setup-perl.sh:44-48`.
+
+### b. PS1 writes OK after LogError
+
+- `setup-user-cursor.ps1:271-301`
+- `setup-cursor-ide-mcp.ps1:141-162`
+- `setup-user-hooks.ps1:378-411`
+- `setup-user-settings.ps1:95-98`: a failed `Sync-ManagedJson` leaves the result `"unchanged"` and reports OK "verified".
+- `aitools-install.ps1:321-323`: Step 5 writes no `aitools config` row on any path.
+
+### c. bash aborts under `set -e` before any summary
+
+- `setup-user-cursor.sh:157`, `setup-user-hooks.sh:245`, `setup-cursor-ide-mcp.sh:67`: bare `$(node … process.exit(1))`.
+- `setup-user-settings.sh:100`: `sync_managed_json` returns 1.
+- `setup-user-hooks.sh:162,226`: `adopt_managed_file` returns 1.
+
+### d. Results never reported
+
+- `setup-user-cursor.sh/.ps1`: `STATUS_ripgrep` / `STATUS_cursorCli` / `$status` are set but never read.
+- `setup-modal.sh:72-76` / `.ps1:82-87`: no `else` branch.
+
+### e. Orchestrators add no row when a child fails
+
+- `aitools-install.sh:147`
+- `aitools-install.ps1:98`: `try { & $ScriptPath } catch {…}` never checks `$LASTEXITCODE`.
+- `aitools:345,372`, `aitools.ps1:327-328`
+- gh auth login failure: `aitools-install.sh:277`, `aitools-install.ps1:198-200`
+
+### f. Lib file-write failures are ignored by callers
+
+`adopt_managed_file` / `Adopt-ManagedFile` failures are ignored (`setup-user-hooks.sh:162,226`; `.ps1:134,196` pipe the result to `| Out-Null`).
+
+### Also
+
+The vercel auth check (`setup-vercelcli.sh:136-139` / `.ps1:68-72`) skips the required `write_summary WARN`.
+
+## Fix
+
+- Add `write_summary ERROR` before every `exit 1`.
+- Compare the error count before and after validation blocks, and write ERROR instead of OK when it changed.
+- Wrap status-returning calls in `if !`.
+- Have orchestrators write `ERROR "<script>" "script failed (exit N)"`.
+
+Part of #21.
+
+=========== ISSUE 27 ===========
+Success decided by grepping output; error messages point at output the log lacks ("exit 0" always)
+## Problem
+
+Standard 3 limits deciding success by output grep to `brew upgrade` only. #18 was the same pattern on `brew install`; PR A fixed that one.
+
+### a. Install/update success decided by grep, not by exit code
+
+| File:line | Command | PS1 twin |
+|---|---|---|
+| `setup-rust.sh:38,40` | `rustup update` | uses the exit code |
+| `setup-modal.sh:59-81` | `uv tool upgrade` | uses the exit code |
+| `setup-modal.sh:97,99` | `pip install` | uses the exit code |
+| `setup-vercelcli.sh:116,118` | `npm install -g vercel`; any npm warning containing "error" becomes ERROR | uses the exit code |
+| `aitools-install.sh:647,652` | `claude update` | uses the exit code |
+| `aitools-lib.sh:1522,1527` | `repair_uv_tool_env` | uses the exit code |
+
+### b. Messages point at output the log lacks, or report the wrong value
+
+- `aitools:345,372`: `if ! bash "$script_path"; then log_error "$script failed (exit $?)"`. Inside `if ! cmd`, `$?` is the status of the negated test, so the log always says **exit 0** (verified).
+- `setup-rust.sh:41` says "see log above", but the log holds only 3 lines (see the sibling issue on truncated output).
+- `setup-user-hooks.sh:421` says "(see above)", but the detail is node stderr on the console only.
+- `setup-cursor-ide-mcp.sh:182-186`: `agent mcp remove vercel` fails with `error: too many arguments for 'mcp'` and is logged as "Could not remove vercel from Cursor (likely not configured)", which is wrong. The CLI interface changed. The PS1 twin still uses `agent mcp disable` (logged as ERROR).
+
+### c. Spec ambiguity (route via /incident)
+
+Seven `brew upgrade` grep hits use ERROR: `setup-gh-cli.sh:76-78`, `setup-pandoc.sh:51-53`, `setup-go.sh:57-59`, `setup-uv.sh:36-38`, `setup-typst.sh:45-47`, `setup-vercelcli.sh:55-57`, `setup-datadog.sh:61-63`. Standard 3's canonical block prescribes WARN. Either the scripts or the spec should change.
+
+## Fix
+
+- Decide success on the exit code (`|| RC=$?`) plus a binary check.
+- Capture the exit code before entering the `if`.
+- Re-verify the Cursor CLI `mcp` subcommands against official docs via `/tool-eval`, then make bash and PS1 match.
+
+Part of #21.
+
+=========== ISSUE 28 ===========
+aitools entry-point log override is clobbered when aitools-lib is sourced later
+## Problem
+
+`reference/script-standards-detail.md` ("Logging overrides") says entry points override the lib's logging functions **after sourcing**, and that `scripts/aitools` uses file-only logging with errors and warnings on stderr.
+
+In practice the override is defined first and then overwritten:
+
+- **bash:** `scripts/aitools:77-83` defines `log` / `log_error` / `log_warn`. `:1405-1406` then runs `source "$repo_path/scripts/aitools-lib.sh"` and `logging_init "aitools"`, which redefines all four (`aitools-lib.sh:115-128`) and resets `ERRORS` / `WARNINGS`.
+- **PS1:** `scripts/aitools.ps1:88-94` versus `:1316-1317` has the same problem.
+
+## Impact
+
+For the whole pull/build/deploy phase, the documented behaviour isn't in effect:
+
+- Info lines also go to the console.
+- `error:` / `warning:` lines no longer go to stderr.
+- Counts accumulated before the lib is sourced are reset to 0.
+
+## Fix
+
+Either re-apply the override immediately after `logging_init` / `Initialize-Logging`, or update the overrides table if console output is now the intended behaviour. That table is protected and needs review.
+
+Part of #21.
+
+=========== ISSUE 29 ===========
+Interactive review prompts die silently on EOF (bash read < /dev/tty under set -e; PS1 null .ToLower())
+## Problem
+
+The lib's interactive prompts don't handle end-of-input. The prompt can be reached with a terminal that delivers EOF (for example a pty with no input, or a closed terminal). When that happens, the setup script dies with no `[error]` line and no summary row. The orchestrator then logs only "setup-user-settings.sh failed" (exit 0, see the sibling issue on misleading messages).
+
+### bash (`scripts/aitools-lib.sh`)
+
+`read -r choice < /dev/tty` returns 1 at EOF, and `set -e` in the caller aborts. Affected:
+- `prompt_json_field_review` (:1209)
+- `prompt_diff_review` (:873, :916)
+- `_invoke_ai_merge` (:718, :738, :758)
+
+### PS1 (`scripts/aitools-lib.ps1`)
+
+- `Prompt-JsonFieldReview` handles EOF correctly: `if ($null -eq $choice) { return "overwrite" }`.
+- `Prompt-DiffReview` (:882, :929) and `Invoke-AiMerge` (:711, :731, :749) call `.ToLower()` on a possibly-null `[Console]::ReadLine()` result, which throws.
+- Non-interactive detection is inconsistent: `Prompt-DiffReview` uses `[Environment]::UserInteractive`, while `Prompt-JsonFieldReview` uses `[Console]::IsInputRedirected`.
+
+## Observed (2026-10-03, Linux end-to-end run 2)
+
+```
+[setup-user-settings] [info] Settings sync plan: adopts=0 deprecated=0 decisions=10
+[REVIEW] autoMemoryEnabled differs from profile.json.
+  …
+  choice [o/a/s/x]: [aitools-install] [error] setup-user-settings.sh failed
+```
+
+## Fix
+
+- One helper per language: `read_tty_choice` / `Read-ConsoleChoice`. At EOF it logs "no input (EOF) -- defaulting to overwrite" and returns the non-interactive default, so the documented non-interactive fallback applies.
+- Unify PS1 non-interactive detection.
+- Add a regression test that drives each prompt with `/dev/null` input under a pty.
+
+Related: the `interactive-menus.md` "Non-interactive fallback" rule. Part of #21.
+
+=========== ISSUE 30 ===========
+Malformed or misattributed log records (raw diff lines, hardcoded os in checks.jsonl, unchecked node in deploy-state)
+## Problem
+
+`reference/logging.md` §5 requires every log line to follow `[<utc-Z>] [<script>] [<level>] <msg>`. Several sites write records that are malformed, or that report the wrong data.
+
+| File:line | Issue |
+|---|---|
+| `scripts/aitools-lib.sh:843` (`prompt_diff_review`) | Appends the full unified diff to `deploy.log` as raw lines with no `[ts] [script] [level]` prefix, which breaks parsing. It also does this only when the diff is over 40 lines, so smaller reviewed diffs are never logged. |
+| `scripts/check-lib.ps1:52` (`CheckLogInit`) | Hardcodes `"os":"Windows"` in the `checks.jsonl` run_start record, so PS1 check runs on macOS or Linux are misattributed. `check-lib.sh` derives the OS from `uname`. |
+| `scripts/aitools-lib.sh:379-384, 399-404` (`get_deploy_state_hash` / `update_deploy_state`) | Node output goes to `2>/dev/null` with no comment or result check. If node fails in `update_deploy_state`, `_DEPLOY_MANIFEST` becomes empty and an empty `manifest.json` is written. All deploy-state history is lost silently, nothing is logged, and later runs fall back to interactive review. |
+| `scripts/aitools-lib.sh:312-314` (`backup_file`) / `aitools-lib.ps1:264-268` (`Backup-File`) | `cp` / `Copy-Item` are unguarded, so a failed backup aborts the run (bash `set -e`) or throws. `config-file-safety.md` says a failed backup should warn and proceed. Pruning uses `2>/dev/null` with no comment or check. |
+
+## Fix
+
+- Write diffs through `log_detail` line by line, at every size.
+- Derive the OS in `CheckLogInit` (from `$IsMacOS` / `$IsLinux`).
+- Check node's exit in the deploy-state helpers, and `log_warn` and keep the old manifest on failure.
+- Guard the backup copy: `log_warn` and continue.
+
+Part of #21.
+
+=========== ISSUE 31 ===========
+Fresh install: setup-user-settings runs before settings.json exists, so profile settings are never applied on run 1
+## Problem
+
+On a fresh machine, the deploy order runs `setup-user-settings` **before** `setup-user-hooks`, and `setup-user-hooks` is the script that creates `~/.claude/settings.json`.
+
+Run 1:
+```
+[setup-user-settings] [info] No settings.json yet at …/.claude/settings.json -- nothing to sync
+[setup-user-settings] [ok] COMPLETED successfully
+[setup-user-hooks] [ok] Hooks deployed to …/.claude/settings.json
+```
+
+The result is a `settings.json` containing only `hooks`. None of the `profile.json` `claude.settings` values (autoMemoryEnabled, effortLevel, permissions, …) are applied, and the run still reports success.
+
+Run 2 sees every profile key as `live-missing` and prompts for each one:
+```
+Settings sync plan: adopts=0 deprecated=0 decisions=10
+[REVIEW] autoMemoryEnabled differs from profile.json.
+  settings.json : (not in settings.json)
+  profile.json : false
+```
+A brand-new machine therefore needs two installs plus 10 manual answers to reach its intended state. Separately, a prompt at EOF dies silently (#29).
+
+This was reproduced on 2026-10-03 with the branch for #10, in an isolated HOME on Ubuntu 24.04. It is not Linux-specific: the ordering is the same in `scripts/aitools` `deploy_scripts` and in the installer's deploy list.
+
+## Expected
+
+- `reference/user-repo.md` says `profile.json` `claude.settings` is "the source of truth for `~/.claude/settings.json`".
+- `interactive-menus.md` says the source wins non-interactively.
+
+On a fresh file (nothing for the user to have customized), the profile values should simply be written.
+
+## Fix options
+
+1. Run `setup-user-hooks` before `setup-user-settings`, in both bash and PS1 deploy lists and in `build-deploy.sh`.
+2. In `sync_managed_json` / `Sync-ManagedJson`, when the live file does not exist, create it from the profile mirror without prompting.
+
+Option 2 is more robust and independent of ordering. Option 1 alone still prompts once per key on the first run.
+
+=========== ISSUE 32 ===========
+check-pre-push step 7 fails every setup-script change: expects aitools/deploy/, but the build target moved to the dotprofile repo
+## Problem
+
+Step 7 ("deploy/ matches source") in `scripts/check-pre-push.sh` (lines 106-117) fails a push whenever it touches `scripts/setup-*`, `build-deploy.*` or `shared/` without also touching `deploy/` **in the aitools repo**:
+
+```bash
+scripts_shared_changed=$(echo "$PUSH_FILES" | grep -E '^(scripts/(setup-.*|build-deploy)\.(sh|ps1)$|shared/)' || true)
+deploy_changed=$(echo "$PUSH_FILES" | grep -E '^deploy/' || true)
+...
+step_fail "7" "deploy/ matches source" "scripts/shared changed but deploy/ not updated"
+```
+
+That no longer matches the spec:
+
+- `.claude/rules/deploy-paths.md` says `build-deploy.sh` generates `deploy/` "into the user's dotprofile repo… The shared `aitools/deploy/` is frozen (no longer regenerated)".
+- `build-deploy.sh` (lines 180-192) sets `DEPLOY_DIR="$_urp/deploy"`.
+
+A compliant push can never pass step 7. The regenerated output belongs in, and is committed to, `aitools-<user>/deploy/`.
+
+Observed on 2026-10-03 while pushing PR A (#10). The regenerated deploy/ was committed to the dotprofile repo, and step 7 still failed.
+
+The same staleness may affect:
+- `pre-commit` steps 3, 10 (build freshness / deploy drift), which `deploy-paths.md` already says "no longer apply"
+- `post-push` Extensive #7
+
+The PS1 twin (`check-pre-push.ps1`) needs the same fix.
+
+## Fix
+
+Check the dotprofile repo instead. Resolve `userRepoPath`, then verify that `<userRepoPath>/deploy/` either:
+- has a commit newer than the source change, or
+- shows no diff after a dry-run build.
+
+Alternatively, drop the step in favour of pre-commit step 13 plus `build-deploy.sh`'s own sentinel checks.
+
+=========== ISSUE 72 ===========
+PS1 managed-file review menu has no Windows test coverage (interactive cases skipped on Windows)
+## Problem
+
+The PowerShell managed-file review menu (`Prompt-DiffReview`, `Review-JsonFields`, `Invoke-AiMerge`, `Invoke-ManagedAbort` in `scripts/aitools-lib.ps1`) is tested only on macOS and Linux CI. That code runs only on Windows in production.
+
+`tests/managed-files/test-managed-files.ps1` drives its interactive cases through `tests/managed-files/pty-run.py`, which uses Python's `pty` module (Unix only). On Windows the whole interactive group is skipped:
+
+```
+windows  Managed-file tests (PowerShell, native)  SKIP interactive cases (no python3 pty on this platform)
+windows  Managed-file tests (PowerShell, native)  9 passed, 0 failed, 1 skipped
+```
+(PR #68, run 39719152527, job 119628339941)
+
+So 13 interactive cases (overwrite, skip, accept & adopt, adopt filter, merge & adopt, merge rejection, failed AI merge, adopt-target write failure, abort, per-field JSON review) run on macOS and Linux, where the PS1 entry points stop at their OS guard, and never on Windows, where users see the menu. CI reports the Windows job green because a skipped group counts as a pass.
+
+## How it surfaced
+
+PR #68's Linux job failed on the PS1 "EOF at the menu" pty case: pwsh on Linux did not end `[Console]::ReadLine` on a `\x04` sent through the pty, so it timed out after 60 s. Fixed on the PR branch in 435a7aa by testing `Read-ConsoleChoice` with an empty `Console.In` (portable, runs on Windows too). The investigation showed the larger gap above.
+
+## History
+
+- 2026-03-24 `b698ea7` (v0.66.0): CI created with 3 runners; Linux job checked bash/Python only.
+- 2026-10-03 #37 (`62442cb`): PS1 logging tests added to all three runners, the first PS1 run on Linux. Authored in Claude Code web (Linux only).
+- 2026-10-22 #68: PS1 managed-file tests with pty interactive cases added to all three runners.
+
+No recorded decision says which PS1 tests belong on which platform.
+
+## Suggested direction
+
+1. **Input seam (preferred, no new dependency):** route the menu's key reads (`Read-ConsoleChoice` and the merge `[y/n]` read) through one replaceable function or `Console.In`, so tests can script keystrokes without a terminal. The interactive cases then run on Windows, macOS and Linux alike. `Test-InteractiveConsole` needs a matching test override so the menu is shown under redirected input.
+2. **Alternative:** a Windows ConPTY harness. Needs a `/tool-eval` pass for any third-party package (e.g. pywinpty).
+3. **Policy:** write down that PS1 logic tests (parse, JSON merge, file ops, logging) run on all three runners, and console/terminal behavior tests must run on Windows. Candidate home: `.claude/rules/cross-platform.md` (protected, needs review).
+4. **Visibility:** make CI surface a skipped test group (e.g. `::warning::` annotation) instead of passing silently.
+
+## Done when
+
+- The Windows job runs the PS1 interactive cases (no `SKIP interactive cases` line).
+- Breaking a menu branch in `aitools-lib.ps1` fails the Windows job.
+

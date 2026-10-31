@@ -1,0 +1,13 @@
+.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-H2-DraftsM3/S3-H2-DraftsM3-Review-verdict.md
+.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-H2-DraftsM3/S3-H2-DraftsM3-drafts/reference/user-repo.md.edit.txt
+.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-H2-DraftsM3/S3-H2-DraftsM3-drafts/registries/glossary.json.edit.txt
+.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-H2-DraftsM3/S3-H2-DraftsM3-handback.md
+.claude/rules/managed-file-deployment.md
+.cursor/rules/managed-file-deployment.mdc
+plans/tool-support-and-machine-profile.md
+reference/logging.md
+reference/script-standards-detail.md
+reference/tool-support-decision-tree.md
+reference/user-repo.md
+registries/glossary.json
+shared/skills/tool-adopt/SKILL.md

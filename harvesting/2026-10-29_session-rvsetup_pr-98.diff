@@ -1,0 +1,662 @@
+diff --git a/.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-NoMachine/S3-MF-NoMachine-Review-pr98.md b/.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-NoMachine/S3-MF-NoMachine-Review-pr98.md
+new file mode 100644
+index 00000000..fe76e5ff
+--- /dev/null
++++ b/.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-NoMachine/S3-MF-NoMachine-Review-pr98.md
+@@ -0,0 +1,141 @@
++# S3-MF-NoMachine-Review: PR #98 (`--no-machine` / `-NoMachine`)
++
++Reviewer: S3-MF-NoMachine-Review (independent; launched by S3-MF-NoMachine). Date: 2026-10-22.
++Branch reviewed: `feature/mf-config-no-machine` (worktree `.claude/worktrees/mf-nomach`), diff `origin/main...HEAD`
++(3 files: `scripts/setup-user-config.sh`, `scripts/setup-user-config.ps1`, `tests/profile/test-config.sh`).
++
++## Verdict: approve (no blockers)
++
++0 blocker, 0 major, 3 minor, 4 nit.
++
++The flag does what M3-FINISH item 2 asks: with `--no-machine`, an unregistered machine
++("no profile matches this machine", "profile.json has no machine profiles") gives no
++ERROR row, no ACTION row and exit 0; every other field is written; `machineId` /
++`machineAlias` are preserved (never set, never deleted); one info line says registration
++is left to the caller; `--no-machine` with `--machine-id` or `--machine-alias` is
++`ERROR|aitools config|bad arguments`, exit 1, nothing written. The PR #86 contract is
++kept (exit 0/1, never 2; no prompts; dry-run unchanged; at most one ACTION).
++Runs without the flag behave as before: the bash `derive_warn` split into
++`derive_warn` + `derive_warn_machine` (setup-user-config.sh:200-227) routes every message
++exactly as the main version did (origin/main setup-user-config.sh:174-189, compared
++branch by branch), the PS1 change only inserts a guarded `elseif` (ps1:206), and all
++pre-existing cases (c1-c21) still pass with byte-identical config.json and summary rows.
++
++## Test results (run by the reviewer, macOS Darwin arm64)
++
++| Command | Result |
++|---|---|
++| `bash -n` (bash 5 and `/bin/bash` 3.2) on setup-user-config.sh; `/bin/bash -n` on test-config.sh | clean |
++| pwsh parser on setup-user-config.ps1 | clean |
++| `bash tests/profile/test-config.sh` (pwsh parity) | **258 passed, 0 failed** |
++| `AITOOLS_TEST_BASH=/bin/bash bash tests/profile/test-config.sh --bash-only` | **167 passed, 0 failed** |
++| `bash tests/profile/test-user-init.sh` | **200 passed, 0 failed** |
++| Reviewer probe cases P1-P9 (the test harness, both writers, isolated HOME) | 27 passed, 1 "failed" (P1: expected by design, see m1) |
++
++All results match the PR body. Logs: `.scratch/session-mfnmrev/{test-config,test-config-bash32,test-user-init,probe}.log` in the worktree (not tracked).
++
++Probe cases (each runs bash and pwsh, compares config.json bytes and summary rows; all parity checks passed):
++
++| Probe | Fixture, args | Result |
++|---|---|---|
++| P1 | v2 profile.json with no `profiles` key, `--no-machine` | exit 1; `ERROR|profile.json|invalid (see log)` + ACTION (m1) |
++| P2 | two profiles share this hostname, `--no-machine` | exit 1; `ERROR|machine profile|no machine match` + ACTION (still reported, as documented) |
++| P3 | two profiles share this machine.id, `--no-machine` | exit 1; same rows as P2 |
++| P4 | unmatched machine, `--no-machine --dry-run` | exit 0; `OK|aitools config|dry-run: would update`; config untouched |
++| P5 | unmatched, config.json with machineAlias only | exit 0; no WARN, no ERROR, no ACTION |
++| P6 | `AITOOLS_ENVIRONMENT=claude-code-web` | not testable on macOS (lib: "claude-code-web on Linux only -- environment is local"); web path **unknown** empirically (m3) |
++| P7 | registered machine (id match), `--no-machine` | exit 0; machineId not written, stale machineAlias "new-mac" kept (flag honoured; caller-misuse risk, m2) |
++| P8 | `AITOOLS_MACHINE_ALIAS=nosuch`, `--no-machine` | exit 1; override error still reported as `no machine match` |
++| P9 | `--no-machine --machine-id ""` | exit 0, accepted (empty value = not passed, as for `--machine-id ""` today); parity holds |
++
++## Findings
++
++### Minor
++
++**m1. A v2 profile.json without a `profiles` object is still "invalid profile.json" under `--no-machine`.**
++The resolver emits one message for two states, "profile.json is not v2 or has no profiles"
++(scripts/aitools-profile.sh:636-637), and the writer classes it as `PROFILE_BAD`
++(setup-user-config.sh:242, ps1:233), so P1 gives `ERROR|profile.json|invalid (see log)`,
++an ACTION and exit 1 even with the flag. `"profiles": {}` is silenced (c22c), `profiles`
++absent is not. Reachability is low: `register --create` (scripts/aitools:486) writes a
++profile, so only a hand-edited file gets here. Suggested fix: either (a) say in the
++header/usage that a profile.json without a `profiles` object counts as invalid, or
++(b) in a resolver PR, split the message ("is not v2" vs "has no profiles") and silence
++the second with the flag. (a) is enough for this PR.
++
++**m2. The "caller" warning class matches by substring, so it also silences two "real" warnings.**
++setup-user-config.sh:204-209 / ps1:206-207 send every warning that contains
++`run: aitools user init` or `run: aitools-profile migrate` to detail. That includes the
++clone hint "profile ... was registered with hostname ..., this machine is ... -- renamed
++(run: aitools user init to update it), or a clone that shares machine id"
++(aitools-profile.sh:618) and "matched by hostname only (legacy) -- run: aitools user init"
++(aitools-profile.sh:756). The writer does not check that the machine is actually
++unregistered (P7: a registered machine with the flag keeps a stale machineAlias and
++loses these warnings). User init should only pass the flag for an unregistered machine,
++where :618 cannot fire (it needs `via=id`), so this is a misuse risk, not a live bug.
++Suggested fix: keep `log_warn` / `LogWarn` (counted, no NEED_* flag) for the clone
++message (`*"or a clone that shares machine id"*`) under `--no-machine`, or add one line
++to the header and `--help`: "pass only when this machine is not registered".
++
++**m3. Registration-related warnings that do not name a command still count under `--no-machine`.**
++By code reading (not run: P6 cannot run on macOS): "no profile has machine.environment
++\"claude-code-web\"" (aitools-profile.sh:682), "config.json machineAlias ... not in
++profiles" (:736) and "config.json machineId ... not in profiles -- ignored" (:719) stay
++`log_warn` (setup-user-config.sh:210-211, ps1:214-215), so an unregistered machine in
++those states gets `WARN|aitools config|updated` from the writer. That is not an ERROR or
++ACTION, so the requirement holds, but the run shows a second, machine-related warning
++next to user init's own. Suggested fix: none needed for merge; if the commander wants
++a quiet writer, route :682/:719/:736 to detail under the flag too (follow-up).
++
++### Nit
++
++**n1. Runner guidance: compute the flag where user init decides "not registered".**
++scripts/aitools:998-1002 is the "this machine without a profile" outcome;
++:1010-1017 then clears `machine_key` for owner `config` (registered, id undetectable)
++and for another machine's key. If S3-MF-Runner tests `machine_key` empty at the writer
++call (:1026-1028), owner `config` would get `--no-machine` too (harmless for
++config.json, since the cached values are kept either way, but it silences m2-class
++advice). Suggested fix for Runner: set a `no_machine=true` at :998 and pass the flag
++from that; the "not this machine's" branch (:1013-1016) can also set it, since user
++init already writes its own ERROR row there.
++
++**n2. Ambiguous matches keep the pre-existing row text.** P2/P3/P8 report
++`ERROR|machine profile|no machine match` + `ACTION||Run: aitools user init (profiles: a, b)`
++(setup-user-config.sh:275-276, ps1:269-270) for "hostname matches more than one
++profile", "machine.id ... on more than one profile" and an unknown override. That is
++the documented contract ("still reported") and pre-existing wording, not a regression;
++noting only that user init will show its own error next to it in those cases.
++
++**n3. The derivation info line prints values that `--no-machine` will not write.**
++setup-user-config.sh:265 / ps1:259 log `machineId=<derived> machineAlias=<derived>`
++before the flag clears them (sh:329-332, ps1:319-322). Suggested fix: append
++` (not written: --no-machine)` when the flag is set, or leave it (deploy.log only).
++
++**n4. Test gaps that the probes filled.** No committed case for an ambiguous match with
++the flag (P2/P3), the flag with `--dry-run` (P4), or a profile.json without `profiles`
++(P1). The behaviour is right in P2-P4; suggest adding P2 and P4 as c22k / c22l so the
++"still reported" and "dry-run unchanged" claims in the PR body are pinned by tests.
++
++## Checked and fine
++
++- Bash/PS1 parity: same flag semantics, same rows and exit codes in all 10 c22 cases and
++  all 9 probes; info/detail lines differ only in the flag spelling (documented).
++- bash 3.2: `{ ...; }` grouping at sh:116 and the new functions parse and run under
++  `/bin/bash` 3.2 (167 passed).
++- Error accounting: suppressed resolver errors use `log_detail` / `LogDetail` (not
++  counted); every other error still goes through `log_error` / `LogError` (counted); the
++  section-1 skip requires `NM_UNREG && ! NM_OTHER_ERR` (sh:272, ps1:266), so a mixed run
++  still reports.
++- `write_summary` on every path: the silenced path still writes the config row
++  (`OK|aitools config|updated|created|verified`), and bad arguments write an ERROR row.
++- config-file-safety: read-then-merge, backup and validation paths untouched; preserved
++  keys documented in both headers (sh:25-26, ps1:24-25).
++- PS1 `$profileBad` -> `$script:ProfileBad` is required (set inside a function) and
++  correct.
++- Protected files: none touched; `grep` for `machine-id|MachineId|machine-alias` in
++  reference/, .claude/rules/ and plans/tool-support-and-machine-profile.md finds nothing,
++  so no doc draft is owed.
++
++## INCIDENT markers
++
++None. m1-m3 are minor design gaps in a new flag, tracked here for the author.
+diff --git a/.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-NoMachine/S3-MF-NoMachine-report.md b/.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-NoMachine/S3-MF-NoMachine-report.md
+new file mode 100644
+index 00000000..94fddb6c
+--- /dev/null
++++ b/.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-NoMachine/S3-MF-NoMachine-report.md
+@@ -0,0 +1,74 @@
++# S3-MF-NoMachine report: setup-user-config --no-machine / -NoMachine
++
++**Intent**: **Purpose**: Record what mission S3-MF-NoMachine shipped (M3-FINISH item 2), how it was verified and reviewed, and what is left open. **Scope**: scripts/setup-user-config.sh/.ps1, tests/profile/test-config.sh, PR #98. NOT the caller change (S3-MF-Runner). **Audience**: S3-M3Finish, S3-MF-Runner, Jose.
++
++## Summary
++
++- PR: https://github.com/nobul-tech/aitools/pull/98, branch `feature/mf-config-no-machine`.
++- Commits:
++  - b5292fd: the flag and tests c22 to c22j;
++  - a second commit: the review fixes (m2 wording, n4 cases c22k and c22l), the review file and this report.
++- Files changed: scripts/setup-user-config.sh, scripts/setup-user-config.ps1, tests/profile/test-config.sh.
++
++## Flag contract (stated in the PR body, "Contract change")
++
++`--no-machine` / `-NoMachine` means the caller owns machine registration.
++
++- **Written:** every other managed field.
++- **Preserved:** `machineId` and `machineAlias` are never set and never deleted.
++- **Not reported** for "no profile matches this machine" and "profile.json has no machine profiles":
++  - no ERROR row and no ACTION row;
++  - no section-3 ACTION;
++  - those resolver messages, and any warning that names `aitools user init` or `aitools-profile migrate`, go to deploy.log at detail.
++- **Exit code:** 0 for an unregistered machine alone.
++- **Still reported:** an invalid profile.json, a missing dotprofile path, ambiguous matches, and bootstrap or validation errors.
++- **Log:** one info line, `config: --no-machine: machine registration is left to the caller ...` (PowerShell writes `-NoMachine`).
++- **Bad arguments:** the flag together with `--machine-id` / `-MachineId` or `--machine-alias` / `-MachineAlias` gives `ERROR|aitools config|bad arguments`, exit 1.
++- **Caller duty:** pass the flag only for a machine the caller has found unregistered. The writer does not check this.
++- **Unchanged:** the rest of the PR #86 contract.
++
++## Verification (macOS arm64)
++
++- **Syntax:** `bash -n` (bash 5 and /bin/bash 3.2) and the pwsh parser are clean (.scratch/session-mfnomach/syntax.sh).
++- **test-config.sh with pwsh parity:** 269 passed, 0 failed (258 before c22k and c22l).
++- **test-config.sh under /bin/bash 3.2, bash only:** 174 passed, 0 failed.
++- **test-user-init.sh:** 200 passed, 0 failed (on b5292fd).
++- **check-pre-commit:** 1 FAIL, step 6. This is the known pre-existing failure. Step 11 WARNs about an uncommitted change in the live dotprofile, which this mission did not touch.
++- **check-pre-push under an isolated HOME:**
++  - Without a userRepoPath: 0 FAIL.
++  - With userRepoPath pointing at the dotprofile (step 7 checks a git-archive copy): step 7 FAILs. This is the known stale dotprofile `deploy/`; every generated file is listed.
++- **CI on b5292fd:** all green (linux, macos, windows, CodeQL).
++
++## Not run
++
++- Windows / Git Bash.
++- The claude-code-web environment.
++- An end-to-end user init that passes the flag (that is S3-MF-Runner's change).
++
++## Review
++
++- **Reviewer:** S3-MF-NoMachine-Review, an independent general-purpose agent with no isolation.
++- **Verdict:** approve. 0 blockers, 0 majors, 3 minors, 4 nits.
++- **Review comment:** https://github.com/nobul-tech/aitools/pull/98#issuecomment-6355804455
++- **Review file:** S3-MF-NoMachine-Review-pr98.md, in this folder.
++- **Fixed:**
++  - m2: the header and the help text now say the flag is only for an unregistered machine.
++  - n4: added c22k (ambiguous match, still an ERROR) and c22l (dry run).
++- **Left open, with suggested answers:**
++  - m1: a v2 profile.json without a `profiles` object is still reported as invalid with the flag. The resolver uses one message for two states. Suggest splitting the message in a later resolver PR.
++  - m3: some warnings that name no command are still counted, so the config row becomes WARN. There is still no ERROR or ACTION. Suggest leaving it.
++  - n1, for S3-MF-Runner: decide the flag at scripts/aitools:998 (`machine_key` empty after the registration flow). Do not decide it at the writer call: lines 1010-1017 also empty `machine_key` when the owner is "config", and that machine is registered.
++  - n2: an ambiguous match still shows the writer's ACTION. Suggest leaving it; it is a real profile.json problem.
++  - n3: the derivation log line shows machine values that the flag does not write. Suggest leaving it.
++
++## WRITE_BLOCKED
++
++None.
++
++## INCIDENT markers (not filed)
++
++- `INCIDENT:` (reviewer m1) aitools-profile.sh `resolve_machine` emits "profile.json is not v2 or has no profiles" for two different states. The writer therefore cannot tell a missing `profiles` object (an unregistered machine) from a non-v2 file.
++
++## Delegates
++
++- S3-MF-NoMachine-Review (general-purpose, no isolation).
+diff --git a/scripts/setup-user-config.ps1 b/scripts/setup-user-config.ps1
+index 39de66f2..e93fbc31 100644
+--- a/scripts/setup-user-config.ps1
++++ b/scripts/setup-user-config.ps1
+@@ -21,6 +21,8 @@
+ #   machineId: the matched profiles key, only for this machine's id-keyed profile
+ #   (profile.json revision 2.2). machineAlias: display only (the profile's alias),
+ #   kept for one release for 2.1 readers; the legacy cache for an alias-keyed profile.
++#   With -NoMachine, machineId and machineAlias are preserved as they are (never
++#   set, never removed): machine registration and its advice belong to the caller.
+ # Preserved: all other keys, in place (key order kept)
+ # Write path: merge to temp -> validate -> Backup-File -> move.
+ #   A read, merge or validation failure leaves the existing file untouched.
+@@ -30,8 +32,18 @@
+ #   with pwsh on macOS/Linux.
+ #
+ # Usage: setup-user-config.ps1 [-ReposPath P] [-RepoPath P] [-DrivesJson JSON]
+-#          [-GithubUser U] [-UserRepoPath P] [-MachineId ID] [-DryRun] [-Help]
++#          [-GithubUser U] [-UserRepoPath P] [-MachineId ID | -NoMachine]
++#          [-DryRun] [-Help]
+ #   -MachineAlias A is still accepted for one release (deprecated; logged at detail).
++#   -NoMachine (user init, when it leaves this machine unregistered): the caller owns
++#   machine registration and reports it. The writer writes every other field, leaves
++#   machineId / machineAlias untouched, and adds no machine-profile ERROR or ACTION row
++#   for an unregistered machine (no profile matches; no machine profiles) and no
++#   registration ACTION; it logs one info line saying so. Other derivation errors
++#   (invalid profile.json, a missing dotprofile path, an ambiguous match) are still
++#   reported. With -MachineId or -MachineAlias: bad arguments. Pass it only for a
++#   machine the caller has concluded is unregistered: the writer does not check, and
++#   every warning naming aitools user init / aitools-profile migrate goes to detail.
+ # Exit: 0 done (warnings possible), 1 any error. Never prompts, never exits 2.
+ 
+ [CmdletBinding(PositionalBinding = $false)]
+@@ -43,6 +55,7 @@ param(
+     [string]$UserRepoPath = "",
+     [string]$MachineId = "",
+     [string]$MachineAlias = "",   # deprecated (one release): use -MachineId
++    [switch]$NoMachine,           # machine registration left to the caller (user init)
+     [switch]$DryRun,
+     [switch]$Force,   # accepted for deploy-list parity; this script has no review menu
+     [switch]$Help,
+@@ -69,6 +82,10 @@ Parameters:
+   -UserRepoPath P    Dotprofile path chosen by user init
+   -MachineId ID      This machine's profile key chosen by user init (explicit choice)
+   -MachineAlias A    Deprecated (one release): a profile alias or key; use -MachineId
++  -NoMachine         Machine registration is left to the caller (user init): keep
++                     machineId / machineAlias as they are; no ERROR or ACTION row for
++                     an unregistered machine. Only for a machine the caller found
++                     unregistered. Not with -MachineId / -MachineAlias
+   -DryRun            Show what would change; write nothing
+   -Help              This text
+ 
+@@ -96,6 +113,14 @@ if ($MachineId -and $deprecatedAlias) {
+     Write-Summary "ERROR" "aitools config" "bad arguments"
+     exit 1
+ }
++if ($NoMachine -and ($MachineId -or $deprecatedAlias)) {
++    LogError "-NoMachine leaves the machine to the caller: not with -MachineId or -MachineAlias (see -Help)"
++    Write-Summary "ERROR" "aitools config" "bad arguments"
++    exit 1
++}
++if ($NoMachine) {
++    Log "config: -NoMachine: machine registration is left to the caller -- machineId / machineAlias kept as they are; no machine-profile ERROR or ACTION from this writer"
++}
+ # The profile choice goes to the resolver as an override (a key, ignoring case, else an alias)
+ $choiceArg = $MachineId
+ if ($deprecatedAlias) {
+@@ -163,7 +188,7 @@ $seen = $false
+ $script:NeedInit = $false
+ $script:NeedMigrate = $false
+ $script:NeedUpdate = $false
+-$profileBad = $false
++$script:ProfileBad = $false
+ # Route one resolver warning (the resolver returns its warnings; this caller logs
+ # them at their level and owns the rows):
+ #   handled  -- about the cached config.json or the expected shared-only state; this
+@@ -173,9 +198,16 @@ $profileBad = $false
+ #               one warning with the ACTION
+ #   real     -- something is off for this run (a clone, a duplicate alias, a hostname
+ #               guess, an undetectable id): LogWarn, counted; the config row becomes WARN
++#   caller   -- -NoMachine only: advice whose follow-up is machine registration (it
++#               names aitools user init or aitools-profile migrate) belongs to the
++#               caller: detail only, not counted, no ACTION
++$script:NmUnreg = $false      # -NoMachine: the resolver reported this machine as unregistered
++$script:NmOtherErr = $false   # -NoMachine: the resolver reported another error (still an ERROR)
+ function Write-DeriveWarning([string]$w) {
+     if ($w.StartsWith("config.json ") -or $w.Contains("not saved to config.json") -or $w.StartsWith("no dotprofile found") -or $w.StartsWith("githubUser unknown")) {
+         Log "config: $w (handled by this write)"
++    } elseif ($NoMachine -and ($w.Contains("run: aitools user init") -or $w.Contains("run: aitools-profile migrate"))) {
++        LogDetail "config: $w (-NoMachine: left to the caller)"
+     } elseif ($w.Contains("has no machine.id -- run: aitools user init")) {
+         Log "config: $w (see ACTION)"
+         $script:NeedInit = $true
+@@ -188,6 +220,21 @@ function Write-DeriveWarning([string]$w) {
+         elseif ($w.Contains("run: aitools user init")) { $script:NeedInit = $true }
+     }
+ }
++# One resolver error. With -NoMachine, "this machine is not registered" (no profile
++# matches it; profile.json has no machine profiles) is the caller's to report: detail
++# only. Every other error stays an error.
++function Write-DeriveError([string]$e) {
++    if ($NoMachine) {
++        if ($e.StartsWith("no profile matches this machine") -or $e.StartsWith("profile.json has no machine profiles")) {
++            LogDetail "config: $e (-NoMachine: left to the caller)"
++            $script:NmUnreg = $true
++            return
++        }
++        $script:NmOtherErr = $true
++    }
++    LogError "config: $e"
++    if ($e.Contains("is invalid JSON") -or $e.Contains("is not v2")) { $script:ProfileBad = $true }
++}
+ foreach ($line in $deriveOut) {
+     $kv = ([string]$line) -split "`t", 2
+     if ($kv.Count -lt 2) { continue }
+@@ -203,10 +250,7 @@ foreach ($line in $deriveOut) {
+         "hostname" { $d.host = $kv[1] }
+         "aliases" { $d.aliases = $kv[1] }
+         "warn" { Write-DeriveWarning $kv[1] }
+-        "error" {
+-            LogError "config: $($kv[1])"
+-            if ($kv[1].Contains("is invalid JSON") -or $kv[1].Contains("is not v2")) { $profileBad = $true }
+-        }
++        "error" { Write-DeriveError $kv[1] }
+     }
+ }
+ if (-not $seen -or $deriveRc -gt 2) {
+@@ -219,9 +263,11 @@ if (-not $seen -or $deriveRc -gt 2) {
+     if ($deriveRc -eq 1) {
+         Log "config: no dotprofile yet -- writing bootstrap keys only (shared-only mode)"
+     } elseif ($deriveRc -ne 0) {
+-        if ($profileBad) {
++        if ($script:ProfileBad) {
+             Write-Summary "ERROR" "profile.json" "invalid (see log)"
+             Write-Summary "ACTION" "" "Fix profile.json in the dotprofile (details in deploy.log)"
++        } elseif ($NoMachine -and $script:NmUnreg -and -not $script:NmOtherErr) {
++            LogDetail "config: no machine match not reported (-NoMachine: the caller reports registration)"
+         } else {
+             Write-Summary "ERROR" "machine profile" "no machine match"
+             Write-Summary "ACTION" "" "Run: aitools user init (profiles: $(& $show $d.aliases 'none'))"
+@@ -273,6 +319,10 @@ try {
+     }
+     if ($d.gh) { Set-JValue $cfg $d.gh @("githubUser") }
+     if ($d.urp) { Set-JValue $cfg $d.urp @("userRepoPath") }
++    if ($NoMachine) {
++        # -NoMachine: machineId / machineAlias are the caller's; kept exactly as they are
++        $d.mid = ""; $d.alias = ""
++    }
+     if ($d.mid) { Set-JValue $cfg $d.mid @("machineId") }
+     elseif ($d.alias -and $midHad) {
+         # The derivation matched a profile that is not this machine's id-keyed one (a 2.1
+@@ -366,6 +416,7 @@ if (-not $failed) {
+ # the ACTION (script-standards-detail "Severity decision guide") is counted. The row
+ # reports the write; the footer still counts this warning. ---
+ # The re-key advice assumes user init calls aitools-profile migrate (re-key batch 5).
++# -NoMachine: no Need* flag is set (the advice is the caller's), so no ACTION.
+ if ($deriveRc -eq 0) {
+     $advice = ""
+     if ($script:NeedInit) { $advice = "Run: aitools user init (registers this machine)" }
+diff --git a/scripts/setup-user-config.sh b/scripts/setup-user-config.sh
+index 161820ff..562b9565 100755
+--- a/scripts/setup-user-config.sh
++++ b/scripts/setup-user-config.sh
+@@ -22,6 +22,8 @@
+ #   machineId: the matched profiles key, only for this machine's id-keyed profile
+ #   (profile.json revision 2.2). machineAlias: display only (the profile's alias),
+ #   kept for one release for 2.1 readers; the legacy cache for an alias-keyed profile.
++#   With --no-machine, machineId and machineAlias are preserved as they are (never
++#   set, never removed): machine registration and its advice belong to the caller.
+ # Preserved: all other keys, in place (key order kept)
+ # Write path: merge to temp -> validate -> backup_file -> mv.
+ #   A read, merge or validation failure leaves the existing file untouched.
+@@ -29,8 +31,18 @@
+ #   created or changed (deploy.log still records the run).
+ #
+ # Usage: setup-user-config.sh [--repos-path P] [--repo-path P] [--drives-json JSON]
+-#          [--github-user U] [--user-repo-path P] [--machine-id ID] [--dry-run] [--help]
++#          [--github-user U] [--user-repo-path P] [--machine-id ID | --no-machine]
++#          [--dry-run] [--help]
+ #   --machine-alias A is still accepted for one release (deprecated; logged at detail).
++#   --no-machine (user init, when it leaves this machine unregistered): the caller owns
++#   machine registration and reports it. The writer writes every other field, leaves
++#   machineId / machineAlias untouched, and adds no machine-profile ERROR or ACTION row
++#   for an unregistered machine (no profile matches; no machine profiles) and no
++#   registration ACTION; it logs one info line saying so. Other derivation errors
++#   (invalid profile.json, a missing dotprofile path, an ambiguous match) are still
++#   reported. With --machine-id or --machine-alias: bad arguments. Pass it only for a
++#   machine the caller has concluded is unregistered: the writer does not check, and
++#   every warning naming aitools user init / aitools-profile migrate goes to detail.
+ # Exit: 0 done (warnings possible), 1 any error. Never prompts, never exits 2.
+ 
+ set -euo pipefail
+@@ -57,6 +69,10 @@ Options:
+   --user-repo-path P   Dotprofile path chosen by user init
+   --machine-id ID      This machine's profile key chosen by user init (explicit choice)
+   --machine-alias A    Deprecated (one release): a profile alias or key; use --machine-id
++  --no-machine         Machine registration is left to the caller (user init): keep
++                       machineId / machineAlias as they are; no ERROR or ACTION row for
++                       an unregistered machine. Only for a machine the caller found
++                       unregistered. Not with --machine-id / --machine-alias
+   --dry-run            Show what would change; write nothing
+   --help               This text
+ 
+@@ -67,6 +83,7 @@ EOF
+ 
+ REPOS_PATH_ARG=""; REPO_PATH_ARG=""; DRIVES_JSON="[]"; GH_USER_ARG=""; URP_ARG=""; ALIAS_ARG=""; MID_ARG=""
+ DEPRECATED_ALIAS=false
++NO_MACHINE=false
+ DRY_RUN=false
+ if [ "${AITOOLS_DRY_RUN:-}" = "1" ]; then DRY_RUN=true; fi
+ bad_args() {
+@@ -88,6 +105,7 @@ while [ $# -gt 0 ]; do
+                 --machine-alias)  ALIAS_ARG="$2"; DEPRECATED_ALIAS=true ;;
+             esac
+             shift 2 ;;
++        --no-machine) NO_MACHINE=true; shift ;;
+         --dry-run)  DRY_RUN=true; shift ;;
+         --force)    shift ;;  # accepted for deploy-list parity; this script has no review menu
+         --help|-h)  usage; exit 0 ;;
+@@ -98,6 +116,12 @@ for v in "$REPOS_PATH_ARG" "$REPO_PATH_ARG" "$DRIVES_JSON" "$GH_USER_ARG" "$URP_
+     case "$v" in *$'\t'*|*$'\n'*|*$'\r'*) bad_args "option values must be one line (no tab or newline)" ;; esac
+ done
+ if [ -n "$MID_ARG" ] && $DEPRECATED_ALIAS; then bad_args "pass --machine-id or --machine-alias, not both"; fi
++if $NO_MACHINE && { [ -n "$MID_ARG" ] || $DEPRECATED_ALIAS; }; then
++    bad_args "--no-machine leaves the machine to the caller: not with --machine-id or --machine-alias"
++fi
++if $NO_MACHINE; then
++    log "config: --no-machine: machine registration is left to the caller -- machineId / machineAlias kept as they are; no machine-profile ERROR or ACTION from this writer"
++fi
+ # The profile choice goes to the resolver as an override (a key, ignoring case, else an alias)
+ CHOICE_ARG="$MID_ARG"
+ if $DEPRECATED_ALIAS; then
+@@ -171,10 +195,27 @@ PROFILE_BAD=false
+ #               one warning with the ACTION
+ #   real     -- something is off for this run (a clone, a duplicate alias, a hostname
+ #               guess, an undetectable id): log_warn, counted; the config row becomes WARN
++#   caller   -- --no-machine only: advice whose follow-up is machine registration (it
++#               names aitools user init or aitools-profile migrate) belongs to the
++#               caller: detail only, not counted, no ACTION
++NM_UNREG=false      # --no-machine: the resolver reported this machine as unregistered
++NM_OTHER_ERR=false  # --no-machine: the resolver reported another error (still an ERROR)
+ derive_warn() {
+     case "$1" in
+         config.json\ *|*"not saved to config.json"*|"no dotprofile found"*|"githubUser unknown"*)
+             log "config: $1 (handled by this write)" ;;
++        *"run: aitools user init"*|*"run: aitools-profile migrate"*)
++            if $NO_MACHINE; then
++                log_detail "config: $1 (--no-machine: left to the caller)"
++            else
++                derive_warn_machine "$1"
++            fi ;;
++        *)
++            log_warn "config: $1" ;;
++    esac
++}
++derive_warn_machine() {
++    case "$1" in
+         *"has no machine.id -- run: aitools user init"*)
+             log "config: $1 (see ACTION)"; NEED_INIT=true ;;
+         *"run: aitools-profile migrate"*)
+@@ -187,6 +228,22 @@ derive_warn() {
+             esac ;;
+     esac
+ }
++# derive_error TEXT -- one resolver error. With --no-machine, "this machine is not
++# registered" (no profile matches it; profile.json has no machine profiles) is the
++# caller's to report: detail only. Every other error stays an error.
++derive_error() {
++    if $NO_MACHINE; then
++        case "$1" in
++            "no profile matches this machine"*|"profile.json has no machine profiles"*)
++                log_detail "config: $1 (--no-machine: left to the caller)"
++                NM_UNREG=true
++                return 0 ;;
++        esac
++        NM_OTHER_ERR=true
++    fi
++    log_error "config: $1"
++    case "$1" in *"is invalid JSON"*|*"is not v2"*) PROFILE_BAD=true ;; esac
++}
+ while IFS=$'\t' read -r k v; do
+     case "$k" in
+         derived.githubUser)   D_GH="$v"; SEEN=true ;;
+@@ -200,8 +257,7 @@ while IFS=$'\t' read -r k v; do
+         hostname)             D_HOST="$v" ;;
+         aliases)              ALIASES="$v" ;;
+         warn)                 derive_warn "$v" ;;
+-        error)                log_error "config: $v"
+-                              case "$v" in *"is invalid JSON"*|*"is not v2"*) PROFILE_BAD=true ;; esac ;;
++        error)                derive_error "$v" ;;
+     esac
+ done <<< "$DERIVE_OUT"
+ if ! $SEEN || [ "$DERIVE_RC" -gt 2 ]; then
+@@ -216,6 +272,8 @@ else
+         *) if $PROFILE_BAD; then
+                write_summary ERROR "profile.json" "invalid (see log)"
+                write_summary ACTION "" "Fix profile.json in the dotprofile (details in deploy.log)"
++           elif $NO_MACHINE && $NM_UNREG && ! $NM_OTHER_ERR; then
++               log_detail "config: no machine match not reported (--no-machine: the caller reports registration)"
+            else
+                write_summary ERROR "machine profile" "no machine match"
+                write_summary ACTION "" "Run: aitools user init (profiles: ${ALIASES:-none})"
+@@ -271,6 +329,10 @@ else
+ fi
+ if [ -n "$D_GH" ]; then op_set string "$D_GH" githubUser; fi
+ if [ -n "$D_URP" ]; then op_set string "$D_URP" userRepoPath; fi
++if $NO_MACHINE; then
++    # --no-machine: machineId / machineAlias are the caller's; kept exactly as they are
++    D_MID=""; D_ALIAS=""
++fi
+ if [ -n "$D_MID" ]; then op_set string "$D_MID" machineId
+ elif [ -n "$D_ALIAS" ] && [ -n "$MID_HAD" ]; then
+     # The derivation matched a profile that is not this machine's id-keyed one (a 2.1
+@@ -369,6 +431,7 @@ fi
+ # the ACTION (script-standards-detail "Severity decision guide") is counted. The row
+ # reports the write; the footer still counts this warning. ---
+ # The re-key advice assumes user init calls aitools-profile migrate (re-key batch 5).
++# --no-machine: no NEED_* flag is set (the advice is the caller's), so no ACTION.
+ if [ "$DERIVE_RC" -eq 0 ]; then
+     ADVICE=""
+     if $NEED_INIT; then ADVICE="Run: aitools user init (registers this machine)"
+diff --git a/tests/profile/test-config.sh b/tests/profile/test-config.sh
+index 34ee8c20..8159018b 100755
+--- a/tests/profile/test-config.sh
++++ b/tests/profile/test-config.sh
+@@ -110,6 +110,7 @@ map_args() {
+             --user-repo-path) PS_ARGS+=(-UserRepoPath "$2"); shift 2 ;;
+             --machine-id)     PS_ARGS+=(-MachineId "$2"); shift 2 ;;
+             --machine-alias)  PS_ARGS+=(-MachineAlias "$2"); shift 2 ;;
++            --no-machine)     PS_ARGS+=(-NoMachine); shift ;;
+             --dry-run)        PS_ARGS+=(-DryRun); shift ;;
+             *)                PS_ARGS+=("$1"); shift ;;
+         esac
+@@ -383,6 +384,101 @@ has_row "WARN|aitools config|rebuilt (was invalid)"
+ has_json '"machineId": "'"$KEY_MAC"'"'
+ out_has "Recovered machineId from the invalid config"
+ 
++# C22 --no-machine (user init left this machine unregistered): the caller owns machine
++# registration. No profile matches this machine: no ERROR, no ACTION, exit 0; every
++# other field is written; machineId / machineAlias are kept exactly as they were
++KEY_KEEP="bbbbbbbb-5555-6666-7777-888888888888"
++fix_nm_nomatch() {
++    fix_nomatch
++    perl -pi -e 's/"machineAlias": "new-mac"/"machineAlias": "new-mac",\n  "machineId": "'"$KEY_KEEP"'"/' "$CFG"
++}
++case_run c22-no-machine-unmatched 0 fix_nm_nomatch --no-machine --github-user nobul-jose
++has_row "OK|aitools config|updated"
++rows_n 0 "ERROR"
++rows_n 0 "ACTION"
++has_json '"machineAlias": "new-mac"'
++has_json '"machineId": "'"$KEY_KEEP"'"'
++has_json '"githubUser": "nobul-jose"'
++has_json '"version": 3'
++has_json '"userRepoPath": "[^"]+\/aitools-nobul-jose"'
++out_has "COMPLETED successfully"
++out_has "machine registration is left to the caller"
++log_has "no profile matches this machine"
++log_has ": left to the caller)"  # "(--no-machine: ..." (bash) / "(-NoMachine: ..." (PowerShell)
++# C22b the same fixture without the flag still reports it (C7 behaviour unchanged)
++case_run c22b-unmatched-without-flag 1 fix_nm_nomatch --github-user nobul-jose
++has_row "ERROR|machine profile|no machine match"
++rows_n 1 "ACTION"
++# C22c profile.json with no machine profiles: unregistered too, nothing reported
++fix_nm_empty() {
++    fix_v2
++    printf '{ "version": 2, "meta": { "schemaRevision": "2.2" }, "identity": { "github": "nobul-jose" }, "profiles": {} }\n' > "$DP/profile.json"
++}
++case_run c22c-no-machine-no-profiles 0 fix_nm_empty --no-machine
++rows_n 0 "ERROR"
++rows_n 0 "ACTION"
++has_json '"machineAlias": "new-mac"'
++# C22d unregistered 2.1 profile (C13 fixture): the registration ACTION is the caller's
++case_run c22d-no-machine-unregistered 0 fix_unreg --no-machine
++has_row "OK|aitools config|updated"
++rows_n 0 "ACTION"
++rows_n 0 "WARN"
++no_json '"machineId"'
++has_json '"machineAlias": "nobul-mac"'
++out_has "COMPLETED successfully"
++# C22e a cached machineId the match would remove (C20) is kept with --no-machine
++case_run c22e-no-machine-keeps-id 0 fix_stale_mid --no-machine
++rows_n 0 "ACTION"
++no_row_like "machineId updated"
++has_json '"machineId": "'"$KEY_OTHER"'"'
++has_json '"machineAlias": "nobul-mac"'
++# C22f a legacy alias-keyed profile (C17): no migrate ACTION, machineAlias not written
++case_run c22f-no-machine-legacy 0 fix_legacy "${BOOT[@]}" --no-machine
++has_row "OK|aitools config|created"
++rows_n 0 "ACTION"
++no_json '"machineAlias"'
++no_json '"machineId"'
++# C22g other derivation errors are still reported: an invalid profile.json
++fix_nm_badprofile() { fix_v2; printf '{ "version": 2, ' > "$DP/profile.json"; }
++case_run c22g-no-machine-bad-profile 1 fix_nm_badprofile --no-machine
++has_row "ERROR|profile.json|invalid (see log)"
++# C22h --no-machine with a machine choice: bad arguments, nothing written
++case_run c22h-no-machine-and-id 1 fix_v2 --no-machine --machine-id "$ID_MAC"
++has_row "ERROR|aitools config|bad arguments"
++rows_n 1 "ERROR"
++if grep -q '"version": 2' "$OUTJ"; then ok "c22h-no-machine-and-id: config untouched"; else bad "c22h-no-machine-and-id: config changed"; fi
++case_run c22i-no-machine-and-alias 1 fix_v2 --machine-alias laptop --no-machine
++has_row "ERROR|aitools config|bad arguments"
++# C22k an ambiguous match (this machine.id on two profiles) is still an error
++fix_nm_dupid() {
++    fix_v2
++    printf '{ "version": 2, "meta": { "schemaRevision": "2.2" }, "identity": { "github": "nobul-jose" }, "profiles": { "a": { "machine": { "id": "%s", "hostname": "nobul-mac" } }, "b": { "machine": { "id": "%s", "hostname": "nobul-mac" } } } }\n' "$ID_MAC" "$ID_MAC" > "$DP/profile.json"
++}
++case_run c22k-no-machine-ambiguous 1 fix_nm_dupid --no-machine
++has_row "ERROR|machine profile|no machine match"
++# C22l --no-machine with --dry-run: nothing written, no machine rows
++case_run c22l-no-machine-dry-run 0 fix_nm_nomatch --no-machine --dry-run
++has_row "OK|aitools config|dry-run: would update"
++rows_n 0 "ERROR"
++rows_n 0 "ACTION"
++if grep -q '"version": 2' "$OUTJ"; then ok "c22l-no-machine-dry-run: config untouched"; else bad "c22l-no-machine-dry-run: config changed"; fi
++
++# C22j the help text names the flag
++CASE="c22j-help"
++reset_home
++RC=0
++env HOME="$H" AITOOLS_LOG_DIR="$H/.aitools/logs" "$BASH_BIN" "$SH" --help > "$WORK/help.bash.out" 2>&1 || RC=$?
++if [ "$RC" -eq 0 ] && grep -qF -- "--no-machine" "$WORK/help.bash.out"; then ok "c22j-help: bash --help names --no-machine"
++else bad "c22j-help: bash --help (exit $RC) lacks --no-machine"; fi
++if $USE_PS; then
++    RC=0
++    env HOME="$H" AITOOLS_LOG_DIR="$H/.aitools/logs" AITOOLS_PROFILE_TEST_ANY_OS=1 \
++        pwsh -NoProfile -File "$PS" -Help > "$WORK/help.ps.out" 2>&1 || RC=$?
++    if [ "$RC" -eq 0 ] && grep -qF -- "-NoMachine" "$WORK/help.ps.out"; then
++        ok "c22j-help: pwsh -Help names -NoMachine"
++    else bad "c22j-help: pwsh -Help lacks -NoMachine"; fi
++fi
++
+ # C14 relative bootstrap path: bad arguments, nothing written
+ case_run c14-relative 1 fix_nodp --repos-path repos --repo-path "$H/repos/aitools"
+ has_row "ERROR|aitools config|bad arguments"

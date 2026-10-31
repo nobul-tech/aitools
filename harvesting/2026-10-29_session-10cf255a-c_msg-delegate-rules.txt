@@ -1,0 +1,8 @@
+/delegate: instruct delegates to read all project and user rules
+
+Duty element 2 now requires the prompt to tell the delegate explicitly to
+read every project-scope and user-scope rule not already in its context,
+each listed by absolute path. Writing step 4 and the prompt skeleton's
+Rules block carry the same instruction (commander decision, 2026-10-21).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

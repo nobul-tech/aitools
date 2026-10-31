@@ -1,0 +1,29 @@
+Make delegation.md the trigger and decisions only (D-DEL5, D-DEL7)
+
+Commander decisions 2026-10-26: the /delegate skill is the single body of
+delegation practice (the shared mission packet is merged into it); this
+rule must not duplicate it; it must make /delegate mandatory before every
+Agent tool call (any subagent_type) and every workflow, at every level.
+
+claude/rules/delegation.md:
+- Decisions table: adds D-DEL5 (versions, not drafts; protected files are
+  written as a version and reviewed after) and D-DEL7 (skill is the body,
+  rule is decisions + trigger; load /delegate before every Agent and
+  Workflow call).
+- Trigger directive (MUST): invoke Skill delegate before every Agent tool
+  call, every Workflow tool call or workflow script, every parallel,
+  background or cloud session, and before relying on a delegate's output;
+  load it at session start and after a compaction.
+- The three recursion instructions every prompt must carry: read every
+  user- and project-scope CLAUDE.md and rule in full by absolute path;
+  load /delegate before delegating further; pass both instructions down.
+- Removed the duplicated element detail, name-prefix detail, shipping
+  steps and return checks (they live in the skill).
+- Detection: the guard hook now covers Agent and Workflow and reminds on
+  every call (aitools change in progress).
+
+claude/CLAUDE.md "Delegation Duty": restated to the eight elements and
+the load-before-every-Agent-and-Workflow-call directive, matching
+aitools shared/claude-shared.md.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

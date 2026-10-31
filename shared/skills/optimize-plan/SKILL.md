@@ -126,7 +126,8 @@ available.
 This skill does NOT enforce cross-platform checks. Platform coverage
 is a project-specific concern. If the plan is for a cross-platform
 project, apply that project's rules (in aitools:
-`.claude/rules/cross-platform.md`, `.claude/rules/plan-execution.md`).
+`.claude/rules/cross-platform.md`; the sub-agent batch pattern in
+`reference/plan-execution-detail.md`).
 
 If scripts are modified but only one platform is shown, flag it as a
 contextual question: "Scripts modified but only one platform shown.

@@ -223,6 +223,6 @@ Not done:
 - Evaluation research: `reference/evaluations/google-chrome-linux-2026-10-05.md`
 - Registry entries: `/tool-registry` skill (`google-chrome`, `nss-tools`, `chrome-devtools-mcp`)
 - Environment notes: dotprofile `environments/claude-code-web/CLAUDE.md`
-- Evaluation principles: `@.claude/rules/tool-evaluation.md`
-- Lifecycle and onboarding: `@.claude/rules/tool-lifecycle.md`
-- Web sources rule (chrome-devtools for docs): `@.claude/rules/web-sources.md`
+- Evaluation principles: `@shared/rules/tool-evaluation.md`
+- Lifecycle and onboarding: `@shared/rules/tool-lifecycle.md`
+- Web sources rule (chrome-devtools for docs): `@shared/rules/web-sources.md`

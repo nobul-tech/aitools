@@ -1,0 +1,7 @@
+Add plans/ to the channel exception in CLAUDE.md
+
+Commander decision 2026-10-26: the plans directory skips worktrees and
+PRs, like handoffs, relay.md and CLAUDE.md, and is committed directly to
+main. Docs only.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

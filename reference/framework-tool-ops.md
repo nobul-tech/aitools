@@ -5,7 +5,7 @@ tool-ops — why per-tool operational metadata exists, how
 observe-to-enforce graduation works, and how tool-ops connects to
 the broader harness. **Scope**: Discipline source, adoption rationale,
 and maintenance guidance. NOT the ops data (`/tool-ops` skill). NOT
-the governance principle (`.claude/rules/tool-ops.md`). **Audience**:
+the governance principle (`shared/rules/tool-ops.md`). **Audience**:
 Agents understanding why tool-ops exists, harness architects extending
 the framework.
 
@@ -57,7 +57,7 @@ Three disciplines converge:
 
 ## Implementing Artifacts
 
-- `.claude/rules/tool-ops.md` (governance rule — always in context)
+- `shared/rules/tool-ops.md` (governance rule — always in context)
 - `shared/skills/tool-ops/SKILL.md` (governed access to registry)
 - Tool-ops registry (per-tool metadata, via `/tool-ops` skill)
 - `reference/tool-ops-*.md` (per-tool ops references — full detail)

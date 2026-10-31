@@ -1,0 +1,12 @@
+agentic-standards: managed-file review choices and merge (target model)
+
+Adds "Managed-file review choices and merge": SOURCE is the source of truth
+(no ancestor, no deploy state); JSON is reviewed field by field with SOURCE
+owning every field; accept & adopt and merge & adopt copy the result to the
+repo immediately, done by the library; backup, validate, restore and continue
+on failure; abort unchanged. Commander-approved text, 2026-10-21.
+
+The lib comment blocks gain a TARGET MODEL note: they still describe today's
+code until mission HARNESS batch B1 implements the model.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

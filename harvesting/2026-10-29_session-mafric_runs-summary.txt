@@ -1,0 +1,237 @@
+40417651110 2026-10-26T23:08:26Z Push on main main  Push on main
+40417646895 2026-10-26T23:08:24Z CI main  Merge pull request #99 from nobul-tech/docs/harness-approved-drafts
+40417500006 2026-10-26T23:07:08Z CI main  Add MERGE-ALL mission brief v1.0
+40417499059 2026-10-26T23:07:08Z Push on main main success Push on main
+40416826001 2026-10-26T23:01:39Z Push on main main success Push on main
+40416825997 2026-10-26T23:01:39Z CI main  Scaffold build-package.sh and packaging launcher stubs (batch B0)
+40415865053 2026-10-26T22:53:37Z CI main success Add BUILD-PKG design decisions contract (BP-1..BP-20, batches B0-B14)
+40415864894 2026-10-26T22:53:36Z Push on main main success Push on main
+40415470079 2026-10-26T22:50:20Z CI main success Add BUILD-PKG mission brief and wave-1 review and research findings
+40415468639 2026-10-26T22:50:19Z Push on main main success Push on main
+40414837170 2026-10-26T22:45:16Z CI main success Add MDM-PKG, ANSWER-1A and ANSWER-1B mission reports
+40414836399 2026-10-26T22:45:15Z Push on main main success Push on main
+40414580951 2026-10-26T22:43:15Z CI main success Run pre-push step 7 on every push
+40414580141 2026-10-26T22:43:14Z Push on main main success Push on main
+40414217797 2026-10-26T22:40:19Z CI main success Add plans/ to the channel exception in CLAUDE.md
+40414216651 2026-10-26T22:40:19Z Push on main main success Push on main
+40412060127 2026-10-26T22:23:30Z CI feature/harness-hookin success Run deploy-harness from the installer and every aitools run
+40412055797 2026-10-26T22:23:28Z PR #106 refs/pull/106/head success PR #106
+40411324343 2026-10-26T22:17:45Z Push on main main success Push on main
+40411324030 2026-10-26T22:17:45Z CI main success Document the channel exception in CLAUDE.md
+40409286713 2026-10-26T22:02:21Z Push on main main success Push on main
+40409286238 2026-10-26T22:02:21Z CI main success Add handoff 10cf255a-c and its relay entry
+40409226134 2026-10-26T22:01:53Z CI main success Use -LiteralPath in Backup-File and Backup-Dir
+40409225364 2026-10-26T22:01:53Z Push on main main success Push on main
+40083563653 2026-10-24T09:50:44Z Scheduled main success Scheduled
+39904776531 2026-10-23T05:15:44Z CI docs/mf-incidents success File M3 incidents #146-#161 (drafts for approval)
+39904772593 2026-10-23T05:15:41Z PR #102 refs/pull/102/head success PR #102
+39904682547 2026-10-23T05:14:45Z CI fix/mf-installer-relay success Installers and user init use the lib relay (A-1, A-12..A-18)
+39904678597 2026-10-23T05:14:43Z PR #116 refs/pull/116/head success PR #116
+39904330044 2026-10-23T05:10:52Z CI docs/mf-incidents success File M3 incidents #146-#161 (drafts for approval)
+39904326886 2026-10-23T05:10:49Z PR #102 refs/pull/102/head success PR #102
+39903839218 2026-10-23T05:05:32Z CI fix/mf-installer-relay success Installers and user init use the lib relay (A-1, A-12..A-18)
+39903835111 2026-10-23T05:05:29Z PR #116 refs/pull/116/head success PR #116
+39901917412 2026-10-23T04:44:20Z CI fix/mf-installer-relay success Installers and user init use the lib relay (A-1, A-12..A-18)
+39901915457 2026-10-23T04:44:19Z PR #116 refs/pull/116/head success PR #116
+39899995433 2026-10-23T04:22:45Z CI fix/mf-lib-relay success Lib relay: ERROR row for a failed child, machine-profile resolver ACTION (A-2, A-3, A-4)
+39899990902 2026-10-23T04:22:41Z PR #115 refs/pull/115/head success PR #115
+39898715301 2026-10-23T04:08:29Z CI fix/mf-audit-config success Fix audit A-10/A-11 in setup-user-config; split the resolver's not-v2 message
+39898712253 2026-10-23T04:08:27Z PR #114 refs/pull/114/head success PR #114
+39898507037 2026-10-23T04:06:09Z CI fix/mf-lib-relay success Lib relay: ERROR row for a failed child, machine-profile resolver ACTION (A-2, A-3, A-4)
+39898502960 2026-10-23T04:06:06Z PR #115 refs/pull/115/head success PR #115
+39898010128 2026-10-23T04:00:34Z CI fix/mf-audit-config success Fix audit A-10/A-11 in setup-user-config; split the resolver's not-v2 message
+39898005375 2026-10-23T04:00:32Z PR #114 refs/pull/114/head success PR #114
+39897637407 2026-10-23T03:56:13Z CI fix/mf-audit-config success Fix audit A-10/A-11 in setup-user-config; split the resolver's not-v2 message
+39897635567 2026-10-23T03:56:12Z PR #114 refs/pull/114/head success PR #114
+39895162994 2026-10-23T03:28:02Z CI fix/mf-lib-runner-result success Lib profile runner accepts result lines; user init uses it and passes --no-machine
+39895159139 2026-10-23T03:28:00Z PR #113 refs/pull/113/head success PR #113
+39894588085 2026-10-23T03:21:38Z CI fix/mf-audit-profile-json success Fix resolver and JSON engine audit findings A-6..A-9
+39894584836 2026-10-23T03:21:36Z PR #108 refs/pull/108/head success PR #108
+39894487599 2026-10-23T03:20:30Z CI fix/mf-audit-claude-build success Fix setup-user-claude hostname/dry-run rows and build-deploy embed cleanup, plain build output (A-19, A-20, A-25, A-26 claude)
+39894483661 2026-10-23T03:20:28Z PR #112 refs/pull/112/head success PR #112
+39894222195 2026-10-23T03:17:33Z CI fix/mf-audit-claude-build success Fix setup-user-claude hostname/dry-run rows and build-deploy embed cleanup, plain build output (A-19, A-20, A-25, A-26 claude)
+39894217850 2026-10-23T03:17:31Z PR #112 refs/pull/112/head success PR #112
+39893974745 2026-10-23T03:14:49Z CI feature/harness-mdm-followups success MDM deploy-harness: payload data file, no-bootstrap skip, body markers, --skip-config
+39893972255 2026-10-23T03:14:48Z PR #111 refs/pull/111/head success PR #111
+39893895116 2026-10-23T03:13:57Z CI fix/mf-lib-runner-result success Lib profile runner accepts result lines; user init uses it and passes --no-machine
+39893892576 2026-10-23T03:13:55Z PR #113 refs/pull/113/head success PR #113
+39893314181 2026-10-23T03:07:30Z CI feature/harness-mdm-followups success MDM deploy-harness: payload data file, no-bootstrap skip, body markers, --skip-config
+39893310477 2026-10-23T03:07:28Z PR #111 refs/pull/111/head success PR #111
+39893297698 2026-10-23T03:07:19Z CI fix/mf-audit-claude-build success Fix setup-user-claude hostname/dry-run rows and build-deploy embed cleanup, plain build output (A-19, A-20, A-25, A-26 claude)
+39893294867 2026-10-23T03:07:18Z PR #112 refs/pull/112/head success PR #112
+39892122180 2026-10-23T02:54:29Z CI feature/harness-mdm-followups success MDM deploy-harness: payload data file, no-bootstrap skip, body markers, --skip-config
+39892119954 2026-10-23T02:54:28Z PR #111 refs/pull/111/head success PR #111
+39891857647 2026-10-23T02:51:34Z CI feature/harness-cursor-user-rules success Cursor: fan out user-level rules only and prune against the rules manifest
+39891852520 2026-10-23T02:51:31Z PR #110 refs/pull/110/head success PR #110
+39891750142 2026-10-23T02:50:23Z CI fix/mf-audit-consumers success Fix B8 consumer rows on a dotprofile resolver error (A-22, A-23, A-24, A-26 cursor)
+39891745116 2026-10-23T02:50:20Z PR #109 refs/pull/109/head success PR #109
+39891714493 2026-10-23T02:50:01Z CI fix/mf-audit-profile-json failure Fix resolver and JSON engine audit findings A-6..A-9
+39891710641 2026-10-23T02:49:58Z PR #108 refs/pull/108/head success PR #108
+39891582699 2026-10-23T02:48:31Z CI feature/harness-cursor-user-rules success Cursor: fan out user-level rules only and prune against the rules manifest
+39891579525 2026-10-23T02:48:29Z PR #110 refs/pull/110/head success PR #110
+39891264259 2026-10-23T02:44:59Z CI fix/mf-audit-profile-json failure Fix resolver and JSON engine audit findings A-6..A-9
+39891260694 2026-10-23T02:44:56Z PR #108 refs/pull/108/head success PR #108
+39890801661 2026-10-23T02:39:58Z CI feature/harness-cursor-user-rules success Cursor: fan out user-level rules only and prune against the rules manifest
+39890798567 2026-10-23T02:39:56Z PR #110 refs/pull/110/head success PR #110
+39890722708 2026-10-23T02:39:03Z CI fix/mf-dotprofile-adopt-push success Commit and push dotprofile adopt targets from the managed-file library (N-Q2)
+39890718786 2026-10-23T02:39:01Z CI fix/mf-audit-consumers success Fix B8 consumer rows on a dotprofile resolver error (A-22, A-23, A-24, A-26 cursor)
+39890717433 2026-10-23T02:39:00Z PR #103 refs/pull/103/head success PR #103
+39890716407 2026-10-23T02:38:59Z PR #109 refs/pull/109/head success PR #109
+39890650263 2026-10-23T02:38:15Z CI fix/mf-audit-profile-json failure Fix resolver and JSON engine audit findings A-6..A-9
+39890647756 2026-10-23T02:38:13Z PR #108 refs/pull/108/head success PR #108
+39890130095 2026-10-23T02:32:31Z CI feature/harness-hookin success Run deploy-harness from the installer and every aitools run
+39890125433 2026-10-23T02:32:28Z PR #106 refs/pull/106/head success PR #106
+39890046563 2026-10-23T02:31:36Z CI feature/harness-rules-manifest success deploy-harness: write a rules source manifest and retire removed rules
+39890042219 2026-10-23T02:31:33Z PR #100 refs/pull/100/head success PR #100
+39889922576 2026-10-23T02:30:17Z CI docs/m3-approved-intents success Apply approved M3 intents for the resolver and shared template (#96 rows 7, 12)
+39889918043 2026-10-23T02:30:14Z PR #105 refs/pull/105/head success PR #105
+39889813396 2026-10-23T02:29:08Z CI docs/mf-incidents success File M3 incidents #146-#161 (drafts for approval)
+39889808343 2026-10-23T02:29:04Z PR #102 refs/pull/102/head success PR #102
+39889790225 2026-10-23T02:28:52Z CI fix/mf-dotprofile-adopt-push success Commit and push dotprofile adopt targets from the managed-file library (N-Q2)
+39889786142 2026-10-23T02:28:49Z PR #103 refs/pull/103/head success PR #103
+39889680335 2026-10-23T02:27:39Z CI feature/harness-rules-manifest success deploy-harness: write a rules source manifest and retire removed rules
+39889673336 2026-10-23T02:27:34Z PR #100 refs/pull/100/head success PR #100
+39889571631 2026-10-23T02:26:26Z CI docs/handoff-10cf255a-c success Handoff 10cf255a-c: integrate main, verify on Windows, release v0.74.0
+39889569261 2026-10-23T02:26:24Z PR #107 refs/pull/107/head success PR #107
+39889514047 2026-10-23T02:25:47Z CI docs/mf-incidents success File M3 incidents #146-#161 (drafts for approval)
+39889511792 2026-10-23T02:25:45Z PR #102 refs/pull/102/head success PR #102
+39889390866 2026-10-23T02:24:24Z CI feature/mf-config-no-machine success setup-user-config: add --no-machine / -NoMachine (no duplicate machine advice)
+39889387635 2026-10-23T02:24:22Z PR #98 refs/pull/98/head success PR #98
+39889303708 2026-10-23T02:23:27Z CI docs/mf-incidents success File M3 incidents #146-#161 (drafts for approval)
+39889297183 2026-10-23T02:23:23Z PR #102 refs/pull/102/head success PR #102
+39889261423 2026-10-23T02:22:59Z CI docs/m3-approved-drafts success Write the approved #96 M3 protected-doc rows
+39889257501 2026-10-23T02:22:56Z PR #101 refs/pull/101/head success PR #101
+39889106471 2026-10-23T02:21:17Z CI feature/harness-hookin success Run deploy-harness from the installer and every aitools run
+39889102744 2026-10-23T02:21:15Z PR #106 refs/pull/106/head success PR #106
+39889037513 2026-10-23T02:20:33Z CI docs/harness-approved-drafts success Write the approved HARNESS protected-file drafts
+39889035329 2026-10-23T02:20:31Z PR #99 refs/pull/99/head success PR #99
+39889004847 2026-10-23T02:20:11Z CI docs/m3-approved-intents success Apply approved M3 intents for the resolver and shared template (#96 rows 7, 12)
+39889002473 2026-10-23T02:20:10Z PR #105 refs/pull/105/head success PR #105
+39888913219 2026-10-23T02:19:11Z CI docs/harness-approved-drafts success Write the approved HARNESS protected-file drafts
+39888909735 2026-10-23T02:19:09Z PR #99 refs/pull/99/head success PR #99
+39888890343 2026-10-23T02:18:55Z CI docs/mf-audit success M3-FINISH audit: logging and script-standards findings
+39888888147 2026-10-23T02:18:54Z PR #104 refs/pull/104/head success PR #104
+39888735993 2026-10-23T02:17:11Z CI fix/mf-dotprofile-adopt-push failure Commit and push dotprofile adopt targets from the managed-file library (N-Q2)
+39888733116 2026-10-23T02:17:09Z PR #103 refs/pull/103/head success PR #103
+39888709338 2026-10-23T02:16:53Z CI docs/mf-incidents success File M3 incidents #146-#161 (drafts for approval)
+39888706913 2026-10-23T02:16:52Z PR #102 refs/pull/102/head success PR #102
+39888631188 2026-10-23T02:16:02Z CI docs/m3-approved-drafts success Write the approved #96 M3 protected-doc rows
+39888627648 2026-10-23T02:15:59Z PR #101 refs/pull/101/head success PR #101
+39888596345 2026-10-23T02:15:38Z CI feature/harness-rules-manifest success deploy-harness: write a rules source manifest and retire removed rules
+39888593881 2026-10-23T02:15:37Z PR #100 refs/pull/100/head success PR #100
+39888381315 2026-10-23T02:13:21Z CI docs/harness-approved-drafts success Write the approved HARNESS protected-file drafts
+39888378764 2026-10-23T02:13:19Z PR #99 refs/pull/99/head success PR #99
+39888259262 2026-10-23T02:12:01Z CI feature/mf-config-no-machine success setup-user-config: add --no-machine / -NoMachine (no duplicate machine advice)
+39888255815 2026-10-23T02:11:59Z PR #98 refs/pull/98/head success PR #98
+39887075743 2026-10-23T01:59:25Z CI docs/m3-lead-plan success Preserve the M3-LEAD orchestration plan
+39887073735 2026-10-23T01:59:23Z PR #97 refs/pull/97/head success PR #97
+39886968620 2026-10-23T01:58:13Z CI main success Merge pull request #96 from nobul-tech/docs/m3-protected-drafts
+39886968197 2026-10-23T01:58:12Z Push on main main success Push on main
+39886951516 2026-10-23T01:58:01Z CI main success Merge pull request #94 from nobul-tech/docs/s3-harness-orchestration
+39886950250 2026-10-23T01:58:00Z Push on main main success Push on main
+39886918507 2026-10-23T01:57:39Z CI main success Merge pull request #93 from nobul-tech/feature/harness-mdm
+39886917673 2026-10-23T01:57:39Z Push on main main success Push on main
+39885729482 2026-10-23T01:44:49Z CI feature/harness-mdm success MDM: build-deploy.sh generates an embedded deploy/deploy-harness.* and ports the Cursor fan-out headers
+39885726435 2026-10-23T01:44:47Z PR #93 refs/pull/93/head success PR #93
+39884358633 2026-10-23T01:30:17Z Push on main main success Push on main
+39884358008 2026-10-23T01:30:16Z CI main success Merge pull request #87 from nobul-tech/feature/harness-cursor-rules
+39884325180 2026-10-23T01:29:59Z CI main success Merge pull request #88 from nobul-tech/feature/harness-deploy-harness
+39884325102 2026-10-23T01:29:59Z Push on main main success Push on main
+39884293662 2026-10-23T01:29:38Z CI main success Merge pull request #85 from nobul-tech/feature/harness-tool-ops-fallback
+39884293446 2026-10-23T01:29:37Z Push on main main success Push on main
+39884272005 2026-10-23T01:29:23Z CI main success Merge pull request #81 from nobul-tech/fix/review-diff-display
+39884271484 2026-10-23T01:29:23Z Push on main main success Push on main
+39884251998 2026-10-23T01:29:10Z CI main success Merge pull request #92 from nobul-tech/feature/m3-b8b-consumers
+39884251631 2026-10-23T01:29:10Z Push on main main success Push on main
+39884230325 2026-10-23T01:28:56Z CI main success Merge pull request #91 from nobul-tech/feature/m3-b8a-consumers
+39884230320 2026-10-23T01:28:56Z Push on main main success Push on main
+39884178410 2026-10-23T01:28:23Z CI main success Merge pull request #90 from nobul-tech/feature/m3-b8c-consumers
+39884177200 2026-10-23T01:28:22Z Push on main main success Push on main
+39883692453 2026-10-23T01:23:11Z Push on main main success Push on main
+39883692011 2026-10-23T01:23:11Z CI main success Merge pull request #95 from nobul-tech/feature/m3-b5-build-deploy
+39882779659 2026-10-23T01:13:34Z CI main success Merge pull request #83 from nobul-tech/feature/m3-b4-setup-user-claude
+39882778950 2026-10-23T01:13:33Z Push on main main success Push on main
+39882572345 2026-10-23T01:11:25Z CI feature/m3-b5-build-deploy success M3 B5: deploy/ resolves the dotprofile and machine profile on the target machine
+39882569847 2026-10-23T01:11:24Z CI feature/m3-b8b-consumers success M3 B8b: skills (ps1) and cursor use the one dotprofile resolver
+39882568483 2026-10-23T01:11:23Z PR #95 refs/pull/95/head success PR #95
+39882566303 2026-10-23T01:11:21Z PR #92 refs/pull/92/head success PR #92
+39882328321 2026-10-23T01:08:54Z CI feature/m3-b8a-consumers success M3 B8a: settings and skills (sh) use the one dotprofile resolver
+39882325524 2026-10-23T01:08:52Z PR #91 refs/pull/91/head success PR #91
+39882233163 2026-10-23T01:07:54Z CI feature/m3-b8c-consumers success M3 B8c: check-lib and ait-harvest use the one dotprofile answer
+39882228402 2026-10-23T01:07:51Z PR #90 refs/pull/90/head success PR #90
+39881776833 2026-10-23T01:03:20Z CI feature/m3-b4-setup-user-claude success M3 B4: setup-user-claude uses the one resolver (no first-profile fallback, literal-safe tokens)
+39881773430 2026-10-23T01:03:17Z PR #83 refs/pull/83/head success PR #83
+39881383474 2026-10-23T00:59:32Z CI main success Merge pull request #86 from nobul-tech/feature/m3-rekey
+39881383284 2026-10-23T00:59:32Z Push on main main success Push on main
+39879899971 2026-10-23T00:44:26Z CI feature/m3-rekey success M3 re-key: machine profiles keyed by machine id
+39879897389 2026-10-23T00:44:24Z PR #86 refs/pull/86/head success PR #86
+39879271389 2026-10-23T00:38:02Z Push on main main success Push on main
+39879271192 2026-10-23T00:38:02Z CI main success Merge pull request #82 from nobul-tech/feature/m3-b6-user-init
+39879250910 2026-10-23T00:37:50Z CI main success Merge pull request #80 from nobul-tech/feature/m3-b2-lib-wrappers
+39879250807 2026-10-23T00:37:49Z Push on main main success Push on main
+39879228167 2026-10-23T00:37:36Z CI main success Merge pull request #89 from nobul-tech/fix/m3-b3b-installer-review3
+39879227784 2026-10-23T00:37:35Z Push on main main success Push on main
+39879191700 2026-10-23T00:37:12Z CI main success Merge pull request #84 from nobul-tech/fix/m3-review2-fixes
+39879191323 2026-10-23T00:37:12Z Push on main main success Push on main
+39876814933 2026-10-23T00:13:28Z CI feature/m3-rekey success M3 re-key: machine profiles keyed by machine id
+39876811172 2026-10-23T00:13:26Z PR #86 refs/pull/86/head success PR #86
+39874607472 2026-10-22T23:52:34Z CI feature/m3-rekey success M3 re-key: machine profiles keyed by machine id
+39874602037 2026-10-22T23:52:31Z PR #86 refs/pull/86/head success PR #86
+39873612279 2026-10-22T23:43:02Z CI feature/m3-rekey failure M3 re-key: machine profiles keyed by machine id
+39873606356 2026-10-22T23:42:59Z PR #86 refs/pull/86/head success PR #86
+39872800971 2026-10-22T23:35:32Z CI docs/m3-protected-drafts success M3 protected-file drafts for approval (no protected file changed)
+39872798110 2026-10-22T23:35:31Z PR #96 refs/pull/96/head success PR #96
+39869774643 2026-10-22T23:08:10Z CI feature/m3-rekey success M3 re-key: machine profiles keyed by machine id
+39869768696 2026-10-22T23:08:07Z PR #86 refs/pull/86/head success PR #86
+39867211241 2026-10-22T22:45:16Z CI feature/m3-rekey success M3 re-key: machine profiles keyed by machine id
+39867207553 2026-10-22T22:45:14Z PR #86 refs/pull/86/head success PR #86
+39867198105 2026-10-22T22:45:10Z CI feature/m3-b5-build-deploy success M3 B5: deploy/ resolves the dotprofile and machine profile on the target machine
+39867193897 2026-10-22T22:45:08Z PR #95 refs/pull/95/head success PR #95
+39866909522 2026-10-22T22:42:43Z CI feature/m3-rekey success M3 re-key: machine profiles keyed by machine id
+39866904968 2026-10-22T22:42:40Z PR #86 refs/pull/86/head success PR #86
+39865324910 2026-10-22T22:29:22Z CI feature/m3-rekey success M3 re-key: machine profiles keyed by machine id
+39865319610 2026-10-22T22:29:19Z PR #86 refs/pull/86/head success PR #86
+39865308887 2026-10-22T22:29:13Z CI feature/m3-b5-build-deploy success M3 B5: deploy/ resolves the dotprofile and machine profile on the target machine
+39865303498 2026-10-22T22:29:11Z PR #95 refs/pull/95/head success PR #95
+39863630115 2026-10-22T22:15:42Z CI feature/m3-rekey success M3 re-key: machine profiles keyed by machine id
+39863625305 2026-10-22T22:15:40Z PR #86 refs/pull/86/head success PR #86
+39862670711 2026-10-22T22:08:07Z CI docs/s3-harness-orchestration success S3-Harness: mission brief and hand-back
+39862666201 2026-10-22T22:08:04Z PR #94 refs/pull/94/head success PR #94
+39862460786 2026-10-22T22:06:27Z CI feature/harness-mdm success MDM: build-deploy.sh generates an embedded deploy/deploy-harness.* and ports the Cursor fan-out headers
+
+COUNTS
+CI  3
+CI failure 5
+CI success 92
+PR #100 success 3
+PR #101 success 2
+PR #102 success 6
+PR #103 success 3
+PR #104 success 1
+PR #105 success 2
+PR #106 success 3
+PR #107 success 1
+PR #108 success 4
+PR #109 success 2
+PR #110 success 3
+PR #111 success 3
+PR #112 success 3
+PR #113 success 2
+PR #114 success 3
+PR #115 success 2
+PR #116 success 3
+PR #83 success 1
+PR #86 success 9
+PR #90 success 1
+PR #91 success 1
+PR #92 success 1
+PR #93 success 1
+PR #94 success 1
+PR #95 success 3
+PR #96 success 1
+PR #97 success 1
+PR #98 success 2
+PR #99 success 3
+Push on main  1
+Push on main success 27
+Scheduled success 1

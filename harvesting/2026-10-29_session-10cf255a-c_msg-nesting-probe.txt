@@ -1,0 +1,12 @@
+Record the 2026-10-26 workflow nesting probe in tool-ops-claude-code
+
+Two workflow agents (default, and agentType general-purpose) were told
+explicitly to launch their own general-purpose sub-agent. Neither has an
+Agent, Task or Workflow tool, and ToolSearch cannot load one, so the
+agent type does not change what a workflow agent can do. Adds a row to
+the launch-path table and the probe evidence (run wf_f1bf6cf0-be5).
+
+Commander order 2026-10-26: add the evidence and commit directly to main.
+Docs only. (tested: macOS)
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

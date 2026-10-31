@@ -103,10 +103,41 @@ mkdir -p "$PROJ/.aitools/channel/handoffs"
 payload "$SID"
 run_hook "$SI_HOOK" "$WORK/p.json" "$PROJ" FAKE_HDB=ok
 check "exit 0" [ "$RC" -eq 0 ]
-check ".current-session names session-abcdef1234" contains "$(cat "$PROJ/.scratch/.current-session")" "session-abcdef1234"
-check "session dir exists" [ -d "$PROJ/.scratch/session-abcdef1234" ]
+# Compare base names: the hook resolves the git root (/private/var/... on
+# macOS) where $PROJ may be /var/...
+ptr_base() { local p; p=$(cat "$PROJ/.scratch/.current-session"); printf '%s' "${p##*/}"; }
+check ".current-session names session-<full id>" [ "$(ptr_base)" = "session-$SID" ]
+check "session dir named with the full session id (never cut)" [ -d "$PROJ/.scratch/session-$SID" ]
+check "no 10-char dir created" [ ! -d "$PROJ/.scratch/session-abcdef1234" ]
 check "handoff line" contains "$OUT" "Handoff available: handoff-test.md"
 check "last line is the scratch directory" contains "$(printf '%s\n' "$OUT" | tail -n 1)" "Session scratch directory: "
+check "last line names the full-id dir" contains "$(printf '%s\n' "$OUT" | tail -n 1)" "/.scratch/session-$SID"
 check "no stderr" [ -z "$ERR" ]
+
+echo "== scratch-init: legacy 10-char dir of the same session is reused =="
+LSID="fedcba9876-5432-10fe-dcba-000000000002"
+mkdir -p "$PROJ/.scratch/session-fedcba9876"
+payload "$LSID"
+run_hook "$SI_HOOK" "$WORK/p.json" "$PROJ" FAKE_HDB=ok
+check "legacy dir reused" [ "$(ptr_base)" = "session-fedcba9876" ]
+check "no full-id dir beside the legacy one" [ ! -d "$PROJ/.scratch/session-$LSID" ]
+
+echo "== scratch-init: unsafe session id falls back to mktemp =="
+payload "../escape"
+run_hook "$SI_HOOK" "$WORK/p.json" "$PROJ" FAKE_HDB=ok
+check "unsafe id: exit 0" [ "$RC" -eq 0 ]
+check "unsafe id: no dir outside .scratch" [ ! -d "$WORK/escape" ] && [ ! -d "$PROJ/escape" ]
+check "unsafe id: pointer is a session-* dir in .scratch" contains "$(cat "$PROJ/.scratch/.current-session")" "$PROJ/.scratch/session-"
+
+echo "== scratch-init: dated handoffs are discovered, newest announced (issue #138) =="
+: > "$PROJ/.aitools/channel/handoffs/2026-10-22_10cf255a-c.md"
+: > "$PROJ/.aitools/channel/handoffs/2026-06-21_session-46ee1c2b-1_handoff-verification.md"
+: > "$PROJ/.aitools/channel/handoffs/2026-03-23_session-KHGOmVeNNM.md"
+: > "$PROJ/.aitools/channel/handoffs/.gitkeep"
+mkdir -p "$PROJ/.aitools/channel/handoffs/2026-10-30_missions"
+payload "$SID"
+run_hook "$SI_HOOK" "$WORK/p.json" "$PROJ" FAKE_HDB=ok
+check "newest dated handoff announced" contains "$OUT" "Handoff available: 2026-10-22_10cf255a-c.md (4 total in"
+check "undated legacy handoff not announced over a dated one" eval '! contains "$OUT" "Handoff available: handoff-test.md"'
 
 finish_tests "test-sessionstart-harness-db"

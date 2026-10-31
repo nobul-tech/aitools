@@ -1,0 +1,13 @@
+.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-AbortDocs/S3-AbortDocs-handback.md
+.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-H2-Hookin/S3-H2-Hookin-handback.md
+.claude/rules/interactive-menus.md
+.cursor/rules/interactive-menus.mdc
+plans/tool-support-and-machine-profile.md
+reference/managed-file-deployment.md
+reference/tool-support-decision-tree.md
+scripts/aitools
+scripts/aitools-install.ps1
+scripts/aitools-install.sh
+scripts/aitools.ps1
+tests/hookin/hookin-driver.ps1
+tests/hookin/test-hookin.sh

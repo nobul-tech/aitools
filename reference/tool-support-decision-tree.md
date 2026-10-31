@@ -31,8 +31,8 @@ helper contract, the installer and entry-point contract for exit 2, the tool
 exception contract (when written, read, matched; storage shape in
 `@reference/user-repo.md`), the conformance check, the `/audit` additions and
 planned hook for this domain, and the test matrix. NOT the lifecycle gates or onboarding checklist
-(`@.claude/rules/tool-lifecycle.md`, `/tool-adopt`). NOT how a method is chosen
-(`/tool-eval`, `@.claude/rules/tool-evaluation.md`). NOT registry data
+(`@shared/rules/tool-lifecycle.md`, `/tool-adopt`). NOT how a method is chosen
+(`/tool-eval`, `@shared/rules/tool-evaluation.md`). NOT registry data
 (`/tool-registry`). NOT managed-file menus (`@.claude/rules/interactive-menus.md`).
 NOT per-tool post-config such as auth or GOPATH (each setup script).
 **Audience**: Agents running `/tool-adopt`, agents writing or migrating
@@ -791,7 +791,7 @@ stubs on PATH, both `AITOOLS_ENVIRONMENT` values where relevant.
 
 ## Cross-references
 
-- Lifecycle rule and update policy: `@.claude/rules/tool-lifecycle.md`
+- Lifecycle rule and update policy: `@shared/rules/tool-lifecycle.md`
 - Framework: `@reference/framework-tool-lifecycle.md`
 - Process skills: `/tool-adopt`, `/tool-eval`, `/tool-registry`
 - Severity and summary rules: `@reference/script-standards-detail.md`

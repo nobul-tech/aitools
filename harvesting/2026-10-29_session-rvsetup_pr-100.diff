@@ -1,0 +1,927 @@
+diff --git a/.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-H2-Manifest/S3-H2-Manifest-drafts/dot-claude/rules/managed-file-deployment.md b/.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-H2-Manifest/S3-H2-Manifest-drafts/dot-claude/rules/managed-file-deployment.md
+new file mode 100644
+index 00000000..6569e5ed
+--- /dev/null
++++ b/.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-H2-Manifest/S3-H2-Manifest-drafts/dot-claude/rules/managed-file-deployment.md
+@@ -0,0 +1,21 @@
++# Draft: .claude/rules/managed-file-deployment.md (protected) -- S3-H2-Manifest, awaiting approval
++
++One edit, in "### Content sources". Apply verbatim.
++
++OLD:
++
++```
++- **Rules**: additive deploy from `<userRepoPath>/claude/rules/` — managed files updated, unmanaged files in target preserved
++```
++
++NEW:
++
++```
++- **Rules**: deploy-harness collects `shared/rules/`, `.claude/rules/` and `<userRepoPath>/claude/rules/` into `~/.aitools/rules/` (first source wins) and writes `~/.aitools/rules/.aitools-rules-manifest` (each rule's source, or `retired`); the fan-out consumers update managed files, preserve unmanaged files, and back up and remove the copies of retired rules. Detail: `@reference/harness.md` "Rules manifest and retired rules"
++```
++
++## Why
++
++HARNESS Q2 (approved). The current bullet predates deploy-harness and says
++nothing is ever removed; with the manifest, retired rules are backed up and
++removed (deploy-harness now; the consumers in S3-H2-Claude / S3-H2-Cursor).
+diff --git a/.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-H2-Manifest/S3-H2-Manifest-drafts/reference/harness.md b/.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-H2-Manifest/S3-H2-Manifest-drafts/reference/harness.md
+new file mode 100644
+index 00000000..03c020bf
+--- /dev/null
++++ b/.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-H2-Manifest/S3-H2-Manifest-drafts/reference/harness.md
+@@ -0,0 +1,88 @@
++# Draft: reference/harness.md (protected) -- S3-H2-Manifest, awaiting approval
++
++Two edits, both in "## Deployed harness (`~/.aitools`)". Apply verbatim.
++
++## Edit 1 -- replace the "No deletion" bullet in "### Assumptions and what is not detected"
++
++OLD:
++
++```
++- **No deletion.** A file in `~/.aitools` with no source (a renamed or
++  removed source, a file the user added) is preserved and logged on
++  every run.
++```
++
++NEW:
++
++```
++- **No deletion, except retired rules.** A file in `~/.aitools` with no
++  source (a renamed or removed source, a file the user added) is
++  preserved and logged on every run. The one exception is a rule the
++  rules manifest retires (next section): it is backed up and removed.
++```
++
++## Edit 2 -- new subsection, inserted after "### Assumptions and what is not detected" (before "## Cross-References")
++
++NEW:
++
++```
++### Rules manifest and retired rules
++
++After the deploy loop, deploy-harness writes
++`~/.aitools/rules/.aitools-rules-manifest` (it is the file's sole owner).
++The rules fan-out consumers (`setup-user-claude`, `setup-user-cursor`)
++read it to learn each rule's source and which rules to retire.
++
++- **Format v1**: UTF-8, LF, first line `# aitools rules manifest v1`, then
++  one line per rule, `<file name><TAB><source>`, sorted by file name
++  (byte order). Source: `shared` (aitools `shared/rules/`), `aitools`
++  (aitools `.claude/rules/`), `dotprofile` (`<dotprofile>/claude/rules/`),
++  or `retired`. Only `*.md` names; never `*.bak.*`. The name has no
++  `.md` extension, so a consumer that copies `*.md` never copies it.
++- **The winning source is recorded** (first source wins; a skipped
++  duplicate is still a `log_error` + ERROR row, as above).
++- **Written every run**, temp file then move. A write failure is
++  `log_error` + an ERROR row (`rules manifest not written`); the run
++  continues and exits 1.
++- **Retiring.** A name in the previous manifest that no source has this
++  run (names compared case-insensitively) becomes `retired`; its copy in
++  `~/.aitools/rules` is backed up (`backup_file()`) and removed, with an
++  info log line and a DETAIL row `retired: rules/<name>`. The `retired`
++  line stays in later manifests until a source has the name again; while
++  it is retired, a file with that name found in `~/.aitools/rules` is
++  backed up and removed on each run. A failed backup leaves the file in
++  place (`log_error` + ERROR row).
++- **Only a listed source retires.** A name whose source was not listed
++  this run (directory not found, not a git work tree, `git ls-files`
++  failed, or no dotprofile configured) keeps its previous line and its
++  file; it is not retired. A temporarily missing dotprofile therefore
++  never deletes the user rules.
++- **First run** (no previous manifest): nothing is retired. A previous
++  manifest whose first line is not the v1 header: a warning, nothing
++  retired, and the manifest is rewritten. Invalid lines (not `*.md`, a
++  `*.bak.*` name, a `/` or `\` in the name, an unknown source) are
++  ignored with a warning.
++- **Dry run** logs what would be retired and written; nothing changes.
++- **Known limits.** A rule renamed only by case (`Foo.md` to `foo.md`) is
++  the same rule, so the old name is not retired; on a case-sensitive file
++  system (Linux) the old `Foo.md` stays in `~/.aitools/rules` as a
++  preserved file. A rule that moves to a source that is not listed on
++  that run is retired on that run and deployed again on the next run that
++  lists its new source. Only a file (or a symlink) is removed, never a
++  directory with a rule's name.
++- **Consumers** take every non-retired name they are entitled to, and
++  back up and remove their own deployed copy of every `retired` name.
++  Cursor takes user-level rules only, so it also removes its copies of
++  names whose source is `aitools`.
++- **Not in the preserved report**: the manifest (and its temp file) are
++  never logged as preserved files.
++- **MDM path**: the generated `deploy/deploy-harness.*` runs the same
++  code; its sources are the build-time snapshot, so a rule removed from
++  the repos is retired on the endpoint at the first run of a deploy/
++  built after the removal.
++```
++
++## Why
++
++HARNESS Q2 (approved): a removed source rule stayed in `~/.aitools/rules`
++and stayed loaded. PR: feature/harness-rules-manifest.
+diff --git a/.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-H2-Manifest/S3-H2-Manifest-drafts/reference/managed-file-deployment.md b/.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-H2-Manifest/S3-H2-Manifest-drafts/reference/managed-file-deployment.md
+new file mode 100644
+index 00000000..0897408d
+--- /dev/null
++++ b/.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-H2-Manifest/S3-H2-Manifest-drafts/reference/managed-file-deployment.md
+@@ -0,0 +1,38 @@
++# Draft: reference/managed-file-deployment.md (protected) -- S3-H2-Manifest, awaiting approval
++
++Two edits. Apply verbatim.
++
++## Edit 1 -- "## Content Sources" table, the "User rules" row
++
++OLD:
++
++```
++| User rules | `<userRepoPath>/claude/rules/*.md` | (none — no rules deployed) |
++```
++
++NEW:
++
++```
++| User rules | `<userRepoPath>/claude/rules/*.md`, collected with `shared/rules/` and `.claude/rules/` into `~/.aitools/rules/` by deploy-harness (first source wins) | (none — no dotprofile rules deployed) |
++```
++
++## Edit 2 -- "### Script-owned JSON (no review)": add a paragraph after the table
++
++NEW (after the table that ends with the `JSON deployed via deploy_managed_file` row):
++
++```
++**Script-owned text: the rules manifest.** deploy-harness writes
++`~/.aitools/rules/.aitools-rules-manifest` on every run without review
++(it is the file's sole owner; temp file then move; a failure is
++`log_error` + an ERROR row). It is not deployed through
++`deploy_managed_file`: it is generated, not copied from a source. It
++lists each rule's source or `retired`; retired rules are backed up and
++removed by deploy-harness and by the fan-out consumers. Format and rules:
++`@reference/harness.md` "Rules manifest and retired rules".
++```
++
++## Why
++
++HARNESS Q2 (approved). The deployment spec should name the one file in
++`~/.aitools` that is not written through `deploy_managed_file`, and the one
++case where a deployed file is removed.
+diff --git a/.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-H2-Manifest/S3-H2-Manifest-handback.md b/.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-H2-Manifest/S3-H2-Manifest-handback.md
+new file mode 100644
+index 00000000..72692d38
+--- /dev/null
++++ b/.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-H2-Manifest/S3-H2-Manifest-handback.md
+@@ -0,0 +1,104 @@
++# S3-H2-Manifest hand-back (2026-10-22)
++
++## Summary
++
++deploy-harness.sh/.ps1 now write `~/.aitools/rules/.aitools-rules-manifest`
++on every run and retire removed rules (back up, remove, keep a `retired`
++line). PR https://github.com/nobul-tech/aitools/pull/100, branch
++feature/harness-rules-manifest, commits 8c5b01d, 0757364, 161edd0.
++The independent reviewer (S3-H2-Manifest-Review) found one BLOCKING issue:
++the .ps1 deleted bracket-named rules without a backup. It is fixed in
++161edd0, and the follow-up review is APPROVE-EQUIVALENT.
++
++## Files changed
++
++- scripts/deploy-harness.sh, scripts/deploy-harness.ps1 -- section 5b
++  (functions only; inside build-deploy's extracted span "# 3." to EOF),
++  `add_source`/`Add-Source` record listed sources, preserved report skips
++  the manifest, header comments.
++- tests/deploy-harness/test-deploy-harness.sh -- 31 new checks (.sh, and the
++  .ps1 on pwsh with the OS guard disabled in a temp copy).
++- Drafts (protected, awaiting approval) in `S3-H2-Manifest-drafts/`:
++  reference/harness.md, dot-claude/rules/managed-file-deployment.md,
++  reference/managed-file-deployment.md. Note: open PR #99 also edits
++  reference/managed-file-deployment.md; re-check the draft's OLD text after
++  #99 merges.
++
++## Final contract (also verbatim in the PR body, "Contract")
++
++- File: `~/.aitools/rules/.aitools-rules-manifest` (no .md extension).
++- Format: UTF-8, LF, first line `# aitools rules manifest v1`, then
++  `<file name><TAB><source>`, source shared | aitools | dotprofile |
++  retired; sorted by file name (byte order); only *.md, never *.bak.*.
++- Written every run after the rules copy (temp then move); the winning
++  source (first source wins) is recorded.
++- Retiring: a name in the previous manifest (non-retired source) that no
++  source has this run (case-insensitive) becomes `retired`, **only when its
++  previous source was listed this run**. A name whose source was not listed
++  (not found, not a git checkout, ls-files failed, no dotprofile) keeps its
++  line and file. While a name is `retired`, its file in ~/.aitools/rules is
++  backed up and removed whenever it exists (a failed backup leaves it:
++  log_error + ERROR row). The line stays until the name reappears. First run:
++  nothing is retired. Unknown header: warning, nothing retired, rewritten.
++  Invalid lines: ignored with a warning.
++- Consumers: take non-retired names they are entitled to; back up and remove
++  their copies of `retired` names (Cursor also removes `aitools` names).
++- Manifest write failure: log_error + ERROR row, run continues.
++
++Contract changes (why): (1) listed-source-only retirement -- otherwise a
++missing dotprofile deletes every user rule; (2) re-removal while retired --
++self-healing after a failed backup/removal; (3) case-insensitive names --
++otherwise removing a "retired" `Scratch.md` on macOS/Windows deletes the live
++`scratch.md`; (4) header/invalid-line/dry-run behaviour added.
++
++## Verification (macOS, pwsh 7, isolated temp HOMEs)
++
++- bash -n and the pwsh parser on both scripts: clean.
++- tests/deploy-harness/test-deploy-harness.sh: 76 passed, 0 failed, 0 skipped.
++- tests/deploy-harness-mdm/test-deploy-harness-mdm.sh: 30 passed (dev and
++  MDM trees, including the manifest, identical).
++- check-pre-commit: known step 6 FAIL (harvesting file mode); step 3 WARN
++  (--fix would run build-deploy against the real HOME, not run); step 11 WARN
++  (another session's uncommitted dotprofile edits: claude/CLAUDE.md,
++  sessions/.DS_Store -- not touched). check-pre-push: 0 FAIL.
++- Reviews: https://github.com/nobul-tech/aitools/pull/100#pullrequestreview-5623187396
++  (BLOCKING), https://github.com/nobul-tech/aitools/pull/100#pullrequestreview-5623233837
++  (APPROVE-EQUIVALENT).
++
++## Not run
++
++- The .ps1 on Windows. build-deploy.sh against the real dotprofile. The
++  consumers (not in scope).
++
++## Follow-ups
++
++- S3-H2-Cursor: setup-user-cursor.ps1 `Get-ChildItem` lists the dot file and
++  logs "Ignoring non-rule file" each run (the .sh glob skips it).
++- Low parity notes from the reviewer (open): .ps1 retire backups not pruned
++  (.sh keeps 20); failed-backup warning count differs; dangling symlink with a
++  retired name removed by .sh, left by .ps1.
++- Known limits (in the harness.md draft): case-only rename on Linux leaves the
++  old file; a rule moving to an unlisted source is retired then re-deployed.
++
++## WRITE_BLOCKED
++
++None.
++
++## INCIDENT markers (not filed)
++
++- INCIDENT: `Backup-File` in scripts/aitools-lib.ps1 uses `Test-Path` /
++  `Copy-Item -Path` / `Get-ChildItem -Path` without `-LiteralPath`. For a path
++  with `[ ]` it makes no backup but sets `BackupFileOk = $true`. Every caller
++  is affected, including Deploy-ManagedFile. This deviates from
++  config-file-safety.md "Backup before overwrite" and from .sh parity
++  (source: S3-H2-Manifest-Review probe; aitools-lib.ps1 Backup-File).
++- INCIDENT: the rules filter in add_source is case-sensitive in the .sh
++  (`*.md`, `*.bak.*`) and case-insensitive in the .ps1 (`-like`), so `X.MD`
++  deploys on Windows only (scripts/deploy-harness.sh add_source,
++  scripts/deploy-harness.ps1 Add-Source). This predates the mission.
++
++## Delegates
++
++- S3-H2-Manifest-Review (general-purpose, independent; given the PR, the
++  packet, the Intent and the contract). It ran two passes and posted both
++  reviews on the PR.
+diff --git a/scripts/deploy-harness.ps1 b/scripts/deploy-harness.ps1
+index 4e46ab02..5ead43c7 100644
+--- a/scripts/deploy-harness.ps1
++++ b/scripts/deploy-harness.ps1
+@@ -22,9 +22,15 @@
+ #                                   <dotprofile>\claude\rules (one flat directory)
+ #   .aitools\bin\<cli>           <- <aitools>\scripts\{harness-db.py,read-session.py,read-session-full.py}
+ #   .aitools\config.json         <- generated by setup-user-config.ps1 (its own managed fields)
++#   .aitools\rules\.aitools-rules-manifest <- written every run (sole owner): one
++#                                   "<file name><TAB><source>" line per rule; source
++#                                   shared | aitools | dotprofile | retired (section 5b)
+ # Name conflicts: the first source wins; each skipped duplicate is LogError +
+ #   an ERROR row. Unit: file name (rules, hooks), skill directory name (skills);
+ #   compared case-insensitively. Files named *.bak.* are never deployed.
++# Retired rules: a rule in the previous manifest that no source has any more is
++#   backed up and removed from .aitools\rules (only when its source was listed
++#   this run); the manifest keeps its "retired" line until a source has it again.
+ # Preserved: every other file under .aitools (logs, backups, files with no
+ #   source -- each logged, never deleted).
+ # Overwrites: no -- a deployed file that differs from its source gets the review menu.
+@@ -145,6 +151,7 @@ foreach ($kind in $kinds) {
+ # =========================================================================
+ $plan = [System.Collections.Generic.List[object]]::new()
+ $seen = @{}          # "<kind>|<lowercased unit>" -> @{ Label; Unit }
++$listed = @{}        # source labels listed this run (section 5b: only these retire rules)
+ $duplicates = 0
+ 
+ # Add-Source KIND LABEL SRC_DIR DEST_DIR LAYOUT
+@@ -184,6 +191,7 @@ function Add-Source {
+         Write-Summary "ERROR" $tool (Get-ShortDetail "${Label}: git ls-files failed")
+         return
+     }
++    $listed[$Label] = $true
+     $files = @((@($raw) -join "") -split "`0" | Where-Object { $_ })
+     $lastUnit = ""
+     $keepUnit = $true
+@@ -314,6 +322,161 @@ foreach ($p in $plan) {
+     }
+ }
+ 
++# =========================================================================
++# 5b. Rules manifest (.aitools\rules\.aitools-rules-manifest), retired rules
++# =========================================================================
++# The rules fan-out consumers (setup-user-claude, setup-user-cursor) read it for
++# each rule's source and for the rules to retire. Format v1: UTF-8, LF, first
++# line "# aitools rules manifest v1", then "<file name><TAB><source>" sorted by
++# file name (ordinal); source: shared (aitools shared/rules), aitools (aitools
++# .claude/rules), dotprofile (dotprofile claude/rules), retired. The source is
++# the one that won (first source wins). No .md extension: consumers that copy
++# *.md never copy it.
++# Retired: a name in the previous manifest that no source has this run (names
++# compared case-insensitively). Only a source listed this run can retire its
++# names; a name whose source was not listed (not found, not a git checkout,
++# ls-files failed, no dotprofile) keeps its line. A retired name's file in
++# .aitools\rules is backed up and removed (on every run while it is there);
++# the line stays until a source has the name again. No previous manifest
++# (first run): nothing is retired. A previous manifest with another header:
++# warning, nothing retired, rewritten. Same outcomes as deploy-harness.sh.
++$rulesManifestHeader = "# aitools rules manifest v1"
++$nRetired = 0
++
++# Get-RulesManifestPlan PREV -- from $seen (rule winners), $listed and the
++# previous manifest PREV (may be absent): @{ Lines = sorted manifest lines;
++# Actions = list of @{ Kind = retire|stale|keep|warn; Name; Extra } }.
++# Throws on a read failure.
++function Get-RulesManifestPlan([string]$Prev) {
++    $sourceOf = @{ "shared/rules" = "shared"; ".claude/rules" = "aitools"; "dotprofile" = "dotprofile" }
++    $labelOf = @{ "shared" = "shared/rules"; "aitools" = ".claude/rules"; "dotprofile" = "dotprofile" }
++    $lines = [System.Collections.Generic.Dictionary[string, string]]::new([StringComparer]::Ordinal)
++    $claimed = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
++    $actions = [System.Collections.Generic.List[object]]::new()
++    foreach ($k in @($seen.Keys)) {
++        if (-not $k.StartsWith("rules|")) { continue }
++        $w = $seen[$k]
++        if (-not $sourceOf.ContainsKey($w.Label)) { throw "unknown rules source label: $($w.Label)" }
++        $lines[$w.Unit] = $sourceOf[$w.Label]
++        [void]$claimed.Add($w.Unit)
++    }
++    if (Test-Path -LiteralPath $Prev -PathType Leaf) {
++        $prevLines = [IO.File]::ReadAllLines($Prev, [System.Text.UTF8Encoding]::new($false))
++        if ($prevLines.Count -eq 0 -or $prevLines[0] -cne $rulesManifestHeader) {
++            $actions.Add(@{ Kind = "warn"; Name = "the first line is not `"$rulesManifestHeader`" -- nothing retired this run"; Extra = "" })
++        } else {
++            foreach ($l in ($prevLines | Select-Object -Skip 1)) {
++                if ($l -eq "") { continue }
++                $parts = $l -split "`t", 2
++                $name = $parts[0]
++                $src = if ($parts.Count -gt 1) { $parts[1] } else { "" }
++                if ($name -cnotlike '*.md' -or $name -clike '*.bak.*' -or $name -match '[/\\]' -or
++                        $src -cnotmatch '\A(?:shared|aitools|dotprofile|retired)\z') {
++                    $actions.Add(@{ Kind = "warn"; Name = "line ignored: $($l -replace "`t", '<TAB>')"; Extra = "" })
++                    continue
++                }
++                if ($claimed.Contains($name)) { continue }          # a source has it this run
++                if ($src -ceq "retired") {
++                    $lines[$name] = "retired"
++                    $actions.Add(@{ Kind = "stale"; Name = $name; Extra = "" })
++                } elseif ($listed.ContainsKey($labelOf[$src])) {
++                    $lines[$name] = "retired"
++                    $actions.Add(@{ Kind = "retire"; Name = $name; Extra = $src })
++                } else {
++                    $lines[$name] = $src
++                    $actions.Add(@{ Kind = "keep"; Name = $name; Extra = $src })
++                }
++            }
++        }
++    }
++    $names = [string[]]@($lines.Keys)
++    [Array]::Sort($names, [StringComparer]::Ordinal)
++    $out = [System.Collections.Generic.List[string]]::new()
++    foreach ($n in $names) { $out.Add("$n`t$($lines[$n])") }
++    return @{ Lines = $out; Actions = $actions }
++}
++
++# Remove-RetiredRule NAME -- back up and remove .aitools\rules\NAME (a retired rule)
++function Remove-RetiredRule([string]$Name) {
++    $f = Join-Path (Join-Path $harnessDir "rules") $Name
++    if ($DryRun) {
++        Log "[DRY RUN] Would back up and remove $f (retired rule)"
++        return
++    }
++    # Not Backup-File: it resolves wildcards ([ ] in a rule name), finds nothing
++    # and reports success. Same name as backup_file: <file>.bak.<UTC timestamp>.
++    $bak = "$f.bak." + (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHHmmssZ")
++    $backupOk = $true
++    try {
++        Copy-Item -LiteralPath $f -Destination $bak -Force -ErrorAction Stop
++    } catch {
++        $backupOk = $false
++        LogDetail "Retired rule ${Name}: backup copy failed: $_"
++    }
++    if (-not $backupOk -or -not (Test-Path -LiteralPath $bak -PathType Leaf)) {
++        LogError "Retired rule ${Name}: backup failed -- $f not removed"
++        Write-Summary "ERROR" $tool (Get-ShortDetail "retire failed: $Name")
++        return
++    }
++    Log "Backed up $f"
++    try {
++        Remove-Item -LiteralPath $f -Force -ErrorAction Stop
++    } catch {
++        LogError "Retired rule ${Name}: cannot remove ${f}: $_"
++        Write-Summary "ERROR" $tool (Get-ShortDetail "retire failed: $Name")
++        return
++    }
++    $script:nRetired++
++    Log "Removed $f (retired rule; backup kept)"
++    Write-Summary "DETAIL" $tool (Get-ShortDetail "retired: rules/$Name")
++}
++
++# Write-RulesManifest -- section 5b: retire, then write the manifest (temp file + move)
++function Write-RulesManifest {
++    $manifest = Join-Path (Join-Path $harnessDir "rules") ".aitools-rules-manifest"
++    $tmp = "$manifest.tmp"
++    try {
++        $mp = Get-RulesManifestPlan $manifest
++    } catch {
++        LogError "Rules manifest: $_ -- manifest not written, nothing retired"
++        Write-Summary "ERROR" $tool "rules manifest not written"
++        return
++    }
++    foreach ($a in $mp.Actions) {
++        switch ($a.Kind) {
++            "warn" { LogWarn "Rules manifest ${manifest}: $($a.Name)" }
++            "keep" { Log "Rules manifest: $($a.Name) kept as $($a.Extra) (source not listed this run -- not retired)" }
++            { $_ -in @("retire", "stale") } {
++                if ($a.Kind -eq "retire") { Log "Retired rule: $($a.Name) (was $($a.Extra); no source has it now)" }
++                $f = Join-Path (Join-Path $harnessDir "rules") $a.Name
++                # A file (or a symlink to one), as the .sh's -f / -L; never a directory
++                if (Test-Path -LiteralPath $f -PathType Leaf) { Remove-RetiredRule $a.Name }
++            }
++        }
++    }
++    $n = $mp.Lines.Count
++    if ($DryRun) {
++        Log "[DRY RUN] Would write $manifest ($n rule line(s))"
++        return
++    }
++    $text = "$rulesManifestHeader`n"
++    foreach ($l in $mp.Lines) { $text += "$l`n" }
++    try {
++        [IO.File]::WriteAllText($tmp, $text, [System.Text.UTF8Encoding]::new($false))
++        [IO.File]::Move($tmp, $manifest, $true)
++    } catch {
++        LogError "Rules manifest: cannot write ${manifest}: $_ -- manifest not written"
++        Write-Summary "ERROR" $tool "rules manifest not written"
++        if (Test-Path -LiteralPath $tmp) {
++            try { Remove-Item -LiteralPath $tmp -Force -ErrorAction Stop } catch { LogWarn "Cannot remove ${tmp}: $_" }
++        }
++        return
++    }
++    Log "Rules manifest: wrote $manifest ($n rule line(s))"
++}
++
++Write-RulesManifest
++
+ # =========================================================================
+ # 6. Preserved: files under the six directories with no source (logged, kept)
+ # =========================================================================
+@@ -331,6 +494,7 @@ foreach ($kind in $kinds) {
+     }
+     foreach ($f in $found) {
+         if ($f.Name -like '*.bak.*') { continue }
++        if ($f.Name -eq ".aitools-rules-manifest" -or $f.Name -eq ".aitools-rules-manifest.tmp") { continue }   # section 5b writes it
+         if ($planned.ContainsKey([IO.Path]::GetFullPath($f.FullName))) { continue }
+         $nPreserved++
+         Log "Preserved: $($f.FullName) (no source -- kept)"
+@@ -340,7 +504,7 @@ foreach ($kind in $kinds) {
+ # =========================================================================
+ # 7. Summary (one row under "harness files") + exit footer
+ # =========================================================================
+-Log "harness files: $($plan.Count) planned, $nAdded added, $nUpdated updated, $nAccepted accepted, $nVerified verified, $nSkipped skipped, $nFailed failed, $nPreserved preserved, $duplicates duplicate(s)"
++Log "harness files: $($plan.Count) planned, $nAdded added, $nUpdated updated, $nAccepted accepted, $nVerified verified, $nSkipped skipped, $nFailed failed, $nPreserved preserved, $nRetired retired, $duplicates duplicate(s)"
+ if ($DryRun) {
+     Write-Summary "OK" $tool (Get-ShortDetail "dry-run: $nWouldCreate create, $nWouldUpdate update")
+ } elseif ($nFailed -gt 0) {
+diff --git a/scripts/deploy-harness.sh b/scripts/deploy-harness.sh
+index 5ed4d6e7..9313374a 100755
+--- a/scripts/deploy-harness.sh
++++ b/scripts/deploy-harness.sh
+@@ -21,9 +21,15 @@
+ #                                     <dotprofile>/claude/rules (one flat directory)
+ #   ~/.aitools/bin/<cli>           <- <aitools>/scripts/{harness-db.py,read-session.py,read-session-full.py}
+ #   ~/.aitools/config.json         <- generated by setup-user-config.sh (its own managed fields)
++#   ~/.aitools/rules/.aitools-rules-manifest <- written every run (sole owner): one
++#                                     "<file name><TAB><source>" line per rule; source
++#                                     shared | aitools | dotprofile | retired (section 5b)
+ # Name conflicts: the first source wins; each skipped duplicate is log_error +
+ #   an ERROR row. Unit: file name (rules, hooks), skill directory name (skills);
+ #   compared case-insensitively. Files named *.bak.* are never deployed.
++# Retired rules: a rule in the previous manifest that no source has any more is
++#   backed up and removed from ~/.aitools/rules (only when its source was listed
++#   this run); the manifest keeps its "retired" line until a source has it again.
+ # Preserved: every other file under ~/.aitools (logs, backups, files with no
+ #   source -- each logged, never deleted).
+ # Overwrites: no -- a deployed file that differs from its source gets the review menu.
+@@ -150,8 +156,10 @@ done
+ # =========================================================================
+ PLAN="$WORK/plan.tsv"     # kind <TAB> source <TAB> dest <TAB> item
+ SEEN="$WORK/seen.tsv"     # kind <TAB> lowercased unit <TAB> source label <TAB> unit
++LISTED="$WORK/listed.txt" # source labels listed this run (section 5b: only these retire rules)
+ : > "$PLAN"
+ : > "$SEEN"
++: > "$LISTED"
+ DUPLICATES=0
+ 
+ # seen_winner KIND KEY -- "label<TAB>unit" of the source that claimed KEY first; "" when none
+@@ -190,6 +198,10 @@ add_source() {
+         write_summary ERROR "$TOOL" "$(short "$label: git ls-files failed")"
+         return 0
+     fi
++    if ! printf '%s\n' "$label" >> "$LISTED"; then
++        log_error "Source $label: cannot record it as listed -- its retired rules are kept this run"
++        write_summary ERROR "$TOOL" "$(short "$label: not recorded")"
++    fi
+     local rel base unit lc winner w_label w_unit last_unit="" keep_unit=true n=0
+     while IFS= read -r -d '' rel <&4; do
+         base="${rel##*/}"
+@@ -341,6 +353,166 @@ while IFS=$'\t' read -r kind src dest item <&3; do
+     deploy_one "$src" "$dest" "$item"
+ done 3< "$PLAN"
+ 
++# =========================================================================
++# 5b. Rules manifest (~/.aitools/rules/.aitools-rules-manifest), retired rules
++# =========================================================================
++# The rules fan-out consumers (setup-user-claude, setup-user-cursor) read it for
++# each rule's source and for the rules to retire. Format v1: UTF-8, LF, first
++# line "# aitools rules manifest v1", then "<file name><TAB><source>" sorted by
++# file name (byte order); source: shared (aitools shared/rules), aitools
++# (aitools .claude/rules), dotprofile (dotprofile claude/rules), retired. The
++# source is the one that won (first source wins). No .md extension: consumers
++# that copy *.md never copy it.
++# Retired: a name in the previous manifest that no source has this run (names
++# compared case-insensitively). Only a source listed this run can retire its
++# names; a name whose source was not listed (not found, not a git checkout,
++# ls-files failed, no dotprofile) keeps its line. A retired name's file in
++# ~/.aitools/rules is backed up and removed (on every run while it is there);
++# the line stays until a source has the name again. No previous manifest
++# (first run): nothing is retired. A previous manifest with another header:
++# warning, nothing retired, rewritten.
++RULES_MANIFEST_HEADER="# aitools rules manifest v1"
++N_RETIRED=0
++
++# rules_manifest_plan PREV NEW ACTIONS -- from $SEEN (rule winners), $LISTED and
++# the previous manifest PREV (may be absent): write the new manifest to NEW and
++# one action per line to ACTIONS: "retire<TAB>name<TAB>was" (retired this run),
++# "stale<TAB>name" (retired before), "keep<TAB>name<TAB>source" (source not
++# listed this run), "warn<TAB>message". Exit non-zero (message on stderr) on
++# any read or write failure.
++rules_manifest_plan() {
++    perl -e '
++        my ($seen, $listed, $prev, $new, $actions, $header) = @ARGV;
++        my %source_of = ("shared/rules" => "shared", ".claude/rules" => "aitools", "dotprofile" => "dotprofile");
++        my %label_of = reverse %source_of;
++        my (%lines, %claimed, %listed);
++        open my $s, "<:raw", $seen or die "cannot read $seen: $!\n";
++        while (my $l = <$s>) {
++            chomp $l;
++            my ($kind, $lc, $label, $unit) = split /\t/, $l, 4;
++            next unless $kind eq "rules";
++            my $src = $source_of{$label};
++            die "unknown rules source label: $label\n" unless defined $src;
++            $lines{$unit} = $src;
++            $claimed{lc $unit} = 1;
++        }
++        close $s;
++        open my $ls, "<:raw", $listed or die "cannot read $listed: $!\n";
++        while (my $l = <$ls>) { chomp $l; $listed{$l} = 1; }
++        close $ls;
++        open my $a, ">:raw", $actions or die "cannot write $actions: $!\n";
++        if (-e $prev) {
++            open my $p, "<:raw", $prev or die "cannot read $prev: $!\n";
++            my $head = <$p>;
++            $head = "" unless defined $head;
++            $head =~ s/\A\xEF\xBB\xBF//;   # a UTF-8 BOM (as the .ps1 reader skips it)
++            $head =~ s/\r?\n\z//;
++            if ($head ne $header) {
++                print $a "warn\tthe first line is not \"$header\" -- nothing retired this run\n";
++            } else {
++                while (my $l = <$p>) {
++                    $l =~ s/\r?\n\z//;
++                    next if $l eq "";
++                    my ($name, $src) = split /\t/, $l, 2;
++                    $src = "" unless defined $src;
++                    if ($name !~ /\.md\z/ || $name =~ /\.bak\./ || $name =~ m{[/\\]}
++                            || $src !~ /\A(?:shared|aitools|dotprofile|retired)\z/) {
++                        (my $show = $l) =~ s/\t/<TAB>/g;
++                        print $a "warn\tline ignored: $show\n";
++                        next;
++                    }
++                    next if $claimed{lc $name};          # a source has it this run
++                    if ($src eq "retired") {
++                        $lines{$name} = "retired";
++                        print $a "stale\t$name\n";
++                    } elsif ($listed{$label_of{$src}}) {
++                        $lines{$name} = "retired";
++                        print $a "retire\t$name\t$src\n";
++                    } else {
++                        $lines{$name} = $src;
++                        print $a "keep\t$name\t$src\n";
++                    }
++                }
++            }
++            close $p;
++        }
++        close $a or die "cannot write $actions: $!\n";
++        open my $n, ">:raw", $new or die "cannot write $new: $!\n";
++        print $n "$header\n";
++        print $n "$_\t$lines{$_}\n" for sort keys %lines;
++        close $n or die "cannot write $new: $!\n";
++    ' "$SEEN" "$LISTED" "$1" "$2" "$3" "$RULES_MANIFEST_HEADER"
++}
++
++# retire_rule_file NAME -- back up and remove ~/.aitools/rules/NAME (a retired rule)
++retire_rule_file() {
++    local name="$1" f="$HARNESS_DIR/rules/$1"
++    if $DRY_RUN; then
++        log "[DRY RUN] Would back up and remove $(display_path "$f") (retired rule)"
++        return 0
++    fi
++    backup_file "$f"
++    if ! $BACKUP_FILE_OK; then
++        log_error "Retired rule $name: backup failed -- $(display_path "$f") not removed"
++        write_summary ERROR "$TOOL" "$(short "retire failed: $name")"
++        return 0
++    fi
++    if ! rm -f "$f"; then
++        log_error "Retired rule $name: cannot remove $(display_path "$f")"
++        write_summary ERROR "$TOOL" "$(short "retire failed: $name")"
++        return 0
++    fi
++    N_RETIRED=$((N_RETIRED + 1))
++    log "Removed $(display_path "$f") (retired rule; backup kept)"
++    write_summary DETAIL "$TOOL" "$(short "retired: rules/$name")"
++}
++
++# write_rules_manifest -- section 5b: retire, then write the manifest (temp file + move)
++write_rules_manifest() {
++    local manifest="$HARNESS_DIR/rules/.aitools-rules-manifest"
++    local new="$WORK/rules-manifest.new" actions="$WORK/rules-manifest.actions"
++    local tmp="$manifest.tmp" kind name extra n
++    if ! rules_manifest_plan "$manifest" "$new" "$actions" 2> "$WORK/rules-manifest.err"; then
++        log_error "Rules manifest: $(cat "$WORK/rules-manifest.err") -- manifest not written, nothing retired"
++        write_summary ERROR "$TOOL" "rules manifest not written"
++        return 0
++    fi
++    while IFS=$'\t' read -r kind name extra <&5; do
++        case "$kind" in
++            warn)
++                log_warn "Rules manifest $(display_path "$manifest"): $name" ;;
++            keep)
++                log "Rules manifest: $name kept as $extra (source not listed this run -- not retired)" ;;
++            retire|stale)
++                if [ "$kind" = "retire" ]; then
++                    log "Retired rule: $name (was $extra; no source has it now)"
++                fi
++                if [ -f "$HARNESS_DIR/rules/$name" ] || [ -L "$HARNESS_DIR/rules/$name" ]; then
++                    retire_rule_file "$name"
++                fi ;;
++        esac
++    done 5< "$actions"
++    n=$(perl -ne '$n++ if $. > 1; END { print $n + 0 }' "$new")
++    if $DRY_RUN; then
++        log "[DRY RUN] Would write $(display_path "$manifest") ($n rule line(s))"
++        return 0
++    fi
++    if ! cp "$new" "$tmp"; then
++        log_error "Rules manifest: cannot write $(display_path "$tmp") -- manifest not written"
++        write_summary ERROR "$TOOL" "rules manifest not written"
++        return 0
++    fi
++    if ! mv -f "$tmp" "$manifest"; then
++        log_error "Rules manifest: cannot move $(display_path "$tmp") to $(display_path "$manifest") -- manifest not written"
++        write_summary ERROR "$TOOL" "rules manifest not written"
++        if ! rm -f "$tmp"; then log_warn "Cannot remove $(display_path "$tmp")"; fi
++        return 0
++    fi
++    log "Rules manifest: wrote $(display_path "$manifest") ($n rule line(s))"
++}
++
++write_rules_manifest
++
+ # =========================================================================
+ # 6. Preserved: files under the six directories with no source (logged, kept)
+ # =========================================================================
+@@ -365,6 +537,7 @@ for kind in $KINDS; do
+             chomp;
+             my $b = $_; $b =~ s{.*/}{};
+             next if $b =~ /\.bak\./i;
++            next if $b =~ /\A\.aitools-rules-manifest(?:\.tmp)?\z/;   # section 5b writes it
+             print "$_\n" unless $d{lc $_};
+         }
+     ' "$WORK/dests.txt" "$WORK/found.txt" > "$WORK/preserved.txt"; then
+@@ -381,7 +554,7 @@ done
+ # =========================================================================
+ # 7. Summary (one row under "harness files") + exit footer
+ # =========================================================================
+-log "harness files: $N_PLANNED planned, $N_ADDED added, $N_UPDATED updated, $N_ACCEPTED accepted, $N_VERIFIED verified, $N_SKIPPED skipped, $N_FAILED failed, $N_PRESERVED preserved, $DUPLICATES duplicate(s)"
++log "harness files: $N_PLANNED planned, $N_ADDED added, $N_UPDATED updated, $N_ACCEPTED accepted, $N_VERIFIED verified, $N_SKIPPED skipped, $N_FAILED failed, $N_PRESERVED preserved, $N_RETIRED retired, $DUPLICATES duplicate(s)"
+ if $DRY_RUN; then
+     write_summary OK "$TOOL" "$(short "dry-run: $N_WOULD_CREATE create, $N_WOULD_UPDATE update")"
+ elif [ "$N_FAILED" -gt 0 ]; then
+diff --git a/tests/deploy-harness/test-deploy-harness.sh b/tests/deploy-harness/test-deploy-harness.sh
+index d3a7f083..a660f2a7 100755
+--- a/tests/deploy-harness/test-deploy-harness.sh
++++ b/tests/deploy-harness/test-deploy-harness.sh
+@@ -9,7 +9,8 @@
+ # accept & adopt into a protected file (pty), skip (pty), abort (pty, exit 2),
+ # --force on a terminal, conflicts (first source wins, ERROR rows, exit 1),
+ # dry run (no writes), config writer failure (stub and real writer),
+-# missing / non-git dotprofile, preserved files, bad arguments, --help.
++# missing / non-git dotprofile, preserved files, bad arguments, --help, the
++# rules manifest and retired rules (.sh, and the .ps1 on pwsh when available).
+ # Interactive cases use tests/managed-files/pty-run.py (python3); skipped
+ # without it. The config writer is a stub except in the "real writer" case.
+ # Platform: macOS, Linux. Exit 1 if any case fails.
+@@ -19,7 +20,7 @@
+ set -uo pipefail
+ 
+ if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
+-    perl -ne 'print if $. >= 2 && $. <= 17' "$0"
++    perl -ne 'print if $. >= 2 && $. <= 18' "$0"
+     exit 0
+ fi
+ 
+@@ -267,6 +268,187 @@ run_dh "" --
+ check "dotprofile not in git: ERROR row, exit 1" \
+     "[ \"\$(rc)\" = 1 ] && row 'ERROR|harness files|dotprofile: not a git checkout' && [ ! -e '$(A)/rules/user1.md' ]"
+ 
++# ---------------------------------------------------------------------------
++# Rules manifest (~/.aitools/rules/.aitools-rules-manifest) and retired rules
++# ---------------------------------------------------------------------------
++M() { printf '%s' "$H/.aitools/rules/.aitools-rules-manifest"; }
++# mf_is LINE... -- the manifest is exactly the header + these lines (LF, in order)
++mf_is() {
++    { printf '# aitools rules manifest v1\n'; printf '%s\n' "$@"; } > "$C/mf.expected"
++    cmp -s "$C/mf.expected" "$(M)"
++}
++T="$(printf '\t')"
++fresh_log() { : > "$C/logs/deploy.log"; }   # the log accumulates across the runs of a case
++FIRST_MF=("hook-lifecycle.md${T}shared" "p1.md${T}aitools" "scratch.md${T}shared" "sources-of-truth.md${T}aitools" "user1.md${T}dotprofile")
++
++setup_case manifest
++mkdir -p "$(A)/rules"
++printf 'left over\n' > "$(A)/rules/old.md"
++printf 'backup copy\n' > "$R/shared/rules/x.bak.1.md"
++gitc -C "$R" add -A; gitc -C "$R" commit -q -m bak
++run_dh "" --
++check "manifest: first run writes it (header, sorted, winning sources)" "[ \"\$(rc)\" = 0 ] && mf_is \"\${FIRST_MF[@]}\""
++check "manifest: first run (no previous manifest) retires nothing" \
++    "[ -f '$(A)/rules/old.md' ] && grep -q 'Preserved: .*rules/old.md' '$LOG' && ! grep -q 'Retired rule' '$LOG'"
++check "manifest: *.bak.* never listed, manifest itself not preserved" \
++    "! grep -q 'bak' '$(M)' && ! grep -q 'Preserved: .*aitools-rules-manifest' '$LOG' && [ ! -e '$(M).tmp' ]"
++check "manifest: no .md extension (consumers copying *.md skip it)" "[ -f '$(M)' ] && ! ls '$(A)/rules' | grep -q 'manifest.*\\.md'"
++
++gitc -C "$R" rm -q shared/rules/scratch.md; gitc -C "$R" commit -q -m retire
++fresh_log
++run_dh "" --
++check "retire: exit 0, line becomes retired" \
++    "[ \"\$(rc)\" = 0 ] && mf_is 'hook-lifecycle.md${T}shared' 'p1.md${T}aitools' 'scratch.md${T}retired' 'sources-of-truth.md${T}aitools' 'user1.md${T}dotprofile'"
++check "retire: file backed up and removed, logged, DETAIL row" \
++    "[ ! -e '$(A)/rules/scratch.md' ] && ls '$(A)/rules/'scratch.md.bak.* >/dev/null 2>&1 && grep -q 'Retired rule: scratch.md (was shared' '$LOG' && row 'DETAIL|harness files|retired: rules/scratch.md'"
++check "retire: a file never in a manifest is still preserved" "[ -f '$(A)/rules/old.md' ]"
++fresh_log
++run_dh "" --
++check "retired line persists; no new backup, no row" \
++    "[ \"\$(rc)\" = 0 ] && grep -qx 'scratch.md${T}retired' '$(M)' && [ \"\$(ls '$(A)/rules/' | grep -c '^scratch.md.bak')\" = 1 ] && ! has_row 'retired:'"
++printf 'scratch again\n' > "$(A)/rules/scratch.md"
++run_dh "" --
++check "retired name's file found again: backed up and removed" \
++    "[ ! -e '$(A)/rules/scratch.md' ] && grep -lq 'scratch again' '$(A)/rules/'scratch.md.bak.* && grep -qx 'scratch.md${T}retired' '$(M)'"
++printf 'dotprofile scratch\n' > "$D/claude/rules/scratch.md"
++gitc -C "$D" add -A; gitc -C "$D" commit -q -m back
++run_dh "" --
++check "reappearing name returns to its (new) source and is deployed" \
++    "[ \"\$(rc)\" = 0 ] && grep -qx 'scratch.md${T}dotprofile' '$(M)' && grep -qx 'dotprofile scratch' '$(A)/rules/scratch.md'"
++
++write_config "$C/no-such-dotprofile"
++fresh_log
++run_dh "" --
++check "source not listed (no dotprofile): its names keep their lines, files kept" \
++    "[ \"\$(rc)\" = 0 ] && grep -qx 'user1.md${T}dotprofile' '$(M)' && grep -qx 'scratch.md${T}dotprofile' '$(M)' && [ -f '$(A)/rules/user1.md' ] && grep -q 'user1.md kept as dotprofile' '$LOG'"
++write_config "$D"
++gitc -C "$D" rm -q claude/rules/user1.md; gitc -C "$D" commit -q -m retire-user
++fresh_log
++run_dh "" -- --dry-run
++check "dry run: retirement reported, nothing removed or written" \
++    "[ -f '$(A)/rules/user1.md' ] && grep -qx 'user1.md${T}dotprofile' '$(M)' && grep -q 'DRY RUN\] Would back up and remove .*user1.md' '$LOG'"
++run_dh "" --
++check "dotprofile listed again: its removed rule is retired" \
++    "[ ! -e '$(A)/rules/user1.md' ] && grep -qx 'user1.md${T}retired' '$(M)'"
++
++printf '# aitools rules manifest v1\nScratch.md\tdotprofile\nP1.MD\taitools\n' > "$(M)"
++fresh_log
++run_dh "" --
++check "names compared case-insensitively: a case variant is not retired" \
++    "[ \"\$(rc)\" = 0 ] && [ -f '$(A)/rules/scratch.md' ] && [ -f '$(A)/rules/p1.md' ] && ! grep -q 'Retired rule' '$LOG' && ! grep -q 'Scratch.md' '$(M)'"
++printf 'not a manifest\nold.md\tshared\n' > "$(M)"
++fresh_log
++run_dh "" --
++check "unknown header: warning, nothing retired, rewritten" \
++    "[ -f '$(A)/rules/old.md' ] && grep -q '\[warn\] Rules manifest .*the first line is not' '$LOG' && head -n 1 '$(M)' | grep -qx '# aitools rules manifest v1' && ! grep -q '^old.md' '$(M)'"
++printf '# aitools rules manifest v1\n../evil.md\tshared\nnotes.txt\tshared\nz.md\tbogus\n' > "$(M)"
++printf 'keep me\n' > "$(A)/evil.md"    # where rules/../evil.md resolves
++fresh_log
++run_dh "" --
++check "invalid lines ignored with a warning (no path outside rules/)" \
++    "[ -f '$(A)/evil.md' ] && [ \"\$(grep -c 'line ignored' '$LOG')\" = 3 ] && ! grep -q 'evil' '$(M)'"
++mkdir -p "$(A)/rules/d.md"
++printf 'inside\n' > "$(A)/rules/d.md/f"
++printf '# aitools rules manifest v1\nd.md\tretired\n' > "$(M)"
++fresh_log
++run_dh "" --
++check "a directory named like a retired rule is left alone" \
++    "[ \"\$(rc)\" = 0 ] && [ -f '$(A)/rules/d.md/f' ] && grep -qx 'd.md${T}retired' '$(M)'"
++
++# rule_retire_cases RUNNER -- bracket name, failed backup (shared by .sh and .ps1)
++rule_retire_cases() {
++    local runner="$1" side="$2"
++    printf 'bracket\n' > "$R/shared/rules/a[1].md"
++    gitc -C "$R" add -A; gitc -C "$R" commit -q -m bracket
++    : > "$C/summary"; "$runner"
++    gitc -C "$R" rm -q 'shared/rules/a[1].md'; gitc -C "$R" commit -q -m bracket-gone
++    fresh_log; : > "$C/summary"; "$runner"
++    check "$side: retired name with [ ] is backed up before removal" \
++        "[ ! -e '$(A)/rules/a[1].md' ] && ls '$(A)/rules' | grep -qF 'a[1].md.bak.' && grep -qxF 'a[1].md${T}retired' '$(M)'"
++    gitc -C "$R" rm -q .claude/rules/p1.md; gitc -C "$R" commit -q -m p1-gone
++    chmod 555 "$(A)/rules"
++    fresh_log; : > "$C/summary"; "$runner"
++    chmod 755 "$(A)/rules"
++    check "$side: failed backup keeps the file (ERROR row, exit 1)" \
++        "[ \"\$(rc)\" = 1 ] && [ -f '$(A)/rules/p1.md' ] && row 'ERROR|harness files|retire failed: p1.md' && grep -q 'backup failed' '$LOG'"
++    fresh_log; : > "$C/summary"; "$runner"
++    check "$side: next run retries and removes it" \
++        "[ \"\$(rc)\" = 0 ] && [ ! -e '$(A)/rules/p1.md' ] && grep -qx 'p1.md${T}retired' '$(M)'"
++}
++run_dh_plain() { run_dh "" --; }
++if [ "$(id -u)" != 0 ]; then
++    setup_case retiresh
++    rule_retire_cases run_dh_plain sh
++fi
++if [ "$(id -u)" != 0 ]; then
++    chmod 555 "$(A)/rules"
++    run_dh "" --
++    chmod 755 "$(A)/rules"
++    check "manifest write failure: ERROR row, exit 1, run completes" \
++        "[ \"\$(rc)\" = 1 ] && row 'ERROR|harness files|rules manifest not written' && grep -q 'harness files: .* retired' '$LOG'"
++else
++    printf 'SKIP manifest write failure (root ignores permissions)\n'; SKIP=$((SKIP + 1))
++fi
++
++# The .ps1 twin on pwsh (OS guard disabled in a temp copy): same manifest, same retirement
++if command -v pwsh >/dev/null 2>&1; then
++    setup_case psmanifest
++    perl -pe 's/-and -not \$IsWindows\)/-and \$false)/' "$ROOT/scripts/deploy-harness.ps1" > "$R/scripts/deploy-harness.ps1"
++    cp "$ROOT/scripts/aitools-lib.ps1" "$R/scripts/"
++    printf 'param([switch]$DryRun, [switch]$Force)\nexit 0\n' > "$R/scripts/setup-user-config.ps1"
++    run_ps() {
++        env -u AITOOLS_FORCE -u AITOOLS_DRY_RUN HOME="$H" USERPROFILE="$H" AITOOLS_LOG_DIR="$C/logs" \
++            AITOOLS_SUMMARY_FILE="$C/summary" pwsh -NoProfile -File "$R/scripts/deploy-harness.ps1" "$@" < /dev/null > "$C/out" 2>&1
++        echo $? > "$C/rc"
++        LOG="$C/logs/deploy.log"
++    }
++    : > "$C/summary"
++    run_ps
++    check "ps1 manifest: first run, same content as the .sh" "[ \"\$(rc)\" = 0 ] && mf_is \"\${FIRST_MF[@]}\""
++    gitc -C "$R" rm -q shared/rules/scratch.md; gitc -C "$R" commit -q -m retire
++    : > "$C/summary"
++    run_ps
++    check "ps1 retire: retired line, file backed up and removed, DETAIL row" \
++        "[ \"\$(rc)\" = 0 ] && grep -qx 'scratch.md${T}retired' '$(M)' && [ ! -e '$(A)/rules/scratch.md' ] && ls '$(A)/rules/'scratch.md.bak.* >/dev/null 2>&1 && row 'DETAIL|harness files|retired: rules/scratch.md'"
++    write_config "$C/no-such-dotprofile"
++    gitc -C "$R" rm -q .claude/rules/p1.md; gitc -C "$R" commit -q -m retire2
++    : > "$C/summary"
++    run_ps
++    check "ps1: unlisted source keeps its lines; listed source retires" \
++        "grep -qx 'user1.md${T}dotprofile' '$(M)' && [ -f '$(A)/rules/user1.md' ] && grep -qx 'p1.md${T}retired' '$(M)' && [ ! -e '$(A)/rules/p1.md' ]"
++    check "ps1: manifest is LF, no BOM" "! grep -q \$'\\r' '$(M)' && head -c 3 '$(M)' | grep -q '^# a'"
++    write_config "$D"
++    # Another dotprofile rule keeps claude/rules in the checkout (git removes empty directories)
++    printf 'user rule two\n' > "$D/claude/rules/user2.md"
++    gitc -C "$D" add -A; gitc -C "$D" commit -q -m user2
++    gitc -C "$D" rm -q claude/rules/user1.md; gitc -C "$D" commit -q -m retire-user
++    fresh_log; : > "$C/summary"
++    run_ps -DryRun
++    check "ps1 dry run: retirement reported, nothing removed or written" \
++        "[ -f '$(A)/rules/user1.md' ] && grep -qx 'user1.md${T}dotprofile' '$(M)' && grep -q 'DRY RUN\] Would back up and remove .*user1.md' '$LOG'"
++    printf '# aitools rules manifest v1\n../evil.md\tshared\nnotes.txt\tshared\nz.md\tbogus\nHook-Lifecycle.md\tshared\n' > "$(M)"
++    printf 'keep me\n' > "$(A)/evil.md"
++    fresh_log; : > "$C/summary"
++    run_ps
++    check "ps1: invalid lines ignored (3 warnings), case variant not retired" \
++        "[ -f '$(A)/evil.md' ] && [ \"\$(grep -c 'line ignored' '$LOG')\" = 3 ] && ! grep -q 'evil' '$(M)' && ! grep -q 'Retired rule' '$LOG' && [ -f '$(A)/rules/hook-lifecycle.md' ]"
++    mkdir -p "$(A)/rules/d.md"; printf 'inside\n' > "$(A)/rules/d.md/f"
++    printf '# aitools rules manifest v1\nd.md\tretired\n' > "$(M)"
++    fresh_log; : > "$C/summary"
++    run_ps
++    check "ps1: a directory named like a retired rule is left alone" \
++        "[ \"\$(rc)\" = 0 ] && [ -f '$(A)/rules/d.md/f' ]"
++    if [ "$(id -u)" != 0 ]; then
++        setup_case retireps
++        perl -pe 's/-and -not \$IsWindows\)/-and \$false)/' "$ROOT/scripts/deploy-harness.ps1" > "$R/scripts/deploy-harness.ps1"
++        cp "$ROOT/scripts/aitools-lib.ps1" "$R/scripts/"
++        printf 'param([switch]$DryRun, [switch]$Force)\nexit 0\n' > "$R/scripts/setup-user-config.ps1"
++        rule_retire_cases run_ps ps1
++    fi
++else
++    printf 'SKIP ps1 manifest cases (pwsh not found)\n'; SKIP=$((SKIP + 1))
++fi
++
+ # ---------------------------------------------------------------------------
+ # Arguments
+ # ---------------------------------------------------------------------------

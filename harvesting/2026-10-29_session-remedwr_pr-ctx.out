@@ -1,0 +1,252 @@
+
+=== files pr100
+  .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-H2-Manifest/S3-H2-Manifest-drafts/dot-claude/rules/managed-file-deployment.md
+  .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-H2-Manifest/S3-H2-Manifest-drafts/reference/harness.md
+  .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-H2-Manifest/S3-H2-Manifest-drafts/reference/managed-file-deployment.md
+  .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-H2-Manifest/S3-H2-Manifest-handback.md
+  scripts/deploy-harness.ps1
+  scripts/deploy-harness.sh
+  tests/deploy-harness/test-deploy-harness.sh
+
+=== files pr103
+  .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Adopt/S3-MF-Adopt-Review-pr103.md
+  .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Adopt/S3-MF-Adopt-drafts/reference/managed-file-deployment.md.edit.txt
+  .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Adopt/S3-MF-Adopt-report.md
+  .github/workflows/check.yml
+  scripts/aitools-lib.ps1
+  scripts/aitools-lib.sh
+  scripts/setup-user-claude.ps1
+  scripts/setup-user-claude.sh
+  tests/managed-files/test-adopt-push.ps1
+  tests/managed-files/test-adopt-push.sh
+
+=== files pr106
+  .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-AbortDocs/S3-AbortDocs-handback.md
+  .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-H2-Hookin/S3-H2-Hookin-handback.md
+  .claude/rules/interactive-menus.md
+  .cursor/rules/interactive-menus.mdc
+  plans/tool-support-and-machine-profile.md
+  reference/managed-file-deployment.md
+  reference/tool-support-decision-tree.md
+  scripts/aitools
+  scripts/aitools-install.ps1
+  scripts/aitools-install.sh
+  scripts/aitools.ps1
+  tests/hookin/hookin-driver.ps1
+  tests/hookin/test-hookin.sh
+
+=== files pr109
+  .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Fix4/S3-MF-Fix4-Review-pr109.md
+  .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Fix4/S3-MF-Fix4-report.md
+  scripts/check-lib.ps1
+  scripts/check-lib.sh
+  scripts/setup-user-cursor.ps1
+  scripts/setup-user-cursor.sh
+  scripts/setup-user-skills.ps1
+  tests/b8-consumers/test-b8-consumers.sh
+
+=== files pr110
+  .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-H2-Cursor/S3-H2-Cursor-Review-reverify.md
+  .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-H2-Cursor/S3-H2-Cursor-Review-verdict.md
+  .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-H2-Cursor/S3-H2-Cursor-drafts/reference/tool-ops-cursor.md.edit.txt
+  .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-H2-Cursor/S3-H2-Cursor-drafts/registries/tool-ops.json.edit.txt
+  .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-H2-Cursor/S3-H2-Cursor-handback.md
+  .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-H2-Manifest/S3-H2-Manifest-drafts/dot-claude/rules/managed-file-deployment.md
+  .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-H2-Manifest/S3-H2-Manifest-drafts/reference/harness.md
+  .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-H2-Manifest/S3-H2-Manifest-drafts/reference/managed-file-deployment.md
+  .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-H2-Manifest/S3-H2-Manifest-handback.md
+  scripts/deploy-harness.ps1
+  scripts/deploy-harness.sh
+  scripts/setup-user-cursor.ps1
+  scripts/setup-user-cursor.sh
+  tests/deploy-harness/test-deploy-harness.sh
+  tests/rules-fanout-cursor/convert-rule.ps1
+  tests/rules-fanout-cursor/step4-driver.ps1
+  tests/rules-fanout-cursor/test-rules-fanout-cursor.sh
+
+=== files pr111
+  .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-H2-MDM/S3-H2-MDM-drafts/dot-claude/rules/deploy-paths.md.edit.txt
+  .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-H2-MDM/S3-H2-MDM-drafts/reference/harness.md.edit.txt
+  .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-H2-MDM/S3-H2-MDM-handback.md
+  .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-H2-Manifest/S3-H2-Manifest-drafts/dot-claude/rules/managed-file-deployment.md
+  .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-H2-Manifest/S3-H2-Manifest-drafts/reference/harness.md
+  .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-H2-Manifest/S3-H2-Manifest-drafts/reference/managed-file-deployment.md
+  .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-H2-Manifest/S3-H2-Manifest-handback.md
+  scripts/build-deploy.sh
+  scripts/deploy-harness.ps1
+  scripts/deploy-harness.sh
+  tests/deploy-harness-mdm/test-deploy-harness-mdm.sh
+  tests/deploy-harness/test-deploy-harness.sh
+
+=== files pr112
+  .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Adopt/S3-MF-Adopt-Review-pr103.md
+  .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Adopt/S3-MF-Adopt-drafts/reference/managed-file-deployment.md.edit.txt
+  .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Adopt/S3-MF-Adopt-report.md
+  .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Fix5/S3-MF-Fix5-Review-pr112.md
+  .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Fix5/S3-MF-Fix5-report.md
+  .github/workflows/check.yml
+  scripts/aitools-lib.ps1
+  scripts/aitools-lib.sh
+  scripts/build-deploy.sh
+  scripts/setup-user-claude.ps1
+  scripts/setup-user-claude.sh
+  tests/claude-mdm/test-claude-mdm.sh
+  tests/managed-files/test-adopt-push.ps1
+  tests/managed-files/test-adopt-push.sh
+
+=== files pr113
+  .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Adopt/S3-MF-Adopt-Review-pr103.md
+  .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Adopt/S3-MF-Adopt-drafts/reference/managed-file-deployment.md.edit.txt
+  .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Adopt/S3-MF-Adopt-report.md
+  .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-NoMachine/S3-MF-NoMachine-Review-pr98.md
+  .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-NoMachine/S3-MF-NoMachine-report.md
+  .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Runner/S3-MF-Runner-Review-pr113.md
+  .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Runner/S3-MF-Runner-plan.md
+  .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Runner/S3-MF-Runner-report.md
+  .github/workflows/check.yml
+  scripts/aitools
+  scripts/aitools-lib.ps1
+  scripts/aitools-lib.sh
+  scripts/aitools.ps1
+  scripts/setup-user-claude.ps1
+  scripts/setup-user-claude.sh
+  scripts/setup-user-config.ps1
+  scripts/setup-user-config.sh
+  tests/managed-files/test-adopt-push.ps1
+  tests/managed-files/test-adopt-push.sh
+  tests/profile/test-config.sh
+  tests/profile/test-lib.sh
+  tests/profile/test-user-init.sh
+
+=== files pr115
+  .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Adopt/S3-MF-Adopt-Review-pr103.md
+  .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Adopt/S3-MF-Adopt-drafts/reference/managed-file-deployment.md.edit.txt
+  .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Adopt/S3-MF-Adopt-report.md
+  .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-NoMachine/S3-MF-NoMachine-Review-pr98.md
+  .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-NoMachine/S3-MF-NoMachine-report.md
+  .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Relay/S3-MF-Relay-ReviewA-pr115.md
+  .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Runner/S3-MF-Runner-Review-pr113.md
+  .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Runner/S3-MF-Runner-plan.md
+  .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Runner/S3-MF-Runner-report.md
+  .github/workflows/check.yml
+  scripts/aitools
+  scripts/aitools-lib.ps1
+  scripts/aitools-lib.sh
+  scripts/aitools.ps1
+  scripts/setup-user-claude.ps1
+  scripts/setup-user-claude.sh
+  scripts/setup-user-config.ps1
+  scripts/setup-user-config.sh
+  tests/managed-files/test-adopt-push.ps1
+  tests/managed-files/test-adopt-push.sh
+  tests/profile/test-config.sh
+  tests/profile/test-lib.sh
+  tests/profile/test-user-init.sh
+
+=== files pr116
+  .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Adopt/S3-MF-Adopt-Review-pr103.md
+  .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Adopt/S3-MF-Adopt-drafts/reference/managed-file-deployment.md.edit.txt
+  .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Adopt/S3-MF-Adopt-report.md
+  .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-NoMachine/S3-MF-NoMachine-Review-pr98.md
+  .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-NoMachine/S3-MF-NoMachine-report.md
+  .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Relay/S3-MF-Relay-ReviewA-pr115.md
+  .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Relay/S3-MF-Relay-ReviewB-pr116.md
+  .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Relay/S3-MF-Relay-report.md
+  .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Runner/S3-MF-Runner-Review-pr113.md
+  .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Runner/S3-MF-Runner-plan.md
+  .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Runner/S3-MF-Runner-report.md
+  .github/workflows/check.yml
+  scripts/aitools
+  scripts/aitools-install.ps1
+  scripts/aitools-install.sh
+  scripts/aitools-lib.ps1
+  scripts/aitools-lib.sh
+  scripts/aitools.ps1
+  scripts/setup-user-claude.ps1
+  scripts/setup-user-claude.sh
+  scripts/setup-user-config.ps1
+  scripts/setup-user-config.sh
+  tests/managed-files/test-adopt-push.ps1
+  tests/managed-files/test-adopt-push.sh
+  tests/profile/test-config.sh
+  tests/profile/test-install.sh
+  tests/profile/test-lib.sh
+  tests/profile/test-user-init.sh
+
+=== pr109 node not found
+49:+- **n-6** (already in the PR follow-ups, pre-existing, outside the audit) cursor.sh:185-187 "node not found" logs a `log_warn` with no summary row. INCIDENT: summary coverage gap, setup-user-cursor.sh:186, not in S3-MF-Audit; owner to file.
+124:+- INCIDENT: setup-user-cursor.sh:186 "node not found" log_warn has no summary row (summary coverage rule). Not filed.
+
+=== pr112 node not found
+1397:+    skip "build and MDM cases (node not found; build-deploy needs it)"
+
+=== pr116 GIT_TERMINAL_PROMPT
+120:+GIT_TERMINAL_PROMPT and BatchMode settings, ACTION once per run. If N1 and N2
+203:+  - *Push* never prompts (`GIT_TERMINAL_PROMPT=0`; ssh BatchMode unless
+2220:+# never prompts (GIT_TERMINAL_PROMPT=0; ssh BatchMode unless GIT_SSH_COMMAND is
+2301:+    $prevPrompt = $env:GIT_TERMINAL_PROMPT
+2304:+        $env:GIT_TERMINAL_PROMPT = "0"
+2309:+        $env:GIT_TERMINAL_PROMPT = $prevPrompt
+2700:+# never prompts (GIT_TERMINAL_PROMPT=0; ssh BatchMode unless GIT_SSH_COMMAND is
+2768:+    out=$(GIT_TERMINAL_PROMPT=0 GIT_SSH_COMMAND="${GIT_SSH_COMMAND:-ssh -o BatchMode=yes}" git -C "$dir" push 2>&1) || rc=$?
+
+=== pr116 AppendAllText
+4021:+        [IO.File]::AppendAllText($env:AITOOLS_SUMMARY_FILE, "OK|aitools config|stub`n")
+4033:+        [IO.File]::AppendAllText($env:AITOOLS_SUMMARY_FILE, "ERROR|aitools config|stub failed`n")
+
+=== pr116 rotate
+
+=== pr106 rotate
+
+=== pr101 first profile
+1007:+`profiles[config machineAlias]`, then the node hostname, then the first profile, so
+
+=== pr106 AITOOLS_DEPLOY
+481:+        unset AITOOLS_DEPLOY
+832:+        if (Test-Path Env:\AITOOLS_DEPLOY) { Remove-Item Env:\AITOOLS_DEPLOY }
+
+=== pr106 MDM deploy
+564:+        LogWarn "deploy-harness.ps1 not found -- skipping (MDM deploy)"
+680:+        log_warn "deploy-harness.sh not found -- skipping (MDM deploy)"
+
+=== pr110 backup_dir
+108:+   - Backup before every removal: per file, never `backup_dir`. `BACKUP_FILE_OK` is checked, and a failed backup or removal gives a failed tracker entry and an ERROR row.
+
+=== pr111 rev-parse ps1
+
+=== pr103 LASTEXITCODE
+398:+    if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+
+=== pr106 deploy_scripts
+413:+            local deploy_scripts="deploy-harness.ps1 setup-user-claude.ps1 setup-user-mcp.ps1 setup-user-skills.ps1 setup-cursor-ide-mcp.ps1 setup-user-cursor.ps1 setup-user-settings.ps1 setup-user-hooks.ps1"
+447:+            local deploy_scripts="deploy-harness.sh setup-user-claude.sh setup-user-mcp.sh setup-user-skills.sh setup-cursor-ide-mcp.sh setup-user-cursor.sh setup-user-settings.sh setup-user-hooks.sh"
+796:+    $deployScripts = @("deploy-harness.ps1", "setup-user-claude.ps1", "setup-user-mcp.ps1", "setup-user-skills.ps1", "setup-cursor-ide-mcp.ps1", "setup-user-cursor.ps1", "setup-user-settings.ps1", "setup-user-hooks.ps1")
+1122:+    "[ \"\$(grep -cE '^ +local deploy_scripts=\"deploy-harness\.(sh|ps1) ' '$ROOT/scripts/aitools')\" = 2 ] && ! grep -qE '^ +local deploy_scripts=.*setup-user-config' '$ROOT/scripts/aitools'"
+1124:+    "grep -qE '^ +\\\$deployScripts = @\\(\"deploy-harness\.ps1\", ' '$ROOT/scripts/aitools.ps1' && ! grep -qE '^ +\\\$deployScripts = .*setup-user-config' '$ROOT/scripts/aitools.ps1'"
+
+=== pr112 SHELL
+
+=== incidents ids near lines
+line 15 -> id 1
+line 39 -> id 2
+line 93 -> id 4
+line 117 -> id 5
+line 1752 -> id 76
+line 1806 -> id 78
+line 2066 -> id 91
+line 2210 -> id 97
+line 2808 -> id 121
+line 3421 -> id 52
+
+=== incidents status for those
+incidents 1 open high | Hook scripts deployed without backup or interactive review
+incidents 2 open medium | Bash scripts missing backup_file before JSON config merge
+incidents 76 open high | Profile selection silently falls back to the first profile when neither machineAlias nor hostname matches, and
+incidents 78 open high | build-deploy.sh bakes the building machine's per-machine values (profile company/name) into the dotprofile dep
+incidents 91 open medium | Installer Step 8 reports OK for any node on PATH; on nobul-mac the registry-preferred node@22 is installed keg
+max id open 145 closed 82
+
+=== pr102 drafted ids for push/cursor-node/first-profile
+164 "title": "adopt_managed_file / Adopt-ManagedFile, used by the reverse discovery of user-created hooks and skills, copies into the dotprofile
+165 "title": "Dotprofile auto-push runs a bare `git push`, which pushes the current branch (not necessarily main) and also publishes every earli
+167 "title": "setup-user-cursor.sh logs 'node not found' as a warning and writes no 'cursor cli' summary row for the skipped cli-config.json mer

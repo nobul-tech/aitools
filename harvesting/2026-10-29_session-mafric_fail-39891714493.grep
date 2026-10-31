@@ -1,0 +1,40 @@
+macos	Profile resolver tests (macOS /bin/bash 3.2)	2026-10-23T03:15:27.0006630Z   ok   urp-env-missing: line /^error\tAITOOLS_USER_REPO_PATH does not exist/
+macos	Profile resolver tests (macOS /bin/bash 3.2)	2026-10-23T03:15:27.0552150Z   ok   urp-arg-missing: line /^error\t--user-repo-path does not exist/
+macos	Profile resolver tests (macOS /bin/bash 3.2)	2026-10-23T03:15:27.5794560Z   ok   rm-utf16-profile: line /^error\t.*/u16\.json is UTF-16 encoded, not UTF-8 -- save it as UTF-8$/
+macos	Profile resolver tests (macOS /bin/bash 3.2)	2026-10-23T03:15:29.4786370Z   ok   rm-none: line /^error\tno profile matches this machine \(machine.id 0B1C2D3E.*hostname some-other-host\)/
+macos	Profile resolver tests (macOS /bin/bash 3.2)	2026-10-23T03:15:31.1983360Z   ok   rm-override-unknown: line /^error\toverride alias "nope" not in profiles \(laptop, nobul-mac, workstation\)/
+macos	Profile resolver tests (macOS /bin/bash 3.2)	2026-10-23T03:15:31.5657160Z   ok   rm-id-twice: line /^error\tmachine.id 3D4DF2A5.* is registered on more than one profile: laptop, nobul-mac/
+macos	Profile resolver tests (macOS /bin/bash 3.2)	2026-10-23T03:15:31.9275840Z   ok   rm-host-twice: line /^error\thostname matches more than one profile: laptop, nobul-mac/
+macos	Profile resolver tests (macOS /bin/bash 3.2)	2026-10-23T03:15:32.4925400Z   ok   rm-corrupt-profile: line /^error\t.*profile.json is invalid JSON/
+macos	Profile resolver tests (macOS /bin/bash 3.2)	2026-10-23T03:15:32.7120710Z   ok   rm-v1: line /^error\tprofile.json is not v2 or has no profiles/
+macos	Profile resolver tests (macOS /bin/bash 3.2)	2026-10-23T03:15:32.7693190Z   ok   rm-profile-file-missing: line /^error\tprofile file set but missing: .*\(AITOOLS_PROFILE_FILE\)/
+macos	Profile resolver tests (macOS /bin/bash 3.2)	2026-10-23T03:15:33.4883620Z   ok   rm-json: line /^\{"alias":"laptop","via":"override",.*"warnings":\["profile \\"laptop\\" has no machine.id.*"\],"errors":\[\]\}$/
+macos	Profile resolver tests (macOS /bin/bash 3.2)	2026-10-23T03:15:34.4622390Z   ok   reg-noclaim: line /^error\talias "nobul-mac" is used by profile nobul-mac, which is not registered to any machine -- claim it \(--claim nobul-mac\) or choose another alias$/
+macos	Profile resolver tests (macOS /bin/bash 3.2)	2026-10-23T03:15:35.5323740Z   ok   reg-alias-taken: line /^error\talias "spare" is used by another machine.s profile \(0b1c2d3e-0000-1111-2222-333344445555\) -- choose another alias/
+macos	Profile resolver tests (macOS /bin/bash 3.2)	2026-10-23T03:15:36.0786050Z   ok   reg-dup-id: line /^error\tmachine.id 3D4DF2A5.* is already registered on profile "old-mac"/
+macos	Profile resolver tests (macOS /bin/bash 3.2)	2026-10-23T03:15:36.1525190Z   ok   reg-no-id: line /^error\tno machine id: no machine id \(test value\) -- a machine profile is keyed by this machine.s id$/
+macos	Profile resolver tests (macOS /bin/bash 3.2)	2026-10-23T03:15:36.9280490Z   ok   reg-claim-foreign: line /^error\t--claim: profile "laptop" is registered to another machine -- not claimed$/
+macos	Profile resolver tests (macOS /bin/bash 3.2)	2026-10-23T03:15:37.0347110Z   ok   reg-claim-missing: line /^error\t--claim: no profile "nope"$/
+macos	Profile resolver tests (macOS /bin/bash 3.2)	2026-10-23T03:15:40.9146470Z   ok   exc-set-hostname: line /^error\tmachine profile "nobul-mac" matched by hostname only -- run: aitools user init to remember tool choices$/
+macos	Profile resolver tests (macOS /bin/bash 3.2)	2026-10-23T03:15:41.0045070Z   ok   exc-set-none: line /^error\tno dotprofile profile.json -- run: aitools user init/
+macos	Profile resolver tests (macOS /bin/bash 3.2)	2026-10-23T03:15:41.1012140Z   ok   exc-set-snapshot: line /^error\tprofile from AITOOLS_PROFILE_FILE is a read-only snapshot/
+macos	Profile resolver tests (macOS /bin/bash 3.2)	2026-10-23T03:15:41.7630210Z   ok   exc-get-none: line /^error\tno profile matches this machine/
+macos	Profile resolver tests (macOS /bin/bash 3.2)	2026-10-23T03:15:42.0768040Z   ok   exc-set-alias: line /^error\tmachine profile "laptop" is not registered to this machine -- run: aitools user init to remember tool choices$/
+macos	Profile resolver tests (macOS /bin/bash 3.2)	2026-10-23T03:15:42.4396240Z   ok   exc-set-foreign: line /^error\tmachine profile "nobul-mac" matched by hostname only/
+macos	Profile resolver tests (macOS /bin/bash 3.2)	2026-10-23T03:15:42.7800600Z   ok   exc-set-override: line /^error\tmachine profile "laptop" is not registered to this machine/
+macos	Profile resolver tests (macOS /bin/bash 3.2)	2026-10-23T03:15:45.9071850Z   ok   exc-set-nopush: line /^warn\tdotprofile push failed \(exit [0-9]+\) -- run git push in /
+macos	Profile resolver tests (macOS /bin/bash 3.2)	2026-10-23T03:15:51.5727650Z   ok   idk-dup-lookup: line /^error\talias "nobul-mac" is used by more than one profile: 3d4df2a5-7d91-5af9-9944-4feebaae3cf5, 0b1c2d3e-0000-1111-2222-333344445555 -- select one by its key$/
+macos	Profile resolver tests (macOS /bin/bash 3.2)	2026-10-23T03:15:53.1018490Z   ok   idk-exc-other: line /^error\tmachine profile "laptop" is not registered to this machine/
+macos	Profile resolver tests (macOS /bin/bash 3.2)	2026-10-23T03:15:53.4557940Z   ok   idk-exc-cfg: line /^error\tmachine profile "nobul-mac" matched by config.json machineId only \(machine id unavailable\) -- tool choice not saved$/
+macos	Profile resolver tests (macOS /bin/bash 3.2)	2026-10-23T03:15:54.6683910Z   ok   idk-mismatch-migrate: result=failed
+macos	Profile resolver tests (macOS /bin/bash 3.2)	2026-10-23T03:15:54.6721170Z   ok   idk-mismatch-migrate: line /^error\tprofile key "3d4df2a5-7d91-5af9-9944-4feebaae3cf5" disagrees with its machine.id "0B1C2D3E-0000-1111-2222-333344445555" -- fix profile.json by hand; nothing written$/
+macos	Profile resolver tests (macOS /bin/bash 3.2)	2026-10-23T03:15:56.6761540Z   ok   mig-dup: result=failed
+macos	Profile resolver tests (macOS /bin/bash 3.2)	2026-10-23T03:15:56.6799920Z   ok   mig-dup: line /^error\tprofiles "laptop" and "nobul-mac" would both be keyed "3d4df2a5-7d91-5af9-9944-4feebaae3cf5" \(one machine id on two profiles\) -- nothing written$/
+macos	Profile resolver tests (macOS /bin/bash 3.2)	2026-10-23T03:15:57.0243520Z   ok   rev-m2-throw: line /^error\tregister failed: set: 'machine' is not an object/
+macos	Profile resolver tests (macOS /bin/bash 3.2)	2026-10-23T03:15:58.2823590Z   ok   jr-keep-out: existing OUT untouched on failure
+macos	Profile resolver tests (macOS /bin/bash 3.2)	2026-10-23T03:15:58.6996460Z   ok   a9-exc-case: result=failed
+macos	Profile resolver tests (macOS /bin/bash 3.2)	2026-10-23T03:15:58.7027740Z   ok   a9-exc-case: line /^error\texception-set failed: set: 'toolExceptions' differs only in case from existing key 'ToolExceptions'$/
+macos	Profile resolver tests (macOS /bin/bash 3.2)	2026-10-23T03:15:59.1535380Z   ok   a78-exc-ro: result=failed
+macos	Profile resolver tests (macOS /bin/bash 3.2)	2026-10-23T03:15:59.1565240Z   FAIL a78-exc-ro: no line matches /^error\texception-set failed: cannot write /var/folders/s6/5hzmn6lx4dz5nxs7k_0slzph0000gn/T/tmp.ltmCGIq1hN/a69/home/repos/aitools-nobul-jose/profile.json\.tmp\.<pid>: Permission denied$/
+macos	Profile resolver tests (macOS /bin/bash 3.2)	2026-10-23T03:15:59.1660910Z        result	failed
+macos	Profile resolver tests (macOS /bin/bash 3.2)	2026-10-23T03:15:59.1668710Z        error	exception-set failed: cannot write /var/folders/s6/5hzmn6lx4dz5nxs7k_0slzph0000gn/T/tmp.ltmCGIq1hN/a69/home/repos/aitools-nobul-jose/profile.json.tmp.40736: Permission denied

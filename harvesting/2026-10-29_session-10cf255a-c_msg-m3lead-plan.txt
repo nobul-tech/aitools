@@ -1,0 +1,6 @@
+Preserve the M3-LEAD orchestration plan
+
+Mission records only: S3-M3Lead-plan.md (missions, sequencing, merge
+order, decisions applied). Commander-directed commit, 2026-10-22.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

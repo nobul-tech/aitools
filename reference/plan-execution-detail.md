@@ -1,7 +1,8 @@
 # Plan Execution -- Detail Reference
 
-Companion to `.claude/rules/plan-execution.md`. Defines the sub-agent execution
-pattern, rule injection template, and verification protocol.
+Companion to the plan-execution rule, a project rule retired on 2026-10-31
+(commander). This file keeps the sub-agent execution pattern, rule injection
+template, and verification protocol for plans that choose to use them.
 
 ## Why
 

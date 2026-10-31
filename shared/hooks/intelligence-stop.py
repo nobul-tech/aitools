@@ -368,17 +368,30 @@ def main() -> int:
         session_prefix = session_id[:10] if len(session_id) >= 10 else session_id
         session_db = os.path.join(project_root, ".aitools", "sessions", f"{session_prefix}.db")
 
+        # Scratch dir: session-<full id> (scratch-init.sh since 2026-10-31,
+        # names never cut), else the legacy session-<id[:10]>, else the
+        # .current-session pointer (it names whichever session started last
+        # in this repo, so it is only the last resort). The session DB above
+        # keeps its 10-char file name.
+        scratch_root = os.path.join(project_root, ".scratch")
         session_dir = ""
-        current_session_file = os.path.join(project_root, ".scratch", ".current-session")
-        try:
-            if os.path.exists(current_session_file):
-                with open(current_session_file, "r") as f:
-                    session_dir = f.read().strip()
-        except Exception:
-            pass
+        for name in (session_id, session_prefix):
+            candidate = os.path.join(scratch_root, f"session-{name}")
+            if os.path.isdir(candidate):
+                session_dir = candidate
+                break
+        if not session_dir:
+            current_session_file = os.path.join(scratch_root, ".current-session")
+            try:
+                if os.path.exists(current_session_file):
+                    with open(current_session_file, "r") as f:
+                        session_dir = f.read().strip()
+            except OSError as e:
+                sys.stderr.write(f"intelligence-stop: cannot read {current_session_file}: {e}\n")
+                session_dir = ""
 
         if not session_dir:
-            session_dir = os.path.join(project_root, ".scratch", f"session-{session_prefix}")
+            session_dir = os.path.join(scratch_root, f"session-{session_id}")
 
         marker_path = os.path.join(session_dir, ".intelligence-last-check")
         events_path = os.path.join(session_dir, "events.jsonl")

@@ -1,0 +1,8 @@
+Document the channel exception in CLAUDE.md
+
+Handoffs, relay.md and CLAUDE.md itself are committed directly to main
+from the main checkout (pull --ff-only, commit only those paths, push),
+with no worktree or PR. Commander approval 2026-10-26, text approved in
+chat; CLAUDE.md added to the list by the commander. Docs only.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

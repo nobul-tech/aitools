@@ -1,0 +1,136 @@
+#100 [OPEN] deploy-harness: write a rules source manifest and retire removed rules
+FILES: .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-H2-Manifest/S3-H2-Manifest-drafts/dot-claude/rules/managed-file-deployment.md, .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-H2-Manifest/S3-H2-Manifest-drafts/reference/harness.md, .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-H2-Manifest/S3-H2-Manifest-drafts/reference/managed-file-deployment.md, .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-H2-Manifest/S3-H2-Manifest-handback.md, scripts/deploy-harness.ps1, scripts/deploy-harness.sh, tests/deploy-harness/test-deploy-harness.sh
+
+## Summary
+
+deploy-harness.sh/.ps1 now write a per-file source manifest,
+`~/.aitools/rules/.aitools-rules-manifest`, on every run, and retire rules
+whose source was removed: the deployed copy is backed up and removed, and
+the manifest keeps a `retired` line for the consumers. Mission
+S3-H2-Manifest (HARNESS-2).
+
+## Why
+
+Approved HARNESS Q2 (S3-Harness handback): a removed source rule stayed in
+`~/.aitools/rules` and in the tools' rule directories, and stayed loaded.
+The manifest gives the fan-out consumers (setup-user-claude,
+setup-user-cursor; missions S3-H2-Claude / S3-H2-Cursor) each rule's
+source, so Cursor can take user-level rules only, and every consumer can
+retire what was removed.
+
+## Changes
+
+- `scripts/deploy-harness.sh` / `.ps1`: new section 5b (after the deploy
+  loop, before the preserved report). Functions `rules_manifest_plan`,
+  `retire_rule_file`, `write_rules_manifest` / `Get-RulesManifestPlan`,
+  `Remove-RetiredRule`, `Write-RulesManifest`. `add_source` / `Add-Source`
+  record each source listed this run. The manifest (and its `.tmp`) are
+  excluded from the preserved report. The summary log line gains
+  `N retired`. Header comments describe the manifest and retiring.
+- No summary row changes in normal runs; a retired file adds
+  `DETAIL|harness files|retired: rules/<name>`; failures add ERROR rows
+  `rules manifest not written` / `retire failed: <name>`.
+- `tests/deploy-harness/test-deploy-harness.sh`: 21 new checks (bash, and
+  the .ps1 on pwsh with the OS guard disabled in a temp copy).
+- Protected-doc drafts (not edits) in
+  `.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-H2-Manifest/S3-H2-Manifest-drafts/`.
+- MDM: all new code is in section 5b, inside "section 3 to EOF", which
+  build-deploy.sh extracts unchanged; no build-deploy change needed.
+
+## Verification (macOS, isolated HOMEs under temp dirs)
+
+- `bash -n scripts/deploy-harness.sh`; pwsh parser on `scripts/deploy-harness.ps1`: clean.
+- `bash tests/deploy-harness/test-deploy-harness.sh`: 66 passed, 0 failed, 0 skipped
+  (manifest content, sort order and winning sources; first source wins
+  recorded; removed source rule becomes `retired`, backed up and removed,
+  DETAIL row; retired line persists with no new backup; a retired name's
+  file found again is removed; a reappearing name returns to its new
+  source; an unlisted source (no dotprofile) keeps its lines and files;
+  dry run changes nothing; case-insensitive names; unknown header;
+  invalid lines including `../evil.md`; write failure is an ERROR row and
+  exit 1; `*.bak.*` never listed; .ps1: same manifest bytes, retire,
+  unlisted source, LF and no BOM).
+- `bash tests/deploy-harness-mdm/test-deploy-harness-mdm.sh`: 30 passed
+  (dev and MDM trees, including the manifest, identical; .ps1 pair identical).
+- `check-pre-commit.sh`: 1 FAIL = known pre-existing step 6 (harvesting
+  file mode 100644); WARN step 3 (build freshness: `--fix` runs
+  build-deploy against the real HOME, not run), step 5, step 9, step 11
+  (another session's uncommitted dotprofile edits: claude/CLAUDE.md,
+  sessions/.DS_Store).
+- `check-pre-push.sh`: 0 FAIL, 3 WARN (checklist, release notes, roadmap).
+
+## Not run
+
+- The .ps1 on Windows (tested on pwsh 7 on macOS only).
+- build-deploy.sh against the real dotprofile (MDM generation verified only
+  by the MDM test's fixture build).
+- The consumers: setup-user-claude / setup-user-cursor do not read the
+  manifest yet (later missions).
+
+## Protected-file drafts awaiting approval
+
+- `S3-H2-Manifest-drafts/reference/harness.md` -- new subsection "Rules
+  manifest and retired rules"; "No deletion" bullet amended.
+- `S3-H2-Manifest-drafts/dot-claude/rules/managed-file-deployment.md` --
+  Content sources "Rules" bullet.
+- `S3-H2-Manifest-drafts/reference/managed-file-deployment.md` -- Content
+  Sources "User rules" row; script-owned text paragraph.
+
+## Contract change
+
+Four changes to the shared contract, each for safety or determinism:
+
+1. **Only a listed source retires.** The launch contract retired any name
+   "absent from every source this run". A dotprofile that is not
+   configured, not found, or not a git checkout would then retire, and
+   delete, every user rule on that run (and `.claude/rules` if the repo
+   listing failed). Now a name whose previous source was not listed this
+   run keeps its previous line and its file.
+2. **A retired name's file is removed on every run while it exists**, not
+   only on the run that retires it. This makes a failed backup or removal
+   self-healing, and keeps `~/.aitools/rules` consistent with the
+   manifest. Each removal is backed up first; a failed backup leaves the
+   file in place (log_error + ERROR row).
+3. **Names are compared case-insensitively** (as the conflict check is):
+   `Scratch.md` in the previous manifest and `scratch.md` in a source are
+   the same rule. Without this, removing the "retired" `Scratch.md` on a
+   case-insensitive file system would delete the live `scratch.md`.
+4. **Added**: unknown header -> warning, nothing retired, rewritten;
+   invalid lines (not `*.md`, `*.bak.*`, `/` or `\` in the name, unknown
+   source) -> ignored with a warning (no path outside `~/.aitools/rules`
+   is ever touched); dry run -> logged only.
+
+## Contract
+
+- File: `~/.aitools/rules/.aitools-rules-manifest` (no .md extension, so consumers that copy only *.md never copy it).
+- Format: UTF-8, LF, first line `# aitools rules manifest v1`, then one line per rule: `<file name><TAB><source>`, source one of `shared` (aitools shared/rules), `aitools` (aitools .claude/rules), `dotprofile` (dotprofile claude/rules), `retired` (was in a previous manifest, no longer in any source). Lines sorted by file name (byte order). Only *.md file names; never *.bak.*.
+- deploy-harness writes it on every run after the rules copy (temp file then move), recording the source that won (first source wins; duplicates already produce log_error + ERROR row).
+- Retiring: a name present in the previous manifest (with a non-retired source) and absent from every source this run (names compared case-insensitively) becomes `retired`, but only when its previous source was listed this run; a name whose source was not listed (directory not found, not a git work tree, git ls-files failed, no dotprofile configured) keeps its previous line and file. While a name is `retired`, deploy-harness backs up and removes `~/.aitools/rules/<name>` whenever it exists (a failed backup leaves it: log_error + ERROR row), logs it, and keeps the `retired` line in later manifests until the name reappears in a source. With no previous manifest (first run) nothing is retired. A previous manifest with another first line: warning, nothing retired, rewritten. Invalid lines: ignored with a warning.
+- Consumers: take every non-retired name they are entitled to; back up and remove their own deployed copy of every `retired` name (Cursor also removes names whose source is `aitools`).
+- Manifest write failure: log_error + ERROR row, run continues.
+
+## Follow-ups
+
+- Consumers: S3-H2-Claude, S3-H2-Cursor read the manifest. Note for
+  setup-user-cursor.ps1: its `Get-ChildItem` lists the dot file and logs
+  "Ignoring non-rule file in harness rules: .aitools-rules-manifest" on
+  every run (the .sh glob skips dot files); the Cursor mission may want to
+  skip it silently.
+- S3-H2-MDM: when adding body markers, section 5b must stay inside the
+  extracted span.
+- Pre-existing divergence (not changed here): the rules filter is
+  case-sensitive in the .sh (`*.md`, `*.bak.*`) and case-insensitive in the
+  .ps1 (`-like`), so `X.MD` deploys on Windows only.
+- Review parity notes (low, open): the .ps1 retire backups are never
+  pruned (the .sh backup_file keeps 20); on a failed backup the .sh counts
+  a warning plus an error, the .ps1 only the error; a dangling symlink with
+  a retired name is removed by the .sh, left by the .ps1.
+- `Backup-File` in aitools-lib.ps1 resolves wildcards (`[ ]` names): no
+  backup, success reported. deploy-harness.ps1 no longer uses it for
+  retirement (commit 161edd0); the library fix belongs to its owner.
+- A machine that runs both the dev path and an older MDM deploy/ would
+  retire and re-add rules between the two snapshots (each run is correct
+  for its own sources).
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+

@@ -1,0 +1,563 @@
+diff --git a/.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Fix4/S3-MF-Fix4-Review-pr109.md b/.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Fix4/S3-MF-Fix4-Review-pr109.md
+new file mode 100644
+index 00000000..73bba46a
+--- /dev/null
++++ b/.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Fix4/S3-MF-Fix4-Review-pr109.md
+@@ -0,0 +1,66 @@
++# S3-MF-Fix4-Review: PR #109 review
++
++**Intent**: **Purpose**: An independent verdict on PR #109 (fix/mf-audit-consumers): are audit findings A-22, A-23, A-24 and the cursor part of A-26 fixed, is bash/PS1 parity kept, did nothing else change behaviour, and do the tests pass. **Scope**: The diff origin/main...origin/fix/mf-audit-consumers at e9fd2ae, read against S3-MF-Audit-findings.md sections 7, 8 and 10. NOT other audit findings. NOT fixes. **Audience**: S3-MF-Fix4 (author), Jose.
++
++Reviewer: S3-MF-Fix4-Review (independent; wrote none of this code). Review worktree: `.claude/worktrees/mf-fix4-review` (detached at origin/fix/mf-audit-consumers, e9fd2ae). Date: 2026-10-22. Line numbers are at e9fd2ae unless marked "main".
++
++## Verdict
++
++**APPROVE-equivalent.** No blocking findings. All four findings are fixed in both languages. Parity holds row for row, and the negative control shows the new test catches every finding. The non-blocking notes below can ship as follow-ups.
++
++## Per-finding status
++
++| finding | status | evidence |
++|---|---|---|
++| A-22 skills rc 3 parity | **Fixed** | skills.ps1:48-54 now writes the same `LogError` text and the same two rows as skills.sh:55-61 (`ERROR\|claude skills\|not deployed: dotprofile error`, `ERROR\|cursor skills\|not deployed: dotprofile error`). The non-canonical `skills` tool and the word "skipped" are gone. Discovery is gated in the same way: ps1:69-71 matches sh:74-76. The "no skills found" guard (ps1:87 / sh:97) and the reverse-discovery guard (ps1:179) also match. The ungated dotprofile-skills loop (ps1:79-85 / sh:84-95) does nothing on rc 3, because both libs clear the path and set it only on rc 0 (lib.sh:287, 299 / lib.ps1:219, 229). |
++| A-23 cursor rc 3 counted | **Fixed** | cursor.sh:354-359 / cursor.ps1:273-278 now `log_error`/`LogError` "Dotprofile unresolved (resolver error above) -- <cli-config> not merged, so defaults cannot replace the profile preferences" and write `ERROR\|cursor cli\|not merged: dotprofile error`. This now has the same shape as settings.sh:72-75 ("Counted (S3-M3Lead decision)") and skills. I-4 is still undecided; the three consumers are now consistent with each other, so a different I-4 answer changes three places at once (as the PR body says). |
++| A-24 check-lib rc 3 | **Fixed** | check-lib.sh:168-191 / check-lib.ps1:174-198 keep the rc (`USER_REPO_RC` / `$script:UserRepoRc`). `print_summary` / `PrintSummary` call the WARN-step helper first (sh:130 / ps1:130). It uses `step_warn`/`StepWarn`, so it is counted and written to checks.log and checks.jsonl (sh:71-84). The helper defaults to 0 when `resolve_config` never ran (sh:187 `${USER_REPO_RC:-0}`; ps1:174 sets 0 at dot-source), so check-script-compliance, which calls print_summary without resolve_config, is unaffected. Each check script calls print_summary once per run (check-pre-push.sh:41 is followed by `exit 0`). Exit codes do not change: they depend on FAIL_COUNT (check-pre-commit.sh:502). |
++| A-26 cursor part (dry-run rows) | **Fixed** | cursor.sh:350-353 adds `OK\|cursor cli\|dry-run: would update` for `would-merge`; `unchanged` already wrote `verified` (sh:336-339). cursor.ps1:289-298 now writes both rows with the same mapping: unchanged and not corrupt gives verified, anything else gives would update. This matches the node test `before === after && !corrupt` (sh:290). The claude part of A-26 belongs to FIX-5 and is correctly left out. |
++
++## Parity (line by line)
++
++- **skills .sh vs .ps1** (rc 3 block, discovery gate, warn guard): same message text, same rows in the same order, same gating. Only the path separator in the "No skills found" message differs (`shared/skills/` vs `shared\skills\`), and that is pre-existing.
++- **cursor .sh vs .ps1** (rc 3 and dry run): same rows, row order, levels and STATUS text. On rc 3 both branches take precedence over the dry run (node exits at sh:216-219 before the dryRun branch; ps1:273 is checked before ps1:279). On rc 3 both still back up the file and create `~/.cursor` first (sh:178-182 / ps1:209-219), the same in both and pre-existing. See n-1 for the message path form.
++- **check-lib .sh vs .ps1**: same step number, label, detail and log text. The test asserts identical console output and checks.jsonl content for both.
++
++## Behaviour outside the findings
++
++Nothing else changed. The diff touches only the four regions above plus comments (`git diff --stat`: 5 scripts plus 1 new test). Exit codes are unchanged on every path: rc 3 already exited 1 through the lib's `log_error`, and the cursor rc 3 path now counts 2 errors instead of 1. The renamed PS variable (`$skillsSkipped` to `$skillsBlocked`) has no other references (grep over scripts/, tests/, reference/ and .claude/rules/ finds no leftover `skillsSkipped` or "skipped (dotprofile" text).
++
++**build-deploy.sh: no port needed.** The cursor body is extracted whole (build-deploy.sh:835-866, 876-907). Only the two default lines inside the profile-preferences block are substituted (:838-841, :879-882), and the changed lines are outside that block (cursor.sh:211-234 / ps1:173-206). The skills rc 3 block is inside the "skill discovery" region (skills.sh:38-237 / ps1:31-222), which build-deploy replaces with embedded skills (:1265-1266, :1363-1364), so deploy/ has no copy of it. The dotprofile `deploy/` setup-user-cursor copies stay stale until they are regenerated (PR follow-up).
++
++## Blocking findings
++
++None.
++
++## Non-blocking findings
++
++- **n-1** cursor rc 3 message path form: sh uses `$(display_path "$CLI_CONFIG")` (cursor.sh:357), ps1 uses the full `$cliConfig` (cursor.ps1:276). The text is otherwise identical. This follows the existing convention in the same files (corrupt message cursor.sh:361 / ps1:302), and the test matches it with `.*cli-config.json` (test:136). Leave as is, or align both files together later.
++- **n-2** PS helper name `Write-DotprofileResolutionStep` (check-lib.ps1:192) uses Verb-Noun style, while the rest of check-lib.ps1 uses `StepWarn`, `PrintSummary`, `ResolveConfig`, `CheckLogStep`. Cosmetic.
++- **n-3** The WARN step is numbered "0" but prints last, after the highest step, because it is emitted from print_summary (check-lib.sh:130). It is readable as is; a comment would help the next reader.
++- **n-4** The comment "a broken dotprofile never passes a check run" (check-lib.sh:167 / ps1:172-173) overstates it: the run still exits 0 with a WARN. "never passes clean" would be exact. Cosmetic.
++- **n-5** `tests/b8-consumers/test-b8-consumers.sh` is not wired into CI (.github/workflows/check.yml runs tests/profile/test-lib.sh at :141, :144, :306; tests/rules-fanout-cursor is not wired either, so this matches existing practice). Suggest a follow-up to add it with the bash 3.2 leg.
++- **n-6** (already in the PR follow-ups, pre-existing, outside the audit) cursor.sh:185-187 "node not found" logs a `log_warn` with no summary row. INCIDENT: summary coverage gap, setup-user-cursor.sh:186, not in S3-MF-Audit; owner to file.
++
++## Commands run (macOS, isolated HOME and AITOOLS_LOG_DIR under `.scratch/session-f4rev/`)
++
++Scripts: `.scratch/session-f4rev/run-tests.sh`, `.scratch/session-f4rev/neg-control.sh` (review worktree).
++
++| command | result |
++|---|---|
++| `bash -n` (GNU 5.3.15) and `/bin/bash -n` (3.2.57) on setup-user-skills.sh, setup-user-cursor.sh, check-lib.sh, the new test | all rc 0 |
++| pwsh 7.6.3 `Parser::ParseFile` on setup-user-skills.ps1, setup-user-cursor.ps1, check-lib.ps1 | all clean |
++| `bash tests/b8-consumers/test-b8-consumers.sh` | 60 passed, 0 failed, 0 skipped |
++| `AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/b8-consumers/test-b8-consumers.sh` | 60 passed, 0 failed, 0 skipped |
++| `tests/profile/test-lib.sh`, bash 5 and /bin/bash 3.2 | 209/0 and 209/0 |
++| `tests/rules-fanout-cursor/test-rules-fanout-cursor.sh`, bash 5 and /bin/bash 3.2 | 78/0 (1 skip) and 78/0 (1 skip) |
++| **Negative control**: the new test against `git archive origin/main scripts shared` (unfixed) | 36 passed, **24 failed**: skills ps1 rows, message and parity (A-22); cursor sh+ps1 rows, error level and count (A-23); cursor dry-run rows (A-26); check-lib sh+ps1 WARN step (A-24). This matches the PR body's claim. |
++
++The rc 3 path is really reached. The skills case asserts the lib's own `ERROR|dotprofile|` row, which the lib writes only on rc 3 (lib.sh:286-311), and it passed. The cursor case asserts the `[error] Dotprofile unresolved ...` line in deploy.log, and the check-lib case asserts the WARN step; both pass on the PR and fail on main. The trigger is `AITOOLS_USER_REPO_PATH=<nonexistent>` (test:104, :127, :187).
++
++## Not run
++
++- Windows / Git Bash: the .ps1 files ran only as the test's guard-stripped copies under pwsh on macOS.
++- tests/profile test-profile, test-config, test-user-init; tests/logging; tests/deploy-harness*. The author reports them green. They do not touch the changed regions except through the lib, which is unchanged.
++- check-pre-commit / check-pre-push (review only, no commit).
++- build-deploy.sh (the live dotprofile is read-only).
+diff --git a/.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Fix4/S3-MF-Fix4-report.md b/.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Fix4/S3-MF-Fix4-report.md
+new file mode 100644
+index 00000000..4f8d6f0d
+--- /dev/null
++++ b/.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Fix4/S3-MF-Fix4-report.md
+@@ -0,0 +1,52 @@
++# S3-MF-Fix4 report: audit findings A-22, A-23, A-24, A-26 (cursor part)
++
++**Intent**: **Purpose**: Record what S3-MF-Fix4 changed for S3-MF-Audit findings A-22, A-23, A-24 and the cursor part of A-26, how it was verified, and what is left, so that S3-M3Finish and Jose can review PR #109. **Scope**: The B8 consumer fixes in setup-user-skills, setup-user-cursor and check-lib, and their test. NOT other audit findings. NOT the I-4 decision. **Audience**: S3-M3Finish, Jose.
++
++## Summary
++- PR: https://github.com/nobul-tech/aitools/pull/109
++- Branch: `fix/mf-audit-consumers`, from origin/main 8a9dcb5.
++- All four findings were confirmed in the code and fixed. None was rejected.
++- The independent reviewer (S3-MF-Fix4-Review) found no blocking items. Its review: `S3-MF-Fix4-Review-pr109.md`; the same text is posted on the PR at https://github.com/nobul-tech/aitools/pull/109#issuecomment-6356131306.
++
++## Per finding
++| id | status | evidence (origin/main → fix) |
++|---|---|---|
++| A-22 | fixed | Before: setup-user-skills.ps1:44-52 wrote `ERROR\|skills\|skipped (dotprofile error)`, while the .sh (:52-60) wrote two rows. Now the .ps1 writes the same two rows (`claude skills`, `cursor skills`: "not deployed: dotprofile error") with the same LogError text, and skips discovery as the .sh does. |
++| A-23 | fixed | Before: setup-user-cursor.sh:353-358 and .ps1:273-278 wrote an info line and "skipped (dotprofile error)". Now both log an error (`log_error` / `LogError`) and write `ERROR\|cursor cli\|not merged: dotprofile error`. This assumes I-4 = count the error, as setup-user-settings does. |
++| A-24 | fixed | check-lib keeps the resolver's return code (`USER_REPO_RC` / `$script:UserRepoRc`). On a resolver error, print_summary / PrintSummary add the counted WARN step "0. Dotprofile resolution" to the console, checks.log and checks.jsonl. The check-*.sh/.ps1 callers are unchanged, because they are outside this mission's file ownership (see follow-ups). |
++| A-26 (cursor) | fixed | The cli-config dry run now writes `OK\|cursor cli\|dry-run: would update`, or `OK\|cursor cli\|verified` when the file is up to date, in both languages. Before, the .sh wrote no row for would-merge, and the .ps1 wrote no dry-run row at all. |
++
++## Verification (macOS)
++- Syntax: `bash -n` (bash 5 and /bin/bash 3.2) and the pwsh parser on every touched file: clean. Re-run after the review tweaks: clean.
++- tests/b8-consumers/test-b8-consumers.sh (new): 60/0 under bash 5 and 60/0 under /bin/bash 3.2. Run against the unfixed scripts, 24 of its checks fail.
++- Existing suites, run under an isolated HOME, with bash 5 and 3.2:
++
++  | suite | result (both bash versions) |
++  |---|---|
++  | profile | 689/0 |
++  | lib | 209/0 |
++  | config | 190/0 |
++  | user-init | 200/0 |
++  | rules-fanout-cursor | 78/0, 1 skip |
++  | logging | 24/0 |
++  | deploy-harness | 45/0 |
++  | deploy-harness-mdm | 30/0 |
++
++- check-pre-commit: 1 FAIL, which is the known step 6. check-pre-push: 1 FAIL, which is the known step 7 (stale dotprofile deploy/).
++- After review: helper renamed from `Write-DotprofileResolutionStep` to `StepDotprofileResolution` (n-2); comment wording corrected (n-4). The new suite is green again.
++
++## Not run
++- Windows / Git Bash. The .ps1 files ran only as guard-stripped copies under pwsh 7.
++- build-deploy against the live dotprofile, which stayed read-only.
++
++## Follow-ups
++- Regenerate the dotprofile deploy/ after merge. The cursor body is extracted whole, so no build-deploy.sh logic port is needed (the reviewer confirmed this against build-deploy.sh:835-907).
++- A-24 caller skip texts: when the rc is 3, say "dotprofile unresolved" in pre-commit 11, pre-push 7 and 10, and post-push 5.
++- The new suite and rules-fanout-cursor are not in CI (review n-5).
++- INCIDENT: setup-user-cursor.sh:186 "node not found" log_warn has no summary row (summary coverage rule). Not filed.
++
++## WRITE_BLOCKED
++None.
++
++## Open questions
++- I-4: should a consumer re-count a resolver error that the lib already counted? Suggested answer: yes. That is the current behaviour in settings, skills and cursor; the step really did fail.
+diff --git a/scripts/check-lib.ps1 b/scripts/check-lib.ps1
+index 362ebaf0..afb54af8 100644
+--- a/scripts/check-lib.ps1
++++ b/scripts/check-lib.ps1
+@@ -127,6 +127,7 @@ function StepSkip {
+ # Summary
+ # ---------------------------------------------------------------------------
+ function PrintSummary {
++    StepDotprofileResolution
+     Write-Host ""
+     Write-Host "=== SUMMARY: " -NoNewline
+     Write-Host "$($script:PassCount) PASS" -ForegroundColor Green -NoNewline
+@@ -166,16 +167,32 @@ function PrintSummary {
+ # rc 1 (no dotprofile, shared-only mode) is not an error in a check: UserRepoPath
+ # stays empty and callers skip their dotprofile steps.
+ # rc 3 was already logged by the lib (LogError, ERROR row when a run summary
+-# exists); UserRepoPath stays empty, so those steps skip too.
++# exists); UserRepoPath stays empty, so those steps skip too. CheckLogInit
++# then resets $script:errors, so the rc is kept in $script:UserRepoRc and
++# PrintSummary adds one WARN step for it: a broken dotprofile is never a clean
++# check run (audit A-24; the exit code still follows FAIL steps only).
++$script:UserRepoRc = 0
+ function ResolveConfig {
+     $script:ConfigFile = Join-Path $HOME ".aitools/config.json"
+     $script:UserRepoPath = ""
+     $script:UserRepoVia = "none"
++    $script:UserRepoRc = 0
+     $rc = Resolve-UserRepoPath
+     $script:UserRepoPath = $script:AitLibUserRepoPath
+     if ($script:AitLibUserRepoVia) { $script:UserRepoVia = $script:AitLibUserRepoVia }
++    $script:UserRepoRc = $rc
+     if ($rc -ne 0 -and $rc -ne 1) {
+-        Log "dotprofile unresolved (resolver error above) -- dotprofile steps skip as 'not configured'"
++        Log "dotprofile unresolved (resolver error above) -- dotprofile steps skip as 'not configured'; the run reports a WARN step"
++    }
++}
++
++# StepDotprofileResolution -- the WARN step for a resolver error kept by
++# ResolveConfig ($script:UserRepoRc other than 0 or 1). Called by PrintSummary,
++# so it is counted in the run summary. No-op when ResolveConfig did not run.
++function StepDotprofileResolution {
++    $rc = $script:UserRepoRc
++    if ($rc -ne 0 -and $rc -ne 1) {
++        StepWarn "0" "Dotprofile resolution" "resolver error (rc $rc, see deploy.log) -- dotprofile steps reported 'not configured'"
+     }
+ }
+ 
+diff --git a/scripts/check-lib.sh b/scripts/check-lib.sh
+index c76f5f98..0e9f7101 100755
+--- a/scripts/check-lib.sh
++++ b/scripts/check-lib.sh
+@@ -127,6 +127,7 @@ step_skip() {
+ # Summary
+ # ---------------------------------------------------------------------------
+ print_summary() {
++    _dotprofile_resolution_step
+     echo ""
+     printf "=== SUMMARY: ${GREEN}%d PASS${RESET}, ${DIM}%d SKIP${RESET}, ${YELLOW}%d WARN${RESET}, ${RED}%d FAIL${RESET} ===\n" \
+         "$PASS_COUNT" "$SKIP_COUNT" "$WARN_COUNT" "$FAIL_COUNT"
+@@ -161,17 +162,32 @@ print_summary() {
+ # rc 1 (no dotprofile, shared-only mode) is not an error in a check: USER_REPO_PATH
+ # stays empty and callers skip their dotprofile steps ([ -n ] before use).
+ # rc 3 was already logged by the lib (log_error, ERROR row when a run summary
+-# exists); USER_REPO_PATH stays empty, so those steps skip too.
++# exists); USER_REPO_PATH stays empty, so those steps skip too. check_log_init
++# then resets ERRORS, so the rc is kept in USER_REPO_RC and print_summary adds
++# one WARN step for it: a broken dotprofile is never a clean check run (audit
++# A-24; the exit code still follows FAIL steps only).
+ resolve_config() {
+     CONFIG_FILE="$HOME/.aitools/config.json"
+     USER_REPO_PATH=""
+     USER_REPO_VIA="none"
++    USER_REPO_RC=0
+     local rc=0
+     resolve_user_repo_path || rc=$?
+     USER_REPO_PATH="$AITLIB_USER_REPO_PATH"
+     USER_REPO_VIA="${AITLIB_USER_REPO_VIA:-none}"
++    USER_REPO_RC=$rc
+     if [ "$rc" -ne 0 ] && [ "$rc" -ne 1 ]; then
+-        log "dotprofile unresolved (resolver error above) -- dotprofile steps skip as 'not configured'"
++        log "dotprofile unresolved (resolver error above) -- dotprofile steps skip as 'not configured'; the run reports a WARN step"
++    fi
++}
++
++# _dotprofile_resolution_step -- the WARN step for a resolver error kept by
++# resolve_config (USER_REPO_RC other than 0 or 1). Called by print_summary,
++# so it is counted in the run summary. No-op when resolve_config did not run.
++_dotprofile_resolution_step() {
++    local rc="${USER_REPO_RC:-0}"
++    if [ "$rc" -ne 0 ] && [ "$rc" -ne 1 ]; then
++        step_warn "0" "Dotprofile resolution" "resolver error (rc $rc, see deploy.log) -- dotprofile steps reported 'not configured'"
+     fi
+ }
+ 
+diff --git a/scripts/setup-user-cursor.ps1 b/scripts/setup-user-cursor.ps1
+index 8ac4b056..d5004953 100644
+--- a/scripts/setup-user-cursor.ps1
++++ b/scripts/setup-user-cursor.ps1
+@@ -271,11 +271,11 @@ $lostKeys = @($beforeKeys | Where-Object { $_ -notin $config.Keys })
+ $afterJson = Normalize-JsonForComparison $config -Depth 10
+ 
+ if ($prefsUnresolved) {
+-    # Not counted again: the resolver error is already an error and the ERROR
+-    # row "dotprofile" (the lib wrote both).
+-    Log "Skipped the $cliConfig merge: dotprofile unresolved (resolver error above), so the profile preferences are unknown"
+-    $status.cliConfig = "SKIPPED (dotprofile error)"
+-    Write-Summary "ERROR" "cursor cli" "skipped (dotprofile error)"
++    # Counted (S3-M3Lead decision, as setup-user-settings and -skills): this
++    # step fails too, not only the resolver (the lib logged that one).
++    LogError "Dotprofile unresolved (resolver error above) -- $cliConfig not merged, so defaults cannot replace the profile preferences"
++    $status.cliConfig = "ERROR (dotprofile error)"
++    Write-Summary "ERROR" "cursor cli" "not merged: dotprofile error"
+ } elseif ($DryRun) {
+     # --- Dry-run output ---
+     Log "[DRY RUN] $cliConfig`: merge"
+@@ -286,12 +286,15 @@ if ($prefsUnresolved) {
+     if ($corrupt) {
+         LogWarn "[DRY RUN] File is corrupt -- -Force required to overwrite"
+     }
++    # Same rows as the .sh dry run: unchanged -> verified, else would update.
+     if ($beforeJson -eq $afterJson -and -not $corrupt) {
+         Log "[DRY RUN] No changes needed (already up to date)"
+         $status.cliConfig = "already up to date (dry-run)"
++        Write-Summary "OK" "cursor cli" "verified"
+     } else {
+         Log "[DRY RUN] Would write merged config"
+         $status.cliConfig = "would merge (dry-run)"
++        Write-Summary "OK" "cursor cli" "dry-run: would update"
+     }
+ } else {
+     # --- Normal mode ---
+diff --git a/scripts/setup-user-cursor.sh b/scripts/setup-user-cursor.sh
+index 7b6587cf..33de43b0 100755
+--- a/scripts/setup-user-cursor.sh
++++ b/scripts/setup-user-cursor.sh
+@@ -349,13 +349,14 @@ if (dryRun) {
+             write_summary OK "cursor cli" "updated" ;;
+         would-merge)
+             log "[DRY RUN] Would write merged config"
+-            STATUS_cliConfig="would merge (dry-run)" ;;
++            STATUS_cliConfig="would merge (dry-run)"
++            write_summary OK "cursor cli" "dry-run: would update" ;;
+         skipped-dotprofile)
+-            # Not counted again: the resolver error is already an error and the
+-            # ERROR row "dotprofile" (the lib wrote both).
+-            log "Skipped the $(display_path "$CLI_CONFIG") merge: dotprofile unresolved (resolver error above), so the profile preferences are unknown"
+-            STATUS_cliConfig="SKIPPED (dotprofile error)"
+-            write_summary ERROR "cursor cli" "skipped (dotprofile error)" ;;
++            # Counted (S3-M3Lead decision, as setup-user-settings and -skills): this
++            # step fails too, not only the resolver (the lib logged that one).
++            log_error "Dotprofile unresolved (resolver error above) -- $(display_path "$CLI_CONFIG") not merged, so defaults cannot replace the profile preferences"
++            STATUS_cliConfig="ERROR (dotprofile error)"
++            write_summary ERROR "cursor cli" "not merged: dotprofile error" ;;
+         error-corrupt)
+             log_error "$(display_path "$CLI_CONFIG") is corrupt. Use --force to overwrite."
+             STATUS_cliConfig="ERROR (corrupt, needs --force)"
+diff --git a/scripts/setup-user-skills.ps1 b/scripts/setup-user-skills.ps1
+index db125d83..6b7a763b 100644
+--- a/scripts/setup-user-skills.ps1
++++ b/scripts/setup-user-skills.ps1
+@@ -40,15 +40,17 @@ $skillsSrc = Join-Path (Join-Path $repoDir "shared") "skills"
+ # suppressed: 0 found, 1 no dotprofile (shared-only mode, expected), 3 resolver
+ # error (the lib already logged it: LogError + ERROR row "dotprofile").
+ # On 1 $userRepoPath is empty: shared skills only, no adopt offer. On 3 the
+-# skills deploy is SKIPPED (S3-M3Lead decision): shared copies must never
+-# overwrite deployed dotprofile versions when the dotprofile is unknown.
++# deploy is not run (S3-M3Lead decision): shared copies must never overwrite
++# deployed dotprofile versions while the dotprofile cannot be read. Same rows
++# and message as setup-user-skills.sh (parity).
+ $urpRc = Resolve-UserRepoPath
+ $userRepoPath = $script:AitLibUserRepoPath
+-$skillsSkipped = $false
++$skillsBlocked = $false
+ if ($urpRc -ne 0 -and $urpRc -ne 1) {
+-    $skillsSkipped = $true
+-    LogError "Skills deploy skipped: dotprofile unresolved (resolver error above) -- shared skills would overwrite dotprofile versions"
+-    Write-Summary "ERROR" "skills" "skipped (dotprofile error)"
++    $skillsBlocked = $true
++    LogError "Dotprofile unresolved (resolver error above) -- skills not deployed, so shared copies cannot replace dotprofile versions"
++    Write-Summary "ERROR" "claude skills" "not deployed: dotprofile error"
++    Write-Summary "ERROR" "cursor skills" "not deployed: dotprofile error"
+ }
+ $dotprofileSkills = $null
+ if ($userRepoPath) {
+@@ -64,7 +66,9 @@ $allSkillDests = @($skillsDest, $skillsDestCursor)
+ 
+ # --- Discover skills from shared and dotprofile ---
+ $skillNames = @()
+-if (Test-Path $skillsSrc) {
++if ($skillsBlocked) {
++    # resolver error: nothing is discovered, deployed or offered for adoption
++} elseif (Test-Path $skillsSrc) {
+     foreach ($skillDir in Get-ChildItem -Path $skillsSrc -Directory) {
+         if (Test-Path (Join-Path $skillDir.FullName "SKILL.md")) {
+             $skillNames += $skillDir.Name
+@@ -80,10 +84,7 @@ if ($dotprofileSkills) {
+     }
+ }
+ 
+-if ($skillsSkipped) {
+-    # Nothing is deployed or offered for adoption (the ERROR row is above).
+-    $skillNames = @()
+-} elseif ($skillNames.Count -eq 0) {
++if ($skillNames.Count -eq 0 -and -not $skillsBlocked) {
+     LogWarn "No skills found in shared\skills\ or dotprofile"
+     Write-Summary "WARN" "claude skills" "no skills found"
+ }
+@@ -175,7 +176,7 @@ if ($skillNames.Count -gt 0) {
+ 
+ # --- Reverse discovery ---
+ # Scan deployed skills for user-created skills not in shared or dotprofile
+-if (-not $skillsSkipped -and (Test-Path $skillsDest)) {
++if (-not $skillsBlocked -and (Test-Path $skillsDest)) {
+     foreach ($skillDir in Get-ChildItem -Path $skillsDest -Directory) {
+         $skillName = $skillDir.Name
+         if (-not (Test-Path (Join-Path $skillDir.FullName "SKILL.md"))) { continue }
+diff --git a/tests/b8-consumers/test-b8-consumers.sh b/tests/b8-consumers/test-b8-consumers.sh
+new file mode 100755
+index 00000000..39ac590a
+--- /dev/null
++++ b/tests/b8-consumers/test-b8-consumers.sh
+@@ -0,0 +1,211 @@
++#!/usr/bin/env bash
++# test-b8-consumers.sh -- dotprofile-resolver consumers outside tests/profile:
++# setup-user-skills, setup-user-cursor (cli-config step) and check-lib, in bash
++# and PowerShell, on a dotprofile resolver error (rc 3) and on the cursor dry run.
++#
++# Checks the S3-MF-Audit fixes: A-22 (skills .sh/.ps1 write the same rows and
++# message on rc 3), A-23 (cursor counts its own rc 3 error, row "not merged:
++# dotprofile error"), A-24 (a check run with a resolver error reports a WARN
++# step), A-26 cursor part (the cli-config dry run writes a summary row).
++#
++# Safe to re-run: every case runs under its own temp HOME (removed on exit) with
++# stub rg/agent on PATH; the real HOME is never read or written. The .ps1 setup
++# scripts run as guard-stripped copies in a temp scripts/ copy (their OS guard
++# exits on macOS/Linux), with AITOOLS_PROFILE_TEST_ANY_OS=1 for the resolver.
++# Without pwsh the .ps1 cases are skipped. AITOOLS_TEST_BASH picks the bash that
++# runs the .sh scripts (default: bash). Platform: macOS, Linux. Exit 1 on failure.
++#
++# Usage: bash tests/b8-consumers/test-b8-consumers.sh [--help]
++
++set -uo pipefail
++
++if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
++    perl -ne 'print if $. >= 2 && $. <= 18' "$0"
++    exit 0
++fi
++
++ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
++TB="${AITOOLS_TEST_BASH:-bash}"
++TMP_ROOT="$(mktemp -d)"
++trap 'rm -rf "$TMP_ROOT"' EXIT
++
++PASS=0
++FAIL=0
++SKIP=0
++
++check() {  # name, condition (eval'd)
++    if eval "$2"; then
++        printf 'PASS %s\n' "$1"; PASS=$((PASS + 1))
++    else
++        printf 'FAIL %s\n' "$1"; FAIL=$((FAIL + 1))
++        if [ -n "${C:-}" ] && [ -f "$C/out" ]; then
++            perl -pe 's/\e\[[0-9;]*m//g; s/^/      | /' "$C/out" | tail -n 25
++        fi
++    fi
++}
++
++HAVE_PWSH=false
++if command -v pwsh >/dev/null 2>&1; then HAVE_PWSH=true; fi
++
++# Guard-stripped copy of scripts/ for the .ps1 cases (the copy, never the source)
++PS_SCRIPTS="$TMP_ROOT/repo/scripts"
++if $HAVE_PWSH; then
++    mkdir -p "$TMP_ROOT/repo"
++    cp -R "$ROOT/scripts" "$PS_SCRIPTS"
++    for s in setup-user-skills.ps1 setup-user-cursor.ps1; do
++        perl -pe 's/^if \(\$PSVersionTable\.PSVersion\.Major -ge 6 -and -not \$IsWindows\) \{\r?$/if (\$false) {  # OS guard stripped by test-b8-consumers.sh/' \
++            "$ROOT/scripts/$s" > "$PS_SCRIPTS/$s"
++        check "setup: OS guard stripped in the $s copy" "grep -q 'OS guard stripped by test-b8-consumers' '$PS_SCRIPTS/$s'"
++    done
++fi
++
++# setup_case <name>: fresh HOME, logs, summary and stub bin (rg, agent: version only)
++setup_case() {
++    C="$TMP_ROOT/$1"
++    H="$C/home"
++    mkdir -p "$H" "$C/bin" "$C/logs"
++    printf '#!/usr/bin/env bash\necho "ripgrep 14.1.0"\n' > "$C/bin/rg"
++    printf '#!/usr/bin/env bash\necho "2026.05.21-stub"\n' > "$C/bin/agent"
++    chmod +x "$C/bin/rg" "$C/bin/agent"
++    : > "$C/summary"
++    CASE_ENV=""
++}
++
++# run_sh <script> [args...] / run_ps1 <script> [args...]: non-interactive, case HOME.
++# CASE_ENV (space-separated VAR=value words) is added to the environment.
++run_sh() {
++    local s="$1"; shift
++    # shellcheck disable=SC2086  # CASE_ENV is a list of VAR=value words
++    env HOME="$H" AITOOLS_LOG_DIR="$C/logs" AITOOLS_SUMMARY_FILE="$C/summary" \
++        PATH="$C/bin:$PATH" $CASE_ENV "$TB" "$ROOT/scripts/$s" "$@" < /dev/null > "$C/out" 2>&1
++    echo $? > "$C/rc"
++}
++run_ps1() {
++    local s="$1"; shift
++    # shellcheck disable=SC2086
++    env HOME="$H" USERPROFILE="$H" AITOOLS_LOG_DIR="$C/logs" AITOOLS_SUMMARY_FILE="$C/summary" \
++        AITOOLS_PROFILE_TEST_ANY_OS=1 PATH="$C/bin:$PATH" $CASE_ENV \
++        pwsh -NoProfile -File "$PS_SCRIPTS/$s" "$@" < /dev/null > "$C/out" 2>&1
++    echo $? > "$C/rc"
++}
++
++rc() { cat "$C/rc"; }
++rows() { grep -v '^DETAIL' "$C/summary" | LC_ALL=C sort; }  # summary rows, order-free
++has_row() { grep -qxF "$1" "$C/summary"; }
++in_log() { perl -pe 's/\e\[[0-9;]*m//g' "$C/out" "$C/logs/deploy.log" 2>/dev/null | grep -qF -- "$1"; }
++
++# --- A-22: setup-user-skills on a resolver error (rc 3) ------------------------
++for lang in sh ps1; do
++    if [ "$lang" = ps1 ] && ! $HAVE_PWSH; then
++        printf 'SKIP skills ps1 (pwsh not on PATH)\n'; SKIP=$((SKIP + 1)); continue
++    fi
++    setup_case "skills-rc3-$lang"
++    CASE_ENV="AITOOLS_USER_REPO_PATH=$C/nowhere"
++    "run_$lang" "setup-user-skills.$lang"
++    check "skills $lang rc3: exit 1" "[ \"\$(rc)\" = 1 ]"
++    check "skills $lang rc3: lib ERROR row dotprofile" "grep -q '^ERROR|dotprofile|' '$C/summary'"
++    check "skills $lang rc3: ERROR row claude skills" "has_row 'ERROR|claude skills|not deployed: dotprofile error'"
++    check "skills $lang rc3: ERROR row cursor skills" "has_row 'ERROR|cursor skills|not deployed: dotprofile error'"
++    check "skills $lang rc3: no non-canonical 'skills' row" "! grep -q '^[A-Z]*|skills|' '$C/summary'"
++    check "skills $lang rc3: no 'skipped' detail" "! grep -qi 'skipped' '$C/summary'"
++    check "skills $lang rc3: consumer error logged" "in_log 'Dotprofile unresolved (resolver error above) -- skills not deployed, so shared copies cannot replace dotprofile versions'"
++    check "skills $lang rc3: nothing deployed" "[ ! -e '$H/.claude/skills' ] && [ ! -e '$H/.cursor/skills' ]"
++    rows > "$TMP_ROOT/skills-rc3-$lang.rows"
++done
++if $HAVE_PWSH; then
++    check "skills rc3 parity: identical summary rows sh/ps1" "cmp -s '$TMP_ROOT/skills-rc3-sh.rows' '$TMP_ROOT/skills-rc3-ps1.rows'"
++fi
++
++# --- A-23: setup-user-cursor cli-config on a resolver error (rc 3) -------------
++# --dry-run keeps steps 1-2 to version checks; the rc 3 branch comes first.
++for lang in sh ps1; do
++    if [ "$lang" = ps1 ] && ! $HAVE_PWSH; then
++        printf 'SKIP cursor rc3 ps1 (pwsh not on PATH)\n'; SKIP=$((SKIP + 1)); continue
++    fi
++    setup_case "cursor-rc3-$lang"
++    CASE_ENV="AITOOLS_USER_REPO_PATH=$C/nowhere"
++    if [ "$lang" = sh ]; then run_sh setup-user-cursor.sh --dry-run; else run_ps1 setup-user-cursor.ps1 -DryRun; fi
++    check "cursor $lang rc3: exit 1" "[ \"\$(rc)\" = 1 ]"
++    check "cursor $lang rc3: ERROR row not merged" "has_row 'ERROR|cursor cli|not merged: dotprofile error'"
++    check "cursor $lang rc3: no 'skipped' detail" "! grep -qi 'skipped' '$C/summary'"
++    check "cursor $lang rc3: consumer error logged as error" "perl -pe 's/\e\[[0-9;]*m//g' '$C/logs/deploy.log' | grep -E '\[error\] Dotprofile unresolved \(resolver error above\) -- .*cli-config.json not merged, so defaults cannot replace the profile preferences' >/dev/null"
++    check "cursor $lang rc3: error counted (consumer + lib)" "in_log 'FAILED with 2 error(s)'"
++    check "cursor $lang rc3: no cli-config written" "[ ! -e '$H/.cursor/cli-config.json' ]"
++    rows > "$TMP_ROOT/cursor-rc3-$lang.rows"
++done
++if $HAVE_PWSH; then
++    check "cursor rc3 parity: identical summary rows sh/ps1" "cmp -s '$TMP_ROOT/cursor-rc3-sh.rows' '$TMP_ROOT/cursor-rc3-ps1.rows'"
++fi
++
++# --- A-26 (cursor part): cli-config dry run writes a row ------------------------
++# No dotprofile (rc 1, defaults). First a dry run on a missing cli-config (would
++# update), then a real run (created), then a dry run on the written file (verified).
++for lang in sh ps1; do
++    if [ "$lang" = ps1 ] && ! $HAVE_PWSH; then
++        printf 'SKIP cursor dry-run ps1 (pwsh not on PATH)\n'; SKIP=$((SKIP + 1)); continue
++    fi
++    if [ "$lang" = sh ] && ! command -v node >/dev/null 2>&1; then
++        printf 'SKIP cursor dry-run sh (node not on PATH)\n'; SKIP=$((SKIP + 1)); continue
++    fi
++    setup_case "cursor-dry-$lang"
++    if [ "$lang" = sh ]; then run_sh setup-user-cursor.sh --dry-run; else run_ps1 setup-user-cursor.ps1 -DryRun; fi
++    check "cursor $lang dry (missing config): exit 0" "[ \"\$(rc)\" = 0 ]"
++    check "cursor $lang dry (missing config): OK row dry-run: would update" "has_row 'OK|cursor cli|dry-run: would update'"
++    check "cursor $lang dry (missing config): nothing written" "[ ! -e '$H/.cursor/cli-config.json' ]"
++    rows > "$TMP_ROOT/cursor-dry1-$lang.rows"
++    : > "$C/summary"
++    if [ "$lang" = sh ]; then run_sh setup-user-cursor.sh; else run_ps1 setup-user-cursor.ps1; fi
++    check "cursor $lang real run: OK row created" "has_row 'OK|cursor cli|created'"
++    : > "$C/summary"
++    if [ "$lang" = sh ]; then run_sh setup-user-cursor.sh --dry-run; else run_ps1 setup-user-cursor.ps1 -DryRun; fi
++    check "cursor $lang dry (up to date): exit 0" "[ \"\$(rc)\" = 0 ]"
++    check "cursor $lang dry (up to date): OK row verified" "has_row 'OK|cursor cli|verified'"
++    rows > "$TMP_ROOT/cursor-dry2-$lang.rows"
++done
++if $HAVE_PWSH && command -v node >/dev/null 2>&1; then
++    check "cursor dry parity (missing config): identical rows sh/ps1" "cmp -s '$TMP_ROOT/cursor-dry1-sh.rows' '$TMP_ROOT/cursor-dry1-ps1.rows'"
++    check "cursor dry parity (up to date): identical rows sh/ps1" "cmp -s '$TMP_ROOT/cursor-dry2-sh.rows' '$TMP_ROOT/cursor-dry2-ps1.rows'"
++fi
++
++# --- A-24: check-lib reports a resolver error as a WARN step --------------------
++# A minimal check script in the check-script block order (check-lib, init-logging,
++# resolve_config, check_log_init), one PASS step, summary.
++CL_SH="$TMP_ROOT/mini-check.sh"
++printf '%s\n' 'set -euo pipefail' \
++    "source '$ROOT/scripts/check-lib.sh'" "source '$ROOT/scripts/init-logging.sh'" \
++    'resolve_config' 'check_log_init "mini"' 'step_pass "1" "Something"' 'print_summary' > "$CL_SH"
++CL_PS1="$TMP_ROOT/mini-check.ps1"
++printf '%s\n' "\$ErrorActionPreference = 'Stop'" \
++    ". '$ROOT/scripts/check-lib.ps1'" ". '$ROOT/scripts/init-logging.ps1'" \
++    'ResolveConfig' 'CheckLogInit "mini"' 'StepPass "1" "Something"' 'PrintSummary' > "$CL_PS1"
++
++for lang in sh ps1; do
++    if [ "$lang" = ps1 ] && ! $HAVE_PWSH; then
++        printf 'SKIP check-lib ps1 (pwsh not on PATH)\n'; SKIP=$((SKIP + 1)); continue
++    fi
++    for mode in rc3 rc1; do
++        setup_case "checklib-$mode-$lang"
++        [ "$mode" = rc3 ] && CASE_ENV="AITOOLS_USER_REPO_PATH=$C/nowhere"
++        if [ "$lang" = sh ]; then
++            # shellcheck disable=SC2086
++            env HOME="$H" AITOOLS_LOG_DIR="$C/logs" $CASE_ENV "$TB" "$CL_SH" < /dev/null > "$C/out" 2>&1
++        else
++            # shellcheck disable=SC2086
++            env HOME="$H" USERPROFILE="$H" AITOOLS_LOG_DIR="$C/logs" AITOOLS_PROFILE_TEST_ANY_OS=1 $CASE_ENV \
++                pwsh -NoProfile -File "$CL_PS1" < /dev/null > "$C/out" 2>&1
++        fi
++        echo $? > "$C/rc"
++        check "check-lib $lang $mode: exit 0" "[ \"\$(rc)\" = 0 ]"
++        if [ "$mode" = rc3 ]; then
++            check "check-lib $lang rc3: WARN step on console" "perl -pe 's/\e\[[0-9;]*m//g' '$C/out' | grep -E '^ +0\. Dotprofile resolution +\[WARN\] resolver error \(rc 3, see deploy.log\)' >/dev/null"
++            check "check-lib $lang rc3: summary counts it" "perl -pe 's/\e\[[0-9;]*m//g' '$C/out' | grep -qF '=== SUMMARY: 1 PASS, 0 SKIP, 1 WARN, 0 FAIL ==='"
++            check "check-lib $lang rc3: WARN step in checks.jsonl" "grep -q '\"label\":\"Dotprofile resolution\",\"result\":\"WARN\"' '$C/logs/checks.jsonl'"
++        else
++            check "check-lib $lang rc1: no dotprofile step" "! grep -q 'Dotprofile resolution' '$C/out'"
++            check "check-lib $lang rc1: clean summary" "perl -pe 's/\e\[[0-9;]*m//g' '$C/out' | grep -qF '=== SUMMARY: 1 PASS, 0 SKIP, 0 WARN, 0 FAIL ==='"
++        fi
++    done
++done
++
++printf '\n%d passed, %d failed, %d skipped\n' "$PASS" "$FAIL" "$SKIP"
++[ "$FAIL" -eq 0 ]

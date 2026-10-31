@@ -412,8 +412,8 @@ upper bound of what breaks):
 | audit | .claude | 6 | incidents registry, `.claude/rules/*.md` | does not work |
 | governed-data | .claude | 5 | `.claude/rules/governed-data-access.md`, `scripts/check-pre-commit.sh/.ps1` | does not work |
 | frameworks, glossary, incident, tool-eval, tool-ops, tool-registry | shared (PR 128) | 4-9 | the registries, `reference/framework-*.md`, `reference/tool-ops-*.md`, `reference/evaluations/` | works: "Where the files live" resolves the paths in the clone named by `repoPath` (reads from `origin/main`), else the read-only `~/.aitools/registries/` copy |
-| harvest | shared (PR 128) | 6 | `.claude/rules/artifact-harvesting.md`, `scripts/check-*.sh` | partly (the harvesting folder is per repo; "Where the files live") |
-| tool-adopt | shared | 19 | `.claude/rules/tool-lifecycle.md`, `reference/evaluations/` | says "In the aitools repo: run every step": partly |
+| harvest | shared (PR 128) | 6 | `shared/rules/artifact-harvesting.md`, `scripts/check-*.sh` | partly (the harvesting folder is per repo; "Where the files live") |
+| tool-adopt | shared | 19 | `shared/rules/tool-lifecycle.md`, `reference/evaluations/` | says "In the aitools repo: run every step": partly |
 | aitool-continue | shared | 6 | `.aitools/channel/handoffs/`, `reference/harness.md` | branches on the repo (by design) |
 | handoff | shared | 6 | `plans/*/handoff-prompt.md`, `.aitools/channel/handoffs/` | relative to the current repo (by design) |
 | intent-audit | shared | 9 | glossary and incidents registries | partly |

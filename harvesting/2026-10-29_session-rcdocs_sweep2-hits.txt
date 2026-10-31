@@ -1,0 +1,637 @@
+=== pre-push
+origin/main:README.md:15:| `scripts/check-*.sh/.ps1` | Automated pre-commit, pre-push, and post-push checklists |
+origin/main:README.md:129:bash scripts/check-pre-push.sh           # 10 steps, read-only
+origin/main:README.md:137:.\scripts\check-pre-push.ps1             # 10 steps, read-only
+origin/main:reference/README.md:42:| `pre-push-checklist.md` | Pre-push checklist (`check-pre-push`) |
+origin/main:reference/pre-push-checklist.md:1:# Pre-Push Checklist (this repo)
+origin/main:reference/pre-push-checklist.md:3:> **Script**: On macOS: `bash scripts/check-pre-push.sh`.
+origin/main:reference/pre-push-checklist.md:4:> On Windows: `pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/check-pre-push.ps1`.
+origin/main:scripts/check-pre-push.ps1:1:# check-pre-push.ps1 -- automated pre-push checklist for aitools
+origin/main:scripts/check-pre-push.ps1:2:# Usage: .\scripts\check-pre-push.ps1
+origin/main:scripts/check-pre-push.ps1:16:    LogError "This script is for Windows. On macOS/Linux, use check-pre-push.sh."
+origin/main:scripts/check-pre-push.ps1:21:CheckLogInit "pre-push"
+origin/main:scripts/check-pre-push.ps1:26:Write-Host "=== PRE-PUSH CHECKLIST ===" -ForegroundColor White
+origin/main:scripts/check-pre-push.ps1:202:                foreach ($l in $sOut.Split("`n")) { if ($l.Trim()) { LogDetail "pre-push 7 smoke ${s}: $($l.TrimEnd())" } }
+origin/main:scripts/check-pre-push.ps1:226:                foreach ($l in $sOut.Split("`n")) { if ($l.Trim()) { LogDetail "pre-push 7 smoke endpoint setup-user-claude.ps1: $($l.TrimEnd())" } }
+origin/main:scripts/check-pre-push.ps1:242:        foreach ($l in $d7Log.Split("`n")) { if ($l.Trim()) { LogDetail "pre-push 7 build: $($l.TrimEnd())" } }
+origin/main:scripts/check-pre-push.ps1:247:        foreach ($l in $d7Log.Split("`n")) { if ($l.Trim()) { LogDetail "pre-push 7 build: $($l.TrimEnd())" } }
+origin/main:scripts/check-pre-push.sh:2:# check-pre-push.sh -- automated pre-push checklist for aitools
+origin/main:scripts/check-pre-push.sh:3:# Usage: bash scripts/check-pre-push.sh
+origin/main:scripts/check-pre-push.sh:18:        log_error "This script is for macOS/Linux. On Windows, use check-pre-push.ps1."
+origin/main:scripts/check-pre-push.sh:23:check_log_init "pre-push"
+origin/main:scripts/check-pre-push.sh:28:echo "${BOLD}=== PRE-PUSH CHECKLIST ===${RESET}"
+origin/main:scripts/check-pre-push.sh:148:            if [ -n "$d7_line" ]; then log_detail "pre-push 7 build: $d7_line"; fi
+origin/main:scripts/check-pre-push.sh:155:            if [ -n "$d7_line" ]; then log_detail "pre-push 7 build: $d7_line"; fi
+origin/main:scripts/check-pre-push.sh:167:            log_detail "pre-push 7 diff: $d7_diff"
+origin/main:scripts/check-pre-push.sh:184:                if [ -n "$d7_line" ]; then log_detail "pre-push 7 smoke $d7_s: $d7_line"; fi
+origin/main:scripts/check-pre-push.sh:207:                if [ -n "$d7_line" ]; then log_detail "pre-push 7 smoke endpoint setup-user-claude.sh: $d7_line"; fi
+origin/main:shared/skills/delegate/SKILL.md:84:   to create, the pre-push checks to run, and require a pushed branch plus a
+origin/main:shared/skills/delegate/SKILL.md:183:run `<pre-push checks>` (any check that runs build-deploy.sh under an
+origin/main:shared/skills/handoff/SKILL.md:504:2. **Run check scripts** per PSO (check-pre-commit, check-pre-push if
+=== deploy-relevant
+origin/main:reference/pre-push-checklist.md:40:Runs on every push (commander decision 2026-10-26; it used to run only when a deploy-relevant source changed). It rebuilds from this branch into a temporary copy of the dotprofile's committed tree, under a temporary HOME, and compares that copy's `deploy/` with the committed one; then it dry-runs the generated resolver consumers. The real dotprofile is never touched. A stale dotprofile `deploy/` is a FAIL: run `bash scripts/build-deploy.sh` and commit `deploy/` in the dotprofile repo. Skipped when `userRepoPath` is not configured; WARN when node (bash) or Git Bash (PowerShell) is missing.
+origin/main:scripts/check-pre-push.ps1:115:# to run only when a deploy-relevant source changed, which missed reference/,
+origin/main:scripts/check-pre-push.sh:112:# to run only when a deploy-relevant source changed, which missed reference/,
+=== deploy/ matches source
+origin/main:reference/pre-push-checklist.md:38:## 7. deploy/ matches source
+origin/main:scripts/check-pre-push.ps1:111:# 7. deploy/ matches source
+origin/main:scripts/check-pre-push.ps1:137:    StepSkip "7" "deploy/ matches source" "userRepoPath not configured -- dotprofile deploy/ not verified"
+origin/main:scripts/check-pre-push.ps1:139:    StepWarn "7" "deploy/ matches source" "Git Bash not found -- dotprofile deploy/ not verified"
+origin/main:scripts/check-pre-push.ps1:243:        StepFail "7" "deploy/ matches source" "rebuild into a dotprofile copy failed (exit $d7Rc) -- see deploy.log"
+origin/main:scripts/check-pre-push.ps1:248:        StepFail "7" "deploy/ matches source" "build-deploy built nothing into the dotprofile copy -- see deploy.log"
+origin/main:scripts/check-pre-push.ps1:267:            StepPass "7" "deploy/ matches source" "dotprofile deploy/ matches a fresh build; resolver consumers dry-run clean"
+origin/main:scripts/check-pre-push.ps1:269:            StepFail "7" "deploy/ matches source" ($d7Problems -join "; ")
+origin/main:scripts/check-pre-push.sh:108:# 7. deploy/ matches source
+origin/main:scripts/check-pre-push.sh:123:    step_skip "7" "deploy/ matches source" "userRepoPath not configured -- dotprofile deploy/ not verified"
+origin/main:scripts/check-pre-push.sh:125:    step_warn "7" "deploy/ matches source" "node not found -- dotprofile deploy/ not verified"
+origin/main:scripts/check-pre-push.sh:150:        step_fail "7" "deploy/ matches source" "rebuild into a dotprofile copy failed (exit $d7_rc) -- see deploy.log"
+origin/main:scripts/check-pre-push.sh:157:        step_fail "7" "deploy/ matches source" "build-deploy built nothing into the dotprofile copy -- see deploy.log"
+origin/main:scripts/check-pre-push.sh:219:            step_pass "7" "deploy/ matches source" "dotprofile deploy/ matches a fresh build; resolver consumers dry-run clean"
+origin/main:scripts/check-pre-push.sh:221:            step_fail "7" "deploy/ matches source" "$d7_problems"
+=== deploy/ stale
+(no hits)
+=== stale deploy
+(no hits)
+=== \.aitools/rules
+(no hits)
+=== \.aitools/skills
+(no hits)
+=== \.aitools/hooks
+(no hits)
+=== \.aitools/reference
+origin/main:.claude/skills/tool-ops/SKILL.md:49:1. **Deployed copy**: `~/.aitools/reference/tool-ops-<toolname>.md`
+origin/main:shared/skills/aitool-ops/SKILL.md:62:1. **Deployed copy**: `~/.aitools/reference/tool-ops-<toolname>.md`
+origin/main:shared/skills/aitool-ops/SKILL.md:361:  repo; deployed copy `~/.aitools/reference/tool-ops-claude-code.md`; read
+=== \.aitools/registries
+(no hits)
+=== claude/rules/
+origin/main:.claude/rules/agentic-standards.md:104:- Adopting into a protected file (`.claude/rules/sources-of-truth.md`) is
+origin/main:.claude/rules/aitool-eval.md:9:(`@.claude/rules/tool-evaluation.md`). NOT the discovery playbook
+origin/main:.claude/rules/aitool-eval.md:67:- Evaluation principles rule: `.claude/rules/tool-evaluation.md`
+origin/main:.claude/rules/aitool-eval.md:68:- Lifecycle gates rule: `.claude/rules/tool-lifecycle.md`
+origin/main:.claude/rules/aitool-eval.md:70:- Governed data access pattern: `.claude/rules/governed-data-access.md`
+origin/main:.claude/rules/aitool-ops.md:65:- Governance rule: `.claude/rules/tool-ops.md` (project-level)
+origin/main:.claude/rules/aitool-ops.md:67:- Governed data access pattern: `.claude/rules/governed-data-access.md`
+origin/main:.claude/rules/aitools-workspace.md:52:| `rules/` | Rules from `shared/rules/`, `.claude/rules/` and the dotprofile `claude/rules/`, one flat directory — deployed by `deploy-harness`; copied to each tool's rules location by `setup-user-claude` / `setup-user-cursor` |
+origin/main:.claude/rules/config-file-safety.md:9:  - .claude/rules/**
+origin/main:.claude/rules/config-file-safety.md:86:See `@.claude/rules/managed-file-deployment.md` for full deployment type
+origin/main:.claude/rules/config-file-safety.md:106:1. Declare managed scope in script header (e.g., `# Managed: ~/.claude/rules/*.md
+origin/main:.claude/rules/config-file-safety.md:107:   matching <userRepoPath>/claude/rules/`)
+origin/main:.claude/rules/config-file-safety.md:122:`@.claude/rules/interactive-menus.md` and `@reference/managed-file-deployment.md`.
+origin/main:.claude/rules/deploy-paths.md:9:  - .claude/rules/**
+origin/main:.claude/rules/deploy-paths.md:69:- `<userRepoPath>/claude/rules/*.md` → read via `cat` at build time
+origin/main:.claude/rules/documentation-standards.md:9:  - .claude/rules/**
+origin/main:.claude/rules/documentation-standards.md:69:- **Rules** (`.claude/rules/`) = concise behavioral directives, ~40-100 lines
+origin/main:.claude/rules/documentation-standards.md:75:  See `@.claude/rules/incident-governance.md` for lifecycle and classification
+origin/main:.claude/rules/documentation-standards.md:96:- `@` can reference ANY repo file: `@reference/`, `@.claude/rules/`,
+origin/main:.claude/rules/documentation-standards.md:98:- In `.claude/rules/*.md`: `@path/file.md` is NOT resolved — it remains
+origin/main:.claude/rules/frameworks.md:53:- Governed data access: `@.claude/rules/governed-data-access.md`
+origin/main:.claude/rules/governed-data-access.md:6:`@.claude/rules/frameworks.md` registries table). NOT the framework
+origin/main:.claude/rules/governed-data-access.md:26:- `.claude/rules/*.md` — reference the skill instead
+origin/main:.claude/rules/governed-data-access.md:36:- **Scope**: pre-commit checks `.claude/rules/`, `CLAUDE.md`, and
+origin/main:.claude/rules/governed-data-access.md:41:- Registries table: `@.claude/rules/frameworks.md`
+origin/main:.claude/rules/hook-rollout.md:9:  - .claude/rules/**
+origin/main:.claude/rules/hook-rollout.md:111:(deployed to `~/.claude/rules/hook-lifecycle.md` once a deploy path for
+origin/main:.claude/rules/incident-governance.md:100:  step 4. Audited: `@.claude/rules/incident-governance.md`,
+origin/main:.claude/rules/incident-governance.md:102:  `@.claude/rules/sources-of-truth.md`. Session: 2026-03-14" —
+origin/main:.claude/rules/incident-governance.md:109:  adherence. Alternative: extend `@.claude/rules/incident-governance.md`
+origin/main:.claude/rules/incident-governance.md:204:for the full lifecycle and `@.claude/rules/frameworks.md` for the
+origin/main:.claude/rules/interactive-menus.md:9:`@.claude/rules/agentic-standards.md` "Managed-file review choices and merge".
+origin/main:.claude/rules/managed-file-deployment.md:19:| Markdown | Interactive diff review via `deploy_managed_file` (SOURCE is the source of truth; one menu: overwrite / accept & adopt / merge & adopt / skip / abort) | CLAUDE.md, `~/.claude/rules/*.md`, skill SKILL.md files |
+origin/main:.claude/rules/managed-file-deployment.md:26:Choices and failure handling: `@.claude/rules/agentic-standards.md`
+origin/main:.claude/rules/managed-file-deployment.md:48:| aitools repo + dotprofile -> `~/.aitools/` (`deploy-harness`) | First source wins on a name conflict: `shared/`, then `.claude/`, then dotprofile `claude/rules/` | reference, registries, hooks, skills, rules (one flat directory), bin; config.json generated from profile.json. Rules reach the tools through the `setup-user-claude` / `setup-user-cursor` fan-out. Detail: `@reference/harness.md` "Deployed harness (`~/.aitools`)" |
+origin/main:.claude/rules/managed-file-deployment.md:52:- **Rules**: additive deploy from `<userRepoPath>/claude/rules/` — managed files updated, unmanaged files in target preserved
+origin/main:.claude/rules/managed-file-deployment.md:96:`@.claude/rules/cross-platform.md` "Environment branches".
+origin/main:.claude/rules/managed-file-deployment.md:104:`@.claude/rules/tool-lifecycle.md` "Onboarding checklist" (deployment types
+origin/main:.claude/rules/managed-file-deployment.md:110:- Text + JSON menus: `@.claude/rules/interactive-menus.md`
+origin/main:.claude/rules/managed-file-deployment.md:111:- JSON write safety: `@.claude/rules/config-file-safety.md`
+origin/main:.claude/rules/managed-file-deployment.md:112:- AI merge: `@.claude/rules/agentic-standards.md`
+origin/main:.claude/rules/relay-outbound.md:16:during deploy — see `@.claude/rules/managed-file-deployment.md`).
+origin/main:.claude/rules/script-standards.md:15:4. OS guard -- see `@.claude/rules/cross-platform.md` "OS guard patterns"
+origin/main:.claude/rules/script-standards.md:23:3. OS guard -- see `@.claude/rules/cross-platform.md` "OS guard patterns"
+origin/main:.claude/rules/script-standards.md:106:See `@.claude/rules/agentic-standards.md` for prompt design and evaluation rules.
+origin/main:.claude/rules/script-standards.md:110:See `@.claude/rules/agentic-standards.md` for AI CLI invocation requirements,
+origin/main:.claude/rules/script-standards.md:187:`@.claude/rules/interactive-menus.md` and `@reference/managed-file-deployment.md`.
+origin/main:.claude/rules/script-standards.md:238:tool documentation. See `@.claude/rules/tool-lifecycle.md` Install method discovery.
+origin/main:.claude/rules/sources-of-truth.md:15:| `.claude/rules/*.md` | Claude Code behavioral rules (this file included) | Any |
+origin/main:.claude/rules/sources-of-truth.md:16:| `.claude/rules/managed-file-deployment.md` | Deployment type definitions, content sources, platform config rules | Any |
+origin/main:.claude/rules/sources-of-truth.md:17:| `registries/incidents.json` | Incident tracking — governed by `.claude/rules/incident-governance.md` | Any |
+origin/main:.claude/rules/sources-of-truth.md:28:| `.claude/rules/frameworks.md` | Framework rule — intent of frameworks, registry of registries | Any |
+origin/main:.claude/rules/tool-evaluation.md:17:NOT lifecycle gates (`@.claude/rules/tool-lifecycle.md`).
+origin/main:.claude/rules/tool-evaluation.md:61:- Lifecycle gates: `@.claude/rules/tool-lifecycle.md`
+origin/main:.claude/rules/tool-lifecycle.md:9:  - .claude/rules/**
+origin/main:.claude/rules/tool-lifecycle.md:24:(`@.claude/rules/tool-evaluation.md`). NOT the evaluation process
+origin/main:.claude/rules/tool-lifecycle.md:128:- Evaluation principles: `@.claude/rules/tool-evaluation.md`
+origin/main:.claude/rules/web-sources.md:9:  - .claude/rules/**
+origin/main:.claude/skills/audit/SKILL.md:19:- Every `@path/file` reference in `.claude/rules/*.md` → verify file exists
+origin/main:.claude/skills/audit/SKILL.md:101:1. Reads all rules files (`.claude/rules/*.md`)
+origin/main:.claude/skills/audit/SKILL.md:120:- Operational rule: `@.claude/rules/incident-governance.md`
+origin/main:.claude/skills/audit/tests/expected-behaviors.md:13:- Should detect `@.claude/rules/cursor-rule-parity.md` as broken (deleted in v0.54)
+origin/main:.claude/skills/frameworks/SKILL.md:119:   `@.claude/rules/sources-of-truth.md`
+origin/main:.claude/skills/frameworks/SKILL.md:141:- Framework rule: `@.claude/rules/frameworks.md`
+origin/main:.claude/skills/frameworks/SKILL.md:142:- Governed data access: `@.claude/rules/governed-data-access.md`
+origin/main:.claude/skills/glossary/SKILL.md:14:in `@.claude/rules/glossary.md`, always in context). NOT the
+origin/main:.claude/skills/glossary/SKILL.md:34:1. Check `@.claude/rules/glossary.md` — is it already listed?
+origin/main:.claude/skills/glossary/SKILL.md:79:   `@.claude/rules/sources-of-truth.md`
+origin/main:.claude/skills/glossary/SKILL.md:126:- Word list: `@.claude/rules/glossary.md`
+origin/main:.claude/skills/governed-data/SKILL.md:15:principle itself (`@.claude/rules/governed-data-access.md`). NOT the
+origin/main:.claude/skills/governed-data/SKILL.md:18:table (`@.claude/rules/frameworks.md`). **Audience**: Any agent
+origin/main:.claude/skills/governed-data/SKILL.md:54:4. **Add to registries table** in `@.claude/rules/frameworks.md`
+origin/main:.claude/skills/governed-data/SKILL.md:69:1. Run pre-commit step 16 — checks `.claude/rules/` and `CLAUDE.md`
+origin/main:.claude/skills/governed-data/SKILL.md:87:- Access principle: `@.claude/rules/governed-data-access.md`
+origin/main:.claude/skills/governed-data/SKILL.md:89:- Registries table: `@.claude/rules/frameworks.md`
+origin/main:.claude/skills/harvest/SKILL.md:17:harvesting governance (`@.claude/rules/artifact-harvesting.md`). NOT
+origin/main:.claude/skills/harvest/SKILL.md:44:    "governance": ".claude/rules/artifact-harvesting.md",
+origin/main:.claude/skills/harvest/SKILL.md:143:- Harvesting governance: `@.claude/rules/artifact-harvesting.md`
+origin/main:.claude/skills/harvest/SKILL.md:146:- Governed data access: `@.claude/rules/governed-data-access.md`
+origin/main:.claude/skills/incident/SKILL.md:112:   (`.claude/rules/incident-governance.md`, "Field quality rules"). Update
+origin/main:.claude/skills/incident/SKILL.md:138:- Operational rule: `@.claude/rules/incident-governance.md`
+origin/main:.claude/skills/tool-eval/SKILL.md:17:(`@.claude/rules/tool-evaluation.md`). **Audience**: Any agent
+origin/main:.claude/skills/tool-eval/SKILL.md:23:1. **Load principles** — read `@.claude/rules/tool-evaluation.md`
+origin/main:.claude/skills/tool-eval/SKILL.md:128:- Evaluation principles: `@.claude/rules/tool-evaluation.md`
+origin/main:.claude/skills/tool-eval/SKILL.md:132:- Lifecycle gates: `@.claude/rules/tool-lifecycle.md`
+origin/main:.claude/skills/tool-ops/SKILL.md:11:principle (`.claude/rules/tool-ops.md`). NOT the framework documentation
+origin/main:.claude/skills/tool-ops/SKILL.md:124:- Governance rule: `.claude/rules/tool-ops.md`
+origin/main:.claude/skills/tool-ops/SKILL.md:129:- Governed data access pattern: `.claude/rules/governed-data-access.md`
+origin/main:.claude/skills/tool-ops/tests/expected-behaviors.md:80:bypass. The governed data access rule (`.claude/rules/governed-data-access.md`)
+origin/main:.claude/skills/tool-registry/SKILL.md:14:onboarding checklists (`@.claude/rules/tool-lifecycle.md`).
+origin/main:.claude/skills/tool-registry/SKILL.md:60:4. Present for review — protected per `@.claude/rules/sources-of-truth.md`
+origin/main:.claude/skills/tool-registry/SKILL.md:106:- Evaluation principles: `@.claude/rules/tool-evaluation.md`
+origin/main:.claude/skills/tool-registry/SKILL.md:107:- Lifecycle gates: `@.claude/rules/tool-lifecycle.md`
+origin/main:.cursor/rules/agentic-standards.mdc:110:- Adopting into a protected file (`.claude/rules/sources-of-truth.md`) is
+origin/main:.cursor/rules/config-file-safety.mdc:3:globs: "scripts/**,deploy/**,shared/**,reference/**,plans/**,rfcs/**,.claude/rules/**,.cursor/rules/**,CLAUDE.md,RELEASE_NOTES.md,ROADMAP.md,README.md"
+origin/main:.cursor/rules/config-file-safety.mdc:33:See `@.claude/rules/managed-file-deployment.md` and `@reference/managed-file-deployment.md` "Backup Policy".
+origin/main:.cursor/rules/cross-platform.mdc:17:  Splits are recorded exceptions in `.claude/rules/cross-platform.md`
+origin/main:.cursor/rules/cross-platform.mdc:29:`.claude/rules/cross-platform.md` "Environment branches".
+origin/main:.cursor/rules/cross-platform.mdc:35:`setup-bash.ps1` checks only Git paths. Details: `.claude/rules/cross-platform.md`.
+origin/main:.cursor/rules/cross-platform.mdc:41:before the guard. See `.claude/rules/cross-platform.md` "OS guard patterns".
+origin/main:.cursor/rules/cross-platform.mdc:48:scripts, scratch files. Full table in `.claude/rules/cross-platform.md`.
+origin/main:.cursor/rules/cross-platform.mdc:59:Every script gets a native variant for each platform. Crossing languages (e.g., PowerShell calling bash) is an exception -- ask the user first. See approved exceptions in `.claude/rules/cross-platform.md`.
+origin/main:.cursor/rules/cursor-rule-parity.mdc:9:When modifying rules in `.claude/rules/*.md`, also update the corresponding `.cursor/rules/*.mdc` file (and vice versa). See the Rule Correspondence table in `reference/cursor-practices.md`.
+origin/main:.cursor/rules/deploy-paths.mdc:3:globs: "scripts/**,deploy/**,shared/**,reference/**,plans/**,rfcs/**,.claude/rules/**,.cursor/rules/**,CLAUDE.md,RELEASE_NOTES.md,ROADMAP.md,README.md"
+origin/main:.cursor/rules/documentation-standards.mdc:3:globs: "scripts/**,deploy/**,shared/**,reference/**,plans/**,rfcs/**,.claude/rules/**,.cursor/rules/**,CLAUDE.md,RELEASE_NOTES.md,ROADMAP.md,README.md"
+origin/main:.cursor/rules/documentation-standards.mdc:31:- **Rules** (`.claude/rules/` / `.cursor/rules/`) = concise behavioral directives, ~40-100 lines
+origin/main:.cursor/rules/documentation-standards.mdc:36:- **Cursor parity** — `.cursor/rules/*.mdc` mirrors `.claude/rules/*.md`. See `@.claude/rules/cursor-rule-parity.md`
+origin/main:.cursor/rules/documentation-standards.mdc:40:- `@` can reference ANY repo file: `@reference/`, `@.claude/rules/`, `@shared/`, `@scripts/`, `@plans/`
+origin/main:.cursor/rules/hook-rollout.mdc:3:globs: "scripts/**,deploy/**,shared/**,reference/**,plans/**,rfcs/**,.claude/rules/**,.cursor/rules/**,CLAUDE.md,RELEASE_NOTES.md,ROADMAP.md,README.md"
+origin/main:.cursor/rules/interactive-menus.mdc:12:`.claude/rules/agentic-standards.md` "Managed-file review choices and merge".
+origin/main:.cursor/rules/managed-file-deployment.mdc:15:| Markdown | Interactive diff review via `deploy_managed_file` (SOURCE is the source of truth; one menu: overwrite / accept & adopt / merge & adopt / skip / abort) | CLAUDE.md, `~/.claude/rules/*.md`, skill SKILL.md files |
+origin/main:.cursor/rules/managed-file-deployment.mdc:19:`deploy_managed_file()` / `Deploy-ManagedFile` is defined in `@scripts/aitools-lib.sh` / `@scripts/aitools-lib.ps1`. Full state machine spec: `@reference/managed-file-deployment.md`. Choices and failure handling: `@.claude/rules/agentic-standards.md` "Managed-file review choices and merge". There is no ancestor and no deploy state.
+origin/main:.cursor/rules/managed-file-deployment.mdc:32:- **Rules**: additive deploy from `<userRepoPath>/claude/rules/` — managed files updated, unmanaged files in target preserved
+origin/main:.cursor/rules/managed-file-deployment.mdc:55:Scripts must NEVER write cross-platform values or another environment's values. See `@.claude/rules/cross-platform.md` "Environment branches".
+origin/main:.cursor/rules/managed-file-deployment.mdc:59:Adding a row (new file type) or column requires updating: this rule, `@reference/managed-file-deployment.md`, `@.claude/rules/managed-file-deployment.md`, and the `/incident` skill if there are implementation gaps. See `@.claude/rules/tool-lifecycle.md` "Onboarding checklist" (deployment types table, protected).
+origin/main:.cursor/rules/managed-file-deployment.mdc:64:- Text + JSON menus: `@.claude/rules/interactive-menus.md`
+origin/main:.cursor/rules/managed-file-deployment.mdc:65:- JSON write safety: `@.claude/rules/config-file-safety.md`
+origin/main:.cursor/rules/managed-file-deployment.mdc:66:- AI merge: `@.claude/rules/agentic-standards.md`
+origin/main:.cursor/rules/script-standards.mdc:56:See `.claude/rules/agentic-standards.md` for prompt design and evaluation rules.
+origin/main:.cursor/rules/script-standards.mdc:60:See `.claude/rules/agentic-standards.md` for AI CLI invocation requirements,
+origin/main:.cursor/rules/script-standards.mdc:103:tool documentation. See `.claude/rules/tool-lifecycle.md` Install method discovery.
+origin/main:.cursor/rules/sources-of-truth.mdc:21:| `.claude/rules/*.md` | Claude Code behavioral rules | Any |
+origin/main:.cursor/rules/tool-lifecycle.mdc:3:globs: "scripts/**,deploy/**,shared/**,reference/**,plans/**,rfcs/**,.claude/rules/**,.cursor/rules/**,CLAUDE.md,RELEASE_NOTES.md,ROADMAP.md,README.md"
+origin/main:.cursor/rules/tool-lifecycle.mdc:59:- `.claude/rules/tool-lifecycle.md` + `.cursor/rules/tool-lifecycle.mdc` — update this checklist if pattern changes
+origin/main:.cursor/rules/tool-lifecycle.mdc:64:- Check deployment types table in `@.claude/rules/managed-file-deployment.md` — add row if new file type
+origin/main:.cursor/rules/tool-lifecycle.mdc:136:When onboarding a new tool that deploys config files, check the deployment types table in `@.claude/rules/managed-file-deployment.md`.
+origin/main:.cursor/rules/web-sources.mdc:3:globs: "scripts/**,deploy/**,shared/**,reference/**,plans/**,rfcs/**,.claude/rules/**,.cursor/rules/**,CLAUDE.md,RELEASE_NOTES.md,ROADMAP.md,README.md"
+origin/main:CLAUDE.md:8:themselves (`.claude/rules/`). NOT the failure-mode work that seeded the harness
+origin/main:CLAUDE.md:37:- `.claude/rules/` — behavioral rules, always in context. Check them before assuming.
+origin/main:CLAUDE.md:75:`.claude/rules/relay-outbound.md`.
+origin/main:README.md:12:| `.claude/rules/` | Claude Code project rules |
+origin/main:reference/README.md:3:Implementation detail, specs and knowledge base behind the rules in `.claude/rules/`.
+origin/main:reference/agentic-framework.md:3:Companion to `.claude/rules/agentic-standards.md`. Defines the `invoke_ai` /
+origin/main:reference/agentic-prompt-patterns.md:9:`.claude/rules/agentic-standards.md` for the governing rule.
+origin/main:reference/agentic-prompt-patterns.md:30:feature (v0.50.1) corrupted `~/.claude/rules/concurrent-agents.md` by writing Claude's
+origin/main:reference/ait-shellintegration.md:127:`@.claude/rules/cross-platform.md`). A hook that needs the managed
+origin/main:reference/ait-shellintegration.md:143:- Cross-platform shell rules: `@.claude/rules/cross-platform.md`
+origin/main:reference/claude-code-effectiveness.md:88:- **Observed**: Subagents launched via Task tool did not load `.claude/rules/`, `CLAUDE.md`, or `~/.claude/CLAUDE.md`
+origin/main:reference/claude-code-effectiveness.md:117:- **Remediation**: Added `.claude/rules/surface-silent-failures.md` rule. Technical fix: user ran `aitools user init` to set `userRepoPath`
+origin/main:reference/cross-platform-detail.md:3:Detail and background for `.claude/rules/cross-platform.md`. This file is
+origin/main:reference/cross-platform-detail.md:21:Rule: `.claude/rules/cross-platform.md` "Environment branches". Decisions D-ENV1..D-ENV9
+origin/main:reference/cursor-practices.md:133:**Not read by agent CLI:** `~/.claude/CLAUDE.md`, `~/.claude/skills/`, `.claude/rules/`.
+origin/main:reference/cursor-practices.md:157:| `.claude/rules/cross-platform.md` | `.cursor/rules/cross-platform.mdc` | Condensed |
+origin/main:reference/cursor-practices.md:158:| `.claude/rules/sources-of-truth.md` | `.cursor/rules/sources-of-truth.mdc` | Near-identical |
+origin/main:reference/cursor-practices.md:159:| `.claude/rules/tool-lifecycle.md` | `.cursor/rules/tool-lifecycle.mdc` | Near-identical |
+origin/main:reference/cursor-practices.md:160:| `.claude/rules/cursor-rule-parity.md` | `.cursor/rules/cursor-rule-parity.mdc` | Identical |
+origin/main:reference/cursor-practices.md:162:| `.claude/rules/script-standards.md` | `.cursor/rules/script-standards.mdc` | Condensed; absorbed error-handling + surface-silent-failures |
+origin/main:reference/cursor-practices.md:163:| `.claude/rules/documentation-standards.md` | `.cursor/rules/documentation-standards.mdc` | Condensed |
+origin/main:reference/cursor-practices.md:164:| `.claude/rules/web-sources.md` | `.cursor/rules/web-sources.mdc` | Identical |
+origin/main:reference/cursor-practices.md:165:| `.claude/rules/config-file-safety.md` | `.cursor/rules/config-file-safety.mdc` | Condensed |
+origin/main:reference/cursor-practices.md:166:| `.claude/rules/deploy-paths.md` | `.cursor/rules/deploy-paths.mdc` | Near-identical |
+origin/main:reference/cursor-practices.md:167:| `.claude/rules/hook-rollout.md` | `.cursor/rules/hook-rollout.mdc` | Condensed |
+origin/main:reference/cursor-practices.md:168:| `.claude/rules/plan-execution.md` | `.cursor/rules/plan-execution.mdc` | Condensed |
+origin/main:reference/cursor-practices.md:169:| `.claude/rules/smoke-test-pattern.md` | — | Claude Code-specific (Bash tool pattern) |
+origin/main:reference/cursor-practices.md:170:| `.claude/rules/interactive-menus.md` | `.cursor/rules/interactive-menus.mdc` | Condensed |
+origin/main:reference/cursor-practices.md:171:| `.claude/rules/relay-outbound.md` | `.cursor/rules/relay-outbound.mdc` | Near-identical |
+origin/main:reference/cursor-practices.md:175:When adding or modifying a rule in either `.claude/rules/` or `.cursor/rules/`:
+origin/main:reference/do-what-feels-right.md:145:See **`.claude/rules/relay-outbound.md`**.
+origin/main:reference/framework-adoption.md:62:- `@.claude/rules/frameworks.md` — does an existing framework govern
+origin/main:reference/framework-adoption.md:66:- Rules that might address it — search `.claude/rules/` and
+origin/main:reference/framework-adoption.md:67:  `~/.claude/rules/`
+origin/main:reference/framework-adoption.md:147:- Protected files require review (`@.claude/rules/sources-of-truth.md`)
+origin/main:reference/framework-adoption.md:239:- Framework rule: `@.claude/rules/frameworks.md`
+origin/main:reference/framework-adoption.md:240:- Incident governance: `@.claude/rules/incident-governance.md`
+origin/main:reference/framework-artifact-harvesting.md:8:(`@.claude/rules/artifact-harvesting.md`). NOT the harvesting process
+origin/main:reference/framework-artifact-harvesting.md:54:- Rule in `@.claude/rules/artifact-harvesting.md` governs criteria
+origin/main:reference/framework-artifact-harvesting.md:62:- `@.claude/rules/artifact-harvesting.md` (governance)
+origin/main:reference/framework-artifact-harvesting.md:71:- Governed data access: `@.claude/rules/governed-data-access.md`
+origin/main:reference/framework-governed-data-access.md:8:`@.claude/rules/governed-data-access.md`). NOT which registries
+origin/main:reference/framework-governed-data-access.md:9:exist (see `@.claude/rules/frameworks.md` registries table).
+origin/main:reference/framework-governed-data-access.md:114:- `@.claude/rules/governed-data-access.md` enforces the access principle
+origin/main:reference/framework-governed-data-access.md:116:- The registries table in `@.claude/rules/frameworks.md` lists all
+origin/main:reference/framework-governed-data-access.md:122:- `@.claude/rules/governed-data-access.md` (operational rule)
+origin/main:reference/framework-governed-data-access.md:123:- `@.claude/rules/frameworks.md` (registries table)
+origin/main:reference/framework-governed-data-access.md:130:- Operational rule: `@.claude/rules/governed-data-access.md`
+origin/main:reference/framework-governed-data-access.md:131:- Registries table: `@.claude/rules/frameworks.md`
+origin/main:reference/framework-governed-vocabulary.md:8:`@.claude/rules/glossary.md`). NOT the definitions (the `/glossary` skill
+origin/main:reference/framework-governed-vocabulary.md:30:- **Always in context** → `@.claude/rules/glossary.md` lists every
+origin/main:reference/framework-governed-vocabulary.md:58:| rule | Claude Code rule file (`.md` in `.claude/rules/` or `~/.claude/rules/`) |
+origin/main:reference/framework-governed-vocabulary.md:69:| project rule | `.claude/rules/*.md` |
+origin/main:reference/framework-governed-vocabulary.md:70:| user rule | `~/.claude/rules/*.md` |
+origin/main:reference/framework-governed-vocabulary.md:81:  review (protected file per `@.claude/rules/sources-of-truth.md`),
+origin/main:reference/framework-governed-vocabulary.md:95:- `@.claude/rules/glossary.md` (word list, always in context)
+origin/main:reference/framework-hook-rollout.md:7:`@.claude/rules/hook-rollout.md`). **Audience**: Agents building new
+origin/main:reference/framework-hook-rollout.md:29:- Enforcement state table in `@.claude/rules/hook-rollout.md` tracks
+origin/main:reference/framework-hook-rollout.md:36:- `@.claude/rules/hook-rollout.md` (operational rule + state table)
+origin/main:reference/framework-incident-governance.md:8:`@.claude/rules/incident-governance.md`). NOT the incident data itself
+origin/main:reference/framework-incident-governance.md:37:- Incident schema defined in `@.claude/rules/incident-governance.md` —
+origin/main:reference/framework-incident-governance.md:44:- `@.claude/rules/incident-governance.md` (operational rule)
+origin/main:reference/framework-intent-documentation.md:8:the protection rule (see `@.claude/rules/sources-of-truth.md`).
+origin/main:reference/framework-intent-documentation.md:46:- Intent protection in `@.claude/rules/sources-of-truth.md` gates
+origin/main:reference/framework-intent-documentation.md:57:- `@.claude/rules/sources-of-truth.md` (protection gate)
+origin/main:reference/framework-managed-file-deployment.md:8:`@.claude/rules/managed-file-deployment.md`). **Audience**: Agents
+origin/main:reference/framework-managed-file-deployment.md:43:- `@.claude/rules/managed-file-deployment.md` (deployment type rule)
+origin/main:reference/framework-managed-file-deployment.md:45:- `@.claude/rules/interactive-menus.md` (menu patterns)
+origin/main:reference/framework-managed-file-deployment.md:46:- `@.claude/rules/config-file-safety.md` (JSON write safety)
+origin/main:reference/framework-provenance.md:11:principle (future `.claude/rules/provenance.md`). **Audience**: Agents
+origin/main:reference/framework-provenance.md:210:- Future: `.claude/rules/provenance.md` (governance rule -- always in
+origin/main:reference/framework-source-of-truth.md:7:`@.claude/rules/sources-of-truth.md`). **Audience**: Agents
+origin/main:reference/framework-source-of-truth.md:36:- `@.claude/rules/sources-of-truth.md` (operational rule)
+origin/main:reference/framework-three-layer-governance.md:52:- `@.claude/rules/hook-rollout.md` governs how detection hooks
+origin/main:reference/framework-three-layer-governance.md:70:**Rule** (`.claude/rules/<name>.md`) — always in context, states
+origin/main:reference/framework-three-layer-governance.md:92:- Rule: `.claude/rules/<registry-name>.md`
+origin/main:reference/framework-three-layer-governance.md:119:The registry list is maintained in `@.claude/rules/frameworks.md`.
+origin/main:reference/framework-three-layer-governance.md:165:- `@.claude/rules/*.md` (prevention layer)
+origin/main:reference/framework-tool-lifecycle.md:6:why. NOT the evaluation requirements (`@.claude/rules/tool-evaluation.md`).
+origin/main:reference/framework-tool-lifecycle.md:7:NOT the operational checklist (`@.claude/rules/tool-lifecycle.md`).
+origin/main:reference/framework-tool-lifecycle.md:35:  in `@.claude/rules/tool-evaluation.md`
+origin/main:reference/framework-tool-lifecycle.md:43:- Onboarding checklist in `@.claude/rules/tool-lifecycle.md`
+origin/main:reference/framework-tool-lifecycle.md:44:- Evaluation principles in `@.claude/rules/tool-evaluation.md`
+origin/main:reference/framework-tool-lifecycle.md:53:- `@.claude/rules/tool-lifecycle.md` (operational rule + checklist)
+origin/main:reference/framework-tool-lifecycle.md:54:- `@.claude/rules/tool-evaluation.md` (evaluation principles)
+origin/main:reference/framework-tool-lifecycle.md:66:- Governed data access: `@.claude/rules/governed-data-access.md`
+origin/main:reference/framework-tool-ops.md:8:the governance principle (`.claude/rules/tool-ops.md`). **Audience**:
+origin/main:reference/framework-tool-ops.md:60:- `.claude/rules/tool-ops.md` (governance rule — always in context)
+origin/main:reference/harness.md:30:- Project (`.claude/rules/`, `.claude/skills/`, `.claude/commands/`,
+origin/main:reference/harness.md:32:- User (`~/.claude/rules/`, `~/.claude/skills/`, `~/.claude/hooks/`,
+origin/main:reference/harness.md:46:  (`@.claude/rules/git-safety.md`)
+origin/main:reference/harness.md:57:`@.claude/rules/tool-lifecycle.md` for the onboarding process.
+origin/main:reference/harness.md:67:`@.claude/rules/frameworks.md` for the rule.
+origin/main:reference/harness.md:118:| `rules/` | `shared/rules/`, `.claude/rules/`, `<dotprofile>/claude/rules/` | flat (top-level `*.md`) | file name |
+origin/main:reference/harness.md:154:  tool's own location (`~/.claude/rules/`), which the fan-out in
+origin/main:reference/harness.md:164:  its repo's protected-files table (`@.claude/rules/sources-of-truth.md`)
+origin/main:reference/harness.md:174:- Framework rule: `@.claude/rules/frameworks.md`
+origin/main:reference/incident-020-process-discipline.md:25:- `@.claude/rules/incident-governance.md` — tracks defects, not
+origin/main:reference/incident-020-process-discipline.md:28:- `@.claude/rules/plan-execution.md` — covers code batch mechanics
+origin/main:reference/incident-020-process-discipline.md:59:Create a user-level rule (`~/.claude/rules/process-discipline.md`)
+origin/main:reference/incident-020-process-discipline.md:73:Alternative: extend `@.claude/rules/incident-governance.md` with a
+origin/main:reference/logging.md:7:`@.claude/rules/script-standards.md` + `@reference/script-standards-detail.md`,
+origin/main:reference/logging.md:38:deploy-state, proposed telemetry — see `@.claude/rules/aitools-workspace.md`),
+origin/main:reference/logging.md:115:- Per-script helper API + levels: `@.claude/rules/script-standards.md`
+origin/main:reference/logging.md:117:- User-scoped namespace (`~/.aitools/`): `@.claude/rules/aitools-workspace.md`
+origin/main:reference/logging.md:118:- Hook observe-mode logs: `@.claude/rules/hook-rollout.md`
+origin/main:reference/managed-file-deployment.md:23:`@.claude/rules/agentic-standards.md` "Managed-file review choices and
+origin/main:reference/managed-file-deployment.md:78:Target model, approved 2026-10-21 (`.claude/rules/agentic-standards.md`
+origin/main:reference/managed-file-deployment.md:242:  (`@.claude/rules/interactive-menus.md` "Return value contract"):
+origin/main:reference/managed-file-deployment.md:266:  `.claude/rules/sources-of-truth.md` table) is allowed; the library writes
+origin/main:reference/managed-file-deployment.md:277:`@.claude/rules/agentic-standards.md` "Managed-file review choices and merge".
+origin/main:reference/managed-file-deployment.md:304:`@.claude/rules/managed-file-deployment.md` for the concise rule.
+origin/main:reference/managed-file-deployment.md:308:**Files**: CLAUDE.md, `~/.claude/rules/*.md`, skill `SKILL.md` files.
+origin/main:reference/managed-file-deployment.md:389:| User rules | `<userRepoPath>/claude/rules/*.md` | (none — no rules deployed) |
+origin/main:reference/managed-file-deployment.md:412:dispatch rules in `@.claude/rules/cross-platform.md` prevent this.
+origin/main:reference/managed-file-deployment.md:414:them through the environment API (`@.claude/rules/cross-platform.md`
+origin/main:reference/managed-file-deployment.md:522:(`@.claude/rules/config-file-safety.md`) with no review menu and no adopt.
+origin/main:reference/managed-file-deployment.md:601:**Prompt structure** (RCFT pattern per `@.claude/rules/agentic-standards.md`):
+origin/main:reference/managed-file-deployment.md:635:`@.claude/rules/script-standards.md` "Agentic invocation logging".
+origin/main:reference/managed-file-deployment.md:638:See `@.claude/rules/agentic-standards.md` for the full prompt design,
+origin/main:reference/managed-file-deployment.md:656:  `@.claude/rules/config-file-safety.md`)
+origin/main:reference/path-targeted-hooks-analysis.md:50:Pattern: Edit|Write on reference/**/*.md, plans/**/*.md, .claude/rules/**/*.md
+origin/main:reference/plan-execution-detail.md:3:Companion to `.claude/rules/plan-execution.md`. Defines the sub-agent execution
+origin/main:reference/post-push-checklist.md:28:redirect-and-check pattern from `.claude/rules/smoke-test-pattern.md` —
+origin/main:reference/post-push-checklist.md:67:files -- see `.claude/rules/cross-platform.md` Pre-validation convention for the
+origin/main:reference/post-push-checklist.md:91:Every file in the `.claude/rules/sources-of-truth.md` protected table exists on
+origin/main:reference/post-push-checklist.md:92:disk. Every file matching the glob patterns (`.claude/rules/*.md`,
+origin/main:reference/pre-commit-checklist.md:17:- PS1: See `.claude/rules/cross-platform.md` Pre-validation convention for the full ParseFile command. Note: `$e` must be declared before `[ref]$e` -- undeclared variables cause `[ref]` to error.
+origin/main:reference/pre-commit-checklist.md:79:`.claude/rules/deploy-paths.md` "Scripts with deploy templates" for the full list.
+origin/main:reference/script-standards-detail.md:3:Comprehensive reference for `.claude/rules/script-standards.md`.
+origin/main:reference/script-standards-detail.md:307:| `"n/a (<environment>)"` | Step does not apply in this environment (tool platform state `n/a`) | `write_environment_skip` / `Write-EnvironmentSkip`, category OK (`.claude/rules/cross-platform.md` "Environment branches") |
+origin/main:reference/script-standards-detail.md:881:handler. See `.claude/rules/script-standards.md` block order sections.
+origin/main:reference/tool-evaluation-criteria.md:168:Create `scripts/setup-<tool>.sh` + `.ps1` following the conventions in `.claude/rules/script-standards.md`. Install commands come from the tool registry entry (not memory). Include cleanup of non-preferred install methods.
+origin/main:reference/tool-evaluation-playbook.md:4:and build prerequisites. Referenced by `.claude/rules/tool-lifecycle.md`.
+origin/main:reference/tool-evaluation-playbook.md:94:`.claude/rules/script-standards.md`.
+origin/main:reference/tool-evaluation-playbook.md:199:- **Install command verification gate** (`.claude/rules/tool-lifecycle.md`) --
+origin/main:reference/tool-evaluation-playbook.md:203:- **BuildPrereqs entries** (`.claude/rules/script-standards.md`) -- install fields
+origin/main:reference/tool-ops-claude-code.md:38:| 1 | Windows shell hardcoded to Git Bash (CLAUDE_CODE_SHELL broken) | 2.1.51 | 2.1.74 (2026-03-13) | "Windows Shell Limitations" section below, `.claude/rules/cross-platform.md`, `CLAUDE.md` (Windows dispatch) | [#7490](https://github.com/anthropics/claude-code/issues/7490), [#25558](https://github.com/anthropics/claude-code/issues/25558), [#5049](https://github.com/anthropics/claude-code/issues/5049), [#16225](https://github.com/anthropics/claude-code/issues/16225), [#20453](https://github.com/anthropics/claude-code/issues/20453) |
+origin/main:reference/tool-ops-claude-code.md:45:| 3 | Chrome DevTools MCP `--isolated` flag | Personal preference for concurrent sessions, not tied to CC versions | `scripts/setup-user-mcp.sh/.ps1`, `.claude/rules/post-push.md` |
+origin/main:reference/tool-ops-claude-code.md:61:| 26 | Sub-agent Markdown file-name block: Write refuses a sub-agent write whose basename matches `^(REPORT\|SUMMARY\|FINDINGS\|ANALYSIS).*\.md$` (case-insensitive) | 2.1.289 | 2.1.289 (2026-10-05) | "Sub-agent Markdown File-Name Block" section below, dotprofile `claude/rules/delegation.md` (D-DEL1), `shared/skills/delegate/SKILL.md`, `shared/hooks/delegation-duty-guard.sh`, `shared/claude-shared.md` + dotprofile `claude/CLAUDE.md` (Delegation Duty) | -- (not in the official docs) |
+origin/main:reference/tool-ops-claude-code.md:68:| 10 | Write tool produces CRLF on macOS | 2.1.51 | 2.1.51 | `.claude/rules/pre-commit.md`, auto-memory `MEMORY.md` | -- |
+origin/main:reference/tool-ops-claude-code.md:72:| 18 | `@file` references resolved in CLAUDE.md but NOT in `.claude/rules/*.md` | 2.1.63 | 2.1.63 (2026-03-01) | `shared/claude-shared.md` (Knowledge Management), dotprofile `claude/CLAUDE.md` | -- |
+origin/main:reference/tool-ops-claude-code.md:90:| F1 | [#29423](https://github.com/anthropics/claude-code/issues/29423) | Task subagents do not load project CLAUDE.md or .claude/rules/ | 2026-02-27 | Open (duplicate bot challenged, differentiation posted 2026-02-28) | Item #5 |
+origin/main:reference/tool-ops-claude-code.md:481:- Cross-platform rules: `.claude/rules/cross-platform.md`
+origin/main:reference/tool-ops-google-chrome.md:67:`@.claude/rules/cross-platform.md` "Environment branches").
+origin/main:reference/tool-ops-google-chrome.md:226:- Evaluation principles: `@.claude/rules/tool-evaluation.md`
+origin/main:reference/tool-ops-google-chrome.md:227:- Lifecycle and onboarding: `@.claude/rules/tool-lifecycle.md`
+origin/main:reference/tool-ops-google-chrome.md:228:- Web sources rule (chrome-devtools for docs): `@.claude/rules/web-sources.md`
+origin/main:reference/tool-registry.md:166:`@.claude/rules/config-file-safety.md`.
+origin/main:reference/tool-registry.md:194:row is chosen by `AITOOLS_ENVIRONMENT` (`.claude/rules/cross-platform.md` "Environment
+origin/main:reference/tool-support-decision-tree.md:23:(`@.claude/rules/tool-lifecycle.md`, `/tool-adopt`). NOT how a method is chosen
+origin/main:reference/tool-support-decision-tree.md:24:(`/tool-eval`, `@.claude/rules/tool-evaluation.md`). NOT registry data
+origin/main:reference/tool-support-decision-tree.md:25:(`/tool-registry`). NOT managed-file menus (`@.claude/rules/interactive-menus.md`).
+origin/main:reference/tool-support-decision-tree.md:134:| T2 | Resolve the command (`hash -r` + `command -v` / `Refresh-Path` + `Get-Command -CommandType Application`). When the tool's `resolveBy` is `knownPaths` (section 6), resolution is the first verified known path that exists instead of PATH. Probe order: the preferred method first; then every method whose detection uses a package-database probe (`brew-*`, `dpkg`, `winget`, `choco`, `scoop`, `pkgutil`, `uv-tool`, `cargo-crate`, `npm-global`); then path-only methods; registry order within each group. First match wins; no match = `unknown`. On Windows (PowerShell) the PATH searched by T2, T7 and RP is the persistent Machine PATH then User PATH, each entry environment-expanded, not the inherited process PATH: a PS1 setup script launched from Git Bash `aitools` inherits Git's `usr\bin` ahead of the managed directories, and `Refresh-Path` only adds entries, so the process PATH would give SHADOWED under one entry point and OK under the other (S3-GateFix-B GB-04; UNVERIFIED, read not run). `Get-Command` takes the first result (`Select-Object -First 1`) | D-TS3; review D-04; `@.claude/rules/cross-platform.md` "Windows: managed bash" |
+origin/main:reference/tool-support-decision-tree.md:136:| P | `kind` `system` / `bundled` are not installable: absent → PREREQ `not provided by <platform or environment>`. Otherwise the method's manager is on PATH and `check_build_prereqs` / `Check-BuildPrereqs` passes for source builds. No fallback to another method (T-Q4). The same checks run before R1 (node RQ) and before a T4 update that builds from source: a failure there is REPLACE-FAIL `(prereq missing)` with the PREREQ ACTION (the old copy is kept), or for T4 a failed update (warn, continue to T7) | `@.claude/rules/script-standards.md` "Build prerequisite validation" |
+origin/main:reference/tool-support-decision-tree.md:269:| `resolveBy` | `path` (default) or `knownPaths`. `knownPaths` = T2 and T7 resolve the command from the first verified `knownPaths.<platform>` entry that exists, never from PATH, and SHADOWED does not apply; for tools whose PATH name is taken by another product (Git Bash on Windows, where `bash` resolves to WSL — `@.claude/rules/cross-platform.md` "Windows: managed bash"). May be keyed per platform: `{ "windows": "knownPaths" }` |
+origin/main:reference/tool-support-decision-tree.md:283:| `knownPaths.<platform>[]` (shape changed) | `{ "path": "<tokens allowed>", "verified": "YYYY-MM-DD (vX.Y.Z)" }`; `verified` records empirical path verification per `@.claude/rules/script-standards.md` "KnownPaths empirical verification" (not the governed deployment outcome "verified"); string entries are read as unverified and ignored by T3. `/tool-adopt` migrates the three existing shapes |
+origin/main:reference/tool-support-decision-tree.md:332:(1) MDM deploy scripts must be self-contained (`@.claude/rules/deploy-paths.md`);
+origin/main:reference/tool-support-decision-tree.md:675:Smoke test pattern (`@.claude/rules/smoke-test-pattern.md`), package-manager
+origin/main:reference/tool-support-decision-tree.md:742:- Lifecycle rule and update policy: `@.claude/rules/tool-lifecycle.md`
+origin/main:reference/tool-support-decision-tree.md:746:- Menus, console I/O, parity: `@.claude/rules/interactive-menus.md`
+origin/main:reference/tool-support-decision-tree.md:747:- Environment API: `@.claude/rules/cross-platform.md` "Environment branches"
+origin/main:reference/user-repo.md:18:│   ├── rules/             # User-level Claude Code rules (deployed to ~/.claude/rules/)
+origin/main:reference/user-repo.md:183:Setup scripts deploy user-level Claude Code rules from `<userRepoPath>/claude/rules/` to `~/.claude/rules/`.
+origin/main:reference/user-repo.md:187:- **Source**: `<userRepoPath>/claude/rules/*.md`
+origin/main:reference/user-repo.md:188:- **Target**: `~/.claude/rules/*.md`
+origin/main:reference/user-repo.md:193:**Scope guidance**: user-level rules should be universal conventions that apply across all projects. Project-specific rules belong in `.claude/rules/` within the project repo.
+origin/main:scripts/check-pre-commit.ps1:326:# Scope: .claude/rules/*.md, .cursor/rules/*.mdc and CLAUDE.md (the @-referenced
+origin/main:scripts/check-pre-commit.ps1:329:# See .claude/rules/governed-data-access.md for the principle
+origin/main:scripts/check-pre-commit.sh:337:# Scope: .claude/rules/*.md, .cursor/rules/*.mdc and CLAUDE.md (the @-referenced
+origin/main:scripts/check-pre-commit.sh:340:# See .claude/rules/governed-data-access.md for the principle
+origin/main:scripts/check-pre-commit.sh:343:hits=$(grep -rnE '@?(reference|registries)/[a-z0-9-]*\.json' .claude/rules/ .cursor/rules/ CLAUDE.md \
+origin/main:shared/claude-shared.md:97:  - `autoMemory: false` -- auto memory disabled. Durable knowledge belongs in git-tracked files: `CLAUDE.md`, `.claude/rules/`, or project docs.
+origin/main:shared/claude-shared.md:133:Applies on every platform and in every environment, to every delegate (sub-agent, parallel or background session, cloud agent). Before writing a delegation prompt, invoke the `/delegate` skill. Every delegation prompt carries seven elements: identity, rules, skills, operational learning, the `WRITE_BLOCKED` signal, access (explicit paths), and the name prefix -- **the delegate writes every `*.md` file with its name as a prefix**, e.g. `S2-report.md` (decision D-DEL1, 2026-10-05). The prefix avoids Claude Code's block on sub-agent writes named `REPORT*.md`, `SUMMARY*.md`, `FINDINGS*.md` or `ANALYSIS*.md`, and the file name records which delegate produced it. Verify a delegate's output before relying on it. Rule: `~/.claude/rules/delegation.md`.
+origin/main:shared/rules/hook-lifecycle.md:7:  - .claude/rules/hook-rollout.md
+origin/main:shared/rules/hook-lifecycle.md:20:observe-then-enforce rollout of a check (aitools `.claude/rules/hook-rollout.md`).
+origin/main:shared/rules/hook-lifecycle.md:22:`reference/managed-file-deployment.md`, `.claude/rules/interactive-menus.md`).
+origin/main:shared/rules/hook-lifecycle.md:23:NOT hook portability (aitools `.claude/rules/cross-platform.md` "Hook
+origin/main:shared/rules/hook-lifecycle.md:64:  `.claude/rules/deploy-paths.md`). Change it in all of them together.
+origin/main:shared/rules/hook-lifecycle.md:96:  overwrite (aitools `.claude/rules/interactive-menus.md`).
+origin/main:shared/rules/hook-lifecycle.md:113:  `.claude/rules/hook-rollout.md`.
+origin/main:shared/rules/hook-lifecycle.md:121:  merged change to the machine (aitools `.claude/rules/deploy-paths.md` step 2,
+origin/main:shared/rules/hook-lifecycle.md:122:  `.claude/rules/tool-lifecycle.md` "Rebuild + propagate"); those run against
+origin/main:shared/rules/hook-lifecycle.md:127:- Rollout of a check: aitools `.claude/rules/hook-rollout.md`
+origin/main:shared/rules/hook-lifecycle.md:129:  `.claude/rules/managed-file-deployment.md`,
+origin/main:shared/rules/hook-lifecycle.md:131:- Duplicated setup logic: aitools `.claude/rules/deploy-paths.md`
+origin/main:shared/rules/hook-lifecycle.md:132:- Menus and non-interactive fallback: aitools `.claude/rules/interactive-menus.md`
+origin/main:shared/rules/hook-lifecycle.md:133:- Hook portability: aitools `.claude/rules/cross-platform.md`
+origin/main:shared/rules/scratch.md:11:(`/harvest` skill; aitools `.claude/rules/artifact-harvesting.md`). NOT the
+origin/main:shared/rules/scratch.md:73:- Hook rollout states: aitools `.claude/rules/hook-rollout.md`
+origin/main:shared/rules/scratch.md:74:- Workspace namespaces: aitools `.claude/rules/aitools-workspace.md`
+origin/main:shared/skills/aitool-continue/SKILL.md:105:2. Check for `.claude/rules/` (project rules)
+origin/main:shared/skills/aitool-continue/SKILL.md:267:4. **User rules**: `claude/rules/` -- additional behavioral rules.
+origin/main:shared/skills/aitool-continue/SKILL.md:384:- `.claude/rules/` for behavioral rules
+origin/main:shared/skills/aitool-continue/SKILL.md:415:- `.claude/rules/` for project rules
+origin/main:shared/skills/aitool-eval/SKILL.md:600:- `.claude/rules/tool-evaluation.md` (governance principles)
+origin/main:shared/skills/aitool-eval/SKILL.md:601:- `.claude/rules/tool-lifecycle.md` (lifecycle gates)
+origin/main:shared/skills/aitool-eval/SKILL.md:609:- Tool lifecycle: `.claude/rules/tool-lifecycle.md` (aitools repo)
+origin/main:shared/skills/aitool-ops/SKILL.md:193:| 18 | `@file` references resolved in CLAUDE.md but NOT in `.claude/rules/*.md` | 2.1.63 | 2.1.63 |
+origin/main:shared/skills/aitool-ops/SKILL.md:359:- Tool-ops governance rule: `.claude/rules/tool-ops.md` (aitools repo)
+origin/main:shared/skills/delegate/SKILL.md:69:   - Project scope: `<repo>/CLAUDE.md` and every `<repo>/.claude/rules/*.md`
+origin/main:shared/skills/delegate/SKILL.md:70:   - User scope: `~/.claude/CLAUDE.md` and every `~/.claude/rules/*.md`
+origin/main:shared/skills/delegate/SKILL.md:152:- Project: <repo>/CLAUDE.md, <each <repo>/.claude/rules/*.md, absolute>
+origin/main:shared/skills/delegate/SKILL.md:153:- User: <~/.claude/CLAUDE.md, each ~/.claude/rules/*.md, absolute>
+origin/main:shared/skills/delegate/SKILL.md:292:- Governing rule: `~/.claude/rules/delegation.md` (source: dotprofile
+origin/main:shared/skills/delegate/SKILL.md:293:  `claude/rules/delegation.md`)
+origin/main:shared/skills/intent-audit/SKILL.md:132:2. `.claude/rules/tool-ops.md` **Intent** — approved 2026-03-15
+origin/main:shared/skills/intent-audit/SKILL.md:133:3. `.claude/rules/governed-data-access.md` **Intent** — approved 2026-03-14
+origin/main:shared/skills/intent-audit/SKILL.md:206:- Protection rule: `@.claude/rules/sources-of-truth.md`
+origin/main:shared/skills/intent-writing/SKILL.md:19:by the intent protection gate in `@.claude/rules/sources-of-truth.md`.
+origin/main:shared/skills/intent-writing/SKILL.md:136:- Rule intents: check `**Intent**:` blocks in `.claude/rules/`
+origin/main:shared/skills/intent-writing/SKILL.md:217:**Markdown rules** (`.claude/rules/*.md`):
+origin/main:shared/skills/intent-writing/SKILL.md:247:- Protection rule: `@.claude/rules/sources-of-truth.md`
+origin/main:shared/skills/planning/SKILL.md:103:- Project rules (`.claude/rules/*.md`)
+origin/main:shared/skills/scratch/SKILL.md:203:  in the aitools repo; deployed to `~/.claude/rules/` once
+origin/main:shared/skills/tool-adopt/SKILL.md:78:| 4 Setup scripts | `.claude/rules/script-standards.md` and `.claude/rules/tool-lifecycle.md` ("Install cleanup", "PATH refresh after install") | The tree reference "Setup script shape after migration" |
+origin/main:shared/skills/tool-adopt/SKILL.md:86:1. `.claude/rules/tool-lifecycle.md` — gates, onboarding checklist, update policy
+origin/main:shared/skills/tool-adopt/SKILL.md:87:2. `.claude/rules/tool-evaluation.md` — evaluation principles
+origin/main:shared/skills/tool-adopt/SKILL.md:91:6. `.claude/rules/script-standards.md`, `.claude/rules/cross-platform.md`,
+origin/main:shared/skills/tool-adopt/SKILL.md:92:   `.claude/rules/interactive-menus.md` — when you touch scripts
+origin/main:shared/skills/tool-adopt/SKILL.md:133:- Today: follow `.claude/rules/script-standards.md` block order, logging,
+origin/main:shared/skills/tool-adopt/SKILL.md:136:  non-preferred sources (`.claude/rules/tool-lifecycle.md` "Install
+origin/main:shared/skills/tool-adopt/SKILL.md:147:- Plans touching 3+ code files follow `.claude/rules/plan-execution.md`
+origin/main:shared/skills/tool-adopt/SKILL.md:174:  (`.claude/rules/smoke-test-pattern.md`: log to file, check exit code).
+origin/main:shared/skills/tool-adopt/SKILL.md:187:  tree), draft the `.claude/rules/tool-lifecycle.md` edit and present it —
+origin/main:shared/skills/tool-adopt/SKILL.md:210:- Lifecycle rule: `.claude/rules/tool-lifecycle.md`
+origin/main:shared/skills/tool-adopt/SKILL.md:213:- Evaluation: `/tool-eval`, `.claude/rules/tool-evaluation.md`
+=== shared/rules
+origin/main:.claude/rules/aitools-workspace.md:52:| `rules/` | Rules from `shared/rules/`, `.claude/rules/` and the dotprofile `claude/rules/`, one flat directory — deployed by `deploy-harness`; copied to each tool's rules location by `setup-user-claude` / `setup-user-cursor` |
+origin/main:.claude/rules/hook-rollout.md:110:retirement) is governed by the user-level rule `@shared/rules/hook-lifecycle.md`
+origin/main:.claude/rules/hook-rollout.md:112:`shared/rules/` exists).
+origin/main:.cursor/rules/hook-rollout.mdc:32:Hook lifecycle beyond rollout (source, deploy, adopt, retire): user-level rule `shared/rules/hook-lifecycle.md` (not yet deployed).
+origin/main:reference/harness.md:118:| `rules/` | `shared/rules/`, `.claude/rules/`, `<dotprofile>/claude/rules/` | flat (top-level `*.md`) | file name |
+origin/main:scripts/check-pre-push.ps1:58:# shared/rules/scratch.md is not flagged (2026-10-21; keep in sync with .sh).
+origin/main:scripts/check-pre-push.sh:57:# shared/rules/scratch.md is not flagged (2026-10-21; keep in sync with .ps1).
+origin/main:shared/rules/hook-lifecycle.md:8:  - shared/rules/hook-lifecycle.md
+origin/main:shared/skills/scratch/SKILL.md:202:- Governing rule: user rule `scratch.md` (source `shared/rules/scratch.md`
+origin/main:shared/skills/scratch/SKILL.md:204:  deploy-harness ships a path for `shared/rules/`)
+=== \.cursor/rules
+origin/main:.claude/rules/config-file-safety.md:10:  - .cursor/rules/**
+origin/main:.claude/rules/deploy-paths.md:10:  - .cursor/rules/**
+origin/main:.claude/rules/documentation-standards.md:10:  - .cursor/rules/**
+origin/main:.claude/rules/governed-data-access.md:29:- `.cursor/rules/*.mdc` — reference the skill instead
+origin/main:.claude/rules/hook-rollout.md:10:  - .cursor/rules/**
+origin/main:.claude/rules/managed-file-deployment.md:102:`@.cursor/rules/managed-file-deployment.mdc`, and
+origin/main:.claude/rules/sources-of-truth.md:18:| `.cursor/rules/*.mdc` | Cursor behavioral rules | Any |
+origin/main:.claude/rules/tool-lifecycle.md:10:  - .cursor/rules/**
+origin/main:.claude/rules/web-sources.md:10:  - .cursor/rules/**
+origin/main:.cursor/rules/config-file-safety.mdc:3:globs: "scripts/**,deploy/**,shared/**,reference/**,plans/**,rfcs/**,.claude/rules/**,.cursor/rules/**,CLAUDE.md,RELEASE_NOTES.md,ROADMAP.md,README.md"
+origin/main:.cursor/rules/cursor-rule-parity.mdc:9:When modifying rules in `.claude/rules/*.md`, also update the corresponding `.cursor/rules/*.mdc` file (and vice versa). See the Rule Correspondence table in `reference/cursor-practices.md`.
+origin/main:.cursor/rules/deploy-paths.mdc:3:globs: "scripts/**,deploy/**,shared/**,reference/**,plans/**,rfcs/**,.claude/rules/**,.cursor/rules/**,CLAUDE.md,RELEASE_NOTES.md,ROADMAP.md,README.md"
+origin/main:.cursor/rules/documentation-standards.mdc:3:globs: "scripts/**,deploy/**,shared/**,reference/**,plans/**,rfcs/**,.claude/rules/**,.cursor/rules/**,CLAUDE.md,RELEASE_NOTES.md,ROADMAP.md,README.md"
+origin/main:.cursor/rules/documentation-standards.mdc:31:- **Rules** (`.claude/rules/` / `.cursor/rules/`) = concise behavioral directives, ~40-100 lines
+origin/main:.cursor/rules/documentation-standards.mdc:36:- **Cursor parity** — `.cursor/rules/*.mdc` mirrors `.claude/rules/*.md`. See `@.claude/rules/cursor-rule-parity.md`
+origin/main:.cursor/rules/hook-rollout.mdc:3:globs: "scripts/**,deploy/**,shared/**,reference/**,plans/**,rfcs/**,.claude/rules/**,.cursor/rules/**,CLAUDE.md,RELEASE_NOTES.md,ROADMAP.md,README.md"
+origin/main:.cursor/rules/relay-outbound.mdc:9:**`.aitools/channel/relay.md`** lives **inside this repo**. It is **not** a managed user file like `~/.claude/CLAUDE.md` (those use `[REVIEW]` / `deploy_managed_file` during deploy — see `@.cursor/rules/managed-file-deployment.mdc`).
+origin/main:.cursor/rules/sources-of-truth.mdc:22:| `.cursor/rules/*.mdc` | Cursor behavioral rules (this file included) | Any |
+origin/main:.cursor/rules/tool-lifecycle.mdc:3:globs: "scripts/**,deploy/**,shared/**,reference/**,plans/**,rfcs/**,.claude/rules/**,.cursor/rules/**,CLAUDE.md,RELEASE_NOTES.md,ROADMAP.md,README.md"
+origin/main:.cursor/rules/tool-lifecycle.mdc:59:- `.claude/rules/tool-lifecycle.md` + `.cursor/rules/tool-lifecycle.mdc` — update this checklist if pattern changes
+origin/main:.cursor/rules/web-sources.mdc:3:globs: "scripts/**,deploy/**,shared/**,reference/**,plans/**,rfcs/**,.claude/rules/**,.cursor/rules/**,CLAUDE.md,RELEASE_NOTES.md,ROADMAP.md,README.md"
+origin/main:README.md:13:| `.cursor/rules/` | Cursor project rules (.mdc format) |
+origin/main:reference/cursor-practices.md:13:| Project rules | `.cursor/rules/*.mdc` | Yes (via git) |
+origin/main:reference/cursor-practices.md:15:| Team rules | `.cursor/rules/*.mdc` (shared) | Yes (via git) |
+origin/main:reference/cursor-practices.md:129:| Project rules | `.cursor/rules/*.mdc` | Cursor-specific rules |
+origin/main:reference/cursor-practices.md:139:The automated clipboard-copy workflow (via `setup-user-cursor`) has been removed as of v3.11. Cursor project rules (`.cursor/rules/*.mdc`) are auto-loaded and cover the same ground. If manual User Rules are still needed, copy from `shared/cursor-rules/user-rules.md` directly.
+origin/main:reference/cursor-practices.md:145:**Important:** The **Cursor Agent CLI** (`agent`) does NOT read `~/.claude/CLAUDE.md`. It uses Cursor User Rules (SQLite) + project `CLAUDE.md` + `.cursor/rules/` only. See "Rule Sources" below.
+origin/main:reference/cursor-practices.md:157:| `.claude/rules/cross-platform.md` | `.cursor/rules/cross-platform.mdc` | Condensed |
+origin/main:reference/cursor-practices.md:158:| `.claude/rules/sources-of-truth.md` | `.cursor/rules/sources-of-truth.mdc` | Near-identical |
+origin/main:reference/cursor-practices.md:159:| `.claude/rules/tool-lifecycle.md` | `.cursor/rules/tool-lifecycle.mdc` | Near-identical |
+origin/main:reference/cursor-practices.md:160:| `.claude/rules/cursor-rule-parity.md` | `.cursor/rules/cursor-rule-parity.mdc` | Identical |
+origin/main:reference/cursor-practices.md:161:| (CLAUDE.md Code Conventions) | `.cursor/rules/general.mdc` | Python style folded in |
+origin/main:reference/cursor-practices.md:162:| `.claude/rules/script-standards.md` | `.cursor/rules/script-standards.mdc` | Condensed; absorbed error-handling + surface-silent-failures |
+origin/main:reference/cursor-practices.md:163:| `.claude/rules/documentation-standards.md` | `.cursor/rules/documentation-standards.mdc` | Condensed |
+origin/main:reference/cursor-practices.md:164:| `.claude/rules/web-sources.md` | `.cursor/rules/web-sources.mdc` | Identical |
+origin/main:reference/cursor-practices.md:165:| `.claude/rules/config-file-safety.md` | `.cursor/rules/config-file-safety.mdc` | Condensed |
+origin/main:reference/cursor-practices.md:166:| `.claude/rules/deploy-paths.md` | `.cursor/rules/deploy-paths.mdc` | Near-identical |
+origin/main:reference/cursor-practices.md:167:| `.claude/rules/hook-rollout.md` | `.cursor/rules/hook-rollout.mdc` | Condensed |
+origin/main:reference/cursor-practices.md:168:| `.claude/rules/plan-execution.md` | `.cursor/rules/plan-execution.mdc` | Condensed |
+origin/main:reference/cursor-practices.md:170:| `.claude/rules/interactive-menus.md` | `.cursor/rules/interactive-menus.mdc` | Condensed |
+origin/main:reference/cursor-practices.md:171:| `.claude/rules/relay-outbound.md` | `.cursor/rules/relay-outbound.mdc` | Near-identical |
+origin/main:reference/cursor-practices.md:175:When adding or modifying a rule in either `.claude/rules/` or `.cursor/rules/`:
+origin/main:reference/post-push-checklist.md:93:`.cursor/rules/*.mdc`, `plans/*.md`) is covered by the table.
+origin/main:scripts/check-pre-commit.ps1:326:# Scope: .claude/rules/*.md, .cursor/rules/*.mdc and CLAUDE.md (the @-referenced
+origin/main:scripts/check-pre-commit.ps1:331:$cursorRulesDir = Join-Path $script:RepoRoot ".cursor/rules"
+origin/main:scripts/check-pre-commit.sh:337:# Scope: .claude/rules/*.md, .cursor/rules/*.mdc and CLAUDE.md (the @-referenced
+origin/main:scripts/check-pre-commit.sh:343:hits=$(grep -rnE '@?(reference|registries)/[a-z0-9-]*\.json' .claude/rules/ .cursor/rules/ CLAUDE.md \
+origin/main:shared/cursor-rules/default.mdc:2:description: Default Cursor rules template -- copy to new projects as .cursor/rules/general.mdc
+=== steps 3\+10
+origin/main:.claude/rules/deploy-paths.md:39:3. Verify the dotprofile `deploy/` includes the change (the shared `aitools/deploy/` is frozen, so pre-commit deploy-drift steps 3+10 no longer apply to it)
+origin/main:.cursor/rules/deploy-paths.mdc:24:3. Verify via pre-commit steps 3+10
+=== step 13
+origin/main:.claude/rules/deploy-paths.md:78:5. Pre-commit step 13 will warn if step 2 was missed
+origin/main:.cursor/rules/deploy-paths.mdc:41:When changing logic in any of these: fix `scripts/`, fix `build-deploy.sh`, run build, verify `deploy/` output. Pre-commit step 13 warns if `build-deploy.sh` wasn't touched.
+origin/main:reference/claude-code-effectiveness.md:127:  - Added pre-commit step 13: heuristic warning when `scripts/setup-user-*` changes without `build-deploy.sh`
+origin/main:reference/claude-code-effectiveness.md:131:- **Verification**: `build-deploy.sh` now fails loudly if sentinels are missing. Pre-commit step 13 remains as a secondary safety net.
+=== aitools/deploy
+origin/main:.claude/rules/deploy-paths.md:25:   deployment. The shared `aitools/deploy/` is frozen (no longer regenerated).
+origin/main:.claude/rules/deploy-paths.md:39:3. Verify the dotprofile `deploy/` includes the change (the shared `aitools/deploy/` is frozen, so pre-commit deploy-drift steps 3+10 no longer apply to it)
+origin/main:README.md:23:`shared/` is the single source of truth for shared framework content. `scripts/build-deploy.sh` reads from `shared/` **and the user's dotprofile repo**, then embeds the content into self-contained, personalized deploy scripts written to **`<userRepoPath>/deploy/`** (the user's `aitools-<user>` repo) — not the shared `aitools/deploy/`, which is now frozen/historical. Deploy scripts need only bash or PowerShell on the target machine — no repo clone required. The workflow is: edit `shared/` (framework) or your dotprofile repo (personal config) → run `build-deploy.sh` → commit the generated `deploy/` **in your dotprofile repo** → deploy to endpoints.
+origin/main:scripts/check-pre-push.ps1:113:# Generated deploy scripts live in the dotprofile repo (deploy-paths.md; aitools/deploy/
+origin/main:scripts/check-pre-push.sh:110:# Generated deploy scripts live in the dotprofile repo (deploy-paths.md; aitools/deploy/
+=== frozen
+origin/main:.claude/rules/deploy-paths.md:25:   deployment. The shared `aitools/deploy/` is frozen (no longer regenerated).
+origin/main:.claude/rules/deploy-paths.md:39:3. Verify the dotprofile `deploy/` includes the change (the shared `aitools/deploy/` is frozen, so pre-commit deploy-drift steps 3+10 no longer apply to it)
+origin/main:README.md:11:| `deploy/` | Frozen historical shared baseline. `build-deploy.sh` now generates each user's MDM-ready scripts into their **dotprofile repo** (`aitools-<user>/deploy/`), not here |
+origin/main:README.md:23:`shared/` is the single source of truth for shared framework content. `scripts/build-deploy.sh` reads from `shared/` **and the user's dotprofile repo**, then embeds the content into self-contained, personalized deploy scripts written to **`<userRepoPath>/deploy/`** (the user's `aitools-<user>` repo) — not the shared `aitools/deploy/`, which is now frozen/historical. Deploy scripts need only bash or PowerShell on the target machine — no repo clone required. The workflow is: edit `shared/` (framework) or your dotprofile repo (personal config) → run `build-deploy.sh` → commit the generated `deploy/` **in your dotprofile repo** → deploy to endpoints.
+origin/main:scripts/check-pre-push.ps1:114:# is frozen). On every push (commander decision 2026-10-26: step 7 always runs; it used
+origin/main:scripts/check-pre-push.sh:111:# is frozen). On every push (commander decision 2026-10-26: step 7 always runs; it used
+=== MDM path
+origin/main:.claude/rules/deploy-paths.md:23:2. **MDM path** (`<userRepoPath>/deploy/setup-*.sh/.ps1`): self-contained, personalized,
+origin/main:.cursor/rules/deploy-paths.mdc:12:2. **MDM path** (`deploy/setup-*.sh/.ps1`): self-contained with build-time embedded content. Generated by `build-deploy.sh`.
+origin/main:reference/managed-file-deployment.md:452:`shared/hooks/` is not present (MDM path without the aitools repo), the
+origin/main:reference/tool-evaluation-criteria.md:171:Add step to `aitools-install.sh/.ps1`. Add copy-as-is block to `build-deploy.sh`. Promote from "Under Evaluation" to full entry if not already done. If the tool is a CLI tool, add it to the Managed CLI Tools table in `shared/claude-shared.md` (and mirror to user repo template). Run `build-deploy.sh` to propagate to MDM path.
+origin/main:reference/tool-support-decision-tree.md:328:standalone, dev and MDM paths alike; nobody edits a spec file.
+origin/main:shared/rules/hook-lifecycle.md:16:and MDM paths, the single target of an `[a]dopt`, the place of user-created
+origin/main:shared/rules/hook-lifecycle.md:75:- The MDM path has no adopt: it has no aitools clone.
+origin/main:shared/rules/hook-lifecycle.md:107:3. The MDM path removes the registration (the merge block is extracted) but not
+=== build-deploy
+origin/main:.claude/rules/cross-platform.md:14:On Windows, the **harness-managed** shell for bash scripts (`build-deploy.sh`,
+origin/main:.claude/rules/cross-platform.md:103:| Build scripts | `build-deploy.sh` | See cross-language exceptions |
+origin/main:.claude/rules/cross-platform.md:128:| `build-deploy.sh` | Platform-independent output, result committed | 2026-02-17 | `& $bashExe "$path/build-deploy.sh"` |
+origin/main:.claude/rules/deploy-paths.md:24:   generated by `build-deploy.sh` into the user's dotprofile repo. Used for endpoint
+origin/main:.claude/rules/deploy-paths.md:32:3. Run `bash scripts/build-deploy.sh` to regenerate `<userRepoPath>/deploy/` (your dotprofile repo)
+origin/main:.claude/rules/deploy-paths.md:38:2. Run `bash scripts/build-deploy.sh` to regenerate the `<userRepoPath>/deploy/` counterpart
+origin/main:.claude/rules/deploy-paths.md:50:`build-deploy.sh`. Fixing a bug in one requires manually porting to the other.
+origin/main:.claude/rules/deploy-paths.md:51:Running `build-deploy.sh` does NOT auto-fix stale template logic — it faithfully
+origin/main:.claude/rules/deploy-paths.md:74:2. **Find and fix the same logic in `build-deploy.sh`** (search for the function
+origin/main:.claude/rules/deploy-paths.md:76:3. Run `bash scripts/build-deploy.sh`
+origin/main:.claude/rules/deploy-paths.md:81:The structural fix is to refactor `build-deploy.sh` to extract setup logic from
+origin/main:.claude/rules/git-safety.md:5:`deploy/` is 100% generated by `build-deploy.sh`. The `aitools` entry points
+origin/main:.claude/rules/git-safety.md:9:After running `build-deploy.sh`, `deploy/` will have uncommitted diffs (newly
+origin/main:.claude/rules/script-standards.md:126:`build-deploy.sh` defines its own `blog`/`blog_ok`/`blog_error` (doesn't source aitools-lib.sh).
+origin/main:.claude/rules/tool-lifecycle.md:47:- Build pipeline entries in `build-deploy.sh`
+origin/main:.claude/rules/tool-lifecycle.md:90:- `@scripts/build-deploy.sh` — add copy block pair
+origin/main:.claude/rules/tool-lifecycle.md:102:1. `bash scripts/build-deploy.sh` — verify count increments by 2
+origin/main:.claude/skills/tool-registry/SKILL.md:54:   - **Build pipeline** — copy block in `build-deploy.sh`
+origin/main:.cursor/rules/deploy-paths.mdc:12:2. **MDM path** (`deploy/setup-*.sh/.ps1`): self-contained with build-time embedded content. Generated by `build-deploy.sh`.
+origin/main:.cursor/rules/deploy-paths.mdc:18:3. Run `build-deploy.sh` to regenerate `deploy/`
+origin/main:.cursor/rules/deploy-paths.mdc:23:2. Run `build-deploy.sh` to regenerate `deploy/`
+origin/main:.cursor/rules/deploy-paths.mdc:32:Four script pairs have **duplicated setup logic** between `scripts/` and `build-deploy.sh`. Running `build-deploy.sh` does NOT auto-fix stale template logic.
+origin/main:.cursor/rules/deploy-paths.mdc:41:When changing logic in any of these: fix `scripts/`, fix `build-deploy.sh`, run build, verify `deploy/` output. Pre-commit step 13 warns if `build-deploy.sh` wasn't touched.
+origin/main:.cursor/rules/git-safety.mdc:6:  - scripts/build-deploy.sh
+origin/main:.cursor/rules/git-safety.mdc:14:`deploy/` is 100% generated by `build-deploy.sh`. The `aitools` entry points
+origin/main:.cursor/rules/git-safety.mdc:18:After running `build-deploy.sh`, `deploy/` will have uncommitted diffs (newly
+origin/main:.cursor/rules/script-standards.mdc:73:`build-deploy.sh` defines own `blog`/`blog_ok`/`blog_error` (doesn't source aitools-lib.sh). Must follow `[timestamp] [script] [level] message` format. Documented in `reference/script-standards-detail.md` logging overrides.
+origin/main:.cursor/rules/tool-lifecycle.mdc:51:- `scripts/build-deploy.sh` — add numbered copy-as-is block pair after last tool block
+origin/main:.cursor/rules/tool-lifecycle.mdc:67:1. `bash scripts/build-deploy.sh` — verify count increments by 2
+origin/main:CLAUDE.md:40:- `scripts/` — the `aitools` CLI, `hh`, setup scripts, checks, `build-deploy.sh`.
+origin/main:CLAUDE.md:42:- `deploy/` — generated by `build-deploy.sh`; ephemeral, reset on each `aitools` run.
+origin/main:README.md:10:| `scripts/` | `aitools` CLI, installers, setup scripts, `build-deploy.sh` pipeline |
+origin/main:README.md:11:| `deploy/` | Frozen historical shared baseline. `build-deploy.sh` now generates each user's MDM-ready scripts into their **dotprofile repo** (`aitools-<user>/deploy/`), not here |
+origin/main:README.md:23:`shared/` is the single source of truth for shared framework content. `scripts/build-deploy.sh` reads from `shared/` **and the user's dotprofile repo**, then embeds the content into self-contained, personalized deploy scripts written to **`<userRepoPath>/deploy/`** (the user's `aitools-<user>` repo) — not the shared `aitools/deploy/`, which is now frozen/historical. Deploy scripts need only bash or PowerShell on the target machine — no repo clone required. The workflow is: edit `shared/` (framework) or your dotprofile repo (personal config) → run `build-deploy.sh` → commit the generated `deploy/` **in your dotprofile repo** → deploy to endpoints.
+origin/main:README.md:97:`hh` runs **`git pull --ff-only`** first (skip with **`--no-pull`** or **`HH_NO_PULL=1`** if offline), then **git status** for harness paths (relay, `shared/`, `deploy/`, `build-deploy.sh`, `.cursorignore`), then **`aitools`** (unless `-n` / `--status-only`). Use it when you want one habit instead of remembering pull vs relay vs shared vs deploy.
+origin/main:README.md:101:- **Optional pre-commit** (regenerates `deploy/` when `shared/` or `scripts/build-deploy.sh` is staged): from repo root run `bash scripts/init-hh-hooks.sh` once, or `git config core.hooksPath scripts/githooks`.
+origin/main:README.md:110:bash scripts/build-deploy.sh        # writes the personalized deploy/ into your dotprofile repo
+origin/main:README.md:118:bash scripts/build-deploy.sh             # bash-only build step (uses Git Bash on Windows); writes deploy/ into your dotprofile repo
+origin/main:reference/claude-code-effectiveness.md:14:| Architectural thinking | Designs systems, not just fixes. CLAUDE.md hierarchy, build-deploy pipeline, MCP enable/disable architecture. |
+origin/main:reference/claude-code-effectiveness.md:124:- **Observed**: When fixing bugs in `scripts/setup-user-hooks.sh/.ps1` (ConvertPSObjectToHashtable array fix, mergeHookEntry logic), the corresponding template in `build-deploy.sh` was not updated. User had to remind. This is the 3rd+ occurrence of this pattern.
+origin/main:reference/claude-code-effectiveness.md:125:- **RCA**: Generated deploy scripts (`setup-user-{claude,cursor,mcp,hooks}`) have setup logic hardcoded in `build-deploy.sh` templates, duplicated from `scripts/`. Running `build-deploy.sh` faithfully reproduces stale templates — existing pre-commit checks (step 3+10) catch stale builds but not stale template logic.
+origin/main:reference/claude-code-effectiveness.md:127:  - Added pre-commit step 13: heuristic warning when `scripts/setup-user-*` changes without `build-deploy.sh`
+origin/main:reference/claude-code-effectiveness.md:129:  - **Structural fix (v0.25.1)**: Refactored `build-deploy.sh` to extract setup logic from `scripts/` at build time via sentinel-based Perl extraction (`extract_between()` helper). Eliminated ~507 lines of duplicated template logic. All 4 script pairs (claude, cursor, mcp, hooks) now use single source of truth.
+origin/main:reference/claude-code-effectiveness.md:131:- **Verification**: `build-deploy.sh` now fails loudly if sentinels are missing. Pre-commit step 13 remains as a secondary safety net.
+origin/main:reference/cross-platform-detail.md:71:`.ps1` and `build-deploy.sh` (`deploy-paths.md`). A check that compares each hook's copy with
+origin/main:reference/cross-platform-detail.md:189:# Script-wide (build-deploy.sh)
+origin/main:reference/cross-platform-detail.md:206:**Applied in**: `build-deploy.sh` (`export PERLIO=:perlio` near top).
+origin/main:reference/cursor-practices.md:149:The deploy scripts handle this automatically: `deploy/setup-user-claude.sh/.ps1` have the shared content embedded at build time. Re-run `scripts/build-deploy.sh` after editing the shared file, then re-deploy to propagate changes.
+origin/main:reference/managed-file-deployment.md:5:blocks that `build-deploy.sh` generates).
+origin/main:reference/managed-file-deployment.md:672:| `PERLIO=:perlio` | `build-deploy.sh` | Build-time | Disable Strawberry Perl CRLF text mode; prevents double-CR in `extract_between --crlf` output. No-op for Git's bundled perl. See `@reference/tool-registry.md` "Perl > PERLIO Deployment". |
+origin/main:reference/path-targeted-hooks-analysis.md:35:Checks: pair exists? tool lifecycle phase? wired into aitools-install? build-deploy?
+origin/main:reference/path-targeted-hooks-analysis.md:56:Pattern: Edit|Write on scripts/**/*.sh, scripts/**/*.ps1 (except build-deploy.sh)
+origin/main:reference/path-targeted-hooks-analysis.md:73:| scripts/build-deploy.sh | Missing copy block | "New tools need 2 numbered blocks." |
+origin/main:reference/plan-execution-detail.md:22:| Any change to `scripts/build-deploy.sh` | Yes |
+origin/main:reference/plan-execution-detail.md:96:4. **Build**: `bash scripts/build-deploy.sh` (after lib or setup script changes)
+origin/main:reference/post-push-checklist.md:74:bash scripts/build-deploy.sh
+origin/main:reference/post-push-checklist.md:217:- `scripts/build-deploy.sh`: its hook preflight (required-file check) and both
+origin/main:reference/post-push-checklist.md:224:names it, e.g. `build-deploy: hardcoded hook filename(s) resurfaced [...]`).
+origin/main:reference/pre-commit-checklist.md:22:If any file in `scripts/` or `shared/` was modified, run `bash scripts/build-deploy.sh` and include the regenerated `deploy/` in the commit.
+origin/main:reference/pre-commit-checklist.md:77:`scripts/build-deploy.sh`, this is a **warning** (not a block): the corresponding
+origin/main:reference/pre-commit-checklist.md:78:deploy template in `build-deploy.sh` may need the same fix. See
+origin/main:reference/pre-push-checklist.md:40:Runs on every push (commander decision 2026-10-26; it used to run only when a deploy-relevant source changed). It rebuilds from this branch into a temporary copy of the dotprofile's committed tree, under a temporary HOME, and compares that copy's `deploy/` with the committed one; then it dry-runs the generated resolver consumers. The real dotprofile is never touched. A stale dotprofile `deploy/` is a FAIL: run `bash scripts/build-deploy.sh` and commit `deploy/` in the dotprofile repo. Skipped when `userRepoPath` is not configured; WARN when node (bash) or Git Bash (PowerShell) is missing.
+origin/main:reference/script-standards-detail.md:71:`build-deploy.sh` inlines the content into deploy/ scripts for self-containment.
+origin/main:reference/script-standards-detail.md:163:| `scripts/build-deploy.sh` | `blog`, `blog_ok`, `blog_error` | n/a | Standalone build tool; doesn't source aitools-lib.sh; defines own logging functions |
+origin/main:reference/script-standards-detail.md:1022:7. **Run** `bash scripts/build-deploy.sh` to propagate to deploy scripts
+origin/main:reference/tool-evaluation-criteria.md:171:Add step to `aitools-install.sh/.ps1`. Add copy-as-is block to `build-deploy.sh`. Promote from "Under Evaluation" to full entry if not already done. If the tool is a CLI tool, add it to the Managed CLI Tools table in `shared/claude-shared.md` (and mirror to user repo template). Run `build-deploy.sh` to propagate to MDM path.
+origin/main:reference/tool-ops-claude-code.md:322:  it"), so isolated-`HOME` runs (`build-deploy.sh`, #86) must run from a
+origin/main:reference/tool-ops-claude-code.md:377:- [x] Shared rules in repo (`shared/claude-shared.md`), embedded into deploy scripts by `build-deploy.sh`
+origin/main:reference/tool-ops-google-chrome.md:204:  (unconditional, D-ENV8), `build-deploy.sh` copy block pair, registry entry (`/tool-registry` skill)
+origin/main:reference/tool-registry.md:532:| `build-deploy.sh` | `export PERLIO=:perlio` | Build-time |
+origin/main:reference/tool-registry.md:582:- Used by: PS1 syntax validation in check scripts and build-deploy.sh, all Windows dispatch from bash scripts
+origin/main:reference/tool-support-decision-tree.md:347:`build-deploy.sh`, the installers and the setup scripts read the committed
+origin/main:reference/tool-support-decision-tree.md:355:# build-deploy.sh is deferred, section 7.5).
+origin/main:reference/tool-support-decision-tree.md:510:  `build-deploy.sh` follows mission S3-Nine's work on that file.
+origin/main:reference/user-repo.md:195:**Build-time embedding**: `build-deploy.sh` reads user rules at build time and embeds them in deploy scripts via heredocs. If no rules exist at build time, deploy scripts skip rules deployment.
+origin/main:scripts/check-pre-commit.ps1:112:            & $bashExe "$script:RepoRoot/scripts/build-deploy.sh" 2>$null | Out-Null
+origin/main:scripts/check-pre-commit.ps1:116:            StepFail "3" "Build freshness" "bash not found for build-deploy.sh"
+origin/main:scripts/check-pre-commit.ps1:264:$hasBuildDeploy = $stagedFiles -contains 'scripts/build-deploy.sh'
+origin/main:scripts/check-pre-commit.ps1:267:    StepWarn "13" "Deploy template sync" "scripts/setup-user-* changed without build-deploy.sh -- verify deploy template is up to date"
+origin/main:scripts/check-pre-commit.ps1:269:    StepPass "13" "Deploy template sync" "both scripts/ and build-deploy.sh modified"
+origin/main:scripts/check-pre-commit.sh:113:        bash "$SCRIPT_DIR/build-deploy.sh" >/dev/null 2>&1
+origin/main:scripts/check-pre-commit.sh:269:        scripts/build-deploy.sh)
+origin/main:scripts/check-pre-commit.sh:275:    step_warn "13" "Deploy template sync" "scripts/setup-user-* changed without build-deploy.sh -- verify deploy template is up to date"
+origin/main:scripts/check-pre-commit.sh:277:    step_pass "13" "Deploy template sync" "both scripts/ and build-deploy.sh modified"
+origin/main:scripts/check-pre-push.ps1:120:# build-deploy, so build-deploy stays a pure generator.
+origin/main:scripts/check-pre-push.ps1:121:# The build gets the temp copy through AITOOLS_USER_REPO_PATH (build-deploy's
+origin/main:scripts/check-pre-push.ps1:125:# build-deploy.sh runs under Git Bash (approved cross-language exception); same lookup
+origin/main:scripts/check-pre-push.ps1:182:            $d7Log += & $d7Bash "$script:RepoRoot/scripts/build-deploy.sh" 2>&1 | Out-String
+origin/main:scripts/check-pre-push.ps1:245:        # The copy's committed deploy/ was removed before the build, and build-deploy
+origin/main:scripts/check-pre-push.ps1:248:        StepFail "7" "deploy/ matches source" "build-deploy built nothing into the dotprofile copy -- see deploy.log"
+origin/main:scripts/check-pre-push.ps1:261:            $d7Problems += "dotprofile deploy/ is stale ($($d7Stale -join ' ')) -- run build-deploy.sh and commit in $($script:UserRepoPath)"
+origin/main:scripts/check-pre-push.sh:116:# not on an endpoint (B8a INCIDENT). The smoke run lives here, not in build-deploy, so
+origin/main:scripts/check-pre-push.sh:117:# build-deploy stays a pure generator that never executes what it generates.
+origin/main:scripts/check-pre-push.sh:118:# The build gets the temp copy through AITOOLS_USER_REPO_PATH (build-deploy's
+origin/main:scripts/check-pre-push.sh:144:            HOME="$d7_tmp/home" AITOOLS_USER_REPO_PATH="$d7_tmp/dot" bash "$REPO_ROOT/scripts/build-deploy.sh"
+origin/main:scripts/check-pre-push.sh:152:        # The copy's committed deploy/ was removed before the build, and build-deploy
+origin/main:scripts/check-pre-push.sh:157:        step_fail "7" "deploy/ matches source" "build-deploy built nothing into the dotprofile copy -- see deploy.log"
+origin/main:scripts/check-pre-push.sh:165:            d7_problems="dotprofile deploy/ is stale (${d7_files% }) -- run build-deploy.sh and commit in $USER_REPO_PATH"
+origin/main:shared/rules/hook-lifecycle.md:6:  - scripts/build-deploy.sh
+origin/main:shared/rules/hook-lifecycle.md:28:sections of `scripts/build-deploy.sh`.
+origin/main:shared/rules/hook-lifecycle.md:52:  `build-deploy.sh` generate deployment and registration from the manifest;
+origin/main:shared/rules/hook-lifecycle.md:60:| MDM: `<userRepoPath>/deploy/setup-user-hooks.*` | embedded by `build-deploy.sh` at build time, same order | `~/.claude/hooks/` overwritten, no review |
+origin/main:shared/rules/hook-lifecycle.md:63:  `build-deploy.sh` embed loops (duplicated logic, aitools
+origin/main:shared/rules/hook-lifecycle.md:108:   the file: stale-file cleanup sits in the section `build-deploy.sh` replaces.
+origin/main:shared/rules/hook-lifecycle.md:116:  the adopt path and the EOF path; an isolated-`HOME` `build-deploy.sh` run with
+origin/main:shared/rules/hook-lifecycle.md:119:  never the real one: `build-deploy.sh` deletes and rebuilds the real dotprofile
+origin/main:shared/skills/aitool-eval/SKILL.md:466:   for Strawberry Perl. Added to `build-deploy.sh` (build-time) and
+origin/main:shared/skills/aitool-ops/SKILL.md:52:Future enhancement: `build-deploy.sh` could auto-generate this skill's
+origin/main:shared/skills/delegate/SKILL.md:183:run `<pre-push checks>` (any check that runs build-deploy.sh under an
+origin/main:shared/skills/delegate/SKILL.md:214:  `build-deploy.sh`) from a non-isolated delegate or the delegating agent.
+origin/main:shared/skills/tool-adopt/SKILL.md:153:`scripts/aitools-install.sh/.ps1`; `scripts/build-deploy.sh` copy block; auth
+origin/main:shared/skills/tool-adopt/SKILL.md:166:(`build-deploy.sh` deletes and rebuilds the real dotprofile `deploy/`
+origin/main:shared/skills/tool-adopt/SKILL.md:167:otherwise): `bash scripts/build-deploy.sh` (count grows by 2),
+=== cursor-rule-parity
+origin/main:.claude/skills/audit/tests/expected-behaviors.md:13:- Should detect `@.claude/rules/cursor-rule-parity.md` as broken (deleted in v0.54)
+origin/main:.cursor/rules/documentation-standards.mdc:36:- **Cursor parity** — `.cursor/rules/*.mdc` mirrors `.claude/rules/*.md`. See `@.claude/rules/cursor-rule-parity.md`
+origin/main:reference/cursor-practices.md:160:| `.claude/rules/cursor-rule-parity.md` | `.cursor/rules/cursor-rule-parity.mdc` | Identical |
+=== mirrors
+origin/main:.claude/rules/interactive-menus.md:125:- **Adopt** available for every managed leaf (the settings sync mirrors all
+origin/main:.claude/skills/tool-ops/SKILL.md:51:   (Windows). `aitools` (deploy-harness) mirrors the repo `reference/`
+origin/main:.cursor/rules/documentation-standards.mdc:36:- **Cursor parity** — `.cursor/rules/*.mdc` mirrors `.claude/rules/*.md`. See `@.claude/rules/cursor-rule-parity.md`
+origin/main:reference/framework-three-layer-governance.md:62:pattern that mirrors the governance layers:
+origin/main:reference/user-repo.md:83:- **`overrides`** -- intentional deviations from upstream tool defaults. Informational only -- CLI does not read this yet. Mirrors the `overrides` section of the tool registry (`/tool-registry` skill) in machine-readable form. Future `aitools audit` could validate overrides against live config.
+origin/main:shared/skills/aitool-ops/SKILL.md:64:   (Windows). `aitools` (deploy-harness) mirrors the aitools repo
+origin/main:shared/skills/delegate/SKILL.md:170:A draft that mirrors a repo path keeps the repo file name inside

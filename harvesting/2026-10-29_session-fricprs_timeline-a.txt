@@ -1,0 +1,144 @@
+############################## 71 Path-reference check, stale registry paths, tool-versions.json removal (S2-Layout PR-a)
+[2026-10-22T03:57:58Z] commit: 0db8cc9 Add a path-reference check and repoint stale registry paths
+-
+[2026-10-22T03:58:20Z] commit: 24b56d3 Delete tool-versions.json; post-push reads versions from the tool reg…
+-
+[2026-10-22T03:59:00Z] commit: 01355d5 Deprecate reference/tool-registry.md; point citations at /tool-registry
+-
+[2026-10-22T04:05:51Z] review: ## Independent review: S3-Layout-ReviewA (comment only)
+
+**Verdict: no blockers. 2 MAJOR, 9 MINOR.** The path repoints, the step 11 JSON match and the move of the version data are correct. The two MAJORs should be fixed or explicitly accepted before merge: a dropped check whose stated justification is false, and a checker scope that misses the bug class (#114) that motivated it.
+
+Reviewed: `git diff origin/main..fix/registry-paths` (3 commits, 70 files) in a read-only worktree. All probes ran in a scratch directory, with seeds in a throwaway `git init` repo.
+
+### MAJOR
+
+**M1. The 30-day MCP `lastReviewed` check was removed, but the data it needs is in the registry.**
+- `scripts/check-post-push.sh` step 21 (~:492-500) and `check-post-push.ps1` step 21 (~:556-565) delete the `pinned`/`lastReviewed` branch.
+- `reference/post-push-checklist.md:166-167` says "the registry has no review-date field for MCP servers yet". The PR body follow-up says the same ("`mcpServers` has no review date").
+- That is not the case. `registries/tool-registry.json` `mcpServers` has `lastReviewed` for all four servers: :1003 chrome-devtools-mcp 2026-10-05, :1024 vercel-mcp 2026-03-02, :1046 webflow-mcp 2026-03-02, :1069 datadog-mcp 2026-03-06. It also keeps the `assumptions` arrays and the datadog-mcp "Preview status" note. I compared every `mcpServers` entry against the deleted file.
+- Impact: three of the four servers are over 200 days past review. The old check would WARN on them; now nothing does.
+
+-
+[2026-10-22T04:07:06Z] commit: 63ce030 Keep the MCP review-age check; scan scripts for dead paths
+-
+[2026-10-22T04:10:06Z] MERGED: 
+-
+############################## 73 M3 B1: native profile resolver (aitools-profile.sh/.ps1)
+[2026-10-22T04:04:23Z] commit: c1308f6 Add native profile resolver: scripts/aitools-profile.sh and .ps1 (M3 B1)
+-
+[2026-10-22T04:09:03Z] commit: d977807 CI: end the Windows profile-resolver step with exit 0
+-
+[2026-10-22T04:15:11Z] review: # S3-Profile-Review: PR #73 (native profile resolver), independent review
+
+Verdict: no blockers. Mergeable after the 3 major fixes below (each is a few lines), or with them filed as follow-ups if you prefer to keep B1 moving.
+Counts: 0 blocker, 3 major, 14 minor, plus 3 open questions.
+Tests (local, macOS, bash 5.3 + pwsh 7.6.3): `bash tests/profile/test-profile.sh`: 180 passed, 0 failed. `AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/profile/test-profile.sh --bash-only`: 135 passed, 0 failed.
+CI on head d977807: linux, macos and windows all pass (macOS 180/0 and 135/0, Linux 185/0 with rm-web; the Windows step read MachineGuid `09044d2c-...` and hostname `runnervmgnbhw`, and resolve exited 1).
+Reviewed: c1308f6 (scripts/aitools-profile.sh, scripts/aitools-profile.ps1, tests/profile/test-profile.sh, .github/workflows/check.yml) plus the CI follow-up d977807. I did not change any code.
+
+## Scope and method
+
+- I read both scripts in full, along with the test, the CI diff, the approved draft spec (S4-Review-drafts/reference/user-repo.md, "Profile Schema" and "Resolution"), the JS baseline (S5-Profile-drafts/scripts/aitools-profile.js), the plan's P-Q2, P-Q3, P-Q5 and D-TS13 rows, and the aitools-lib.sh/.ps1 environment and logging code.
+- I ran the probes against both implementations in mktemp HOMEs, with injected ids and hostnames. The scripts are in `.scratch/session-S3PRev/` (probe-lib.sh, probe1-cli.sh, probe2-register.sh, probe3-inproc.ps1, probe4-snapshot.sh, probe5-bash32.s
+-
+[2026-10-22T04:17:08Z] commit: fe0752f Merge origin/main into feature/m3-b1-profile-resolver
+-
+[2026-10-22T04:20:19Z] commit: a278b28 Fix the PR #73 review findings in the native profile resolver
+-
+[2026-10-22T04:20:27Z] comment: Review findings addressed in a278b28: M1, M2, M3 fixed; minors 3, 4, 6-14 fixed; 1, 2, 5 documented in the headers; Q2 header reworded. Q1 (env before --user-repo-path, per the approved spec) and Q3 (corrupt config.json warns and continues) kept as the reviewer suggested. 13 regression assertions added; suite 204/0 (bash 5.3 + pwsh), 152/0 (bash 3.2). Origin/main was merged into this branch (fe0752f) before the fix.
+-
+[2026-10-22T04:24:03Z] MERGED: 
+-
+############################## 74 Move seven governance skills to user level; one-name-one-level check (S2-Layout PR-b)
+[2026-10-22T04:04:22Z] commit: 4aa4728 Move seven governance skills to user level (shared/skills)
+-
+[2026-10-22T04:04:56Z] commit: 1b34195 Add the S2L-Q4 design note: user-level skills in Claude Code web
+-
+[2026-10-22T04:07:24Z] commit: e8b6f99 Merge branch 'fix/registry-paths' into feature/user-level-skills
+-
+[2026-10-22T04:13:25Z] review: ## S3-Layout-ReviewB: independent review of PR #74 (PR-b commits 4aa4728, 1b34195, merge e8b6f99)
+
+**Verdict: COMMENT. No blockers. The move itself is clean.** Fix three MAJOR items before merge, or hand them off explicitly in the PR: the adopt path, write safety in "Where the files live", and the rollout ACTION. The rest is MINOR.
+
+Scope reviewed: `git diff fix/registry-paths...feature/user-level-skills` (26 files). Read against the S2-Layout report §3-5, evidence E6/E7, plan items SD-8-ext, SD-8-reg, S2L-QA, S2L-Q1, S2L-QB, and mission packet §6.
+
+### What I verified independently (macOS; nothing ran against the real HOME)
+
+- **MDM path (V4).** I `git archive`d the branch and the dotprofile HEAD into scratch, wrote a fake `config.json`, and ran `HOME=<iso> bash scripts/build-deploy.sh`: exit 0.
+  - Generated `deploy/setup-user-skills.sh`: passes `bash -n` and `/bin/bash -n` (3.2.57). It has 2 heredoc markers per moved skill.
+  - Generated `.ps1`: one here-string per moved skill. The pwsh parser reports no errors.
+  - None of the 7 SKILL.md files has a line starting with `'@`, `"@` or `__SKILL_`, so the embedding cannot be terminated early.
+  - Running the generated `.sh` under the isolated HOME (`AITOOLS_FORCE=1`): exit 0. All 7 deployed files are `cmp`-identical to `shared/skills/*/SKILL.md`.
+- **Step 21 parity.** I copied the bash block verbatim and ran it under `/bin/bash` 3.2, and the PS1 block verbatim under pwsh 7 with stubbed StepPass/StepFail. Both report PASS on a 
+-
+[2026-10-22T04:14:18Z] commit: ed1b75c Make cross-repo registry access safe; clarify step 21 and shared/README
+-
+[2026-10-22T04:24:16Z] MERGED: 
+-
+############################## 75 Retire the aitool-ops and aitool-eval reference cards (S2-Layout PR-c)
+[2026-10-22T04:09:20Z] commit: 6d3cacf Retire the aitool-ops and aitool-eval reference cards
+-
+[2026-10-22T04:10:08Z] commit: 7b45433 Record mission LAYOUT follow-ups for the owning missions
+-
+[2026-10-22T04:14:36Z] commit: ef7146f Merge branch 'feature/user-level-skills' into refactor/retire-referen…
+-
+[2026-10-22T04:14:42Z] commit: 2375fea Follow-ups: add the SD-2 rule for skills (PR #74 review M1)
+-
+[2026-10-22T04:24:26Z] MERGED: 
+-
+############################## 80 M3 B2: aitools-lib profile and tool-exception wrappers
+[2026-10-22T04:42:46Z] commit: 9462ed0 Installers: Step 5 writes config.json through setup-user-config (M3 B3b)
+-
+[2026-10-22T04:54:01Z] commit: 6210403 Fix the PR #76 review findings in exception-set and derive-config
+-
+[2026-10-22T04:54:22Z] commit: d6819bb Merge remote-tracking branch 'origin/feature/m3-b1b-tool-exceptions' …
+-
+[2026-10-22T04:57:05Z] commit: e6850ad Fix the PR #77 review findings in setup-user-config
+-
+[2026-10-22T04:57:30Z] commit: cc597ec Merge branch 'feature/m3-b3-config-writer' into feature/m3-b3b-instal…
+-
+[2026-10-22T04:59:45Z] commit: 18218ce aitools-lib: dotprofile, machine-profile and tool-exception wrappers …
+-
+[2026-10-22T05:23:08Z] review: ## S3-Profile-Review3: independent review of #80 (comment only)
+
+**Verdict: 1 blocker, 1 major, 4 minors. Not mergeable until B1 is fixed. #82's PowerShell user init depends on that fix.**
+
+Reviewed: commit 18218ce. I read the new lib sections in full in `scripts/aitools-lib.sh/.ps1`, plus `tests/profile/test-lib.sh` and the CI change, against tree section 7 (helpers), section 7.5 and section 8. Every probe ran under a mktemp HOME. The probe scripts are in the m3lib worktree, `.scratch/session-S3PRev3/`.
+
+### Blocker
+**B1. Dot-sourcing aitools-lib.ps1 now wipes a caller's `$UserRepoPath`, so `setup-user-config.ps1 -UserRepoPath` is ignored.**
+- **Cause.** The new section sets `$script:UserRepoPath = ""` at top level. A dot-sourced file runs in the caller's script scope, and PowerShell variable names are case-insensitive.
+- **Where it bites.** `setup-user-config.ps1` declares `[string]$UserRepoPath` (line 36) and dot-sources the lib on line 44. After that the parameter is empty, so `--user-repo-path` never reaches derive-config (line 117).
+- **probe-clobber.ps1:** `before lib: UserRepoPath=[/x/aitools-me]`, then `after lib: UserRepoPath=[]`.
+- **probe-urp.sh:** config.json `userRepoPath` points at an existing old dotprofile, and the caller passes a different one.
+  - bash writes the new path: `dotprofile=.../elsewhere/aitools-newuser via=argument`.
+  - PowerShell keeps the old one: `dotprofile=.../repos/aitools-olduser via=config`.
+- **Impact.** `aitools user init` on Windows 
+-
+[2026-10-22T20:57:48Z] commit: dae07fe Prefix the aitools-lib wrapper results so they cannot clobber callers
+-
+[2026-10-22T21:14:08Z] review: ## S3-M3-LibFix-Review: independent review of PR #80 at dae07fe
+
+> Posted as a comment. GitHub refused `--request-changes`: "Can not request changes on your own pull request" (the reviewer uses the PR author's account). Read this as **request changes**.
+
+**Verdict: changes requested.** 0 blockers, 2 majors, 4 minors, 1 nit.
+
+The Review3 fixes hold. B1 and M1 are fixed in both shells, end to end. m1, m3 and m4 are fixed. The m2 argument path works on macOS for every edge case I tried. All suites pass. Two things still need work:
+- **M1:** the wrappers trust the resolver's exit code even when the resolver printed nothing. A crashed resolver therefore reads as "found" with an empty path, or as "no dotprofile". In the Git Bash → pwsh branch, pwsh's own failures produce exactly those exit codes.
+- **M2:** the renamed result names contradict the approved decision tree (rev 5, PR #78), and the PR offers no protected-file draft for the tree.
+
+Code reviewed: 18218ce + dae07fe. I read them from a `git archive dae07fe` snapshot and ran everything from it under an isolated HOME. The resolver ran only with the `AITOOLS_PROFILE_TEST_*` overrides.
+
+---
+
+### Majors
+
+**M1. Exit codes are trusted without the resolver's tagged output, so a resolver failure reads as success or as shared-only mode.**
+
+The real resolver always emits a `via` tag (`user-repo-path`, `resolve`, `exception-get`) or a `result` tag (`exception-set`) before it exits through `finish`. The wrappers never check that the tag 
+-
+[2026-10-22T21:23:54Z] commit: 28e0f5b Treat a silent resolver exit as an error in the aitools-lib wrappers
+-
+[2026-10-23T00:37:47Z] MERGED: 
+-

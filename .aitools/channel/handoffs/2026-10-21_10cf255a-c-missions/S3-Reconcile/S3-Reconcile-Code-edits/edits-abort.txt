@@ -1,0 +1,186 @@
+@@@FILE pr106/aitools E3a helper deploy_script_abort
+@@@OLD
+deploy_abort() {
+    deploy_aborted=true
+    log "$1: aborted by user at a review menu -- remaining deploy steps not run"
+    write_summary WARN "harness files" "aborted by user"
+}
+@@@NEW
+deploy_abort() {
+    deploy_aborted=true
+    log "$1: aborted by user at a review menu -- remaining deploy steps not run"
+    write_summary WARN "harness files" "aborted by user"
+}
+
+# deploy_script_abort SCRIPT TOOL -- any other deploy script exited 2: the user chose
+# [x]abort at a review menu (D-TS13). That ends only that script; it is a user
+# choice, not a failure, so the row is WARN and the run goes on with the next
+# script. Parity: Invoke-DeployScriptAbort in aitools.ps1.
+deploy_script_abort() {
+    log "$1: aborted by user at a review menu -- the run continues with the next script"
+    write_summary WARN "$2" "aborted by user"
+}
+@@@END
+@@@FILE pr106/aitools E3b Git Bash branch: exit 2 of a non-harness script
+@@@OLD
+                    if [ "$script" = "deploy-harness.ps1" ] && [ "$script_rc" -eq 2 ]; then
+                        deploy_abort "$script"
+                        break
+                    fi
+                    if [ "$script_rc" -ne 0 ]; then
+                        log_error "$script failed (exit $script_rc) -- see $LOG_DISPLAY"
+                        write_summary ERROR "$row_tool" "script failed (exit $script_rc)"
+                        errors=$((errors + 1))
+                    fi
+@@@NEW
+                    if [ "$script" = "deploy-harness.ps1" ] && [ "$script_rc" -eq 2 ]; then
+                        deploy_abort "$script"
+                        break
+                    fi
+                    if [ "$script_rc" -eq 2 ]; then
+                        deploy_script_abort "$script" "$row_tool"
+                    elif [ "$script_rc" -ne 0 ]; then
+                        log_error "$script failed (exit $script_rc) -- see $LOG_DISPLAY"
+                        write_summary ERROR "$row_tool" "script failed (exit $script_rc)"
+                        errors=$((errors + 1))
+                    fi
+@@@END
+@@@FILE pr106/aitools E3c macOS/Linux branch: exit 2 of a non-harness script
+@@@OLD
+                    bash "$script_path" || script_rc=$?
+                    if [ "$script_rc" -ne 0 ]; then
+                        log_error "$script failed (exit $script_rc) -- see $LOG_DISPLAY"
+                        write_summary ERROR "${script%.sh}" "script failed (exit $script_rc)"
+                        errors=$((errors + 1))
+                    fi
+@@@NEW
+                    bash "$script_path" || script_rc=$?
+                    if [ "$script_rc" -eq 2 ]; then
+                        deploy_script_abort "$script" "${script%.sh}"
+                    elif [ "$script_rc" -ne 0 ]; then
+                        log_error "$script failed (exit $script_rc) -- see $LOG_DISPLAY"
+                        write_summary ERROR "${script%.sh}" "script failed (exit $script_rc)"
+                        errors=$((errors + 1))
+                    fi
+@@@END
+@@@FILE pr106/aitools.ps1 E4a helper Invoke-DeployScriptAbort
+@@@OLD
+    $script:deployAborted = $true
+    Log "${AbortedScript}: aborted by user at a review menu -- remaining deploy steps not run"
+    Write-Summary "WARN" "harness files" "aborted by user"
+}
+@@@NEW
+    $script:deployAborted = $true
+    Log "${AbortedScript}: aborted by user at a review menu -- remaining deploy steps not run"
+    Write-Summary "WARN" "harness files" "aborted by user"
+}
+
+# Invoke-DeployScriptAbort SCRIPT TOOL -- any other deploy script exited 2: the user
+# chose [x]abort at a review menu (D-TS13). That ends only that script; it is a user
+# choice, not a failure, so the row is WARN and the run goes on with the next
+# script. Parity: deploy_script_abort in scripts/aitools.
+function Invoke-DeployScriptAbort([string]$AbortedScript, [string]$Tool) {
+    Log "${AbortedScript}: aborted by user at a review menu -- the run continues with the next script"
+    Write-Summary "WARN" $Tool "aborted by user"
+}
+@@@END
+@@@FILE pr106/aitools.ps1 E4b Deploy-Configs: exit 2 of a non-harness script
+@@@OLD
+            $scriptRc = $LASTEXITCODE
+            if ($scriptRc -and $scriptRc -ne 0) {
+                LogError "$script failed (exit $scriptRc) -- see $logFile"
+@@@NEW
+            $scriptRc = $LASTEXITCODE
+            if ($scriptRc -eq 2) {
+                Invoke-DeployScriptAbort $script ($script -replace '\.ps1$', '')
+            } elseif ($scriptRc -and $scriptRc -ne 0) {
+                LogError "$script failed (exit $scriptRc) -- see $logFile"
+@@@END
+@@@FILE pr106/aitools-install.sh E5 validate_and_run: exit 2 = WARN aborted by user
+@@@OLD
+    local script_rc=0
+    bash "$script" || script_rc=$?
+    if [ "$script_rc" -ne 0 ]; then
+        log_error "$name failed (exit $script_rc)"
+        write_summary ERROR "${name%.sh}" "script failed (exit $script_rc)"
+    fi
+}
+@@@NEW
+    local script_rc=0
+    bash "$script" || script_rc=$?
+    if [ "$script_rc" -eq 2 ]; then
+        # [x]abort at a review menu (D-TS13; bash -n above rules out a syntax error):
+        # ends this script only, a user choice -- WARN, the install continues. Only
+        # deploy-harness's exit 2 stops the install (run_harness_step).
+        log "$name: aborted by user at a review menu -- the install continues"
+        write_summary WARN "${name%.sh}" "aborted by user"
+    elif [ "$script_rc" -ne 0 ]; then
+        log_error "$name failed (exit $script_rc)"
+        write_summary ERROR "${name%.sh}" "script failed (exit $script_rc)"
+    fi
+}
+@@@END
+@@@FILE pr106/aitools-install.ps1 E6 Invoke-ValidatedScript: exit 2 = WARN aborted by user
+@@@OLD
+    $scriptRc = $LASTEXITCODE
+    if ($scriptRc -and $scriptRc -ne 0) {
+        LogError "$name failed (exit $scriptRc)"
+        Write-Summary "ERROR" ($name -replace '\.ps1$', '') "script failed (exit $scriptRc)"
+    }
+}
+@@@NEW
+    $scriptRc = $LASTEXITCODE
+    if ($scriptRc -eq 2) {
+        # [x]abort at a review menu (D-TS13; ParseFile above rules out a parse error):
+        # ends this script only, a user choice -- WARN, the install continues. Only
+        # deploy-harness's exit 2 stops the install (Invoke-HarnessStep).
+        Log "${name}: aborted by user at a review menu -- the install continues"
+        Write-Summary "WARN" ($name -replace '\.ps1$', '') "aborted by user"
+    } elseif ($scriptRc -and $scriptRc -ne 0) {
+        LogError "$name failed (exit $scriptRc)"
+        Write-Summary "ERROR" ($name -replace '\.ps1$', '') "script failed (exit $scriptRc)"
+    }
+}
+@@@END
+@@@FILE pr106/aitools-install.ps1 E6b Invoke-HarnessStep: no summary tool to the relay (sh parity, no duplicate rows)
+@@@OLD
+    $harnessRc = Invoke-ChildRelayed "Step 8b: deploy-harness.ps1" $Harness @{} "harness files"
+@@@NEW
+    # No summary tool: this function writes the one "harness files" row (parity:
+    # run_harness_step passes none; with one, a throw gets two ERROR rows)
+    $harnessRc = Invoke-ChildRelayed "Step 8b: deploy-harness.ps1" $Harness @{}
+@@@END
+@@@FILE pr106/aitools.ps1 E4c Deploy-Configs: no summary tool to the relay (sh parity, no duplicate rows)
+@@@OLD
+                $harnessRc = Invoke-ChildRelayed $script $scriptPath @{} "harness files"
+@@@NEW
+                # No summary tool: this block writes the one "harness files" row (parity:
+                # deploy_configs passes none; with one, a throw gets two ERROR rows)
+                $harnessRc = Invoke-ChildRelayed $script $scriptPath @{}
+@@@END
+@@@FILE main/aitools-lib.sh E1 JSON-field menu abort text
+@@@OLD
+    printf '  [x]abort    : stop the run\n' > /dev/tty
+@@@NEW
+    printf '  [x]abort    : stop this script (exit 2)\n' > /dev/tty
+@@@END
+@@@FILE main/aitools-lib.sh E1b JSON-field menu comment
+@@@OLD
+# abort (x) is global and exits the run (code 2).
+@@@NEW
+# abort (x) is global: it ends this script (exit 2, D-TS13); the runner decides
+# whether the run goes on (only deploy-harness's abort stops it).
+@@@END
+@@@FILE main/aitools-lib.ps1 E2 JSON-field menu abort text
+@@@OLD
+    [Console]::WriteLine("  [x]abort    : stop the run")
+@@@NEW
+    [Console]::WriteLine("  [x]abort    : stop this script (exit 2)")
+@@@END
+@@@FILE main/aitools-lib.ps1 E2b JSON-field menu comment
+@@@OLD
+# setting/rule. overwrite/adopt/skip are per-leaf; abort (x) exits (code 2).
+@@@NEW
+# setting/rule. overwrite/adopt/skip are per-leaf; abort (x) ends this script
+# (exit 2, D-TS13); the runner decides whether the run goes on.
+@@@END

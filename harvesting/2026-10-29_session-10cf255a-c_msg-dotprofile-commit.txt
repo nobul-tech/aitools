@@ -1,0 +1,8 @@
+Commit regenerated deploy/ and profile.json from recent aitools runs
+
+deploy/: build-deploy output from the merged aitools PRs (managed-file
+model, harness, M3 resolver). profile.json: the effortLevel change
+adopted by an earlier settings sync. Commander-directed commit,
+2026-10-22.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

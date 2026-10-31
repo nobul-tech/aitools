@@ -1,0 +1,20 @@
+Use -LiteralPath in Backup-File and Backup-Dir
+
+With -Path, a file name containing [ ] is a wildcard: Test-Path returned
+false, so the file got no backup while Backup-File reported success
+($script:BackupFileOk stayed true). Deploy-ManagedFile relies on it.
+Backup-File now uses -LiteralPath for Test-Path, Copy-Item and Remove-Item,
+and prunes by a literal name prefix instead of a wildcard. Backup-Dir had
+the same pattern in Test-Path, Get-ChildItem and Copy-Item.
+
+Found by S3-H2-Manifest and S3-H2-Cursor (HARNESS-2 hand-back Q4).
+Commander order 2026-10-26: fix directly on main, no PR. The bash
+backup_file is unaffected (quoted paths, no globbing).
+
+Verification (tested: macOS, pwsh 7): scratch test with rule[1].md and
+rules[x]/ -- 3 backups pruned to MaxBackups=2, dir backup created, PASS;
+tests/managed-files/test-managed-files.ps1 39 passed, 0 failed.
+check-pre-commit: step 6 FAIL is the known pre-existing one.
+Not run: Windows.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

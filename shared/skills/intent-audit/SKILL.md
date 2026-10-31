@@ -132,7 +132,7 @@ approved intents exist — e.g. `CLAUDE.md` (2026-10-26 rewrite) and
 rank):
 
 1. `registries/tool-ops.json` meta.intent — approved 2026-03-15
-2. `.claude/rules/tool-ops.md` **Intent** — approved 2026-03-15
+2. `shared/rules/tool-ops.md` **Intent** — approved 2026-03-15
 3. `.claude/rules/governed-data-access.md` **Intent** — approved 2026-03-14
 4. `registries/incidents.json` meta.intent — approved 2026-03-15
 5. `registries/glossary.json` meta.intent — approved 2026-03-15

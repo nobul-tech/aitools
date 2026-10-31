@@ -1,0 +1,29 @@
+Switch protected files to review-after; retire the mission packet
+
+.claude/rules/sources-of-truth.md (commander order 2026-10-28: "apply
+review after to sources-of-truth.md"; decision D-DEL5, 2026-10-26):
+- "The rule" is now write the version, commit it reviewably (every
+  protected edit old -> new under "Review after" in the PR body, or in the
+  commit body for a channel-exception commit), present the diff. The old
+  draft / present / wait-for-approval steps are replaced.
+- Outward-facing or destructive actions (merge, tag, delete, publish)
+  still need the commander's explicit order.
+- Intent statements follow the same review-after rule.
+Review after (old -> new): the intro sentence ("require user review before
+being written" -> reviewed by the user, after the write); "The rule" steps
+1-3 (Draft / Present / Wait for approval -> Write the version / Commit it
+reviewably / Present the diff) plus the outward-facing paragraph; "Intent
+statements" ("Draft the intent, present for user review, write only after
+approval" -> same review-after rule); "Why this matters" last sentence.
+
+SC-mission-packet.md: retired (commander 2026-10-28). Its rev 2 content
+lives in the /delegate skill v2.0; the file now points there.
+
+reference/tool-ops-claude-code.md: records the 2026-10-27 probe --
+isolation "remote" fell back to a local worktree (no cloud environment,
+CLAUDE_CODE_REMOTE unset), Agent tool present at levels 1-2 and absent at
+level 3, and delegates' Agent tool has no run_in_background parameter.
+
+Docs only. Committed directly to main on the commander's order.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

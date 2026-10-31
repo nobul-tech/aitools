@@ -55,7 +55,7 @@ When a tool is approved (Phase 2 gate passed), complete ALL of these steps in or
 - Registry entry via the `/tool-registry` skill — full entry with all lifecycle fields
 - `shared/claude-shared.md` — add row to Managed CLI Tools table (shared template + MDM source)
 - `<userRepoPath>/claude/CLAUDE.md` (dotprofile repo) — same row addition; commit + push dotprofile repo separately
-- `.claude/rules/tool-lifecycle.md` + `.cursor/rules/tool-lifecycle.mdc` — update this checklist if pattern changes
+- `shared/rules/tool-lifecycle.md` + `.cursor/rules/tool-lifecycle.mdc` — update this checklist if pattern changes
 - `scripts/check-post-push.ps1` — add entry to `$toolCmds` dictionary
   (command name + version flag, e.g., `'perl' = @('perl', '--version')`)
 - `scripts/check-post-push.sh` — add entry to `TOOL_CMDS` dictionary

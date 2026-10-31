@@ -1,0 +1,11 @@
+Add handoff 10cf255a-c and its relay entry
+
+Handoff v1.1 (S3-Handoff2, verified by S3-Handoff2-V, 12 amendments
+applied), the S2 session-state audit, the verification report and the
+relay entry. Docs only.
+
+Committed directly to main, replacing PR #107: commander order
+2026-10-26, handoffs and the relay go straight to main with no
+worktree or PR (channel exception).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

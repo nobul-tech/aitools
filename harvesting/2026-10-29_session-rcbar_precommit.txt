@@ -1,0 +1,33 @@
+
+=== PRE-COMMIT CHECKLIST ===
+
+  1. Git identity                               [FAIL] expected Jose <jose@nobul.tech>, got nobul-jose <jose@nobul.tech>
+  2. Script syntax (.sh)                        [SKIP] no scripts staged
+  2. Script syntax (.ps1)                       [SKIP] no scripts staged
+  3. Build freshness                            [WARN] scripts/ or shared/ modified -- run with --fix
+  4. Line endings (.sh)                         [SKIP] no .sh staged
+  5. Platform note                              [SKIP] no scripts staged
+  6. Executable bit (.sh)                       [FAIL] 1 file(s) missing +x
+  7. Install cmd consistency                    [SKIP] no setup-* staged
+  8. Config merge safety                        [SKIP] no setup scripts staged
+  9. Release notes                              [SKIP] docs-only changes
+ 10. Deploy drift                               [PASS]
+ 11. User repo changes                          [WARN] uncommitted changes in /Users/new-jose/repos/aitools-nobul-jose
+ 12. Template sync                              [SKIP] shared/claude-shared.md not modified
+ 13. Deploy template sync                       [SKIP] no setup-user-* scripts modified
+ 14. Build prereq framework                     [PASS]
+
+--- Step 15: Deprecated summary terms ---
+ 15. Deprecated summary terms                   [PASS] no deprecated terms found
+
+--- Step 16: Capability bypass audit ---
+ 16. Capability bypass audit                    [PASS] no direct governed JSON references in rules/CLAUDE.md
+--- Step 17: Hook portability audit ---
+ 17. Hook portability audit                     [PASS] all hooks portable
+ 18. Script syntax (.py)                        [SKIP] no .py staged
+ 19. Harness DB schema file                     [PASS] reference/harness-db-schema.sql exists
+
+--- Step 20: Path references ---
+ 20. Path references                            [PASS] every cited repo path exists
+
+=== SUMMARY: 7 PASS, 10 SKIP, 2 WARN, 2 FAIL ===

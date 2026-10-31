@@ -17,7 +17,7 @@ flag assessment, and research documentation. Produces evaluation
 research and a recommendation; hands off to `/tool-registry` for
 registry writes. **Scope**: The evaluation process only. NOT registry
 CRUD (use `/tool-registry`). NOT the evaluation principles themselves
-(`@.claude/rules/tool-evaluation.md`). **Audience**: Any agent
+(`@shared/rules/tool-evaluation.md`). **Audience**: Any agent
 evaluating a new tool, questioning an existing install method, or
 updating health flags.
 
@@ -50,7 +50,7 @@ to the aitools clone:
 
 ## Running an evaluation
 
-1. **Load principles** — read `@.claude/rules/tool-evaluation.md`
+1. **Load principles** — read `@shared/rules/tool-evaluation.md`
 2. **Discovery** — follow `@reference/tool-evaluation-playbook.md`:
    - Read official docs (prefer chrome-devtools skill for accuracy)
    - Catalog all available install methods per platform
@@ -158,7 +158,7 @@ made and is reusable for future evaluations.
 
 ## Cross-References
 
-- Evaluation principles: `@.claude/rules/tool-evaluation.md`
+- Evaluation principles: `@shared/rules/tool-evaluation.md`
 - Discovery playbook: `@reference/tool-evaluation-playbook.md` (also:
   sandbox walkthrough, special contexts for system tool upgrades and
   capabilities of existing tools, the Perl exemplar, and the platform
@@ -167,5 +167,5 @@ made and is reusable for future evaluations.
   blocks, yellow flags and their disclosure format, green signals,
   quick checks by tool type, platform states)
 - Registry writes: `/tool-registry` skill
-- Lifecycle gates: `@.claude/rules/tool-lifecycle.md`
+- Lifecycle gates: `@shared/rules/tool-lifecycle.md`
 - Evaluation research: `reference/evaluations/`

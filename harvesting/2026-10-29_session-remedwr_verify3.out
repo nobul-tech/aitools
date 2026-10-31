@@ -1,0 +1,78 @@
+
+=== BD profile snapshot 265-277
+
+=== BD skills heredoc
+1
+
+=== BD inline_lib_bash def
+124:inline_lib_bash() {
+151:inline_lib_ps1() {
+
+=== shared template nobul-jose 29-30
+29:- Tool governance lives in [`nobul-jose/aitools`](https://github.com/nobul-jose/aitools) -- pre-approved tools, evaluation framework, and lifecycle phases documented there
+30:- When working outside aitools: open an issue on `nobul-jose/aitools` via `gh` (see [RFC 0001](https://github.com/nobul-jose/aitools/blob/main/rfcs/RFC-0001-workspace-tool-requests.md))
+
+=== aitool-continue Jose 120
+120:- **Part 1: Commander Profile** -- who Jose is, what he values,
+
+=== hooks adopt target 166
+        hook_dst="$HOME/.claude/hooks/$hook_name"
+
+        deploy_managed_file "$(cat "$hook_src")" "$hook_dst" "claude hooks" "$hook_name" "$hook_src"
+
+        case "$MANAGED_FILE_RESULT" in
+
+=== hooks home path 269-277
+276:    cmd: 'bash \"' + path.join(home, '.claude', 'hooks', r.file) + '\"'
+
+=== README line 1
+
+=== logging.md system phase
+1
+
+=== tool-ops-cc proxy-injected
+0
+
+=== ssd blog_warn
+163:| `scripts/build-deploy.sh` | `blog`, `blog_ok`, `blog_error` | n/a | Standalone build tool; doesn't source aitools-lib.sh; defines own logging functions |
+
+=== cross-platform.md lines
+     200 /Users/new-jose/repos/aitools/.claude/rules/cross-platform.md
+
+=== mdc drift on main
+24:3. Verify via pre-commit steps 3+10
+32:Four script pairs have **duplicated setup logic** between `scripts/` and `build-deploy.sh`. Running `build-deploy.sh` does NOT auto-fix stale template logic.
+
+=== pr99 mdc drift added
+76:+- `.mdc` line 30, "3. Verify via pre-commit steps 3+10". The `.md` says those steps "no longer apply" to the frozen `aitools/deploy/`.
+372:+  - N2: lines in the `.mdc` that were already stale before this PR (for example "Verify via pre-commit steps 3+10").
+386:+- INCIDENT (low): `.cursor/rules/deploy-paths.mdc` already lagged its `.md` twin before this PR. Its old text said "Four script pairs" and listed `setup-user-mcp` as duplicated. The parity rule (`.cursor/rules/cursor-rule-parity.mdc`) has no check.
+
+=== pr99 mdc removed
+572:-Four script pairs have **duplicated setup logic** between `scripts/` and `build-deploy.sh`. Running `build-deploy.sh` does NOT auto-fix stale template logic.
+
+=== pr106 skip-config
+136:+- **Q1: should `aitools install` run the writer once?** Suggested: add `--skip-config` / `-SkipConfig` to `deploy-harness` (S3-H2-Manifest), and Step 8b passes it.
+
+=== pr100/110 rev-parse added
+
+=== spec for $3 arg
+/Users/new-jose/repos/aitools/reference/cross-platform-detail.md
+
+=== DH OS guard 44-48
+
+# --- OS guard ---
+case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*)
+        log_error "This script is for macOS/Linux. On Windows, use deploy-harness.ps1."
+        exit 1 ;;
+esac
+
+
+=== lifecycle build-host
+
+=== inst unknown option exit
+22:SHOW_HELP=false
+44:            SHOW_HELP=true
+49:            SHOW_HELP=true
+56:if $SHOW_HELP; then

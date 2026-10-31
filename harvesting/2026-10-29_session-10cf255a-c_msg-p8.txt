@@ -1,0 +1,16 @@
+Record decision P-8: commander accepts the Win32 Content Prep Tool licence
+
+plans/build-package/design.md section 17 gains P-8, the commander's
+acceptance on 2026-10-28, verbatim: "I accept the Microsoft Win32 Content
+Prep Tool licence terms for nobul-tech CI use (v1.8.7, commit 1d6cfcb):
+download per job, never redistribute, commit, cache or modify it."
+
+Binding for batch B9a onward: per-job download from Microsoft's repo at
+commit 1d6cfcb, SHA-256 and Authenticode checks before use; the exe is
+never committed, cached, uploaded, bundled or modified (licence 4(a),
+4(b), 4(e)); a newer version needs a new acceptance. This resolves
+findings Q1 (who accepts the licence).
+
+Plans go directly to main (CLAUDE.md channel exception). Docs only.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

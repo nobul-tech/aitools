@@ -1,0 +1,12 @@
+.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-H2-MDM/S3-H2-MDM-drafts/dot-claude/rules/deploy-paths.md.edit.txt
+.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-H2-MDM/S3-H2-MDM-drafts/reference/harness.md.edit.txt
+.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-H2-MDM/S3-H2-MDM-handback.md
+.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-H2-Manifest/S3-H2-Manifest-drafts/dot-claude/rules/managed-file-deployment.md
+.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-H2-Manifest/S3-H2-Manifest-drafts/reference/harness.md
+.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-H2-Manifest/S3-H2-Manifest-drafts/reference/managed-file-deployment.md
+.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-H2-Manifest/S3-H2-Manifest-handback.md
+scripts/build-deploy.sh
+scripts/deploy-harness.ps1
+scripts/deploy-harness.sh
+tests/deploy-harness-mdm/test-deploy-harness-mdm.sh
+tests/deploy-harness/test-deploy-harness.sh

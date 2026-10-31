@@ -1,0 +1,394 @@
+====================================================================================================
+#50 [MERGED] base=main head=fix/issue-9-manifest-driven-preflight created=2026-10-21T02:33:44Z merged=2026-10-21T02:54:28Z
+  title: Derive build-deploy hook preflight from hooks-manifest.json (closes #9)
+  commits=6 last_commit=2026-10-21T02:22:06Z files=7 checks={'SUCCESS': 7}
+  body draft mentions=0 comments=1 reviews=0 after_merge=0
+====================================================================================================
+#51 [MERGED] base=main head=docs/delegate-ships-own-prs created=2026-10-21T02:37:51Z merged=2026-10-21T02:54:43Z
+  title: /delegate: delegates push and open their own PRs (D-DEL4)
+  commits=1 last_commit=2026-10-21T02:37:48Z files=1 checks={'SUCCESS': 7}
+  body draft mentions=0 comments=0 reviews=0 after_merge=0
+====================================================================================================
+#52 [MERGED] base=main head=docs/incidents-74-86 created=2026-10-21T02:44:38Z merged=2026-10-21T02:56:00Z
+  title: File incidents #74-#86 (machine identity, hook shadowing, deploy safety)
+  commits=1 last_commit=2026-10-21T02:44:34Z files=1 checks={'SUCCESS': 7}
+  body draft mentions=0 comments=0 reviews=0 after_merge=0
+====================================================================================================
+#53 [MERGED] base=main head=docs/handoff-360aa8f3-8 created=2026-10-21T03:59:01Z merged=2026-10-21T04:03:17Z
+  title: Handoff 360aa8f3-8 + housekeeping (gitignore MCP configs, harvesting)
+  commits=2 last_commit=2026-10-21T03:58:56Z files=100 checks={'SUCCESS': 7}
+  body draft mentions=0 comments=0 reviews=0 after_merge=0
+====================================================================================================
+#54 [MERGED] base=main head=docs/delegate-read-all-rules created=2026-10-21T22:53:03Z merged=2026-10-22T00:42:47Z
+  title: /delegate: instruct delegates to read all project and user rules
+  commits=2 last_commit=2026-10-21T23:37:51Z files=1 checks={'SUCCESS': 7}
+  body draft mentions=1 comments=0 reviews=0 after_merge=0
+====================================================================================================
+#55 [MERGED] base=main head=fix/issue-32-pre-push-deploy-path created=2026-10-21T23:00:50Z merged=2026-10-22T00:43:03Z
+  title: Record macOS verification of check-pre-push step 7 (closes #32, fixed in 7aacdef)
+  commits=1 last_commit=2026-10-21T23:00:25Z files=1 checks={'SUCCESS': 7}
+  body draft mentions=0 comments=0 reviews=0 after_merge=0
+====================================================================================================
+#56 [MERGED] base=main head=fix/hook-lifecycle created=2026-10-21T23:07:12Z merged=2026-10-22T00:43:38Z
+  title: Hooks: adopt writes shared/hooks only, EOF-safe prompts, sed -n reads pass the guard (#80, #81, #82)
+  commits=2 last_commit=2026-10-21T23:06:40Z files=11 checks={'SUCCESS': 7}
+  body draft mentions=7 comments=0 reviews=0 after_merge=0
+====================================================================================================
+#57 [MERGED] base=main head=docs/incidents-87-plus created=2026-10-21T23:11:03Z merged=2026-10-22T00:44:15Z
+  title: Ledger: draft incident batch #87+ for commander approval
+  commits=1 last_commit=2026-10-21T23:10:34Z files=3 checks={'SUCCESS': 7}
+  body draft mentions=4 comments=0 reviews=0 after_merge=0
+====================================================================================================
+#58 [MERGED] base=main head=docs/gate-ab-review created=2026-10-21T23:19:43Z merged=2026-10-22T00:44:44Z
+  title: Gate: A/B review of tool-support tree, rev 4, consolidated review page
+  commits=3 last_commit=2026-10-21T23:18:50Z files=23 checks={'SUCCESS': 7}
+  body draft mentions=7 comments=0 reviews=0 after_merge=0
+====================================================================================================
+#59 [MERGED] base=main head=docs/cc-nesting-launch-path created=2026-10-21T23:37:39Z merged=2026-10-22T00:44:58Z
+  title: tool-ops-claude-code: launch path decides whether delegates can delegate
+  commits=1 last_commit=2026-10-21T23:37:24Z files=1 checks={'SUCCESS': 7}
+  body draft mentions=0 comments=0 reviews=0 after_merge=0
+====================================================================================================
+#60 [MERGED] base=main head=fix/sed-guard-enforce created=2026-10-22T01:07:26Z merged=2026-10-22T02:48:58Z
+  title: Restore the sed guard to enforce; fix hook-lifecycle drafts (#82 follow-up)
+  commits=2 last_commit=2026-10-22T01:08:04Z files=13 checks={'SUCCESS': 7}
+  body draft mentions=15 comments=0 reviews=0 after_merge=0
+====================================================================================================
+#61 [MERGED] base=main head=feature/scratch-rule created=2026-10-22T01:09:56Z merged=2026-10-22T02:49:13Z
+  title: Scratch: accurate /scratch skill; draft scratch rule (for approval)
+  commits=2 last_commit=2026-10-22T01:10:42Z files=6 checks={'SUCCESS': 7}
+  body draft mentions=8 comments=0 reviews=0 after_merge=0
+====================================================================================================
+#62 [MERGED] base=main head=docs/delegate-lessons created=2026-10-22T01:14:19Z merged=2026-10-22T02:49:32Z
+  title: /delegate: generalized lessons from running parallel missions
+  commits=1 last_commit=2026-10-22T01:14:03Z files=1 checks={'SUCCESS': 7}
+  body draft mentions=3 comments=0 reviews=0 after_merge=0
+====================================================================================================
+#63 [MERGED] base=main head=docs/managed-file-spec-drafts created=2026-10-22T01:14:41Z merged=2026-10-22T02:49:50Z
+  title: Managed-file spec: drafts for the source-of-truth model (for approval)
+  commits=4 last_commit=2026-10-22T01:15:10Z files=13 checks={'SUCCESS': 7}
+  body draft mentions=12 comments=0 reviews=0 after_merge=0
+====================================================================================================
+#64 [MERGED] base=main head=docs/registry-claude-code created=2026-10-22T01:18:43Z merged=2026-10-22T02:50:20Z
+  title: Registry: Claude Code entry draft (for approval)
+  commits=1 last_commit=2026-10-22T01:18:04Z files=5 checks={'SUCCESS': 7}
+  body draft mentions=7 comments=0 reviews=0 after_merge=0
+====================================================================================================
+#65 [MERGED] base=main head=docs/incidents-87-plus-apply created=2026-10-22T01:19:06Z merged=2026-10-22T02:50:32Z
+  title: File incidents #87-#145 (session 10cf255a-c backlog)
+  commits=2 last_commit=2026-10-22T01:19:29Z files=5 checks={'SUCCESS': 7}
+  body draft mentions=3 comments=0 reviews=0 after_merge=0
+====================================================================================================
+#66 [MERGED] base=main head=docs/gate-fix created=2026-10-22T01:20:05Z merged=2026-10-22T02:51:08Z
+  title: Gate fix: rev 5, D-TS13 runner coverage, independent B-pass, tool-adopt approval section
+  commits=3 last_commit=2026-10-22T01:20:41Z files=12 checks={'SUCCESS': 7}
+  body draft mentions=9 comments=0 reviews=0 after_merge=0
+====================================================================================================
+#67 [MERGED] base=main head=docs/tool-support-gate-decisions created=2026-10-22T03:35:01Z merged=2026-10-22T03:40:04Z
+  title: Record tool-support gate decisions (95 items)
+  commits=1 last_commit=2026-10-22T03:34:57Z files=2 checks={'SUCCESS': 7}
+  body draft mentions=0 comments=0 reviews=0 after_merge=0
+====================================================================================================
+#68 [MERGED] base=main head=feature/managed-file-source-of-truth created=2026-10-22T03:51:00Z merged=2026-10-22T04:09:30Z
+  title: Managed files: SOURCE is the source of truth; adopt and merge write the repo; per-field JSON review
+  commits=8 last_commit=2026-10-22T04:04:24Z files=87 checks={'SUCCESS': 7}
+  body draft mentions=4 comments=0 reviews=0 after_merge=0
+====================================================================================================
+#69 [MERGED] base=main head=feature/tool-adopt-skill created=2026-10-22T03:51:49Z merged=2026-10-22T04:09:42Z
+  title: Ship /tool-adopt (user level) and approved gate glossary terms
+  commits=2 last_commit=2026-10-22T03:53:27Z files=3 checks={'SUCCESS': 7}
+  body draft mentions=11 comments=0 reviews=0 after_merge=0
+====================================================================================================
+#70 [MERGED] base=main head=docs/apply-approved-drafts created=2026-10-22T03:57:16Z merged=2026-10-22T04:09:54Z
+  title: Apply approved drafts: hook and scratch rules, managed-file spec, Claude Code registry entry
+  commits=6 last_commit=2026-10-22T03:58:28Z files=22 checks={'SUCCESS': 7}
+  body draft mentions=18 comments=0 reviews=0 after_merge=0
+====================================================================================================
+#71 [MERGED] base=main head=fix/registry-paths created=2026-10-22T03:59:59Z merged=2026-10-22T04:10:06Z
+  title: Path-reference check, stale registry paths, tool-versions.json removal (S2-Layout PR-a)
+  commits=4 last_commit=2026-10-22T04:07:06Z files=70 checks={'SUCCESS': 7}
+  body draft mentions=2 comments=0 reviews=1 after_merge=0
+  NEG-before-merge review:COMMENTED 2026-10-22T04:05:51Z: ## Independent review: S3-Layout-ReviewA (comment only)  **Verdict: no blockers. 2 MAJOR, 9 MINOR.** The path repoints, the step 11 JSON match and the move of the version data are correct. The two MAJORs should be fixed or explicitly accepted before merge: a dropped check whose stated justification 
+====================================================================================================
+#73 [MERGED] base=main head=feature/m3-b1-profile-resolver created=2026-10-22T04:04:58Z merged=2026-10-22T04:24:03Z
+  title: M3 B1: native profile resolver (aitools-profile.sh/.ps1)
+  commits=4 last_commit=2026-10-22T04:20:19Z files=5 checks={'SUCCESS': 7}
+  body draft mentions=2 comments=1 reviews=1 after_merge=0
+  NEG-before-merge review:COMMENTED 2026-10-22T04:15:11Z: # S3-Profile-Review: PR #73 (native profile resolver), independent review  Verdict: no blockers. Mergeable after the 3 major fixes below (each is a few lines), or with them filed as follow-ups if you prefer to keep B1 moving. Counts: 0 blocker, 3 major, 14 minor, plus 3 open questions. Tests (local,
+====================================================================================================
+#74 [MERGED] base=fix/registry-paths head=feature/user-level-skills created=2026-10-22T04:05:23Z merged=2026-10-22T04:24:16Z
+  title: Move seven governance skills to user level; one-name-one-level check (S2-Layout PR-b)
+  commits=4 last_commit=2026-10-22T04:14:18Z files=26 checks={}
+  body draft mentions=5 comments=0 reviews=1 after_merge=0
+  !! base is not main
+  NEG-before-merge review:COMMENTED 2026-10-22T04:13:25Z: ## S3-Layout-ReviewB: independent review of PR #74 (PR-b commits 4aa4728, 1b34195, merge e8b6f99)  **Verdict: COMMENT. No blockers. The move itself is clean.** Fix three MAJOR items before merge, or hand them off explicitly in the PR: the adopt path, write safety in "Where the files live", and the r
+====================================================================================================
+#75 [MERGED] base=feature/user-level-skills head=refactor/retire-reference-cards created=2026-10-22T04:10:29Z merged=2026-10-22T04:24:26Z
+  title: Retire the aitool-ops and aitool-eval reference cards (S2-Layout PR-c)
+  commits=4 last_commit=2026-10-22T04:14:42Z files=10 checks={}
+  body draft mentions=3 comments=0 reviews=0 after_merge=0
+  !! base is not main
+====================================================================================================
+#76 [MERGED] base=main head=feature/m3-b1b-tool-exceptions created=2026-10-22T04:14:10Z merged=2026-10-22T04:37:58Z
+  title: M3 B1b: tool exception store (exception-get/set) in the native resolver
+  commits=7 last_commit=2026-10-22T04:32:39Z files=3 checks={'SUCCESS': 7}
+  body draft mentions=1 comments=1 reviews=1 after_merge=2
+  AFTER-MERGE review:COMMENTED 2026-10-22T04:44:18Z: ## Independent review (S3-Profile-Review2), comment only  **Verdict: no blockers, 1 major, 8 minor.** The major is a spec gap: section 8 of the decision tree allows `via=alias`. It needs a commander decision, either before this merges or as an immediate follow-up. Everything else can be a follow-up.
+  AFTER-MERGE comment 2026-10-22T04:57:16Z: Review (S3-Profile-Review2) addressed in 6210403. M1: exception-set now refuses via=alias whenever this machine has an id (registered profiles resolve via=id, so alias means unregistered or another machine's profile); explicit overrides stay allowed; derive-config no longer caches hostname matches. 
+====================================================================================================
+#77 [MERGED] base=main head=feature/m3-b3-config-writer created=2026-10-22T04:34:42Z merged=2026-10-22T04:38:28Z
+  title: M3 B3: setup-user-config.sh/.ps1, the node-free config.json writer
+  commits=9 last_commit=2026-10-22T04:34:20Z files=9 checks={'SUCCESS': 7}
+  body draft mentions=2 comments=1 reviews=1 after_merge=2
+  AFTER-MERGE review:COMMENTED 2026-10-22T04:44:19Z: ## Independent review (S3-Profile-Review2), comment only  **Verdict: no blockers, 1 major (shared with #76), 10 minor.** The engine move is behaviour-neutral (verified). The writer meets config-file-safety.md on its own terms. It misses the double-slash validation that the spec names, and it caches 
+  AFTER-MERGE comment 2026-10-22T04:57:26Z: The review (S3-Profile-Review2) is addressed in e6850ad, which also merges #76's fixes (6210403, review M1: hostname matches are no longer cached).  **Fixed:** - **1:** validation rejects `//` in path values (as the old installer did) and rejects relative bootstrap paths. - **3:** an invalid profile
+====================================================================================================
+#78 [MERGED] base=main head=docs/m2-tree-user-repo created=2026-10-22T04:40:46Z merged=2026-10-22T20:45:19Z
+  title: Land the tool support decision tree (R1, approved rev 5 + gate decisions)
+  commits=2 last_commit=2026-10-22T04:54:17Z files=3 checks={'SUCCESS': 7}
+  body draft mentions=6 comments=0 reviews=0 after_merge=0
+====================================================================================================
+#79 [MERGED] base=main head=feature/m3-b3b-installer-config created=2026-10-22T04:43:01Z merged=2026-10-22T20:46:29Z
+  title: M3 B3b: installers write config.json through setup-user-config
+  commits=5 last_commit=2026-10-22T04:57:30Z files=11 checks={'SUCCESS': 7}
+  body draft mentions=1 comments=1 reviews=2 after_merge=2
+  NEG-before-merge review:COMMENTED 2026-10-22T05:23:06Z: ## S3-Profile-Review3: independent review of #79 (comment only)  **Verdict: no blockers, no majors, 5 minors. Mergeable. The minors can be follow-ups.**  Reviewed: own commit 9462ed0 plus merge cc597ec, read in full at f5939a2: `scripts/aitools-install.sh/.ps1`, `scripts/setup-user-config.sh/.ps1`, 
+  AFTER-MERGE review:COMMENTED 2026-10-22T21:02:50Z: ## S3-M3-Install-Review: independent review of #79 at 69b6420  **Verdict: changes requested. 0 blockers, 1 major, 3 minors, 3 nits.**  Posted as a comment: GitHub refused `--request-changes` ("Can not request changes on your own pull request"). Treat this review as a change request.  The Review3 fix
+  AFTER-MERGE comment 2026-10-22T21:10:24Z: This PR merged at cc597ec before the Review3 fixes were pushed to its branch. The fixes (69b6420, plus the review fixes) ship in fix-forward #89.
+====================================================================================================
+#80 [MERGED] base=main head=feature/m3-b2-lib-wrappers created=2026-10-22T05:00:04Z merged=2026-10-23T00:37:47Z
+  title: M3 B2: aitools-lib profile and tool-exception wrappers
+  commits=8 last_commit=2026-10-22T21:23:54Z files=18 checks={'SUCCESS': 7}
+  body draft mentions=2 comments=0 reviews=2 after_merge=0
+  NEG-before-merge review:COMMENTED 2026-10-22T05:23:08Z: ## S3-Profile-Review3: independent review of #80 (comment only)  **Verdict: 1 blocker, 1 major, 4 minors. Not mergeable until B1 is fixed. #82's PowerShell user init depends on that fix.**  Reviewed: commit 18218ce. I read the new lib sections in full in `scripts/aitools-lib.sh/.ps1`, plus `tests/pr
+  NEG-before-merge review:COMMENTED 2026-10-22T21:14:08Z: ## S3-M3-LibFix-Review: independent review of PR #80 at dae07fe  > Posted as a comment. GitHub refused `--request-changes`: "Can not request changes on your own pull request" (the reviewer uses the PR author's account). Read this as **request changes**.  **Verdict: changes requested.** 0 blockers, 2
+====================================================================================================
+#81 [MERGED] base=main head=fix/review-diff-display created=2026-10-22T05:03:53Z merged=2026-10-23T01:29:20Z
+  title: Make the managed-file review diff readable (local -> repo, labelled, coloured)
+  commits=4 last_commit=2026-10-22T20:44:51Z files=8 checks={'SUCCESS': 7}
+  body draft mentions=1 comments=1 reviews=0 after_merge=0
+  NEG-before-merge comment 2026-10-22T05:17:14Z: The independent reviewer's verdict is below, verbatim. The reviewer could not post it: GitHub rejects `--request-changes` from the account that opened the PR (`Can not request changes on your own pull request`), so the mission commander posts it here as a comment.  ## Resolution (S3-DiffUX, commit 1
+====================================================================================================
+#82 [MERGED] base=main head=feature/m3-b6-user-init created=2026-10-22T05:08:19Z merged=2026-10-23T00:37:59Z
+  title: M3 B6/B7: aitools user init registers this machine's profile
+  commits=8 last_commit=2026-10-22T20:50:15Z files=19 checks={'SUCCESS': 7}
+  body draft mentions=2 comments=0 reviews=1 after_merge=0
+  NEG-before-merge review:COMMENTED 2026-10-22T05:23:09Z: ## S3-Profile-Review3: independent review of #82 (comment only)  **Verdict: no blocker of its own, 2 majors, 8 minors. Fix M1 and M2, or have the commander rule on them, before merging. Merge after #80's B1 is fixed: aitools.ps1 user init passes `-UserRepoPath` to setup-user-config.ps1, and #80 B1 d
+====================================================================================================
+#83 [MERGED] base=main head=feature/m3-b4-setup-user-claude created=2026-10-22T05:14:06Z merged=2026-10-23T01:13:31Z
+  title: M3 B4: setup-user-claude uses the one resolver (no first-profile fallback, literal-safe tokens)
+  commits=7 last_commit=2026-10-23T01:01:50Z files=4 checks={'SUCCESS': 7}
+  body draft mentions=4 comments=1 reviews=1 after_merge=0
+  NEG-before-merge review:COMMENTED 2026-10-22T21:46:19Z: **Verdict: ship after fixes** (0 blocker, 2 major, 4 minor, 5 nit). Independent review by S3-M3-Claude-Review of head `08482fe`. This is a comment review: it does not approve and does not request changes.  The contract use is correct: the AITLIB_* / `$script:AitLib*` names are right, values are copi
+  NEG-before-merge comment 2026-10-22T21:55:00Z: Review fixes pushed in a87ffce (S3-M3-Claude):  - M1 fixed: dotprofile rc 3 deploys nothing; ERROR "claude.md" "not deployed: dotprofile unresolved", exit 1, no caller ACTION. - M2 fixed: adopt filter is one pass, longest value first, P-Q13 tie kept; live data shape (company inside email) round-trip
+====================================================================================================
+#84 [MERGED] base=main head=fix/m3-review2-fixes created=2026-10-22T05:16:34Z merged=2026-10-23T00:37:10Z
+  title: Land the review fixes for #76/#77 (merged before the fixes)
+  commits=4 last_commit=2026-10-22T05:14:59Z files=7 checks={'SUCCESS': 7}
+  body draft mentions=1 comments=0 reviews=0 after_merge=0
+====================================================================================================
+#85 [MERGED] base=main head=feature/harness-tool-ops-fallback created=2026-10-22T20:50:58Z merged=2026-10-23T01:29:35Z
+  title: Read tool-ops references from ~/.aitools/reference first, repo second
+  commits=2 last_commit=2026-10-22T20:54:04Z files=5 checks={'SUCCESS': 7}
+  body draft mentions=4 comments=0 reviews=1 after_merge=0
+  NEG-before-merge review:COMMENTED 2026-10-22T20:53:02Z: # S3-H-ToolOps-Review verdict: PR #85  **Verdict: no blocking findings.** (Posted as a comment review. This is not an approval.)  Reviewer: S3-H-ToolOps-Review (independent delegate of S3-H-ToolOps), 2026-10-22. Reviewed: `gh pr diff 85`, the PR body, commit e0d2c03, and the full text of both SKILL.
+====================================================================================================
+#86 [MERGED] base=main head=feature/m3-rekey created=2026-10-22T20:58:01Z merged=2026-10-23T00:59:29Z
+  title: M3 re-key: machine profiles keyed by machine id
+  commits=17 last_commit=2026-10-23T00:40:13Z files=26 checks={'SUCCESS': 7}
+  body draft mentions=6 comments=0 reviews=5 after_merge=0
+  NEG-before-merge review:COMMENTED 2026-10-22T21:03:47Z: Posted as a comment, not request-changes: the reviewer runs under the PR author's account. **Verdict: request changes. 1 major, 1 minor, 3 nits.** Reviewer: S3-M3-JsonRename-Review. Scope: commit 7cf9b8b only (the rename op in `scripts/aitools-json.pl`, `Rename-JKey` in `scripts/aitools-json.ps1`, a
+  NEG-before-merge review:COMMENTED 2026-10-22T21:50:30Z: **Verdict: REQUEST CHANGES** (posted as a comment: GitHub refuses request-changes on own-account PRs). 0 blocker, 4 major, 8 minor, 5 nit.  # S3-M3-Resolver-Review: PR #86, commit b70fc64 (re-key batch 2, native resolver keyed by machine id)  **Intent**: **Purpose**: Independent review of commit b70
+  NEG-before-merge review:COMMENTED 2026-10-22T22:21:36Z: **Verdict: approve-equivalent for c1ca81e. One condition: #86 does not merge before batch 5 (finding 1).** No blockers. 1 major, 4 minor, 3 nit.  Reviewer: S3-M3-ConfigKey-Review (independent level-3 reviewer, delegated by S3-M3-ConfigKey). Scope: commit c1ca81e on `feature/m3-rekey`. Files: `script
+  NEG-before-merge review:COMMENTED 2026-10-22T22:52:21Z: # S3-M3-LibKey-Review: PR #86, re-key batch 3 (693a7e7)  **Verdict: approve-equivalent. 0 blockers, 0 majors, 4 minors, 4 nits.** Nothing here has to be fixed before merge. m1 is a wrong claim in the PR body and should be corrected or backed by a test. m2 to m4 are small hardening changes for the de
+  NEG-before-merge review:COMMENTED 2026-10-22T23:58:48Z: # S3-M3-UserInit-Review: PR #86 batch 5 (bb43536, tests at f473e55)  **Intent**: **Purpose**: Independent level-3 review of re-key batch 5 (user init on id-keyed profiles) on PR #86. **Scope**: scripts/aitools, scripts/aitools.ps1 (user init block, build-deploy env), scripts/profile-check.js, tests/
+====================================================================================================
+#87 [MERGED] base=main head=feature/harness-cursor-rules created=2026-10-22T21:01:23Z merged=2026-10-23T01:30:14Z
+  title: S3-H-Cursor: fan harness rules out to Cursor user rule files (~/.cursor/rules, .md -> .mdc)
+  commits=6 last_commit=2026-10-22T21:21:34Z files=10 checks={'SUCCESS': 7}
+  body draft mentions=5 comments=0 reviews=2 after_merge=0
+  NEG-before-merge review:COMMENTED 2026-10-22T21:08:12Z: # S3-H-Cursor-Review verdict: PR #87 (Cursor rules fan-out)  **Verdict: CHANGES REQUESTED** (1 blocking finding, 8 non-blocking). Reviewer: S3-H-Cursor-Review (independent, level 3), 2026-10-22. Branch reviewed: `feature/harness-cursor-rules` at the worktree `/Users/new-jose/repos/aitools/.claude/wo
+  NEG-before-merge review:COMMENTED 2026-10-22T21:19:47Z: # S3-H-Cursor-Review re-verify: PR #87 after 1a4e31e and 118a79c  **Verdict: no blocking findings.**  B1 is fixed, and I verified the fix against Cursor's own parser and its shipped picomatch. N1-N4 and N6-N8 are fixed. N5 is fixed in bash. In PS1 the outcome is right but the new detection branch do
+====================================================================================================
+#88 [MERGED] base=main head=feature/harness-deploy-harness created=2026-10-22T21:03:25Z merged=2026-10-23T01:29:56Z
+  title: Add deploy-harness.sh/.ps1: populate ~/.aitools from the repos
+  commits=3 last_commit=2026-10-22T21:13:14Z files=10 checks={'SUCCESS': 7}
+  body draft mentions=4 comments=0 reviews=1 after_merge=0
+  NEG-before-merge review:COMMENTED 2026-10-22T21:11:52Z: # S3-H-Core-Review verdict: PR #88 (deploy-harness)  Independent review by S3-H-Core-Review (level-3 delegate of S3-H-Core). Reviewed head `15a2b80` against the S3-Harness brief (requirements and shared contract) and the repo rules. I did not read the author's notes or hand-back.  ## Verdict: no blo
+====================================================================================================
+#89 [MERGED] base=main head=fix/m3-b3b-installer-review3 created=2026-10-22T21:10:18Z merged=2026-10-23T00:37:33Z
+  title: Installer Step 5: relay writer logs and warnings, fix relative repos path and dry-run writes (#79 fix-forward)
+  commits=3 last_commit=2026-10-22T21:09:30Z files=7 checks={'SUCCESS': 7}
+  body draft mentions=2 comments=0 reviews=0 after_merge=0
+====================================================================================================
+#90 [MERGED] base=main head=feature/m3-b8c-consumers created=2026-10-22T21:34:19Z merged=2026-10-23T01:28:19Z
+  title: M3 B8c: check-lib and ait-harvest use the one dotprofile answer
+  commits=4 last_commit=2026-10-23T01:06:39Z files=7 checks={'SUCCESS': 7}
+  body draft mentions=1 comments=0 reviews=1 after_merge=0
+  NEG-before-merge review:COMMENTED 2026-10-22T21:41:57Z: # S3-M3-B8c-Review: PR #90 (M3 B8c), commit 4b345cc  **Verdict: request changes.** One major, and the fix is small. The rest is sound: the #80 contract is used correctly, rc handling is right in both shells, nothing leaks into the PowerShell output stream, and the ait-harvest hardening does what the
+====================================================================================================
+#91 [MERGED] base=main head=feature/m3-b8a-consumers created=2026-10-22T21:36:12Z merged=2026-10-23T01:28:53Z
+  title: M3 B8a: settings and skills (sh) use the one dotprofile resolver
+  commits=4 last_commit=2026-10-23T01:07:57Z files=5 checks={'SUCCESS': 7}
+  body draft mentions=1 comments=0 reviews=1 after_merge=0
+  NEG-before-merge review:COMMENTED 2026-10-22T21:42:10Z: # S3-M3-B8a-Review: independent review of PR #91 (commit e639df2)  Reviewer: S3-M3-B8a-Review (level 3, delegated by S3-M3-B8a). Date: 2026-10-22. Scope: e639df2 only -- `scripts/setup-user-settings.sh`, `scripts/setup-user-settings.ps1`, `scripts/setup-user-skills.sh`. The lib wrappers (#80) were r
+====================================================================================================
+#92 [MERGED] base=main head=feature/m3-b8b-consumers created=2026-10-22T21:36:13Z merged=2026-10-23T01:29:08Z
+  title: M3 B8b: skills (ps1) and cursor use the one dotprofile resolver
+  commits=5 last_commit=2026-10-23T01:09:38Z files=4 checks={'SUCCESS': 7}
+  body draft mentions=1 comments=0 reviews=1 after_merge=0
+  NEG-before-merge review:COMMENTED 2026-10-22T21:42:09Z: ## S3-M3-B8b-Review: independent review of PR #92 (commit 1554d80)  **Verdict: no blockers (APPROVE-equivalent), on one merge condition: merge with or after B5 (M1).** If it merges before B5, M1 becomes a blocker for the MDM path.  Scope: 1554d80 only (`scripts/setup-user-skills.ps1`, `scripts/setup
+====================================================================================================
+#93 [MERGED] base=main head=feature/harness-mdm created=2026-10-22T21:47:40Z merged=2026-10-23T01:57:36Z
+  title: MDM: build-deploy.sh generates an embedded deploy/deploy-harness.* and ports the Cursor fan-out headers
+  commits=7 last_commit=2026-10-23T01:44:40Z files=6 checks={'SUCCESS': 7}
+  body draft mentions=5 comments=0 reviews=2 after_merge=0
+  NEG-before-merge review:COMMENTED 2026-10-22T21:56:50Z: VERDICT: CHANGES REQUESTED (3 blocking)  # S3-H-MDM-Review: independent review of PR #93 (commit dd562f6)  Reviewer: S3-H-MDM-Review (level-3 delegate, read-only). Scope: the dd562f6 diff (`scripts/build-deploy.sh`, `tests/deploy-harness-mdm/test-deploy-harness-mdm.sh`) and the generated output. #88
+  NEG-before-merge review:COMMENTED 2026-10-22T22:05:09Z: VERDICT: NO BLOCKING FINDINGS (B1 and B3 fixed; B2 minimum fix accepted, with the skip-writer question left to the commander)  # S3-H-MDM-Review: re-verification of PR #93 at 3e1a97d  Scope: the 3e1a97d diff (`scripts/build-deploy.sh`, `tests/deploy-harness-mdm/test-deploy-harness-mdm.sh`) checked a
+====================================================================================================
+#94 [MERGED] base=main head=docs/s3-harness-orchestration created=2026-10-22T22:08:03Z merged=2026-10-23T01:57:58Z
+  title: S3-Harness: mission brief and hand-back
+  commits=2 last_commit=2026-10-22T22:07:52Z files=2 checks={'SUCCESS': 7}
+  body draft mentions=2 comments=0 reviews=0 after_merge=0
+====================================================================================================
+#95 [MERGED] base=main head=feature/m3-b5-build-deploy created=2026-10-22T22:29:09Z merged=2026-10-23T01:23:09Z
+  title: M3 B5: deploy/ resolves the dotprofile and machine profile on the target machine
+  commits=24 last_commit=2026-10-23T01:09:38Z files=26 checks={'SUCCESS': 7}
+  body draft mentions=2 comments=1 reviews=1 after_merge=0
+  NEG-before-merge review:COMMENTED 2026-10-22T22:39:57Z: # S3-M3-B5a-Review: independent review of PR #95  Reviewer: S3-M3-B5a-Review (level 3, delegated by S3-M3-B5a), 2026-10-22, macOS. Scope: the PR's own commits c421511 and 266a1ba (`scripts/build-deploy.sh`, `scripts/check-pre-push.sh` / `.ps1` step 7, the deploy-paths.md draft). The stacked PRs (#83
+  NEG-before-merge comment 2026-10-22T22:45:15Z: Review fixes in ff6e7dd (report: b595632):  - **m1 fixed.** The build now goes to a staging dir, which replaces `<dotprofile>/deploy` only at the end. New edge case: a broken cursor default in a repo copy fails the build, and the committed deploy/ stays intact. - **m2 fixed.** Step 7 (sh/ps1) also d
+====================================================================================================
+#96 [MERGED] base=main head=docs/m3-protected-drafts created=2026-10-22T23:35:29Z merged=2026-10-23T01:58:10Z
+  title: M3 protected-file drafts for approval (no protected file changed)
+  commits=1 last_commit=2026-10-22T23:35:02Z files=18 checks={'SUCCESS': 7}
+  body draft mentions=9 comments=0 reviews=0 after_merge=0
+====================================================================================================
+#97 [OPEN] base=main head=docs/m3-lead-plan created=2026-10-23T01:59:21Z merged=None
+  title: Preserve the M3-LEAD orchestration plan
+  commits=1 last_commit=2026-10-23T01:59:18Z files=1 checks={'SUCCESS': 7}
+  body draft mentions=0 comments=0 reviews=0 after_merge=0
+====================================================================================================
+#98 [OPEN] base=main head=feature/mf-config-no-machine created=2026-10-23T02:11:57Z merged=None
+  title: setup-user-config: add --no-machine / -NoMachine (no duplicate machine advice)
+  commits=2 last_commit=2026-10-23T02:24:18Z files=5 checks={'SUCCESS': 7}
+  body draft mentions=1 comments=1 reviews=0 after_merge=0
+  LAST comment 2026-10-23T02:18:09Z: # S3-MF-NoMachine-Review: PR #98 (`--no-machine` / `-NoMachine`)  Reviewer: S3-MF-NoMachine-Review (independent; launched by S3-MF-NoMachine). Date: 2026-10-22. Branch reviewed: `feature/mf-config-no-machine` (worktree `.claude/worktrees/mf-nomach`), diff `origin/main...HEAD` (3 files: `scripts/setu
+====================================================================================================
+#99 [MERGED] base=main head=docs/harness-approved-drafts created=2026-10-23T02:13:17Z merged=2026-10-26T23:08:21Z
+  title: Write the approved HARNESS protected-file drafts
+  commits=7 last_commit=2026-10-23T02:20:26Z files=13 checks={'SUCCESS': 7}
+  body draft mentions=26 comments=1 reviews=1 after_merge=0
+  NEG-before-merge review:COMMENTED 2026-10-23T02:18:22Z: NO BLOCKING FINDINGS  # S3-H2-DraftsH-Review: independent review of PR #99 (Write the approved HARNESS protected-file drafts)  Reviewer: S3-H2-DraftsH-Review (independent, read-only). Date: 2026-10-22. Branch `docs/harness-approved-drafts` at 9e70ca6. Base: origin/main 8a9dcb5. Method: mechanical co
+  NEG-before-merge comment 2026-10-23T02:21:00Z: NO BLOCKING FINDINGS (S3-H2-DraftsH-Review re-verify of df10361): scripts/check-path-refs-allow.txt adds exactly the three N1 lines; it removes the two tool-ops-cursor.md 'future' fixture lines, safe because reference/tool-ops-cursor.md now exists (the shared/skills/tool-ops/tests/expected-behaviors
+====================================================================================================
+#100 [OPEN] base=main head=feature/harness-rules-manifest created=2026-10-23T02:15:35Z merged=None
+  title: deploy-harness: write a rules source manifest and retire removed rules
+  commits=4 last_commit=2026-10-23T02:31:27Z files=7 checks={'SUCCESS': 7}
+  body draft mentions=6 comments=0 reviews=2 after_merge=0
+  LAST review:COMMENTED 2026-10-23T02:22:28Z: BLOCKING: on the .ps1, a retired rule whose name contains a wildcard character (`[`, `]`) is removed with no backup, and the log says "backup kept" (finding 1). It is a small fix. Everything else is non-blocking.  Review by S3-H2-Manifest-Review (independent reviewer, mission HARNESS-2). Reviewed he
+  LAST review:COMMENTED 2026-10-23T02:30:39Z: APPROVE-EQUIVALENT: commit 161edd0 resolves the blocking finding (1) and findings 2, 3, 4 and 8, and documents 5 and 6. Three small parity notes remain. They are low severity and optional.  Follow-up review by S3-H2-Manifest-Review (independent reviewer, HARNESS-2). Reviewed head `161edd0`.  ## Re-v
+====================================================================================================
+#101 [OPEN] base=main head=docs/m3-approved-drafts created=2026-10-23T02:15:57Z merged=None
+  title: Write the approved #96 M3 protected-doc rows
+  commits=10 last_commit=2026-10-23T02:22:49Z files=13 checks={'SUCCESS': 7}
+  body draft mentions=8 comments=0 reviews=1 after_merge=0
+  LAST review:COMMENTED 2026-10-23T02:21:49Z: NON-BLOCKING  ## Independent review of PR #101 (S3-H2-DraftsM3-Review, 2026-10-22)  Reviewer: S3-H2-DraftsM3-Review, delegated by S3-H2-DraftsM3. I did not write this PR. Base: the PR's merge-base is origin/main 8a9dcb5, which is also the current origin/main tip. "Approved text" means the #96 drafts
+====================================================================================================
+#102 [OPEN] base=main head=docs/mf-incidents created=2026-10-23T02:16:49Z merged=None
+  title: File M3 incidents #146-#161 (drafts for approval)
+  commits=6 last_commit=2026-10-23T05:15:37Z files=5 checks={'SUCCESS': 6, 'NEUTRAL': 1}
+  body draft mentions=5 comments=6 reviews=0 after_merge=0
+  LAST comment 2026-10-23T02:29:10Z: The re-check findings on 0b6b00e are fixed in 27ea6bc.  **Major** - R-M1: #163's line numbers are corrected (grep-confirmed), and the PS1 twins are added.  **Minor** - R-m1: key order normalized (`id` first). - R-m2: #163's expected field now cites 'Governed summary outcomes'. - R-m3: #162 now names
+  LAST comment 2026-10-23T05:14:19Z: ## Re-check (87284ea)  **Reviewer:** S3-MF-Incidents-Review · **Date:** 2026-10-22 · **PR head:** 87284ea. **Code checked on:** the source PR heads (945deb5, dbcc61a, 1692959, f8e8fc0, 1605d6e, 52821bd; all six PRs are still OPEN, `gh pr list`) and on origin/main 8a9dcb5. Probes: my own, in `.scratc
+  LAST comment 2026-10-23T05:15:46Z: Commit fa90df0 fixes the findings from the third re-check (87284ea).  - **R3-M1:** #164, #165, #167, #168, #169 and #170 now also cite origin/main 8a9dcb5. I spot-checked those citations with grep. #166 is kept: on main the two engines disagree on key case as well (audit A-9), so the spec is missing
+====================================================================================================
+#103 [OPEN] base=main head=fix/mf-dotprofile-adopt-push created=2026-10-23T02:17:07Z merged=None
+  title: Commit and push dotprofile adopt targets from the managed-file library (N-Q2)
+  commits=3 last_commit=2026-10-23T02:38:57Z files=10 checks={'SUCCESS': 7}
+  body draft mentions=2 comments=1 reviews=0 after_merge=0
+  LAST comment 2026-10-23T02:37:59Z: # S3-MF-Adopt-Review: PR #103 review  Reviewer: S3-MF-Adopt-Review (independent; delegated by S3-MF-Adopt), 2026-10-22. PR: https://github.com/nobul-tech/aitools/pull/103, branch `fix/mf-dotprofile-adopt-push`. Head reviewed: **c05fec8** (11ba964 plus a test-only fix). Read with the base, 11ba964.  
+====================================================================================================
+#104 [OPEN] base=main head=docs/mf-audit created=2026-10-23T02:18:52Z merged=None
+  title: M3-FINISH audit: logging and script-standards findings
+  commits=1 last_commit=2026-10-23T02:18:46Z files=1 checks={'SUCCESS': 7}
+  body draft mentions=2 comments=0 reviews=0 after_merge=0
+====================================================================================================
+#105 [OPEN] base=main head=docs/m3-approved-intents created=2026-10-23T02:20:08Z merged=None
+  title: Apply approved M3 intents for the resolver and shared template (#96 rows 7, 12)
+  commits=2 last_commit=2026-10-23T02:30:11Z files=6 checks={'SUCCESS': 7}
+  body draft mentions=8 comments=0 reviews=1 after_merge=0
+  LAST review:COMMENTED 2026-10-23T02:29:15Z: NON-BLOCKING -- S3-H2-DraftsM3b-Review verdict on PR #105 (head f0eab8a, base origin/main 8a9dcb5) and dotprofile commit 525ee49  **Intent**: **Purpose**: Record an independent check of whether PR #105 and dotprofile 525ee49 write the #96 rows 5-8, 12 and 13 exactly as the commander approved them, a
+====================================================================================================
+#106 [OPEN] base=main head=feature/harness-hookin created=2026-10-23T02:21:13Z merged=None
+  title: Run deploy-harness from the installer and every aitools run
+  commits=3 last_commit=2026-10-26T22:23:22Z files=13 checks={'SUCCESS': 7}
+  body draft mentions=2 comments=1 reviews=2 after_merge=0
+  LAST review:COMMENTED 2026-10-23T02:31:15Z: ## Independent review: S3-H2-Hookin-Review (PR #106 at bbc3cbb)  **Verdict: NOT BLOCKING.** The exit-code handling, the writer-once-per-sync change, stdin handling and the bin-step removal are correct on all four paths: installer .sh/.ps1 and sync loop .sh/.ps1. I found 9 non-blocking findings, list
+  LAST review:COMMENTED 2026-10-23T02:33:25Z: ## Follow-up: S3-H2-Hookin-Review (PR #106 at 0dea75f)  **Finding 1 is fixed. The fix is verified.**  - `scripts/aitools.ps1:158`: the parameter is now `Invoke-DeployAbort([string]$AbortedScript)`, so it no longer hides the lib's `$scriptName`. - `tests/hookin/test-hookin.sh` has a new assertion. It
+  LAST comment 2026-10-26T22:23:32Z: ## Abort docs now match this PR's code (S3-AbortDocs, commander order 2026-10-26)  "update the docs to match the current implementation of PR #106. lets keep functionality, update docs on whatever current state is". No code changed.  ### Behaviour found in the code (this branch)  | Script that exits
+====================================================================================================
+#107 [CLOSED] base=main head=docs/handoff-10cf255a-c created=2026-10-23T02:26:22Z merged=None
+  title: Handoff 10cf255a-c: integrate main, verify on Windows, release v0.74.0
+  commits=1 last_commit=2026-10-23T02:26:03Z files=6 checks={'SUCCESS': 7}
+  body draft mentions=2 comments=1 reviews=0 after_merge=0
+  LAST comment 2026-10-26T22:02:21Z: Superseded: committed directly to main as 480b901 (channel exception, commander order 2026-10-26).
+====================================================================================================
+#108 [OPEN] base=main head=fix/mf-audit-profile-json created=2026-10-23T02:38:11Z merged=None
+  title: Fix resolver and JSON engine audit findings A-6..A-9
+  commits=4 last_commit=2026-10-23T03:21:32Z files=8 checks={'SUCCESS': 7}
+  body draft mentions=4 comments=0 reviews=1 after_merge=0
+  LAST review:COMMENTED 2026-10-23T02:49:20Z: # S3-MF-Fix6-Review: independent review of PR #108  **Intent**: **Purpose**: An independent verdict on whether PR #108 fixes S3-MF-Audit findings A-6 (code part), A-7, A-8 and A-9 and changes nothing else, in particular not the resolver's output contract. **Scope**: The PR diff (fix/mf-audit-profile
+====================================================================================================
+#109 [OPEN] base=main head=fix/mf-audit-consumers created=2026-10-23T02:38:57Z merged=None
+  title: Fix B8 consumer rows on a dotprofile resolver error (A-22, A-23, A-24, A-26 cursor)
+  commits=2 last_commit=2026-10-23T02:50:13Z files=8 checks={'SUCCESS': 7}
+  body draft mentions=1 comments=1 reviews=0 after_merge=0
+  LAST comment 2026-10-23T02:44:27Z: # S3-MF-Fix4-Review: PR #109 review  **Intent**: **Purpose**: An independent verdict on PR #109 (fix/mf-audit-consumers): are audit findings A-22, A-23, A-24 and the cursor part of A-26 fixed, is bash/PS1 parity kept, did nothing else change behaviour, and do the tests pass. **Scope**: The diff orig
+====================================================================================================
+#110 [OPEN] base=main head=feature/harness-cursor-user-rules created=2026-10-23T02:39:54Z merged=None
+  title: Cursor: fan out user-level rules only and prune against the rules manifest
+  commits=8 last_commit=2026-10-23T02:51:27Z files=17 checks={'SUCCESS': 7}
+  body draft mentions=2 comments=0 reviews=2 after_merge=0
+  LAST review:COMMENTED 2026-10-23T02:45:15Z: NO BLOCKING FINDINGS  # S3-H2-Cursor-Review: independent review of PR #110  Reviewer: S3-H2-Cursor-Review (launched by S3-H2-Cursor, the author). I worked read-only in my own checkout of `origin/feature/harness-cursor-user-rules` at c91c5ea. I compared it with its base, `origin/feature/harness-rules
+  LAST review:COMMENTED 2026-10-23T02:50:47Z: NO BLOCKING FINDINGS  # S3-H2-Cursor-Review: re-verification of PR #110 at 7f7fc5c  I checked commit 7f7fc5c against my findings 1-4 from the first review (`S3-H2-Cursor-Review-verdict.md`), working read-only in my own worktree, detached at `origin/feature/harness-cursor-user-rules` = 7f7fc5c. All f
+====================================================================================================
+#111 [OPEN] base=main head=feature/harness-mdm-followups created=2026-10-23T02:54:26Z merged=None
+  title: MDM deploy-harness: payload data file, no-bootstrap skip, body markers, --skip-config
+  commits=8 last_commit=2026-10-23T03:14:44Z files=12 checks={'SUCCESS': 7}
+  body draft mentions=5 comments=1 reviews=2 after_merge=0
+  LAST review:COMMENTED 2026-10-23T03:00:39Z: BLOCKING (1 finding: B1)  # S3-H2-MDM-Review: verdict on PR #111  I reviewed only what #111 adds over `origin/feature/harness-rules-manifest`. I checked that #100's branch is an ancestor of the PR head with `git merge-base --is-ancestor`. The reviewed head is `633d1d7`. Files reviewed: `scripts/depl
+  LAST review:COMMENTED 2026-10-23T03:11:22Z: NO BLOCKING FINDINGS  # S3-H2-MDM-Review: re-verify of PR #111 at fdb5109  I re-reviewed only the fix commit: `git diff 633d1d7 fdb5109` (`scripts/build-deploy.sh`, `tests/deploy-harness-mdm/test-deploy-harness-mdm.sh`). `origin/feature/harness-mdm-followups` is at `fdb5109055f4`.  ## Tests reproduc
+  LAST comment 2026-10-23T03:14:51Z: 8caa79e fixes re-verify finding N6: the .ps1 now parses payload records as UTF-8, after the byte checksum. MDM tests 64/64 after the fix; the reviewer has not re-checked this commit. N7 (the size warning prints on every build) and N8 (the first-line guard needs perl) are recorded in the hand-back. H
+====================================================================================================
+#112 [OPEN] base=main head=fix/mf-audit-claude-build created=2026-10-23T03:07:16Z merged=None
+  title: Fix setup-user-claude hostname/dry-run rows and build-deploy embed cleanup, plain build output (A-19, A-20, A-25, A-26 claude)
+  commits=8 last_commit=2026-10-23T03:20:24Z files=14 checks={'SUCCESS': 7}
+  body draft mentions=1 comments=2 reviews=0 after_merge=0
+  LAST comment 2026-10-23T03:15:36Z: # S3-MF-Fix5-Review: independent review of PR #112  **Intent**: **Purpose**: An independent verdict on PR #112: is each of the S3-MF-Audit findings A-19, A-20, A-25 and A-26 (claude part) fixed? Does the build-deploy.sh port match the scripts/ source? Do bash and PowerShell behave the same? **Scope*
+  LAST comment 2026-10-23T03:20:01Z: ## Re-verification (18d6646)  **Updated verdict: APPROVE-equivalent.** B-1 is fixed, and so is N-1. I found no new blocking issue. The macOS and Linux CI jobs for 18d6646 were still pending when I checked; Windows and CodeQL passed. Merge after #103, as the PR body says.  I checked out `18d6646` det
+====================================================================================================
+#113 [OPEN] base=main head=fix/mf-lib-runner-result created=2026-10-23T03:13:54Z merged=None
+  title: Lib profile runner accepts result lines; user init uses it and passes --no-machine
+  commits=10 last_commit=2026-10-23T03:27:55Z files=22 checks={'SUCCESS': 7}
+  body draft mentions=1 comments=1 reviews=0 after_merge=0
+  LAST comment 2026-10-23T03:27:02Z: # S3-MF-Runner-Review: independent review of PR #113  **Reviewer**: S3-MF-Runner-Review (independent; wrote none of this code). **Date**: 2026-10-22. **Scope**: commits e427e60 and 8967660 on `fix/mf-lib-runner-result` (diff `53bc7b4..origin/fix/mf-lib-runner-result`), reviewed at 8967660 in a detac
+====================================================================================================
+#114 [OPEN] base=main head=fix/mf-audit-config created=2026-10-23T03:56:10Z merged=None
+  title: Fix audit A-10/A-11 in setup-user-config; split the resolver's not-v2 message
+  commits=11 last_commit=2026-10-23T04:08:23Z files=15 checks={'SUCCESS': 7}
+  body draft mentions=1 comments=1 reviews=0 after_merge=0
+  LAST comment 2026-10-23T04:07:55Z: # S3-MF-Fix3-Review: independent review of PR #114  **Intent**: **Purpose**: An independent verdict on whether PR #114 fixes what it claims (audit A-10, A-11; PR #98 review m1; PR #108 review n-2) and changes nothing else. **Scope**: The PR's own commit 93569b2 on `fix/mf-audit-config` (head 16c9d18
+====================================================================================================
+#115 [OPEN] base=main head=fix/mf-lib-relay created=2026-10-23T04:06:04Z merged=None
+  title: Lib relay: ERROR row for a failed child, machine-profile resolver ACTION (A-2, A-3, A-4)
+  commits=13 last_commit=2026-10-23T04:22:22Z files=23 checks={'SUCCESS': 7}
+  body draft mentions=3 comments=1 reviews=0 after_merge=0
+  LAST comment 2026-10-23T04:14:45Z: **Verdict: approve with minors** -- 0 B, 0 M, 1 m, 4 n. The PR fixes A-2, A-3 and the `run_child_relayed` part of A-4 as the audit describes. Rows, messages and counters are the same in bash and PowerShell, and the change is bash 3.2 safe. The one minor is a gap in the tests, not in the code.  # S3-
+====================================================================================================
+#116 [OPEN] base=main head=fix/mf-installer-relay created=2026-10-23T04:44:17Z merged=None
+  title: Installers and user init use the lib relay (A-1, A-12..A-18)
+  commits=19 last_commit=2026-10-23T05:14:38Z files=28 checks={'SUCCESS': 7}
+  body draft mentions=3 comments=3 reviews=0 after_merge=0
+  LAST comment 2026-10-23T04:55:28Z: **Verdict: changes requested** (1 major, 4 minor, 4 nits; no blocking finding)  # S3-MF-Relay-ReviewB: independent review of PR #116 (installers and user init on the lib relay)  Reviewer: S3-MF-Relay-ReviewB, an independent reviewer delegated by S3-MF-Relay. I wrote none of this code and did not rea
+  LAST comment 2026-10-23T05:05:40Z: Author response to S3-MF-Relay-ReviewB (changes requested). The fixes are in 1605d6e.  | Finding | Disposition | |---|---| | **M-1** Git Bash: relayed `pwsh -File setup-user-hooks.ps1` hides the PS menu prompts | **Fixed.** On Git Bash, user init runs the hooks child directly again. It keeps the rel
+  LAST comment 2026-10-23T05:14:15Z: ## Re-check of 1605d6e  **Verdict: approve with minors.** M-1 is resolved, nothing blocks, and the open items are minor or nits.  Re-checked `git diff ccccbd8..1605d6e` (scripts/aitools, aitools-install.sh/.ps1, aitools-lib.sh, aitools.ps1, tests/profile/test-install.sh) against my findings and the 

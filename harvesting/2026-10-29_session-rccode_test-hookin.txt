@@ -1,0 +1,41 @@
+PASS static: aitools-install.sh has no harness bin step
+PASS static: aitools-install.sh Step 8b between Step 8 (Node) and Step 9
+PASS static: aitools-install.ps1 has no harness bin step
+PASS static: aitools-install.ps1 Step 8b between Step 8 (Node) and Step 9
+PASS static: aitools deploy lists start with deploy-harness, no setup-user-config
+PASS static: aitools.ps1 deploy list starts with deploy-harness, no setup-user-config
+PASS static: loop functions extracted
+PASS install: exit 0
+PASS install: Step 8b runs once, after Step 8 and before Step 9
+PASS install: deploy-harness ran once (one summary row)
+PASS install: bin deployed by deploy-harness, executable
+PASS install: no harness bin row
+PASS install: writer at Step 5 (flags) and once bare inside Step 8b
+PASS install: deploy-harness lines relayed to deploy.jsonl
+PASS install: one run id in deploy.jsonl
+PASS install: Step 21 scripts ran
+PASS install rerun: verified
+PASS install exit 1: ERROR row, install continued, exit 1
+PASS install abort: exit 2, Step 9 and Step 21 not run
+PASS install abort: WARN row, file unchanged
+PASS loop: rc 0, not aborted
+PASS loop: writer runs once (inside deploy-harness)
+PASS loop: deploy-harness first, then the 7 scripts
+PASS loop: deploy-harness lines relayed to deploy.jsonl
+PASS loop exit 1: one error counted, ERROR row, the 7 scripts ran
+PASS loop abort: aborted, no later script ran
+PASS ps: driver guard check (fixture deploy-harness.ps1 guard disabled)
+PASS ps loop: rc 0, not aborted
+PASS ps loop: writer runs once (inside deploy-harness)
+PASS ps loop: deploy-harness first, then the 7 scripts
+PASS ps loop: deploy-harness lines relayed to deploy.jsonl
+PASS ps loop exit 1: one error counted, ERROR row, the 7 scripts ran
+PASS ps step: returns 0, one OK row
+PASS ps step: bin deployed
+PASS ps step exit 1: returns 0 (install continues), ERROR row
+PASS ps step missing script: WARN row
+PASS ps loop abort: aborted, no later script ran, WARN row
+PASS ps loop abort: abort line logged as [aitools]
+PASS ps step abort: returns 2, WARN row, file unchanged
+
+39 passed, 0 failed, 0 skipped

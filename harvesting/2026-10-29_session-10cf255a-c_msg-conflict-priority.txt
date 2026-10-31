@@ -1,0 +1,36 @@
+Add conflict priority to /delegate; file incident #171
+
+A delegate in mission MDM-WINTOOL loaded the commander-mandated
+deep-research skill, found that its file locations (research_notes/,
+reports/ in the working directory) and its coordinator-only process
+clashed with the prompt's access rules, and silently did the research by
+hand. The commander had to ask where the report was.
+
+shared/skills/delegate/SKILL.md:
+- Writing step 12 (new): before naming a skill, read its SKILL.md and
+  pre-resolve each conflict with the prompt -- allow its file locations
+  or process explicitly, or override them ("write its files under <path>
+  instead"). Never leave a named skill in conflict with the prompt.
+- "Conflict priority" (commander decision 2026-10-26): 1) the commander's
+  own words, newest first (recent session transcripts; rules, standing
+  orders and decision records that record his words; a newer statement
+  overrides an older rule); 2) the delegation prompt and its packet;
+  3) skills. A prompt cannot loosen a rule unless it quotes the
+  commander's authorisation. A mandated skill or rule is never dropped
+  silently: the delegate follows its non-conflicting parts and reports
+  each `CONFLICT: <A> vs <B> -- resolved by <tier>: <what was done>`.
+- Prompt skeleton: a "Skill overrides" line under Skills and a new
+  "Conflicts" block carrying the priority order.
+
+Incident #171 (medium) is appended to the approved S3-MF-Incidents batch
+(#146-#170), so MERGE-ALL's apply step files it with the others and the
+ids stay in sequence; the apply script's dry run passes (146-171, max
+171, unique). Remaining, recorded in the incident: the same priority as
+a decision in the user rule delegation.md and the mission packet, a
+delegation-duty-guard check for the Conflicts block, and a real
+deep-research re-run for MDM-WINTOOL.
+
+Commander order 2026-10-26: mark the incident and update /delegate.
+Docs only. Committed directly to main.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

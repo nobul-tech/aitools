@@ -1,0 +1,31 @@
+Scaffold build-package.sh and packaging launcher stubs (batch B0)
+
+What: scripts/build-package.sh (bash 3.2, aitools-lib logging, --help,
+commands stage|pkg|intune|deb|all, --ref/--version/--out/--intune-tool/
+--dry-run, host detection per kind, dry-run plan, summary rows, exit
+footer; the four build functions are v1.0 stubs that log ERROR and exit
+1, implemented in batches B2/B8/B9/B10). packaging/macos (postinstall,
+aitools-pkg-run.sh, firstrun LaunchAgent plist), packaging/windows
+(install-system, install-user, detect-user), packaging/linux (control.in,
+postinst, aitools-setup): headers stating run context and batch, bodies
+that refuse to run. tests/build-package/test-cli.sh (32 cases).
+
+Why: mission BUILD-PKG, commander decisions 2026-10-26 (parallel
+package distribution; scaffolding allowed in scripts/). Contract BP-1..
+BP-20 in the S3-BuildPkg decisions file. No existing script changed;
+build-deploy.sh untouched. bash-only build script and package-launcher
+exemption rows are pending approval P-1 (drafted in
+plans/build-package/doc-edits-pending.md).
+
+Verification (tested: macOS): test-cli.sh 32 passed under bash 5.3.15
+and /bin/bash 3.2.57 (delegate), re-run by the orchestrator under an
+isolated HOME: 32 passed, 0 failed. bash -n on every launcher, pwsh
+7.6.3 parser on the three .ps1, plutil -lint on the plist (delegate).
+Only one 2>/dev/null, commented and result-checked. check-pre-commit:
+step 6 FAIL is the known pre-existing harvesting file; step 20 passes
+for these files.
+
+Not run: Windows PowerShell 5.1 parse of the .ps1 stubs; any Windows or
+Linux host.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

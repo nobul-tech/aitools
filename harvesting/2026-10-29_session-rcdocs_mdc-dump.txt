@@ -1,0 +1,1020 @@
+
+######## agentic-standards.mdc
+   1  ---
+   2  description: Agentic AI invocation standards for scripts in this repo
+   3  globs: "*.sh,*.ps1"
+   4  alwaysApply: false
+   5  ---
+   6  
+   7  ## Agentic Standards (this repo)
+   8  
+   9  ### Framework usage
+  10  
+  11  All AI CLI invocations in reusable scripts must use `invoke_ai` / `Invoke-AI`
+  12  from aitools-lib. Direct `claude -p` or `agent -p` only in contexts where
+  13  aitools-lib is not loaded (e.g., interactive shell aliases with opportunistic
+  14  fallback).
+  15  
+  16  Default: `none` permissions, `balanced` speed. Escalate only when needed.
+  17  
+  18  ### Prompt design
+  19  
+  20  Every prompt function must follow the structured prompt pattern:
+  21  
+  22  1. **Role** -- who the AI is acting as ("You are a file merge tool")
+  23  2. **Context** -- what it's working with (file type, source, deploy purpose)
+  24  3. **Task** -- specific action ("apply the changes from the diff to LOCAL")
+  25  4. **Constraints** -- rules about conflicts, preservation, what to keep/change
+  26  5. **Output format** -- exact expectations ("no commentary, no code fences")
+  27  
+  28  Prompts must be self-contained -- never reference file paths when tool use is
+  29  disabled. Inline all content using XML delimiters.
+  30  
+  31  ### Prompt evaluation
+  32  
+  33  Before shipping a new or modified prompt:
+  34  
+  35  1. **Test against samples** -- run with realistic inputs in `.scratch/`
+  36  2. **Verify validation** -- output must pass the prompt's validation function
+  37  3. **Check edge cases** -- empty input, large input, conflicting content
+  38  4. **Document limitations** -- in the prompt function's header comment
+  39  
+  40  At runtime, log every AI invocation to deploy.log:
+  41  - Speed tier, backend (claude/agent), validation result, retry count
+  42  - On failure: full rejected output via `log_detail` for post-mortem
+  43  
+  44  ### Prompt iteration
+  45  
+  46  When a prompt fails in production:
+  47  1. Read rejected output from deploy.log (`[detail] ai-rejected:` lines)
+  48  2. Identify the failure mode (which validation check, why)
+  49  3. Update the prompt to address the failure
+  50  4. Re-test against the original failing input + other samples
+  51  5. Ship the updated prompt
+  52  
+  53  ### Managed-file review choices and merge
+  54  
+  55  Every choice in the managed-file review menus has one defined effect. Code:
+  56  `prompt_diff_review` in `@scripts/aitools-lib.sh` (twin: `Prompt-DiffReview`
+  57  in `@scripts/aitools-lib.ps1`); mission SOURCE-TRUTH implements this model.
+  58  State machine: `@reference/managed-file-deployment.md`.
+  59  
+  60  **SOURCE is the source of truth.**
+  61  - **SOURCE**: the file in the repo (or dotprofile) being deployed
+  62  - **LOCAL**: the deployed copy on disk
+  63  
+  64  There is no ancestor and no deploy state: the only comparison is SOURCE
+  65  against LOCAL.
+  66  - LOCAL equals SOURCE: verified, nothing written.
+  67  - LOCAL differs, non-interactive run (no terminal, EOF, or `--force`):
+  68    SOURCE written to LOCAL. No merge runs.
+  69  - LOCAL differs, interactive run: the review menu.
+  70  
+  71  **Text files** (markdown, shell): one review per file, with the full menu,
+  72  including AI merge.
+  73  
+  74  **JSON files:** SOURCE owns every field. Node compares SOURCE and LOCAL
+  75  field by field (key path; a whole array is one field), and each differing
+  76  field is one review. A field only in LOCAL is kept in LOCAL and never
+  77  written to SOURCE without a review. Key order is preserved. No text or AI
+  78  merge. `sync_managed_json` / `Sync-ManagedJson` (settings.json) keep their
+  79  profile-mirror rule: a leaf only in the live file auto-adopts into
+  80  profile.json. cli-config.json uses its own merge (`setup-user-cursor`).
+  81  
+  82  **Adopt and merge write the repo immediately.** On accept & adopt or merge &
+  83  adopt, the library writes the result to LOCAL and copies it to the repo
+  84  (the adopt target) in the same step, before the next file is reviewed. After
+  85  that SOURCE, LOCAL and the repo are identical, so the next run verifies the
+  86  file and asks nothing. A file with no adopt target is not offered adopt or
+  87  merge.
+  88  
+  89  **Choices.**
+  90  
+  91  | Choice | LOCAL | Repo (source of truth) |
+  92  |---|---|---|
+  93  | overwrite | SOURCE written | unchanged |
+  94  | accept & adopt (file, or JSON field) | LOCAL kept | LOCAL copied to the repo immediately |
+  95  | merge & adopt (text only; AI merge) | merge written | merge copied to the repo immediately |
+  96  | skip | unchanged | unchanged; reviewed again next run |
+  97  | abort | unchanged | unchanged; the script logs an error and exits 2 |
+  98  
+  99  **Failure handling.** Before any write, back up every file the step will
+ 100  write: LOCAL, and the repo file for an adopt or merge. After writing,
+ 101  validate (text: non-empty; JSON: parses, required keys present). If a write,
+ 102  the AI merge or a validation fails: restore the backups, log the error with
+ 103  its reason, report the file as ERROR in the summary, and continue with the
+ 104  next file. One failed file never stops the run, and a failure never leaves a
+ 105  half-written file.
+ 106  
+ 107  **Rules.**
+ 108  - The library performs the repo write-back itself, given the adopt target's
+ 109    path. Callers pass the path; they do not copy files back themselves.
+ 110  - Adopting into a protected file (`.claude/rules/sources-of-truth.md`) is
+ 111    allowed. It writes only the working tree and logs a WARN that names the
+ 112    file; the review gate applies at commit and PR.
+ 113  - AI merge applies to text files only and follows the prompt design,
+ 114    validation and telemetry rules above (speed `balanced`, permissions
+ 115    `none`, at most 1 retry, preview before write).
+ 116  
+ 117  ### Speed tiers
+ 118  
+ 119  | Tier | When to use | claude model | agent model |
+ 120  |------|-------------|-------------|-------------|
+ 121  | `fast` | Simple extraction, naming, classification | haiku | auto (default) |
+ 122  | `balanced` | Merge, summarization, moderate complexity | sonnet | auto (default) |
+ 123  | `quality` | Complex reasoning, code generation | opus | auto (default) |
+ 124  
+ 125  Agent CLI note: uses `--model auto` (account default) for all tiers.
+ 126  Speed hints via prompt prefix only. Update when explicit models available.
+ 127  
+ 128  ### Permission tiers
+ 129  
+ 130  | Tier | When to use |
+ 131  |------|-------------|
+ 132  | `none` | Text-only tasks -- merge, naming, summary. **This is the default.** |
+ 133  | `readonly` | Tasks that need file context but shouldn't write |
+ 134  | `full` | Full agentic tasks requiring file/shell access |
+ 135  | `dangerous` | Autonomous operations -- requires explicit justification |
+ 136  
+ 137  ### Anti-patterns
+ 138  
+ 139  - Vague prompts without explicit output format specification
+ 140  - Prompts that reference file paths when `--allowedTools ""` is set
+ 141  - AI invocations without validation callbacks
+ 142  - Fire-and-forget calls without checking output or exit code
+ 143  - Hardcoded model names (use speed tiers)
+ 144  - Suppressing AI errors without logging (`2>/dev/null` without result check)
+ 145  - Prompts tested only manually -- write `.scratch/` test scripts
+ 146  
+ 147  ### User-facing AI invocations
+ 148  
+ 149  When an AI invocation is visible to the user (interactive prompt, not background):
+ 150  
+ 151  1. **Transparency**: Display the backend (claude/agent), speed tier, and purpose
+ 152     before the invocation starts
+ 153  2. **Progress**: Show an animated spinner for operations expected to take >3 seconds
+ 154  3. **Failure severity**: When the user explicitly requested the AI operation and it
+ 155     fails after retries, log_error (not log_warn). log_warn is for
+ 156     background/optional AI operations with automatic fallbacks
+ 157  
+ 158  Details: `@reference/agentic-framework.md`
+
+######## config-file-safety.mdc
+   1  ---
+   2  description: Config file write safety — read-then-merge for JSON configs
+   3  globs: "scripts/**,deploy/**,shared/**,reference/**,plans/**,rfcs/**,.claude/rules/**,.cursor/rules/**,CLAUDE.md,RELEASE_NOTES.md,ROADMAP.md,README.md"
+   4  alwaysApply: false
+   5  ---
+   6  
+   7  ## Config File Write Safety (this repo)
+   8  
+   9  Scripts that write JSON config files must use read-then-merge by default.
+  10  Blind overwrites silently drop user data and non-managed fields.
+  11  
+  12  ### Rules
+  13  
+  14  1. **Read-then-merge**: Read existing file, set only managed fields, write merged result
+  15  2. **Document ownership**: Script header must list managed vs preserved fields
+  16  3. **Overwrite only if sole owner**: Must be documented in header as `# Overwrites: yes (sole owner)`
+  17  4. **No empty `catch {}`**: Distinguish ENOENT (start fresh) from parse errors (warn user)
+  18  
+  19  ### Anti-patterns
+  20  
+  21  - `cat > file << EOF` for shared JSON configs
+  22  - `ConvertTo-Json | WriteAllText` without reading existing content first
+  23  - `try { ... } catch {}` that swallows both missing-file and corrupt-file errors
+  24  
+  25  ### Backup before overwrite
+  26  
+  27  Scripts MUST back up targets before writing, regardless of ownership model or deployment type:
+  28  - **Markdown files and shell scripts**: `deploy_managed_file` calls `backup_file` internally
+  29  - **JSON config files**: caller MUST call `backup_file` / `Backup-File` before the merge write
+  30  
+  31  Retention: Single files `.bak.TIMESTAMP` (max 20), directories `.bak.TIMESTAMP/` (max 5). Skip if target doesn't exist. Backup failures are non-fatal. A merge or copy without backup is a bug.
+  32  
+  33  See `@.claude/rules/managed-file-deployment.md` and `@reference/managed-file-deployment.md` "Backup Policy".
+  34  
+  35  ### Diff logging on overwrite
+  36  
+  37  Compare old and new before overwriting. Identical: skip, log "unchanged". Different: log diff to deploy log, then write. New: log "added".
+  38  
+  39  ### Directory deployment
+  40  
+  41  Additive pattern for directory-level deploys:
+  42  1. Declare managed scope in header
+  43  2. Back up directory, compare+deploy (add/update/skip), preserve unmanaged files
+  44  3. Validate each deployed file, log counts
+  45  4. If source empty/missing: log info, leave target untouched
+  46  
+  47  ### Post-write validation
+  48  
+  49  Every config-writing script must validate output after writing:
+  50  
+  51  1. **JSON**: Check non-empty, valid JSON parse, required keys present, no double-slash paths
+  52  2. **Markdown** (CLAUDE.md): Check non-empty, required sections present
+  53  3. **Bash**: Use `validate_json_config` function or inline Node.js validation after `fs.writeFileSync`
+  54  4. **PowerShell**: Use `ValidateJsonConfig` function or inline try/catch after write
+  55  
+  56  ### Reference examples
+  57  
+  58  Do not assume these are violation-free -- verify copied code against the rules.
+  59  
+  60  - Single config writer: `scripts/setup-user-config.sh` / `.ps1` (config.json; bootstrap + derived keys)
+  61  - Node.js merge: `scripts/setup-user-cursor.sh` (cli-config.json)
+  62  - PowerShell merge: `scripts/setup-user-mcp.ps1` (settings.json)
+  63  - Hook merge: `scripts/setup-user-hooks.sh` (settings.json hooks)
+  64  - Bash `validate_json_config`: `scripts/aitools-install.sh`
+  65  - PS1 `ValidateJsonConfig`: `scripts/aitools-install.ps1`
+  66  - Inline Node.js validation: `scripts/setup-user-mcp.sh`
+
+######## cross-platform.mdc
+   1  ---
+   2  description: Cross-platform rules for this dual-platform repo
+   3  globs:
+   4  alwaysApply: true
+   5  ---
+   6  
+   7  ## Cross-Platform Awareness (this repo)
+   8  
+   9  This repo targets macOS and Windows equally.
+  10  
+  11  ### Dual-script rule
+  12  
+  13  - Provide both `.ps1` and `.sh` variants for setup/utility scripts
+  14  - Use forward slashes in paths; `$HOME`/`~` for user directory references
+  15  - One script per tool (D-ENV0): one `.sh` for every POSIX platform and
+  16    environment, paired with one `.ps1`; divergence goes into library helpers.
+  17    Splits are recorded exceptions in `.claude/rules/cross-platform.md`
+  18  
+  19  ### Environment branches
+  20  
+  21  Platform = operating system; environment = where and how the agent runs
+  22  (`claude-code-web` or `local`). Branch on the environment only where a recorded
+  23  decision names it. Detect only via the library API (`is_claude_code_web` /
+  24  `Test-ClaudeCodeWeb`, `AITOOLS_ENVIRONMENT`, `AITOOLS_PLATFORM`), never by
+  25  reading `CLAUDE_CODE_REMOTE`. `.ps1` scripts behind the Windows guard never
+  26  branch on the environment. Hooks copy the library's environment block verbatim.
+  27  Not applicable: `OK` row `n/a (<environment>)` via `write_environment_skip` /
+  28  `Write-EnvironmentSkip`. Test both values under an isolated `HOME`. Details:
+  29  `.claude/rules/cross-platform.md` "Environment branches".
+  30  
+  31  ### Windows managed bash (Git Bash, not WSL)
+  32  
+  33  Harness bash on Windows = **Git for Windows** (`…\Git\bin\bash.exe`). **WSL
+  34  bash** is a different product — do not assume `bash` in PATH is Git Bash.
+  35  `setup-bash.ps1` checks only Git paths. Details: `.claude/rules/cross-platform.md`.
+  36  
+  37  ### OS guard + dispatch
+  38  
+  39  Every script uses the canonical guard pattern. Guards MUST use structured
+  40  logging (`LogError`/`log_error`), not raw output. Source `init-logging`
+  41  before the guard. See `.claude/rules/cross-platform.md` "OS guard patterns".
+  42  
+  43  **PS1:** `if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows)` —
+  44  use `-not $IsWindows` (catches macOS AND Linux), never `$IsMacOS` alone.
+  45  **Bash:** `case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*)` — exits on Windows.
+  46  
+  47  Exemptions: libraries (aitools-lib, check-lib, init-logging), hooks, build
+  48  scripts, scratch files. Full table in `.claude/rules/cross-platform.md`.
+  49  
+  50  Dead code rule: Do not write platform branches for the rejected platform
+  51  below an OS guard. Branch on capability, not identity (`IS_MACOS`,
+  52  `IS_LINUX`, `AITOOLS_PLATFORM`).
+  53  
+  54  - Never call `.sh` setup scripts without a `uname -s` dispatch
+  55  - On Windows, call `.ps1` via `pwsh -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$path")"`
+  56  
+  57  ### Cross-language script calls require explicit approval
+  58  
+  59  Every script gets a native variant for each platform. Crossing languages (e.g., PowerShell calling bash) is an exception -- ask the user first. See approved exceptions in `.claude/rules/cross-platform.md`.
+  60  
+  61  ### PowerShell 7 baseline
+  62  
+  63  PS 7 (`pwsh`) is the project baseline on both platforms. Existing PS 5.1 workarounds remain in scripts -- harmless on PS 7, cleanup deferred.
+  64  
+  65  ### ASCII preference for PS1 executable code
+  66  
+  67  Prefer ASCII in PS1 strings and expressions for consistency. PS 7 handles UTF-8 natively, so this is a preference, not a hard rule.
+  68  
+  69  ### Pre-validation convention
+  70  
+  71  Before committing scripts, validate syntax:
+  72  - PS1: `pwsh -NoProfile -Command '$e = $null; $null = [System.Management.Automation.Language.Parser]::ParseFile("path", [ref]$null, [ref]$e); if ($e) { $e }'`
+  73  - Bash: `bash -n path/to/script.sh`
+  74  
+  75  ### Windows platform gotchas
+  76  
+  77  Details: `reference/cross-platform-detail.md`
+  78  
+  79  - **Git Bash PATH shadowing**: Git's `usr/bin/` can shadow managed tools (perl).
+  80    Use explicit PATH prepend; no fallback to bundled versions
+  81  - **Strawberry Perl text mode**: Defaults to `:crlf` layer (double-CR on
+  82    explicit `\r\n` writes). Fix: `export PERLIO=:perlio`
+
+######## deploy-paths.mdc
+   1  ---
+   2  description: Dual deployment path equivalence for scripts/ and deploy/
+   3  globs: "scripts/**,deploy/**,shared/**,reference/**,plans/**,rfcs/**,.claude/rules/**,.cursor/rules/**,CLAUDE.md,RELEASE_NOTES.md,ROADMAP.md,README.md"
+   4  alwaysApply: false
+   5  ---
+   6  
+   7  ## Dual Deployment Paths (this repo)
+   8  
+   9  Two deployment methods must produce equivalent results:
+  10  
+  11  1. **Dev/repo path** (`scripts/setup-*.sh/.ps1`): reads `shared/` and user repo at runtime. Used by `aitools` CLI.
+  12  2. **MDM path** (`deploy/setup-*.sh/.ps1`): self-contained with build-time embedded content. Generated by `build-deploy.sh`.
+  13  
+  14  ### Changing shared/ content
+  15  
+  16  1. Edit `shared/` source file
+  17  2. If it has a user repo counterpart (e.g., `shared/claude-shared.md` -> `<userRepoPath>/claude/CLAUDE.md`), update both
+  18  3. Run `build-deploy.sh` to regenerate `deploy/`
+  19  
+  20  ### Changing scripts/setup-*.sh/.ps1
+  21  
+  22  1. Edit `scripts/` source
+  23  2. Run `build-deploy.sh` to regenerate `deploy/`
+  24  3. Verify via pre-commit steps 3+10
+  25  
+  26  ### Template sync
+  27  
+  28  `shared/claude-shared.md` and `<userRepoPath>/claude/CLAUDE.md` must stay in sync. User repo template takes priority at runtime.
+  29  
+  30  ### Scripts with deploy templates (duplication risk)
+  31  
+  32  Four script pairs have **duplicated setup logic** between `scripts/` and `build-deploy.sh`. Running `build-deploy.sh` does NOT auto-fix stale template logic.
+  33  
+  34  | Script | What's duplicated |
+  35  |--------|-------------------|
+  36  | `setup-user-claude.sh/.ps1` | Template interpolation, footer generation |
+  37  | `setup-user-cursor.sh/.ps1` | CLI config merge logic |
+  38  | `setup-user-mcp.sh/.ps1` | Settings.json merge, validation |
+  39  | `setup-user-hooks.sh/.ps1` | Settings.json hook merge, dedup, validation |
+  40  
+  41  When changing logic in any of these: fix `scripts/`, fix `build-deploy.sh`, run build, verify `deploy/` output. Pre-commit step 13 warns if `build-deploy.sh` wasn't touched.
+
+######## documentation-standards.mdc
+   1  ---
+   2  description: Documentation standards for release notes, roadmap, and reference docs
+   3  globs: "scripts/**,deploy/**,shared/**,reference/**,plans/**,rfcs/**,.claude/rules/**,.cursor/rules/**,CLAUDE.md,RELEASE_NOTES.md,ROADMAP.md,README.md"
+   4  alwaysApply: false
+   5  ---
+   6  
+   7  ## Documentation Standards (this repo)
+   8  
+   9  ### RELEASE_NOTES.md format
+  10  
+  11  Version header: `## vX.Y -- Title (YYYY-MM-DD)`. Standard sections (include only applicable): Bug fixes, New features, Improvements, Documentation, Files created. Each as a table. End with `**Verified on:**` line.
+  12  
+  13  ### Version numbering
+  14  
+  15  `major.minor.patch` (e.g., v0.14.1) -- major = structural, minor = features/tools, patch = isolated bug fixes. Multiple changes same day roll into one release.
+  16  
+  17  ### ROADMAP.md format
+  18  
+  19  Three sections: In Progress, Planned, Completed. Table: `| Item | Plan | Priority | Summary |`. In Progress must link `plans/*.md`. Completed items move to RELEASE_NOTES.md.
+  20  
+  21  ### Reference doc threshold
+  22  
+  23  Content >20 lines of detail goes in `reference/`, not CLAUDE.md. Keep CLAUDE.md under 200 lines.
+  24  
+  25  ### When to create a plan
+  26  
+  27  Spans multiple sessions, has phased gates, or needs detailed design beyond a roadmap row.
+  28  
+  29  ### Layered reference architecture
+  30  
+  31  - **Rules** (`.claude/rules/` / `.cursor/rules/`) = concise behavioral directives, ~40-100 lines
+  32  - **References** (`reference/`) = implementation detail, unlimited length
+  33  - **No duplication** — one authoritative location per fact
+  34  - **Tool configs** documented per-tool via the `/tool-registry` skill
+  35  - **Specs vs state** — rules and references are specs; the `/incident` skill tracks out-of-spec code
+  36  - **Cursor parity** — `.cursor/rules/*.mdc` mirrors `.claude/rules/*.md`. See `@.claude/rules/cursor-rule-parity.md`
+  37  
+  38  ### `@` link convention
+  39  
+  40  - `@` can reference ANY repo file: `@reference/`, `@.claude/rules/`, `@shared/`, `@scripts/`, `@plans/`
+  41  - Use `@` consistently for all cross-references to signal "this is a linked file" and enable grep-based link auditing
+  42  
+  43  ### Function and library attribution
+  44  
+  45  - Reference shared library functions by file + function name: `deploy_managed_file()` in `@scripts/aitools-lib.sh` / `Deploy-ManagedFile` in `@scripts/aitools-lib.ps1`
+  46  - Never cite line numbers — they drift. Function names are stable identifiers
+
+######## git-safety.mdc
+   1  ---
+   2  description: Git safety rules for pre-pull resets and generated vs source directories
+   3  globs:
+   4    - scripts/aitools
+   5    - scripts/aitools.ps1
+   6    - scripts/build-deploy.sh
+   7  alwaysApply: false
+   8  ---
+   9  
+  10  ## Git Safety (this repo)
+  11  
+  12  ### deploy/ is ephemeral
+  13  
+  14  `deploy/` is 100% generated by `build-deploy.sh`. The `aitools` entry points
+  15  reset it to HEAD before every pull (`git checkout HEAD -- deploy/`). Uncommitted
+  16  changes in `deploy/` will not survive an `aitools` run — this is by design.
+  17  
+  18  After running `build-deploy.sh`, `deploy/` will have uncommitted diffs (newly
+  19  generated content). These are expected. They are committed as part of the normal
+  20  release flow and cleared by the pre-pull reset on the next run.
+  21  
+  22  ### scripts/ is source — never bulk-reset
+  23  
+  24  `scripts/` contains source files (aitools-lib, setup scripts, entry points).
+  25  The pre-pull reset must NEVER include `scripts/` or any other source directory.
+  26  
+  27  If a build step creates noise diffs in source directories (mode changes, line
+  28  endings), fix the build step — do not add the source directory to the pre-pull
+  29  checkout.
+  30  
+  31  ### Pre-pull reset scope rule
+  32  
+  33  When modifying pre-pull reset logic in `scripts/aitools` or `scripts/aitools.ps1`:
+  34  - Only include directories that are fully generated (currently: `deploy/`)
+  35  - Never include directories containing source files
+  36  - If adding a new directory, document WHY in the code comment and in this rule
+
+######## hook-rollout.mdc
+   1  ---
+   2  description: Hook rollout practice -- observe before enforce
+   3  globs: "scripts/**,deploy/**,shared/**,reference/**,plans/**,rfcs/**,.claude/rules/**,.cursor/rules/**,CLAUDE.md,RELEASE_NOTES.md,ROADMAP.md,README.md"
+   4  alwaysApply: false
+   5  ---
+   6  
+   7  ## Hook Rollout Practice
+   8  
+   9  PreToolUse hooks must go through observe-then-enforce:
+  10  
+  11  1. **Observe** (1+ week): per-check mode variable set to `"observe"`, log only (`~/.aitools/logs/<hook-name>.log`), exit 0
+  12  2. **Review**: Audit logs for false positives, fix matching
+  13  3. **Enforce**: per-check mode variable set to `"enforce"`, blocks violations (exit 2)
+  14  
+  15  Per-check mode variables (`MODE_AND`, `MODE_SUBSHELL`, `MODE_SED`, etc.) allow promoting individual checks
+  16  independently. `violation "message" "$MODE_VAR"` — second arg drives observe vs. enforce.
+  17  
+  18  Reset a check to observe after adding new patterns, changing matching logic so it blocks more, or CC version upgrades.
+  19  A matching change that only narrows what is blocked (an exemption) keeps the current mode; a widening change resets to observe.
+  20  A check with no mode variable gets one when it is reset.
+  21  
+  22  **Pre-deploy verification** (required before any hook change goes live):
+  23  1. `bash -n <hook>.sh` — syntax only, insufficient alone
+  24  2. Smoke-test clean input: `echo '{"tool_name":"Bash","tool_input":{"command":"git status"}}' | bash <hook>` → must exit 0
+  25  3. Violation test: same with a known-bad command → must exit 2 (enforce) or log entry (observe)
+  26  4. Exemption test (when adding an exemption): the exempted form exits 0 with no log entry; each near-miss write form is still blocked
+  27  
+  28  `bash -n` cannot catch `-u` unset variable errors. Always smoke-test. (I12: stale `$MODE` caused crash-on-every-call.)
+  29  
+  30  **Current state (standing-order-guard.sh):** every check enforcing (`&&`, `||`, `;`, `$()`, backticks, scratch files, `rm` globs, `cat`/`head`/`tail`/`awk` outside a pipeline, echo/printf redirects; `||`, `;`, backticks promoted 2026-03-24), and `sed` outside a pipeline (`MODE_SED`, enforce; read-only `sed -n '<N[,M]>p' <file>` exempt since 2026-10-21, incident #82, single-line commands only, a narrowing change). **delegation-duty-guard.sh:** observe (`MODE_DUTY`, stderr reminder only).
+  31  
+  32  Hook lifecycle beyond rollout (source, deploy, adopt, retire): user-level rule `shared/rules/hook-lifecycle.md` (not yet deployed).
+
+######## interactive-menus.mdc
+   1  ---
+   2  description: Interactive deploy menu conventions for managed file deployment
+   3  globs: "scripts/**,deploy/**"
+   4  alwaysApply: false
+   5  ---
+   6  
+   7  ## Interactive Deploy Menus (this repo)
+   8  
+   9  One review menu: `[o]verwrite` / `[a]ccept & adopt` / `[m]erge & adopt` /
+  10  `[s]kip` / `[x]abort`; `[a]` and `[m]` only when the caller passed an adopt
+  11  target; JSON gets the same choices per field, without `[m]`. Choices:
+  12  `.claude/rules/agentic-standards.md` "Managed-file review choices and merge".
+  13  
+  14  PS1 and bash menus MUST show identical options in identical order. Every return
+  15  value from `Deploy-ManagedFile` / `deploy_managed_file` MUST be handled at
+  16  **every call site**: `created`, `updated`, `verified`, `accept & adopt`,
+  17  `skipped`, `failed` (library restored backups and logged; caller records an
+  18  ERROR row and continues). Scripts with multiple call sites (e.g., setup-user-claude
+  19  deploys both CLAUDE.md and rules) must handle all return values at each site
+  20  independently. **Known limitation:** Step 30 validates at file level, not
+  21  call-site level -- manual audit required for multi-deployment scripts.
+  22  Non-interactive fallback required (`AITOOLS_FORCE`/`--force`, non-terminal stdin, EOF at prompt -> overwrite + warn; no AI merge); installers apply the same rule to their own prompts.
+  23  `[x]abort` logs an error and exits 2; a bare exit 2 is a user abort (D-TS13); it ends this setup script and the installer continues with the next script.
+  24  
+  25  PS1 console I/O: `[Console]::ReadLine/WriteLine`. Read external command output
+  26  via temp file + `[IO.File]::ReadAllText(..., UTF8)` (not pipeline capture).
+  27  
+  28  Bash: `read -r < /dev/tty` / `printf ... > /dev/tty`.
+  29  
+  30  Full spec: `reference/managed-file-deployment.md`.
+
+######## managed-file-deployment.mdc
+   1  ---
+   2  description: Managed file deployment types, content sources, and platform config rules
+   3  globs: "scripts/**,deploy/**,shared/**"
+   4  alwaysApply: false
+   5  ---
+   6  
+   7  ## Managed File Deployment (this repo)
+   8  
+   9  All setup scripts that deploy files to user directories must follow the deployment type matching the file format. Every type has the same correctness requirements: backup, logging, and validation. They differ only in merge strategy.
+  10  
+  11  ### Deployment types
+  12  
+  13  | Type | Merge strategy | Files |
+  14  |------|---------------|-------|
+  15  | Markdown | Interactive diff review via `deploy_managed_file` (SOURCE is the source of truth; one menu: overwrite / accept & adopt / merge & adopt / skip / abort) | CLAUDE.md, `~/.claude/rules/*.md`, skill SKILL.md files |
+  16  | JSON config | Read-then-merge on managed fields. Profile-sourced fields (settings.json) use granular field-level review (`sync_managed_json`: auto-adopt when profile silent, per-leaf overwrite/adopt/skip/abort on divergence); harness-managed keys (e.g. `hooks`) reconcile silently. JSON deployed through `deploy_managed_file` is reviewed field by field with SOURCE owning every field (`review_json_fields`; no merge) | settings.json, cli-config.json, mcp.json, deployed JSON |
+  17  | Shell script | Interactive diff review via `deploy_managed_file` (same menu as markdown) | Hook scripts (`~/.claude/hooks/*.sh`) |
+  18  
+  19  `deploy_managed_file()` / `Deploy-ManagedFile` is defined in `@scripts/aitools-lib.sh` / `@scripts/aitools-lib.ps1`. Full state machine spec: `@reference/managed-file-deployment.md`. Choices and failure handling: `@.claude/rules/agentic-standards.md` "Managed-file review choices and merge". There is no ancestor and no deploy state.
+  20  
+  21  **Adopt target.** Callers pass the absolute path of the repo file the content came from (`ADOPT_PATH` / `-AdoptPath`, `""` for none). On accept & adopt or merge & adopt the library writes that file itself, in the same step. Callers never copy files back. An adopt target in the aitools repo is a working-tree change only (no commit, no push). An adopt target in the dotprofile repo is committed and pushed to its main automatically (N-Q2). CLAUDE.md, a template, passes an adopt transform that strips the machine footer and reverses the interpolation (`ADOPT_TRANSFORM` / `-AdoptTransform`; today `adopt_claude_md`).
+  22  
+  23  ### Content sources
+  24  
+  25  | Source | Priority | What it provides |
+  26  |--------|----------|-----------------|
+  27  | Dotprofile repo (`aitools-<username>`) | Primary (wins if present) | CLAUDE.md template, user rules, profile.json (preferences, identity, machine profiles) |
+  28  | aitools repo (`shared/`) | Fallback | claude-shared.md template, hook scripts, skills, shell aliases |
+  29  
+  30  - **Template interpolation**: `{{PLACEHOLDER}}` tokens in CLAUDE.md replaced with `profile.json` values at deploy time
+  31  - **Machine profile selection**: `config.json` `machineAlias` → `profile.json` `profiles[alias]`. Fallback: hostname match, then first profile
+  32  - **Rules**: additive deploy from `<userRepoPath>/claude/rules/` — managed files updated, unmanaged files in target preserved
+  33  - **Skills**: vendored from upstream in `shared/skills/`, deployed to `~/.claude/skills/` and `~/.cursor/skills/`
+  34  - **Hooks**: canonical source in `shared/hooks/`, deployed to `~/.claude/hooks/`
+  35  
+  36  Full spec: `@reference/user-repo.md`
+  37  
+  38  ### Shared requirements (all types)
+  39  
+  40  1. **Backup before write**: call `backup_file` / `Backup-File` before writing to an existing file. For markdown and shell script types and deployed JSON, `deploy_managed_file` handles this internally, for LOCAL and for the adopt target, and restores the backups when a write, merge or validation fails. For the other JSON config writers, the caller MUST call it explicitly.
+  41  2. **Diff logging**: log what changed to deploy.log before writing.
+  42  3. **Post-write validation**: verify the written file immediately. JSON: valid parse + required keys. Markdown: non-empty + required sections. Shell: non-empty + executable bit.
+  43  4. **Outcome tracking**: every deployment must resolve to created, updated, or unchanged — and report via `write_summary`. `deploy_managed_file` results (created, updated, verified, accept & adopt, skipped, failed) are recorded with the deploy tracker; `failed` is an ERROR row and the run continues with the next file.
+  44  
+  45  ### Platform-specific config values
+  46  
+  47  JSON config files may contain values that differ by platform, and a few by environment. OS guards in setup scripts ensure the correct platform variant is deployed; the environment API selects environment variants. Examples:
+  48  
+  49  | Config | Field | Windows | macOS | Linux |
+  50  |--------|-------|---------|-------|-------|
+  51  | mcp.json | chrome-devtools command | `cmd /c npx -y chrome-devtools-mcp@latest --isolated` | `npx -y chrome-devtools-mcp@latest --isolated` | same as macOS |
+  52  | mcp.json, ~/.claude.json | chrome-devtools command, Claude Code web environment (D-CHR2) | n/a | n/a | `npx -y chrome-devtools-mcp@latest --isolated --headless --chromeArg=--no-sandbox` |
+  53  | settings.json | hook paths | `bash "C:/Users/.../hooks/session-archive.sh"` | `bash "/Users/.../hooks/session-archive.sh"` | `bash "/home/.../hooks/session-archive.sh"` (`/root/...` as root) |
+  54  
+  55  Scripts must NEVER write cross-platform values or another environment's values. See `@.claude/rules/cross-platform.md` "Environment branches".
+  56  
+  57  ### Updating this table
+  58  
+  59  Adding a row (new file type) or column requires updating: this rule, `@reference/managed-file-deployment.md`, `@.claude/rules/managed-file-deployment.md`, and the `/incident` skill if there are implementation gaps. See `@.claude/rules/tool-lifecycle.md` "Onboarding checklist" (deployment types table, protected).
+  60  
+  61  ### Cross-references
+  62  
+  63  - State machine + detail: `@reference/managed-file-deployment.md`
+  64  - Text + JSON menus: `@.claude/rules/interactive-menus.md`
+  65  - JSON write safety: `@.claude/rules/config-file-safety.md`
+  66  - AI merge: `@.claude/rules/agentic-standards.md`
+  67  - Content sources: `@reference/user-repo.md`
+  68  - Known incidents: `/incident` skill
+
+######## plan-execution.mdc
+   1  ---
+   2  description: Plan execution pattern for large code changes
+   3  globs: "*.sh,*.ps1"
+   4  alwaysApply: false
+   5  ---
+   6  
+   7  ## Plan Execution with Sub-Agents (this repo)
+   8  
+   9  Plans modifying 3+ code files (or any shared library) use sub-agent execution:
+  10  verbatim code in plan, error-handling audit per block, fresh sub-agent per batch
+  11  with rules injected, main agent verification between batches.
+  12  See `reference/plan-execution-detail.md` for the rule injection template.
+
+######## relay-outbound.mdc
+   1  ---
+   2  description: Relay.md git outbound flow and [RELAY] harness prompt (not managed deploy)
+   3  globs: ".aitools/channel/**,scripts/relay-outbound-prompt.*,scripts/aitools,scripts/aitools.ps1,scripts/hh.*"
+   4  alwaysApply: false
+   5  ---
+   6  
+   7  ## Relay outbound (git) — not managed deploy
+   8  
+   9  **`.aitools/channel/relay.md`** lives **inside this repo**. It is **not** a managed user file like `~/.claude/CLAUDE.md` (those use `[REVIEW]` / `deploy_managed_file` during deploy — see `@.cursor/rules/managed-file-deployment.mdc`).
+  10  
+  11  **Inbound (pull):** `aitools` / `hh` runs `git pull` on the aitools clone, then deploy and relay → `AGENTS.md` when Python is available.
+  12  
+  13  **Outbound (commit + push):** Only the commander (or a shell with credentials) can publish. After **`aitools`** or **`hh -n`**, the harness may show a **`[RELAY]`** prompt when `relay.md` has uncommitted changes or the branch is ahead of `origin/main`.
+  14  
+  15  Script sources: `scripts/relay-outbound-prompt.sh` (bash / Git Bash), `scripts/relay-outbound-prompt.ps1` (PowerShell). Choices: **[c]** continue, **[q]** exit with code 2, **[s]** show `git status -sb`.
+  16  
+  17  **Skip automation:** `AITOOLS_SKIP_RELAY_PROMPT=1`. **CI / non-interactive:** short hint only (or `RELAY_PROMPT_FORCE=1` to force the full prompt when a TTY exists).
+  18  
+  19  **Agent behavior:** If you edited `relay.md`, propose **`git add` / `git commit` / `git push`** with a **`channel:`** subject (see relay.md). Do not claim push succeeded without evidence. Do not put tokens or secrets in relay or commit messages.
+
+######## script-standards.mdc
+   1  ---
+   2  description: Script standards for all reusable scripts in this repo
+   3  globs: "*.sh,*.ps1"
+   4  alwaysApply: false
+   5  ---
+   6  
+   7  ## Script Standards (this repo)
+   8  
+   9  All plans you propose and all reusable code you write must follow these conventions. A plan that drafts code with violations is itself a violation. Covers: setup, check/audit, installer, deploy, hooks, shell aliases, and pseudocode in plans/*.md.
+  10  
+  11  ### Block order (setup scripts)
+  12  
+  13  **Bash:** shebang/header > `set -euo pipefail` > `source aitools-lib.sh` + `logging_init "name"` (provides platform detection, display_path, read_config_key, log/log_ok/log_error/log_warn, write_summary, backup_file, backup_dir, emit_merge_details, ERRORS/WARNINGS counters) > OS guard > body > exit footer
+  14  **PS1:** header > `. aitools-lib.ps1` + `Initialize-Logging "name"` (provides ReadConfigKey, Log/LogOk/LogError/LogWarn, Write-Summary, Backup-File, Backup-Dir, ConvertPSObjectToHashtable, Emit-MergeDetails, $errors/$warnings counters) > OS guard > body > exit footer
+  15  
+  16  ### Block order (check/audit scripts)
+  17  
+  18  **Bash:** shebang/header > `set -euo pipefail` > `source check-lib.sh` + `source init-logging.sh` > OS guard (`log_error`) > `resolve_config` + `check_log_init "NAME"` > body > `print_summary`
+  19  **PS1:** header > `. check-lib.ps1` + `. init-logging.ps1` > OS guard (`LogError`) > `ResolveConfig` + `CheckLogInit "NAME"` > body > `PrintSummary`
+  20  
+  21  ### Error and warning tracking (required)
+  22  
+  23  - `log_error()` MUST do `ERRORS=$((ERRORS + 1))`; `log_warn()` MUST do `WARNINGS=$((WARNINGS + 1))`
+  24  - `LogError` MUST do `$script:errors++`; `LogWarn` MUST do `$script:warnings++`
+  25  - Missing tracking is a bug -- scripts silently misreport exit status.
+  26  
+  27  ### Log line format
+  28  
+  29  Every log line: `[timestamp] [script] [level] message`. Valid levels: `info`, `ok`, `warn`, `error`, `detail`. Console: red for `[error]`, yellow for `[warn]`, plain for `[info]`/`[ok]`. Log file: plain text only (no ANSI codes).
+  30  
+  31  ### Logging helpers
+  32  
+  33  | Bash | PS1 | Level | Purpose |
+  34  |------|-----|-------|---------|
+  35  | `log` | `Log` | `info` | General info |
+  36  | `log_ok` | `LogOk` | `ok` | Success |
+  37  | `log_error` | `LogError` | `error` | Error (must increment ERRORS) |
+  38  | `log_warn` | `LogWarn` | `warn` | Warning (must increment WARNINGS) |
+  39  | `log_detail` | `LogDetail` | `detail` | Diagnostic content (file-only, no console) |
+  40  
+  41  UTC timestamps with Z suffix. Raw `echo`/`Write-Host` without structured logging is not acceptable. All helpers are defined in `scripts/aitools-lib.sh` / `.ps1` -- do not define inline copies.
+  42  
+  43  ### Agentic invocation logging
+  44  
+  45  Every `invoke_ai` / `Invoke-AI` call must log structured telemetry to deploy.log:
+  46  
+  47  | Event | Level | Format |
+  48  |-------|-------|--------|
+  49  | Invocation start | `info` | `AI: speed=TIER backend=CLI attempt=N` |
+  50  | Success | `info` | `AI: speed=TIER backend=CLI attempt=N result=accepted` |
+  51  | Validation failure | `warn` | `AI: speed=TIER backend=CLI attempt=N result=rejected reason=REASON` |
+  52  | Rejected output | `detail` | `ai-rejected: LINE` (per-line, file-only) |
+  53  | All retries exhausted | `warn` | `AI: speed=TIER backend=CLI exhausted after N attempts` |
+  54  | Backend unavailable | `error` | `AI: no CLI available (claude or agent)` |
+  55  
+  56  See `.claude/rules/agentic-standards.md` for prompt design and evaluation rules.
+  57  
+  58  ### Agentic invocation
+  59  
+  60  See `.claude/rules/agentic-standards.md` for AI CLI invocation requirements,
+  61  prompt design standards, and evaluation lifecycle.
+  62  
+  63  ### Exit footer
+  64  
+  65  Check both error and warning counters. Errors: exit 1 (FAILED). Warnings but no errors: exit 0 ("COMPLETED with N warning(s)"). Clean: exit 0 ("COMPLETED successfully"). See `reference/script-standards-detail.md` for exact patterns.
+  66  
+  67  ### Cross-platform grep portability
+  68  
+  69  Never use `grep -P` in bash scripts -- macOS BSD `grep` doesn't support it. Use `perl -ne` for Perl regex, `grep -E` for extended regex, `grep -F` for literals. See `reference/script-standards-detail.md`.
+  70  
+  71  ### Standalone build logging
+  72  
+  73  `build-deploy.sh` defines own `blog`/`blog_ok`/`blog_error` (doesn't source aitools-lib.sh). Must follow `[timestamp] [script] [level] message` format. Documented in `reference/script-standards-detail.md` logging overrides.
+  74  
+  75  ### Check script logging
+  76  
+  77  Check scripts source check-lib (which sources aitools-lib), then init-logging
+  78  for structured logging before the OS guard. After the guard, CheckLogInit
+  79  overrides logging vars for check-specific paths (checks.log/checks.jsonl).
+  80  Double-init is safe -- see `reference/script-standards-detail.md` "Bridge pattern".
+  81  
+  82  ### End-of-run summary
+  83  
+  84  Every setup script calls `write_summary` / `Write-Summary` (3-arg from `aitools-lib`: category, tool_name, detail) to report to the end-of-run panel. Categories: OK (tool works), WARN (advisory), ERROR (failure), ACTION (user must act). Every code path -- success and failure -- must produce a `write_summary` call. See `reference/script-standards-detail.md` for severity guide, tool names, and code patterns.
+  85  
+  86  ### Config and file update reporting
+  87  
+  88  Setup scripts that write config files, .md files, hooks, or skills must follow the three-outcome pattern (unchanged/updated/failed) with file-type-specific change logging. Summary detail text is max 30 chars. JSON configs log changed keys and emit DETAIL summary lines; text files log diffs to deploy.log. See `reference/script-standards-detail.md` for patterns and examples.
+  89  
+  90  ### External command error handling
+  91  
+  92  External install/upgrade commands must have output captured and exit codes checked. Never fire-and-forget. Distinguish "already up to date" from real failures. PATH issues are errors, not warnings. See `reference/script-standards-detail.md` for patterns.
+  93  
+  94  ### Post-install authentication check
+  95  
+  96  Setup scripts for tools requiring auth must check auth status on every run (not just fresh install). After successful install/upgrade: check via tool command or config file presence. Not authenticated: `log_warn` + `write_summary WARN` + `write_summary ACTION`. Authenticated: silent. Auth commands documented per-tool in the tool registry (`/tool-registry` skill, `authentication` field). See `reference/script-standards-detail.md` for code patterns.
+  97  
+  98  ### Build prerequisite validation
+  99  
+ 100  Setup scripts compiling from source (`cargo install`, `pip install` with C extensions, `go install` with cgo) MUST use the two-layer prerequisite framework: **Layer 1 (preventive):** `Check-BuildPrereqs`/`check_build_prereqs` before build — missing prereqs → `log_error` + `write_summary ERROR/ACTION` + skip build. **Layer 2 (diagnostic):** `Diagnose-BuildFailure`/`diagnose_build_failure` on captured output after failure — surface specific remedy or fall back to generic error. Both layers use centralized tables in `aitools-lib.ps1`/`.sh`. See `reference/script-standards-detail.md`.
+ 101  
+ 102  Install fields in `BuildPrereqs` entries must reference methods derived from official
+ 103  tool documentation. See `.claude/rules/tool-lifecycle.md` Install method discovery.
+ 104  
+ 105  ### KnownPaths empirical verification
+ 106  All KnownPaths entries must be verified on the actual platform. Document date +
+ 107  version. Unverified = marked `UNVERIFIED`. No guessing from installer type (#22).
+ 108  Applies to managed tools AND build dependencies (NASM, CMake, etc.).
+ 109  
+ 110  ### Error handling (all scripts)
+ 111  
+ 112  Every error-suppression pattern requires an immediate result check:
+ 113  
+ 114  - `-ErrorAction SilentlyContinue` -- null/empty check within 3 lines
+ 115  - `2>/dev/null`, `|| true` -- comment + result check
+ 116  - `try/catch` -- catch must log or re-throw; empty `catch {}` is never OK
+ 117  
+ 118  **Exception:** Command-existence checks (`Get-Command`, `command -v`) with explicit fallback.
+ 119  
+ 120  **Anti-pattern:** Suppressed errors feeding into counts/loops with no null guard (false pass).
+ 121  
+ 122  **Missing error handling:** Critical file reads feeding output/disk writes need explicit error handling. Validate non-null before writing.
+ 123  
+ 124  ### Check/audit scripts
+ 125  
+ 126  - `StepPass`/`StepFail`/`StepWarn` must handle internal errors
+ 127  - `Get-ChildItem`/`Get-Content` failures -- `StepFail` or `StepWarn`, never silent skip
+ 128  - Test file/directory existence before processing
+ 129  - `StepPass` must accept `$Detail` parameter matching `StepFail`/`StepWarn`/`StepSkip`
+ 130  
+ 131  ### Post-write validation
+ 132  
+ 133  Template-generated files: validate content correctness, not just structural markers.
+ 134  
+ 135  ### Exemptions
+ 136  
+ 137  Intentional suppression without result check requires: header comment + entry in `reference/script-standards-detail.md` exemptions table (protected file, user approval needed).
+ 138  
+ 139  ### When analyzing code
+ 140  
+ 141  1. If a feature is a no-op due to missing config, say so prominently -- not buried in a table
+ 142  2. Distinguish "code is correct" from "feature is operational"
+ 143  3. Name the exact fix command, not just "needs configuration"
+
+######## smoke-test-pattern.mdc
+   1  ---
+   2  description: Smoke test pattern for running setup scripts from AI agents
+   3  globs:
+   4  alwaysApply: true
+   5  ---
+   6  
+   7  ## Smoke Test Pattern (this repo)
+   8  
+   9  When running setup scripts as functional smoke tests from Claude Code:
+  10  
+  11  1. **Redirect output to a log file** — never parse setup script output inline
+  12  2. **Check exit code** — the Bash tool result shows just the exit code
+  13  3. **Read the log only if needed** — on failure, or to verify specific content
+  14  
+  15  Platform dispatch: `pwsh -File` for `.ps1` on Windows, `bash` for `.sh` on macOS.
+  16  
+  17  Details and examples: `@reference/smoke-test-pattern-detail.md`
+
+######## sources-of-truth.mdc
+   1  ---
+   2  description: Review gate for protected source-of-truth files
+   3  globs:
+   4  alwaysApply: true
+   5  ---
+   6  
+   7  ## Source-of-Truth Review Gate (this repo)
+   8  
+   9  Certain files are authoritative references that feed scripts, deploy pipelines, or govern AI agent behavior. Changes to these files propagate across machines and affect real workflows, so they require user review before being written.
+  10  
+  11  ### Protected files
+  12  
+  13  | File | What it controls | Agent |
+  14  |------|-----------------|-------|
+  15  | `registries/tool-registry.json` | Registry of managed tools — install methods, platform versions, lifecycle, operational knowledge (via `/tool-registry` skill) | Any |
+  16  | `reference/tool-evaluation-criteria.md` | Tool evaluation framework and lifecycle phases | Any |
+  17  | `reference/tool-evaluation-playbook.md` | Install method discovery process and criteria — feeds BuildPrereqs and tool-registry entries | Any |
+  18  | `CLAUDE.md` | Project-level instructions and Key Decisions | Any |
+  19  | `shared/claude-shared.md` | User-level preferences embedded into deploy scripts (propagates to all machines) | Any |
+  20  | `shared/cursor-rules/user-rules.md` | Cursor User Rules template (manual copy if needed) | Any |
+  21  | `.claude/rules/*.md` | Claude Code behavioral rules | Any |
+  22  | `.cursor/rules/*.mdc` | Cursor behavioral rules (this file included) | Any |
+  23  | `ROADMAP.md` | Active/planned work items — drives project priorities | Any |
+  24  | `plans/*.md` | Detailed implementation plans — referenced by roadmap | Any |
+  25  | `reference/tool-ops-claude-code.md` | Claude Code operations — version deps, session behavior, platform workarounds | Any |
+  26  | `reference/user-repo.md` | User repo pattern, template resolution, session archive — scripts reference this | Any |
+  27  | `reference/agentic-framework.md` | Agentic AI invocation spec — speed/permission tiers, prompt design, validation patterns | Any |
+  28  
+  29  ### The rule
+  30  
+  31  Before writing, editing, or deleting content in any protected file:
+  32  
+  33  1. **Draft the change** -- prepare the exact content but do not write it yet
+  34  2. **Present for review** -- show the proposed change to the user. Use full content for new sections, diff-style (old -> new) for edits to existing content. When multiple protected files change in one task, present them together as a batch.
+  35  3. **Wait for approval** -- do not write until the user confirms. If the user requests modifications, revise and re-present.
+  36  
+  37  ### Exceptions
+  38  
+  39  - **Trivial fixes** (typos, whitespace, markdown formatting) that do not change meaning may be made without review, but mention them in your response so the user is aware.
+  40  - **User-dictated content** -- if the user provides the exact text to write (e.g., "add this bullet to CLAUDE.md: ..."), that counts as pre-approved. Write it directly.
+  41  
+  42  ### Why this matters
+  43  
+  44  These files are the "single source of truth" pattern -- downstream scripts and behaviors derive from them. A silent change here can propagate incorrect install commands, alter behavioral rules, or deploy wrong configs across machines. The review step keeps the agent and user in sync.
+
+######## tool-lifecycle.mdc
+   1  ---
+   2  description: Tool lifecycle gate for adding new managed tools
+   3  globs: "scripts/**,deploy/**,shared/**,reference/**,plans/**,rfcs/**,.claude/rules/**,.cursor/rules/**,CLAUDE.md,RELEASE_NOTES.md,ROADMAP.md,README.md"
+   4  alwaysApply: false
+   5  ---
+   6  
+   7  ## Tool Lifecycle Gate (this repo)
+   8  
+   9  When adding a new managed tool, follow the lifecycle in `reference/tool-evaluation-criteria.md`.
+  10  
+  11  **Hard stop at Phase 2:** After installing the tool and providing a test command, you MUST wait for the user's explicit approval before writing any integration code (aliases, setup scripts, installer steps, build changes).
+  12  
+  13  - Do not plan Phase 3+ implementation until Phase 2 is approved
+  14  - Do not batch Phase 2 approval with Phase 3+ work in a single plan
+  15  - If the user rejects: uninstall, remove the "Under Evaluation" entry, stop
+  16  - If the user approves: promote to full entry, then proceed to Phase 3+
+  17  
+  18  This applies in plan mode too -- a plan that includes Phases 3-5 must note the Phase 2 gate and flag that implementation is contingent on approval.
+  19  
+  20  ### PATH refresh after install
+  21  
+  22  When a tool is installed via a package manager (winget, brew, npm), the new binary may not be on PATH in the current shell. Do not invoke via hardcoded package paths. Instead: install, ask user to relaunch Claude Code for PATH refresh, then verify and test.
+  23  
+  24  ### Bundled dependencies
+  25  
+  26  Bundled tools (pip via Python, rg via Cursor) that become project requirements
+  27  must graduate to full managed tools via the standard lifecycle. See
+  28  tool-lifecycle.md Bundled dependencies section.
+  29  
+  30  ### Lifecycle field completeness
+  31  
+  32  Every tool in the registry (`/tool-registry` skill; including Under Evaluation) must have all 6 fields: Platform Status, Concurrency, Post-Install Config, Dependencies, Invocation, and Last verified version. Last verified version format: `macOS: X.Y.Z (YYYY-MM-DD) | Windows: X.Y.Z | Linux: X.Y.Z` (use `pending` for unverified). Tools with `versions.maintenanceFile` in the registry: `See <filename>`. `@latest`/remote: `Last reviewed: YYYY-MM-DD`. Verify all 6 before committing.
+  33  
+  34  ### Under Evaluation guard
+  35  
+  36  Tools with `evaluating` on ALL platforms must NOT have: setup scripts, installer entries, aliases, build pipeline entries, or CLAUDE.md Managed CLI Tools entries. Flag violations as lifecycle errors.
+  37  
+  38  ### New tool onboarding checklist
+  39  
+  40  When a tool is approved (Phase 2 gate passed), complete ALL of these steps in order. Missing any causes drift between the pipeline, documentation, and deployed configs.
+  41  
+  42  #### Prerequisite
+  43  - Verify upstream install method via Chrome DevTools MCP skill (see "Install command verification gate")
+  44  - Record verified install commands via the `/tool-registry` skill (protected -- present for review)
+  45  
+  46  #### Non-protected (implement directly)
+  47  - `scripts/setup-<tool>.sh` — install/update (macOS+Linux; OS guard exits on Windows)
+  48  - `scripts/setup-<tool>.ps1` — install/update (Windows; OS guard exits on macOS/Linux)
+  49  - `scripts/aitools-install.sh` — add `validate_and_run "$SCRIPT_DIR/setup-<tool>.sh"` step
+  50  - `scripts/aitools-install.ps1` — add `Invoke-ValidatedScript $toolScript` step
+  51  - `scripts/build-deploy.sh` — add numbered copy-as-is block pair after last tool block
+  52  - If tool requires auth: add auth status check in both setup scripts (see script-standards "Post-install authentication check") and document auth commands via the `/tool-registry` skill (`authentication` field)
+  53  
+  54  #### Protected (present for review before writing)
+  55  - Registry entry via the `/tool-registry` skill — full entry with all lifecycle fields
+  56  - `shared/claude-shared.md` — add row to Managed CLI Tools table (shared template + MDM source)
+  57  - `<userRepoPath>/claude/CLAUDE.md` (dotprofile repo) — same row addition; commit + push dotprofile repo separately
+  58  - `CLAUDE.md` — add `setup-<tool>` to "Deploy using MDM" tool scripts list
+  59  - `.claude/rules/tool-lifecycle.md` + `.cursor/rules/tool-lifecycle.mdc` — update this checklist if pattern changes
+  60  - `scripts/check-post-push.ps1` — add entry to `$toolCmds` dictionary
+  61    (command name + version flag, e.g., `'perl' = @('perl', '--version')`)
+  62  - `scripts/check-post-push.sh` — add entry to `TOOL_CMDS` dictionary
+  63    (same command + version flag)
+  64  - Check deployment types table in `@.claude/rules/managed-file-deployment.md` — add row if new file type
+  65  
+  66  #### Rebuild + propagate
+  67  1. `bash scripts/build-deploy.sh` — verify count increments by 2
+  68  2. `bash scripts/setup-user-claude.sh` — propagate dotprofile CLAUDE.md → `~/.claude/CLAUDE.md`
+  69  3. `bash scripts/check-post-push.sh` — all checks pass
+  70  4. Commit + push both repos (aitools + dotprofile)
+  71  
+  72  ### Dotprofile priority
+  73  
+  74  `setup-user-claude.sh/.ps1` reads the user's dotprofile `<userRepoPath>/claude/CLAUDE.md` first. If `userRepoPath` is configured in `~/.aitools/config.json` and the file exists, it wins over `shared/claude-shared.md`. This means any Managed CLI Tools row added to `shared/claude-shared.md` must ALSO be added to the dotprofile — otherwise the live `~/.claude/CLAUDE.md` will not reflect the change. Future: `aitools user sync` will automate this (see ROADMAP.md).
+  75  
+  76  ### Install command verification gate
+  77  
+  78  Before writing or modifying setup scripts for ANY managed tool, verify the current upstream install method using the Chrome DevTools MCP skill (`chrome-devtools`). Do not rely on cached knowledge or existing script commands -- upstream projects change languages, package managers, and release methods without notice.
+  79  
+  80  This gate applies to:
+  81  - New tool onboarding (Phase 2+)
+  82  - Modifying existing setup scripts (bug fixes, upgrades, platform additions)
+  83  - Investigating install failures (RCA)
+  84  
+  85  Required checks (via chrome-devtools):
+  86  1. Official README install section (repo root or docs site)
+  87  2. GitHub releases page -- available platforms, architectures, asset formats
+  88  3. Package manager presence (Homebrew formula/tap, crates.io, npm, winget ID, etc.)
+  89  
+  90  Record findings via the `/tool-registry` skill before modifying scripts. Include the verification date and source URL. If the upstream method has changed, update tool-registry first, then update scripts to match.
+  91  
+  92  For build prerequisites, this gate also applies -- verify official install methods
+  93  before writing `BuildPrereqs` entries or `BuildFailureSignatures` remedies.
+  94  See "Install method discovery" above.
+  95  
+  96  ### Install method discovery
+  97  
+  98  Before choosing or changing an install command for ANY managed tool or build
+  99  prerequisite, follow the discovery process:
+ 100  
+ 101  1. **Read official docs** -- download page, getting started guide, install instructions
+ 102  2. **Identify all methods** per platform (pip, brew, winget, curl, ZIP, MSI, etc.)
+ 103  3. **Evaluate** each method against classification criteria: official support (highest),
+ 104     elevation requirement, update model, PATH integration, existing toolchain fit
+ 105  4. **Trial install** on target platform -- record actual install path, version, any issues
+ 106  5. **Document** via the `/tool-registry` skill: source URL, chosen method, rationale, trial results
+ 107  
+ 108  This applies to managed tools AND build prerequisites (`BuildPrereqs` entries,
+ 109  `BuildFailureSignatures` remedies). The tool's official documentation is the starting
+ 110  point -- do not assume any package manager is universally correct.
+ 111  
+ 112  Details and templates: `@reference/tool-evaluation-playbook.md`
+ 113  
+ 114  ### Cross-platform vetting
+ 115  
+ 116  When recommending tools in this project, verify availability on both macOS and Windows. Disclose if a tool is single-platform or has limited support on one OS.
+ 117  
+ 118  ### MCP server isolation
+ 119  
+ 120  Chrome DevTools MCP uses `--isolated` flag for throwaway temp Chrome profiles, enabling concurrent Claude Code + Cursor sessions without Chrome profile lock conflicts. Apply the same pattern to any future stdio MCP server that creates persistent local state.
+ 121  
+ 122  ### MCP server disable scope
+ 123  
+ 124  `agent mcp disable` (Cursor CLI) stores disable state **per-project**, not per-user. Setup scripts that disable MCP servers only affect the directory from which they run.
+ 125  
+ 126  When adding MCP servers to configuration:
+ 127  - **Always-available** servers (chrome-devtools): user-level config is correct — no disable needed
+ 128  - **Opt-in per-project** servers (vercel, webflow): prefer project-level config only. Adding to user-level `~/.cursor/mcp.json` then disabling is fragile — the disable doesn't propagate to new projects
+ 129  
+ 130  Claude Code handles this differently: `permissions.deny` in `~/.claude/settings.json` is user-scoped and applies globally. Per-project enable via `.claude/settings.local.json` `permissions.allow`. This asymmetry between tools must be documented via the `/tool-registry` skill for each MCP server entry.
+ 131  
+ 132  See the `/tool-registry` skill (cursor-agent-cli entry, config behavior) for the known issue and planned fix.
+ 133  
+ 134  ### Deployment pattern updates
+ 135  
+ 136  When onboarding a new tool that deploys config files, check the deployment types table in `@.claude/rules/managed-file-deployment.md`.
+ 137  
+ 138  - If the new tool's file type doesn't match an existing row, add a row (both rule and reference, plus Cursor `.mdc` parity)
+ 139  - If modifying deployment behavior for an existing type, update corresponding table entries
+
+######## web-sources.mdc
+   1  ---
+   2  description: Prefer Chrome DevTools MCP over WebFetch for reading web content that feeds into source-of-truth files
+   3  globs: "scripts/**,deploy/**,shared/**,reference/**,plans/**,rfcs/**,.claude/rules/**,.cursor/rules/**,CLAUDE.md,RELEASE_NOTES.md,ROADMAP.md,README.md"
+   4  alwaysApply: false
+   5  ---
+   6  
+   7  ## Web Source Reading (this repo)
+   8  
+   9  When reading web content that will feed into source-of-truth files
+  10  (install commands, config steps, lifecycle fields, setup procedures),
+  11  use the Chrome DevTools MCP skill (`chrome-devtools`) instead of WebFetch.
+  12  
+  13  ### Why
+  14  
+  15  WebFetch converts HTML to markdown via a smaller model -- two layers of
+  16  information loss (rendering + summarization). Official docs sites are
+  17  often JS-rendered SPAs with tabbed interfaces and platform toggles that
+  18  WebFetch misses. When accuracy matters, use the real browser.
+  19  
+  20  ### When to use Chrome DevTools MCP skill
+  21  
+  22  - Reading official tool docs to extract install commands for the `/tool-registry` skill
+  23  - Verifying config requirements, post-install steps, or dependencies
+  24  - Checking release notes or changelogs for lifecycle field updates
+  25  - Any page whose content will be recorded verbatim in a protected file
+  26  
+  27  ### When WebFetch is fine
+  28  
+  29  - General web searches and research (use WebSearch for queries)
+  30  - Blog posts, tutorials, Stack Overflow -- low-stakes reference
+  31  - Quick fact-checks that don't feed into protected files
+  32  - Static pages where JS rendering isn't needed (plain GitHub READMEs)
+  33  
+  34  ### Cross-reference
+  35  
+  36  Before reading a tool's docs, check via the `/tool-registry` skill first --
+  37  it may already have verified information. If proposing changes to an existing
+  38  entry, re-verify using Chrome DevTools MCP skill before editing.
+
+######## general.mdc
+   1  ---
+   2  description: General conventions for all files in this repo
+   3  globs:
+   4  alwaysApply: true
+   5  ---
+   6  
+   7  # General Rules
+   8  
+   9  - This is Jose's AI tooling hub — configs, scripts, and reference docs for Claude Code, Cursor, and MCP.
+  10  
+  11  ## Code Style
+  12  
+  13  - Python 3.10+, type hints, `argparse` for CLI with `--help`, `pathlib.Path` over `os.path`, `if __name__ == "__main__":` guard
+  14  - Shell scripts: `set -euo pipefail`, structured logging, UTC timestamps
+  15  - Keep configs and docs concise — avoid bloat

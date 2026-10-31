@@ -1,0 +1,20 @@
+129-130 deploy-state removed|Removed 2026-10-21: `Try-AutoMerge`|reference/managed-file-deployment.md
+84 skill registries path|registries/incidents.json` in full|.claude/skills/incident/SKILL.md
+122 skill both arrays|d["incidents"] + d["closed"]|.claude/skills/incident/SKILL.md
+93 framework-registry|"registries/tool-ops.json",|registries/framework-registry.json
+114 post-push ps1 S2L-Q6|tool-versions.json was deleted, S2L-Q6|scripts/check-post-push.ps1
+115 path refs step|check-path-refs.py|scripts/check-pre-commit.sh
+116 step16 parity|#116 parity|scripts/check-pre-commit.ps1
+102 tool-registry deprecated|reference/tool-registry.md is deprecated, T-Q7|scripts/check-post-push.sh
+74 scutil resolver|scutil --get LocalHostName|scripts/aitools-profile.sh
+75 ui_register|ui_register_flow() {|scripts/aitools
+97 register backup|backup_file "$pf"|scripts/aitools
+77 machineId check|MACHINE_ID_UNKNOWN|scripts/profile-check.js
+76 no fallback|no hostname or|scripts/setup-user-claude.sh
+110 perl env tokens|T_PROFILE_NAME|scripts/setup-user-claude.sh
+99 adopt filter env|AMF_PROFILE_NAME|scripts/setup-user-claude.sh
+95 identity default removed|IDENTITY_GIT_EMAIL="jose@nobul.tech"|scripts/build-deploy.sh
+109 eval removed|eval "$PROFILE_VALS"|scripts/build-deploy.sh
+144 sed enforce|MODE_SED="enforce"|shared/hooks/standing-order-guard.sh
+144 verdict comment|incident #144|shared/skills/delegate/SKILL.md
+145 scratch skill|no hook or harvester uses that path today|shared/skills/scratch/SKILL.md

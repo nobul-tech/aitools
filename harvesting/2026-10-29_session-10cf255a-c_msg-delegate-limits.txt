@@ -1,0 +1,7 @@
+/delegate: launch path and worktree HOME limits
+
+Environment limits gain two facts from the 2026-10-21 probe: Workflow
+agents cannot delegate (no Agent or Workflow tool), Agent-tool chains
+reach level 3, and worktree-isolated delegates cannot set HOME.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

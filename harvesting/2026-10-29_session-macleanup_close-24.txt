@@ -1,0 +1,5 @@
+Verified fixed on origin/main 51d895b (S3-MA-Cleanup, mission MERGE-ALL, 2026-10-27).
+
+- `scripts/setup-rust.sh:49-51`: the loop is `while IFS= read -r line; do if [ -n "${line// /}" ]; then log_detail ...; fi; done <<< "$RUSTUP_OUTPUT"` (no pipe, no `&&`). PR #38 (be46ce8).
+- `scripts/aitools-lib.sh:2936-2938` (`repair_uv_tool_env`): `if [ -n "$line" ]; then log "$line"; fi` over a here-string.
+- `git grep -nE 'do \[ .* \] && log' origin/main -- scripts` returns no match.

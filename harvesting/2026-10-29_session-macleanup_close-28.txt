@@ -1,0 +1,6 @@
+Verified fixed on origin/main 51d895b (S3-MA-Cleanup, mission MERGE-ALL, 2026-10-27). The fix took the issue's second option: the entry points no longer override the lib's logging.
+
+- `scripts/aitools` and `scripts/aitools.ps1` define no `log*` / `Log*` functions (`git grep` for function definitions returns none). `scripts/aitools:1555-1559` sources aitools-lib, runs `logging_init "aitools"`, then replays warnings buffered before the lib loaded (`_pre_lib_warnings`), so they are logged and counted. `scripts/aitools.ps1:541` `Initialize-Logging "aitools"`.
+- `reference/script-standards-detail.md:157-161` ("Logging overrides"): "`scripts/aitools` / `aitools.ps1` ... use the defaults -- no overrides. `tests/logging/` checks that the entry points define no log functions."
+- Enforced by `tests/logging/test-logging.sh:96-99` and `tests/logging/test-logging.ps1:102-106` ("entry: defines no log functions (uses aitools-lib)").
+- PR #37 (62442cb).

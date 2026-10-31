@@ -1,0 +1,10 @@
+Merged by S3-AllowMerge (delegate of Session Commander 10cf255a-c) as a live test of the user-scope allow rule `Bash(gh pr merge:*)` in `~/.claude/settings.json` (Claude Code 2.1.309, auto mode). Command: `gh pr merge 122 -R nobul-tech/aitools --merge --match-head-commit 8f644fffcf6e6c634ee09c4959887022d19ba2d2`. Result: allowed, no classifier denial; merge commit d8f0aedda0271fcf450c7595f5fa2b16eee39119. On 2026-10-28, before the rule, the same command was denied: "Permission for this action was denied by the Claude Code auto mode classifier. Reason: [Merge Without Review]."
+
+Pre-merge check: head 8f644ff, mergeStateStatus CLEAN, all 8 checks (CI macos/linux/windows, CodeQL) SUCCESS.
+
+Second independent verdict: https://github.com/nobul-tech/aitools/pull/122#issuecomment-6475897597
+
+Commander's orders:
+- 2026-10-28: "launch a mission to add an explicit allow rule at the user scope level for merging PRs in claude code in auto mode. test it and record findings in tool-ops-claude-code.md. use /tool-ops skill. accept and adopt that setting for my settings user scope level file."
+- 2026-10-28: "launch a mission to serve as an orchestrator and merge open prs in the correct order."
+- 2026-10-26: "merge commits, mission merges, in the correct order, and checks after each step"; "it should not merge PRs until all github CI/CD checks/auto merge status are green."

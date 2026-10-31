@@ -497,6 +497,20 @@ def migrate_session_columns(conn: sqlite3.Connection) -> None:
         conn.commit()
 
 
+def find_session_scratch_dir(project_root: Path, session_id: str) -> Path | None:
+    """Return a session's scratch dir: .scratch/session-<id> with the id used
+    verbatim (scratch-init.sh names dirs with the full session id since
+    2026-10-31; find_active_session_id returns the dir's own name), else the
+    legacy .scratch/session-<id[:10]> of older sessions. The 10-char form is
+    a lookup fallback only; scratch names are never cut. None if neither."""
+    scratch = project_root / ".scratch"
+    for name in (session_id, session_prefix(session_id)):
+        candidate = scratch / f"session-{name}"
+        if candidate.is_dir():
+            return candidate
+    return None
+
+
 def find_active_session_id(project_root: Path) -> str | None:
     """Find the active session ID from the scratch .current-session file."""
     current_file = project_root / ".scratch" / ".current-session"
@@ -1589,11 +1603,11 @@ def cmd_process_events(args: argparse.Namespace) -> int:
         return 1
 
     # Find session scratch directory
-    prefix = session_prefix(session_id)
-    session_dir = project_root / ".scratch" / f"session-{prefix}"
-
-    if not session_dir.exists():
-        _log_detail(f"Session directory not found: {session_dir}")
+    session_dir = find_session_scratch_dir(project_root, session_id)
+    if session_dir is None:
+        _log_detail(
+            f"Session directory not found: {project_root / '.scratch'}/session-{session_id} "
+            f"(or legacy session-{session_prefix(session_id)})")
         return 1
 
     events_file = session_dir / "events.jsonl"

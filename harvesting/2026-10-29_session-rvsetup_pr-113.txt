@@ -1,0 +1,74 @@
+#113 [OPEN] Lib profile runner accepts result lines; user init uses it and passes --no-machine
+FILES: .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Adopt/S3-MF-Adopt-Review-pr103.md, .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Adopt/S3-MF-Adopt-drafts/reference/managed-file-deployment.md.edit.txt, .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Adopt/S3-MF-Adopt-report.md, .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-NoMachine/S3-MF-NoMachine-Review-pr98.md, .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-NoMachine/S3-MF-NoMachine-report.md, .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Runner/S3-MF-Runner-Review-pr113.md, .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Runner/S3-MF-Runner-plan.md, .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Runner/S3-MF-Runner-report.md, .github/workflows/check.yml, scripts/aitools, scripts/aitools-lib.ps1, scripts/aitools-lib.sh, scripts/aitools.ps1, scripts/setup-user-claude.ps1, scripts/setup-user-claude.sh, scripts/setup-user-config.ps1, scripts/setup-user-config.sh, tests/managed-files/test-adopt-push.ps1, tests/managed-files/test-adopt-push.sh, tests/profile/test-config.sh, tests/profile/test-lib.sh, tests/profile/test-user-init.sh
+
+## Summary
+
+- The lib profile runner (`_aitlib_profile_run` / `Invoke-AitLibProfile`) accepts resolver output with a `result` line and no `via` line (what `register` and `migrate` print), and a bare value for `hostname` / `machine-id`.
+- `aitools user init` (scripts/aitools, aitools.ps1) drops its private runners and uses the lib runner.
+- User init passes `--no-machine` / `-NoMachine` to setup-user-config when it has concluded that this machine is not registered, so the writer adds no second machine-profile ERROR / ACTION.
+
+## Why
+
+M3-FINISH items 2 and 3 (commander): "The lib runner accepts 'result' lines (register/migrate print no 'via' line) so user init drops its private runner." The private runners existed only because the lib runner rewrote every exit 0/1 without a `via` line to 2. Item 2 consumes the writer flag from #98.
+
+## Changes
+
+Commit 1, e427e60 (lib + test-lib):
+- Guard: exit 0/1 is trusted with a `via` or `result` line; for `hostname` / `machine-id` with a non-empty value. Anything else is still rewritten to 2 with an `error` line.
+- A missing resolver: the runner still returns 1, and now also sets RC 2 with an `error` line naming it (the private runners' behaviour). Existing wrappers log their own message as before.
+- A throw: RC 2 with an `error` line `aitools-profile CMD threw: MSG` (in-process PS, and the Git Bash pwsh branch).
+- Git Bash branch: absolute values after `--profile`, `--out`, `--config` are converted with `cygpath -w`, as well as `--path` (what the private bash runner converted).
+- The runner's temp-file removal is checked (`_aitlib_rm_tmp`, failure = detail line): the runner part of audit A-4.
+
+Commit 2, 8967660 (user init + test-user-init):
+- `ui_profile_run` / `Invoke-UiProfile` call the lib runner and copy its results (lib result-global contract); call sites unchanged.
+- Deliberate differences from the private runners (review m1, m2): a failed temp-file removal is now a detail line, as in the lib, not a warning (a warning would promote every lib caller's OK rows, D-TS12); `AITOOLS_PROFILE_SH` / `AITOOLS_PROFILE_PS1` now override user init's resolver too, as for every lib caller (documented in both wrapper comments, commit 3).
+- Flag: decided in the `machine_key` empty block after registration (scripts/aitools, aitools.ps1), not from an empty key at the writer call. The owner-"config" branch (registered, id undetectable) also empties the key and does not get the flag. The flag and `--machine-id` are never both passed.
+
+## Contract (lib runner's accepted outputs)
+
+| command | trusted when | else |
+|---|---|---|
+| `hostname`, `machine-id` | exit 0 and a non-empty value | rewritten to exit 2 + `error` line |
+| every other command | exit 0 or 1 and a `via` or a `result` line (user-repo-path, resolve, exception-get, derive-config: `via`; register, migrate: `result`; exception-set: both) | rewritten to exit 2 + `error` line |
+| any | exit 2, 3, 4 | passed through with the resolver's lines |
+| resolver missing | runner returns 1, RC 2, `error` line naming it | |
+| throw (PS) | RC 2, `error` line `aitools-profile CMD threw: MSG` | |
+
+Case-by-case comparison with the removed private runners: S3-MF-Runner-plan.md section 1 (in this PR).
+
+## Merge order
+
+Merge after #103 (fix/mf-dotprofile-adopt-push) and #98 (feature/mf-config-no-machine). This branch merges both heads (945deb5, fae7d62); the diff against main includes them until they land.
+
+## Verification (macOS arm64, isolated HOME)
+
+- test-lib.sh (bash 5 + pwsh): 287 passed, 0 failed (baseline 209). The new file against the old lib fails exactly the 24 new-behaviour cases.
+- test-lib.sh `--bash-only` under /bin/bash 3.2: 122/0.
+- test-user-init.sh (bash 5 + pwsh): 229/0 (baseline 200). Against the previous entry points the new assertions fail 20 times (2 machine-profile ERROR rows, the writer's `no machine match` row and ACTION).
+- test-user-init.sh `--bash-only` under /bin/bash 3.2: 128/0.
+- test-config.sh 269/0, test-profile.sh 689/0.
+- `bash -n` (bash 5, /bin/bash 3.2) and the pwsh parser on every touched script: clean.
+- check-pre-commit: 1 FAIL, step 6 (the known harvesting file mode); step 11 WARN (uncommitted changes in the live dotprofile, not touched here). check-pre-push (isolated HOME): 0 FAIL.
+
+- CI (linux, macos, windows, CodeQL): see the checks on this PR.
+- Independent review (S3-MF-Runner-Review): approve with minors, 0 B / 0 M / 2 m / 5 n, https://github.com/nobul-tech/aitools/pull/113#issuecomment-6356654462. m1 is stated above; m2 is fixed in commit 3 (comments only); n1-n5 need no change.
+
+## Not run
+
+- Windows / Git Bash: the pwsh branch's cygpath conversion and MSYS translation stay UNVERIFIED (tested through the forced branch with a cygpath stub).
+- claude-code-web environment.
+- build-deploy.sh against the real dotprofile: the lib change reaches the generated `deploy/` scripts on the next build (pre-push step 7 is the known stale-deploy failure).
+
+## Protected-file drafts awaiting approval
+
+None. No protected file is changed.
+
+## Follow-ups
+
+- FIX-1: audit A-2 (resolve_machine_profile resolver-missing has no ACTION), A-3, A-4's `run_child_relayed` part.
+- FIX-2: A-12..A-15 in user init (unchanged here).
+- A registered machine whose refresh (`register`) fails also ends with an empty key and gets the flag: the writer then keeps machineId as it is instead of re-deriving it. The run already fails (ERROR row, exit 1). Suggest leaving it; noted for the reviewer.
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+

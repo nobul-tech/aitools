@@ -1,0 +1,6 @@
+.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-H2-DraftsM3b/S3-H2-DraftsM3b-Review-verdict.md
+.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-H2-DraftsM3b/S3-H2-DraftsM3b-drafts/scripts/aitools-lib.sh.edit.txt
+.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-H2-DraftsM3b/S3-H2-DraftsM3b-handback.md
+scripts/aitools-profile.ps1
+scripts/aitools-profile.sh
+shared/claude-shared.md

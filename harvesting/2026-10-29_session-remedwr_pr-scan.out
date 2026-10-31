@@ -1,0 +1,182 @@
+
+=== trap fix  [MDM_TMP="\$BUILD_TMP/mdm"]
+pr111:1 
+
+=== skip-config  [skip-config|SkipConfig]
+pr106:1 pr111:43 
+
+=== size gate  [200000|200,000|1000000]
+pr111:5 
+
+=== no bootstrap n/a  [no bootstrap]
+pr111:27 
+
+=== deploy-harness in installer/sync  [run_harness_step|Invoke-HarnessStep]
+pr106:17 pr116:1 
+
+=== unknown option exit  [Unknown option]
+
+
+=== node@22  [node@22|brew install node]
+
+
+=== hooks settings backup  [backup_file "\$SETTINGS|Backup-File .*[Ss]ettings]
+
+
+=== ait-harvest cwd  [PROJECT_ROOT/scripts/ait-harvest]
+
+
+=== bash_profile  [bash_profile|\.zprofile]
+
+
+=== winget scope  [winget.*--scope]
+
+
+=== LASTEXITCODE git  [LASTEXITCODE = 1|Get-Command git]
+pr103:1 pr112:1 pr113:1 pr115:1 pr116:1 
+
+=== stamp (?m)  [\(\?m\)]
+
+
+=== create dotprofile default  [ans="y"|ans="n"]
+
+
+=== GIT_TERMINAL_PROMPT  [GIT_TERMINAL_PROMPT]
+pr101:1 pr103:8 pr104:1 pr112:8 pr113:8 pr115:8 pr116:8 
+
+=== log fail-safe  [mkdir -p "\$LOG_DIR"|AppendAllText]
+pr116:2 
+
+=== jsonl rotate  [_rotate_log .*jsonl|deploy.jsonl]
+pr101:2 pr102:12 pr104:4 pr105:2 pr106:13 pr115:3 pr116:40 
+
+=== first profile  [first profile]
+pr101:1 pr102:1 
+
+=== os-release  [os-release]
+
+
+=== cursor-cloud  [cursor-cloud]
+
+
+=== console user  [SUDO_USER|/dev/console|ConsoleUser]
+
+
+=== Test-IsAdmin  [Test-IsAdmin]
+
+
+=== SHELL unbound  [SHELL:-|basename "\$SHELL]
+
+
+=== cursor node no row  [node not found]
+pr102:4 pr109:2 pr112:1 
+
+=== cursor fanout restrict  [rules-manifest|aitools-rules-manifest]
+pr100:21 pr110:37 pr111:22 
+
+=== non-main branch push  [non-main|symbolic-ref|rev-parse --abbrev-ref]
+
+
+=== dotprofile_commit_push  [dotprofile_commit_push]
+pr102:4 pr103:14 pr112:14 pr113:14 pr115:14 pr116:14 
+
+=== mcp ps1 summary  [Write-Summary "ERROR" "claude mcp"]
+
+
+=== cursor-ide-mcp disable  [agent mcp (disable|remove)]
+
+
+=== skipping MDM deploy  [MDM deploy]
+pr106:2 pr111:1 pr99:1 
+
+=== AITOOLS_DEPLOY  [AITOOLS_DEPLOY]
+pr106:2 
+
+=== Git Bash path  [Git\\bin\\bash.exe]
+
+
+=== sync_managed_json  [autoAdopt|sync_managed_json]
+pr101:1 pr99:2 
+
+=== backup_dir md  [backup_dir]
+pr110:1 
+
+=== PS7 guard  [PSVersion.Major]
+
+
+=== HOME guard  [HOME:\?|HOME is not set|HOME not set]
+
+
+=== lib source check  [aitools-lib.sh not found|aitools-lib.ps1 not found]
+
+
+=== version stamp/BUILD-INFO  [BUILD-INFO|--stamp]
+
+
+=== deploy-paths mdc steps  [Four script pairs|steps 3\+10]
+pr99:3 
+
+=== Step21 order  [DEPLOY_SCRIPTS=]
+
+
+=== npx -y  [npx -y chrome-devtools|"-y"]
+
+
+=== installer MDM deploy counts
+/Users/new-jose/repos/aitools/scripts/aitools-install.sh:17
+/Users/new-jose/repos/aitools/scripts/aitools-install.ps1:18
+
+=== bd 2286-2290
+2288:chmod +x "$DEPLOY_DIR"/*.sh 2>/dev/null || true
+
+=== installer mkdir HOME/.aitools
+334:mkdir -p "$CONFIG_DIR"
+421:mkdir -p "$REPOS_PATH"
+518:mkdir -p "$HOME/.local/bin"
+545:mkdir -p "$AITOOLS_BIN"
+
+=== incidents.json related titles
+15:      "title": "Hook scripts deployed without backup or interactive review",
+39:      "title": "Bash scripts missing backup_file before JSON config merge",
+93:      "title": "Cursor MCP disable is project-scoped, not user-scoped",
+117:      "title": "Directory backups cascade — each backup contains older backups",
+1239:      "title": "Script standard 3 (grep brew output for error|fatal) is not scoped to upgrades and gets copied onto install fallbacks",
+1752:      "title": "Profile selection silently falls back to the first profile when neither machineAlias nor hostname matches, and the spec endorses the silent fallback",
+1806:      "title": "build-deploy.sh bakes the building machine's per-machine values (profile company/name) into the dotprofile deploy/, which is committed once and shared by all of the user's machines",
+2066:      "title": "Installer Step 8 reports OK for any node on PATH; on nobul-mac the registry-preferred node@22 is installed keg-only and off PATH while node resolves to Homebrew node 26.3.1",
+2210:      "title": "aitools user init writes config.json and profile.json without backup_file, and its profile write swallows errors (catch with console.error, no exit code, caller unchecked)",
+2259:      "title": "setup-user-claude.sh adopt_claude_md builds its perl program from shell values, so '@' in the email is interpolated as a perl array and '/' in paths breaks the program",
+2562:      "title": "ait-harvest.py reads config.json with encoding utf-8, so a BOM-prefixed file (PS 5.1) disables session archiving",
+2681:      "title": "check-pre-commit step 16 (capability bypass audit) misses registries/ on PowerShell, ignores tool-ops.json and tool-versions.json on both platforms, and does not scan the '@-referenced files' its comment claims",
+2808:      "title": "The installer writes the shell rc 'source .../shared/shell/aliases.sh' line once and never rewrites it, so moving the clone or shared/shell would break every new shell",
+3215:      "title": "standing-order-guard exempts ';' only when the command starts with the bare word pwsh/powershell/perl, so `/opt/homebrew/bin/pwsh -Command '...;...'` is blocked",
+3421:      "title": "aitools-install.sh Step 5 rewrites co-owned config.json via heredoc from regex-parsed fields, with no backup",
+
+=== pr102 incident titles
++    "id", "title", "status", "severity", "affected", "linked", "referenceFile",
++TEXT_REQUIRED = ["title", "observation", "expected", "impact", "discoveryContext", "suggestedResolution"]
++    "title": "check-pre-commit step 13 and deploy-paths.md still treat setup-user-claude and setup-user-cursor as duplicated deploy templates after PR #95 made their generated copies extracts of scripts/",
++    "title": "script-standards-detail.md requires every ACTION to pair with a same-text log_warn, but write_summary then promotes every later OK row to WARN (undocumented) against D-TS12, so the lib and the config writer pair ACTIONs with log_error or different text instead",
++    "title": "No logging contract or script-standards exemption exists for library-style tools (the profile resolver: data on stdout, diagnostics returned as warn/error lines, no exit footer or summary rows), so each caller routes the returned warnings on its own",
++    "title": "The naming and scope contract for shared-library results (AITLIB_ globals, dot-sourced PowerShell scope, function names a caller also defines) exists only as a code comment in aitools-lib.sh, and the installers already shadow two lib functions",
++    "title": "The two JSON engines write the same number differently (aitools-json.pl keeps the source text such as 0.10; aitools-json.ps1 writes 0.1), so bash and PowerShell writers of one shared file produce different bytes",
++    "title": "No rule says each pushed batch of a stacked PR keeps CI green or declares a deliberately red CI, so a batch landed with macOS and Linux CI red and an ordinary commit message",
++    "title": "The lib's resolver runner trusts an exit code only with a 'via' result line, which register and migrate never print, and the output-validation rule it implements is written nowhere outside the lib",
++    "title": "The isolated-HOME rule for test and probe runs does not cover the working directory, so a relative path from a fixture's config.json wrote into the main checkout",
++    "title": "cross-platform-detail.md omits three traps that broke M3 code or tests: PowerShell variable names ignore case, success-stream output from in-process child scripts becomes a function's return value, and .ps1 files are checked out with CRLF",
++    "title": "profile.json scaffolded by the resolver (register --create, user init on a dotprofile without one) carries only meta.schemaRevision, no meta.intent",
++    "title": "When profile.json already had uncommitted changes, tool_exception_record tells the user to 'run git push' although the resolver committed nothing",
++    "title": "script-standards-detail.md still shows the installer's bash JSONL log override with the raw message inside \"msg\":\"%s\", the pattern that wrote invalid deploy.jsonl lines until the installer was fixed",
++    "title": "cross-platform.md 'OS guard exemptions' and 'Platform targeting principle' do not cover the aitools-json.pl + aitools-json.ps1 library pair (a .pl, not a .sh, paired with a .ps1)",
++    "title": "logging_init can print a console warning on stdout before a script can redirect its logging, so every script whose stdout carries data must redefine log() before calling it",
++    "title": "cross-platform.md does not say whether a bash library calling its PowerShell counterpart (aitools-lib.sh running aitools-profile.ps1 under Git Bash) needs cross-language approval or the OS-dispatch form",
++    "title": "reference/tool-support-decision-tree.md still documents pre-M3 interfaces: TOOL_EXC_* globals, a tool_exception_get that 'prints' its result, MACHINE_ALIAS / MACHINE_VIA, and tool exceptions at profiles.<alias>",
++    "title": "reference/logging.md does not define deploy.jsonl (writers, schema, which runs must write it), yet the M3 lead decision requires 'deploy.jsonl coverage' and today only the installers write it",
++    "title": "No spec says whether a consumer counts its own error again after a lib wrapper already logged the resolver failure (log_error + ERROR row), and the B8 consumers disagree",
++    "title": "adopt_managed_file / Adopt-ManagedFile, used by the reverse discovery of user-created hooks and skills, copies into the dotprofile without committing or pushing",
++    "title": "Dotprofile auto-push runs a bare `git push`, which pushes the current branch (not necessarily main) and also publishes every earlier unpushed local commit, and no spec says either is intended",
++    "title": "No spec documents how the JSON engines treat key case (exact-match lookups, refusal of a key that differs only in case); the rule lives only in the aitools-json.pl / .ps1 headers",
++    "title": "setup-user-cursor.sh logs 'node not found' as a warning and writes no 'cursor cli' summary row for the skipped cli-config.json merge",
++    "title": "The bash and PowerShell resolvers compare profile.json `version` differently: PowerShell accepts 2.0 and 20E-1 as version 2, bash rejects them as 'not v2', and no spec says how version is compared",
++    "title": "PowerShell `New-Item -ItemType Directory -Force` can return $null without an error when a parent path is a file, and most harness call sites neither check the result nor are audited",
++    "title": "The Windows PowerShell profile function `function aitools { & aitools.ps1 @args }` passes `--alias <name>` through as a plain string, so `aitools user init --alias` (P-Q12) does not register the alias from a Windows shell",

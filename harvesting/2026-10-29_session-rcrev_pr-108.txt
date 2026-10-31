@@ -1,0 +1,8 @@
+.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Fix6/S3-MF-Fix6-Review-pr108.md
+.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Fix6/S3-MF-Fix6-drafts/reference/script-standards-detail.md.edit.txt
+.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Fix6/S3-MF-Fix6-report.md
+scripts/aitools-json.pl
+scripts/aitools-json.ps1
+scripts/aitools-profile.ps1
+scripts/aitools-profile.sh
+tests/profile/test-profile.sh

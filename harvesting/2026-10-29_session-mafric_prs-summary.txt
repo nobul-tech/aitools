@@ -1,0 +1,903 @@
+#2 CLOSED RFC-001: Mission Bridge — Commander's tier for cross-platform mission orchestration merged=- head=cursor/rfc-mission-bridge-700b draft=y
+  <!-- CURSOR_AGENT_PR_BODY_BEGIN -->
+  ## Status
+  
+  **DRAFT** — awaiting bilateral consent (Jose + Opus Continuous) per GOVERNANCE.md.
+  
+  ## Schwerpunkt
+  
+  Collapse the gap between a Commander's prompt in Slack and a properly-shaped mission running anywhere — with a running estimate, a briefing loop, and a harvest path back into the harness — without losing identity, provenance, or the ability to FRAGORD.
+  
+  ## What this proposes
+  
+  Not a Slack app. A **Commander's Bridge** that binds the harness's existing Mission Command primitives (Auftrag, Schwerpunkt, running estimate, relay, AAR, briefing, FRAGORD) t
+#3 CLOSED [nobul-grok] Add provenance-suffixed tools (aigit, aifetch, aidefend, aihash) + naming convention + Operational Learning merged=- head=nobul-grok/consolidated-tools-provenance draft=n
+  This consolidated PR brings together key aitools artifacts with clear provenance.
+  
+  ### Changes
+  - Added `tools/README.md` documenting the naming convention (`tool--nobul-grok--YYYY-MM-DD.py` for initial contributions)
+  - References the fork model and AAID patterns from prior Opus sessions
+  - Strong `[nobul-grok]` provenance throughout
+  - "No deletes" principle respected
+  
+  Full tool files (`aigit--nobul-grok--2026-05-16.py`, etc.) and Operational Learning notes to be added in follow-up commits on this branch.
+  
+  Prepared while expanding multi-contributor provenance standards.
+#4 CLOSED Add AGENTS.md with Cursor Cloud development environment instructions merged=- head=cursor/env-setup-agents-md-a271 draft=y
+  <!-- CURSOR_AGENT_PR_BODY_BEGIN -->
+  ## Summary
+  
+  Adds `AGENTS.md` documenting the development environment for future Cursor Cloud agents working on this repository.
+  
+  ## What's included
+  
+  - Overview of the aitools toolkit architecture (standalone CLI scripts, no build system)
+  - Runtime requirements (Python >=3.6 stdlib-only, Bash 3.2+, curl)
+  - Tool inventory table with language and purpose
+  - Environment variable reference (pointing to `WRITE-PATHS.md` for full details)
+  - Non-obvious gotchas for Linux/Cloud environments (macOS-specific tools, no tests/linting configured, no package managers by des
+#5 CLOSED [aigit smoke] v1.1.0 write-path verification (session dd6fbde7) merged=- head=aigit-smoke/dd6fbde7-20260523T060352Z draft=n
+  Automated smoke test PR — aigit v1.1.0 deploy + validate mission.
+  
+  See `SMOKE-aigit-v1.1.0-dd6fbde7-20260523T060352Z.md` at the branch tip for full provenance.
+  
+  **Safe to close.** Purpose: verify aigit's branch→commit→PR path works
+  end-to-end against this canonical org repo.
+  
+  - Mission plan: `~/.claude/plans/yes-please-eventual-lollipop.md`
+  - Branch: `aigit-smoke/dd6fbde7-20260523T060352Z`
+  - Commit: `40d5c9899e1c26718d4f8184eed3008ee4381afc`
+  - Agent: Claude Code (claude-opus-4-7), Commander Jose
+  - UTC: 2026-05-23T06:03:57Z
+#6 CLOSED Add 4 missing ai* tools from Claude export (aigit, aifetch, aitools-deploy, aitools-session-deploy) merged=- head=claude/great-cray-R3Ne4 draft=n
+  ## What this does
+  
+  Adds the **4 `ai*` tools that were missing from every branch** of this repo, recovered from the `claude-exports-20260530-093444.zip` Claude.ai export:
+  
+  | Tool | Purpose |
+  |---|---|
+  | `tools/aigit.py` | git operations via GitHub REST API for aitools |
+  | `tools/aifetch.py` | web content fetcher for aitools |
+  | `tools/aitools-deploy.sh` | deploy all aitools from repo to `~/.local/bin` |
+  | `tools/aitools-session-deploy.sh` | deploy a session artifact to `~/.local/bin` |
+  
+  Each file already carries its in-file `[PROVENANCE]`/`[AGENT]` block per `CONTRIBUTING.md` and is committed *
+#8 CLOSED Add AGENTS.md (initial copy of CLAUDE.md) for cloud agent orientation merged=- head=cursor/cloud-env-setup-28cd draft=y
+  <!-- CURSOR_AGENT_PR_BODY_BEGIN -->
+  ## What
+  
+  Adds `AGENTS.md` at the repo root as a **verbatim copy of `CLAUDE.md`**, to serve as the starting point for cloud-agent guidance (Cursor reads `AGENTS.md` first).
+  
+  ## Why
+  
+  `main` currently has no `AGENTS.md`. The only existing copy lives on the stale `cursor/env-setup-agents-md-a271` branch (397 commits behind `main`) and describes a `tools/` layout that no longer exists — so it's misleading. This establishes an accurate base on `main` that can later grow a `## Cursor Cloud specific instructions` section.
+  
+  ## Notes
+  
+  - This commit is intentionally a 
+#20 MERGED File incidents #52–#60 from the Linux install RCA; redefine platform, add environment merged=2026-10-03T02:25:30Z head=claude/fable-status-q9ch93 draft=n
+  ## Summary
+  
+  This PR records the outcome of the `/investigate` RCA of `aitools install` on Linux (epic #10, issues #11–#19). It changes governance data only (no code), and every change went through the protected-file review gate and was approved.
+  
+  ### 1. Incident registry: entries #52–#60, plus an amendment to #10
+  
+  | # | Sev | Type | Deficiency | Issue |
+  |---|---|---|---|---|
+  | 52 | critical | spec deviation | `aitools install` Step 5 rewrites the co-owned `config.json` via heredoc from regex-parsed fields, with no backup (`config-file-safety.md`, `user-repo.md`). Recurrence of the pattern in #
+#33 MERGED Fix safe re-runs on Linux: config merge, install-first cleanup, exit status (v0.73.2) merged=2026-10-03T03:33:58Z head=claude/fable-status-q9ch93 draft=n
+  PR A of epic #10. Fixes #11 #12 #13 #15 #16 #17 #18. Plan: `plans/linux-install-hardening.md` (approved; included in this PR).
+  
+  ## Changes
+  
+  | Issue | File(s) | Fix |
+  |---|---|---|
+  | #11 | `aitools-install.sh` | Step 5 now updates `config.json` with a node read-then-merge: write to a temp file, `validate_json_config`, `backup_file`, then `mv`. It removes `read_config_drives`, whose sed range ran to EOF on an inline `[]` and spliced the rest of the file into a heredoc. It also: preserves `userRepoPath`/`machineAlias`; rebuilds a corrupt file (WARN, with the invalid copy backed up); honors `--dry
+#34 MERGED Close incidents #52, #53 (v0.73.2); record partial fixes on #55-#57 merged=2026-10-03T03:57:45Z head=claude/fable-status-q9ch93 draft=n
+  Follow-up to #33 (v0.73.2). Docs and registry only, no code. Approved in session review.
+  
+  ## Changes
+  
+  - **`registries/incidents.json`**
+    - Moves incident #52 (config.json heredoc rewrite, #11) and #53 (entry points exit 0, #13) to `closed` with `closedIn: v0.73.2`.
+    - Sets `correctiveAction` on #55, #56 and #57, which stay `planned`. Each records what v0.73.2 fixed and what remains:
+      - #55: the `tool-lifecycle.md` cleanup-ordering amendment and the typst ordering
+      - #56: scoping Standard 3 (see also #27)
+      - #57: Linux install paths (PR B, #14)
+  - **`RELEASE_NOTES.md`** v0.73.2: adds 
+#35 MERGED PR C1: EOF-safe prompts, one interactivity rule, --force reaches install (v0.73.3) merged=2026-10-03T05:27:37Z head=claude/fable-status-q9ch93 draft=n
+  First part of PR C (logging conformance, epic #21): the shared libraries, plus the interactive/non-interactive rule for both entry points and installers. Plan: `plans/linux-install-hardening.md`, section "PR C1 — verbatim edits". The plan has the decisions (C-F7, C-F8), the error-handling audit and the exact diff for each batch.
+  
+  ## Behaviour
+  
+  `aitools` and `aitools install` each run interactive or non-interactive, decided by the caller. The same rule applies on every platform:
+  
+  | Run as | Review prompts | Installer prompts (gh login, repos path) |
+  |---|---|---|
+  | From a terminal | Shown. At e
+#36 MERGED Mirror interactive-menus non-interactive fallback in Cursor rule merged=2026-10-03T15:53:39Z head=claude/fable-status-q9ch93 draft=n
+  Follow-up to #35. `.cursor/rules/interactive-menus.mdc` line 15 now matches the `.claude/rules/interactive-menus.md` "Non-interactive fallback" section changed in v0.73.3:
+  
+  ```diff
+  -Non-interactive fallback required (`AITOOLS_FORCE`, non-terminal).
+  +Non-interactive fallback required (`AITOOLS_FORCE`/`--force`, non-terminal stdin, EOF at prompt -> overwrite + warn); installers apply the same rule to their own prompts.
+  ```
+  
+  Protected file; edit approved in session. Docs only, no code change.
+  
+  🤖 Generated with [Claude Code](https://claude.com/claude-code)
+  
+  https://claude.ai/code/session_011Yw8Pmn
+#37 MERGED PR C2: entry points use aitools-lib logging, installers report every failure, logging unit tests merged=2026-10-03T16:39:46Z head=claude/fable-status-q9ch93 draft=n
+  Second part of PR C (logging conformance, epic #21). Plan: `plans/linux-install-hardening.md`, section "PR C2 — verbatim edits". It holds the decisions, the error-handling audit, the exact diff for each batch and the new **logging audit plan**.
+  
+  ## Behaviour changes you will see
+  
+  - **`aitools` subcommand errors use the standard format.** `aitools` / `aitools.ps1` now load aitools-lib as soon as `repoPath` is read, and no longer define their own logging (#28, decision C-F9). Errors such as an unknown argument print as `[ts] [aitools] [error] …` and go to `deploy.log`. Before, they printed as a 
+#38 MERGED PR C3 (batch C5): rust/typst setup log full output and decide on exit codes; pre-push step 7 checks the dotprofile deploy/ merged=2026-10-03T17:00:46Z head=claude/fable-status-q9ch93 draft=n
+  Third part of PR C (logging conformance, epic #21). Plan: `plans/linux-install-hardening.md`, section "PR C3 — verbatim edits (batch C5)". It has the change table, the error-handling audit, the tests, the audit counts, two addenda and the exact diff.
+  
+  ## Changes
+  
+  **`setup-rust.sh` / `setup-rust.ps1`**
+  - **`rustup update`:** the full output is logged as detail; before, only the last 3 lines were kept (#22). The exit code decides success; before, the script searched the output for "error" or "fatal" (#27a). The ERROR row names the exit code and the log path (#27b).
+  - **Blank-line abort (bash):**
+#39 MERGED PR C4 (batch C6): typst.ps1 and pandoc report cleanups and upgrades truthfully merged=2026-10-03T17:08:17Z head=claude/fable-status-q9ch93 draft=n
+  This is the fourth part of PR C (logging conformance, epic #21). The plan is in `plans/linux-install-hardening.md`, section "PR C4 — verbatim edits (batch C6)". That section has the change table, the error-handling audit, the tests, the audit counts and the exact diff.
+  
+  ## Changes
+  
+  **`setup-pandoc.sh`**
+  - **Missing Homebrew:** an ERROR summary row is now written before `exit 1`. Before, there was no row (#26a).
+  - **`brew upgrade`:** the exit code is captured. A non-zero exit is an ERROR even when the output doesn't say "error" (C-F2). The output is logged, and the ERROR row gives the exit code
+#40 MERGED Logging conformance PR C5: setup-modal, setup-go.ps1, setup-rust (batches C7, C7b) merged=2026-10-03T18:41:57Z head=claude/fable-status-q9ch93 draft=n
+  Part of epic #21 (logging conformance). Verbatim edits, error-handling audit and test evidence: `plans/linux-install-hardening.md`, section "PR C5 — verbatim edits (batches C7, C7b)".
+  
+  ## Batch C7 — #23, #26d, #27a
+  - **setup-modal.sh / .ps1**:
+    - `uv tool upgrade` / `uv tool install` / `pip install` are decided by exit code. Before, an output grep decided: uv's exit-0 "Failed to hardlink" warning and pip's exit-0 resolver notice came out as ERRORs, and an exit-137 kill came out as OK.
+    - The upgrade output is logged before a migration or env repair (before, it was overwritten or dropped). Co
+#41 MERGED Logging conformance PR C6: setup-vercelcli, setup-gh-cli.ps1 (batch C8) merged=2026-10-04T01:05:02Z head=claude/fable-status-q9ch93 draft=n
+  Part of epic #21 (logging conformance). Verbatim edits, error-handling audit and test evidence: `plans/linux-install-hardening.md`, section "PR C6 — verbatim edits (batch C8)".
+  
+  ## Batch C8: #23, #26a, #27a, auth WARN row
+  - **setup-vercelcli.sh**:
+    - When Homebrew is missing, the script writes an ERROR row before `exit 1`.
+    - `brew upgrade` and `npm install` are decided by exit code. npm used to be an output grep for "ERR!|error"; the Standard 3 brew grep stays.
+    - `npm uninstall` output is logged and a failure warns. It used to be `2>/dev/null || true`, which is why its exemptions-table ro
+#42 MERGED Logging conformance PR C7: setup-user-cursor (batch C9) merged=2026-10-04T20:41:43Z head=claude/fable-status-q9ch93 draft=n
+  Part of epic #21 (logging conformance). Verbatim edits, error-handling audit and test evidence are in `plans/linux-install-hardening.md`, section "PR C7 — verbatim edits (batch C9)".
+  
+  ## Batch C9 (#23, #25, #26b–d)
+  
+  **setup-user-cursor.sh**
+  - `brew install ripgrep` and the Cursor CLI installer (`curl | bash`) now log their output, and their exit code decides the result. Before, they were fire-and-forget, and any failure aborted the whole script under `set -e`.
+  - Install outcomes now write summary rows under `cursor cli`: a failure is ERROR; Homebrew missing or the tool not on PATH is WARN. Bef
+#43 MERGED Logging conformance PR C8: setup-user-hooks (batch C10) merged=2026-10-04T20:54:45Z head=claude/fable-status-q9ch93 draft=n
+  Part of epic #21 (logging conformance). The verbatim edits, error-handling audit and test evidence are in `plans/linux-install-hardening.md`, section "PR C8 — verbatim edits (batch C10)".
+  
+  ## Batch C10 (#25, #26a–c, #26f, #27b)
+  
+  **setup-user-hooks.sh**
+  - Every early exit now writes a `claude hooks` ERROR row: node missing, manifest missing, manifest lists no hooks, registration list failed, and hook script missing.
+  - The registration-list node exit code is captured.
+  - `adopt_managed_file` failures are checked and write an ERROR row. Before, they were ignored, or aborted the script under `set -
+#44 MERGED Logging conformance PR C9: setup-user-settings, setup-gh-cli (batch C11) merged=2026-10-04T21:04:44Z head=claude/fable-status-q9ch93 draft=n
+  Part of epic #21 (logging conformance). The verbatim edits, error-handling audit and test evidence are in `plans/linux-install-hardening.md`, section "PR C9 — verbatim edits (batch C11)".
+  
+  ## Batch C11 (#26a–c, #27a–b, #31 caller half)
+  
+  **setup-user-settings.sh / .ps1**
+  - The "No settings.json yet -- nothing to sync" branch is removed (#31, C-F5). On a fresh HOME the sync now runs and the lib creates `settings.json` from the profile without prompting. This gets a new row, `OK "claude settings" "created"`.
+  - When node is missing, an ERROR row is written before `exit 1`.
+  - A failed sync writes `
+#45 MERGED PR C10: installer config merge (PS1), Refresh-Path, build-deploy prefs, reference fixes (batch C11b) merged=2026-10-04T21:08:57Z head=claude/fable-status-q9ch93 draft=n
+  This fixes the findings from a full read of `reference/*`, the entry points, both installers, both libs and `build-deploy.sh`. The verbatim edits, error-handling audit and tests are in `plans/linux-install-hardening.md`, section "PR C10 — verbatim edits (batch C11b, D-C10)".
+  
+  ## Code
+  
+  **`aitools-install.ps1` Step 5 now uses read-then-merge.** This is the PS1 half of RCA #1, and brings it into parity with `aitools-install.sh` (C-F4, `config-file-safety.md`).
+  - Before, Step 5 rebuilt `config.json` from scratch. Every key except `userRepoPath`, `machineAlias` and `googleDrives` was dropped, an in
+#46 MERGED Add Google Chrome as a managed tool for the Claude Code web environment (D-CHR1..3) merged=2026-10-05T02:29:40Z head=claude/fable-status-q9ch93 draft=n
+  ## What changed
+  
+  Commander-approved batch (2026-10-05), written verbatim from the approved drafts.
+  
+  | File | Change |
+  |---|---|
+  | `reference/tool-ops-google-chrome.md` | New. Decisions D-CHR1..3, why the default config fails, requirements and sources of truth, MCP config, environment setup-script block, security consequence, verification, unknowns, follow-ups |
+  | `reference/evaluations/google-chrome-linux-2026-10-05.md` | New. Evaluation research: options R1-R4 and the evidence |
+  | `registries/tool-registry.json` | +132/-4: new `google-chrome` and `nss-tools` entries; `chrome-devtools-mcp` get
+#47 MERGED Sync hook-rollout rule with deployed hooks; delegation-duty decisions (D-DEL1–3) merged=2026-10-05T03:01:28Z head=claude/fable-status-q9ch93 draft=n
+  This PR adds two pieces of governance work as separate commits. Its companion is nobul-jose/aitools-nobul-jose#15, which adds the delegation rule, the CLAUDE.md template section, and the regenerated `deploy/`.
+  
+  ## 1. Hook-rollout rule now matches the deployed hooks (2ed7122)
+  
+  `.claude/rules/hook-rollout.md` had drifted from the deployed `standing-order-guard.sh`:
+  - The rule described `||`, `;` and backticks as observe-only under a `MODE_REST` variable. Every check has been enforcing since 2026-03-24 (154fd46), and each check has its own mode variable.
+  - The rule pointed log review at `~/.claud
+#48 MERGED Platform and environment detection API; Chrome setup and MCP args for Claude Code web merged=2026-10-05T04:19:31Z head=claude/fable-status-q9ch93 draft=n
+  Companion PR (dotprofile `deploy/` + environment CLAUDE.md): https://github.com/nobul-jose/aitools-nobul-jose/pull/16 -- merge this one first.
+  
+  ## What changed
+  
+  | Commit | Files | Change |
+  |---|---|---|
+  | 2a60d2d | `scripts/aitools-lib.sh/.ps1`, `.claude/rules/cross-platform.md`, `.cursor/rules/cross-platform.mdc`, `reference/cross-platform-detail.md`, `.claude/rules/managed-file-deployment.md`, `reference/managed-file-deployment.md`, `.cursor/rules/managed-file-deployment.mdc`, `reference/script-standards-detail.md` | Library API: `AITOOLS_PLATFORM` (+ `IS_LINUX`), `AITOOLS_ENVIRONMENT` (`cla
+#49 CLOSED channel: relay — c4ab99d1 ETH/SOL/HYPE research session merged=- head=claude/tender-goldberg-gae94k draft=n
+  Appends one agent entry to `.aitools/channel/relay.md`. This is the session-close relay entry required by CLAUDE.md "Leave something behind". No other files change.
+  
+  ## What the entry records
+  
+  The session was an investment-research task outside the repo's scope: ETH vs SOL vs HYPE. The entry captures the operational learning that carries over to future sessions:
+  
+  - **Fact-check results:** an adversarial fact-check of 194 load-bearing claims from seven parallel researchers. 129 were confirmed, 44 corrected, 5 refuted and 16 unverifiable.
+  - **Provenance predicts accuracy:** claims measured from 
+#50 MERGED Derive build-deploy hook preflight from hooks-manifest.json (closes #9) merged=2026-10-21T02:54:28Z head=fix/issue-9-manifest-driven-preflight draft=n
+  Closes nobul-tech/aitools#9.
+  
+  ## Summary
+  
+  `build-deploy.sh` checked hook files against a hardcoded preflight list that had drifted from `shared/hooks/hooks-manifest.json` (`block-explore-agent.sh` was missing). It now reads the manifest, and the parity audit checks that the hardcoded list doesn't come back.
+  
+  | Commit | Change |
+  |---|---|
+  | 303a7ec | Read the hook/helper preflight from `hooks-manifest.json` (`hooks[].file` + `deploy[]`, looked up in `shared/hooks/`, then `scripts/`). Remove the dead `HOOK_*` and `AITOOLS_LIB_*` variables. `check-hook-parity.py` takes an optional 4th argument, `
+#51 MERGED /delegate: delegates push and open their own PRs (D-DEL4) merged=2026-10-21T02:54:43Z head=docs/delegate-ships-own-prs draft=n
+  /delegate: delegates push and open their own PRs (D-DEL4)
+  
+  Commander decision D-DEL4 (user rule delegation.md): a delegate whose
+  mission produces a code change pushes its branch and opens the PR itself,
+  then returns the PR URL. Prompt step 9 now sets the shipping terms
+  (repo, base, branch, pre-push checks, limits) instead of "no pushes or PRs
+  unless authorized"; the skeleton gains a Shipping section; verification
+  reviews the delegate's PR rather than re-pushing.
+  
+  Also records an environment limit observed 2026-10-21: worktree-isolated
+  delegates cannot Write outside their worktree, so their out
+#52 MERGED File incidents #74-#86 (machine identity, hook shadowing, deploy safety) merged=2026-10-21T02:56:00Z head=docs/incidents-74-86 draft=n
+  File incidents #74-#86 (machine identity, hook shadowing, deploy safety)
+  
+  Commander-approved batch from session 360aa8f3-8 (2026-10-21):
+  - #74-#79 machine identity: kernel hostname instead of scutil names,
+    user init never saves machineAlias, silent first-profile fallback,
+    console-only late detection, per-machine values baked into the shared
+    dotprofile deploy/, defect parked unfiled for 4 months (S2-Host RCA)
+  - #80-#82 hooks: dotprofile copies shadow shared/hooks, reverse-discovery
+    EOF prompt missed by #29, standing-order-guard false positive on sed -n
+  - #83 /delegate worktree output li
+#53 MERGED Handoff 360aa8f3-8 + housekeeping (gitignore MCP configs, harvesting) merged=2026-10-21T04:03:17Z head=docs/handoff-360aa8f3-8 draft=n
+  Session handoff: .aitools/channel/handoffs/2026-10-21_360aa8f3-8.md (verified), preserved mission outputs, relay entry, plus housekeeping commit (gitignore .mcp.json/.cursor/mcp.json; harvested artifacts). 🤖 Generated with [Claude Code](https://claude.com/claude-code)
+#54 MERGED /delegate: instruct delegates to read all project and user rules merged=2026-10-22T00:42:47Z head=docs/delegate-read-all-rules draft=n
+  ## Summary
+  
+  `/delegate` duty element 2 now requires every delegation prompt to tell the delegate explicitly to read all project-scope and user-scope rules not already in its context, each by absolute path. Writing step 4 and the prompt skeleton's Rules block are updated to match.
+  
+  Commander decision, 2026-10-21.
+  
+  ## Commits
+  
+  - f4991be /delegate: instruct delegates to read all project and user rules
+  
+  ## Verification
+  
+  - Docs-only change to `shared/skills/delegate/SKILL.md` (not a protected file).
+  - Not run: check-pre-push (step 7 fails on every change until #32 is fixed; the fix is in flight as 
+#55 MERGED Record macOS verification of check-pre-push step 7 (closes #32, fixed in 7aacdef) merged=2026-10-22T00:43:03Z head=fix/issue-32-pre-push-deploy-path draft=n
+  ## Summary
+  
+  Closes #32.
+  
+  Issue #32 was fixed on main in 7aacdef (2026-10-03, "Pre-push step 7: verify the dotprofile deploy/ against a fresh build"). That commit never referenced the issue, so the issue stayed open. Step 7 in `scripts/check-pre-push.sh` and `.ps1` now works like this:
+  
+  - It resolves `userRepoPath` from `$HOME/.aitools/config.json`, the same source `build-deploy.sh` uses.
+  - It SKIPs when `userRepoPath` is unset or not a git repo.
+  - Otherwise it rebuilds into a temp copy of the dotprofile's committed tree under a temp HOME and compares `deploy/`. PASS when the copy matches. FAIL
+#56 MERGED Hooks: adopt writes shared/hooks only, EOF-safe prompts, sed -n reads pass the guard (#80, #81, #82) merged=2026-10-22T00:43:38Z head=fix/hook-lifecycle draft=n
+  ## Summary
+  
+  Mission HOOKS (S3-Hooks, for Session Commander 10cf255a-c). Fixes incidents #80, #81, #82.
+  
+  - **#80 (decision SD-2):** `setup-user-hooks.sh/.ps1` now resolve manifest hooks from `shared/hooks/` then `scripts/` only. That is the same order as the `build-deploy.sh` embed loops, so the dev and MDM paths deploy the same file. A dotprofile copy of a manifest hook is ignored, with a `log_warn` and a `WARN` row ("dotprofile copy ignored"). `[a]dopt` writes `shared/hooks/<file>` only, never the dotprofile, and the adopt label now reads "aitools shared/hooks". This matches the existing spec
+#57 MERGED Ledger: draft incident batch #87+ for commander approval merged=2026-10-22T00:44:15Z head=docs/incidents-87-plus draft=n
+  ## Summary
+  
+  Mission LEDGER (S3-Ledger, Session Commander 10cf255a-c). This PR adds a draft incident batch for commander approval. **`registries/incidents.json` is NOT modified.** Once the commander approves the batch, a follow-up commit on this branch will append it to the registry.
+  
+  All files are under `.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-Ledger/`:
+  
+  - `S3-Ledger-incidents-batch.json`: 42 entries, #87-#128, ready to append.
+    - S4-Review #87-#112 were re-verified on origin/main c8573ed, with file:line citations added. Thin or wrong claims were fixed: #93, #94, #98 and #
+#58 MERGED Gate: A/B review of tool-support tree, rev 4, consolidated review page merged=2026-10-22T00:44:44Z head=docs/gate-ab-review draft=n
+  ## Summary
+  
+  Mission GATE (S3-Gate) for Session Commander 10cf255a-c. This PR prepares, on one page, every open decision that M2 (tool support), M3 (machine profile) and the S2-Layout PRs depend on. **Drafts only: no protected file is written.** Every file is under `.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-Gate/`.
+  
+  - **A/B adversarial pass on decision tree rev 3** (owed since S4-Review's A/B reviewers were lost):
+    - `S3-Gate-A-review.md` (correctness against the rules): 0 blockers, 4 majors, 12 minors. It also re-verifies the rev-2 dispositions: 43 hold, 5 hold in part, none
+#59 MERGED tool-ops-claude-code: launch path decides whether delegates can delegate merged=2026-10-22T00:44:58Z head=docs/cc-nesting-launch-path draft=n
+  ## Summary
+  
+  Records the 2026-10-21 nesting probe in `reference/tool-ops-claude-code.md` ("Sub-agent Nesting Depth"), and re-verifies item #27 at 2.1.307.
+  
+  | Launched via | Has Agent | Has Workflow | Deepest level that ran |
+  |---|---|---|---|
+  | Agent tool from the main session | yes at levels 1-2, no at level 3 | no | 3 |
+  | A Workflow `agent()` call | no | no | 1 |
+  
+  It also records that worktree-isolated agents refuse commands that set `HOME`.
+  
+  Commander-approved text (protected file).
+  
+  ## Commits
+  
+  - afaa7ed tool-ops-claude-code: launch path decides whether delegates can delegate
+  
+  ## Verificati
+#60 MERGED Restore the sed guard to enforce; fix hook-lifecycle drafts (#82 follow-up) merged=2026-10-22T02:48:58Z head=fix/sed-guard-enforce draft=n
+  ## Summary
+  
+  Restores the standing-order-guard sed check to **enforce** (it regressed to observe in #56) and ships, as **drafts awaiting the commander's approval**, the hook-rollout rule update and the hook-lifecycle rule fixes from #56's review. Once this merges, `aitools` may be run again on this machine: the deployed guard will block `sed -i`, `s///w` and redirect writes outside a pipeline again.
+  
+  ## Why
+  
+  - #56 added the read-only `sed -n 'N[,M]p' <file>` exemption (incident #82) and reset `MODE_SED` to observe, which re-allowed `sed -i s/a/b/ file.txt` (exit 0 on the new guard, 2 on the old
+#61 MERGED Scratch: accurate /scratch skill; draft scratch rule (for approval) merged=2026-10-22T02:49:13Z head=feature/scratch-rule draft=n
+  ## Summary
+  
+  Rewrites the /scratch skill to match what the hooks and `scripts/ait-harvest.py` actually do, and adds a **draft** user rule `shared/rules/scratch.md` for the commander's approval. The rule is **not live**: it sits in the mission folder (`S3-ScratchRule-drafts/shared/rules/scratch.md`), because it carries an intent statement (protected) and because nothing deploys `shared/rules/` yet.
+  
+  Mission SCRATCH-RULE (S3-ScratchRule), Session Commander 10cf255a-c.
+  
+  ## Why
+  
+  - The skill said the SessionEnd hook deletes scratch and cited `harvest-session.sh` lines 164-166. The shim is 65 lines a
+#62 MERGED /delegate: generalized lessons from running parallel missions merged=2026-10-22T02:49:32Z head=docs/delegate-lessons draft=n
+  ## Summary
+  
+  Generalizes what this session's parallel missions taught about delegating into the `/delegate` skill. Only lessons that hold in any session and repo; no mission names, PR numbers or session facts.
+  
+  ## Why
+  
+  Running 8+ parallel mission commanders (HOOKS-FIX, SOURCE-TRUTH, SPEC-REWRITE, GATE-FIX, REGISTRY-CC, SCRATCH-RULE, INCIDENTS, and the earlier workflow missions) surfaced repeatable failure modes: approval given before text existed, worktree removal deleting a delegate's ignored files, two missions needing one interface, PRs merged with open reviews, single-agent "independent" re
+#63 MERGED Managed-file spec: drafts for the source-of-truth model (for approval) merged=2026-10-22T02:49:50Z head=docs/managed-file-spec-drafts draft=n
+  ## Summary
+  
+  Mission SPEC-REWRITE (S3-SpecRewrite). This PR adds drafts of every managed-file spec file that contradicts the commander-approved source-of-truth model. **None of the drafts is applied.** The PR contains only the mission folder `.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-SpecRewrite/`.
+  
+  ## Why
+  
+  - Managed-file model approved 2026-10-21 (branch `docs/managed-file-choices`: agentic-standards.md "Managed-file review choices and merge" + the reference State Machine). SOURCE is the source of truth. There is no ancestor and no deploy state. One review menu. Adopt and mer
+#64 MERGED Registry: Claude Code entry draft (for approval) merged=2026-10-22T02:50:20Z head=docs/registry-claude-code draft=n
+  ## Summary
+  This PR adds a draft of the complete `tools.claude-code` registry entry, for the commander's approval. **The registry (`registries/tool-registry.json`) is NOT modified.** It is protected (`.claude/rules/sources-of-truth.md`). The PR contains only the mission folder `.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-RegCC/`.
+  
+  ## Why
+  Mission REGISTRY-CC (Session Commander 10cf255a-c). The live entry is incomplete:
+  - `purpose` is null.
+  - `versions.{macos,windows,linux}` are all null.
+  - `versions.maintenanceFile` is a bare file name.
+  - It has no `delivery`, `health`, `evaluati
+#65 MERGED File incidents #87-#145 (session 10cf255a-c backlog) merged=2026-10-22T02:50:32Z head=docs/incidents-87-plus-apply draft=n
+  ## Summary
+  
+  Mission INCIDENTS (S3-Incidents, for Session Commander 10cf255a-c). This PR applies the commander-approved backlog (2026-10-21) to `registries/incidents.json`:
+  
+  - **#87-#145**: 59 new entries. 42 come from the S3-Ledger batch (PR #57) with its review fixes, and 17 are new findings.
+  - **Closed**: #80, #81 and #82, fixed by PR #56 (bd42ba5) and independently verified.
+  - **Updated**: the `affected` lists of #21, #55, #59 and #76, plus a recurrence note on #51.
+  
+  The registry after this PR:
+  - 138 entries are open or planned, and 7 are closed (13, 14, 52, 53, 80, 81, 82).
+  - Ids 1-145 are
+#66 MERGED Gate fix: rev 5, D-TS13 runner coverage, independent B-pass, tool-adopt approval section merged=2026-10-22T02:51:08Z head=docs/gate-fix draft=n
+  ## Summary
+  
+  Fixes the review findings on merged PR #58 in a new mission folder
+  (`.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-GateFix/`):
+  decision tree **rev 5**, D-TS13 coverage of every runner and launch site, an
+  **independent** cross-platform B-pass (S3-GateFix-B), and a review page with a
+  new first section, **TOOL-ADOPT approval**. The S3-Gate files merged in #58 are
+  untouched (provenance). No protected file is written; everything is a draft.
+  
+  **The review page is ready to publish:** `S3-GateFix-review-page.json` (single
+  source, 98 items) and the rendered `S3-GateFix-review-
+#67 MERGED Record tool-support gate decisions (95 items) merged=2026-10-22T03:40:04Z head=docs/tool-support-gate-decisions draft=n
+  Records every commander decision from the gate review page plus chat overrides (D-TS13 reversed, C.1, P-Q4, N-Q6, N-Q2) in plans/tool-support-and-machine-profile.md, and adds the ROADMAP In Progress row. Commander-directed write. Docs only.
+  
+  🤖 Generated with [Claude Code](https://claude.com/claude-code)
+#68 MERGED Managed files: SOURCE is the source of truth; adopt and merge write the repo; per-field JSON review merged=2026-10-22T04:09:30Z head=feature/managed-file-source-of-truth draft=n
+  ## Summary
+  
+  Implements the managed-file model the commander approved on 2026-10-21, in both
+  shared libraries and every caller:
+  - SOURCE is the source of truth. There is no ancestor and no deploy state.
+  - There is one review menu: `[o]verwrite / [a]ccept & adopt / [m]erge & adopt / [s]kip / [x]abort`.
+  - On adopt or merge, the library writes the repo file in the same step.
+  - JSON files are reviewed field by field.
+  - Every write is backed up and snapshotted first and validated after. On a failure the files are restored, the result is `failed` (ERROR row), and the run continues.
+  
+  This fixes incide
+#69 MERGED Ship /tool-adopt (user level) and approved gate glossary terms merged=2026-10-22T04:09:42Z head=feature/tool-adopt-skill draft=n
+  ## Summary
+  
+  Ships the approved `/tool-adopt` skill at user level (`shared/skills/tool-adopt/SKILL.md`, deployed to `~/.claude/skills/`) and the approved tool-support gate glossary terms in `registries/glossary.json`. Mission TOOL-ADOPT (S3-ToolAdopt), Session Commander 10cf255a-c.
+  
+  ## Why
+  
+  Decisions in `plans/tool-support-and-machine-profile.md`:
+  
+  - **TA-PLACE**: user level. Commander note: "it should not be process only, it should do work to evaluate (if needed) and adopt the tool". The skill now says so in a new section, "This skill does the work".
+  - **TA-SKILL**: the S3-GateFix draft, appro
+#70 MERGED Apply approved drafts: hook and scratch rules, managed-file spec, Claude Code registry entry merged=2026-10-22T04:09:54Z head=docs/apply-approved-drafts draft=n
+  ## Summary
+  
+  Mission APPLY-DRAFTS (S3-Apply, Session Commander 10cf255a-c). Writes into the repo the five protected draft sets the commander approved on 2026-10-21 (with the suggested answers and the adjustments in the launch prompt). One commit per set:
+  
+  1. `d1328b0` Hooks: hook-rollout rule + mirror, new user rule `shared/rules/hook-lifecycle.md`, and the `sed -n` exemption in standing-order-guard limited to single-line commands.
+  2. `1902cd8` Scratch: new user rule `shared/rules/scratch.md`, /scratch intent update, the false "SessionEnd hook handles cleanup" sentence fixed in both CLAUDE.md t
+#71 MERGED Path-reference check, stale registry paths, tool-versions.json removal (S2-Layout PR-a) merged=2026-10-22T04:10:06Z head=fix/registry-paths draft=n
+  ## Summary
+  
+  S2-Layout PR-a (mission LAYOUT): detection first, then the stale paths.
+  
+  - New pre-commit step 20 "Path references": `scripts/check-path-refs.py` (one stdlib Python implementation for bash and PS1) fails when a skill, rule, Cursor rule, reference doc, hook or CLAUDE.md cites a repo path that does not exist. Intentional citations live in `scripts/check-path-refs-allow.txt`, one reason per line.
+  - Pre-commit step 16 parity fix: the PS1 version now matches `registries/`, both versions govern `tool-ops.json` and scan `.cursor/rules/`.
+  - All stale `reference/<registry>.json` paths repoi
+#73 MERGED M3 B1: native profile resolver (aitools-profile.sh/.ps1) merged=2026-10-22T04:24:03Z head=feature/m3-b1-profile-resolver draft=n
+  ## Summary
+  
+  M3 batch 1: one native resolver for "which dotprofile" and "which machine profile is this machine", as two implementations with identical behaviour: `scripts/aitools-profile.sh` (macOS/Linux) and `scripts/aitools-profile.ps1` (Windows). It has no node dependency. Commands: `user-repo-path`, `machine-id`, `hostname`, `resolve`, `derive-config`, `snapshot`, `register`. No caller uses it yet; the next batches wire it in.
+  
+  ## Why
+  
+  - **P-Q3**: native bash plus PowerShell, not `aitools-profile.js`.
+  - **P-Q2**: raw machine ids (macOS IOPlatformUUID, Windows MachineGuid, Linux /etc/machine
+#74 MERGED Move seven governance skills to user level; one-name-one-level check (S2-Layout PR-b) merged=2026-10-22T04:24:16Z head=feature/user-level-skills draft=n
+  ## Summary
+  
+  S2-Layout PR-b (mission LAYOUT). The folder now decides the level:
+  
+  - **Moved:** seven governance skills (`tool-ops`, `tool-eval`, `tool-registry`, `harvest`, `incident`, `glossary`, `frameworks`) went from `.claude/skills/` to `shared/skills/` with `git mv`. No copies remain.
+  - **Stay project-level:** `audit` and `governed-data`.
+  - **Data location:** each moved skill now says where its files live. That is the aitools clone, else `repoPath` in `~/.aitools/config.json`, else the read-only `~/.aitools/registries/` copy deploy-harness will install.
+  - **New check:** pre-commit step 21 
+#75 MERGED Retire the aitool-ops and aitool-eval reference cards (S2-Layout PR-c) merged=2026-10-22T04:24:26Z head=refactor/retire-reference-cards draft=n
+  ## Summary
+  
+  S2-Layout PR-c (mission LAYOUT): retire the `aitool-ops` and `aitool-eval` reference cards.
+  
+  - After PR-b, `/tool-ops` and `/tool-eval` are user-level skills that load in every repo, so the snapshot cards only duplicated their sources and drifted from them.
+  - Card-only content is folded into the sources; the cards and their two trigger rules are deleted.
+  - The dotprofile `claude/rules/delegation.md` citations were fixed and pushed to the dotprofile main directly (aitools-nobul-jose `2f2e0a9`).
+  - The mission's follow-up list for the owning missions is committed here: `.aitools/chann
+#76 MERGED M3 B1b: tool exception store (exception-get/set) in the native resolver merged=2026-10-22T04:37:58Z head=feature/m3-b1b-tool-exceptions draft=n
+  ## Summary
+  
+  M3 batch 1b (S4's X-B1): adds the tool-exception store's reader and writer as `exception-get` / `exception-set` subcommands of the native resolver, `scripts/aitools-profile.sh` / `.ps1`.
+  
+  **Stacked on #73.** This branch starts from `feature/m3-b1-profile-resolver`, so the diff shows #73's commit until #73 merges. This PR's own commit is the last one.
+  
+  ## Why
+  
+  - **N-Q1:** sets the toolExceptions shape. The Session Commander's 2026-10-21 clarification moves the engine from `aitools-profile.js` to the native pair (P-Q3).
+  - **N-Q2:** dotprofile writes auto-commit and push.
+  - **Decision
+#77 MERGED M3 B3: setup-user-config.sh/.ps1, the node-free config.json writer merged=2026-10-22T04:38:28Z head=feature/m3-b3-config-writer draft=n
+  ## Summary
+  
+  M3 batch 3: `scripts/setup-user-config.sh` / `.ps1`, the single writer of `~/.aitools/config.json`. It needs no node. The JSON engines move into shared files, `scripts/aitools-json.pl` and `scripts/aitools-json.ps1`. The installers are not wired to the writer yet; that is the next PR.
+  
+  **Stacked on #76** (tool exceptions). The diff includes #76's commit until #76 merges. This PR's own commits: `23aefa8` (engine move, no behaviour change), `50e50f9` (writer), and `67e144f` (merge of main after #73's squash).
+  
+  ## Why
+  
+  - **P-Q3:** native, no node.
+  - **P-Q4:** the writer is silent; `ai
+#78 MERGED Land the tool support decision tree (R1, approved rev 5 + gate decisions) merged=2026-10-22T20:45:19Z head=docs/m2-tree-user-repo draft=n
+  ## Summary
+  
+  Lands `reference/tool-support-decision-tree.md`, the approved rev 5 (row R1), with the gate decisions that change it. The new "Changes at landing" section lists every change against the approved text. It also clears the repo's dead path references (pre-commit step 20: 0 dead, was 9) and updates the R18 `user-repo.md` draft, which stays a draft until M3 B9.
+  
+  ## Why
+  
+  - **R1 / REV5 are approved.** The shipped `/tool-adopt` skill and the merged resolver already cite this file, so pre-commit step 20 failed on main.
+  - **Decisions applied** (`plans/tool-support-and-machine-profile.md`):
+   
+#79 MERGED M3 B3b: installers write config.json through setup-user-config merged=2026-10-22T20:46:29Z head=feature/m3-b3b-installer-config draft=n
+  ## Summary
+  
+  M3 batch 3b: both installers' Step 5 write `~/.aitools/config.json` through `setup-user-config.sh` / `.ps1`, the single node-free writer from #77. The PR also adds the approved R21 reference-example line. **Stacked on #77.**
+  
+  The second commit (69b6420, S3-M3-Install) fixes Review3's five #79 minors and the logging-audit findings (commander decision 3).
+  
+  ## Why
+  
+  - **P-Q3 / P-Q4:** one silent writer, no node.
+  - **R21:** approved text, verbatim.
+  - **Review3 #79 m1-m5** and **commander decision 3:** a logging audit of Step 5 and the writer.
+  
+  ## Changes
+  
+  ### 9462ed0 (Step 5 -> writer)
+  
+#80 MERGED M3 B2: aitools-lib profile and tool-exception wrappers merged=2026-10-23T00:37:47Z head=feature/m3-b2-lib-wrappers draft=n
+  ## Summary
+  
+  M3 batch 2: the aitools-lib wrappers every consumer will use for "which dotprofile", "which machine profile" and the tool-exception store:
+  
+  | bash | PowerShell |
+  |------|------------|
+  | `resolve_user_repo_path` | `Resolve-UserRepoPath` |
+  | `resolve_machine_profile` | `Resolve-MachineProfile` |
+  | `tool_exception_get` | `Get-ToolException` |
+  | `tool_exception_record` | `Set-ToolException` |
+  
+  No caller is switched yet. **Stacked on #79** (and through it #77 and #76); this PR's own commits are the last three (18218ce, dae07fe, 28e0f5b).
+  
+  ## Contract
+  
+  Result names are final as of dae07f
+#81 MERGED Make the managed-file review diff readable (local -> repo, labelled, coloured) merged=2026-10-23T01:29:20Z head=fix/review-diff-display draft=n
+  ## Summary
+  
+  The managed-file review diff now reads as "what [o]verwrite changes on this machine": LOCAL -> SOURCE, with both paths in the headers, a one-line legend, red/green colour on a terminal, and menu lines that say what each choice does to the lines shown. Bash and PS1 print byte-identical output.
+  
+  What the commander sees now:
+  
+  ```
+  [REVIEW] /Users/you/.claude/rules/foo.md differs from source.
+  
+    red - = only on this machine   green + = only in the repo
+  
+  --- this machine  /Users/you/.claude/rules/foo.md
+  +++ repo          /Users/you/repos/aitools-you/claude/rules/foo.md
+  @@ -1,3 +1,3 @@
+   #
+#82 MERGED M3 B6/B7: aitools user init registers this machine's profile merged=2026-10-23T00:37:59Z head=feature/m3-b6-user-init draft=n
+  ## Summary
+  
+  M3 batches 6 and 7: `aitools user init` registers this machine's profile, the same way in `scripts/aitools` and `scripts/aitools.ps1`.
+  
+  - It resolves first, then asks or takes `--alias`.
+  - It writes `machine.id` through `aitools-profile register` and commits and pushes only profile.json.
+  - config.json is written by `setup-user-config`.
+  - Every sync re-derives config.json first.
+  
+  **Stacked on #80**; this PR's own commit is the last one.
+  
+  ## Why
+  
+  - Approved R18 "Registration" (numbered aliases, `[n]ew`, `[s]kip`; no guessing without a terminal).
+  - P-Q12 (`--alias`), P-Q5 (no DNS host
+#83 MERGED M3 B4: setup-user-claude uses the one resolver (no first-profile fallback, literal-safe tokens) merged=2026-10-23T01:13:31Z head=feature/m3-b4-setup-user-claude draft=n
+  ## Summary
+  
+  M3 batch 4: `setup-user-claude.sh` / `.ps1` take the dotprofile path and this machine's profile only from the PR #80 wrappers (`resolve_user_repo_path` / `resolve_machine_profile`, `Resolve-UserRepoPath` / `Resolve-MachineProfile`), on the fixed result names (`AITLIB_*`, `$script:AitLib*`). They read no config.json or profile.json themselves: no alias lookup, no hostname or first-profile fallback (re-key design batch 6, alias-independent part). Interpolation and the adopt filter are literal-safe and single-pass. Logging audited (commander decision 3).
+  
+  **Base:** the branch merges P
+#84 MERGED Land the review fixes for #76/#77 (merged before the fixes) merged=2026-10-23T00:37:10Z head=fix/m3-review2-fixes draft=n
+  ## Summary
+  
+  #76 and #77 were merged at their earlier heads (50e4bb5, 67e144f), before the fixes for their independent review (S3-Profile-Review2) were pushed. This PR brings exactly those fixes to main. It is the same content that #79 and the PRs stacked on it already carry, so merging this first shrinks #79's diff.
+  
+  ## Why
+  
+  S3-Profile-Review2, posted on #76 and #77; the report is included in this PR.
+  
+  ## Changes
+  
+  - **6210403, the #76 fixes:**
+    - **Major M1:** `exception-set` refuses `via=alias` whenever this machine has an id. That case means the profile is unregistered or registered to anot
+#85 MERGED Read tool-ops references from ~/.aitools/reference first, repo second merged=2026-10-23T01:29:35Z head=feature/harness-tool-ops-fallback draft=n
+  ## Summary
+  
+  /tool-ops and /aitool-ops now read `reference/tool-ops-*.md` from the deployed copy `~/.aitools/reference/` (`%USERPROFILE%\.aitools\reference\` on Windows) first, then the aitools repo copy. /aitool-ops keeps its embedded snapshot as the last fallback, so it still works when neither file exists. Docs-only: two SKILL.md files plus one protected-file draft.
+  
+  ## Why
+  
+  S3-Harness requirement (verbatim): "/tool-ops and its skills read ~/.aitools/reference/tool-ops-*.md, falling back to the repo." Shared contract (S3-Harness brief): `~/.aitools/reference/` mirrors repo `reference/` with 
+#86 MERGED M3 re-key: machine profiles keyed by machine id merged=2026-10-23T00:59:29Z head=feature/m3-rekey draft=n
+  ## Summary
+  
+  Stacked on #82 (`feature/m3-b6-user-init`); review only the commits above it. This PR carries batches 1-5 of the re-key design (`S3-M3-Register-keydesign.md`, committed on #82): machine profiles keyed by the raw machine id. **Batch 1 lands now**: an order-preserving key `rename` in both JSON engines. Batches 2-5 (resolver, lib wrappers, config.json, user init) are pushed here by later missions.
+  
+  ## Why
+  
+  Commander decision 5 (2026-10-22): `profiles.<machineId>` replaces `profiles.<alias>`. The design's `migrate` subcommand (section f) renames every legacy alias key to its lower-case
+#87 MERGED S3-H-Cursor: fan harness rules out to Cursor user rule files (~/.cursor/rules, .md -> .mdc) merged=2026-10-23T01:30:14Z head=feature/harness-cursor-rules draft=n
+  ## Summary
+  
+  `setup-user-cursor.sh/.ps1` now fan out every `~/.aitools/rules/*.md` into Cursor's user rule files, `~/.cursor/rules/<name>.mdc` (Windows: `%USERPROFILE%\.cursor\rules\`).
+  
+  - Each rule is converted to the `.mdc` form Cursor actually loads.
+  - Path-scoped rules get globs anchored the way Cursor resolves them.
+  - The PR adds a 79-case test suite, the research behind the location, and the protected-file drafts for `/tool-ops`.
+  
+  ## Why
+  
+  This is the S3-Harness rules fan-out (mission packet section 6). The location is established in `S3-H-Cursor-research.md`:
+  
+  - **Docs**: https://cursor.c
+#88 MERGED Add deploy-harness.sh/.ps1: populate ~/.aitools from the repos merged=2026-10-23T01:29:56Z head=feature/harness-deploy-harness draft=n
+  ## Summary
+  
+  New `scripts/deploy-harness.sh` / `.ps1` build the deployed harness in `~/.aitools` (Windows `%USERPROFILE%\.aitools`): they create `{reference,registries,hooks,rules,skills,bin}`, deploy every git-tracked source file through `deploy_managed_file` / `Deploy-ManagedFile` (summary tool `harness files`, adopt target = the repo file), and generate `config.json` by calling the only writer, `setup-user-config.sh` / `.ps1`. Name conflicts: first source wins, each skipped duplicate is `log_error` + an ERROR row. Tests in `tests/deploy-harness/`. Approved protected-doc rows written; the `re
+#89 MERGED Installer Step 5: relay writer logs and warnings, fix relative repos path and dry-run writes (#79 fix-forward) merged=2026-10-23T00:37:33Z head=fix/m3-b3b-installer-review3 draft=n
+  ## Summary
+  
+  This is a fix-forward for **#79**. #79 was merged at cc597ec (2026-10-22T20:46:29Z) before its Review3 fixes were pushed to its branch, so they ship here from main.
+  
+  Commits:
+  - **97deb5a** fixes Review3's five #79 minors and the logging-audit findings (commander decision 3).
+  - **2f189a0** fixes the independent review of that commit (S3-M3-Install-Review: 1 major, 2 minors, 1 nit).
+  - **0c16ec2** adds the mission report and the review verdict.
+  
+  ## Why
+  
+  - **Review3 #79 m1-m5:** `S3-Profile-Review3-pr79-80-82.md`, section "PR #79".
+  - **Commander decision 3:** a logging audit of install
+#90 MERGED M3 B8c: check-lib and ait-harvest use the one dotprofile answer merged=2026-10-23T01:28:19Z head=feature/m3-b8c-consumers draft=n
+  ## Summary
+  
+  M3 batch B8c: the check scripts and the session harvester get their dotprofile the same way as everything else.
+  
+  - `scripts/check-lib.sh` `resolve_config` and `scripts/check-lib.ps1` `ResolveConfig` now call the lib resolver (`resolve_user_repo_path` / `Resolve-UserRepoPath`). They no longer read `userRepoPath` from config.json themselves.
+  - `scripts/ait-harvest.py` reads config.json BOM-safely (`utf-8-sig`), so a config.json with a BOM no longer turns off session archiving.
+  
+  **Stacked on #80** (`feature/m3-b2-lib-wrappers`, merged with origin/main). This PR's own commit is the las
+#91 MERGED M3 B8a: settings and skills (sh) use the one dotprofile resolver merged=2026-10-23T01:28:53Z head=feature/m3-b8a-consumers draft=n
+  ## Summary
+  
+  M3 B8a: `setup-user-settings.sh`, `setup-user-settings.ps1` and `setup-user-skills.sh` find the dotprofile through the lib resolver (`resolve_user_repo_path` / `Resolve-UserRepoPath`) instead of reading `config.json` `userRepoPath` themselves.
+  
+  **Stacked on #80** (and through it #79, #77, #76), with origin/main merged in. This PR's own commits are e639df2 and c719630.
+  
+  **Merge gate: merge with or after B5** (see Follow-ups). `aitools` rebuilds deploy/ on every run (`scripts/aitools:1524-1531`). Until B5 lands, the generated settings scripts fail with `resolver missing`.
+  
+  ## Why
+  
+  - 
+#92 MERGED M3 B8b: skills (ps1) and cursor use the one dotprofile resolver merged=2026-10-23T01:29:08Z head=feature/m3-b8b-consumers draft=n
+  ## Summary
+  
+  M3 B8b: `setup-user-skills.ps1` and `setup-user-cursor.sh/.ps1` get the dotprofile from the one resolver (`Resolve-UserRepoPath` / `resolve_user_repo_path`, PR #80). They no longer read `config.json` `userRepoPath` themselves. The cursor node block now receives the path and the resolver rc as arguments.
+  
+  **Stacked on #80** (and, through it, #79, #77 and #76). This PR adds one commit of its own, 1554d80, plus a merge of origin/main.
+  
+  **Merge with or after B5.** The generated `deploy/setup-user-cursor.sh` now calls the resolver, which is not embedded yet (see Follow-ups).
+  
+  ## Why
+  
+  - 
+#93 MERGED MDM: build-deploy.sh generates an embedded deploy/deploy-harness.* and ports the Cursor fan-out headers merged=2026-10-23T01:57:36Z head=feature/harness-mdm draft=n
+  Merge after #88 and #87; diff shrinks to build-deploy.sh once they merge. (This branch merges both, so until then the diff also shows their files.)
+  
+  ## Summary
+  
+  - `scripts/build-deploy.sh` now generates `<dotprofile>/deploy/deploy-harness.sh` and `.ps1`, the MDM path of `scripts/deploy-harness.*` (#88). They are self-contained: every harness source file is embedded at build time, so no repo, dotprofile checkout or git is needed at run time.
+  - Equivalence was tested under isolated HOMEs, with real repo content, for .sh and .ps1. The dev path and the MDM path produce byte-identical `~/.aitools/{
+#94 MERGED S3-Harness: mission brief and hand-back merged=2026-10-23T01:57:58Z head=docs/s3-harness-orchestration draft=n
+  ## Summary
+  Mission HARNESS orchestration records: the shared S3-H brief and the S3-Harness hand-back. They cover PR merge order, what remains, and the open questions.
+  
+  ## Why
+  Hand-backs must live in tracked paths (mission packet section 2).
+  
+  ## Changes
+  - `.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-Harness/S3-Harness-brief.md`
+  - `.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-Harness/S3-Harness-handback.md`
+  
+  ## Verification
+  Docs only. My spot-checks of the delegate PRs are listed in the hand-back.
+  
+  ## Not run
+  Pre-commit and pre-push checks (docs-only change).
+  
+  ## P
+#95 MERGED M3 B5: deploy/ resolves the dotprofile and machine profile on the target machine merged=2026-10-23T01:23:09Z head=feature/m3-b5-build-deploy draft=n
+  ## Summary
+  
+  M3 B5, part a: the generated `deploy/` scripts now resolve the dotprofile and this machine's profile **on the target machine**, the way `scripts/` does. No machine's values are interpolated at build time any more.
+  
+  - **Stacked on #83 + #90 / #91 / #92.** This branch is #83's branch with the heads of #91 (B8a), #92 (B8b) and #90 (B8c) merged in, so every switched consumer is present. Merge it after them or together with them. #91 and #92 must not merge without this PR: without it the generated `deploy/setup-user-settings.sh` and `deploy/setup-user-cursor.sh` exit 1 with `ERROR|dotpr
+#96 MERGED M3 protected-file drafts for approval (no protected file changed) merged=2026-10-23T01:58:10Z head=docs/m3-protected-drafts draft=n
+  ## Summary
+  
+  Drafts only: every protected-document change M3 needs (B9, B10, re-key batch 8), as exact old -> new text for one approval pass. **No protected file, script or dotprofile file is changed.** Approval page: `.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-M3-Docs/S3-M3-Docs-approval-page.md` (table, recommendation per row, every draft inline).
+  
+  ## Why
+  
+  Commander decision 5 (2026-10-22, machine profiles keyed by machine id) and the code as shipped on #80, #83, #86, #89, #90-#92, #95 made the approved R13, R18, R19, R20, R22 and R23 texts stale (they name `aitools-profile.j
+#97 OPEN Preserve the M3-LEAD orchestration plan merged=- head=docs/m3-lead-plan draft=n
+  Mission records only (S3-M3Lead-plan.md). Commander-directed. 🤖 Generated with [Claude Code](https://claude.com/claude-code)
+#98 OPEN setup-user-config: add --no-machine / -NoMachine (no duplicate machine advice) merged=- head=feature/mf-config-no-machine draft=n
+  ## Summary
+  
+  `setup-user-config.sh` / `.ps1` gain `--no-machine` / `-NoMachine`. When `aitools user init` leaves this machine unregistered, it can pass the flag, and the config writer then adds no machine-profile ERROR or ACTION of its own. The run shows the advice once, from user init.
+  
+  ## Why
+  
+  M3-FINISH item 2 (commander, 2026-10-22): "setup-user-config gains `--no-machine` / `-NoMachine`: when user init leaves the machine unregistered, the writer adds no ERROR/ACTION of its own (no duplicates)." This is the open review finding m2 from S3-M3-UserInit (PR #86, open question 1).
+  
+  ## Changes
+  
+  - 
+#99 MERGED Write the approved HARNESS protected-file drafts merged=2026-10-26T23:08:21Z head=docs/harness-approved-drafts draft=n
+  ## Summary
+  
+  Writes the HARNESS protected-file drafts the commander approved on 2026-10-22 (S3-Harness2 launch decisions) into their target files. Text is verbatim from the drafts, with two exceptions. Two approved paragraphs are now false against origin/main, so they were held and are offered again below as corrected drafts. The `.cursor/rules/deploy-paths.mdc` twin is **derived from approved text, please confirm**.
+  
+  ## Why
+  
+  PRs #85, #87, #88 and #93 merged with their protected-file changes left as drafts. #96 row 14 (R20) was approved with the S3-M3 batch, and HARNESS Q5 was decided in chat. 
+#100 OPEN deploy-harness: write a rules source manifest and retire removed rules merged=- head=feature/harness-rules-manifest draft=n
+  ## Summary
+  
+  deploy-harness.sh/.ps1 now write a per-file source manifest,
+  `~/.aitools/rules/.aitools-rules-manifest`, on every run, and retire rules
+  whose source was removed: the deployed copy is backed up and removed, and
+  the manifest keeps a `retired` line for the consumers. Mission
+  S3-H2-Manifest (HARNESS-2).
+  
+  ## Why
+  
+  Approved HARNESS Q2 (S3-Harness handback): a removed source rule stayed in
+  `~/.aitools/rules` and in the tools' rule directories, and stayed loaded.
+  The manifest gives the fan-out consumers (setup-user-claude,
+  setup-user-cursor; missions S3-H2-Claude / S3-H2-Cursor) each rule's
+#101 OPEN Write the approved #96 M3 protected-doc rows merged=- head=docs/m3-approved-drafts draft=n
+  ## Summary
+  
+  Writes the #96 M3 protected-doc rows the commander approved on 2026-10-22 (rows 1, 2, 3, 9, 10, 11, 15, 16, 17), checked against origin/main 8a9dcb5. Seven rows land verbatim. Row 3 (reference/user-repo.md) lands verbatim with **deletions only**: batch 5 has shipped, so its `VERIFY after #86 batch 5` notes are gone, and four clauses the code now contradicts are cut. Row 15 edit 2 is held because its own dependency is not met. The replacement wording is a draft awaiting re-approval.
+  
+  ## Why
+  
+  The commander approved all #96 rows (S3-Harness2 launch prompt, 2026-10-22). Under the appro
+#102 OPEN File M3 incidents #146-#161 (drafts for approval) merged=- head=docs/mf-incidents draft=n
+  ## Summary
+  
+  I triaged every `INCIDENT:` marker in the M3 reports and reviews and drafted **16 new incident entries, #146-#161**, for your approval. Each verdict was checked against the code on origin/main 8a9dcb5. `registries/incidents.json` is **not changed**. The entries ship as a batch plus an apply step.
+  
+  Counts:
+  - 40 markers in total. A 42-row triage table, with file:line evidence for each verdict, is in `S3-MF-Incidents-triage.md`.
+  - 16 new.
+  - 5 merged into new entries.
+  - 2 already filed: #76 and #98.
+  - 12 fixed since (verified, not filed).
+  - 5 dropped: prompt or draft errata, or a close
+#103 OPEN Commit and push dotprofile adopt targets from the managed-file library (N-Q2) merged=- head=fix/mf-dotprofile-adopt-push draft=n
+  ## Summary
+  
+  An adopt into the dotprofile through the managed-file library (`deploy_managed_file` / `Deploy-ManagedFile` accept & adopt and merge & adopt, `review_json_fields` / `Review-JsonFields` field adopt) is now committed (that one file) and pushed by the library. Adopt targets outside the dotprofile (the aitools repo) stay working-tree changes, as before.
+  
+  ## Why
+  
+  N-Q2 (dotprofile writes auto-commit and push) and M3-FINISH item 1 (commander 2026-10-22): "an adopt into the dotprofile through the library ... must commit and push it, like setup-user-claude's rules path already does. One sha
+#104 OPEN M3-FINISH audit: logging and script-standards findings merged=- head=docs/mf-audit draft=n
+  ## Summary
+  
+  Independent logging and script-standards audit of the M3 code on origin/main (8a9dcb5). 25 findings (0 critical, 0 high, 7 medium, 18 low) with file:line in both languages, the violated rule, a suggested fix and the owning file pair; 4 spec ambiguities as `INCIDENT:` markers; confirmations (a)-(d); a proposed split into six fix PRs. Findings: `.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Audit/S3-MF-Audit-findings.md`.
+  
+  ## Why
+  
+  M3-FINISH item 7 (S3-M3Lead decision 3): audit all M3 code for logging and script-standards compliance so a fix mission can correct it.
+  
+  #
+#105 OPEN Apply approved M3 intents for the resolver and shared template (#96 rows 7, 12) merged=- head=docs/m3-approved-intents draft=n
+  ## Summary
+  
+  Applies the #96 M3 drafts the commander approved on 2026-10-22 for rows 7 and 12,
+  verbatim. Row 13 (the dotprofile twin of row 12, plus the `nobul-{{PROFILE_NAME}}`
+  repair) is pushed to the dotprofile main as commit 525ee49. Rows 5 and 6 are deferred
+  because open PR #98 touches their files. Row 8 is held: one of its claims is false.
+  
+  ## Why
+  
+  Commander approval 2026-10-22 of the #96 approval page
+  (`.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-M3-Docs/S3-M3-Docs-approval-page.md`).
+  Every OLD block was re-checked against origin/main 8a9dcb5 and every behaviour claim
+  aga
+#106 OPEN Run deploy-harness from the installer and every aitools run merged=- head=feature/harness-hookin draft=n
+  ## Summary
+  
+  `deploy-harness` now runs in every `aitools install` and every `aitools` sync, on both platforms. The installer's own `~/.aitools/bin` copy step is gone.
+  
+  - **Installer** (`aitools-install.sh` / `.ps1`): a new Step 8b runs right after Step 8 (Node). It calls `run_harness_step` / `Invoke-HarnessStep`, which use the lib relay helpers `run_child_relayed` / `Invoke-ChildRelayed`.
+  - **Sync** (`scripts/aitools` / `aitools.ps1`): `deploy-harness` is now the first entry in the `deploy_configs` / `Deploy-Configs` list. `setup-user-config` is no longer in the list, because `deploy-harness` r
+#107 CLOSED Handoff 10cf255a-c: integrate main, verify on Windows, release v0.74.0 merged=- head=docs/handoff-10cf255a-c draft=n
+  ## Summary
+  
+  Verified handoff for Session Commander 10cf255a-c: `.aitools/channel/handoffs/2026-10-22_10cf255a-c.md` (v1.1). It adds the S2 session-state audit and the independent verification report under `.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-Handoff2/`, plus a relay entry.
+  
+  **Proposed Schwerpunkt for the accepting session:** ship v0.74.0 from a main that matches what was decided and merged. That means landing the M3-FINISH and HARNESS-2 PRs, re-landing LAYOUT PR-b/c, applying the approved drafts, syncing the incident ledger, and verifying on Windows. M2 tool support sta
+#108 OPEN Fix resolver and JSON engine audit findings A-6..A-9 merged=- head=fix/mf-audit-profile-json draft=n
+  ## Summary
+  
+  Fixes S3-MF-Audit findings A-6 (code part), A-7, A-8 and A-9 in the profile resolver (`scripts/aitools-profile.sh` / `.ps1`) and the JSON engines (`scripts/aitools-json.pl` / `.ps1`). The resolver's output contract (`result`/`via`/`warn`/`error` lines, exit codes 0-4) is unchanged. The A-6 spec part (I-3, a "library-style tool" category) is a draft only.
+  
+  ## Why
+  
+  M3-FINISH item 7, fix PR FIX-6 of the S3-MF-Audit report (PR #104, `S3-MF-Audit-findings.md` section 2). A-8 and A-9 were still open from S3-M3-Resolver-Review n1 and n3. I checked each finding in the code at origin/main 8
+#109 OPEN Fix B8 consumer rows on a dotprofile resolver error (A-22, A-23, A-24, A-26 cursor) merged=- head=fix/mf-audit-consumers draft=n
+  ## Summary
+  
+  Fixes S3-MF-Audit findings A-22, A-23, A-24 and the cursor part of A-26 in the B8 consumers (setup-user-skills, setup-user-cursor, check-lib), with a new test suite that runs both languages.
+  
+  ## Why
+  
+  S3-MF-Audit (PR #104), M3-FINISH item 7. Each finding was checked in the code at origin/main 8a9dcb5 before fixing. All four were confirmed; none was rejected.
+  
+  ## Changes
+  
+  - **A-22** `scripts/setup-user-skills.ps1`: on a dotprofile resolver error (rc 3) it now writes the .sh rows and message: `ERROR|claude skills|not deployed: dotprofile error` and `ERROR|cursor skills|not deployed: d
+#110 OPEN Cursor: fan out user-level rules only and prune against the rules manifest merged=- head=feature/harness-cursor-user-rules draft=n
+  Depends on: #100 (stacked on `feature/harness-rules-manifest`; merge after #100).
+  
+  ## Summary
+  
+  `setup-user-cursor.sh/.ps1` step 4 now fans out only user-level rules (manifest source `shared` or `dotprofile`) to `~/.cursor/rules`, and removes the `.mdc` of every `aitools` (project) or `retired` rule that the fan-out created. A user's own `.mdc` is never removed. Mission S3-H2-Cursor (HARNESS-2).
+  
+  ## Why
+  
+  Commander decision 2026-10-22: Claude Code gets everything in `~/.aitools/rules`, Cursor gets user-level rules only (HARNESS Q1). The rules manifest from #100 (HARNESS Q2, approved) names each 
+#111 OPEN MDM deploy-harness: payload data file, no-bootstrap skip, body markers, --skip-config merged=- head=feature/harness-mdm-followups draft=n
+  Depends on: #100 (stacked on `feature/harness-rules-manifest`; merge after #100).
+  
+  ## Summary
+  
+  The generated MDM deploy-harness (`<dotprofile>/deploy/deploy-harness.sh/.ps1`) now works on a fresh endpoint, fits the Intune script limits, and is extracted by body markers. Mission S3-H2-MDM (HARNESS-2), approved HARNESS Q3, Q4 and Q6, plus `--skip-config` (S3-Harness2).
+  
+  - **Q3**: when `~/.aitools/config.json` has no bootstrap keys (`reposPath`, `repoPath`), which means `aitools-install` has not run, the MDM variant does not run the config writer. It reports `OK|config.json|n/a (no bootstrap)` an
+#112 OPEN Fix setup-user-claude hostname/dry-run rows and build-deploy embed cleanup, plain build output (A-19, A-20, A-25, A-26 claude) merged=- head=fix/mf-audit-claude-build draft=n
+  ## Summary
+  
+  Fixes S3-MF-Audit findings A-19, A-20, A-25 and the claude part of A-26 in `scripts/setup-user-claude.sh/.ps1` and `scripts/build-deploy.sh`. Adds a new test suite, `tests/claude-mdm/test-claude-mdm.sh`, and runs it in CI.
+  
+  ## Why
+  
+  These come from S3-MF-Audit (PR #104), M3-FINISH item 7. I checked each finding in the code before fixing it. All four were confirmed and none was rejected:
+  
+  - **A-25**: setup-user-claude.sh ran `scutil`/`uname` itself (old lines 93-109), and the .ps1 read `COMPUTERNAME` (old lines 171-175). The lib already exposes `AITLIB_MACHINE_HOSTNAME` / `$script:Ai
+#113 OPEN Lib profile runner accepts result lines; user init uses it and passes --no-machine merged=- head=fix/mf-lib-runner-result draft=n
+  ## Summary
+  
+  - The lib profile runner (`_aitlib_profile_run` / `Invoke-AitLibProfile`) accepts resolver output with a `result` line and no `via` line (what `register` and `migrate` print), and a bare value for `hostname` / `machine-id`.
+  - `aitools user init` (scripts/aitools, aitools.ps1) drops its private runners and uses the lib runner.
+  - User init passes `--no-machine` / `-NoMachine` to setup-user-config when it has concluded that this machine is not registered, so the writer adds no second machine-profile ERROR / ACTION.
+  
+  ## Why
+  
+  M3-FINISH items 2 and 3 (commander): "The lib runner accepts 
+#114 OPEN Fix audit A-10/A-11 in setup-user-config; split the resolver's not-v2 message merged=- head=fix/mf-audit-config draft=n
+  ## Summary
+  
+  Fixes S3-MF-Audit findings A-10 and A-11 in the config.json writer, splits the resolver's "not v2 / no profiles" message (PR #98 review m1), and names the key when the merge fails on a case twin (PR #108 review n-2). M3-FINISH item 7.
+  
+  **Merge order: after #98 and #108.** This branch is origin/main + `--no-ff` merges of `feature/mf-config-no-machine` (#98) and `fix/mf-audit-profile-json` (#108); the diff against main includes theirs until they land.
+  
+  ## Why
+  
+  - A-10 (medium): on a failed derivation the writer wrote `ERROR|profile.json|invalid (see log)` + ACTION, or `ERROR|machine p
+#115 OPEN Lib relay: ERROR row for a failed child, machine-profile resolver ACTION (A-2, A-3, A-4) merged=- head=fix/mf-lib-relay draft=n
+  ## Summary
+  
+  FIX-1 of M3-FINISH item 7: the lib's child relay gives every failed child an ERROR summary row, and the machine-profile wrapper's "resolver missing" path writes its ACTION. Audit findings A-2, A-3 and the `run_child_relayed` part of A-4. No caller passes the new summary tool yet; the installers and user init switch to the relay in FIX-2 (stacked on this branch).
+  
+  Branch `fix/mf-lib-relay` = origin/main + `--no-ff` merge of #113's head (`origin/fix/mf-lib-runner-result`, which contains #103 and #98), then one commit (4c55ec0).
+  
+  ## Why
+  
+  - **A-3 (medium):** `run_child_relayed` / `Invo
+#116 OPEN Installers and user init use the lib relay (A-1, A-12..A-18) merged=- head=fix/mf-installer-relay draft=n
+  ## Summary
+  
+  FIX-2 of M3-FINISH item 7. The installers' Step 5 and `aitools user init` now run their child scripts through the lib relay (`run_child_relayed` / `Invoke-ChildRelayed`), and the installers' private relay copies are gone. As a result:
+  
+  - child warnings and errors are counted;
+  - every failed child gets an ERROR summary row;
+  - the children's lines reach deploy.jsonl.
+  
+  An unwritable deploy.jsonl is one warning, and the run goes on. Step 3 failures get an ERROR row and skip Step 5. A missing `--alias` value is logged through the lib.
+  
+  Audit findings: A-1, A-12, A-13, A-14, A-15, A-16, 

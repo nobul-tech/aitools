@@ -1,0 +1,56 @@
+=== docs/harness-approved-drafts
+ .claude/rules/cross-platform.md      |   2 +-
+ .claude/rules/deploy-paths.md        |  80 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++------------
+ .claude/skills/tool-ops/SKILL.md     |   8 +++++---
+ .cursor/rules/deploy-paths.mdc       |  37 ++++++++++++++++++++++++++++++-------
+ reference/managed-file-deployment.md |  19 +++++++++++++++++++
+ reference/tool-ops-cursor.md         | 106 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ registries/tool-ops.json             |  33 ++++++++++++++++++++++++++++++++-
+ scripts/check-path-refs-allow.txt    |   7 +++++--
+ 8 files changed, 266 insertions(+), 26 deletions(-)
+=== feature/harness-rules-manifest
+ scripts/deploy-harness.ps1                  | 166 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++-
+ scripts/deploy-harness.sh                   | 175 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++-
+ tests/deploy-harness/test-deploy-harness.sh | 186 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++--
+ 3 files changed, 523 insertions(+), 4 deletions(-)
+=== docs/m3-approved-drafts
+ .claude/rules/managed-file-deployment.md  |  10 ++--
+ .cursor/rules/managed-file-deployment.mdc |   6 +-
+ plans/tool-support-and-machine-profile.md |   9 ++-
+ reference/logging.md                      |  26 +++++++++
+ reference/script-standards-detail.md      |  18 +++++-
+ reference/tool-support-decision-tree.md   |  74 +++++++++++++++---------
+ reference/user-repo.md                    | 469 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++-------------------------------
+ registries/glossary.json                  |   8 +--
+ shared/skills/tool-adopt/SKILL.md         |   4 +-
+ 9 files changed, 483 insertions(+), 141 deletions(-)
+=== feature/harness-hookin
+ .claude/rules/interactive-menus.md        |  20 ++++++++--
+ .cursor/rules/interactive-menus.mdc       |   2 +-
+ plans/tool-support-and-machine-profile.md |   2 +-
+ reference/managed-file-deployment.md      |  16 ++++++--
+ reference/tool-support-decision-tree.md   |  88 +++++++++++++++++++++++++----------------
+ scripts/aitools                           |  72 +++++++++++++++++++++++++++++++--
+ scripts/aitools-install.ps1               |  75 +++++++++++++++++++++++------------
+ scripts/aitools-install.sh                |  91 ++++++++++++++++++++++++++++--------------
+ scripts/aitools.ps1                       |  57 ++++++++++++++++++++++++++-
+ tests/hookin/hookin-driver.ps1            |  49 +++++++++++++++++++++++
+ tests/hookin/test-hookin.sh               | 326 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 11 files changed, 695 insertions(+), 103 deletions(-)
+=== feature/harness-cursor-user-rules
+ scripts/deploy-harness.ps1                            | 166 +++++++++++++++++++++++++++++++++++++++++++++-
+ scripts/deploy-harness.sh                             | 175 ++++++++++++++++++++++++++++++++++++++++++++++++-
+ scripts/setup-user-cursor.ps1                         | 499 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++------------------------------------
+ scripts/setup-user-cursor.sh                          | 281 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++------
+ tests/deploy-harness/test-deploy-harness.sh           | 186 +++++++++++++++++++++++++++++++++++++++++++++++++++-
+ tests/rules-fanout-cursor/convert-rule.ps1            |  10 ++-
+ tests/rules-fanout-cursor/step4-driver.ps1            |  28 ++++++++
+ tests/rules-fanout-cursor/test-rules-fanout-cursor.sh | 299 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++----
+ 8 files changed, 1476 insertions(+), 168 deletions(-)
+=== feature/harness-mdm-followups
+ scripts/build-deploy.sh                             | 461 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++-----------------------------------------
+ scripts/deploy-harness.ps1                          | 206 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++---
+ scripts/deploy-harness.sh                           | 213 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++---
+ tests/deploy-harness-mdm/test-deploy-harness-mdm.sh | 276 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++----------
+ tests/deploy-harness/test-deploy-harness.sh         | 186 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++-
+ 5 files changed, 1160 insertions(+), 182 deletions(-)

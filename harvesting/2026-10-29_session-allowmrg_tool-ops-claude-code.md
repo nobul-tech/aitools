@@ -1,0 +1,638 @@
+# Claude Code Operations
+
+**Intent**: **Purpose**: Consolidated operational knowledge for
+Claude Code as a managed tool — version dependencies, session
+behavior, platform workarounds, and setup notes that affect harness
+scripts and hooks. **Scope**: Operational knowledge only. NOT
+install/upgrade (`/tool-registry` skill). NOT governance modes or deny
+rules (`/tool-ops` skill). NOT incidents (`/incident` skill). NOT
+configuration deployment (setup scripts). **Audience**: Agents
+modifying CC-related scripts or hooks, agents troubleshooting CC
+behavior, check scripts validating version deps.
+
+## Version Dependencies
+
+Registry of version-dependent workarounds, behaviors, and assumptions in this repo.
+
+- **Current version**: 2.1.309 (observed `claude --version`, macOS, 2026-10-27). Items #1-#25 were last verified at or before 2.1.81 and are not re-verified at this version (open item 2 of `reference/evaluations/claude-code-macos-2026-10-21.md`).
+- **Baseline version**: 2.1.51 (2026-02-16) -- version when most workarounds were written
+
+### How to use
+
+When Claude Code is upgraded:
+
+1. Update "Current version" above
+2. Walk CRITICAL items: check upstream issues (are they still open?)
+3. Walk HIGH items if the version bump is major (e.g., 2.1 -> 2.2 or 3.0)
+4. Update "Last verified" for any re-checked items
+5. If a workaround is no longer needed, remove it from the codebase and this registry
+
+Post-push checklist #20 triggers this review automatically.
+
+---
+
+### CRITICAL -- Would break core scripts if behavior changes
+
+| # | Item | Baseline | Last verified | Files | Upstream |
+|---|------|----------|---------------|-------|----------|
+| 1 | Windows shell hardcoded to Git Bash (CLAUDE_CODE_SHELL broken) | 2.1.51 | 2.1.74 (2026-03-13); **likely obsolete**: the changelog lists a PowerShell tool preview (2.1.84) and "Git for Windows no longer required" (2.1.120), per `reference/evaluations/claude-code-macos-2026-10-21.md`; re-verify on Windows before relying on it | "Windows Shell Limitations" section below, `.claude/rules/cross-platform.md`, `CLAUDE.md` (Windows dispatch) | [#7490](https://github.com/anthropics/claude-code/issues/7490), [#25558](https://github.com/anthropics/claude-code/issues/25558), [#5049](https://github.com/anthropics/claude-code/issues/5049), [#16225](https://github.com/anthropics/claude-code/issues/16225), [#20453](https://github.com/anthropics/claude-code/issues/20453) |
+| 2 | SessionEnd hook API contract (session_id, cwd, transcript_path on stdin) | 2.1.51 | 2.1.74 (2026-03-13) | `shared/hooks/session-archive.sh`, `reference/user-repo.md` | -- |
+
+### NOTE -- Not a CC dependency
+
+| # | Item | Note | Files |
+|---|------|------|-------|
+| 3 | Chrome DevTools MCP `--isolated` flag | Personal preference for concurrent sessions, not tied to CC versions | `scripts/setup-user-mcp.sh/.ps1`, `reference/post-push-checklist.md` (steps 3 and 15) |
+
+### HIGH -- Would break workflows or produce wrong results
+
+| # | Item | Baseline | Last verified | Files | Upstream |
+|---|------|----------|---------------|-------|----------|
+| 4 | Session path sanitization (CWD -> JSONL directory name uses `-` replacement) | 2.1.51 | 2.1.51 | "Session Storage Internals" section below, `shared/hooks/session-archive.sh` | -- |
+| 5 | Subagent context gap (rules/CLAUDE.md not inherited by Task subagents) | 2.1.51 | 2.1.74 (2026-03-13) | `shared/claude-shared.md` (coaching items) | [#29423](https://github.com/anthropics/claude-code/issues/29423) |
+| 6 | CLAUDE.md hierarchy & merge behavior (5 levels, more-specific wins) | 2.1.51 | 2.1.51 | "CLAUDE.md Hierarchy" section below, `scripts/setup-user-claude.sh/.ps1` | -- |
+| 7 | Session management commands (claude -c, --resume, /resume, /rename) | 2.1.51 | 2.1.51 | "Session Management Commands" section below | -- |
+| 8 | Hook execution context (hooks run in bash or HTTP, not configurable shell) | 2.1.51 | 2.1.74 (2026-03-13) | `shared/hooks/session-archive.sh`, `scripts/setup-user-hooks.sh` | -- (2.1.63 adds HTTP hooks as alternative to shell) |
+| 9 | Coaching items tied to CC capabilities (subagent gap, auto-memory locality) | 2.1.51 | 2.1.51 | `shared/claude-shared.md` | -- |
+| 23 | `claude update` triggers SessionEnd hooks then cancels them | 2.1.81 | 2.1.81 (2026-03-22) | `scripts/aitools-install.sh/.ps1` (runs `claude update`) | -- |
+| 24 | Subagent cross-repo file access restriction (Glob/Grep denied outside CWD repo, Read with explicit paths works) | 2.1.74 | 2.1.74 (2026-03-24) | `shared/claude-shared.md` (delegation duty), delegation prompts | -- |
+| 19 | `effortLevel` setting (`settings.json` key controlling reasoning effort) | 2.1.68 | 2.1.74 (2026-03-13) | `scripts/setup-user-settings.sh/.ps1` (`profile.json` `claude.settings.effortLevel`), `shared/claude-shared.md` | -- |
+| 25 | SendMessage for agent continuation unavailable (gated behind Agent Teams flag; old `resume` param removed in 2.1.77) | 2.1.77 | 2.1.81 (2026-03-24); **superseded**: in 2.1.309 (macOS, 2026-10-27) `SendMessage` and `ListAgents` are offered to the main session for in-process subagents; not yet tested end to end | Agent tool documentation, delegation prompts | [#35240](https://github.com/anthropics/claude-code/issues/35240), [#37051](https://github.com/anthropics/claude-code/issues/37051), [#38183](https://github.com/anthropics/claude-code/issues/38183) |
+| 26 | Sub-agent Markdown file-name block: Write refuses a sub-agent write whose basename matches `^(REPORT\|SUMMARY\|FINDINGS\|ANALYSIS).*\.md$` (case-insensitive) | 2.1.289 | 2.1.289 (2026-10-05) | "Sub-agent Markdown File-Name Block" section below, dotprofile `claude/rules/delegation.md` (D-DEL1), `shared/skills/delegate/SKILL.md`, `shared/hooks/delegation-duty-guard.sh`, `shared/claude-shared.md` + dotprofile `claude/CLAUDE.md` (Delegation Duty) | -- (not in the official docs) |
+| 27 | `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` caps sub-agent nesting (documented default 3; the Claude Code web environment sets 1); the launch path decides whether a delegate gets the Agent tool (Workflow agents never do) | 2.1.219 | 2.1.307 (2026-10-21) | "Sub-agent Nesting Depth" section below, `shared/skills/delegate/SKILL.md`, `shared/skills/aitool-continue/SKILL.md` | -- |
+| 28 | Auto mode: an explicit user-scope allow rule (`Bash(gh pr merge:*)`) resolves a matching command before the classifier, so `gh pr merge` no longer gets the "[Merge Without Review]" denial; applies to sub-agents; picked up mid-session | 2.1.309 | 2.1.309 (2026-10-28) | "Auto Mode and Allow Rules for PR Merges" section below, dotprofile `profile.json` `claude.settings.permissions.allow`, merge-mission prompts | -- (documented: permission-modes, permissions, settings) |
+
+### MEDIUM -- Affects developer experience or specific features
+
+| # | Item | Baseline | Last verified | Files | Upstream |
+|---|------|----------|---------------|-------|----------|
+| 10 | Write tool produces CRLF on macOS | 2.1.51 | 2.1.51 | `reference/pre-commit-checklist.md` (step 4), `scripts/check-pre-commit.sh` step 4 (CRLF check) | -- |
+| 11 | PATH limitations (npm global bin not always visible to CC) | 2.1.51 | 2.1.51 | `scripts/setup-user-mcp.sh` (node fallback for `claude mcp add`) | [#5202](https://github.com/anthropics/claude-code/issues/5202), [#3838](https://github.com/anthropics/claude-code/issues/3838) |
+| 12 | PowerShell-from-Bash quoting patterns (single-quote outer, double-quote inner) | 2.1.51 | 2.1.51 | "Windows Shell Limitations" section below | -- |
+| 13 | Cursor Agent CLI rule sources (does NOT read ~/.claude/CLAUDE.md) | 2.1.51 | 2.1.51 | `reference/cursor-practices.md` | -- |
+| 18 | `@file` references resolved in CLAUDE.md but NOT in `.claude/rules/*.md` | 2.1.63 | 2.1.63 (2026-03-01) | `shared/claude-shared.md` (Knowledge Management), dotprofile `claude/CLAUDE.md` | -- |
+| 20 | `InstructionsLoaded` hook event (fires after CLAUDE.md and rules load) | 2.1.68 | 2.1.74 (2026-03-13) | -- (not yet used) | -- |
+| 21 | `agent_id`/`agent_type` in hook events (distinguishes main vs subagent) | 2.1.68 | 2.1.74 (2026-03-13) | -- (not yet used) | -- |
+
+### LOW -- Architectural constraints unlikely to change soon
+
+| # | Item | Baseline | Last verified | Files | Upstream |
+|---|------|----------|---------------|-------|----------|
+| 14 | Auto-memory locality (machine-specific, does not sync) | 2.1.51 | 2.1.51 | `shared/claude-shared.md` | -- |
+| 15 | Session sync not possible (CLI sessions are local per machine + directory) | 2.1.51 | 2.1.51 | "Session Sync" section below | -- |
+| 16 | Session storage internals (JSONL under ~/.claude/projects/) | 2.1.51 | 2.1.51 | "Session Storage Internals" section below, `shared/hooks/session-archive.sh` | -- |
+| 17 | JSONL transcript fields (type, cwd, sessionId) | 2.1.51 | 2.1.51 | "Session Storage Internals" section below, `shared/hooks/session-archive.sh` | -- |
+| 22 | `includeGitInstructions` setting (controls whether git context is injected into system prompt) | 2.1.68 | 2.1.74 (2026-03-13) | -- (not yet used) | -- |
+
+### Filed issues -- Tracking our upstream reports
+
+| # | Issue | Title | Filed | Status | Related items |
+|---|-------|-------|-------|--------|---------------|
+| F1 | [#29423](https://github.com/anthropics/claude-code/issues/29423) | Task subagents do not load project CLAUDE.md or .claude/rules/ | 2026-02-27 | Open (duplicate bot challenged, differentiation posted 2026-02-28) | Item #5 |
+
+### Release notes watch
+
+Notable changes in CC releases that may affect this registry.
+
+#### 2.1.289 (observed 2026-10-05)
+
+- **Sub-agent Markdown file-name block** in the Write tool. See item #26.
+- **`CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH`** in effect (set to 1 by the Claude Code web environment). See item #27.
+- Items #1-#25 were not re-verified against this version (see "Current version" above).
+
+#### 2.1.219
+
+- **Default sub-agent nesting depth raised from 1 to 3** (`CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH`), per the changelog as reported on 2026-10-05. See item #27.
+
+#### 2.1.63 (2026-02-28)
+
+- **HTTP hooks added**: Hooks can now POST JSON to a URL instead of running a shell command. May affect item #8 (hook execution context) -- hooks are no longer bash-only.
+- **Project configs shared across git worktrees**: `CLAUDE.md` and auto-memory now shared across worktrees of the same repo. Affects item #6 (hierarchy behavior).
+- **`/simplify` and `/batch` bundled slash commands**: New built-in commands.
+- No changes to Windows shell configuration (#1) or subagent context loading (#5).
+
+#### 2.1.59 (2026-03-01)
+
+- **Reasoning effort modes**: New `effortLevel` setting in `settings.json` (`"low"`, `"medium"`, `"high"`). Controls reasoning depth per session. "ultrathink" keyword forces high for one turn.
+- No changes to Windows shell configuration (#1) or subagent context loading (#5).
+
+#### 2.1.68 (2026-03-04)
+
+- **`effortLevel` defaults to medium for Opus 4.6**: Previously unset (implicit high). Scripts that manage `settings.json` should handle this key. See item #19.
+- **`InstructionsLoaded` hook event**: New hook event fires after CLAUDE.md and rules are loaded. See item #20.
+- **`agent_id`/`agent_type` in hook events**: Hook stdin JSON now includes agent context. See item #21.
+- **`includeGitInstructions` setting**: Controls git context injection into system prompt. See item #22.
+- No changes to Windows shell configuration (#1) or subagent context loading (#5).
+
+#### 2.1.74 (2026-03-13)
+
+- Patch release. No new features affecting this registry.
+
+#### 2.1.70 (2026-03-06)
+
+- **VS Code integration enhancements**: Spark icon session listing, markdown plan view with comments, native MCP dialog (`/mcp`).
+- **Performance**: ~74% fewer prompt input re-renders, ~426KB less startup memory, Remote Control poll reduced from 1-2s to 10min.
+- **Windows/WSL clipboard fix**: Non-ASCII text (CJK, emoji) no longer corrupted; uses PowerShell `Set-Clipboard`.
+- **Effort parameter fix**: Fixed "model does not support effort parameter" with custom Bedrock profiles.
+- **Model notification fix**: No more repeated "Model updated to Opus 4.6" with legacy Opus strings.
+- **23 bug fixes total** including API gateway compatibility, SSH newline insertion, `/color` enhancements, prompt cache busting on MCP connect.
+- No changes to Windows shell configuration (#1) or subagent context loading (#5).
+
+#### 2.1.69 (2026-03-05)
+
+- Patch release. No new features affecting this registry.
+
+---
+
+## Session Behavior
+
+Baseline: Claude Code 2.1.51 (2026-02-16)
+
+### Session Sync Across Devices
+
+- Claude Code CLI sessions are **local to each machine** and do **not sync** across devices.
+- Claude Code web (claude.ai) sessions are separate from CLI sessions entirely.
+- Sessions are also **tied to the directory** they were started in — you can only resume from the same directory.
+- Syncing raw session files (JSONL) via git is **not recommended** — they contain absolute paths, aren't portable across OS, and there's no `--resume <file>` mechanism.
+- **Best practice:** Use `CLAUDE.md` and auto-memory as the cross-device "session transfer" layer. Put valuable decisions and context there, let sessions be ephemeral.
+
+### Session Archive & Catch-up (harness)
+
+While CC sessions don't sync, the harness archives them. SessionEnd
+(`session-archive.sh`) and SessionStart (`session-catchup.sh`) hooks — thin
+shims over `scripts/ait-harvest.py` — copy each session transcript **and its
+subagent transcripts** to the user repo (`sessions/<project>/`), committing and
+pushing best-effort. Catch-up on SessionStart recovers anything an abrupt,
+offline, or slept SessionEnd missed. The helper logs to
+`~/.aitools/logs/ait-harvest.log`. Full spec: `@reference/user-repo.md`
+"Archiving Mechanism".
+
+### CLAUDE.md Hierarchy (5 levels)
+
+| Level | Path | Scope |
+|-------|------|-------|
+| Managed (org/IT) | `C:\Program Files\ClaudeCode\CLAUDE.md` | All users on machine |
+| **User (personal global)** | `~/.claude/CLAUDE.md` | You, all projects, this machine |
+| **Project (team)** | `./CLAUDE.md` in repo root | All team members via git |
+| Project (personal) | `./CLAUDE.local.md` | You only, auto-gitignored |
+| Subdirectory | `./some-dir/CLAUDE.md` | Loaded on-demand when working in that dir |
+
+All levels merge together. More specific wins on conflict.
+
+### User-Level CLAUDE.md Setup
+
+- Applies to **every** Claude Code session on that machine, regardless of project.
+- Locations:
+  - Windows: `%USERPROFILE%\.claude\CLAUDE.md`
+  - Mac: `~/.claude/CLAUDE.md`
+- **Template source** (priority order):
+  1. `<userRepoPath>/claude/CLAUDE.md` -- personal copy in the user's dotfile repo (syncs across machines via git). Contains `{{PLACEHOLDER}}` tokens.
+  2. `shared/claude-shared.md` -- fallback template in the aitools repo.
+- **Deploy flow** (`scripts/setup-user-claude.sh/.ps1`):
+  1. Read the template from the dotprofile (fallback: `shared/claude-shared.md`); a resolver error deploys nothing.
+  2. Get this machine's values from the one resolver (`resolve_machine_profile` / `Resolve-MachineProfile`).
+  3. Interpolate `{{PROFILE_NAME}}`, `{{PROFILE_COMPANY}}`, `{{IDENTITY_GIT_NAME}}`, `{{IDENTITY_GIT_EMAIL}}`, `{{USER_REPO_PATH}}` (one literal pass; empty values leave the token).
+  4. Append `## Machine-Specific` (`- Machine: <OS> <arch> (<hostname>; profile <alias>)`, `- Shell: <shell>`; PS1: no arch yet).
+  5. Deploy through `deploy_managed_file` with the dotprofile template as adopt target and `claude_md_adopt_filter`.
+- **MDM deploy** (`<userRepoPath>/deploy/setup-user-claude.sh/.ps1`): embeds the resolver, the build-time template, rules and a `profile.json` snapshot; uses the live dotprofile when the machine has it, the embedded copies otherwise.
+- **Scaffolding**: `aitools user init` copies `shared/claude-shared.md` to `<userRepoPath>/claude/CLAUDE.md` if missing.
+
+### Session Management Commands
+
+| Command | What it does |
+|---------|--------------|
+| `claude -c` | Resume most recent session in current directory |
+| `claude --resume` | Interactive session picker (current directory only) |
+| `claude --resume "name"` | Resume a named session |
+| `/resume` | Switch sessions from inside a running session |
+| `/rename <name>` | Name the current session for easy recall |
+| `claude --continue --fork-session` | Fork current session into a new one |
+
+### claude update Hook Cancellation
+
+`claude update` (called by `aitools-install` step 9) internally starts a
+transient session to check for updates. When it completes, SessionEnd hooks
+fire — but CC immediately cancels them with `Hook cancelled`. This is CC
+behavior, not a hook bug.
+
+Observed output:
+```
+SessionEnd hook [bash ".../harvest-session.sh"] failed: Hook cancelled
+```
+
+**Impact:** None. The hooks exit before doing real work (no session dir exists
+for the transient update session). The `[info]` log level in aitools-install
+correctly treats this as informational, not an error.
+
+**No action needed.** This is benign noise from CC's session lifecycle firing
+hooks for non-interactive sessions. If CC adds a hook filter for session type,
+this goes away.
+
+### Agent Continuation Gap (SendMessage)
+
+From v2.1.77 to at least 2.1.81 there was no working mechanism to send
+messages to a previously spawned subagent (history below). By 2.1.309 the main
+session is offered `SendMessage` / `ListAgents` for subagents it spawned;
+whether a delegate can continue after its final response is untested. Until
+tested, keep delegation prompts self-contained.
+
+- **Old mechanism** (`resume` parameter on Agent tool): Removed in v2.1.77.
+  Had longstanding issues (#11712, #13619, #10856) and was effectively
+  non-functional before removal.
+- **New mechanism** (`SendMessage` tool): Part of the Agent Teams feature set,
+  gated behind `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` (disabled by default).
+  The Agent tool description references SendMessage as if universally available,
+  but it is not. Even with the flag enabled, reports of unavailability (#34750).
+
+**Impact on delegation patterns:**
+
+- Subagents must be fully self-contained at launch. No follow-up messages possible.
+- The Agent tool's own return value includes `agentId` with instructions to use
+  SendMessage -- the model will attempt to use it and fail.
+- Sequential delegation (launch new agent with prior agent's output) is the
+  only working pattern for iterative subagent work.
+
+**Workaround:** Include all context in the initial Agent launch prompt. Launch
+new agents for follow-up work, passing prior output as context.
+
+Upstream: [#35240](https://github.com/anthropics/claude-code/issues/35240),
+[#37051](https://github.com/anthropics/claude-code/issues/37051),
+[#38183](https://github.com/anthropics/claude-code/issues/38183)
+
+### Subagent Cross-Repo Access Restriction (#24)
+
+Subagents launched via the Agent tool have restricted file access outside
+the CWD repo:
+
+- **Glob/Grep**: Denied outside CWD repo boundaries
+- **Read**: Works with explicit absolute paths (even outside CWD repo)
+- **Write/Edit**: Denied outside CWD repo
+
+**Impact on delegation**: When delegating work that needs files from another
+repo, include the file content in the delegation prompt (inline via XML
+delimiters) rather than expecting the subagent to read it. Alternatively, use
+Read with explicit paths for known file locations. (Folded in from the retired
+`/aitool-ops` card.)
+
+### Built-in guide subagent block
+
+The built-in `claude-code-guide` subagent is blocked by the
+`block-claude-code-guide.sh` PreToolUse(Agent) hook, which denies it and
+injects correct hook-schema context (#34730). No `permissions.deny` rule is
+used: Claude Code does not reliably honor deny for built-in subagents, so the
+hook is the enforcement. Verification cases: `/tool-ops` skill
+(`tools.claude-code.verifications`). (Folded in from the retired `/aitool-ops`
+card.)
+
+### Sub-agent Markdown File-Name Block
+
+Observed in 2.1.289 (2026-10-05, Claude Code web environment). When the caller
+is a sub-agent, the Write tool's input validation refuses any file whose
+basename matches `^(REPORT|SUMMARY|FINDINGS|ANALYSIS).*\.md$`
+(case-insensitive) and returns:
+
+```
+Subagents should return findings as text, not write report files. Include this content in your final response instead.
+```
+
+- Built into the binary (`validateInput`, telemetry event
+  `tengu_subagent_md_report_blocked`, error code 5); the check is gated on the
+  caller having an agent ID, so the main agent is not affected.
+- It runs before permission rules. No setting, allow rule or hook output
+  overrides it. Not in the official docs.
+- Allowed names observed: `notes.txt`, `plain.md`, `s3-report.md`.
+- Edit and other write paths: not verified.
+
+**Workaround (decision D-DEL1, 2026-10-05):** every delegation prompt tells
+the delegate to start every `*.md` file name with its own name
+(`S2-report.md`). The name prefix never matches the anchored pattern, as long
+as the delegate's name does not itself start with one of the four words. The
+prefix also records which delegate wrote the file. Governed by the user rule
+`delegation.md` and the `/delegate` skill; detected by
+`delegation-duty-guard.sh` (element 8 of eight since 2026-10-26, observe mode).
+
+### Sub-agent Nesting Depth
+
+`CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` sets how deep sub-agents may nest.
+Documented default 3; the 2.1.219 changelog raised the default from 1 to 3
+(as reported by the delegating session 3030c86a on 2026-10-05; changelog not
+re-read for this entry). The Claude Code web environment runner sets it to 1
+(observed: `printenv CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` -> `1`, 2026-10-05),
+so a sub-agent there has no Agent tool and cannot delegate further. A launch
+past the cap fails with:
+
+```
+Subagent nesting limit reached (depth N of M). Complete this task directly using your tools instead of spawning another agent. If the user explicitly requested deeper nesting, ask them to raise CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH.
+```
+
+**Impact on delegation:** a delegation chain must fit the cap of the
+environment it runs in. A delegate at the cap does the whole task itself; plan
+its scope accordingly (`/delegate` skill).
+
+**Launch path decides whether a delegate can delegate** (observed 2.1.307,
+macOS, local environment, 2026-10-21; `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH`
+unset at every level):
+
+| Launched via | Has Agent | Has Workflow | Deepest level that ran |
+|---|---|---|---|
+| Agent tool from the main session | yes at levels 1-2, no at level 3 | no | 3 |
+| A Workflow `agent()` call | no (not even deferred via ToolSearch) | no | 1 |
+| A Workflow `agent()` call with `agentType: 'general-purpose'` | no (not even deferred via ToolSearch) | no | 1 |
+
+Re-verified 2.1.307, macOS, local environment, 2026-10-26 (workflow
+`probe-workflow-nesting`, run wf_f1bf6cf0-be5): a default workflow agent and
+one launched with `agentType: 'general-purpose'` were each told explicitly to
+go outside the workflow's layout and launch their own general-purpose
+sub-agent. Neither had an Agent, Task or Workflow tool; ToolSearch
+`select:Agent` returned "No matching deferred tools found", and a keyword
+search ("agent subagent task workflow") surfaced only TaskCreate / TaskGet /
+TaskList / TaskUpdate / TaskStop (todo-list tools), SendMessage and
+ListAgents (message existing agents only), RemoteTrigger (cloud routines)
+and `mcp__firecrawl__firecrawl_agent` (web research). The agent type does
+not change the tool set. Not tested: spawning through the `claude` CLI
+(`claude -p`, present at `~/.local/bin/claude`) or RemoteTrigger, which are
+separate mechanisms with their own permissions.
+
+**`isolation: "remote"` fell back to a local worktree** (2.1.307, macOS,
+2026-10-27): an Agent-tool call with `subagent_type: "general-purpose"`,
+`isolation: "remote"` ran on this Mac in a new git worktree
+(`.claude/worktrees/agent-<id>`, branch `worktree-agent-<id>`, reported in
+the completion notice's `<worktree>` block), with `CLAUDE_CODE_REMOTE` and
+`CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` unset. No cloud or Claude Code web
+environment was used, so the web nesting limit (1) was not exercised; the
+tool describes remote availability as gated. In the same probe, levels 1 and
+2 had the Agent tool and level 3 did not, and the Agent tool given to
+delegates has no `run_in_background` parameter (every delegate launch was
+asynchronous: "Async agent launched successfully"), so skills that tell a
+delegate to launch foreground sub-agents (e.g. deep-research's
+`run_in_background=false`) cannot be followed as written; the delegate waits
+for each completion notification instead.
+
+- At the default cap (3), the third delegate has no Agent tool at all, so a
+  chain runs main → L1 → L2 → L3.
+- Workflow agents cannot delegate, whatever the cap: a workflow is one level
+  of fan-out under the session that runs it. Encode deeper structure in the
+  script itself (stages, `pipeline()`, one-level `workflow()` calls), or launch
+  mission commanders with the Agent tool when they must delegate.
+- No delegate has the Workflow tool, so a delegate cannot start a workflow.
+- Worktree-isolated agents also refuse any command that sets `HOME`
+  ("this command sets HOME, injecting git configuration ... Refusing to run
+  it"), so isolated-`HOME` runs (`build-deploy.sh`, #86) must run from a
+  non-isolated agent or the main session.
+
+### Auto Mode and Allow Rules for PR Merges (#28)
+
+**Tested** 2026-10-28, Claude Code 2.1.309 (`claude --version`), macOS,
+local environment, session in auto mode (`permissions.defaultMode` stays
+`"default"`), by S3-AllowMerge, a level-1 delegate launched with the Agent
+tool by Session Commander 10cf255a-c.
+
+**The rule** (user scope, added by the Session Commander on the commander's
+order, 2026-10-28): `"permissions": {"allow": ["Bash(gh pr merge:*)"]}` in
+`~/.claude/settings.json` (backup `settings.json.bak.2026-10-28T173309Z`),
+mirrored in the dotprofile `profile.json` `claude.settings.permissions`
+(dotprofile commit 9cb13b2) so `setup-user-settings` keeps it. User scope
+applies in every repo and needs no workspace trust; a project-scope
+`.claude/settings.json` allow rule applies only after the folder's trust
+dialog is accepted (docs below).
+
+**Before** (MERGE-2, 2026-10-28, no allow rule): `gh pr merge 122 --merge
+--match-head-commit 8f644ff…` was denied with:
+
+```
+Permission for this action was denied by the Claude Code auto mode classifier. Reason: [Merge Without Review].
+```
+
+Earlier (MERGE-ALL, 2026-10-27) 25 PRs merged from inside a workflow; four
+were flagged afterwards with the same reason but not stopped. That matches the
+documented third subagent check: the classifier reviews a finished subagent's
+work and report and prepends a warning; it does not undo actions.
+
+**After** (this test, rule in place, delegate session):
+
+| PR | Command | Result | Merge commit |
+|----|---------|--------|--------------|
+| #122 | `gh pr merge 122 -R nobul-tech/aitools --merge --match-head-commit 8f644fffcf6e6c634ee09c4959887022d19ba2d2` | ran with no prompt or denial, empty output; `gh pr view` then showed `MERGED` at 2026-10-28T17:34:47Z; main CI run 40737064303 success | d8f0aedda0271fcf450c7595f5fa2b16eee39119 |
+| #120 | `gh pr merge 120 -R nobul-tech/aitools --merge --match-head-commit 1a30fe7f139fb9d313ec332f489e7b19572cc1f5` | same: no prompt or denial, empty output; `MERGED` at 2026-10-28T18:05:35Z; main CI run 40741876684 success | 1b4e9d7cae8b752a6a3d5355920c8eb791a9435a |
+
+Pre-merge checks: `gh pr view 122 --json state,headRefOid,mergeStateStatus,statusCheckRollup`
+showed head 8f644ff, all 8 checks `SUCCESS`; the first read returned
+`mergeStateStatus: UNKNOWN` (GitHub computes it lazily) and a second read
+`CLEAN` / `MERGEABLE`. Re-read until `CLEAN` before merging.
+
+The result is consistent with the documented decision order: a call that
+matches an allow rule resolves at step 1 and never reaches the classifier.
+The session cannot observe directly whether the classifier was skipped or
+consulted and agreed; the docs say it is skipped.
+
+**What the docs say** (read 2026-10-28 with chrome-devtools, `.md` pages):
+
+- https://code.claude.com/docs/en/permission-modes.md "How the classifier
+  evaluates actions": "Each action goes through a fixed decision order. The
+  first matching step wins: 1. Actions matching your allow, ask, or deny rules
+  resolve immediately, with these exceptions: …" (exceptions: protected-path
+  writes, critical-path `rm`/`rmdir`, `requiresUserInteraction` MCP tools,
+  commands with per-command allowed domains, content-matching ask rules,
+  symlinked protected paths, network-path reads) "… 3. Everything else goes
+  to the classifier".
+- Same page: "On entering auto mode, broad allow rules that grant arbitrary
+  code execution are dropped: Blanket `Bash(*)` or `PowerShell(*)`;
+  Wildcarded interpreters like `Bash(python*)`; Package-manager run commands;
+  `Agent` allow rules; `Monitor` allow rules … Narrow rules like
+  `Bash(npm test)` stay in effect." `Bash(gh pr merge:*)` is a narrow rule.
+- Same page, "How auto mode handles subagents": "2. While the subagent runs,
+  each of its actions goes through the same decision order as in the parent
+  session, with the same block and allow rules. Any `permissionMode` in the
+  subagent's frontmatter is ignored." and "1. Before a subagent starts, the
+  delegated task description is evaluated, so a dangerous-looking task is
+  blocked at spawn time."
+- https://code.claude.com/docs/en/permissions.md: "The `:*` suffix is an
+  equivalent way to write a trailing wildcard, so `Bash(ls:*)` matches the
+  same commands as `Bash(ls *)`." and "if user settings allow a permission
+  and project settings deny it, the deny rule blocks it." and
+  "`permissions.allow` rules … in a project's `.claude/settings.json` grant
+  capability, so Claude Code applies them only after you accept the
+  workspace trust dialog for that folder."
+- https://code.claude.com/docs/en/settings.md "When edits take effect":
+  "Claude Code watches your settings files and reloads them when they
+  change, so it applies most edits to the running session without a
+  restart, including edits to `permissions`, `hooks`, and credential
+  helpers". The rule was added mid-session and applied without a restart.
+
+**Guidance for merge missions:**
+
+1. The allow rule removes the classifier gate for `gh pr merge` only. It
+   does not replace review: the mission still gates each merge on green CI,
+   `mergeStateStatus: CLEAN`, a recorded independent verdict, and
+   `--match-head-commit <verified head>` so a moved branch fails the merge.
+2. Keep the form `gh pr merge <n> -R <owner/repo> …` as one simple command.
+   The rule matches the command prefix; a merge wrapped in a script or a
+   compound command may not match it and then goes to the classifier
+   (inference from the decision order; not tested).
+3. Record the commander's merge order in a PR comment after each merge.
+4. A deny or ask rule in any scope still wins over this allow rule.
+5. Other outward-facing commands (`git push` to `main`, `gh release`, tag
+   pushes) are not covered by this rule and still go to the classifier.
+
+### Session Storage Internals
+
+Claude Code stores session transcripts as JSONL files under `~/.claude/projects/`:
+
+```
+~/.claude/projects/
+├── -Users-pepe-repos-ai-tooling/     # sanitized CWD path
+│   ├── <session-uuid>.jsonl
+│   └── <session-uuid>/subagents/     # subagent transcripts
+└── -Users-pepe-repos-mbx-ext/
+    └── ...
+```
+
+#### Path Sanitization
+
+The project directory name is the CWD with `/` replaced by `-`. This is **lossy** for project names containing hyphens — you cannot split on `-` to recover the project name.
+
+Example: `/Users/pepe/repos/ai-tooling` becomes `-Users-pepe-repos-ai-tooling`. Naive split yields `tooling`, not `ai-tooling`.
+
+**Correct approach:** Read the `cwd` field from the JSONL transcript, then derive the project name from the real path.
+
+#### JSONL Transcript Structure
+
+Each line is a JSON object. Fields available in most entries:
+
+- `type` — message type (`human`, `assistant`)
+- `cwd` — original working directory (absolute path)
+- `sessionId` — full session UUID
+
+### Best Practices for CLAUDE.md Content
+
+**Include:** build/test/lint commands, code style rules, project architecture, gotchas, tool preferences.
+**Exclude:** things Claude can infer from code, standard conventions, long tutorials, frequently-changing info.
+**Size:** Keep under 200 lines (auto-load limit). Use `@path` imports for more detail.
+
+### Auto-Creating CLAUDE.md in New Projects
+
+- No built-in auto-create. Use `claude /init` to scaffold per project.
+- Use the `cc` shell alias (see `shared/shell/`) that checks for CLAUDE.md before launching.
+
+### Machines
+
+| Machine | OS | IDE | Claude Code |
+|---------|-----|-----|-------------|
+| Workstation | Windows 11 Pro for Workstations | Cursor | CLI (in Cursor terminal) |
+| Laptop | macOS | Cursor | CLI (in Cursor terminal) |
+| Web | Any browser | — | claude.ai (separate sessions) |
+
+### Setup Checklist
+
+- [x] Create `~/.claude/CLAUDE.md` on Windows workstation (via `scripts/setup-user-claude.ps1`)
+- [x] Create `~/.claude/CLAUDE.md` on Mac laptop (via `scripts/setup-user-claude.sh`)
+- [x] Shared rules in repo (`shared/claude-shared.md`), embedded into deploy scripts by `build-deploy.sh`
+- [x] Shell alias (`cc`) for auto-CLAUDE.md check (see `shared/shell/`)
+- [x] "Home base" directory for general conversations: this repo (`aitools/`)
+- [x] Self-contained deploy scripts in the dotprofile `deploy/` (generated by `build-deploy.sh`; the shared `aitools/deploy/` is frozen) — MDM-ready, no repo or Drive dependency
+
+---
+
+## Windows Shell Limitations
+
+> **Likely obsolete** (item #1): the Claude Code changelog lists a PowerShell tool
+> preview (2.1.84) and "Git for Windows no longer required" (2.1.120), per
+> `reference/evaluations/claude-code-macos-2026-10-21.md`. Re-verify on Windows
+> before relying on this section.
+
+Claude Code's Bash tool is **hardcoded to Git Bash on Windows**. The `CLAUDE_CODE_SHELL` environment variable exists but is **broken on Windows** -- it is silently ignored regardless of how it's set.
+
+Baseline: Claude Code 2.1.51 | Last verified: 2.1.62 (2026-02-27)
+
+### Upstream Issues
+
+| Issue | Title | Status |
+|-------|-------|--------|
+| [#7490](https://github.com/anthropics/claude-code/issues/7490) | Allow users to configure which shell the Bash tool uses | Open |
+| [#25558](https://github.com/anthropics/claude-code/issues/25558) | CLAUDE_CODE_SHELL environment variable ignored on Windows | Open |
+| [#5049](https://github.com/anthropics/claude-code/issues/5049) | CC native on Windows: not really shell aware | Open |
+| [#16225](https://github.com/anthropics/claude-code/issues/16225) | Improve PowerShell shell configuration support for Windows | Open |
+| [#20453](https://github.com/anthropics/claude-code/issues/20453) | CLAUDE_CODE_SHELL not respected on Windows | Closed (no fix) |
+
+### What Does NOT Work
+
+- `CLAUDE_CODE_SHELL=pwsh` as an environment variable -- ignored
+- `env.CLAUDE_CODE_SHELL` in `settings.json` -- ignored
+- No setting, extension, or MCP server can change the Bash tool's shell on Windows
+
+### Working Workarounds
+
+#### Run a PowerShell command from the Bash tool
+
+```bash
+pwsh -NoProfile -Command 'Your-Command Here'
+```
+
+Single-quote the `-Command` argument so bash doesn't expand `$` variables meant for PowerShell.
+
+#### Run a .ps1 script from the Bash tool
+
+```bash
+pwsh -NoProfile -ExecutionPolicy Bypass -File "path/to/script.ps1"
+```
+
+This is the pattern used by `aitools install` (see the `install` command in `scripts/aitools`).
+
+#### Multi-line PowerShell from the Bash tool
+
+```bash
+pwsh -NoProfile -Command '
+  $items = Get-ChildItem -Path .
+  foreach ($item in $items) {
+    Write-Host $item.Name
+  }
+'
+```
+
+### Quoting Gotchas
+
+| Pattern | Works? | Why |
+|---------|--------|-----|
+| `pwsh -Command 'Write-Host $env:PATH'` | Yes | Single quotes prevent bash expansion |
+| `pwsh -Command "Write-Host $env:PATH"` | No | Bash expands `$env` (empty), PowerShell gets broken command |
+| `pwsh -Command 'Write-Host "hello world"'` | Yes | Inner double quotes are fine inside outer single quotes |
+| `pwsh -Command "Write-Host 'hello world'"` | Risky | Bash may expand special chars in the outer double quotes |
+
+**Rule of thumb:** Always single-quote the outer `-Command` string. Use double quotes inside for PowerShell string interpolation.
+
+### Recommended Pattern: Write-then-Execute
+
+For anything beyond a trivial one-liner, **do not use inline `-Command`**. The quoting rules above become unmanageable for multi-statement scripts with variables, loops, or string interpolation.
+
+**Default pattern**: Write the PowerShell code to a temp `.ps1` file using the Write tool, then execute with `-File`:
+
+```bash
+# Step 1: Use the Write tool to create a temp .ps1 file with full PS syntax
+# Step 2: Execute it cleanly — no quoting issues
+pwsh -NoProfile -ExecutionPolicy Bypass -File "path/to/temp.ps1"
+# Step 3: Delete the temp file when done
+```
+
+Benefits:
+- No escaping between bash and PowerShell
+- Full PowerShell syntax — readable, editable with the Edit tool
+- Same pattern works for validation scripts
+- Tools like pandoc, git, etc. resolve correctly in the script's PATH context
+
+**Only use inline `-Command`** for trivial one-liners where a temp file would be overkill (e.g., `pwsh -Command '$PSVersionTable.PSVersion'`).
+
+### Impact on This Repo
+
+This repo provides both `.ps1` and `.sh` variants of all scripts. On Windows, Claude Code can run `.sh` scripts natively (Git Bash) but must use the `pwsh -File` workaround for `.ps1` scripts. PS 7 (`pwsh`) is the project baseline -- all dispatch uses `pwsh`, not `powershell.exe`.
+
+Once Anthropic fixes the upstream issues, we can simplify by setting `CLAUDE_CODE_SHELL=pwsh` and running `.ps1` scripts directly.
+
+---
+
+## Cross-References
+
+- Tool-ops registry: `/tool-ops` skill
+- Tool registry: `/tool-registry` skill
+- Incident registry: `/incident` skill
+- User repo spec: `reference/user-repo.md`
+- Cross-platform rules: `.claude/rules/cross-platform.md`

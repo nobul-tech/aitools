@@ -1,0 +1,61 @@
+#109 [OPEN] Fix B8 consumer rows on a dotprofile resolver error (A-22, A-23, A-24, A-26 cursor)
+FILES: .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Fix4/S3-MF-Fix4-Review-pr109.md, .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Fix4/S3-MF-Fix4-report.md, scripts/check-lib.ps1, scripts/check-lib.sh, scripts/setup-user-cursor.ps1, scripts/setup-user-cursor.sh, scripts/setup-user-skills.ps1, tests/b8-consumers/test-b8-consumers.sh
+
+## Summary
+
+Fixes S3-MF-Audit findings A-22, A-23, A-24 and the cursor part of A-26 in the B8 consumers (setup-user-skills, setup-user-cursor, check-lib), with a new test suite that runs both languages.
+
+## Why
+
+S3-MF-Audit (PR #104), M3-FINISH item 7. Each finding was checked in the code at origin/main 8a9dcb5 before fixing. All four were confirmed; none was rejected.
+
+## Changes
+
+- **A-22** `scripts/setup-user-skills.ps1`: on a dotprofile resolver error (rc 3) it now writes the .sh rows and message: `ERROR|claude skills|not deployed: dotprofile error` and `ERROR|cursor skills|not deployed: dotprofile error`. Before, it wrote one `ERROR|skills|skipped (dotprofile error)` row, which used a non-canonical tool name and the governed word "skipped". Discovery is now skipped too, as in the .sh. The variable was renamed `$skillsBlocked` to match `SKILLS_BLOCKED`.
+- **A-23** `scripts/setup-user-cursor.sh/.ps1`: on rc 3 the script now logs its own error (`log_error` / `LogError`) and writes `ERROR|cursor cli|not merged: dotprofile error`. Before, it wrote an info line and `ERROR|cursor cli|skipped (dotprofile error)`.
+- **A-26 (cursor part)** `scripts/setup-user-cursor.sh/.ps1`: the cli-config dry run now writes a summary row in both languages. A dry run that would change the file writes `OK|cursor cli|dry-run: would update`, the same wording as the config writer. A dry run on an up-to-date file writes `OK|cursor cli|verified`. The .sh already wrote that row; the .ps1 wrote none.
+- **A-24** `scripts/check-lib.sh/.ps1`: `resolve_config` / `ResolveConfig` now keep the resolver rc in `USER_REPO_RC` / `$script:UserRepoRc`. On a resolver error, `print_summary` / `PrintSummary` add one step: `0. Dotprofile resolution [WARN] resolver error (rc 3, see deploy.log) -- dotprofile steps reported 'not configured'`. That step is counted in the run summary and written to checks.log / checks.jsonl. Before, `check_log_init` reset the lib's error, so a broken dotprofile passed the check run. The check-*.sh/.ps1 callers are unchanged: they are outside this mission's files (see Follow-ups).
+- **Tests** `tests/b8-consumers/test-b8-consumers.sh` (new): it covers the rc 3 path for skills and cursor, the cursor dry run (missing config, then up to date), and the check-lib WARN step for rc 3 and for rc 1. Each case runs in bash and in PowerShell, and the test checks that both languages write identical summary rows. The .ps1 setup scripts run as guard-stripped copies in a temp `scripts/` copy, never the source. Each case gets its own temp HOME and stub rg/agent.
+
+## Assumptions
+
+- **I-4 (open):** A-23 counts the consumer's own error on top of the lib wrapper's error, so the run logs 2 errors. This follows setup-user-settings and the audit's suggested answer. It is waiting on the commander's I-4 decision. If I-4 decides "do not re-count", change the `log_error` / `LogError` in setup-user-settings, -skills and -cursor together.
+
+## Verification (macOS)
+
+- Syntax: `bash -n` under GNU bash 5 and `/bin/bash` 3.2 on setup-user-skills.sh, setup-user-cursor.sh, check-lib.sh and the new test, and the pwsh `Parser::ParseFile` on the three .ps1 files. All clean.
+- `tests/b8-consumers/test-b8-consumers.sh`: 60 passed, 0 failed, under bash 5 and under `/bin/bash` 3.2 (`AITOOLS_TEST_BASH=/bin/bash`), with pwsh 7.
+- Negative control: the same test run against the unfixed scripts (origin/main 8a9dcb5) fails 24 checks, covering every finding (A-22 ps1 rows/message/parity, A-23 both languages, A-26 dry-run rows, A-24 WARN step).
+- Existing suites, run under an isolated HOME and AITOOLS_LOG_DIR in the worktree scratch, with bash 5 / `/bin/bash` 3.2:
+
+  | suite | bash 5 | bash 3.2 |
+  |---|---|---|
+  | tests/profile/test-profile.sh | 689/0 | 689/0 |
+  | tests/profile/test-lib.sh | 209/0 | 209/0 |
+  | tests/profile/test-config.sh | 190/0 | 190/0 |
+  | tests/profile/test-user-init.sh | 200/0 | 200/0 |
+  | tests/rules-fanout-cursor | 78/0 (1 skip) | 78/0 (1 skip) |
+  | tests/logging/test-logging.sh | 24/0 | 24/0 |
+  | tests/deploy-harness | 45/0 | 45/0 |
+  | tests/deploy-harness-mdm | 30/0 | 30/0 |
+
+- `check-pre-commit.sh`: 12 PASS, 2 SKIP, 6 WARN, 1 FAIL. The FAIL is step 6, the known harvesting file mode. Step 11 WARN reports uncommitted changes in the live dotprofile, which this PR did not touch. Step 13 WARN: build-deploy.sh needs no logic change (see Follow-ups).
+- `check-pre-push.sh`: 6 PASS, 3 WARN, 1 FAIL. The FAIL is step 7, the known stale dotprofile deploy/. The build in it ran under the step's own temp HOME.
+
+## Not run
+
+- Windows / Git Bash. The .ps1 files ran only as guard-stripped copies under pwsh 7 on macOS.
+- `build-deploy.sh` against the live dotprofile, which stayed read-only. setup-user-cursor is extracted whole into the dotprofile `deploy/`, so that copy is stale until it is regenerated. The skills rc 3 block is in the "skill discovery" region, which build-deploy replaces, so `deploy/` has no copy of it.
+
+## Protected-file drafts awaiting approval
+
+None. No protected doc names the changed rows.
+
+## Follow-ups
+
+- **Regenerate the dotprofile `deploy/`** (`bash scripts/build-deploy.sh` in the dotprofile flow) after merge. This carries the cursor rows into the MDM path. No build-deploy.sh logic change is needed: the cursor body is extracted whole, and only the preferences defaults are substituted.
+- **A-24 caller texts:** when the rc is 3, the check-*.sh/.ps1 dotprofile steps could say "dotprofile unresolved" instead of "userRepoPath not configured". The affected steps are pre-commit 11, pre-push 7 and 10, and post-push 5. `USER_REPO_RC` / `$script:UserRepoRc` are now available for that.
+- **Not in the audit:** setup-user-cursor.sh logs `log_warn "node not found -- skipping cli-config.json merge"` with no summary row (summary coverage rule).
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+

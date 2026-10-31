@@ -1,0 +1,62 @@
+agentic-standards          md=     152 mdc=     158  code-rows md=  7 mdc=  7
+config-file-safety         md=     172 mdc=      66  code-rows md=  0 mdc=  0
+cross-platform             md=     200 mdc=      82  code-rows md=  7 mdc=  0
+deploy-paths               md=      82 mdc=      41  code-rows md=  3 mdc=  4
+documentation-standards    md=     114 mdc=      46  code-rows md=  0 mdc=  0
+git-safety                 md=      27 mdc=      36  code-rows md=  0 mdc=  0
+hook-rollout               md=     112 mdc=      32  code-rows md=  9 mdc=  0
+interactive-menus          md=     131 mdc=      30  code-rows md=  0 mdc=  0
+managed-file-deployment    md=     114 mdc=      68  code-rows md=  0 mdc=  0
+plan-execution             md=      15 mdc=      12  code-rows md=  0 mdc=  0
+relay-outbound             md=      39 mdc=      19  code-rows md=  0 mdc=  0
+script-standards           md=     300 mdc=     143  code-rows md=  9 mdc=  5
+smoke-test-pattern         md=      11 mdc=      17  code-rows md=  0 mdc=  0
+sources-of-truth           md=      60 mdc=      44  code-rows md= 25 mdc= 13
+tool-lifecycle             md=     133 mdc=     139  code-rows md=  0 mdc=  0
+web-sources                md=      48 mdc=      38  code-rows md=  0 mdc=  0
+
+==== git-safety body diff (frontmatter differs)
+0a1,9
+> ---
+> description: Git safety rules for pre-pull resets and generated vs source directories
+> globs:
+>   - scripts/aitools
+>   - scripts/aitools.ps1
+>   - scripts/build-deploy.sh
+> alwaysApply: false
+> ---
+> 
+
+==== web-sources diff
+2,14c2,4
+< paths:
+<   - scripts/**
+<   - deploy/**
+<   - shared/**
+<   - reference/**
+<   - plans/**
+<   - rfcs/**
+<   - .claude/rules/**
+<   - .cursor/rules/**
+<   - CLAUDE.md
+<   - RELEASE_NOTES.md
+<   - ROADMAP.md
+<   - README.md
+---
+> description: Prefer Chrome DevTools MCP over WebFetch for reading web content that feeds into source-of-truth files
+> globs: "scripts/**,deploy/**,shared/**,reference/**,plans/**,rfcs/**,.claude/rules/**,.cursor/rules/**,CLAUDE.md,RELEASE_NOTES.md,ROADMAP.md,README.md"
+> alwaysApply: false
+
+==== sources-of-truth rows only in md
+`.claude/rules/frameworks.md`
+`.claude/rules/managed-file-deployment.md`
+`reference/framework-*.md`
+`reference/framework-tool-ops.md`
+`reference/harness.md`
+`reference/incident-*.md`
+`reference/managed-file-deployment.md`
+`reference/tool-ops-*.md`
+`registries/framework-registry.json`
+`registries/glossary.json`
+`registries/incidents.json`
+`registries/tool-ops.json`

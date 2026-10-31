@@ -3,8 +3,8 @@
 **Intent**: **Purpose**: Document the framework for evaluating,
 approving, integrating, maintaining, and health-tracking managed tools.
 **Scope**: What software asset management principles we adopted and
-why. NOT the evaluation requirements (`@.claude/rules/tool-evaluation.md`).
-NOT the operational checklist (`@.claude/rules/tool-lifecycle.md`).
+why. NOT the evaluation requirements (`@shared/rules/tool-evaluation.md`).
+NOT the operational checklist (`@shared/rules/tool-lifecycle.md`).
 NOT tool data (use `/tool-registry` skill). **Audience**: Agents
 onboarding new tools, framework adoption work.
 
@@ -32,7 +32,7 @@ go inactive, install methods change upstream.
   via official docs. Process in `/tool-eval` skill
 - **Health flags** → continuous monitoring adapted as per-platform
   health indicators. Criteria in `/tool-eval` skill, requirements
-  in `@.claude/rules/tool-evaluation.md`
+  in `@shared/rules/tool-evaluation.md`
 - **Provenance verification** → supply chain security adapted as
   install method traceability. Process in `/tool-eval` skill
 - **Evaluation provenance** → decision rationale preserved in
@@ -40,8 +40,8 @@ go inactive, install methods change upstream.
 
 ## How It's Maintained
 
-- Onboarding checklist in `@.claude/rules/tool-lifecycle.md`
-- Evaluation principles in `@.claude/rules/tool-evaluation.md`
+- Onboarding checklist in `@shared/rules/tool-lifecycle.md`
+- Evaluation principles in `@shared/rules/tool-evaluation.md`
 - Post-push checks verify tool command availability and version
 - `/tool-registry` skill provides governed access to tool data
 - `/tool-eval` skill runs evaluations and updates health flags
@@ -50,8 +50,8 @@ go inactive, install methods change upstream.
 
 ## Implementing Artifacts
 
-- `@.claude/rules/tool-lifecycle.md` (operational rule + checklist)
-- `@.claude/rules/tool-evaluation.md` (evaluation principles)
+- `@shared/rules/tool-lifecycle.md` (operational rule + checklist)
+- `@shared/rules/tool-evaluation.md` (evaluation principles)
 - `shared/skills/tool-registry/SKILL.md` (registry data access)
 - `shared/skills/tool-eval/SKILL.md` (evaluation process)
 - `@reference/tool-evaluation-criteria.md` (evaluation framework)

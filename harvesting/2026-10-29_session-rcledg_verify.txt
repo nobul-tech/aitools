@@ -1,0 +1,244 @@
+
+=== a-readme-mdm  [deploy-harness|MDM]
+origin/main:README.md:11:| `deploy/` | Frozen historical shared baseline. `build-deploy.sh` now generates each user's MDM-ready scripts into their **dotprofile repo** (`aitools-<user>/deploy/`), not here |
+origin/main:README.md:71:Run these from the `deploy/` directory -- self-contained, MDM-ready:
+
+=== c-abort-text  [stop the run]
+origin/main:.claude/rules/interactive-menus.md:119:  [x]abort    : stop the run
+origin/main:scripts/aitools-lib.ps1:2359:    [Console]::WriteLine("  [x]abort    : stop the run")
+origin/main:scripts/aitools-lib.sh:2376:    printf '  [x]abort    : stop the run\n' > /dev/tty
+
+=== d1-userinit-hooks  [setup-user-hooks]
+origin/main:scripts/aitools:909:    # --force: no prompts here, and the review menus of setup-user-hooks take the source
+origin/main:scripts/aitools:1042:            hook_setup="$repo_path/scripts/setup-user-hooks.ps1"
+origin/main:scripts/aitools:1048:            hook_setup="$repo_path/scripts/setup-user-hooks.sh"
+origin/main:scripts/aitools:1108:            local deploy_scripts="setup-user-config.ps1 setup-user-claude.ps1 setup-user-mcp.ps1 setup-user-skills.ps1 setup-cursor-ide-mcp.ps1 setup-user-cursor.ps1 setup-user-settings.ps1 setup-user-hooks.ps1"
+origin/main:scripts/aitools:1151:            local deploy_scripts="setup-user-config.sh setup-user-claude.sh setup-user-mcp.sh setup-user-skills.sh setup-cursor-ide-mcp.sh setup-user-cursor.sh setup-user-settings.sh setup-user-hooks.sh"
+origin/main:scripts/aitools.ps1:157:    $deployScripts = @("setup-user-config.ps1", "setup-user-claude.ps1", "setup-user-mcp.ps1", "setup-user-skills.ps1", "setup-cursor-ide-mcp.ps1", "setup-user-cursor.ps1", "setup-user-settings.ps1", "setup-user-hooks.ps1")
+origin/main:scripts/aitools.ps1:1521:    # -Force: no prompts here, and the review menus of setup-user-hooks take the source
+origin/main:scripts/aitools.ps1:1659:    $hookSetup = Join-Path $repoPath "scripts" "setup-user-hooks.ps1"
+origin/main:scripts/aitools.ps1:1669:            LogError "user init: setup-user-hooks.ps1 failed: $_"
+origin/main:scripts/aitools.ps1:1682:        LogError "user init: setup-user-hooks.ps1 failed (exit $hookRc) -- see $logFile"
+
+=== d2-bootstrap  [powershell|pwsh]
+origin/main:scripts/bootstrap.ps1:48:& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $aitoolsDir 'scripts\aitools-install.ps1')
+
+=== d3-gitbash  [Git\\bin\\bash|Git/bin/bash]
+origin/main:scripts/aitools.ps1:1989:$bashExe = "$env:ProgramFiles\Git\bin\bash.exe"
+origin/main:scripts/setup-bash.ps1:28:    "C:\Program Files\Git\bin\bash.exe",
+origin/main:scripts/setup-bash.ps1:29:    "C:\Program Files (x86)\Git\bin\bash.exe",
+origin/main:scripts/setup-bash.ps1:30:    (Join-Path $env:LOCALAPPDATA "Programs\Git\bin\bash.exe")
+
+=== f1-uptodate  [up.to.date]
+origin/main:scripts/aitools-install.ps1:583:    } elseif ($claudeOutput -match '(?i)already.*up.to.date|no update') {
+origin/main:scripts/aitools-install.ps1:584:        LogOk "Already up to date"
+origin/main:scripts/aitools-install.sh:660:    elif printf '%s\n' "$UPDATE_OUTPUT" | grep -qi 'already.*up.to.date\|no update'; then
+origin/main:scripts/aitools-install.sh:661:        log_ok "Already up to date"
+
+=== f2-claude-auth  [claude auth|auth status]
+origin/main:scripts/aitools-install.ps1:281:    $authStatus = gh auth status 2>&1
+origin/main:scripts/aitools-install.sh:375:elif gh auth status &>/dev/null; then
+
+=== g-catchup-trunc  [\[:10\]|10\]]
+NO MATCH
+
+=== h-bare-read  [read -r [a-z_]+ < /dev/tty]
+origin/main:scripts/aitools-lib.sh:1366:# Bare `read -r x < /dev/tty` returns 1 at EOF (closed stdin under a pty), which
+origin/main:scripts/aitools-lib.sh:1372:    if ! IFS= read -r __line < /dev/tty; then
+origin/main:scripts/relay-outbound-prompt.sh:77:    read -r choice < /dev/tty
+
+=== i1-merge-reason  [AI_REJECT_REASON]
+origin/main:scripts/aitools-lib.sh:711:#   and set AI_REJECT_REASON on failure.
+origin/main:scripts/aitools-lib.sh:724:AI_REJECT_REASON=""
+origin/main:scripts/aitools-lib.sh:732:    AI_REJECT_REASON=""
+origin/main:scripts/aitools-lib.sh:755:        AI_REJECT_REASON="No AI CLI available (claude or agent)"
+origin/main:scripts/aitools-lib.sh:821:            AI_REJECT_REASON="Empty output from $cli_cmd"
+origin/main:scripts/aitools-lib.sh:833:                [ -z "$AI_REJECT_REASON" ] && AI_REJECT_REASON="Validation failed"
+origin/main:scripts/aitools-lib.sh:834:                _ai_log "AI invocation: speed=$speed backend=$cli_cmd attempt=$attempt result=rejected reason=$AI_REJECT_REASON" "warn"
+origin/main:scripts/aitools-lib.sh:840:                        "$AI_REJECT_REASON" "$prompt")
+origin/main:scripts/aitools-lib.sh:1249:    AI_REJECT_REASON="$MERGE_REJECT_REASON"
+origin/main:scripts/aitools-lib.sh:1448:            MANAGED_MERGE_ERROR="AI merge failed (iteration $iteration): ${AI_REJECT_REASON:-unknown error}"
+
+=== i2-step30  [w\[\\w-\]]
+origin/main:scripts/check-post-push.ps1:904:    $shReturns = (perl -ne 'print "$1\n" if /MANAGED_FILE_RESULT="(\w[\w-]*)"/' $shLib | Sort-Object -Unique) -join ','
+origin/main:scripts/check-post-push.ps1:937:    $shResults = (perl -ne 'if (/^deploy_managed_file\b/ .. (/^\w+.*\(\)\s*\{/ && !/deploy_managed_file/)) { print "$1\n" if /MANAGED_FILE_RESULT="(\w[\w-]*)"/ }' $shLib | Sort-Object -Unique) -join ','
+origin/main:scripts/check-post-push.sh:766:    sh_returns=$(perl -ne 'print "$1\n" if /MANAGED_FILE_RESULT="(\w[\w-]*)"/' "$sh_lib" | sort -u | paste -s -d , -)
+origin/main:scripts/check-post-push.sh:799:    sh_results=$(perl -ne 'if (/^deploy_managed_file\b/ .. (/^\w+.*\(\)\s*\{/ && !/deploy_managed_file/)) { print "$1\n" if /MANAGED_FILE_RESULT="(\w[\w-]*)"/ }' "$sh_lib" | sort -u | paste -s -d , -)
+
+=== j1-claude-rules-adopt  [git -C .* (commit|push)|git_commit_push|dotprofile_commit]
+NO MATCH
+
+=== j2-skills-adopt  [claude/skills]
+origin/main:scripts/setup-user-skills.sh:6:# repo claude/skills/ (personal). Dotprofile skills take priority over shared.
+origin/main:scripts/setup-user-skills.sh:7:# Deploys to ~/.claude/skills/ and ~/.cursor/skills/.
+origin/main:scripts/setup-user-skills.sh:63:if [ -n "$USER_REPO_PATH" ] && [ -d "$USER_REPO_PATH/claude/skills" ]; then
+origin/main:scripts/setup-user-skills.sh:64:    DOTPROFILE_SKILLS="$USER_REPO_PATH/claude/skills"
+origin/main:scripts/setup-user-skills.sh:67:SKILLS_DEST="$HOME/.claude/skills"
+origin/main:scripts/setup-user-skills.sh:218:                        if ! adopt_managed_file "$skill_dir/SKILL.md" "$USER_REPO_PATH/claude/skills/$skill_name/SKILL.md" || [ "$ERRORS" -gt "$_errors_before" ]; then
+
+=== j3-mcp-isolation  [MCP server isolation|Deployment pattern updates]
+origin/main:.cursor/rules/tool-lifecycle.mdc:118:### MCP server isolation
+origin/main:.cursor/rules/tool-lifecycle.mdc:134:### Deployment pattern updates
+
+=== j4-cfs-both  [both sides differ]
+origin/main:.claude/rules/config-file-safety.md:121:the interactive diff review pattern when both sides differ. See
+
+=== k1-agents  [AGENTS.md]
+origin/main:scripts/aitools:1189:    # Best-effort: mirror relay.md into ~/.cursor/AGENTS.md (Cursor IDE).
+origin/main:scripts/aitools:1295:                       (deploy includes relay → ~/.cursor/AGENTS.md when Python is available)
+origin/main:scripts/aitools:1299:                       (install Step 22 / deploy: relay → Cursor AGENTS.md mirror)
+origin/main:scripts/aitools-install.ps1:780:# 22. Relay → Cursor AGENTS.md (mirror; same as aitools deploy)
+origin/main:scripts/aitools-install.ps1:782:Log "Step 22: Relay → Cursor AGENTS.md mirror"
+origin/main:scripts/aitools-install.ps1:787:    $target = Join-Path $env:USERPROFILE ".cursor\AGENTS.md"
+origin/main:scripts/aitools-install.sh:845:# 22. Relay → Cursor AGENTS.md (mirror; same as aitools deploy)
+origin/main:scripts/aitools-install.sh:847:log "Step 22: Relay → Cursor AGENTS.md mirror"
+origin/main:scripts/aitools.ps1:206:    # Best-effort: mirror relay.md into ~/.cursor/AGENTS.md (same as scripts/aitools bash).
+origin/main:scripts/aitools.ps1:215:# Mirror .aitools/channel/relay.md into user Cursor AGENTS.md (non-fatal).
+origin/main:scripts/aitools.ps1:225:    $target = Join-Path $env:USERPROFILE ".cursor\AGENTS.md"
+
+=== k2-backupdir  [\*\.md]
+origin/main:scripts/aitools-lib.sh:925:    file_count=$(find "$dir" -maxdepth 1 -name '*.md' -type f | wc -l | tr -d ' ')
+origin/main:scripts/aitools-lib.sh:1140:        *.md)      printf 'Configuration rule: %s' "$(basename "$1")" ;;
+
+=== k3-cursorprac  [Not file-accessible|SQLite]
+origin/main:reference/cursor-practices.md:127:| Cursor User Rules | Cursor Settings > Rules (SQLite) | Not file-accessible; set via IDE UI |
+origin/main:reference/cursor-practices.md:137:Cursor User Rules live in **Cursor Settings > Rules** (UI only) — they're stored in a SQLite database (`state.vscdb`), not an accessible file.
+origin/main:reference/cursor-practices.md:145:**Important:** The **Cursor Agent CLI** (`agent`) does NOT read `~/.claude/CLAUDE.md`. It uses Cursor User Rules (SQLite) + project `CLAUDE.md` + `.cursor/rules/` only. See "Rule Sources" below.
+
+=== l1-lib-twice  [inline_lib_bash|inline_lib_ps1]
+origin/main:scripts/build-deploy.sh:116:# inline_lib_bash [BLOCK_FILE]: replaces the script's lib-loading line (the FIRST line
+origin/main:scripts/build-deploy.sh:124:inline_lib_bash() {
+origin/main:scripts/build-deploy.sh:148:# inline_lib_ps1 [BLOCK_FILE]: same for PowerShell -- the FIRST line that dot-sources
+origin/main:scripts/build-deploy.sh:151:inline_lib_ps1() {
+origin/main:scripts/build-deploy.sh:707:} | inline_lib_bash "$BUILD_TMP/resolver-claude.sh.blk" > "$DEPLOY_DIR/setup-user-claude.sh"
+origin/main:scripts/build-deploy.sh:803:} | inline_lib_ps1 "$BUILD_TMP/resolver-claude.ps1.blk" > "$DEPLOY_DIR/setup-user-claude.ps1"
+origin/main:scripts/build-deploy.sh:866:} | inline_lib_bash "$BUILD_TMP/resolver.sh.blk" > "$DEPLOY_DIR/setup-user-cursor.sh"
+origin/main:scripts/build-deploy.sh:907:} | inline_lib_ps1 "$BUILD_TMP/resolver.ps1.blk" > "$DEPLOY_DIR/setup-user-cursor.ps1"
+origin/main:scripts/build-deploy.sh:919:    tail -n +2 "$SCRIPTS_DIR/setup-cursor-ide-mcp.sh" | inline_lib_bash
+origin/main:scripts/build-deploy.sh:927:    cat "$SCRIPTS_DIR/setup-cursor-ide-mcp.ps1" | inline_lib_ps1
+origin/main:scripts/build-deploy.sh:938:    tail -n +2 "$SCRIPTS_DIR/setup-vercelcli.sh" | inline_lib_bash
+origin/main:scripts/build-deploy.sh:946:    cat "$SCRIPTS_DIR/setup-vercelcli.ps1" | inline_lib_ps1
+origin/main:scripts/build-deploy.sh:957:    tail -n +2 "$SCRIPTS_DIR/setup-pandoc.sh" | inline_lib_bash
+origin/main:scripts/build-deploy.sh:965:    cat "$SCRIPTS_DIR/setup-pandoc.ps1" | inline_lib_ps1
+origin/main:scripts/build-deploy.sh:976:    tail -n +2 "$SCRIPTS_DIR/setup-rust.sh" | inline_lib_bash
+origin/main:scripts/build-deploy.sh:984:    cat "$SCRIPTS_DIR/setup-rust.ps1" | inline_lib_ps1
+origin/main:scripts/build-deploy.sh:995:    tail -n +2 "$SCRIPTS_DIR/setup-typst.sh" | inline_lib_bash
+origin/main:scripts/build-deploy.sh:1003:    cat "$SCRIPTS_DIR/setup-typst.ps1" | inline_lib_ps1
+origin/main:scripts/build-deploy.sh:1014:    tail -n +2 "$SCRIPTS_DIR/setup-gh-cli.sh" | inline_lib_bash
+origin/main:scripts/build-deploy.sh:1022:    cat "$SCRIPTS_DIR/setup-gh-cli.ps1" | inline_lib_ps1
+origin/main:scripts/build-deploy.sh:1033:    tail -n +2 "$SCRIPTS_DIR/setup-python.sh" | inline_lib_bash
+origin/main:scripts/build-deploy.sh:1041:    cat "$SCRIPTS_DIR/setup-python.ps1" | inline_lib_ps1
+origin/main:scripts/build-deploy.sh:1052:    tail -n +2 "$SCRIPTS_DIR/setup-uv.sh" | inline_lib_bash
+origin/main:scripts/build-deploy.sh:1060:    cat "$SCRIPTS_DIR/setup-uv.ps1" | inline_lib_ps1
+origin/main:scripts/build-deploy.sh:1071:    tail -n +2 "$SCRIPTS_DIR/setup-modal.sh" | inline_lib_bash
+origin/main:scripts/build-deploy.sh:1079:    cat "$SCRIPTS_DIR/setup-modal.ps1" | inline_lib_ps1
+origin/main:scripts/build-deploy.sh:1090:    tail -n +2 "$SCRIPTS_DIR/setup-go.sh" | inline_lib_bash
+origin/main:scripts/build-deploy.sh:1098:    cat "$SCRIPTS_DIR/setup-go.ps1" | inline_lib_ps1
+origin/main:scripts/build-deploy.sh:1109:    tail -n +2 "$SCRIPTS_DIR/setup-datadog.sh" | inline_lib_bash
+origin/main:scripts/build-deploy.sh:1117:    cat "$SCRIPTS_DIR/setup-datadog.ps1" | inline_lib_ps1
+origin/main:scripts/build-deploy.sh:1128:    tail -n +2 "$SCRIPTS_DIR/setup-perl.sh" | inline_lib_bash
+origin/main:scripts/build-deploy.sh:1136:    cat "$SCRIPTS_DIR/setup-perl.ps1" | inline_lib_ps1
+origin/main:scripts/build-deploy.sh:1147:    tail -n +2 "$SCRIPTS_DIR/setup-bash.sh" | inline_lib_bash
+origin/main:scripts/build-deploy.sh:1155:    cat "$SCRIPTS_DIR/setup-bash.ps1" | inline_lib_ps1
+origin/main:scripts/build-deploy.sh:1166:    tail -n +2 "$SCRIPTS_DIR/setup-google-chrome.sh" | inline_lib_bash
+origin/main:scripts/build-deploy.sh:1174:    cat "$SCRIPTS_DIR/setup-google-chrome.ps1" | inline_lib_ps1
+origin/main:scripts/build-deploy.sh:1185:    tail -n +2 "$SCRIPTS_DIR/setup-user-shell.sh" | inline_lib_bash
+origin/main:scripts/build-deploy.sh:1193:    cat "$SCRIPTS_DIR/setup-user-shell.ps1" | inline_lib_ps1
+origin/main:scripts/build-deploy.sh:1209:} | inline_lib_bash > "$DEPLOY_DIR/setup-user-mcp.sh"
+origin/main:scripts/build-deploy.sh:1220:} | inline_lib_ps1 > "$DEPLOY_DIR/setup-user-mcp.ps1"
+origin/main:scripts/build-deploy.sh:1239:} | inline_lib_bash "$BUILD_TMP/resolver.sh.blk" > "$DEPLOY_DIR/setup-user-settings.sh"
+origin/main:scripts/build-deploy.sh:1251:} | inline_lib_ps1 "$BUILD_TMP/resolver.ps1.blk" > "$DEPLOY_DIR/setup-user-settings.ps1"
+origin/main:scripts/build-deploy.sh:1355:} | inline_lib_bash > "$DEPLOY_DIR/setup-user-skills.sh"
+origin/main:scripts/build-deploy.sh:1448:} | inline_lib_ps1 > "$DEPLOY_DIR/setup-user-skills.ps1"
+origin/main:scripts/build-deploy.sh:1497:            # exit leaves the { } | inline_lib_bash subshell; pipefail + set -e
+origin/main:scripts/build-deploy.sh:1538:} | inline_lib_bash > "$DEPLOY_DIR/setup-user-hooks.sh"
+origin/main:scripts/build-deploy.sh:1632:} | inline_lib_ps1 > "$DEPLOY_DIR/setup-user-hooks.ps1"
+origin/main:scripts/build-deploy.sh:1647:        tail -n +2 "$SCRIPTS_DIR/$_cw.sh" | inline_lib_bash
+origin/main:scripts/build-deploy.sh:1655:        cat "$SCRIPTS_DIR/$_cw.ps1" | inline_lib_ps1
+origin/main:scripts/build-deploy.sh:1943:} | inline_lib_bash > "$DEPLOY_DIR/deploy-harness.sh"
+origin/main:scripts/build-deploy.sh:2093:} | inline_lib_ps1 > "$DEPLOY_DIR/deploy-harness.ps1"
+
+=== l2-size  [200000|200 KB|size gate|wc -c]
+NO MATCH
+
+=== l3-trap  [trap ]
+origin/main:scripts/build-deploy.sh:186:# can repair config.json (review H3). The bootstrap flow runs build-deploy only after
+origin/main:scripts/build-deploy.sh:320:trap _cleanup_build_tmp EXIT
+origin/main:scripts/build-deploy.sh:496:# (log_error + ERROR row). The EXIT trap removes the temp dir.
+origin/main:scripts/build-deploy.sh:500:trap _aitools_embed_cleanup EXIT
+origin/main:scripts/build-deploy.sh:1706:trap 'rm -rf "$MDM_TMP"' EXIT
+origin/main:scripts/build-deploy.sh:1916:# config.json, as on the dev path, needs the installer's bootstrap keys
+origin/main:scripts/build-deploy.sh:2066:# config.json, as on the dev path, needs the installer's bootstrap keys
+
+=== m-fanout-claims  [fans? out|fan-out]
+origin/main:.claude/rules/managed-file-deployment.md:48:| aitools repo + dotprofile -> `~/.aitools/` (`deploy-harness`) | First source wins on a name conflict: `shared/`, then `.claude/`, then dotprofile `claude/rules/` | reference, registries, hooks, skills, 
+origin/main:reference/harness.md:154:  tool's own location (`~/.claude/rules/`), which the fan-out in
+
+=== n1-claim  [--claim]
+origin/main:scripts/aitools:393:# (picking it claims it: register --claim KEY, Resolver Q2); one registered to
+origin/main:scripts/aitools:479:    if [ "$mode" = "claim" ]; then extra=(--claim "$value")
+origin/main:scripts/aitools:495:            extra+=(--claim "$okey"); mode=claim
+origin/main:scripts/aitools-profile.ps1:120:                  --claim KEY (move an alias-keyed profile without machine.id
+origin/main:scripts/aitools-profile.ps1:1134:    # --claim KEY (passed by user init only after the user picked KEY at a terminal):
+origin/main:scripts/aitools-profile.ps1:1138:        if ($c.Count -eq 0) { $g.state = "failed"; Add-Err "--claim: no profile `"$($opt['claim'])`""; & $putReg; Complete-Command 2 }
+origin/main:scripts/aitools-profile.ps1:1141:            $g.state = "failed"; Add-Err "--claim: this machine already has profile `"$($src.Key)`""; & $putReg; Complete-Command 2
+origin/main:scripts/aitools-profile.ps1:1146:                Add-Err "--claim: profile `"$($opt['claim'])`" is registered to another machine -- not claimed"
+origin/main:scripts/aitools-profile.ps1:1175:                Add-Err "alias `"$alias`" is used by profile $($g.ownerKey), which is not registered to any machine -- claim it (--claim $($g.ownerKey)) or choose another alias"
+origin/main:scripts/aitools-profile.sh:111:                  --claim KEY (move an alias-keyed profile without machine.id
+origin/main:scripts/aitools-profile.sh:317:        --claim)           need_value $# "$1"; OPT_CLAIM="$2"; shift 2 ;;
+origin/main:scripts/aitools-profile.sh:1299:    # --claim KEY (passed by user init only after the user picked KEY at a terminal):
+origin/main:scripts/aitools-profile.sh:1308:        if [ -z "$c" ]; then state="failed"; add_err "--claim: no profile \"$OPT_CLAIM\""; put_reg; finish 2; fi
+origin/main:scripts/aitools-profile.sh:1310:            state="failed"; add_err "--claim: this machine already has profile \"${E_KEY[src]}\""; put_reg; finish 2
+origin/main:scripts/aitools-profile.sh:1315:                add_err "--claim: profile \"$OPT_CLAIM\" is registered to another machine -- not claimed"
+origin/main:scripts/aitools-profile.sh:1347:                add_err "alias \"$alias\" is used by profile $owner_key, which is not registered to any machine -- claim it (--claim $owner_key) or choose another alias"
+
+=== n2-rebuilt  [Rebuilt]
+origin/main:scripts/aitools:2056:    log_ok "Rebuilt"
+origin/main:scripts/aitools.ps1:2011:    LogOk "Rebuilt"
+
+=== o-exc-hdr  [hostname only or not at all]
+origin/main:scripts/aitools-lib.ps1:346:# profile matched by hostname only or not at all). 3 is LogWarn + ACTION "run
+origin/main:scripts/aitools-lib.sh:414:# machine profile matched by hostname only or not at all). 3 is log_warn +
+
+=== p-allow  [tool-ops-cursor]
+origin/main:scripts/check-path-refs-allow.txt:11:.claude/skills/tool-ops/tests/expected-behaviors.md|reference/tool-ops-cursor.md|test fixture: a future per-tool ops reference
+origin/main:scripts/check-path-refs-allow.txt:12:shared/skills/tool-ops/tests/expected-behaviors.md|reference/tool-ops-cursor.md|test fixture: a future per-tool ops reference
+
+=== q-addsource  [\*\.bak\.\*|-like]
+origin/main:scripts/deploy-harness.ps1:27:#   compared case-insensitively. Files named *.bak.* are never deployed.
+origin/main:scripts/deploy-harness.ps1:193:        if ($base -like '*.bak.*') { LogDetail "skip backup copy: $Label/$rel"; continue }
+origin/main:scripts/deploy-harness.ps1:333:        if ($f.Name -like '*.bak.*') { continue }
+origin/main:scripts/deploy-harness.sh:26:#   compared case-insensitively. Files named *.bak.* are never deployed.
+origin/main:scripts/deploy-harness.sh:197:            *.bak.*) log_detail "skip backup copy: $label/$rel"; continue ;;
+
+=== r-relay-exit2  [failed \(exit]
+origin/main:scripts/aitools-lib.ps1:523:        LogError "$AitLibLabel failed (exit $($script:AitLibChildRc)) -- see $logFile"
+origin/main:scripts/aitools-lib.ps1:1549:            $script:ReviewDiffError = "git diff failed (exit $($proc.ExitCode)): $detail"
+origin/main:scripts/aitools-lib.ps1:2723:        LogError "$ToolName environment repair failed (exit $LASTEXITCODE)"
+origin/main:scripts/aitools-lib.sh:613:        log_error "$label failed (exit $rc) -- see $(display_path "$LOG_FILE")"
+origin/main:scripts/aitools-lib.sh:1601:        REVIEW_DIFF_ERROR="git diff failed (exit $rc): ${err:-no output}"
+
+=== t-handoff-step5  [schwerpunkt]
+origin/main:shared/skills/handoff/SKILL.md:210:Write the assessment to: [SESSION_DIR]/S2-schwerpunkt-assessment.md
+origin/main:shared/skills/handoff/SKILL.md:239:2. [SESSION_DIR]/S2-schwerpunkt-assessment.md
+origin/main:shared/skills/handoff/SKILL.md:355:Read the schwerpunkt assessment at: [SESSION_DIR]/S2-schwerpunkt-assessment.md
+
+=== u-removed-outcome  [removed]
+origin/main:scripts/aitools-lib.sh:1029:# that did not exist is removed), MANAGED_WRITE_ERROR is set, and 1 is
+origin/main:scripts/aitools-lib.sh:2697:    log_warn "$tool_name uv environment is broken (Python removed?) -- repairing..."
+
+=== w-workspace  [.aitools/scratch|deploy-state]
+origin/main:.claude/rules/aitools-workspace.md:48:| `deploy-state/` | Last-deployed file hashes for drift detection |
+origin/main:.claude/rules/aitools-workspace.md:71:namespace consolidation (`.scratch/` → `.aitools/scratch/`,
+
+=== x-gitbash-only  [always uses Git Bash]
+origin/main:shared/claude-shared.md:81:- **Note**: Claude Code on Windows always uses Git Bash (not configurable). `CLAUDE_CODE_SHELL` is broken on Windows ([#25558](https://github.com/anthropics/claude-code/issues/25558)). Use Unix shell syntax in all Claude 
+
+=== y-tooops-ver  [Current version]
+origin/main:reference/tool-ops-claude-code.md:17:- **Current version**: 2.1.81
+origin/main:reference/tool-ops-claude-code.md:24:1. Update "Current version" above
+origin/main:reference/tool-ops-claude-code.md:100:- Items #1-#25 were not re-verified against this version (see "Current version" above).
+
+=== z-profile-term  [keyed by machine alias]
+origin/main:registries/glossary.json:426:      "definition": "The user profile: profile.json in the user's dotprofile repo, holding the user's preferences, identity, and machine profiles. A machine profile is a field inside it (one entry of its 'profiles' obje
+origin/main:registries/glossary.json:443:      "definition": "A field inside the profile (profile.json): one entry of its 'profiles' object, keyed by machine alias, holding one machine's (or one hosted environment's) per-machine overrides of identity name/comp

@@ -5,7 +5,7 @@ evaluating, and promoting reusable artifacts produced during
 development sessions. **Scope**: Source discipline (DA reuse
 engineering), adaptation to our harness, the harvesting lifecycle
 concept, and KPI design. NOT the harvesting governance
-(`@.claude/rules/artifact-harvesting.md`). NOT the harvesting process
+(`@shared/rules/artifact-harvesting.md`). NOT the harvesting process
 (`/harvest` skill). NOT the ephemeral scratch pattern.
 **Audience**: Agents designing harvesting improvements, framework
 adoption work.
@@ -53,7 +53,7 @@ Extended with concepts from:
 
 ## How It's Maintained
 
-- Rule in `@.claude/rules/artifact-harvesting.md` governs criteria
+- Rule in `@shared/rules/artifact-harvesting.md` governs criteria
 - `/harvest` skill implements the process
 - SessionEnd and SessionStart hooks automate the pipeline
 - `/harvest review` triggers generalization analysis
@@ -61,7 +61,7 @@ Extended with concepts from:
 
 ## Implementing Artifacts
 
-- `@.claude/rules/artifact-harvesting.md` (governance)
+- `@shared/rules/artifact-harvesting.md` (governance)
 - `shared/skills/harvest/SKILL.md` (process)
 - `harvesting/` (tracked artifact directory)
 - `/harvest` skill governs manifest data

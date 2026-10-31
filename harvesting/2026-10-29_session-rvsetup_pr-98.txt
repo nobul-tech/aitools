@@ -1,0 +1,70 @@
+#98 [OPEN] setup-user-config: add --no-machine / -NoMachine (no duplicate machine advice)
+FILES: .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-NoMachine/S3-MF-NoMachine-Review-pr98.md, .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-NoMachine/S3-MF-NoMachine-report.md, scripts/setup-user-config.ps1, scripts/setup-user-config.sh, tests/profile/test-config.sh
+
+## Summary
+
+`setup-user-config.sh` / `.ps1` gain `--no-machine` / `-NoMachine`. When `aitools user init` leaves this machine unregistered, it can pass the flag, and the config writer then adds no machine-profile ERROR or ACTION of its own. The run shows the advice once, from user init.
+
+## Why
+
+M3-FINISH item 2 (commander, 2026-10-22): "setup-user-config gains `--no-machine` / `-NoMachine`: when user init leaves the machine unregistered, the writer adds no ERROR/ACTION of its own (no duplicates)." This is the open review finding m2 from S3-M3-UserInit (PR #86, open question 1).
+
+## Changes
+
+- `scripts/setup-user-config.sh`, `scripts/setup-user-config.ps1`, with the same behaviour and the same summary rows in both:
+  - A new flag: `--no-machine` (bash) / `-NoMachine` (PowerShell switch).
+  - Resolver errors go through `derive_error` / `Write-DeriveError`. With the flag, "no profile matches this machine" and "profile.json has no machine profiles" are logged at detail only. Every other error is still `log_error` / `LogError`.
+  - Resolver warnings that name `run: aitools user init` or `run: aitools-profile migrate` are logged at detail with the flag. They are not counted, and no `NEED_*` flag is set, so no section-3 ACTION is written.
+  - With the flag, the section-1 "no machine match" ERROR and ACTION rows are skipped, but only when the unregistered errors were the only errors.
+  - With the flag, the merge never sets or removes `machineId` / `machineAlias`.
+  - The usage line, `--help` / `-Help` and the header comment are updated, including the managed/preserved fields note.
+  - The PS1 `$profileBad` variable became `$script:ProfileBad`, because the new function sets it.
+- `tests/profile/test-config.sh`:
+  - New cases c22 to c22j. Each case runs both writers, checks that the config.json bytes and the summary rows are identical, and checks the exit codes.
+  - `map_args` maps `--no-machine` to `-NoMachine`.
+
+## Contract change
+
+This adds to the writer contract from PR #86 (S3-M3Lead plan 3b). Nothing in the existing contract changes: `--machine-id` / `-MachineId`, the deprecated `--machine-alias` / `-MachineAlias` (one release), exit codes 0/1 (never 2), no prompts, env and dry-run behaviour, and at most one ACTION row.
+
+`--no-machine` / `-NoMachine` means: the caller owns machine registration and reports it.
+
+- **Written:** every other managed field (`version`, `meta`, `reposPath`, `repoPath`, `googleDrives`, `githubUser`, `userRepoPath`), derived as usual.
+- **Preserved:** `machineId` and `machineAlias` stay exactly as they are in config.json. They are not set and not deleted. A stale `machineId` that a normal run would remove (c20) is kept (c22e). A value salvaged from a corrupt file is still salvaged.
+- **Not reported** for an unregistered machine ("no profile matches this machine", "profile.json has no machine profiles"):
+  - no `ERROR|machine profile|no machine match` row and no `ACTION||Run: aitools user init (profiles: ...)` row;
+  - no section-3 ACTION ("registers this machine", "re-keys machine profiles", "updates this machine's profile");
+  - those resolver messages go to deploy.log at `[detail]`.
+- **Exit code:** an unregistered machine alone gives exit 0.
+- **Still reported** (exit 1): an invalid profile.json (`ERROR|profile.json|invalid (see log)`), a missing dotprofile path, ambiguous matches (hostname or machine.id on more than one profile), and bootstrap or validation failures.
+- **Log:** one info line, `config: --no-machine: machine registration is left to the caller -- ...`. PowerShell writes `-NoMachine` in that line.
+- **Bad arguments:** the flag together with `--machine-id` / `-MachineId` or `--machine-alias` / `-MachineAlias` gives `ERROR|aitools config|bad arguments`, exit 1, and nothing is written.
+
+## Verification (macOS, Darwin arm64)
+
+- `bash -n` (bash 5 and `/bin/bash` 3.2) on `setup-user-config.sh` and `test-config.sh`: clean. The pwsh parser on `setup-user-config.ps1`: clean.
+- `bash tests/profile/test-config.sh` (pwsh parity): **258 passed, 0 failed**.
+- `AITOOLS_TEST_BASH=/bin/bash bash tests/profile/test-config.sh --bash-only`: **167 passed, 0 failed**.
+- `bash tests/profile/test-user-init.sh`: **200 passed, 0 failed**. The caller is unchanged; this run shows nothing regressed.
+- `bash scripts/check-pre-commit.sh`: 1 FAIL, step 6. This is the known pre-existing failure (a 100644 harvesting file). Step 11 WARNs about an uncommitted change in the live dotprofile, which this PR did not touch.
+- `bash scripts/check-pre-push.sh`, run under an isolated HOME:
+  - Without a userRepoPath: 0 FAIL.
+  - With userRepoPath pointing at the dotprofile, so step 7 runs on a `git archive` temp copy: 1 FAIL, step 7. This is the known pre-existing stale dotprofile `deploy/` (every generated file is listed, not only this writer).
+
+## Not run
+
+- Windows / Git Bash. On macOS the PowerShell writer ran under pwsh through `AITOOLS_PROFILE_TEST_ANY_OS=1`.
+- `build-deploy.sh` into the real dotprofile (by design).
+- An end-to-end `aitools user init` that passes the flag. That is S3-MF-Runner's change.
+
+## Protected-file drafts awaiting approval
+
+None. No protected file documents the writer's flags (`grep -- --machine-id reference/ .claude/rules/ CLAUDE.md` finds nothing).
+
+## Follow-ups
+
+- **S3-MF-Runner** passes `--no-machine` / `-NoMachine` from `aitools user init` (scripts/aitools, scripts/aitools.ps1) when user init ends with this machine unregistered (`machine_key` empty after the registration flow). It builds on this branch.
+- The dotprofile `deploy/` refresh (pre-push step 7) is still pending, as before this PR.
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+

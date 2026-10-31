@@ -1,0 +1,40 @@
+macos	UNKNOWN STEP	2026-10-23T02:47:40.0550680Z ^[[36;1m  echo "::error::bash version $BASH_VER is below minimum 4.0"^[[0m
+macos	UNKNOWN STEP	2026-10-23T02:47:40.1438350Z ^[[36;1merrors=0^[[0m
+macos	UNKNOWN STEP	2026-10-23T02:47:40.1439980Z ^[[36;1m    echo "FAIL: $f"^[[0m
+macos	UNKNOWN STEP	2026-10-23T02:47:40.1440610Z ^[[36;1m    errors=$((errors + 1))^[[0m
+macos	UNKNOWN STEP	2026-10-23T02:47:40.1441590Z ^[[36;1mif [ "$errors" -gt 0 ]; then^[[0m
+macos	UNKNOWN STEP	2026-10-23T02:47:40.1449350Z ^[[36;1m  echo "::error::$errors bash file(s) failed syntax check"^[[0m
+macos	UNKNOWN STEP	2026-10-23T02:47:40.7939320Z ^[[36;1m  errors=0^[[0m
+macos	UNKNOWN STEP	2026-10-23T02:47:40.7942140Z ^[[36;1m      echo "FAIL: $(basename "$f")"^[[0m
+macos	UNKNOWN STEP	2026-10-23T02:47:40.7942420Z ^[[36;1m      errors=$((errors + 1))^[[0m
+macos	UNKNOWN STEP	2026-10-23T02:47:40.7943310Z ^[[36;1m  if [ "$errors" -gt 0 ]; then^[[0m
+macos	UNKNOWN STEP	2026-10-23T02:47:40.7943980Z ^[[36;1m    echo "::error::$errors ps1 file(s) failed syntax check"^[[0m
+macos	UNKNOWN STEP	2026-10-23T02:47:59.0885180Z ##[group]Run errors=0
+macos	UNKNOWN STEP	2026-10-23T02:47:59.0885650Z ^[[36;1merrors=0^[[0m
+macos	UNKNOWN STEP	2026-10-23T02:47:59.0888110Z ^[[36;1m    echo "FAIL: $f"^[[0m
+macos	UNKNOWN STEP	2026-10-23T02:47:59.0889700Z ^[[36;1m    errors=$((errors + 1))^[[0m
+macos	UNKNOWN STEP	2026-10-23T02:47:59.0891730Z ^[[36;1mif [ "$errors" -gt 0 ]; then^[[0m
+macos	UNKNOWN STEP	2026-10-23T02:47:59.0892460Z ^[[36;1m  echo "::error::$errors Python file(s) failed syntax check"^[[0m
+macos	UNKNOWN STEP	2026-10-23T02:48:00.1663770Z PASS lib: levels ok/warn/error/info recorded
+macos	UNKNOWN STEP	2026-10-23T02:48:00.1927320Z PASS lib: error is red on the console
+macos	UNKNOWN STEP	2026-10-23T02:48:00.3121440Z PASS lib: log_error/log_warn increment ERRORS/WARNINGS
+macos	UNKNOWN STEP	2026-10-23T02:48:01.0658560Z PASS entry: unknown argument shown in the lib's console format (not a bare 'error:')
+macos	UNKNOWN STEP	2026-10-23T02:48:01.2541500Z ---- 24 passed, 0 failed
+macos	UNKNOWN STEP	2026-10-23T02:48:03.1611040Z PASS lib: levels ok/warn/error/info recorded
+macos	UNKNOWN STEP	2026-10-23T02:48:04.3212640Z PASS lib: LogError/LogWarn increment the counters
+macos	UNKNOWN STEP	2026-10-23T02:48:07.3459300Z SKIP entry: unknown command logged by the lib ([aitools] [error]) (aitools.ps1 runs on Windows only)
+macos	UNKNOWN STEP	2026-10-23T02:48:07.3678790Z ---- 15 passed, 0 failed, 5 skipped
+macos	UNKNOWN STEP	2026-10-23T02:48:08.2424060Z PASS write failure: result failed, nothing left
+macos	UNKNOWN STEP	2026-10-23T02:48:08.2452380Z PASS write failure: log_error with the reason
+macos	UNKNOWN STEP	2026-10-23T02:48:08.2540200Z PASS write failure: the run continues
+macos	UNKNOWN STEP	2026-10-23T02:48:08.3622600Z PASS failed backup: step failed, LOCAL unchanged
+macos	UNKNOWN STEP	2026-10-23T02:48:08.4212710Z PASS tracker: failed -> DETAIL + ERROR row
+macos	UNKNOWN STEP	2026-10-23T02:48:17.1241420Z PASS failed AI merge: failed, nothing written
+macos	UNKNOWN STEP	2026-10-23T02:48:17.1266240Z PASS failed AI merge: reason logged
+macos	UNKNOWN STEP	2026-10-23T02:48:18.5134990Z PASS adopt-target write failure: LOCAL restored, failed
+macos	UNKNOWN STEP	2026-10-23T02:48:19.2463080Z PASS abort: exit 2, error logged
+macos	UNKNOWN STEP	2026-10-23T02:48:40.9806230Z PASS display, git diff fails: warning logged, menu still works
+macos	UNKNOWN STEP	2026-10-23T02:48:42.5438830Z PASS json: invalid LOCAL -> failed, untouched
+macos	UNKNOWN STEP	2026-10-23T02:48:47.3572150Z PASS json write failure: LOCAL restored, failed
+macos	UNKNOWN STEP	2026-10-23T02:48:49.3613870Z 57 passed, 0 failed, 0 skipped
+macos	UNKNOWN STEP	2026-10-23T02:48:56.5247030Z PASS write failure: failed, nothing left

@@ -1,0 +1,219 @@
+=== ANSWER 2026-10-21T03:18:24.203Z 2026-10-21_360aa8f3.jsonl:1771
+Q: Several project skills (tool-eval, tool-ops, tool-registry, incident, glossary, frameworks, governed-data, audit, harvest) read aitools-only files like registries/*.json. In shared/ they deploy to ~/.claude/skills in every repo and machine (and Cursor), where those paths don't exist. How should these be placed? | When a skill moves to shared/, should the original in .claude/skills/ be deleted (a git mv) so the same name never exists at both levels? | Your copy .claude/rules/delegation.md duplicates the dotprofile user rule (deployed to ~/.claude/rules/), so aitools sessions would load it twice
+-> "Several project skills (tool-eval, tool-ops, tool-registry, incident, glossary, frameworks, governed-data, audit, harvest) read aitools-only files like registries/*.json. In shared/ they deploy to ~/.claude/skills in every repo and machine (and Cursor), where those paths don't exist. How should these be placed?"="aaaah, i forgot about the split between user and project level.  tool-ops, tool-eval, tool-registry, harvest should all be user (shared).  the registries need to be moved to user level too.  launch a mission carrying forward all OL (operatioinaly learning) to 1) understand aitools, project vs user level, etc 2) understand current state.  3) suggest naming and folder structure remediation for ease of maintenance and support.  4) deliver simple report", "When a skill moves to shared/, should the original in .claude/skills/ be deleted (a git mv) so the same name never exist
+=== ANSWER 2026-10-21T03:07:10.112Z 2026-10-21_360aa8f3.jsonl:1675
+Q: How do you want to review the M2 + M3 drafts (about 25 open questions, about 20 protected files)? | Apply B0 now: add machineAlias "new-mac" to ~/.aitools/config.json? | Discard the redundant staged #9 script edits in main (PR #50 contains them as commit 303a7ec)? | The 13 unexplained untracked files (skill copies in shared/skills/, .claude/rules/delegation.md): what should I do?
+-> "How do you want to review the M2 + M3 drafts (about 25 open questions, about 20 protected files)?"="One consolidated page (Recommended)", "Apply B0 now: add machineAlias "new-mac" to ~/.aitools/config.json?"="why do we still need to keep "new-mac"? "new-mac" should be updated to be "nobul-mac" and that should be in config.json and profile.json", "Discard the redundant staged #9 script edits in main (PR #50 contains them as commit 303a7ec)?"="what do you suggest? im lost here", "The 13 unexplained untracked files (skill copies in shared/skills/, .claude/rules/delegation.md): what should I do?"="i copied them from .claude to shared/.  it made no sense to have them in .claude. everythiung should have been in shared.  launch a mission carrying forward all operational learning to 1) understand aitools 2) use /investigate to determine RCA of .claude/shared split  (should look at commit history and release notes etc and the files themselves 3) determine what else in .claude should move to shared/ 4) remediate as required.  5) open a PR etc.  ask any open questions". 
+=== PROMPT 2026-10-21T02:44:00.640Z 2026-10-21_360aa8f3.jsonl:1523
+incidents approved
+=== PROMPT 2026-10-21T02:32:51.983Z 2026-10-21_360aa8f3.jsonl:1238
+1) update the deletate rule and skill to explicitly state that delegates should own pushing and opening the PR on their own.  it should not come back to the session commander and wait on the user to respond.  2) proceed with pushing m1 and opening the PR.  3) nobul-mac is the name of this machine.  i believe the issues is in how the hostname is gathered.  scutil is the preferred command, what do the scripts use? i cant find just the name "Mac" configured on this machine.  4) file incidents now
+=== ANSWER 2026-10-21T02:15:49.955Z 2026-10-21_360aa8f3.jsonl:1101
+Q: What should a dotprofile copy of a manifest hook (claude/hooks/<name>) mean? | The dotprofile harness-db-sessionstart.sh override is stale and is currently shadowing the newer hook. Remove it now? | Launch M1 + M2 now (M3 after S2-Host reports), or wait until you've run `aitools` and reattached?
+-> "What should a dotprofile copy of a manifest hook (claude/hooks/<name>) mean?"="lets keep a single version for now in shared/hooks.  document this in our new rule/skill/reference file.  lets adhere to the managed-file-deployment.md spec.  build-deploy.sh will behave correctly or do we need to adjust?", "The dotprofile harness-db-sessionstart.sh override is stale and is currently shadowing the newer hook. Remove it now?"="Remove both now (Recommended)", "Launch M1 + M2 now (M3 after S2-Host reports), or wait until you've run `aitools` and reattached?"="Now". 
+=== ANSWER 2026-10-21T02:05:37.799Z 2026-10-21_360aa8f3.jsonl:982
+Q: This Mac matches no profile (hostname now "Mac"). Which profile is this machine? | Dotprofile cleanup before the pull: delete both hook overrides + .bak, commit profile.json as adopted (model opus, document-skills plugin, marketplace, modelSettings), and the 31 firecrawl-* skills? | Go ahead with the simplified pull (stash/pull/pop in aitools; cleanup + pull --rebase in dotprofile)? Nothing is pushed.
+-> "This Mac matches no profile (hostname now "Mac"). Which profile is this machine?"="this should be nobul-mac.  why is it not matching? launch a /investigate mission delegate to RCA and suggest fix", "Dotprofile cleanup before the pull: delete both hook overrides + .bak, commit profile.json as adopted (model opus, document-skills plugin, marketplace, modelSettings), and the 31 firecrawl-* skills?"="there isi some discrepency on how hooks are maintained.  we need a "hook-lifecycle.md" rule that outlines how we rollout, maintain, manage hooks.  when aitools install is run on a machine, the "accept & adopt"/"adopt" etc rules should bring the hook to both shared/hooks/ and the dotprofile claude/hooks.  this will require modifying setup-user-hooks.sh/ps1 etc.  likely its own mission.  where does it fit?", "Go ahead with the simplified pull (stash/pull/pop in aitools; cleanup + pull --rebase in dotprofile)? Nothing is pushed."="Yes". 
+=== PROMPT 2026-10-21T01:54:27.788Z 2026-10-21_360aa8f3.jsonl:869
+what do git switch commands do? i think all of those steps seem overly complex? also, wont are we concerned about the merged build-deploy.sh or not? it should be a note at the least.  2) i ran build-deploy.sh here to fix the #9 changes, why did it pick up company Nobul instead of nobul-tech? the settings sync adopted new names for models etc.  dropping the context size [1] is now how a model is specificied, so "opus" is correct.  what enabled plugins did it pick up? there are like 3 from anthropic that i added, i would like to have those tracked as well.  3) for untracked claude/hooks files in my dotprofile repo, the adopted versions are correct, which i believe makes the local copy stale? lmk if i got that right.  4) im goingo to detach than reattach to this session so ~/.claude picks up /delegate and other files.  5) on config.json being the only place where userRepoPath is istored, lets document/hard code profile.json path as a variable somewhere in the codebase.  perhaps the shared CLAUDE.md file, the managed section, plus somewhere else? build-deploy.sh env variable? it must be platform specific for / or \ etc and know how to find the user dot profile repo on the local environment/operating system.  ask any other open questions
+=== ANSWER 2026-10-21T01:44:42.150Z 2026-10-21_360aa8f3.jsonl:862
+Q: Dotprofile profile.json: the settings sync auto-adopted live values. What should happen to them? | Untracked dotprofile files: claude/hooks/ (standing-order-guard.sh override + .bak, harness-db-sessionstart.sh) and claude/skills/firecrawl-* (31 skills). What should happen to them? | Go ahead with the aitools-side sync now (steps 1-4: two local branches, fast-forward main, rebase)?
+-> The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit, the new_string was NOT written to the file). To tell you how to proceed, the user said:
+The user wants to clarify these questions.
+    This means they may have additional information, context or questions for you.
+    Take their response into account and then reformulate the questions if appropriate.
+    Start by asking them what they would like to clarify.
+
+    Questions asked:
+- "Dotprofile profile.json: the settings sync auto-adopted live values. What should happen to them?"
+  (No answer provided)
+- "Untracked dotprofile files: claude/hooks/ (standing-order-guard.sh override + .bak, harness-db-sessionstart.sh) and claude/skills/firecrawl-* (31 skills). What should happen to them?"
+  (No answer provided)
+- "Go ahead with the aitools-side sync now (steps 1-4: two local branches, fast-forward main, rebase)?"
+  (No answer provided)
+=== ANSWER 2026-10-21T01:41:21.687Z 2026-10-21_360aa8f3.jsonl:807
+Q: "Adopt" already means "local wins, copy back to source" in managed-file deployment ([a]dopt / "accept & adopt" in the glossary). Keep /tool-adopt anyway? | What does "latest" mean for the update policy? | Where should a per-machine [k]eep decision be stored? | Launch Mission 1 (Close #9) as a second delegate now, in parallel with Mission 2?
+-> ""Adopt" already means "local wins, copy back to source" in managed-file deployment ([a]dopt / "accept & adopt" in the glossary). Keep /tool-adopt anyway?"="/tool-adopt + glossary", "What does "latest" mean for the update policy?"="Per-tool channel, but by default is latest-stable yes", "Where should a per-machine [k]eep decision be stored?"="we should store machine info in profile.json and use profile.json to build config.json.  profile.json should contain any and all user customizable and specific data, such as each machine the user has.  should build-deploy.sh or aitools install, aitools user init, or something else entirely be used to read profile.json and create config.json? remember logging etc", "Launch Mission 1 (Close #9) as a second delegate now, in parallel with Mission 2?"="Yes, in parallel but not yet! i have a few more notes 1) profile.json should have a schema that supports storing machineAlias no?.  actually before launching missions we need to pull down the latest code from the remote repo.  can you suggest how to work this into the plan? can you do this yourself before launching M1 and m2 in parallel etc?". 
+=== ANSWER 2026-10-21T01:23:54.989Z 2026-10-21_360aa8f3.jsonl:724
+Q: "Adopt" is already a governed term in managed-file deployment: local wins and is copied back to source ([a]dopt, "accept & adopt"). Naming the skill /tool-adopt would give the word two meanings. What should it be called? | For a tool installed a non-preferred way, what should non-interactive runs (and --force) do? | When the user picks [k]eep in the interactive menu, should that choice be remembered? | Who writes the M2 framework drafts?
+-> ""Adopt" is already a governed term in managed-file deployment: local wins and is copied back to source ([a]dopt, "accept & adopt"). Naming the skill /tool-adopt would give the word two meanings. What should it be called?"="1) if there is no entry in the registry on prefeerred method, /tool-eval should be invoked automatically to determine one with the user in an interactive session with some automated research 2) in our verification we automatically update to the latest version correct? if not lets document that clearly in tool-lifecycle.  the /tool-eval and /tool-adopt skills should include explicit instructions to read in and to maintain the tool-registry (via the /tool-registry skill) and tool-lifecycle.md rule.  do we have a naming mismatch with framework-tool-lifecycle.md as a reference file and the tool-lifecycle.md rule? put the rule into context if not already and the /tool-registry skill as well", "For a tool installed a non-preferred way, what should non-interactive runs (and --force) do?"="Warn, change nothing, warn in summa
+=== ANSWER 2026-10-21T01:10:05.420Z 2026-10-21_360aa8f3.jsonl:711
+Q: Where should node be guaranteed so build-deploy never runs without it? | Should Mission 2 (node) also take on the rest of #14 (Linux install paths for typst, uv, go, datadog)? | How should the staged harvesting files be handled in Mission 4? | Should I rotate the Firecrawl key even though it was never committed?
+-> "Where should node be guaranteed so build-deploy never runs without it?"="we need clear guidelines on how we support tools.  a supported tool should be deterministic and leave nothing ambiguous.  help me build a decision tree and document the process.  i believe it should be something like: What is our preferred install method on the OS/platform? that should be documented in sources-of-truth right, and/or the registry of tools? then if the tool is installed some other way, warn about it in the logs if running non interfactive, and ifi running interactive provide option to remove and install managed tool or to ignore.", "Should Mission 2 (node) also take on the rest of #14 (Linux install paths for typst, uv, go, datadog)?"="Node only, but dont "reuse a pattern", you should document the pattern and process in a reference file or a rule or both.  perhaps reference file + rule + skill paradigm we have? /tool-adopt should be able to be run after /tool-eval and it should know what to do: ie, load rules, reference files, etc, and how to adopt a tool with the guidance from eearlier on if a tool is found to be installed, is it installed via our preffered OS/platform way,
+=== PROMPT 2026-10-21T01:00:23.242Z 2026-10-21_360aa8f3.jsonl:703
+i dont like this list, its messy.  can you spend lots of thinking tokens on reducing it down to a few missions you can run as delegate agents? for fixing node, i think we need to do setup scripts and break this off.  condense this list down to a manageable number of missions.  try to group related items together, feel free to determine how to best do that.  ask any open questions
+=== PROMPT 2026-10-21T00:59:16.637Z 2026-10-21_360aa8f3.jsonl:699
+i dont like this list, its messy.  can you spend lots of thinking tokens on reducing it down to a few missions you can run as delegate agents? for fixing node, i think we need to do setup
+=== PROMPT 2026-10-21T00:55:15.774Z 2026-10-21_360aa8f3.jsonl:687
+outline suggested next steps, one line per step/item to fix
+=== PROMPT 2026-10-21T00:43:45.574Z 2026-10-21_360aa8f3.jsonl:172
+put all files requested into context
+=== PROMPT 2026-10-21T00:40:37.342Z 2026-10-21_360aa8f3.jsonl:19
+<command-message>workflow-authoring</command-message>
+<command-name>workflow-authoring</command-name>
+<skill-format>true</skill-format>
+=== PROMPT 2026-10-21T00:40:37.342Z 2026-10-21_360aa8f3.jsonl:20
+# Workflow authoring reference
+
+A workflow structures work across many agents — to be comprehensive (decompose and cover in parallel), to be confident (independent perspectives and adversarial checks before committing), or to take on scale one context can't hold (migrations, audits, broad sweeps). The script is where you encode that structure: what fans out, what verifies, what synthesizes.
+
+When you do call it, the right move is often **hybrid**: scout inline first (list the files, find the channels, scope the diff) to discover the work-list, then call Workflow to pipeline over it. You don't need to know the shape before the *task* — only before the *orchestration step*.
+
+Common single-phase workflows you can chain across turns:
+- **Understand** — parallel readers over relevant subsystems → structured map
+- **Design** — judge panel of N independent approaches → scored synthesis
+- **Review** — dimensions → find → adversarially verify (the review-changes example)
+- **Research** — multi-modal sweep → deep-read → synthesize
+- **Migrate** — discover sites → transform each (worktree isolation) → verify
+
+For larger work, run several in sequence — read each result before deciding the next phase. You stay in the loop; each workflow is one well-scoped fan-out.
+
+**Ultracode.** When a system-reminder confirms ultracode is on, that opt-in is standing: author and run a workflow for every substantive task by default. The goal is the most exhaustive, correct answer you can produce — token c
+=== PROMPT 2026-10-21T00:40:37.340Z 2026-10-21_360aa8f3.jsonl:9
+i have the following files with changes on the local copies that are older than the files in the remote.  here are the four files in question 
+
+<pasted_content id="fe01">
+    modified:   scripts/build-deploy.sh
+    modified:   scripts/check-hook-parity.py
+    modified:   scripts/check-post-push.ps1
+    modified:   scripts/check-post-push.sh
+
+</pasted_content id="fe01">
+
+  i need you to 1) bring those files into context.  2) bring release notes and the last 20 GH issues and commit messages into context.  3) bring aitools, aitools*, and *lib* files into context  4) bring all files in references/* into context 5) understand the intent of the local changes where they diff on the remote 6) propose a reconciliation and merge strategy ultracode
+=== PROMPT 2026-10-21T00:10:58.063Z 2026-10-21_0d7004b4.jsonl:9
+what is a git command to give me a diff between a local modified checked out file and the remote
+=== PROMPT 2026-07-06T17:34:21.750Z 2026-07-09_ba4c0c12.jsonl:288
+load setup-user-hooks.sh into context.  how does this interact with our work?
+=== PROMPT 2026-07-06T17:08:42.988Z 2026-07-09_ba4c0c12.jsonl:121
+please file gh issue for this preflight drift from hooks-manifest.json and let's make hooks-manifest.json the single source of truth as intended, no more hardcoded lists in our code for hooks
+=== PROMPT 2026-07-06T17:06:13.247Z 2026-07-09_ba4c0c12.jsonl:111
+put shared/hooks-manifest.json into context
+=== PROMPT 2026-07-06T16:54:54.648Z 2026-07-09_ba4c0c12.jsonl:89
+load build-deploy.sh into context
+=== PROMPT 2026-07-06T16:51:13.482Z 2026-07-09_ba4c0c12.jsonl:18
+load aitools, aitools* into context
+=== PROMPT 2026-06-25T23:18:35.047Z 2026-06-28_06c9c816.jsonl:161
+Continue the PDF-to-markdown tool evaluation: check Docling research agent and synthesize the final recommendation.
+=== ANSWER 2026-06-25T23:16:48.617Z 2026-06-28_06c9c816.jsonl:111
+Q: Which tool should I install first for the Phase 2 hands-on test on your M5?
+-> Your questions have been answered: "Which tool should I install first for the Phase 2 hands-on test on your M5?"="MinerU (recommended)". You can now continue with these answers in mind.
+=== PROMPT 2026-06-25T22:59:34.371Z 2026-06-28_06c9c816.jsonl:8
+looking for a very good pdf to markdown tool.  i have used marker in the past.  not opposed to trying it again.  id like to try something that can leverage local models on the M5 Mac - i have a maxed out configuration and I know Marker can make use of some local compute.  perhaps others as well? please use our comprehensive tool evaluation methodology to find a suggest a mac and windows tool
+=== PROMPT 2026-06-24T19:37:16.235Z 2026-06-25_bac1f15c.jsonl:60
+no thanks this explains it well thank you
+=== PROMPT 2026-06-24T19:35:12.039Z 2026-06-25_bac1f15c.jsonl:8
+hi! question, how do we support vercel cli today? i noticed that im prompted to upgrade when i run vercel login directly, but im curious.. shouldnt "aitools install" be updating ALL cli utilities we support? checkout the recent vercel login output Mac:~ new-jose$ vercel auth
+Vercel CLI 54.14.5 (Node.js 26.3.1)
+Error: "auth" is not a valid target directory or subcommand. Did you mean "oauth-apps"?
+Mac:~ new-jose$ vercel login
+vercel login
+Vercel CLI 54.14.5 (Node.js 26.3.1)
+> 
+  Visit https://vercel.com/oauth/device?user_code=FMGQ-FCXZ
+
+  Congratulations! You are now signed in.
+
+  To deploy something, run `vercel`.
+
+  💡 To deploy every commit automatically,
+  connect a Git Repository (vercel.link/git (https://vercel.link/git)).
+
+Update available for Vercel CLI (v54.14.5 → v54.16.0)
+Changelog: https://github.com/vercel/vercel/releases/tag/vercel%4054.16.0
+? Would you like to upgrade now? no
+Mac:~ new-jose$ 
+  please pull aitools, aitools* into context and help me analyze whats going on
+=== PROMPT 2026-06-23T18:19:47.328Z 2026-06-23_d2fc528a.jsonl:8
+hi, we have a number of false starts and stops with mission command and mission control.
+=== PROMPT 2026-06-22T22:30:14.184Z 2026-06-22_8a920db5.jsonl:20
+pick up the most recent handoff and put it into context
+=== PROMPT 2026-06-22T22:28:24.200Z 2026-06-22_8a920db5.jsonl:8
+hi
+=== PROMPT 2026-06-20T16:36:52.802Z 2026-06-20_46ee1c2b.jsonl:560
+going to defer all of this for another session, let's do a /handoff
+=== PROMPT 2026-06-20T16:28:16.392Z 2026-06-20_46ee1c2b.jsonl:460
+please proceed with 1) and 2), then update release notes/tag/head/commit/push/run post push checks
+=== PROMPT 2026-06-20T16:25:47.735Z 2026-06-20_46ee1c2b.jsonl:448
+hmmm please re-read thisi conversation in thinking tokens, all of it, then report back here.
+=== PROMPT 2026-06-18T00:15:41.113Z 2026-06-20_46ee1c2b.jsonl:418
+please capture confirmed model to docs and write the approved registry fix.  no handoffs please just keep working through this with me
+=== PROMPT 2026-06-18T00:11:00.875Z 2026-06-20_46ee1c2b.jsonl:406
+hmmm please re-read thisi conversation in thinking tokens, all of it, then report back here.
+=== PROMPT 2026-06-17T21:58:42.437Z 2026-06-20_46ee1c2b.jsonl:404
+## Context Usage
+
+**Model:** claude-opus-4-8[1m]  
+**Tokens:** 483.1k / 1m (48%)
+
+### Estimated usage by category
+
+| Category | Tokens | Percentage |
+|----------|--------|------------|
+| System prompt | 1.9k | 0.2% |
+| System tools | 12.3k | 1.2% |
+| MCP tools | 2.9k | 0.3% |
+| MCP tools (deferred) | 219.8k | 22.0% |
+| System tools (deferred) | 14.7k | 1.5% |
+| Memory files | 31.5k | 3.1% |
+| Skills | 3.3k | 0.3% |
+| Messages | 432.8k | 43.3% |
+| Compact buffer | 3k | 0.3% |
+| Free space | 512.4k | 51.2% |
+
+### MCP Tools
+
+| Tool | Server | Tokens |
+|------|--------|--------|
+| mcp__chrome-devtools__click | chrome-devtools | 211 |
+| mcp__chrome-devtools__close_page | chrome-devtools | 145 |
+| mcp__chrome-devtools__drag | chrome-devtools | 200 |
+| mcp__chrome-devtools__emulate | chrome-devtools | 608 |
+| mcp__chrome-devtools__evaluate_script | chrome-devtools | 468 |
+| mcp__chrome-devtools__fill | chrome-devtools | 249 |
+| mcp__chrome-devtools__fill_form | chrome-devtools | 399 |
+| mcp__chrome-devtools__get_console_message | chrome-devtools | 164 |
+| mcp__chrome-devtools__get_network_request | chrome-devtools | 321 |
+| mcp__chrome-devtools__handle_dialog | chrome-devtools | 183 |
+| mcp__chrome-devtools__hover | chrome-devtools | 174 |
+| mcp__chrome-devtools__lighthouse_audit | chrome-devtools | 287 |
+| mcp__chrome-devtools__list_console_messages | chrome-devtools | 463 |
+| mcp__chrome-devtools__list_network_requests | chrome-devtools | 420 |
+| mcp__chrome-devtools__list_pages |
+=== PROMPT 2026-06-17T19:04:19.952Z 2026-06-20_46ee1c2b.jsonl:347
+those all land.  lets ship the fixes now and not hold up anything still requiring design.  C is most def a framework adtiption of CMDB + SBOM.  suggest next steps
+=== PROMPT 2026-06-17T18:49:32.862Z 2026-06-20_46ee1c2b.jsonl:327
+1) agree directionally, but now that we're here every tool that we manage in the tool-registry needs some entry in tool-ops.  at the very least it should be "we installed it here and it should be called on this path here", so every tool gets a tool-ops entry period, not just when the harness itselff calls it.  every managed tool is a governed tool period.  i dont think we need a governanceMode metadata field? if we manage a tool that is governed, and so we should own resolution, audit, verification.  do we need to list out the harness consumers? i say we do without them.  each harness consumer artifact should make note in metadata of the artifact itself if we rely on harness managed tools.  i think we also need an artifact registry, seperate from the tool-registry, now that we have so many artifacts.  thoughts on this? basically every single file we have here is an artifact, and everythingn that is not in scratch/harvest needs to be tracked in a registry of artifacts
+=== PROMPT 2026-06-17T18:38:53.723Z 2026-06-20_46ee1c2b.jsonl:303
+hmmm hold up... so when we take a tool here through its lifecycle and mark it is supported/tested on mac os, there should then be something in the registry of exactly how we support/manage it, and we should then also have entries in the tool-ops skill, exapnding the work we started for claude-code into other tools, so lets take python3 using uv as an example.  help me descontruct this flow etc and get this right
+=== PROMPT 2026-06-17T18:27:15.323Z 2026-06-20_46ee1c2b.jsonl:229
+1) please remove the intel mac brew line of code in zprofile 2) we need to own path ordering and own the parts of zprofile and other profiles that we manage with explicit markers. something like "# aitools managed settings and env variables" to begin the block.  this should be handeled in the aitools shell inegration.  where exactly in the code does that happen today? need a dedicated reference/ait-shellintegration.md file to document this for all platforms 3) lets make the harness resolve python3 deterministically as well, using the python version we manage.  in fact everything we manage should be used by the harness, i believe we started some of this work in either the skill named /aitool-ops or /tool-ops , please load both into context as well as the the rules for them rules/aitool-ops.md and rules/tool-ops.md 4) lets also fix the detection/message for python and any other tool we manage that has a similar issue 5) please no tiers etc, lets make brew and anything that comes after brew 1st, then node and anything that comes over node including uv, npm, npx, python3, those are all super high critical.  after that claude code and agent cli are super important.  please note that currently i have a mistakenly created symlink alias that makes agent resolve to grok.  that should not be, agent should point to cursor's cli not grok
+=== PROMPT 2026-06-17T18:08:40.697Z 2026-06-20_46ee1c2b.jsonl:166
+#7 is what i want to  do as well, however, the python uv work here on mac needs some addressing.  checkout this output from aitools install new-jose@nobul-mac aitools % aitools install
+[2026-06-16T16:55:31Z] [aitools] [info] aitools 0.69.0
+[2026-06-16T16:55:31Z] [aitools] [info] Step 1/3: Pulling latest
+[2026-06-16T16:55:31Z] [aitools] [ok] Already up to date
+[2026-06-16T16:56:46Z] [aitools] [warn] user repo pull failed -- using local copy.
+[2026-06-16T16:56:46Z] [aitools] [info] Step 2/3: Rebuilding deploy scripts
+[2026-06-16T16:56:47Z] [aitools] [ok] Rebuilt
+[2026-06-16T16:56:47Z] [aitools] [info] Step 3/3: Running installer
+[2026-06-16T16:56:47Z] [aitools-install] [info] Step 1: gh CLI
+[2026-06-16T16:56:47Z] [setup-gh-cli] [info] gh CLI already installed (gh version 2.94.0 (2026-06-10))
+[2026-06-16T16:56:47Z] [setup-gh-cli] [info] Checking for updates via Homebrew...
+[2026-06-16T16:56:53Z] [setup-gh-cli] [ok] gh CLI already up to date
+[2026-06-16T16:56:53Z] [setup-gh-cli] [ok] COMPLETED successfully
+[2026-06-16T16:56:53Z] [aitools-install] [info] Step 2: gh authentication
+[2026-06-16T16:56:53Z] [aitools-install] [ok] gh already authenticated
+[2026-06-16T16:56:53Z] [aitools-install] [info] Step 3: repos directory
+[2026-06-16T16:56:53Z] [aitools-install] [info] Using repos path from config: /Users/new-jose/repos
+[2026-06-16T16:56:53Z] [aitools-install] [ok] Repos directory: /Users/new-jose/repos
+[2026-06-16T16:56:53Z] [aitools-install] [info] Step 4: Google Drive detection
+[
+=== PROMPT 2026-06-17T18:05:06.577Z 2026-06-20_46ee1c2b.jsonl:137
+load the latest release notes and the latest gh issues on our remote please
+=== PROMPT 2026-06-17T18:03:06.975Z 2026-06-20_46ee1c2b.jsonl:99
+load the ps1 files as well please
+=== PROMPT 2026-06-17T18:00:52.333Z 2026-06-20_46ee1c2b.jsonl:29
+please load into context aitools*, aitools, build-install.sh
+=== PROMPT 2026-06-17T18:00:15.332Z 2026-06-20_46ee1c2b.jsonl:18
+please load into context aitools*, aitools, build-install.sh

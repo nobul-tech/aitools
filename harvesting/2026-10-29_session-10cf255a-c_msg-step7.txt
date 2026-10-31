@@ -1,0 +1,18 @@
+Run pre-push step 7 on every push
+
+Step 7 (deploy/ matches source) ran only when a push changed setup
+scripts, build-deploy, aitools-lib, the resolver, aitools-json or
+shared/. It missed every other deploy-harness input (reference/,
+registries/, .claude/*, deploy-harness.*), so a stale dotprofile
+deploy/deploy-harness.* went unnoticed. Commander decision 2026-10-26:
+step 7 always runs before pushing. The trigger is removed in the .sh
+and .ps1 checks; the rebuild still goes into a temporary copy of the
+dotprofile under a temporary HOME. reference/pre-push-checklist.md
+describes the step as it now works.
+
+Verification (tested: macOS): bash -n and the pwsh parser pass;
+check-pre-commit step 6 FAIL is the known pre-existing one; check-pre-push
+run on this commit exercises the new always-run path.
+Not run: Windows.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

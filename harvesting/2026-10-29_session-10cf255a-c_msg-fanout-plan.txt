@@ -1,0 +1,29 @@
+Add the setup-user-claude rules fan-out plan (v1.0)
+
+plans/rules-fanout-claude.md is the executable plan from mission FAN-PLAN
+(S3-FanPlan) for making setup-user-claude fan out ~/.aitools/rules into
+~/.claude/rules, the way setup-user-cursor already does for Cursor.
+
+Four batches, each for a fresh sub-agent with verbatim old/new edits and
+an error-handling audit (plan-execution.md):
+- A: aitools-lib -- a `removed` tracker outcome, unknown outcomes counted
+  as failed, a shared rules-manifest reader, a case-insensitive filter.
+- B: setup-user-claude.sh/.ps1 -- fan out from ~/.aitools/rules, adopt
+  targets mapped from the manifest, retired copies pruned only after a
+  byte match and a verified backup, review menu kept interactive.
+- C: build-deploy (drop the dotprofile rules embed and fallbacks),
+  tests/claude-mdm, README run order.
+- D: tests/rules-fanout and CI.
+
+Depends on #100 (rules manifest), #106 (deploy-harness runs first) and
+main 9923a3c (Backup-File literal paths). An independent reviewer
+(S3-FanPlan-Review) approved it with changes, which are applied; the
+amendments were not re-reviewed.
+
+Commander decision 2026-10-26 (Q1/Q13): every project-scope rule and
+skill is deployed to user-scope Claude Code; the commander removes the
+duplicate project-level rules later. Copied from the mission's
+S3-FanPlan-drafts/ as a version; plans/ goes directly to main (CLAUDE.md
+channel exception). Docs only.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

@@ -9,7 +9,7 @@ description: "Read and write per-tool operational metadata, in any repo — gove
 metadata, update governance modes, manage per-tool entries.
 **Scope**: CRUD operations on tool-ops.json, and where to read per-tool
 ops references (deployed copy first, then the aitools repo). NOT the
-governance principle (`.claude/rules/tool-ops.md`). NOT the framework
+governance principle (`shared/rules/tool-ops.md`). NOT the framework
 documentation (`reference/framework-tool-ops.md`). NOT the content of
 per-tool ops references.
 **Audience**: Agents checking tool behavior, `/audit` skill validating
@@ -168,7 +168,7 @@ To add a new tool:
 
 ## Cross-references
 
-- Governance rule: `.claude/rules/tool-ops.md`
+- Governance rule: `shared/rules/tool-ops.md`
 - Framework documentation: `reference/framework-tool-ops.md`
 - Per-tool ops references: `reference/tool-ops-*.md` (read order:
   deployed copy, then repo; see "Per-tool ops references" above)

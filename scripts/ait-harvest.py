@@ -9,12 +9,18 @@ logic in session-archive.sh / harvest-session.sh / `aitools sessions archive`.
 Per-source functions (plan imperative-gliding-newell.md §4):
   - archive_claude_session: copy a CC transcript (and its subagents/*.jsonl)
     to the dotprofile under the flat naming sessions/<project>/<date>_<p8>.jsonl,
-    then commit + push (deadline-guarded). Idempotent via dest-exists.
-  - harvest_scratch: classify + route + manifest + prune a session's
-    .scratch/session-<p10>/ dir (stdlib json; never deletes scratch dirs).
-  - catchup: orchestrator -- archive orphaned transcripts globally, harvest
-    orphaned scratch dirs in the current repo, push if ahead. Single-flight
-    heartbeat lock; transcript-mtime liveness; skip own session via stdin sid.
+    then commit ONLY those paths + push (deadline-guarded). Idempotent: an
+    archive is re-copied only when the transcript grew.
+  - harvest_scratch: classify + route + manifest a session's
+    .scratch/session-<name>/ dir, name used verbatim (stdlib json; never
+    deletes scratch dirs). A per-dir harvest record (.harvested, JSON) makes
+    later runs copy only new or changed files.
+  - catchup: orchestrator -- report a stale dotprofile index.lock, archive
+    orphaned transcripts globally, commit archives left uncommitted, harvest
+    pending scratch dirs in the current repo, audit the manifest, push if
+    ahead. Single-flight heartbeat lock; mtime liveness for transcripts and
+    scratch dirs; skip own session via stdin sid.
+  Design and gaps: reference/artifact-harvesting.md.
   - archive_cursor_session: ROADMAP stub (issue #5).
 
 Architecture (stdlib only): json, subprocess, pathlib, shutil, os, sys,
@@ -52,6 +58,7 @@ from __future__ import annotations
 
 import argparse
 import atexit
+import filecmp
 import json
 import logging
 import logging.handlers
@@ -85,13 +92,32 @@ LOCK_HEARTBEAT_SECONDS = 15
 LOCK_STALE_SECONDS = 90  # plan §20.1: SessionEnd git is not deadline-bounded
 
 # Archive filename prefix length. Matches existing archives + `aitools sessions
-# archive` (session-archive.sh:90). NOTE: scratch dir lookup uses 10 chars to
-# match scratch-init.sh -- see SCRATCH_PREFIX_LEN.
+# archive`. Archive names only; scratch names are never truncated.
 ARCHIVE_PREFIX_LEN = 8
 
-# Scratch dir prefix length. Must match scratch-init.sh (cut -c1-10) and
-# harness-db.py session_prefix() -- the dir on disk is session-<10char>.
-SCRATCH_PREFIX_LEN = 10
+# Scratch dir names are used verbatim (2026-10-31): scratch-init.sh creates
+# .scratch/session-<full session id>, delegates create session-<any name>.
+# Dirs created before that are session-<first 10 chars of the id>; this length
+# is used ONLY to find such a legacy dir from a session id (SessionEnd) and to
+# recognize the current session's own legacy dir in catch-up. A dir name is
+# never cut to this length (the cut made a 12-char delegate dir resolve to
+# the live session's dir: reference/artifact-harvesting.md gap G1).
+LEGACY_SCRATCH_PREFIX_LEN = 10
+
+# Files a session dir holds for the harness, not for the user: the harvest
+# record, the intelligence-stop marker, and hook telemetry (consumed by
+# harness-db.py process-events). Never harvested (gap G2). Every other name
+# that starts with "." is treated the same way.
+HARNESS_SCRATCH_FILES = {".harvested", ".intelligence-last-check", "events.jsonl"}
+
+# Name of the per-dir harvest record (JSON since 2026-10-31; older markers are
+# a single UTC timestamp line).
+HARVEST_MARKER = ".harvested"
+
+# A dotprofile .git/index.lock older than this is reported as stale (it blocks
+# every archive commit, gap G3) and no longer prevents stealing a stale
+# harvest lock. It is never deleted by this tool.
+INDEX_LOCK_STALE_SECONDS = 10 * 60
 
 LOG_MAX_BYTES = 5 * 1024 * 1024  # 5 MB (reference/logging.md)
 LOG_BACKUP_COUNT = 5
@@ -324,6 +350,19 @@ def transcript_date(transcript: Path) -> str:
         return today_utc()
 
 
+def index_lock_age(repo: Path) -> Optional[float]:
+    """Age in seconds of repo/.git/index.lock: None when there is no lock,
+    -1.0 when it exists but cannot be inspected. Never raises."""
+    lock = repo / ".git" / "index.lock"
+    try:
+        if not lock.exists():
+            return None
+        return max(0.0, time.time() - lock.stat().st_mtime)
+    except OSError as e:
+        log_detail(f"cannot inspect {lock}: {e}")
+        return -1.0
+
+
 # ---------------------------------------------------------------------------
 # Single-flight heartbeat lock (plan §16 + §20.1)
 # ---------------------------------------------------------------------------
@@ -364,13 +403,17 @@ class HarvestLock:
 
     def _dotprofile_index_locked(self) -> bool:
         """True if the dotprofile has a live .git/index.lock (plan §20.1 C1).
-        Conservative: if we cannot tell, return True (do not steal)."""
+        A lock older than INDEX_LOCK_STALE_SECONDS is a leftover of a crashed
+        git, not a live one, and does not block the steal (it is reported by
+        catchup, never deleted). Conservative: if we cannot tell, True."""
         if self.dotprofile is None:
             return False
-        try:
-            return (self.dotprofile / ".git" / "index.lock").exists()
-        except OSError:
+        age = index_lock_age(self.dotprofile)
+        if age is None:
+            return False
+        if age < 0:
             return True
+        return age < INDEX_LOCK_STALE_SECONDS
 
     def acquire(self) -> bool:
         # m1: ensure the lock directory exists first; failure -> cannot lock,
@@ -532,34 +575,44 @@ def worktree_dirty(repo: Path, remaining: float) -> bool:
 
 
 def commit_and_push(
-    repo: Path, rel_path: str, commit_msg: str, deadline: float,
-) -> None:
-    """Stage one file, commit, and push if the dotprofile is clean. Best-effort:
-    every failure path logs a specific reason; the local commit is preserved on
-    push failure (plan §20.2 M6 / pass 4 -- no silent exit)."""
+    repo: Path, rel_paths: list[str], commit_msg: str, deadline: float,
+) -> bool:
+    """Stage the given paths, commit ONLY those paths (`git commit -- <paths>`,
+    so other work staged in the dotprofile is never swept into an archive
+    commit), and push if the dotprofile is clean. Returns True when a commit
+    was made. Best-effort: every failure path logs a specific reason; a commit
+    is kept on push failure (plan §20.2 M6 / pass 4 -- no silent exit). Files
+    left uncommitted are picked up by catchup's commit_pending_archives()."""
     def remaining() -> float:
         return deadline - time.monotonic()
 
+    if not rel_paths:
+        return False
+    label = rel_paths[0] if len(rel_paths) == 1 else f"{len(rel_paths)} paths"
     if remaining() <= 0:
-        log_warn(f"deadline exceeded before git add ({rel_path})")
-        return
+        log_warn(f"deadline exceeded before git add ({label}); left uncommitted")
+        return False
 
-    rc, _, err = _git(repo, ["add", rel_path], remaining())
+    rc, _, err = _git(repo, ["add", "--", *rel_paths], remaining())
     if rc != 0:
-        log_warn(f"git add failed for {rel_path}: {err}")
-        return
+        log_warn(f"git add failed for {label}, left uncommitted: {err}")
+        return False
 
-    rc, _, err = _git(repo, ["commit", "-m", commit_msg], remaining())
+    rc, out, err = _git(
+        repo, ["commit", "-m", commit_msg, "--", *rel_paths], remaining())
     if rc != 0:
-        # Nothing to commit is benign (already staged/committed by a peer).
-        log_detail(f"git commit produced no commit ({rel_path}): {err}")
-        return
-    log_ok(f"committed {rel_path}")
+        # Nothing to commit is benign (already committed by a peer).
+        if "nothing to commit" in (out + err) or "no changes added" in (out + err):
+            log_detail(f"git commit produced no commit ({label}): nothing to commit")
+        else:
+            log_warn(f"git commit failed for {label}, left uncommitted: {err or out}")
+        return False
+    log_ok(f"committed {label}")
 
     reason = dotprofile_push_blocked_reason(repo, remaining())
     if reason is not None:
         log_warn(f"push skipped, commit kept: {reason}")
-        return
+        return True
 
     # The dotprofile is expected to carry uncommitted work-in-progress; a
     # pull --rebase fails deterministically on a dirty tree, so skip it rather
@@ -573,13 +626,40 @@ def commit_and_push(
         rc, _, err = _git(repo, ["pull", "--rebase"], remaining())
         if rc != 0:
             log_warn(f"git pull --rebase failed, push skipped, commit kept: {err}")
-            return
+            return True
 
     rc, _, err = _git(repo, ["push"], remaining())
     if rc != 0:
         log_warn(f"git push failed (offline or remote ahead), commit kept: {err}")
-        return
-    log_ok(f"pushed {rel_path}")
+        return True
+    log_ok(f"pushed {label}")
+    return True
+
+
+def commit_pending_archives(repo: Path, deadline: float) -> int:
+    """Commit archive files left uncommitted under sessions/ by an earlier
+    failed git step (gap G3: a run that copied a transcript but could not
+    commit it saw "already archived" next time and never retried). Commits
+    only sessions/ paths. Returns the number of files committed."""
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        return 0
+    rc, out, err = _git(
+        repo, ["status", "--porcelain", "--untracked-files=all", "--", "sessions"],
+        remaining)
+    if rc != 0:
+        log_warn(f"cannot list pending archives in dotprofile: {err}")
+        return 0
+    pending = [ln for ln in out.splitlines() if ln.strip()]
+    if not pending:
+        return 0
+    log_info(f"{len(pending)} archived file(s) uncommitted in dotprofile; committing")
+    if commit_and_push(
+        repo, ["sessions"],
+        f"Archive {len(pending)} pending session file(s) (catch-up)", deadline,
+    ):
+        return len(pending)
+    return 0
 
 
 def dotprofile_is_ahead(repo: Path, remaining: float) -> bool:
@@ -639,11 +719,22 @@ def archive_claude_session(
     date = transcript_date(transcript)
 
     dest_dir = user_repo / "sessions" / project
-    dest_file = dest_dir / f"{date}_{prefix}.jsonl"
+    dest_name = f"{date}_{prefix}.jsonl"
+    dest_file = dest_dir / dest_name
 
-    if dest_file.exists():
-        log_detail(f"skipped: already archived {project}/{date}_{prefix}.jsonl")
+    # Already archived and not grown since: nothing to do (fast path). A
+    # transcript that grew after its first archive (a resumed or continued
+    # session) is copied again, with its new subagents (gap G5).
+    try:
+        src_size = transcript.stat().st_size
+        dest_size = dest_file.stat().st_size if dest_file.exists() else -1
+    except OSError as e:
+        log_warn(f"cannot stat transcript or archive for {transcript.name}: {e}")
         return False
+    if dest_size >= src_size:
+        log_detail(f"skipped: already archived {project}/{dest_name}")
+        return False
+    grown = dest_size >= 0
 
     try:
         dest_dir.mkdir(parents=True, exist_ok=True)
@@ -651,54 +742,83 @@ def archive_claude_session(
     except OSError as e:
         log_error(f"failed to copy transcript {transcript.name}: {e}")
         return False
-    log_ok(f"archived {project}/{date}_{prefix}.jsonl")
+    if grown:
+        log_ok(f"re-archived grown transcript {project}/{dest_name} "
+               f"({dest_size} -> {src_size} bytes)")
+    else:
+        log_ok(f"archived {project}/{dest_name}")
 
-    rel_paths = [f"sessions/{project}/{date}_{prefix}.jsonl"]
+    rel_paths = [f"sessions/{project}/{dest_name}"]
+    for sub_name in _archive_subagents(transcript, full_id, dest_dir, date, prefix):
+        rel_paths.append(f"sessions/{project}/{sub_name}")
 
-    # --- Subagent transcripts (plan §3/§4: never archived before) ---
-    # Located at <transcript-dir>/<session-id>/subagents/*.jsonl OR
-    # <transcript-dir>/subagents/*.jsonl depending on CC version. Copy as flat
-    # siblings: <date>_<p8>_subagent-<n>.jsonl (NOT a directory).
+    # --- Commit + push (deadline-guarded) ---
+    # A failed git step leaves the files uncommitted; catchup's
+    # commit_pending_archives() commits them on a later session start.
+    if do_git:
+        if deadline is None:
+            deadline = time.monotonic() + 10.0
+        verb = "Update archived" if grown else "Archive"
+        commit_msg = f"{verb} session {date}_{prefix} ({project})"
+        commit_and_push(user_repo, rel_paths, commit_msg, deadline)
+
+    return True
+
+
+def _archive_subagents(
+    transcript: Path, full_id: str, dest_dir: Path, date: str, prefix: str,
+) -> list[str]:
+    """Copy the session's subagent transcripts next to its archive. Returns
+    the names written.
+
+    Subagent transcripts live at <transcript-dir>/<session-id>/subagents/ or
+    <transcript-dir>/subagents/ depending on the CC version. Each copy is
+    named after its own file (<date>_<p8>_<subagent stem>.jsonl), so a
+    subagent added later never shifts the names of earlier ones; the old
+    positional names (<date>_<p8>_subagent-<n>.jsonl) did (gap G5). A copy
+    that grew is replaced. A file already archived under a legacy positional
+    name (byte-identical) is not copied again."""
     subagent_dirs = [
         transcript.parent / full_id / "subagents",
         transcript.parent / "subagents",
     ]
-    n = 0
+    legacy: list[Path] = []
+    try:
+        legacy = [
+            p for p in dest_dir.glob(f"{date}_{prefix}_subagent-*.jsonl")
+            if re.fullmatch(rf"{re.escape(date)}_{re.escape(prefix)}_subagent-\d+\.jsonl", p.name)
+        ]
+    except OSError as e:
+        log_detail(f"cannot list legacy subagent archives in {dest_dir}: {e}")
+
+    written: list[str] = []
     for sad in subagent_dirs:
         if not sad.is_dir():
             continue
         try:
             sub_files = sorted(sad.glob("*.jsonl"))
-        except OSError:
-            sub_files = []
+        except OSError as e:
+            log_warn(f"cannot list subagent transcripts in {sad}: {e}")
+            continue
         for sub in sub_files:
-            n += 1
-            sub_dest = dest_dir / f"{date}_{prefix}_subagent-{n}.jsonl"
-            if sub_dest.exists():
-                continue
+            sub_dest = dest_dir / f"{date}_{prefix}_{sub.stem}.jsonl"
             try:
+                src_size = sub.stat().st_size
+                if sub_dest.exists() and sub_dest.stat().st_size >= src_size:
+                    continue
+                if not sub_dest.exists() and any(
+                    p.stat().st_size == src_size
+                    and filecmp.cmp(str(p), str(sub), shallow=False)
+                    for p in legacy
+                ):
+                    continue
                 shutil.copy2(str(sub), str(sub_dest))
-                rel_paths.append(
-                    f"sessions/{project}/{date}_{prefix}_subagent-{n}.jsonl"
-                )
-                log_ok(f"archived subagent {sub_dest.name}")
             except OSError as e:
                 log_warn(f"failed to copy subagent {sub.name}: {e}")
-
-    # --- Commit + push (deadline-guarded) ---
-    if do_git:
-        if deadline is None:
-            deadline = time.monotonic() + 10.0
-        commit_msg = f"Archive session {date}_{prefix} ({project})"
-        # Stage all archived files (transcript + subagents) in one commit.
-        for rp in rel_paths:
-            rc, _, err = _git(user_repo, ["add", rp], deadline - time.monotonic())
-            if rc != 0:
-                log_warn(f"git add failed for {rp}: {err}")
-        # Single commit + push via the shared path (re-stages safely).
-        commit_and_push(user_repo, rel_paths[0], commit_msg, deadline)
-
-    return True
+                continue
+            written.append(sub_dest.name)
+            log_ok(f"archived subagent {sub_dest.name}")
+    return written
 
 
 # ---------------------------------------------------------------------------
@@ -714,8 +834,11 @@ LANG_MAP = {
 
 
 def _is_ephemeral(filename: str) -> bool:
-    """Classification mirroring harvest-session.sh (extension + name)."""
+    """Classification mirroring harvest-session.sh (extension + name).
+    Harness bookkeeping (HARNESS_SCRATCH_FILES, any dotfile) is ephemeral."""
     lower = filename.lower()
+    if filename in HARNESS_SCRATCH_FILES or filename.startswith("."):
+        return True
     if lower.startswith("commit-msg") or lower.endswith((".log", ".tmp")):
         return True
     ext = "." + filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
@@ -756,46 +879,142 @@ def _load_manifest(path: Path) -> dict[str, Any]:
     return {"meta": {"schemaVersion": "1.0", "lastAudit": None}, "artifacts": {}}
 
 
+def _scratch_tag(session_dir: Path) -> str:
+    """The name part of a scratch dir (session-<tag>), used verbatim in
+    harvested and routed file names. Never truncated."""
+    name = session_dir.name
+    return name[len("session-"):] if name.startswith("session-") else name
+
+
+def _read_pointer(scratch_dir: Path) -> Optional[Path]:
+    """The dir named by .scratch/.current-session, or None. Never raises."""
+    current = scratch_dir / ".current-session"
+    try:
+        if not current.exists():
+            return None
+        p = current.read_text(encoding="utf-8").strip()
+    except OSError as e:
+        log_detail(f"cannot read {current}: {e}")
+        return None
+    return Path(p) if p and Path(p).is_dir() else None
+
+
+def resolve_session_dir(scratch_dir: Path, session_id: Optional[str]) -> Optional[Path]:
+    """Find a session's scratch dir from its Claude Code session id.
+
+    1. .scratch/session-<full id>        (scratch-init.sh since 2026-10-31)
+    2. .scratch/session-<id[:10]>        (legacy dirs created before that)
+    3. only when there is no session id: the dir in .scratch/.current-session
+
+    The pointer is never used for a known id: it names whichever session
+    started last in this repo, which is how a 12-char delegate dir used to
+    resolve to the live session's dir (gap G1)."""
+    if session_id:
+        for name in (session_id, session_id[:LEGACY_SCRATCH_PREFIX_LEN]):
+            candidate = scratch_dir / f"session-{name}"
+            if candidate.is_dir():
+                return candidate
+        return None
+    return _read_pointer(scratch_dir)
+
+
+def _file_sig(f: Path) -> Optional[dict[str, Any]]:
+    try:
+        st = f.stat()
+    except OSError as e:
+        log_detail(f"cannot stat {f}: {e}")
+        return None
+    return {"size": st.st_size, "mtime": st.st_mtime}
+
+
+def _read_harvest_record(session_dir: Path) -> tuple[dict[str, Any], Optional[float]]:
+    """Read the dir's harvest record. Returns (files, legacy_time):
+    files maps a file name to its {size, mtime} when it was harvested;
+    legacy_time is the mtime of a pre-2026-10-31 timestamp-only marker (every
+    file not modified after it counts as harvested), else None."""
+    marker = session_dir / HARVEST_MARKER
+    try:
+        if not marker.exists():
+            return {}, None
+        text = marker.read_text(encoding="utf-8")
+        mtime = marker.stat().st_mtime
+    except OSError as e:
+        log_detail(f"cannot read harvest record {marker}: {e}")
+        return {}, None
+    try:
+        data = json.loads(text)
+    except ValueError:
+        return {}, mtime  # legacy marker: one UTC timestamp line
+    if isinstance(data, dict) and isinstance(data.get("files"), dict):
+        return data["files"], data.get("legacyTime")
+    return {}, mtime
+
+
+def _already_harvested(
+    f: Path, files: dict[str, Any], legacy_time: Optional[float],
+) -> bool:
+    sig = _file_sig(f)
+    if sig is None:
+        return True  # cannot stat: do not try to copy it
+    rec = files.get(f.name)
+    if isinstance(rec, dict) and rec.get("size") == sig["size"] \
+            and rec.get("mtime") == sig["mtime"]:
+        return True
+    return rec is None and legacy_time is not None and sig["mtime"] <= legacy_time
+
+
+def pending_scratch_files(session_dir: Path) -> list[Path]:
+    """Top-level files of a session dir that are neither ephemeral nor
+    already harvested (unchanged since their recorded harvest)."""
+    files, legacy_time = _read_harvest_record(session_dir)
+    try:
+        candidates = sorted(p for p in session_dir.iterdir() if p.is_file())
+    except OSError as e:
+        log_warn(f"cannot list session dir {session_dir}: {e}")
+        return []
+    return [
+        p for p in candidates
+        if not _is_ephemeral(p.name) and not _already_harvested(p, files, legacy_time)
+    ]
+
+
 def harvest_scratch(
     cwd: str,
     session_id: Optional[str],
     *,
     project_root: Optional[Path] = None,
+    session_dir: Optional[Path] = None,
 ) -> int:
     """Classify + route + manifest a session's scratch dir. Returns the number
     of artifacts harvested. Never deletes scratch dirs (30-file-loss guard).
-    Leaves DB session-end marking to harness-db-sessionend.sh."""
+    Leaves DB session-end marking to harness-db-sessionend.sh.
+
+    session_dir: the dir to harvest, used as is (catch-up passes each orphan
+    dir it found). Without it the dir is resolved from session_id
+    (resolve_session_dir). Only files that are new or changed since the dir's
+    last harvest are copied (gap G2), so a resumed or re-ended session is not
+    harvested twice."""
     if project_root is None:
         root = git_root(Path(cwd)) if cwd and Path(cwd).is_dir() else None
         project_root = root if root is not None else Path(cwd)
 
     scratch_dir = project_root / ".scratch"
-    prefix = session_id[:SCRATCH_PREFIX_LEN] if session_id else ""
-
-    session_dir: Optional[Path] = None
-    if prefix and (scratch_dir / f"session-{prefix}").is_dir():
-        session_dir = scratch_dir / f"session-{prefix}"
-    else:
-        current = scratch_dir / ".current-session"
-        if current.exists():
-            try:
-                p = current.read_text(encoding="utf-8").strip()
-                if p and Path(p).is_dir():
-                    session_dir = Path(p)
-            except OSError:
-                pass
-
+    if session_dir is None:
+        session_dir = resolve_session_dir(scratch_dir, session_id)
     if session_dir is None or not session_dir.is_dir():
-        log_detail(f"skipped harvest: no session dir for {prefix or '(none)'}")
+        log_detail(f"skipped harvest: no session dir for {session_id or '(no session id)'}")
         return 0
 
+    tag = _scratch_tag(session_dir)
     harvesting_dir = project_root / "harvesting"
     handoffs_dir = project_root / ".aitools" / "channel" / "handoffs"
     manifest_path = harvesting_dir / "harvest-manifest.json"
     today = today_utc()
     harvested = 0
     deleted = 0
+    unchanged = 0
 
+    record_files, legacy_time = _read_harvest_record(session_dir)
     try:
         files = sorted(p for p in session_dir.iterdir() if p.is_file())
     except OSError as e:
@@ -809,14 +1028,19 @@ def harvest_scratch(
         if _is_ephemeral(filename):
             deleted += 1
             continue
+        if _already_harvested(f, record_files, legacy_time):
+            unchanged += 1
+            continue
+        sig = _file_sig(f)
 
         # Handoff routing.
         if filename.startswith("handoff"):
             try:
                 handoffs_dir.mkdir(parents=True, exist_ok=True)
-                dest = handoffs_dir / f"{today}_session-{prefix}_{filename}"
+                dest = handoffs_dir / f"{today}_session-{tag}_{filename}"
                 shutil.copy2(str(f), str(dest))
                 harvested += 1
+                record_files[filename] = sig
                 log_ok(f"routed handoff {dest.name}")
             except OSError as e:
                 log_warn(f"handoff copy failed for {filename}: {e}")
@@ -829,7 +1053,7 @@ def harvest_scratch(
             log_warn(f"cannot create harvesting dir: {e}")
             continue
 
-        session_tag = f"session-{prefix}_" if prefix else ""
+        session_tag = f"session-{tag}_" if tag else ""
         dest_name = f"{today}_{session_tag}{filename}"
         dest_path = harvesting_dir / dest_name
         if dest_path.exists():
@@ -849,7 +1073,7 @@ def harvest_scratch(
             manifest = _load_manifest(manifest_path)
         ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
         project_name = project_root.name
-        session_ref = f"{project_name}/{today}_{prefix}" if cwd else ""
+        session_ref = f"{project_name}/{today}_{tag}" if cwd else ""
         # pruneAfter = today + 30 days.
         prune_after = datetime.now(timezone.utc).timestamp() + 30 * 86400
         prune_date = datetime.fromtimestamp(
@@ -865,6 +1089,7 @@ def harvest_scratch(
             "pruneAfter": prune_date,
         }
         harvested += 1
+        record_files[filename] = sig
         log_ok(f"harvested {dest_name}")
 
     if manifest is not None:
@@ -873,28 +1098,39 @@ def harvest_scratch(
         except OSError as e:
             log_warn(f"manifest write failed: {e}")
 
-    # Clear the legacy session pointer (leave the session dir intact).
+    # Clear the session pointer only when it names THIS dir (gap G6): the
+    # pointer belongs to whichever session started last in this repo, and
+    # catch-up harvests other sessions' dirs. The session dir stays intact.
+    pointer = _read_pointer(scratch_dir)
     try:
-        (scratch_dir / ".current-session").unlink()
-    except OSError:
-        pass
-
-    # Idempotency marker: a harvested session dir is never re-swept. This is the
-    # fix for the catchup re-harvest loop that re-copied every orphaned dir each
-    # session start, producing duplicate harvesting/ copies. Written even when
-    # nothing was harvested so empty / ephemeral-only dirs also settle.
-    try:
-        (session_dir / ".harvested").write_text(
-            utcnow() + "\n", encoding="utf-8")
+        if pointer is not None and pointer.resolve() == session_dir.resolve():
+            (scratch_dir / ".current-session").unlink()
     except OSError as e:
-        log_detail(f"could not write .harvested marker in {session_dir}: {e}")
+        log_detail(f"could not clear .current-session: {e}")
+
+    # Harvest record: every file harvested from this dir, with the size and
+    # mtime it had, so a later harvest (catch-up, a resumed session's
+    # SessionEnd) copies only new or changed files. Written even when nothing
+    # was harvested, so an empty or ephemeral-only dir settles.
+    record: dict[str, Any] = {
+        "version": 1,
+        "lastHarvest": utcnow(),
+        "files": record_files,
+    }
+    if legacy_time is not None:
+        record["legacyTime"] = legacy_time
+    try:
+        _atomic_write_json(session_dir / HARVEST_MARKER, record)
+    except OSError as e:
+        log_warn(f"could not write harvest record in {session_dir}: {e}")
 
     # Manifest audit/prune is hoisted to catchup() (the SessionStart owner of
-    # audit, per .claude/rules/artifact-harvesting.md) so it runs at most once
+    # audit, per reference/artifact-harvesting.md) so it runs at most once
     # per session, not once per harvested dir.
-    if harvested or deleted:
+    if harvested or deleted or unchanged:
         log_info(
-            f"harvest {prefix or 'unknown'}: {harvested} harvested, "
+            f"harvest {tag or 'unknown'}: {harvested} harvested, "
+            f"{unchanged} unchanged since last harvest, "
             f"{deleted} ephemeral skipped"
         )
     return harvested
@@ -1011,14 +1247,21 @@ def catchup(
     recovered = 0
     deadline = time.monotonic() + deadline_seconds
     try:
+        if user_repo is not None:
+            _report_stale_index_lock(user_repo)
         recovered += _catchup_archive(user_repo, session_id, deadline, lock)
         lock.heartbeat()
+        # Commit archive files an earlier failed git step left uncommitted
+        # (gap G3); the push-if-ahead step below pushes them.
+        if user_repo is not None:
+            recovered += commit_pending_archives(user_repo, deadline)
+            lock.heartbeat()
         # Harvest orphaned scratch dirs in the current repo (deadline-bounded).
         harvested, project_root = _catchup_harvest(cwd, session_id, deadline)
         recovered += harvested
         lock.heartbeat()
         # Audit/prune the manifest ONCE here -- SessionStart owns audit
-        # (.claude/rules/artifact-harvesting.md) -- not once per harvested dir.
+        # (reference/artifact-harvesting.md) -- not once per harvested dir.
         if project_root is not None and project_root.is_dir():
             harvesting_dir = project_root / "harvesting"
             manifest_path = harvesting_dir / "harvest-manifest.json"
@@ -1044,6 +1287,38 @@ def catchup(
     if recovered:
         log_info(f"catchup recovered {recovered} item(s)")
     return recovered
+
+
+def _report_stale_index_lock(user_repo: Path) -> None:
+    """A dotprofile .git/index.lock older than INDEX_LOCK_STALE_SECONDS makes
+    every archive commit fail (gap G3: one sat there for two days). Report it
+    in the log and on stdout, which SessionStart adds to Claude's context, so
+    a person can remove it. Never removes it: a live git may own it."""
+    age = index_lock_age(user_repo)
+    if age is None or age < INDEX_LOCK_STALE_SECONDS:
+        return
+    lock = user_repo / ".git" / "index.lock"
+    hours = age / 3600
+    msg = (f"dotprofile git index is locked: {lock} is {hours:.1f}h old; "
+           "session archives cannot be committed until it is removed "
+           "(check that no git process is running first)")
+    log_warn(msg)
+    print(f"Harvest: {msg}", flush=True)
+
+
+def _newest_mtime(d: Path) -> float:
+    """Newest mtime of a dir and its top-level entries (0.0 on error)."""
+    try:
+        newest = d.stat().st_mtime
+        for p in d.iterdir():
+            try:
+                newest = max(newest, p.stat().st_mtime)
+            except OSError:
+                continue
+        return newest
+    except OSError as e:
+        log_detail(f"cannot stat {d}: {e}")
+        return 0.0
 
 
 def _catchup_archive(
@@ -1110,10 +1385,14 @@ def _catchup_archive(
 def _catchup_harvest(
     cwd: str, session_id: Optional[str], deadline: float,
 ) -> tuple[int, Optional[Path]]:
-    """Harvest orphaned .scratch/session-* dirs in the current repo whose
-    SessionEnd never ran. Skips the current session's own dir and any dir
-    already carrying a `.harvested` marker (idempotency -- prevents the
-    re-harvest loop). Deadline-bounded. Returns (recovered, project_root)."""
+    """Harvest .scratch/session-* dirs in the current repo that hold files no
+    harvest has copied yet (SessionEnd never ran, or files were added after
+    it). Each dir is passed to harvest_scratch() by path, its name used
+    verbatim: a dir name is never cut to a prefix (gap G1). Skips the current
+    session's own dir (session-<full id>, or the legacy session-<id[:10]>),
+    dirs modified in the last LIVE_MTIME_SECONDS (a session or delegate still
+    working), and dirs with nothing pending (idempotency: the harvest record
+    in .harvested). Deadline-bounded. Returns (recovered, project_root)."""
     root = git_root(Path(cwd)) if cwd and Path(cwd).is_dir() else None
     project_root = root if root is not None else Path(cwd) if cwd else None
     if project_root is None or not project_root.is_dir():
@@ -1122,27 +1401,33 @@ def _catchup_harvest(
     if not scratch_dir.is_dir():
         return 0, project_root
 
-    own_prefix = session_id[:SCRATCH_PREFIX_LEN] if session_id else None
+    own_names: set[str] = set()
+    if session_id:
+        own_names = {session_id, session_id[:LEGACY_SCRATCH_PREFIX_LEN]}
     recovered = 0
+    now = time.time()
     try:
-        session_dirs = [
+        session_dirs = sorted(
             p for p in scratch_dir.iterdir()
             if p.is_dir() and p.name.startswith("session-")
-        ]
-    except OSError:
+        )
+    except OSError as e:
+        log_warn(f"cannot list {scratch_dir}: {e}")
         return 0, project_root
 
     for sd in session_dirs:
         if deadline - time.monotonic() <= 0:
             log_warn("catchup harvest: deadline reached, stopping sweep")
             break
-        dir_prefix = sd.name[len("session-"):]
-        if own_prefix and dir_prefix == own_prefix:
+        if _scratch_tag(sd) in own_names:
             continue  # never harvest our own live session
-        if (sd / ".harvested").exists():
-            continue  # already harvested in a prior session (idempotency)
+        if not pending_scratch_files(sd):
+            continue  # nothing new since its last harvest (idempotency)
+        if (now - _newest_mtime(sd)) < LIVE_MTIME_SECONDS:
+            log_detail(f"skipped harvest: possibly-live scratch dir {sd.name}")
+            continue
         recovered += harvest_scratch(
-            str(project_root), dir_prefix, project_root=project_root
+            str(project_root), None, project_root=project_root, session_dir=sd
         )
     return recovered, project_root
 

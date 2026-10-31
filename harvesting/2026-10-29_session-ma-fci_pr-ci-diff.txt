@@ -1,0 +1,77 @@
+=== PR #103 (fix/mf-dotprofile-adopt-push)
++      - name: Dotprofile adopt commit+push tests (bash)
++        run: bash tests/managed-files/test-adopt-push.sh
++      - name: Dotprofile adopt commit+push tests (PowerShell)
++        run: pwsh -NoProfile -File tests/managed-files/test-adopt-push.ps1
++      - name: Dotprofile adopt commit+push tests (bash)
++        run: bash tests/managed-files/test-adopt-push.sh
++      - name: Dotprofile adopt commit+push tests (PowerShell)
++        run: pwsh -NoProfile -File tests/managed-files/test-adopt-push.ps1
++      - name: Dotprofile adopt commit+push tests (bash, via Git Bash)
++        run: bash tests/managed-files/test-adopt-push.sh
++      - name: Dotprofile adopt commit+push tests (PowerShell, native)
++        run: pwsh -NoProfile -File tests/managed-files/test-adopt-push.ps1
+=== PR #112 (fix/mf-audit-claude-build)
++      - name: Dotprofile adopt commit+push tests (bash)
++        run: bash tests/managed-files/test-adopt-push.sh
++      - name: Dotprofile adopt commit+push tests (PowerShell)
++        run: pwsh -NoProfile -File tests/managed-files/test-adopt-push.ps1
++      - name: setup-user-claude dev + MDM tests (bash 5 + pwsh)
++        run: bash tests/claude-mdm/test-claude-mdm.sh
++      - name: setup-user-claude dev + MDM tests (macOS /bin/bash 3.2)
++        run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/claude-mdm/test-claude-mdm.sh
++      - name: Dotprofile adopt commit+push tests (bash)
++        run: bash tests/managed-files/test-adopt-push.sh
++      - name: Dotprofile adopt commit+push tests (PowerShell)
++        run: pwsh -NoProfile -File tests/managed-files/test-adopt-push.ps1
++      - name: setup-user-claude dev + MDM tests (bash + pwsh)
++        run: bash tests/claude-mdm/test-claude-mdm.sh
++      - name: Dotprofile adopt commit+push tests (bash, via Git Bash)
++        run: bash tests/managed-files/test-adopt-push.sh
++      - name: Dotprofile adopt commit+push tests (PowerShell, native)
++        run: pwsh -NoProfile -File tests/managed-files/test-adopt-push.ps1
+=== PR #113 (fix/mf-lib-runner-result)
++      - name: Dotprofile adopt commit+push tests (bash)
++        run: bash tests/managed-files/test-adopt-push.sh
++      - name: Dotprofile adopt commit+push tests (PowerShell)
++        run: pwsh -NoProfile -File tests/managed-files/test-adopt-push.ps1
++      - name: Dotprofile adopt commit+push tests (bash)
++        run: bash tests/managed-files/test-adopt-push.sh
++      - name: Dotprofile adopt commit+push tests (PowerShell)
++        run: pwsh -NoProfile -File tests/managed-files/test-adopt-push.ps1
++      - name: Dotprofile adopt commit+push tests (bash, via Git Bash)
++        run: bash tests/managed-files/test-adopt-push.sh
++      - name: Dotprofile adopt commit+push tests (PowerShell, native)
++        run: pwsh -NoProfile -File tests/managed-files/test-adopt-push.ps1
+=== PR #115 (fix/mf-lib-relay)
++      - name: Dotprofile adopt commit+push tests (bash)
++        run: bash tests/managed-files/test-adopt-push.sh
++      - name: Dotprofile adopt commit+push tests (PowerShell)
++        run: pwsh -NoProfile -File tests/managed-files/test-adopt-push.ps1
++      - name: Dotprofile adopt commit+push tests (bash)
++        run: bash tests/managed-files/test-adopt-push.sh
++      - name: Dotprofile adopt commit+push tests (PowerShell)
++        run: pwsh -NoProfile -File tests/managed-files/test-adopt-push.ps1
++      - name: Dotprofile adopt commit+push tests (bash, via Git Bash)
++        run: bash tests/managed-files/test-adopt-push.sh
++      - name: Dotprofile adopt commit+push tests (PowerShell, native)
++        run: pwsh -NoProfile -File tests/managed-files/test-adopt-push.ps1
+=== PR #116 (fix/mf-installer-relay)
++      - name: Dotprofile adopt commit+push tests (bash)
++        run: bash tests/managed-files/test-adopt-push.sh
++      - name: Dotprofile adopt commit+push tests (PowerShell)
++        run: pwsh -NoProfile -File tests/managed-files/test-adopt-push.ps1
++      - name: Installer Step 3/5 relay tests (bash 5 + pwsh)
++        run: bash tests/profile/test-install.sh
++      - name: Installer Step 3/5 relay tests (macOS /bin/bash 3.2)
++        run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/profile/test-install.sh --bash-only
++      - name: Dotprofile adopt commit+push tests (bash)
++        run: bash tests/managed-files/test-adopt-push.sh
++      - name: Dotprofile adopt commit+push tests (PowerShell)
++        run: pwsh -NoProfile -File tests/managed-files/test-adopt-push.ps1
++      - name: Installer Step 3/5 relay tests (bash + pwsh)
++        run: bash tests/profile/test-install.sh
++      - name: Dotprofile adopt commit+push tests (bash, via Git Bash)
++        run: bash tests/managed-files/test-adopt-push.sh
++      - name: Dotprofile adopt commit+push tests (PowerShell, native)
++        run: pwsh -NoProfile -File tests/managed-files/test-adopt-push.ps1

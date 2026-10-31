@@ -1,0 +1,104 @@
+<title>Intune Licence Decision</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400&display=swap">
+<style>
+/* Layout: one narrow reading column; a single decision card is the only set-off object. */
+:root {
+  --bg: #f6f7f9; --surface: #ffffff; --fg: #1c2330; --muted: #5a6475;
+  --line: #d9dee7; --accent: #1f5fbf; --ok: #1d7a4a; --warn: #9a5b00;
+  --display: "Source Serif 4", Georgia, serif;
+  --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #12161d; --surface: #1a2029; --fg: #e5e9f0; --muted: #9aa5b5;
+  --line: #2c3542; --accent: #7fb0ff; --ok: #5fcf93; --warn: #e6b05c; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #12161d; --surface: #1a2029; --fg: #e5e9f0; --muted: #9aa5b5;
+  --line: #2c3542; --accent: #7fb0ff; --ok: #5fcf93; --warn: #e6b05c; color-scheme: dark }
+body { background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 16px; line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 32px 48px; }
+main { max-width: 680px; margin: 0 auto; display: flex; flex-direction: column; gap: 28px; }
+h1 { font-family: var(--display); font-weight: 600; font-size: 1.9rem; line-height: 1.2; margin: 0; text-wrap: balance; }
+h2 { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 0 0 10px; font-weight: 600; }
+p { margin: 0; }
+.lede { color: var(--muted); }
+section { display: flex; flex-direction: column; gap: 10px; }
+ul, ol { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 8px; }
+.clause { font-family: var(--mono); font-size: 0.85rem; color: var(--accent); }
+a { color: var(--accent); }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 20px; display: flex; flex-direction: column; gap: 14px; }
+.quote { font-family: var(--mono); font-size: 0.9rem; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 12px; overflow-x: auto; white-space: pre-wrap; word-break: break-word; }
+button { font: inherit; font-weight: 600; align-self: flex-start; background: var(--accent); color: var(--surface); border: 0; border-radius: 6px; padding: 9px 16px; cursor: pointer; }
+button:focus-visible { outline: 3px solid var(--fg); outline-offset: 2px; }
+.status { font-size: 0.9rem; color: var(--ok); min-height: 1.4em; }
+.small { font-size: 0.9rem; color: var(--muted); }
+.yes { color: var(--ok); font-weight: 600; } .no { color: var(--warn); font-weight: 600; }
+</style>
+
+<main>
+  <header>
+    <h2>build-package · Windows Intune package · decision P-8</h2>
+    <h1>Accept Microsoft's Win32 Content Prep Tool licence for nobul-tech CI</h1>
+  </header>
+
+  <p class="lede">Intune Win32 packages (<code>.intunewin</code>) can only be built with Microsoft's <code>IntuneWinAppUtil.exe</code>, which runs on Windows. The plan uses it only inside GitHub Actions on a Windows runner. Its README says downloading and using it accepts its licence terms, so someone has to accept them for nobul-tech. That is you.</p>
+
+  <section>
+    <h2>What you are agreeing to</h2>
+    <ul>
+      <li><span class="yes">Allowed:</span> installing and using any number of copies.</li>
+      <li><span class="no">Not allowed</span> <span class="clause">4(e)</span>: sharing, publishing, renting or lending the tool. We never commit, cache, upload or bundle the exe.</li>
+      <li><span class="no">Not allowed</span> <span class="clause">4(a)</span>: working around its technical limits (so no patching it, and we don't run it under Wine).</li>
+      <li><span class="no">Not allowed</span> <span class="clause">4(b)</span>: reverse engineering, decompiling or disassembling it.</li>
+      <li><span class="clause">3</span> The tool may send telemetry to Microsoft.</li>
+    </ul>
+    <p class="small">Source: the licence PDF in Microsoft's repo, read in full by two delegates (plans/build-package/mdm-windows-tool-findings.md, section 2.5). Not legal advice.</p>
+  </section>
+
+  <section>
+    <h2>What aitools does with it</h2>
+    <ul>
+      <li>Each CI job downloads the exe fresh from Microsoft's own repo at a pinned commit (<code>1d6cfcb</code>, v1.8.7).</li>
+      <li>It checks the file's SHA-256 against our recorded value and its Authenticode signature before running it.</li>
+      <li>Impersonation repos exist on GitHub with fake "releases"; nothing is ever fetched from anywhere else.</li>
+      <li>Non-Windows machines don't run it; they start the Windows CI job and download the finished package.</li>
+    </ul>
+  </section>
+
+  <div class="card">
+    <h2>Your three steps</h2>
+    <ol>
+      <li>Open the licence: <a href="https://github.com/microsoft/Microsoft-Win32-Content-Prep-Tool" target="_blank" rel="noopener">github.com/microsoft/Microsoft-Win32-Content-Prep-Tool</a> (the licence PDF is in the repo root).</li>
+      <li>Skim clauses 3 and 4 (the five points above).</li>
+      <li>Paste this line into the Claude Code session. I record it as decision P-8 in <code>plans/build-package/design.md</code>.</li>
+    </ol>
+    <div class="quote" id="decision">I accept the Microsoft Win32 Content Prep Tool licence terms for nobul-tech CI use (v1.8.7, commit 1d6cfcb): download per job, never redistribute, commit, cache or modify it.</div>
+    <button type="button" id="copy">Copy the line</button>
+    <p class="status" id="status" aria-live="polite"></p>
+  </div>
+
+  <p class="small">Not deciding yet is fine: the Windows build batch (B9a) waits on this line, and nothing downloads the tool until then.</p>
+</main>
+
+<script>
+document.getElementById("copy").addEventListener("click", function () {
+  var text = document.getElementById("decision").textContent;
+  var status = document.getElementById("status");
+  function selectIt() {
+    var range = document.createRange();
+    range.selectNodeContents(document.getElementById("decision"));
+    var sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    status.textContent = "Selected. Press Cmd+C (or Ctrl+C) to copy.";
+  }
+  try {
+    navigator.clipboard.writeText(text).then(function () {
+      status.textContent = "Copied. Paste it into the Claude Code session.";
+    }, selectIt);
+  } catch (e) {
+    selectIt();
+  }
+});
+</script>

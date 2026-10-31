@@ -1,0 +1,30 @@
+Approve the rules.md intent, link it from the rules, record P-1..P-7
+
+reference/rules.md: the commander approved its Intent block (2026-10-26);
+the version note now says so instead of "the mission's intent".
+
+Cross-references to reference/rules.md, approved by the commander
+(S3-RulesSpec drafts, applied verbatim):
+- .claude/rules/documentation-standards.md "Layered reference
+  architecture", and its .cursor/rules/documentation-standards.mdc twin
+- .claude/rules/frameworks.md "Cross-references"
+- reference/harness.md "Cross-References"
+
+plans/build-package/design.md section 17: the commander's decisions on
+BUILD-PKG's P-1..P-7 and the .deb Maintainer, binding for the executing
+mission:
+- P-1 bash-only build-package.sh; P-2 cursor-cloud set only in Cursor
+  cloud; P-3 ship all hooks/skills/MCP for now (per-user selection via
+  profile.json later; still no personal identity in fleet templates);
+- P-4 IntuneWinAppUtil through /tool-eval and /tool-adopt on every
+  platform it supports;
+- P-5 DECISION: Homebrew becomes a managed tool (/tool-eval, /tool-adopt);
+  Intel Macs stay supported;
+- P-6 aitools user init clones <gh-user>/aitools-<gh-user> when it exists,
+  creates it otherwise; re-runnable;
+- P-7 five-platform line in the dotprofile template; Maintainer
+  info@nobul.tech.
+
+Docs only. Committed directly to main on the commander's instruction.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

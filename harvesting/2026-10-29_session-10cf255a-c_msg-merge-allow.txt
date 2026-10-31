@@ -1,0 +1,18 @@
+Allow gh pr merge in Claude Code at user scope
+
+profile.json claude.settings.permissions.allow gains "Bash(gh pr merge:*)"
+(commander order 2026-10-28: "add an explicit allow rule at the user scope
+level for merging PRs in claude code in auto mode ... accept and adopt that
+setting for my settings user scope level file"). The same rule was written
+to ~/.claude/settings.json on nobul-mac, so setup-user-settings sees the two
+in sync (profile.json is the source of truth for that mirror).
+
+Why: in auto mode the Claude Code classifier refused agent merges as
+"Merge Without Review" (MERGE-2, PR #122), although every PR had an
+independent verdict and green CI. An explicit allow rule is expected to
+let the merge run without the classifier; mission ALLOW-MERGE tests that
+and records the result in aitools reference/tool-ops-claude-code.md.
+
+Backups: profile.json.bak.2026-10-28T173308Z (local, not committed).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

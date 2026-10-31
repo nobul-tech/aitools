@@ -1,0 +1,193 @@
+setup-user-config tests (pwsh parity: true)
+  ok   c1-fresh: bash exit 0
+  ok   c1-fresh: config.json bytes identical
+  ok   c1-fresh: summary rows identical
+  ok   c1-fresh: row OK|aitools config|created
+  ok   c1-fresh: config /\A\{\n  "version": 3,\n  "reposPath": "[^"]+\/repos",\n  "repoPath": "[^"]+\/repos\/aitools",\n  "googleDrives": \[\],\n  "githubUser": "nobul-jose",\n  "userRepoPath": "[^"]+\/aitools-nobul-jose",\n  "machineId": "3d4df2a5-7d91-5af9-9944-4feebaae3cf5",\n  "machineAlias": "nobul-mac",\n  "meta": \{\n    "intent": \{\n      "purpose": "Per-machine pointers/
+  ok   c1-fresh: config /"writer": "setup-user-config",\n    "derivedFrom": "profile.json"\n  \}\n\}\n\z/
+  ok   c1-fresh: 0 row(s) ACTION
+  ok   c2-verified: bash exit 0
+  ok   c2-verified: config.json bytes identical
+  ok   c2-verified: summary rows identical
+  ok   c2-verified: row OK|aitools config|verified
+  ok   c2-verified: file unchanged
+  ok   c2-verified: no backup (no write)
+  ok   c3-upgrade: bash exit 0
+  ok   c3-upgrade: config.json bytes identical
+  ok   c3-upgrade: summary rows identical
+  ok   c3-upgrade: row OK|aitools config|updated
+  ok   c3-upgrade: row DETAIL|aitools config|version updated
+  ok   c3-upgrade: row DETAIL|aitools config|machineAlias updated
+  ok   c3-upgrade: row DETAIL|aitools config|machineId updated
+  ok   c3-upgrade: config /"custom": \{\n    "keep": true\n  \},\n  "googleDrives": \[\n    \{\n      "path": "\/gd"/
+  ok   c3-upgrade: config /"machineAlias": "nobul-mac",\n  "githubUser": "nobul-jose",\n  "machineId": "3d4df2a5-7d91-5af9-9944-4feebaae3cf5",\n  "meta"/
+  ok   c3-upgrade: backup written
+  ok   c4-corrupt: bash exit 0
+  ok   c4-corrupt: config.json bytes identical
+  ok   c4-corrupt: summary rows identical
+  ok   c4-corrupt: row WARN|aitools config|rebuilt (was invalid)
+  ok   c4-corrupt: config /\A\{\n  "reposPath": "[^"]+",\n  "repoPath": "[^"]+",\n  "machineAlias": "nobul-mac",\n  "version": 3/
+  ok   c4-corrupt: config /"machineId": "3d4df2a5-7d91-5af9-9944-4feebaae3cf5"/
+  ok   c5-no-dotprofile: bash exit 0
+  ok   c5-no-dotprofile: config.json bytes identical
+  ok   c5-no-dotprofile: summary rows identical
+  ok   c5-no-dotprofile: row OK|aitools config|created
+  ok   c5-no-dotprofile: config /"githubUser": "someone",\n  "meta"/
+  ok   c5-no-dotprofile: config /"derivedFrom": "bootstrap only"/
+  ok   c6-no-bootstrap: bash exit 1
+  ok   c6-no-bootstrap: config.json bytes identical
+  ok   c6-no-bootstrap: summary rows identical
+  ok   c6-no-bootstrap: row ERROR|aitools config|missing bootstrap values
+  ok   c6-no-bootstrap: no config written
+  ok   c7-no-match: bash exit 1
+  ok   c7-no-match: config.json bytes identical
+  ok   c7-no-match: summary rows identical
+  ok   c7-no-match: row ERROR|machine profile|no machine match
+  ok   c7-no-match: row ACTION||Run: aitools user init (profiles: nobul-mac, laptop)
+  ok   c7-no-match: 1 row(s) ACTION
+  ok   c7-no-match: config /"machineAlias": "new-mac"/
+  ok   c7-no-match: config has no /"machineId"/
+  ok   c8-dry-run: bash exit 0
+  ok   c8-dry-run: config.json bytes identical
+  ok   c8-dry-run: summary rows identical
+  ok   c8-dry-run: row OK|aitools config|dry-run: would update
+  ok   c8-dry-run: config untouched
+  ok   c8b-dry-run-readonly: bash exit 0
+  ok   c8b-dry-run-readonly: config.json bytes identical
+  ok   c8b-dry-run-readonly: summary rows identical
+  ok   c8b-dry-run-readonly: row OK|aitools config|dry-run: would update
+  ok   c8b-dry-run-readonly: no row /merge failed/
+  ok   c9-drives: bash exit 0
+  ok   c9-drives: config.json bytes identical
+  ok   c9-drives: summary rows identical
+  ok   c9-drives: config /"googleDrives": \[\n    \{\n      "path": "\/Volumes\/GD\/My Drive",\n      "account": "x\@y.z",\n      "label": ""\n    \}\n  \]/
+  ok   c9-drives-empty: bash exit 0
+  ok   c9-drives-empty: config.json bytes identical
+  ok   c9-drives-empty: summary rows identical
+  ok   c9-drives-empty: config /"path": "\/gd"/
+  ok   c10-machine-id: bash exit 0
+  ok   c10-machine-id: config.json bytes identical
+  ok   c10-machine-id: summary rows identical
+  ok   c10-machine-id: row OK|aitools config|updated
+  ok   c10-machine-id: bash output has 'machineAlias=nobul-mac via=override'
+  ok   c10-machine-id: ps output has 'machineAlias=nobul-mac via=override'
+  ok   c10-machine-id: config /"machineAlias": "nobul-mac"/
+  ok   c10-machine-id: config /"machineId": "3d4df2a5-7d91-5af9-9944-4feebaae3cf5"/
+  ok   c10b-deprecated-alias: bash exit 0
+  ok   c10b-deprecated-alias: config.json bytes identical
+  ok   c10b-deprecated-alias: summary rows identical
+  ok   c10b-deprecated-alias: config /"machineAlias": "laptop"/
+  ok   c10b-deprecated-alias: config has no /"machineId"/
+  ok   c10b-deprecated-alias: row OK|aitools config|updated
+  ok   c10b-deprecated-alias: row ACTION||Run: aitools user init (registers this machine)
+  ok   c10b-deprecated-alias: 1 row(s) ACTION
+  ok   c10b-deprecated-alias: deploy.log has '[detail] deprecated flag:'
+  ok   c10c-both-flags: bash exit 1
+  ok   c10c-both-flags: config.json bytes identical
+  ok   c10c-both-flags: summary rows identical
+  ok   c10c-both-flags: row ERROR|aitools config|bad arguments
+  ok   c10d-unknown-id: bash exit 1
+  ok   c10d-unknown-id: config.json bytes identical
+  ok   c10d-unknown-id: summary rows identical
+  ok   c10d-unknown-id: row ERROR|machine profile|no machine match
+  ok   c10d-unknown-id: config /"machineAlias": "new-mac"/
+  ok   c11-env: bash exit 0
+  ok   c11-env: config.json bytes identical
+  ok   c11-env: summary rows identical
+  ok   c11-env: userRepoPath not saved
+  ok   c11-env: config /"machineAlias": "nobul-mac"/
+  ok   c13-unregistered: bash exit 0
+  ok   c13-unregistered: config.json bytes identical
+  ok   c13-unregistered: summary rows identical
+  ok   c13-unregistered: row OK|aitools config|updated
+  ok   c13-unregistered: row ACTION||Run: aitools user init (registers this machine)
+  ok   c13-unregistered: 1 row(s) ACTION
+  ok   c13-unregistered: config has no /"machineId"/
+  ok   c13-unregistered: bash output has 'COMPLETED with 1 warning(s)'
+  ok   c13-unregistered: ps output has 'COMPLETED with 1 warning(s)'
+  ok   c17-legacy-migrate: bash exit 0
+  ok   c17-legacy-migrate: config.json bytes identical
+  ok   c17-legacy-migrate: summary rows identical
+  ok   c17-legacy-migrate: row OK|aitools config|created
+  ok   c17-legacy-migrate: row ACTION||Run: aitools user init (re-keys machine profiles by machine id)
+  ok   c17-legacy-migrate: 1 row(s) ACTION
+  ok   c17-legacy-migrate: 0 row(s) WARN
+  ok   c17-legacy-migrate: config /"machineAlias": "nobul-mac"/
+  ok   c17-legacy-migrate: config has no /"machineId"/
+  ok   c17-legacy-migrate: deploy.log has 'run: aitools-profile migrate'
+  ok   c18-real-warning: bash exit 0
+  ok   c18-real-warning: config.json bytes identical
+  ok   c18-real-warning: summary rows identical
+  ok   c18-real-warning: row WARN|aitools config|created
+  ok   c18-real-warning: row ACTION||Run: aitools user init (updates this machine's profile)
+  ok   c18-real-warning: 1 row(s) ACTION
+  ok   c18-real-warning: bash output has 'COMPLETED with 2 warning(s)'
+  ok   c18-real-warning: ps output has 'COMPLETED with 2 warning(s)'
+  ok   c18-real-warning: config /"machineId": "3d4df2a5-7d91-5af9-9944-4feebaae3cf5"/
+  ok   c19-id-unavailable: bash exit 0
+  ok   c19-id-unavailable: config.json bytes identical
+  ok   c19-id-unavailable: summary rows identical
+  ok   c19-id-unavailable: row WARN|aitools config|verified
+  ok   c19-id-unavailable: machineId kept, file unchanged
+  ok   c19-id-unavailable: deploy.log has 'machineAlias=nobul-mac via=config'
+  ok   c20-stale-machine-id: bash exit 0
+  ok   c20-stale-machine-id: config.json bytes identical
+  ok   c20-stale-machine-id: summary rows identical
+  ok   c20-stale-machine-id: row OK|aitools config|updated
+  ok   c20-stale-machine-id: row DETAIL|aitools config|machineId updated
+  ok   c20-stale-machine-id: config has no /"machineId"/
+  ok   c20-stale-machine-id: config /"machineAlias": "nobul-mac"/
+  ok   c20-stale-machine-id: bash output has 'cached machineId "aaaaaaaa-1111-2222-3333-444444444444" removed'
+  ok   c20-stale-machine-id: ps output has 'cached machineId "aaaaaaaa-1111-2222-3333-444444444444" removed'
+  ok   c21-salvage-machine-id: bash exit 0
+  ok   c21-salvage-machine-id: config.json bytes identical
+  ok   c21-salvage-machine-id: summary rows identical
+  ok   c21-salvage-machine-id: row WARN|aitools config|rebuilt (was invalid)
+  ok   c21-salvage-machine-id: config /"machineId": "3d4df2a5-7d91-5af9-9944-4feebaae3cf5"/
+  ok   c21-salvage-machine-id: bash output has 'Recovered machineId from the invalid config'
+  ok   c21-salvage-machine-id: ps output has 'Recovered machineId from the invalid config'
+  ok   c14-relative: bash exit 1
+  ok   c14-relative: config.json bytes identical
+  ok   c14-relative: summary rows identical
+  ok   c14-relative: row ERROR|aitools config|bad arguments
+  ok   c14-relative: no config written
+  ok   c15-double-slash: bash exit 1
+  ok   c15-double-slash: config.json bytes identical
+  ok   c15-double-slash: summary rows identical
+  ok   c15-double-slash: row ERROR|aitools config|validation failed
+  ok   c15-double-slash: config untouched
+  ok   c16-bad-profile: bash exit 1
+  ok   c16-bad-profile: config.json bytes identical
+  ok   c16-bad-profile: summary rows identical
+  ok   c16-bad-profile: row ERROR|profile.json|invalid (see log)
+  ok   c16-bad-profile: no row /no machine match/
+  ok   c12-bad-arg: bash exit 1
+  ok   c12-bad-arg: config.json bytes identical
+  ok   c12-bad-arg: summary rows identical
+  ok   c12-bad-arg: row ERROR|aitools config|bad arguments
+  ok   bash step3: relative 'repos' -> /var/folders/9q/3zys2rys7tn7yfwk75kp2h4m0000gn/T/tmp.GKlRwabKWp/home/repos
+  ok   bash step3: absolute path unchanged
+  ok   bash step3: '../home/repos' normalised
+  ok   bash step3: relative from / -> /tmp
+  ok   bash jsonl: control characters give valid JSON
+  ok   bash step5: config.json written
+  ok   bash step5: deploy.jsonl lines are valid JSON
+  ok   bash step5: writer lines in deploy.jsonl (13)
+  ok   bash step5: writer warnings counted (2)
+  ok   bash step5: writer lines shown on the console
+  ok   bash step5: failed writer = 1 error
+  ok   bash step5: writer ERROR row kept
+  ok   ps step3: relative 'repos' -> /private/var/folders/9q/3zys2rys7tn7yfwk75kp2h4m0000gn/T/tmp.GKlRwabKWp/home/repos
+  ok   ps step3: absolute path unchanged
+  ok   ps step3: '../home/repos' normalised
+  ok   ps step3: relative from / -> /tmp
+  ok   ps jsonl: control characters give valid JSON
+  ok   ps step5: config.json written
+  ok   ps step5: deploy.jsonl lines are valid JSON
+  ok   ps step5: writer lines in deploy.jsonl (13)
+  ok   ps step5: writer warnings counted (2)
+  ok   ps step5: writer lines shown on the console
+  ok   ps step5: failed writer = 1 error
+  ok   ps step5: writer ERROR row kept
+
+190 passed, 0 failed

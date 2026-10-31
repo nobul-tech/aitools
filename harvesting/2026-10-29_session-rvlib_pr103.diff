@@ -1,0 +1,1177 @@
+diff --git a/.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Adopt/S3-MF-Adopt-Review-pr103.md b/.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Adopt/S3-MF-Adopt-Review-pr103.md
+new file mode 100644
+index 00000000..cf8c70b5
+--- /dev/null
++++ b/.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Adopt/S3-MF-Adopt-Review-pr103.md
+@@ -0,0 +1,154 @@
++# S3-MF-Adopt-Review: PR #103 review
++
++Reviewer: S3-MF-Adopt-Review (independent; delegated by S3-MF-Adopt), 2026-10-22.
++PR: https://github.com/nobul-tech/aitools/pull/103, branch `fix/mf-dotprofile-adopt-push`.
++Head reviewed: **c05fec8** (11ba964 plus a test-only fix). Read with the base,
++11ba964.
++
++## Verdict: APPROVE
++
++There are no blocking findings at c05fec8. CI on c05fec8: linux pass, windows
++pass, CodeQL pass, macos still pending when this was written. I ran the macOS
++suite locally and it passes (see Tests). Approve once the macos job is green.
++
++The one blocking issue found at 11ba964 is fixed in c05fec8:
++
++- **B1 (fixed in c05fec8)**: Windows CI failed 4 asserts in
++  `tests/managed-files/test-adopt-push.sh` (job 120203060113: "14 passed, 4
++  failed, 1 skipped"). The asserts expected the ACTION row to name the
++  dotprofile in its bash path form. The library prints `display_path`, which
++  is the Windows form (`C:\Users\RUNNER~1\...`) under Git Bash. The library
++  was right and the test was wrong. c05fec8 adds `DPD` (from `cygpath -w`)
++  and uses it in the 5 ACTION asserts. Windows job 120206540857 now shows
++  bash "18 passed, 0 failed, 1 skipped" and PS1 "14 passed, 0 failed, 1
++  skipped".
++
++## Requirement checks (N-Q2 and the 2026-10-22 commander requirement)
++
++| Requirement | Result | Evidence |
++|---|---|---|
++| One shared lib helper | Met | `dotprofile_commit_push` (aitools-lib.sh:1031); `Invoke-DotprofileCommitPush` (aitools-lib.ps1, after `Write-ManagedProtectedNote`) |
++| Called from the adopt path of deploy_managed_file / Deploy-ManagedFile and the JSON field review | Met | `_managed_adopt_notice` is called at aitools-lib.sh:2020 (text adopt/merge) and :2308 (`review_json_fields`), once per file. PS1: `Write-ManagedAdoptNotice` at aitools-lib.ps1:2009 and :2322 |
++| "In the dotprofile" decided by git, not by the path string | Met | `git rev-parse --show-toplevel` of the file's dir is compared with that of the dotprofile (sh:1049-1065). A string prefix is used only when the dotprofile is not a git repo, to choose WARN or detail. Symlinked dotprofile paths pass (edge cases 5 and 6) |
++| Pathspec commit; unrelated changes never committed | Met | `git add -- base`, then `git commit -m msg -- base` (sh:1068-1077). Unrelated staged and unstaged files are left out (tests "direct: unrelated ..."). When the same file is staged at one version and edited again, the working-tree version is committed (edge 12: `--only` semantics) |
++| Push failure = WARN + ACTION; deploy outcome unchanged | Met | sh:1086-1098. `log_warn` increments WARNINGS (PS1: warnings=3 after 3 failure modes, edge-ps1). The ACTION is written once per run (`_aitlib_action_once`). The adopt result stays `accept & adopt` and the exit code is 0 (tests "adopt, push fails") |
++| Adopt target in the aitools repo stays a working-tree change | Met | The `not-dotprofile` branch falls back to the old "Uncommitted change in ..." log (sh:1114-1119). Test "adopt outside the dotprofile" |
++| Result globals AITLIB_* / $script:AitLib*, set inside functions only; nothing returns 2 | Met | `AITLIB_DOTPROFILE_PUSH` / `$script:AitLibDotprofilePush` is set inside the function only. Always returns 0 |
++| PS1 helper writes nothing to the output stream | Met | I checked this myself: `@(Invoke-DotprofileCommitPush ...).Count` is 0 for committed-pushed, push-failed, commit-failed, not-git and unchanged (edge-ps1.ps1). `Log*` use Write-Host and file appends. git output goes to `$null` or into captured variables |
++| bash/PS1 parity (outcomes, log lines, ACTION text) | Met | The warn and ok lines and the ACTION texts are the same in the bash edge run and the PS1 edge run |
++| set -e / set -u safety, bash 3.2 | Met | Every failing command is guarded with `|| rc=$?`. `${AITLIB_USER_REPO_PATH+set}` detects "the caller resolved". The test passes under /bin/bash 3.2.57 (28/0/0) |
++| setup-user-claude's private commit block removed | Met | Both .sh and .ps1. The old block ran only after a merge, with `2>/dev/null` and a bare `git add`. The library now covers adopt and merge |
++| build-deploy / MDM copies | Met for the code | build-deploy inlines the whole lib (`inline_lib_bash` / `inline_lib_ps1`), so no duplicated block exists. No "Sync merged" remains anywhere under scripts/ |
++
++Spot-checked in the code, not through the tests: the pathspec commit and the
++`git diff --cached --quiet` "unchanged" gate (sh:1068-1078, ps1 equivalent);
++the toplevel comparison; the PS1 env save and restore in `finally`
++(`$env:X = $null` removes a variable that was not set before).
++
++## Non-blocking findings
++
++- **N1: the push publishes unrelated local commits.** If the dotprofile
++  already has unpushed commits, `git push` sends them along with the adopt
++  commit (edge 4: an unrelated local commit `notes.md` reached the remote).
++  This meets the letter of "never commit unrelated changes", but it
++  publishes unrelated work. The resolver push (aitools-profile.sh) and the
++  old setup-user-claude block behaved the same way. Suggested fix: before the
++  push, check `git rev-list --count @{u}..HEAD`; if it is greater than 1,
++  WARN + ACTION instead of pushing. Or record the behavior in the spec draft.
++- **N2: it pushes the current branch, not main.** When the dotprofile is
++  checked out on another branch with an upstream, the commit and push go to
++  that branch (edge 3: remote `feature` got the change, `main` did not). The
++  rule (.claude/rules/managed-file-deployment.md "Adopt target") says
++  "pushed to its main". Suggest: when the branch is not main, commit but do
++  not push, with WARN + ACTION. Or have the spec say "its current branch".
++- **N3: misleading ACTION when there is no upstream.** With no upstream, an
++  unborn HEAD, or a detached HEAD, the ACTION is "run git push in <dp>"
++  (edges 1, 2, 7), and plain `git push` fails the same way for the user.
++  Suggest a third case: when the output contains "no upstream" or "not
++  currently on a branch", the ACTION is `git push -u origin <branch>`, or
++  "check out a branch".
++- **N4: hook and skill adopts into the dotprofile are not committed (outside
++  this PR's stated scope).** `adopt_managed_file` / `Adopt-ManagedFile`
++  (aitools-lib.sh:2346) writes user-created hooks and skills into
++  `$USER_REPO_PATH/claude/hooks|skills/` (setup-user-hooks.sh:235,
++  setup-user-skills.sh:218, and the .ps1 twins) with no commit or push. That
++  is a library write into the dotprofile that N-Q2 ("dotprofile writes
++  auto-commit and push") covers, but the requirement named only
++  deploy_managed_file. Suggested follow-up: call `dotprofile_commit_push`
++  for each target in `adopt_managed_file` / `Adopt-ManagedFile`.
++- **N5: generated deploy/ scripts without the resolver.** Some generated
++  scripts get no embedded resolver block: deploy-harness, setup-user-hooks,
++  setup-user-skills, setup-user-mcp (build-deploy.sh 1355/1448/1538/1632/1943/2093).
++  In those scripts the helper's fallback (`_aitlib_profile_run` /
++  `Invoke-AitLibProfile`) finds no resolver. It falls to `not-dotprofile`
++  with a detail line, and the adopt is reported only as an "Uncommitted
++  change" info line. deploy-harness also reads `userRepoPath` from
++  config.json, not from the resolver. Not verified at runtime (I did not run
++  build-deploy).
++- **N6: multi-line git output in deploy.log.** `log_detail "git push in
++  $d: $out"` writes multi-line git output as one entry, so the continuation
++  lines lack the `[ts] [script] [level]` prefix (logging.md /
++  script-standards.md "Log line format"). aitools-profile.sh does the same
++  today. Suggest logging line by line, as the `ai-rejected:` lines are.
++- **N7: git add errors are mislabelled.** When `git add` fails, its output is
++  logged as "git commit in ..." (sh:1079; ps1 same). Cosmetic.
++- **N8: test parity gaps.** The PS1 test has no direct-new-file,
++  direct-action-once, merge-dotprofile, "backup not committed", or
++  "caller-resolved dotprofile wins" cases. The PS1 resolver fallback runs
++  only on Windows (aitools-profile.ps1 has an OS guard). The interactive
++  (pty) adopt cases never run on Windows in either language. The PS1
++  adopt-through-Deploy-ManagedFile path with commit-failed is not tested;
++  my direct-call check covers its output-stream cleanliness.
++- **N9: case-sensitive path compare on Windows.** The toplevel compare is
++  case-sensitive (`!=` / `-cne`). Both values come from `git rev-parse`, so
++  they are probably consistent. Not verified with differently-cased Windows
++  paths.
++- **N10: one commit message for adopt and merge.** A merge & adopt is
++  committed with the same message as a plain adopt ("Adopt X from the
++  deployed copy"). Cosmetic.
++
++## Protected-doc draft
++
++`S3-MF-Adopt-drafts/reference/managed-file-deployment.md.edit.txt` matches the
++code as reviewed: function names, the result table, the message, the
++GIT_TERMINAL_PROMPT and BatchMode settings, ACTION once per run. If N1 and N2
++are accepted as documented behavior, add them to the draft. The draft still
++needs commander approval (sources-of-truth.md).
++
++## Tests run (macOS arm64, worktree at c05fec8)
++
++| Command | Result |
++|---|---|
++| `bash tests/managed-files/test-adopt-push.sh` | 28 passed, 0 failed, 0 skipped (rc 0) |
++| same, `bash` = /bin/bash 3.2.57 on PATH | 28 passed, 0 failed, 0 skipped (rc 0) |
++| `pwsh -NoProfile -File tests/managed-files/test-adopt-push.ps1` | 23 passed, 0 failed, 0 skipped (rc 0) |
++| `bash tests/managed-files/test-managed-files.sh` | 57 passed, 0 failed, 0 skipped (rc 0) |
++| `pwsh -NoProfile -File tests/managed-files/test-managed-files.ps1` | 39 passed, 0 failed, 0 skipped (rc 0) |
++| `bash -n` and `/bin/bash -n` on aitools-lib.sh, setup-user-claude.sh, test-adopt-push.sh | all rc 0 |
++| pwsh parser on aitools-lib.ps1, setup-user-claude.ps1, test-adopt-push.ps1 | all rc 0 |
++| Reviewer edge script (12 cases, bash 3.2): unborn HEAD, no upstream, other branch, unpushed commit, symlinks x2, detached HEAD, spaces, gitignored file, outside any repo, dotprofile not a git repo, partial staging | All return 0 with a sensible state. Findings N1-N3 come from these runs |
++| Reviewer PS1 output-stream check (5 outcomes) | 0 output objects in every case; WARN count and ACTION rows match bash |
++| CI 11ba964 | windows FAIL (B1), linux pass |
++| CI c05fec8 | linux pass (7m55s), windows pass, CodeQL pass, macos pending |
++
++Scripts used: `.scratch/session-mfrev/{run-tests.sh,run-32.sh,edge.sh,edge-ps1.ps1,winlog.sh}`
++in the worktree.
++
++## Not verified
++
++- The macOS CI job on c05fec8 (pending at the time of writing).
++- A real push to GitHub over ssh or https (BatchMode, credential helper, a
++  token in the remote URL appearing in the logged push output): unknown.
++- The generated deploy/ (MDM) scripts at runtime (N5). I did not run
++  build-deploy.sh (real-HOME rule).
++- `check-pre-commit.sh` / `check-pre-push.sh`: not run by me.
++- Windows behavior beyond what CI ran (no interactive cases there).
++
++## INCIDENT markers (not filed)
++
++- INCIDENT: `adopt_managed_file` / `Adopt-ManagedFile` writes user-created
++  hooks and skills into the dotprofile without commit or push, contrary to
++  N-Q2 "dotprofile writes auto-commit and push" (N4).
++- INCIDENT: the dotprofile push publishes any pre-existing unpushed local
++  commits, and pushes the current branch rather than main. No spec states
++  either behavior (N1, N2; also true of aitools-profile.sh's push).
+diff --git a/.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Adopt/S3-MF-Adopt-drafts/reference/managed-file-deployment.md.edit.txt b/.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Adopt/S3-MF-Adopt-drafts/reference/managed-file-deployment.md.edit.txt
+new file mode 100644
+index 00000000..d81805c5
+--- /dev/null
++++ b/.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Adopt/S3-MF-Adopt-drafts/reference/managed-file-deployment.md.edit.txt
+@@ -0,0 +1,61 @@
++Draft edit for reference/managed-file-deployment.md (protected; awaiting commander approval)
++Author: S3-MF-Adopt, 2026-10-22. Section: "Caller Responsibilities".
++
++Why: the code now implements N-Q2 in the library (dotprofile_commit_push /
++Invoke-DotprofileCommitPush, called from the adopt path of deploy_managed_file /
++Deploy-ManagedFile and review_json_fields / Review-JsonFields). The current text
++says setup-user-claude does the commit "today ... (kept)"; that private block is
++removed by this PR, and the helper's contract has no home in the spec yet.
++
++=== OLD ===
++- **Dotprofile writes are committed and pushed** (N-Q2, approved
++  2026-10-21). An adopt or merge whose adopt target is in the dotprofile
++  repo is committed and pushed to the dotprofile's main automatically, as
++  `setup-user-claude` does today for adopted and merged rules (kept). An
++  adopt target in the aitools repo is a working-tree change only: no
++  commit, no push; the user ships it through a PR.
++
++=== NEW ===
++- **Dotprofile writes are committed and pushed** (N-Q2, approved
++  2026-10-21). An adopt or merge whose adopt target is in the dotprofile
++  repo is committed and pushed by the library, right after the adopt write
++  and its validation succeed: `dotprofile_commit_push FILE MESSAGE` in
++  `@scripts/aitools-lib.sh` / `Invoke-DotprofileCommitPush -File -Message`
++  in `@scripts/aitools-lib.ps1` (also usable by any other dotprofile
++  writer). Callers do not commit or push adopt targets themselves. An
++  adopt target in the aitools repo is a working-tree change only: no
++  commit, no push; the user ships it through a PR.
++  - *In the dotprofile* is decided by git: the file's git top level equals
++    the dotprofile's. The dotprofile is the caller's resolved path
++    (`AITLIB_USER_REPO_PATH` / `$script:AitLibUserRepoPath`, set by
++    `resolve_user_repo_path` / `Resolve-UserRepoPath`), or, when the caller
++    never resolved it, the resolver is asked quietly (no ERROR row).
++  - *Pathspec commit*: `git add -- FILE`, then `git commit -m MESSAGE --
++    FILE`. Other staged or unstaged changes in the dotprofile are never
++    included. Message from the adopt path: `Adopt <file name> from the
++    deployed copy`.
++  - *Push* never prompts (`GIT_TERMINAL_PROMPT=0`; ssh BatchMode unless
++    `GIT_SSH_COMMAND` is set). git output goes to deploy.log (detail).
++  - *Result* (`AITLIB_DOTPROFILE_PUSH` / `$script:AitLibDotprofilePush`):
++
++    | Value | Meaning | Log / summary |
++    |-------|---------|---------------|
++    | `committed-pushed` | committed and pushed | `ok` line |
++    | `unchanged` | file matches HEAD: nothing committed, no push | detail line only |
++    | `commit-failed` | commit failed (or the dotprofile is not a git repository) | WARN + ACTION `commit and push <file> in <dotprofile>` |
++    | `push-failed` | committed, not pushed | WARN + ACTION `git pull --rebase, then git push in <dotprofile>` (remote has newer commits) or `run git push in <dotprofile>` |
++    | `not-dotprofile` | not in the dotprofile, or no dotprofile | detail line; the adopt path then logs "Uncommitted change in <repo>" as before |
++
++    ACTION rows are written once per run (`_aitlib_action_once` /
++    `Write-AitLibActionOnce`). A failed commit or push never changes the
++    deploy result: it stays `accept & adopt` and the run continues.
++
++=== ALSO (same file, "Return Values" area, optional one-liner) ===
++After the `accept & adopt` row's explanation, add:
++  "For an adopt target in the dotprofile, `accept & adopt` also means the
++  library tried to commit and push it (see Caller Responsibilities, N-Q2)."
++
++=== Related, not drafted (no change needed) ===
++.claude/rules/managed-file-deployment.md "Adopt target" already states the
++rule ("An adopt target in the dotprofile repo is committed and pushed to its
++main automatically (N-Q2)"); it now matches the code. No edit proposed.
+diff --git a/.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Adopt/S3-MF-Adopt-report.md b/.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Adopt/S3-MF-Adopt-report.md
+new file mode 100644
+index 00000000..07b1f71e
+--- /dev/null
++++ b/.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Adopt/S3-MF-Adopt-report.md
+@@ -0,0 +1,74 @@
++# S3-MF-Adopt report (N-Q2: dotprofile adopt is committed and pushed by the library)
++
++**PR:** https://github.com/nobul-tech/aitools/pull/103. **Branch:** `fix/mf-dotprofile-adopt-push`. **Commits:** 11ba964 (the change), c05fec8 (a Windows test fix), and a third commit that adds this report and the review file.
++
++## Summary
++
++The library now commits and pushes an adopt target when that target is in the dotprofile. This covers accept & adopt, merge & adopt and JSON field adopt. The new helper is `dotprofile_commit_push FILE MESSAGE` in bash and `Invoke-DotprofileCommitPush -File -Message` in PS1.
++
++- **What it commits:** only the one file (pathspec commit). Other staged or unstaged changes in the dotprofile stay out.
++- **How it pushes:** without prompts.
++- **How it decides "in the dotprofile":** it compares git top levels, not path strings. The dotprofile comes from the caller's resolved path. If the caller never resolved it, the helper asks the resolver quietly.
++- **Result values** (`AITLIB_DOTPROFILE_PUSH` / `$script:AitLibDotprofilePush`): `committed-pushed`, `unchanged`, `commit-failed`, `push-failed`, `not-dotprofile`.
++- **When the commit or push fails:** the helper logs a WARN and writes one ACTION per run. The deploy outcome stays `accept & adopt`.
++- **Adopt targets in the aitools repo:** unchanged. They stay working-tree changes with the "Uncommitted change" line.
++
++The private rules-path commit block in setup-user-claude.sh/.ps1 is removed, because the library now does this. The old PS1 block committed everything staged (it used no pathspec).
++
++## Files changed
++
++- `scripts/aitools-lib.sh`: the new helper, `_managed_adopt_notice`, and header comments.
++- `scripts/aitools-lib.ps1`: the new helper, `Write-ManagedAdoptNotice`, and header comments.
++- `scripts/setup-user-claude.sh` and `scripts/setup-user-claude.ps1`: the private commit block removed.
++- `tests/managed-files/test-adopt-push.sh` and `.ps1`: new tests.
++- `.github/workflows/check.yml`: the new tests added to 3 jobs.
++- Draft for `reference/managed-file-deployment.md` (a protected file): `S3-MF-Adopt-drafts/reference/managed-file-deployment.md.edit.txt`.
++
++## Verification
++
++All on macOS:
++
++| Test | Passed | Failed |
++|---|---|---|
++| test-adopt-push.sh | 28 | 0 |
++| test-adopt-push.ps1 | 23 | 0 |
++| test-managed-files.sh | 57 | 0 |
++| test-managed-files.ps1 | 39 | 0 |
++
++`bash -n` and the pwsh parser are clean on every touched script.
++
++The check scripts fail only on known pre-existing items:
++- **check-pre-commit:** fails step 6, the known harvesting file with mode 100644.
++- **check-pre-push:** fails step 7, the known stale dotprofile `deploy/`.
++
++**CI:**
++- On 11ba964, Windows failed 4 asserts. The test expected the bash path form, and display_path prints the Windows form. c05fec8 fixes the test.
++- On c05fec8, Linux, Windows and CodeQL pass. The macOS job was still pending when this report was written.
++
++## Not run
++
++- Windows by hand: it is covered by CI only, and the pty cases are skipped there.
++- The PS1 resolver fallback off Windows: aitools-profile.ps1 refuses to run on other OSes.
++- A real push to GitHub over ssh or https.
++- The generated deploy/ scripts at runtime.
++
++## Reviewer
++
++S3-MF-Adopt-Review gave **APPROVE** at c05fec8: https://github.com/nobul-tech/aitools/pull/103#issuecomment-6356052149. The details are in `S3-MF-Adopt-Review-pr103.md`.
++
++- The one blocking finding (B1, the Windows test asserts) is fixed in c05fec8.
++- It made 10 non-blocking findings (N1–N10).
++
++## WRITE_BLOCKED
++
++None. Two inline commands were refused by the standing-order guard (`$(...)` and `;`). I redid both with the Edit tool or a scratch script.
++
++## INCIDENT markers (not filed)
++
++- INCIDENT: `adopt_managed_file` / `Adopt-ManagedFile` writes user-created hooks and skills into the dotprofile without commit or push, contrary to N-Q2 (reviewer N4).
++- INCIDENT: no spec says what a dotprofile push does with earlier unpushed local commits (it publishes them), or which branch it pushes (the current branch, not "its main" as the rule says). The resolver's own push does the same (reviewer N1, N2).
++
++## Open questions
++
++- **Should the push target main explicitly** (`git push origin HEAD:main`, or refuse when the branch is not main)? I suggest refusing with a WARN + ACTION when the current branch is not main, because that matches the rule text "its main".
++- **Should the helper fall back to `identity.git` from profile.json** when the machine has no git identity, as `ui_commit` in scripts/aitools does? I suggest yes, in a follow-up. It needs a JSON reader in the lib.
+diff --git a/.github/workflows/check.yml b/.github/workflows/check.yml
+index 5806c2f9..0363e0c3 100644
+--- a/.github/workflows/check.yml
++++ b/.github/workflows/check.yml
+@@ -125,6 +125,12 @@ jobs:
+       - name: Managed-file tests (PowerShell)
+         run: pwsh -NoProfile -File tests/managed-files/test-managed-files.ps1
+ 
++      - name: Dotprofile adopt commit+push tests (bash)
++        run: bash tests/managed-files/test-adopt-push.sh
++
++      - name: Dotprofile adopt commit+push tests (PowerShell)
++        run: pwsh -NoProfile -File tests/managed-files/test-adopt-push.ps1
++
+       - name: Profile resolver tests (bash 5 + pwsh parity)
+         run: bash tests/profile/test-profile.sh
+ 
+@@ -296,6 +302,12 @@ jobs:
+       - name: Managed-file tests (PowerShell)
+         run: pwsh -NoProfile -File tests/managed-files/test-managed-files.ps1
+ 
++      - name: Dotprofile adopt commit+push tests (bash)
++        run: bash tests/managed-files/test-adopt-push.sh
++
++      - name: Dotprofile adopt commit+push tests (PowerShell)
++        run: pwsh -NoProfile -File tests/managed-files/test-adopt-push.ps1
++
+       - name: Profile resolver tests (bash + pwsh parity, incl. claude-code-web)
+         run: bash tests/profile/test-profile.sh
+ 
+@@ -406,6 +418,14 @@ jobs:
+         shell: pwsh
+         run: pwsh -NoProfile -File tests/managed-files/test-managed-files.ps1
+ 
++      - name: Dotprofile adopt commit+push tests (bash, via Git Bash)
++        shell: bash
++        run: bash tests/managed-files/test-adopt-push.sh
++
++      - name: Dotprofile adopt commit+push tests (PowerShell, native)
++        shell: pwsh
++        run: pwsh -NoProfile -File tests/managed-files/test-adopt-push.ps1
++
+       - name: Profile resolver (PowerShell, native machine id and hostname)
+         shell: pwsh
+         run: |
+diff --git a/scripts/aitools-lib.ps1 b/scripts/aitools-lib.ps1
+index ea4d4046..8ca96a47 100644
+--- a/scripts/aitools-lib.ps1
++++ b/scripts/aitools-lib.ps1
+@@ -895,12 +895,139 @@ function Write-ManagedProtectedNote {
+     }
+ }
+ 
+-# After adopt or merge: the library never commits or pushes. Say that the
+-# adopt target's repo has an uncommitted change to review, and WARN when the
+-# target is protected (Write-ManagedProtectedNote). Parity: _managed_adopt_notice.
++# ---------------------------------------------------------------------------
++# Invoke-DotprofileCommitPush -File FILE -Message MESSAGE -- commit FILE, and
++# only FILE, in the dotprofile and push it (N-Q2: dotprofile writes are
++# committed and pushed automatically). Parity: dotprofile_commit_push in
++# aitools-lib.sh.
++#   -File     absolute path of a file this run wrote
++#   -Message  commit message
++# "In the dotprofile" is decided by git, not by the path string: FILE's git top
++# level equals the dotprofile's git top level. The dotprofile is
++# $script:AitLibUserRepoPath when the caller already ran Resolve-UserRepoPath
++# (set, even to ""); otherwise the resolver is asked here, quietly (no ERROR
++# row: a resolver failure means "not the dotprofile"; it overwrites
++# $script:AitLibProfileOut / AitLibProfileRc).
++# Pathspec commit (git add -- FILE, then git commit -m MESSAGE -- FILE), so other
++# staged or unstaged changes in the dotprofile are never included. The push
++# never prompts (GIT_TERMINAL_PROMPT=0; ssh BatchMode unless GIT_SSH_COMMAND is
++# set); credential helpers still work. git's output goes to deploy.log (detail).
++# Sets $script:AitLibDotprofilePush (never empty after the call):
++#   committed-pushed  committed and pushed (LogOk)
++#   unchanged         FILE matches HEAD: nothing committed, no push, no warning
++#   commit-failed     LogWarn + ACTION "commit and push <file> in <dotprofile>"
++#   push-failed       committed, not pushed: LogWarn + ACTION "git pull --rebase,
++#                     then git push in <dotprofile>" (remote has newer commits)
++#                     or "run git push in <dotprofile>" (any other failure)
++#   not-dotprofile    FILE is not in the dotprofile, or there is none: nothing done
++# Writes nothing to the output stream (it is called inside Deploy-ManagedFile,
++# whose output is its result): a failed commit or push is a warning, the
++# caller's own outcome (e.g. "accept & adopt") is unchanged and the run continues.
++# ---------------------------------------------------------------------------
++function Invoke-DotprofileCommitPush {
++    param([string]$File, [string]$Message)
++    $script:AitLibDotprofilePush = "not-dotprofile"
++    $dir = Split-Path -Parent $File
++    $base = Split-Path -Leaf $File
++    if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
++        # Get-Command exempt: command-existence check; this branch is the fallback
++        LogDetail "dotprofile commit: git not found -- $File not committed"
++        return
++    }
++    $dp = ""
++    $known = Get-Variable -Name AitLibUserRepoPath -Scope Script -ErrorAction SilentlyContinue
++    if ($null -ne $known) {
++        # Variable present = the caller ran Resolve-UserRepoPath ($null result checked above)
++        $dp = [string]$known.Value
++    } elseif ((Invoke-AitLibProfile @("user-repo-path")) -and $script:AitLibProfileRc -eq 0) {
++        $dp = Get-AitLibProfileTag "path"
++    }
++    if (-not $dp -or -not (Test-Path -LiteralPath $dp -PathType Container) -or -not $dir -or -not (Test-Path -LiteralPath $dir -PathType Container)) {
++        LogDetail "dotprofile commit: $File -- no dotprofile resolved or no such directory; nothing committed"
++        return
++    }
++    # 2>$null: outside a git repo rev-parse fails; $LASTEXITCODE and the empty result are checked below.
++    $top = (& git -C $dir rev-parse --show-toplevel 2>$null | Out-String).Trim()
++    if ($LASTEXITCODE -ne 0) { $top = "" }
++    $dpTop = (& git -C $dp rev-parse --show-toplevel 2>$null | Out-String).Trim()
++    if ($LASTEXITCODE -ne 0) { $dpTop = "" }   # same: empty checked below
++    if (-not $dpTop) {
++        $dpFull = [IO.Path]::GetFullPath($dp).TrimEnd('/', '\')
++        $fileFull = [IO.Path]::GetFullPath($File)
++        if ($fileFull.StartsWith($dpFull + [IO.Path]::DirectorySeparatorChar) -or $fileFull.StartsWith($dpFull + '/')) {
++            $script:AitLibDotprofilePush = "commit-failed"
++            LogWarn "dotprofile $dp is not a git repository -- $base written but not committed"
++            Write-AitLibActionOnce "commit and push $base in $dp"
++        } else {
++            LogDetail "dotprofile commit: $dp is not a git repository; $File is outside it"
++        }
++        return
++    }
++    if (-not $top -or $top -cne $dpTop) {
++        LogDetail "dotprofile commit: $File is not in the dotprofile ($dp) -- not committed"
++        return
++    }
++    $prefix = (& git -C $dir rev-parse --show-prefix 2>$null | Out-String).Trim()
++    if ($LASTEXITCODE -ne 0) { $prefix = "" }   # "" = file at the repo root (valid)
++    $rel = "$prefix$base"
++    $out = (& git -C $dir add -- $base 2>&1 | Out-String).Trim()
++    $rc = $LASTEXITCODE
++    if ($rc -eq 0) {
++        $null = & git -C $dir diff --cached --quiet -- $base
++        $drc = $LASTEXITCODE
++        if ($drc -eq 0) {
++            $script:AitLibDotprofilePush = "unchanged"
++            LogDetail "dotprofile commit: $rel unchanged in $dp -- nothing to commit or push"
++            return
++        }
++        # drc 1 = a staged change to commit; >1 = diff error: the commit reports a real problem
++        $out = (& git -C $dir commit -m $Message -- $base 2>&1 | Out-String).Trim()
++        $rc = $LASTEXITCODE
++    }
++    if ($out) { LogDetail "git commit in ${dp}: $out" }
++    if ($rc -ne 0) {
++        $script:AitLibDotprofilePush = "commit-failed"
++        LogWarn "dotprofile commit failed (exit $rc) -- commit and push $rel in $dp by hand"
++        Write-AitLibActionOnce "commit and push $rel in $dp"
++        return
++    }
++    $prevPrompt = $env:GIT_TERMINAL_PROMPT
++    $prevSsh = $env:GIT_SSH_COMMAND
++    try {
++        $env:GIT_TERMINAL_PROMPT = "0"
++        if (-not $env:GIT_SSH_COMMAND) { $env:GIT_SSH_COMMAND = "ssh -o BatchMode=yes" }
++        $out = (& git -C $dir push 2>&1 | Out-String).Trim()
++        $rc = $LASTEXITCODE
++    } finally {
++        $env:GIT_TERMINAL_PROMPT = $prevPrompt
++        $env:GIT_SSH_COMMAND = $prevSsh
++    }
++    if ($out) { LogDetail "git push in ${dp}: $out" }
++    if ($rc -ne 0) {
++        $script:AitLibDotprofilePush = "push-failed"
++        if ($out -match 'rejected|non-fast-forward|fetch first') {
++            LogWarn "dotprofile push rejected (exit $rc): the remote has newer commits -- run git pull --rebase, then git push in $dp"
++            Write-AitLibActionOnce "git pull --rebase, then git push in $dp"
++        } else {
++            LogWarn "dotprofile push failed (exit $rc) -- run git push in $dp"
++            Write-AitLibActionOnce "run git push in $dp"
++        }
++        return
++    }
++    $script:AitLibDotprofilePush = "committed-pushed"
++    LogOk "dotprofile: $rel committed and pushed ($Message)"
++}
++
++# After adopt or merge: WARN when the target is protected
++# (Write-ManagedProtectedNote). An adopt target in the dotprofile is committed
++# and pushed (Invoke-DotprofileCommitPush, N-Q2). Any other adopt target (the
++# aitools repo) stays a working-tree change: say that its repo has an
++# uncommitted change to review. Parity: _managed_adopt_notice.
+ function Write-ManagedAdoptNotice {
+     param([string]$Target)
+     Write-ManagedProtectedNote -Target $Target
++    Invoke-DotprofileCommitPush -File $Target -Message "Adopt $(Split-Path -Leaf $Target) from the deployed copy"
++    if ($script:AitLibDotprofilePush -ne "not-dotprofile") { return }
+     $dir = Split-Path -Parent $Target
+     if (-not $dir -or -not (Test-Path -LiteralPath $dir)) { return }
+     # 2>$null: outside a git repo there is nothing to commit ($LASTEXITCODE and the result are checked).
+@@ -1467,9 +1594,12 @@ function Invoke-AiMerge {
+ # caller records it; Write-DeployTrackerSummary writes an ERROR row) and the
+ # run continues with the next file. An adopt target listed in its repo's
+ # protected-files table (.claude/rules/sources-of-truth.md) gets a WARN that
+-# names it: working tree only; the review gate applies at commit. The library
+-# never commits or pushes: after adopt or merge it logs that the adopt
+-# target's repo has an uncommitted change to review and ship.
++# names it: working tree only; the review gate applies at commit. After adopt
++# or merge, an adopt target in the dotprofile is committed (that file only) and
++# pushed (Invoke-DotprofileCommitPush, N-Q2; a failed commit or push is a
++# warning + ACTION, the result stays "accept & adopt"). Any other adopt target
++# (the aitools repo) is not committed: the library logs that its repo has an
++# uncommitted change to review and ship.
+ # ---------------------------------------------------------------------------
+ 
+ # ---------------------------------------------------------------------------
+diff --git a/scripts/aitools-lib.sh b/scripts/aitools-lib.sh
+index 450cb890..26ae3088 100755
+--- a/scripts/aitools-lib.sh
++++ b/scripts/aitools-lib.sh
+@@ -1001,12 +1001,117 @@ _managed_protected_note() {
+     fi
+ }
+ 
+-# After adopt or merge: the library never commits or pushes. Say that the
+-# adopt target's repo has an uncommitted change to review, and WARN when the
+-# target is protected (_managed_protected_note).
++# ---------------------------------------------------------------------------
++# dotprofile_commit_push FILE MESSAGE -- commit FILE, and only FILE, in the
++# dotprofile and push it (N-Q2: dotprofile writes are committed and pushed
++# automatically). Parity: Invoke-DotprofileCommitPush in aitools-lib.ps1.
++#   FILE     absolute path of a file this run wrote
++#   MESSAGE  commit message
++# "In the dotprofile" is decided by git, not by the path string: FILE's git top
++# level equals the dotprofile's git top level. The dotprofile is
++# AITLIB_USER_REPO_PATH when the caller already ran resolve_user_repo_path
++# (set, even to ""); otherwise the resolver is asked here, quietly (no ERROR
++# row: a resolver failure means "not the dotprofile"; it overwrites
++# AITLIB_PROFILE_OUT / AITLIB_PROFILE_RC).
++# Pathspec commit (git add -- FILE, then git commit -m MESSAGE -- FILE), so other
++# staged or unstaged changes in the dotprofile are never included. The push
++# never prompts (GIT_TERMINAL_PROMPT=0; ssh BatchMode unless GIT_SSH_COMMAND is
++# set); credential helpers still work. git's output goes to deploy.log (detail).
++# Sets AITLIB_DOTPROFILE_PUSH (never empty after the call):
++#   committed-pushed  committed and pushed (log_ok)
++#   unchanged         FILE matches HEAD: nothing committed, no push, no warning
++#   commit-failed     log_warn + ACTION "commit and push <file> in <dotprofile>"
++#   push-failed       committed, not pushed: log_warn + ACTION "git pull --rebase,
++#                     then git push in <dotprofile>" (remote has newer commits)
++#                     or "run git push in <dotprofile>" (any other failure)
++#   not-dotprofile    FILE is not in the dotprofile, or there is none: nothing done
++# Always returns 0: a failed commit or push is a warning, the caller's own
++# outcome (e.g. "accept & adopt") is unchanged and the run continues.
++# ---------------------------------------------------------------------------
++dotprofile_commit_push() {
++    AITLIB_DOTPROFILE_PUSH="not-dotprofile"
++    local file="$1" msg="$2" dir base top dp="" dptop prefix rel d out rc=0 drc=0
++    dir=$(dirname "$file"); base=$(basename "$file")
++    if ! command -v git >/dev/null 2>&1; then
++        log_detail "dotprofile commit: git not found -- $(display_path "$file") not committed"
++        return 0
++    fi
++    if [ -n "${AITLIB_USER_REPO_PATH+set}" ]; then
++        dp="$AITLIB_USER_REPO_PATH"
++    elif _aitlib_profile_run user-repo-path && [ "$AITLIB_PROFILE_RC" -eq 0 ]; then
++        dp=$(_aitlib_bash_path "$(_aitlib_profile_tag path)")
++    fi
++    if [ -z "$dp" ] || [ ! -d "$dp" ] || [ ! -d "$dir" ]; then
++        log_detail "dotprofile commit: $(display_path "$file") -- no dotprofile resolved or no such directory; nothing committed"
++        return 0
++    fi
++    # 2>/dev/null: outside a git repo rev-parse fails; the empty result is checked below.
++    top=$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null) || top=""
++    dptop=$(git -C "$dp" rev-parse --show-toplevel 2>/dev/null) || dptop=""  # same: empty checked below
++    d=$(display_path "$dp")
++    if [ -z "$dptop" ]; then
++        case "$file" in
++            "$dp"/*)
++                AITLIB_DOTPROFILE_PUSH="commit-failed"
++                log_warn "dotprofile $d is not a git repository -- $base written but not committed"
++                _aitlib_action_once "commit and push $base in $d" ;;
++            *) log_detail "dotprofile commit: $d is not a git repository; $(display_path "$file") is outside it" ;;
++        esac
++        return 0
++    fi
++    if [ -z "$top" ] || [ "$top" != "$dptop" ]; then
++        log_detail "dotprofile commit: $(display_path "$file") is not in the dotprofile ($d) -- not committed"
++        return 0
++    fi
++    prefix=$(git -C "$dir" rev-parse --show-prefix 2>/dev/null) || prefix=""  # "" = file at the repo root (valid)
++    rel="${prefix}${base}"
++    out=$(git -C "$dir" add -- "$base" 2>&1) || rc=$?
++    if [ "$rc" -eq 0 ]; then
++        git -C "$dir" diff --cached --quiet -- "$base" || drc=$?
++        if [ "$drc" -eq 0 ]; then
++            AITLIB_DOTPROFILE_PUSH="unchanged"
++            log_detail "dotprofile commit: $rel unchanged in $d -- nothing to commit or push"
++            return 0
++        fi
++        # drc 1 = a staged change to commit; >1 = diff error: the commit reports a real problem
++        out=$(git -C "$dir" commit -m "$msg" -- "$base" 2>&1) || rc=$?
++    fi
++    if [ -n "$out" ]; then log_detail "git commit in $d: $out"; fi
++    if [ "$rc" -ne 0 ]; then
++        AITLIB_DOTPROFILE_PUSH="commit-failed"
++        log_warn "dotprofile commit failed (exit $rc) -- commit and push $rel in $d by hand"
++        _aitlib_action_once "commit and push $rel in $d"
++        return 0
++    fi
++    out=$(GIT_TERMINAL_PROMPT=0 GIT_SSH_COMMAND="${GIT_SSH_COMMAND:-ssh -o BatchMode=yes}" git -C "$dir" push 2>&1) || rc=$?
++    if [ -n "$out" ]; then log_detail "git push in $d: $out"; fi
++    if [ "$rc" -ne 0 ]; then
++        AITLIB_DOTPROFILE_PUSH="push-failed"
++        case "$out" in
++            *rejected*|*non-fast-forward*|*"fetch first"*)
++                log_warn "dotprofile push rejected (exit $rc): the remote has newer commits -- run git pull --rebase, then git push in $d"
++                _aitlib_action_once "git pull --rebase, then git push in $d" ;;
++            *)
++                log_warn "dotprofile push failed (exit $rc) -- run git push in $d"
++                _aitlib_action_once "run git push in $d" ;;
++        esac
++        return 0
++    fi
++    AITLIB_DOTPROFILE_PUSH="committed-pushed"
++    log_ok "dotprofile: $rel committed and pushed ($msg)"
++    return 0
++}
++
++# After adopt or merge: WARN when the target is protected
++# (_managed_protected_note). An adopt target in the dotprofile is committed and
++# pushed (dotprofile_commit_push, N-Q2). Any other adopt target (the aitools
++# repo) stays a working-tree change: say that its repo has an uncommitted
++# change to review.
+ _managed_adopt_notice() {
+     local target="$1" top
+     _managed_protected_note "$target"
++    dotprofile_commit_push "$target" "Adopt $(basename "$target") from the deployed copy"
++    if [ "$AITLIB_DOTPROFILE_PUSH" != "not-dotprofile" ]; then return 0; fi
+     # 2>/dev/null: outside a git repo there is nothing to commit (empty result checked).
+     top=$(git -C "$(dirname "$target")" rev-parse --show-toplevel 2>/dev/null) || top=""
+     if [ -n "$top" ]; then
+@@ -1541,9 +1646,12 @@ _invoke_ai_merge() {
+ # caller records it; deploy_tracker_summary writes an ERROR row) and the run
+ # continues with the next file. An adopt target listed in its repo's
+ # protected-files table (.claude/rules/sources-of-truth.md) gets a WARN that
+-# names it: working tree only; the review gate applies at commit. The library
+-# never commits or pushes: after adopt or merge it logs that the adopt
+-# target's repo has an uncommitted change to review and ship.
++# names it: working tree only; the review gate applies at commit. After adopt
++# or merge, an adopt target in the dotprofile is committed (that file only) and
++# pushed (dotprofile_commit_push, N-Q2; a failed commit or push is a warning +
++# ACTION, the result stays "accept & adopt"). Any other adopt target (the
++# aitools repo) is not committed: the library logs that its repo has an
++# uncommitted change to review and ship.
+ # ---------------------------------------------------------------------------
+ 
+ # ---------------------------------------------------------------------------
+diff --git a/scripts/setup-user-claude.ps1 b/scripts/setup-user-claude.ps1
+index 9af0d981..2b308bc4 100644
+--- a/scripts/setup-user-claude.ps1
++++ b/scripts/setup-user-claude.ps1
+@@ -394,32 +394,9 @@ if ($rulesSrc) {
+                 # tracker records every outcome (failed -> ERROR row).
+             }
+             Record-DeployOutcome -Outcome $ruleResult -ToolName "claude rules" -ItemName $rf.Name
+-            # After a merge & adopt (the library already wrote the merge to the
+-            # dotprofile), auto commit+push to keep the dotprofile in sync.
+-            # Kept: commander confirmed 2026-10-21 (contract item #11).
+-            if ($ruleResult -eq "accept & adopt" -and $script:MergedContent -and $userRepoPath) {
+-                try {
+-                    Push-Location $userRepoPath
+-                    & git add "claude/rules/$($rf.Name)"
+-                    # Suppress git stderr noise; LASTEXITCODE checked on next line
+-                    & git diff --cached --quiet "claude/rules/$($rf.Name)" 2>$null
+-                    if ($LASTEXITCODE -ne 0) {
+-                        # Has staged changes -- commit and push
+-                        & git commit -m "Sync merged $($rf.Name) from deploy"
+-                        if ($LASTEXITCODE -ne 0) { throw "git commit failed" }
+-                        & git push
+-                        if ($LASTEXITCODE -ne 0) { throw "git push failed" }
+-                        LogOk "Pushed merged $($rf.Name) to user repo"
+-                    } else {
+-                        Log "No diff to commit in user repo for $($rf.Name)"
+-                    }
+-                } catch {
+-                    LogWarn "Failed to push merged $($rf.Name) to user repo: $_"
+-                    Write-Summary "WARN" "claude rules" "$($rf.Name) not pushed"
+-                } finally {
+-                    Pop-Location
+-                }
+-            }
++            # After accept & adopt or merge & adopt the library commits that one
++            # dotprofile rule and pushes it (Invoke-DotprofileCommitPush, N-Q2;
++            # commander confirmed 2026-10-21, contract item #11). No commit here.
+         }
+ 
+         # Log preserved files (in target but not in source)
+diff --git a/scripts/setup-user-claude.sh b/scripts/setup-user-claude.sh
+index 22216ea1..f49dcfcd 100755
+--- a/scripts/setup-user-claude.sh
++++ b/scripts/setup-user-claude.sh
+@@ -364,29 +364,9 @@ if [ -n "$RULES_SRC" ]; then
+                     ;;
+             esac
+             deploy_tracker_record "$MANAGED_FILE_RESULT" "claude rules" "$rule_name"
+-            # After a merge & adopt (the library already wrote the merge to the
+-            # dotprofile), auto commit+push to keep the dotprofile in sync.
+-            # Kept: commander confirmed 2026-10-21 (contract item #11).
+-            if [ "$MANAGED_FILE_RESULT" = "accept & adopt" ] && [ -n "${MERGED_CONTENT:-}" ] && [ -n "${USER_REPO_PATH:-}" ]; then
+-                # Suppress git stderr noise; failure handled by if/else branches
+-                if (cd "$USER_REPO_PATH" && \
+-                    git add "claude/rules/$rule_name" && \
+-                    git diff --cached --quiet "claude/rules/$rule_name") 2>/dev/null; then
+-                    # git diff --cached --quiet exits 0 = no staged changes
+-                    log "No diff to commit in user repo for $rule_name"
+-                else
+-                    # Suppress git stderr noise; failure handled by if/else branches
+-                    if (cd "$USER_REPO_PATH" && \
+-                        git add "claude/rules/$rule_name" && \
+-                        git commit -m "Sync merged $rule_name from deploy" && \
+-                        git push) 2>/dev/null; then
+-                        log_ok "Pushed merged $rule_name to user repo"
+-                    else
+-                        log_warn "Failed to push merged $rule_name to user repo"
+-                        write_summary WARN "claude rules" "$rule_name not pushed"
+-                    fi
+-                fi
+-            fi
++            # After accept & adopt or merge & adopt the library commits that one
++            # dotprofile rule and pushes it (dotprofile_commit_push, N-Q2;
++            # commander confirmed 2026-10-21, contract item #11). No commit here.
+         done
+ 
+         # Log preserved files (in target but not in source)
+diff --git a/tests/managed-files/test-adopt-push.ps1 b/tests/managed-files/test-adopt-push.ps1
+new file mode 100644
+index 00000000..44d7ce30
+--- /dev/null
++++ b/tests/managed-files/test-adopt-push.ps1
+@@ -0,0 +1,200 @@
++# test-adopt-push.ps1 -- tests for N-Q2 in scripts/aitools-lib.ps1: an adopt into
++# the dotprofile through Deploy-ManagedFile (accept & adopt, merge & adopt,
++# JSON field adopt) is committed (that file only) and pushed by
++# Invoke-DotprofileCommitPush; an adopt target outside the dotprofile is not
++# committed; commit and push failures are a warning + ACTION and leave the
++# deploy outcome unchanged. Mirror of tests/managed-files/test-adopt-push.sh.
++#
++# Safe to re-run: every case runs in a child pwsh with its own temp HOME, a
++# throwaway dotprofile git repo and a bare remote, removed on exit. The real
++# dotprofile is never touched (AITOOLS_USER_REPO_PATH points into the temp dir;
++# git's global and system config are ignored). Interactive cases run on a
++# pseudo-terminal (tests/managed-files/pty-run.py, python3; skipped on Windows).
++# Platform: macOS, Linux (pwsh 7); Windows runs the non-interactive cases.
++# Exit 1 if any case fails.
++#
++# Usage: pwsh -NoProfile -File tests/managed-files/test-adopt-push.ps1 [-Help]
++
++param([switch]$Help)
++if ($Help) { Get-Content $PSCommandPath -TotalCount 16 | Select-Object -Skip 1; exit 0 }
++
++$ErrorActionPreference = "Stop"
++$root = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
++$lib = Join-Path $root "scripts/aitools-lib.ps1"
++$pty = Join-Path $root "tests/managed-files/pty-run.py"
++$tmpRoot = Join-Path ([IO.Path]::GetTempPath()) ("adopt-push-" + [guid]::NewGuid().ToString("N"))
++New-Item -ItemType Directory -Path $tmpRoot | Out-Null
++$pwshExe = (Get-Process -Id $PID).Path
++# The user's git config (signing, hooks, templates) must not reach these repos.
++$env:GIT_CONFIG_GLOBAL = Join-Path $tmpRoot "gitconfig"
++[IO.File]::WriteAllText($env:GIT_CONFIG_GLOBAL, "")
++$env:GIT_CONFIG_NOSYSTEM = "1"
++
++$script:pass = 0; $script:fail = 0; $script:skip = 0
++$havePty = (-not $IsWindows) -and [bool](Get-Command python3 -ErrorAction SilentlyContinue)
++# Get-Command exempt: command-existence check; $havePty is the fallback branch
++
++function Check([string]$Name, [bool]$Cond) {
++    if ($Cond) { Write-Output "PASS $Name"; $script:pass++ }
++    else {
++        Write-Output "FAIL $Name"; $script:fail++
++        $outFile = Join-Path $script:C "out"
++        if (Test-Path $outFile) {
++            (Get-Content $outFile -Tail 25) | ForEach-Object { Write-Output ("      | " + ($_ -replace "`e\[[0-9;]*m", "")) }
++        }
++    }
++}
++
++# G DIR ARGS: quiet git for fixture setup; throws on failure
++function G {
++    $out = & git -C @args 2>&1 | Out-String
++    if ($LASTEXITCODE -ne 0) { throw "git -C $($args -join ' ') failed: $out" }
++}
++
++function Setup-Case([string]$Name) {
++    $script:C = Join-Path $tmpRoot $Name
++    $script:DP = Join-Path $script:C "dotprofile"; $script:REMOTE = Join-Path $script:C "remote.git"; $script:OTHER = Join-Path $script:C "other"
++    foreach ($d in @("home", "dest", "bin", "logs", "dotprofile/claude/rules", "other")) { New-Item -ItemType Directory -Path (Join-Path $script:C $d) -Force | Out-Null }
++    G $script:C init -q --bare -b main $script:REMOTE
++    G $script:C init -q -b main $script:DP
++    G $script:C init -q -b main $script:OTHER
++    foreach ($r in @($script:DP, $script:OTHER)) { G $r config user.name "Test User"; G $r config user.email "test@example.com" }
++    W "dotprofile/claude/rules/r.md" "source rule"; W "dotprofile/profile.json" '{"a":1,"b":2}'; W "dotprofile/notes.md" "notes"
++    G $script:DP add -A; G $script:DP commit -q -m init; G $script:DP remote add origin $script:REMOTE; G $script:DP push -q -u origin main
++    W "other/o.md" "other source"
++    G $script:OTHER add -A; G $script:OTHER commit -q -m init
++    Set-Content -Path (Join-Path $script:C "summary") -Value "" -NoNewline
++}
++
++function Run-Lib([string]$Snippet, [string]$InputKeys = "") {
++    $C = $script:C
++    # aitools-profile.ps1 refuses to run off Windows (OS guard), so the snippet
++    # starts as a caller that already ran Resolve-UserRepoPath; the resolver
++    # fallback inside Invoke-DotprofileCommitPush is exercised on Windows only.
++    $resolved = if ($IsWindows) { "" } else { "`$script:AitLibUserRepoPath = '$($script:DP)'" }
++    $body = @"
++. '$lib'
++Initialize-Logging "t"
++`$C = '$C'
++$resolved
++$Snippet
++"@
++    $snip = Join-Path $C "snippet.ps1"
++    [IO.File]::WriteAllText($snip, $body)
++    $saved = @{}
++    foreach ($k in @("HOME", "USERPROFILE", "AITOOLS_LOG_DIR", "AITOOLS_SUMMARY_FILE", "AITOOLS_USER_REPO_PATH", "PATH", "TERM")) { $saved[$k] = [Environment]::GetEnvironmentVariable($k) }
++    $env:HOME = Join-Path $C "home"; $env:USERPROFILE = $env:HOME
++    $env:AITOOLS_LOG_DIR = Join-Path $C "logs"; $env:AITOOLS_SUMMARY_FILE = Join-Path $C "summary"
++    $env:AITOOLS_USER_REPO_PATH = $script:DP
++    $env:PATH = (Join-Path $C "bin") + [IO.Path]::PathSeparator + $saved["PATH"]
++    $env:TERM = "dumb"
++    try {
++        if ($InputKeys) {
++            & python3 $pty --input $InputKeys --log (Join-Path $C "out") -- $pwshExe -NoProfile -File $snip
++        } else {
++            $null | & $pwshExe -NoProfile -NonInteractive -File $snip *> (Join-Path $C "out")
++        }
++        Set-Content -Path (Join-Path $C "rc") -Value $LASTEXITCODE
++    } finally {
++        foreach ($k in $saved.Keys) { [Environment]::SetEnvironmentVariable($k, $saved[$k]) }
++    }
++}
++
++function W([string]$Rel, [string]$Text) { [IO.File]::WriteAllText((Join-Path $script:C $Rel), "$Text`n") }
++function Txt([string]$Rel) { $f = Join-Path $script:C $Rel; if (Test-Path $f) { (Get-Content $f -Raw) -replace '[\r\n]+$', '' } else { $null } }
++function Result { Txt "result" }
++function PushState { Txt "push" }
++function Rc { Txt "rc" }
++function Log { $f = Join-Path $script:C "logs/deploy.log"; if (Test-Path $f) { Get-Content $f -Raw } else { "" } }
++function Summary { @(Get-Content (Join-Path $script:C "summary")) }
++function RemoteHas([string]$Path, [string]$Text) { $o = (& git -C $script:REMOTE show "main:$Path" 2>$null | Out-String) -replace '[\r\n]+$', ''; ($LASTEXITCODE -eq 0) -and ($o -eq $Text) }
++function Commits { (& git -C $script:DP rev-list --count HEAD | Out-String).Trim() }
++function CommittedFiles { ((& git -C $script:DP show --name-only --format= HEAD | Out-String).Trim() -split "`n" | Where-Object { $_ }) -join " " }
++function HeadMsg { (& git -C $script:DP log -1 --format=%s | Out-String).Trim() }
++function Dcp([string]$File, [string]$Msg) { "Invoke-DotprofileCommitPush -File '$File' -Message '$Msg'; Set-Content -Path `"`$C/push`" -Value `$script:AitLibDotprofilePush -NoNewline" }
++$dmf = '$r = Deploy-ManagedFile -Content ([IO.File]::ReadAllText($src)) -DestPath $dest -ToolName "tool" -ItemName "item" -AdoptPath $adopt; Set-Content -Path "$C/result" -Value $r -NoNewline; $ps = Get-Variable -Name AitLibDotprofilePush -Scope Script -ValueOnly -ErrorAction SilentlyContinue; if (-not $ps) { $ps = "unset" }; Set-Content -Path "$C/push" -Value $ps -NoNewline'
++
++try {
++    # --- Helper, called directly ---
++    Setup-Case "direct-pushed"
++    W "dotprofile/claude/rules/r.md" "edited rule"; W "dotprofile/notes.md" "unrelated hand edit"; W "dotprofile/staged.md" "staged"; G $DP add staged.md
++    Run-Lib (Dcp "$DP/claude/rules/r.md" "Adopt r.md from the deployed copy")
++    Check "direct: committed-pushed" ((PushState) -eq "committed-pushed")
++    Check "direct: commit holds that file only" ((CommittedFiles) -eq "claude/rules/r.md" -and (HeadMsg) -eq "Adopt r.md from the deployed copy")
++    Check "direct: remote has the adopted file" (RemoteHas "claude/rules/r.md" "edited rule")
++    Check "direct: unrelated unstaged change not committed" ((Txt "dotprofile/notes.md") -eq "unrelated hand edit" -and (RemoteHas "notes.md" "notes"))
++    Check "direct: unrelated staged file still staged" ((& git -C $DP diff --cached --name-only | Out-String).Trim() -eq "staged.md")
++    Check "direct: ok line logged, no warning" ((Log) -match "\[ok\] dotprofile: claude/rules/r.md committed and pushed" -and (Log) -notmatch "\[warn\]" -and -not ((Summary) -match "^ACTION"))
++
++    Setup-Case "direct-unchanged"
++    Run-Lib (Dcp "$DP/claude/rules/r.md" "Adopt r.md")
++    Check "unchanged: no commit, no push, no warning" ((PushState) -eq "unchanged" -and (Commits) -eq "1" -and (Log) -notmatch "\[warn\]")
++
++    Setup-Case "direct-other-repo"; W "other/o.md" "other edit"
++    Run-Lib (Dcp "$OTHER/o.md" "Adopt o.md")
++    Check "not in the dotprofile: nothing committed" ((PushState) -eq "not-dotprofile" -and (& git -C $OTHER rev-list --count HEAD | Out-String).Trim() -eq "1")
++
++    Setup-Case "direct-preresolved"; W "dotprofile/claude/rules/r.md" "edited"
++    Run-Lib ("`$script:AitLibUserRepoPath = ''; " + (Dcp "$DP/claude/rules/r.md" "Adopt r.md"))
++    Check "caller resolved shared-only (empty): not-dotprofile" ((PushState) -eq "not-dotprofile" -and (Commits) -eq "1")
++
++    Setup-Case "direct-push-fail"; G $DP remote remove origin; W "dotprofile/claude/rules/r.md" "edited rule"
++    Run-Lib (Dcp "$DP/claude/rules/r.md" "Adopt r.md")
++    Check "push failure: push-failed, committed locally" ((PushState) -eq "push-failed" -and (Commits) -eq "2")
++    Check "push failure: WARN logged, ACTION 'run git push in <dotprofile>'" ((Log) -match "\[warn\] dotprofile push failed" -and ((Summary) -ccontains "ACTION||run git push in $DP"))
++    Check "push failure: exit 0" ((Rc) -eq "0")
++
++    Setup-Case "direct-push-rejected"
++    G $C clone -q -b main $REMOTE (Join-Path $C "elsewhere")
++    $elsewhere = Join-Path $C "elsewhere"; G $elsewhere config user.name x; G $elsewhere config user.email x@example.com
++    W "elsewhere/notes.md" "from elsewhere"; G $elsewhere commit -q -am other; G $elsewhere push -q
++    W "dotprofile/claude/rules/r.md" "edited rule"
++    Run-Lib (Dcp "$DP/claude/rules/r.md" "Adopt r.md")
++    Check "push rejected: push-failed, ACTION pull --rebase" ((PushState) -eq "push-failed" -and (Log) -match "\[warn\] dotprofile push rejected" -and ((Summary) -ccontains "ACTION||git pull --rebase, then git push in $DP"))
++
++    if (-not $IsWindows) {
++        Setup-Case "direct-commit-fail"
++        [IO.File]::WriteAllText((Join-Path $DP ".git/hooks/pre-commit"), "#!/bin/sh`nexit 1`n"); & chmod +x (Join-Path $DP ".git/hooks/pre-commit")
++        W "dotprofile/claude/rules/r.md" "edited rule"
++        Run-Lib (Dcp "$DP/claude/rules/r.md" "Adopt r.md")
++        Check "commit failure: commit-failed, WARN + ACTION, nothing pushed" ((PushState) -eq "commit-failed" -and (Log) -match "\[warn\] dotprofile commit failed" -and ((Summary) -ccontains "ACTION||commit and push claude/rules/r.md in $DP") -and (RemoteHas "claude/rules/r.md" "source rule"))
++    }
++
++    # --- Through Deploy-ManagedFile (interactive adopt) ---
++    if ($havePty) {
++        Setup-Case "adopt-dotprofile"; W "dest/r.md" "local edit"; W "dotprofile/notes.md" "unrelated hand edit"
++        Run-Lib "`$src='$DP/claude/rules/r.md'; `$dest='$C/dest/r.md'; `$adopt='$DP/claude/rules/r.md'; $dmf" "a\n"
++        Check "accept & adopt into the dotprofile: result unchanged, committed-pushed" ((Result) -eq "accept & adopt" -and (PushState) -eq "committed-pushed")
++        Check "accept & adopt: remote has LOCAL, commit is that file only" ((RemoteHas "claude/rules/r.md" "local edit") -and (CommittedFiles) -eq "claude/rules/r.md")
++        Check "accept & adopt: unrelated change not committed, no 'Uncommitted change' line" ((RemoteHas "notes.md" "notes") -and (Log) -notmatch "Uncommitted change in")
++
++        Setup-Case "json-dotprofile"; W "dest/profile.json" '{"a":9,"b":2}'
++        Run-Lib "`$src='$DP/profile.json'; `$dest='$C/dest/profile.json'; `$adopt='$DP/profile.json'; $dmf" "a\n"
++        $remoteJson = ((& git -C $REMOTE show main:profile.json | Out-String) -replace '\s', '')
++        Check "JSON field adopt into the dotprofile: committed and pushed" ((Result) -eq "accept & adopt" -and (PushState) -eq "committed-pushed" -and $remoteJson -eq '{"a":9,"b":2}')
++
++        Setup-Case "adopt-push-fail"; G $DP remote remove origin; W "dest/r.md" "local edit"
++        Run-Lib "`$src='$DP/claude/rules/r.md'; `$dest='$C/dest/r.md'; `$adopt='$DP/claude/rules/r.md'; $dmf" "a\n"
++        Check "adopt, push fails: outcome still accept & adopt, files written" ((Result) -eq "accept & adopt" -and (Txt "dotprofile/claude/rules/r.md") -eq "local edit" -and (Rc) -eq "0")
++        Check "adopt, push fails: push-failed, WARN + ACTION" ((PushState) -eq "push-failed" -and (Log) -match "\[warn\] dotprofile push failed" -and ((Summary) -ccontains "ACTION||run git push in $DP"))
++
++        Setup-Case "adopt-other-repo"; W "dest/o.md" "local edit"
++        Run-Lib "`$src='$OTHER/o.md'; `$dest='$C/dest/o.md'; `$adopt='$OTHER/o.md'; $dmf" "a\n"
++        Check "adopt outside the dotprofile: working tree only, not committed" ((Result) -eq "accept & adopt" -and (PushState) -eq "not-dotprofile" -and (Txt "other/o.md") -eq "local edit" -and (& git -C $OTHER rev-list --count HEAD | Out-String).Trim() -eq "1")
++        Check "adopt outside the dotprofile: 'Uncommitted change' logged" ((Log) -match "Uncommitted change in")
++    } else {
++        Write-Output "SKIP interactive cases (no python3 pty on this platform)"; $script:skip++
++    }
++
++    # --- No adopt: overwrite never commits ---
++    Setup-Case "overwrite-no-commit"; W "dest/r.md" "local edit"
++    Run-Lib "`$src='$DP/claude/rules/r.md'; `$dest='$C/dest/r.md'; `$adopt='$DP/claude/rules/r.md'; $dmf"
++    Check "non-interactive overwrite: dotprofile untouched, helper not called" ((Result) -eq "updated" -and (PushState) -eq "unset" -and (Commits) -eq "1")
++} finally {
++    Remove-Item -LiteralPath $tmpRoot -Recurse -Force
++}
++
++Write-Output ""
++Write-Output "$($script:pass) passed, $($script:fail) failed, $($script:skip) skipped"
++if ($script:fail -gt 0) { exit 1 }
++exit 0
+diff --git a/tests/managed-files/test-adopt-push.sh b/tests/managed-files/test-adopt-push.sh
+new file mode 100755
+index 00000000..37670bcb
+--- /dev/null
++++ b/tests/managed-files/test-adopt-push.sh
+@@ -0,0 +1,232 @@
++#!/usr/bin/env bash
++# test-adopt-push.sh -- tests for N-Q2 in scripts/aitools-lib.sh: an adopt into
++# the dotprofile through deploy_managed_file (accept & adopt, merge & adopt,
++# JSON field adopt) is committed (that file only) and pushed by
++# dotprofile_commit_push; an adopt target outside the dotprofile is not
++# committed; commit and push failures are a warning + ACTION and leave the
++# deploy outcome unchanged.
++#
++# Safe to re-run: every case runs in its own temp HOME with a throwaway
++# dotprofile git repo and a bare remote, removed on exit. The real dotprofile is
++# never touched (AITOOLS_USER_REPO_PATH points into the temp dir; git's global
++# and system config are ignored). Interactive cases run on a pseudo-terminal
++# (tests/managed-files/pty-run.py, python3). Platform: macOS, Linux (Git Bash:
++# pty cases are skipped). Exit 1 if any case fails.
++# Spec: .claude/rules/managed-file-deployment.md "Adopt target";
++# reference/managed-file-deployment.md.
++#
++# Usage: bash tests/managed-files/test-adopt-push.sh [--help]
++
++set -uo pipefail
++
++if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
++    perl -ne 'print if $. >= 2 && $. <= 18' "$0"
++    exit 0
++fi
++
++ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
++LIB="$ROOT/scripts/aitools-lib.sh"
++PTY="$ROOT/tests/managed-files/pty-run.py"
++TMP_ROOT="$(mktemp -d)"
++trap 'rm -rf "$TMP_ROOT"' EXIT
++# The user's git config (signing, hooks, templates) must not reach these repos.
++: > "$TMP_ROOT/gitconfig"
++export GIT_CONFIG_GLOBAL="$TMP_ROOT/gitconfig" GIT_CONFIG_NOSYSTEM=1
++
++PASS=0
++FAIL=0
++SKIP=0
++HAVE_PTY=true
++case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) HAVE_PTY=false ;; esac
++command -v python3 >/dev/null 2>&1 || HAVE_PTY=false
++
++check() {  # name, condition (eval'd)
++    if eval "$2"; then
++        printf 'PASS %s\n' "$1"; PASS=$((PASS + 1))
++    else
++        printf 'FAIL %s\n' "$1"; FAIL=$((FAIL + 1))
++        if [ -n "${C:-}" ] && [ -f "$C/out" ]; then
++            perl -pe 's/\e\[[0-9;]*m//g; s/^/      | /' "$C/out" | tail -n 25
++        fi
++    fi
++}
++
++g() { git -C "$@" >/dev/null 2>&1; }   # quiet git for fixture setup; each use is followed by a check
++
++# setup_case NAME: temp HOME, dotprofile repo DP (main, pushed to bare remote
++# REMOTE), an unrelated repo OTHER, stub bin. DP holds claude/rules/r.md and
++# profile.json, committed and pushed.
++setup_case() {
++    C="$TMP_ROOT/$1"
++    DP="$C/dotprofile"; REMOTE="$C/remote.git"; OTHER="$C/other"
++    # DPD: DP as the lib's display_path prints it in ACTION rows (Windows form under Git Bash)
++    if command -v cygpath >/dev/null 2>&1; then DPD=$(cygpath -w "$DP"); else DPD="$DP"; fi
++    mkdir -p "$C/home" "$C/dest" "$C/bin" "$DP/claude/rules" "$OTHER"
++    git init -q --bare -b main "$REMOTE"
++    git init -q -b main "$DP"
++    git init -q -b main "$OTHER"
++    local r
++    for r in "$DP" "$OTHER"; do
++        g "$r" config user.name "Test User"; g "$r" config user.email "test@example.com"
++    done
++    printf 'source rule\n' > "$DP/claude/rules/r.md"
++    printf '{"a":1,"b":2}\n' > "$DP/profile.json"
++    printf 'notes\n' > "$DP/notes.md"
++    g "$DP" add -A; g "$DP" commit -q -m init; g "$DP" remote add origin "$REMOTE"; g "$DP" push -q -u origin main
++    printf 'other source\n' > "$OTHER/o.md"
++    g "$OTHER" add -A; g "$OTHER" commit -q -m init
++    : > "$C/summary"
++    if [ "$(git -C "$REMOTE" rev-parse main 2>/dev/null)" != "$(git -C "$DP" rev-parse HEAD 2>/dev/null)" ]; then
++        printf 'FAIL fixture %s: dotprofile not pushed to its remote\n' "$1"; FAIL=$((FAIL + 1))
++    fi
++}
++
++# run_lib SNIPPET [INPUT]: source the lib in a fresh bash under the case HOME.
++# No INPUT -> stdin /dev/null (non-interactive); INPUT -> pty keystrokes.
++# The snippet starts as a caller that ran resolve_user_repo_path
++# (AITLIB_USER_REPO_PATH=DP, as setup-user-claude does); RUN_UNRESOLVED=1 leaves
++# it unset so the helper asks the resolver (AITOOLS_USER_REPO_PATH=DP).
++run_lib() {
++    local snippet="$1" input="${2:-}" pre="AITLIB_USER_REPO_PATH='$DP'"
++    if [ -n "${RUN_UNRESOLVED:-}" ]; then pre=":"; fi
++    printf '%s\n' "set -euo pipefail" "source '$LIB'" "logging_init t" "$pre" "$snippet" > "$C/snippet.sh"
++    local envs=(HOME="$C/home" AITOOLS_LOG_DIR="$C/logs" AITOOLS_SUMMARY_FILE="$C/summary"
++        AITOOLS_USER_REPO_PATH="$DP" PATH="$C/bin:$PATH" TERM=dumb)
++    if [ -z "$input" ]; then
++        env "${envs[@]}" bash "$C/snippet.sh" < /dev/null > "$C/out" 2>&1
++        echo $? > "$C/rc"
++    else
++        env "${envs[@]}" python3 "$PTY" --input "$input" --log "$C/out" -- bash "$C/snippet.sh"
++        echo $? > "$C/rc"
++    fi
++    LOG="$C/logs/deploy.log"
++    [ -f "$LOG" ] || : > "$LOG"
++}
++
++result() { cat "$C/result" 2>/dev/null; }
++push_state() { cat "$C/push" 2>/dev/null; }
++remote_has() { [ "$(git -C "$REMOTE" show "main:$1" 2>/dev/null)" = "$2" ]; }  # absent = not pushed (asserted)
++head_msg() { git -C "$DP" log -1 --format=%s 2>/dev/null; }
++commits() { git -C "$DP" rev-list --count HEAD 2>/dev/null; }
++committed_files() { git -C "$DP" show --name-only --format= HEAD 2>/dev/null | tr '\n' ' '; }
++# DMF: deploy_managed_file SRCF -> DEST with adopt target ADOPT; result and push state to $C
++DMF='deploy_managed_file "$(cat "$SRCF")" "$DEST" tool item "$ADOPT"; printf "%s" "$MANAGED_FILE_RESULT" > "$C/result"; printf "%s" "${AITLIB_DOTPROFILE_PUSH:-unset}" > "$C/push"'
++# DCP FILE MSG: call the helper directly
++dcp() { printf 'dotprofile_commit_push %q %q; printf "%%s" "$AITLIB_DOTPROFILE_PUSH" > %q' "$1" "$2" "$C/push"; }
++
++# ---------------------------------------------------------------------------
++# Helper, called directly (non-interactive)
++# ---------------------------------------------------------------------------
++setup_case direct-pushed
++printf 'edited rule\n' > "$DP/claude/rules/r.md"
++printf 'unrelated hand edit\n' > "$DP/notes.md"          # unstaged, unrelated
++printf 'staged\n' > "$DP/staged.md"; g "$DP" add staged.md  # staged, unrelated
++RUN_UNRESOLVED=1 run_lib "$(dcp "$DP/claude/rules/r.md" "Adopt r.md from the deployed copy")"
++check "direct (dotprofile from the resolver): committed-pushed" "[ \"\$(push_state)\" = committed-pushed ]"
++check "direct: commit holds that file only" "[ \"\$(committed_files)\" = 'claude/rules/r.md ' ] && [ \"\$(head_msg)\" = 'Adopt r.md from the deployed copy' ]"
++check "direct: remote has the adopted file" "remote_has claude/rules/r.md 'edited rule'"
++check "direct: unrelated unstaged change not committed" "grep -qx 'unrelated hand edit' '$DP/notes.md' && remote_has notes.md notes && [ -n \"\$(git -C '$DP' diff --name-only -- notes.md)\" ]"
++check "direct: unrelated staged file still staged, not committed" "[ \"\$(git -C '$DP' diff --cached --name-only)\" = staged.md ] && ! git -C '$REMOTE' cat-file -e main:staged.md 2>/dev/null"
++check "direct: ok line logged, no warning" "grep -q '\[ok\] dotprofile: claude/rules/r.md committed and pushed' '$LOG' && ! grep -q '\[warn\]' '$LOG' && ! grep -q '^ACTION' '$C/summary'"
++
++setup_case direct-unchanged
++run_lib "$(dcp "$DP/claude/rules/r.md" "Adopt r.md")"
++check "unchanged: no commit, no push, no warning" "[ \"\$(push_state)\" = unchanged ] && [ \"\$(commits)\" = 1 ] && ! grep -q '\[warn\]' '$LOG' && ! grep -q '^ACTION' '$C/summary'"
++
++setup_case direct-new-file
++printf 'brand new\n' > "$DP/claude/rules/new.md"
++run_lib "$(dcp "$DP/claude/rules/new.md" "Adopt new.md")"
++check "new (untracked) file: added, committed, pushed" "[ \"\$(push_state)\" = committed-pushed ] && remote_has claude/rules/new.md 'brand new'"
++
++setup_case direct-other-repo
++printf 'other edit\n' > "$OTHER/o.md"
++RUN_UNRESOLVED=1 run_lib "$(dcp "$OTHER/o.md" "Adopt o.md")"
++check "not in the dotprofile (dotprofile from the resolver): nothing committed" "[ \"\$(push_state)\" = not-dotprofile ] && [ -n \"\$(git -C '$OTHER' diff --name-only)\" ] && [ \"\$(git -C '$OTHER' rev-list --count HEAD)\" = 1 ]"
++
++setup_case direct-preresolved
++printf 'edited\n' > "$DP/claude/rules/r.md"
++run_lib "AITLIB_USER_REPO_PATH='$OTHER'; $(dcp "$DP/claude/rules/r.md" "Adopt r.md")"
++check "caller-resolved dotprofile wins (AITLIB_USER_REPO_PATH), no resolver call" "[ \"\$(push_state)\" = not-dotprofile ] && [ \"\$(commits)\" = 1 ]"
++run_lib "AITLIB_USER_REPO_PATH=''; $(dcp "$DP/claude/rules/r.md" "Adopt r.md")"
++check "caller resolved shared-only (\"\"): not-dotprofile" "[ \"\$(push_state)\" = not-dotprofile ] && [ \"\$(commits)\" = 1 ]"
++
++setup_case direct-push-fail
++g "$DP" remote remove origin
++printf 'edited rule\n' > "$DP/claude/rules/r.md"
++run_lib "$(dcp "$DP/claude/rules/r.md" "Adopt r.md")"
++check "push failure: push-failed, committed locally" "[ \"\$(push_state)\" = push-failed ] && [ \"\$(commits)\" = 2 ]"
++check "push failure: WARN logged, ACTION 'run git push in <dotprofile>'" "grep -q '\[warn\] dotprofile push failed' '$LOG' && grep -qxF 'ACTION||run git push in $DPD' '$C/summary'"
++check "push failure: exit 0 (the run continues)" "[ \"\$(cat '$C/rc')\" = 0 ]"
++
++setup_case direct-push-rejected
++git clone -q -b main "$REMOTE" "$C/elsewhere"
++g "$C/elsewhere" config user.name x; g "$C/elsewhere" config user.email x@example.com
++printf 'from elsewhere\n' > "$C/elsewhere/notes.md"; g "$C/elsewhere" commit -q -am other; g "$C/elsewhere" push -q
++printf 'edited rule\n' > "$DP/claude/rules/r.md"
++run_lib "$(dcp "$DP/claude/rules/r.md" "Adopt r.md")"
++check "push rejected: push-failed, ACTION pull --rebase" "[ \"\$(push_state)\" = push-failed ] && grep -q '\[warn\] dotprofile push rejected' '$LOG' && grep -qxF 'ACTION||git pull --rebase, then git push in $DPD' '$C/summary'"
++
++setup_case direct-commit-fail
++printf '#!/bin/sh\nexit 1\n' > "$DP/.git/hooks/pre-commit"; chmod +x "$DP/.git/hooks/pre-commit"
++printf 'edited rule\n' > "$DP/claude/rules/r.md"
++run_lib "$(dcp "$DP/claude/rules/r.md" "Adopt r.md")"
++check "commit failure: commit-failed, WARN + ACTION, nothing pushed" "[ \"\$(push_state)\" = commit-failed ] && grep -q '\[warn\] dotprofile commit failed' '$LOG' && grep -qxF 'ACTION||commit and push claude/rules/r.md in $DPD' '$C/summary' && remote_has claude/rules/r.md 'source rule'"
++
++setup_case direct-action-once
++g "$DP" remote remove origin
++printf 'e1\n' > "$DP/claude/rules/r.md"; printf '{"a":9}\n' > "$DP/profile.json"
++run_lib "$(dcp "$DP/claude/rules/r.md" "Adopt r.md"); $(dcp "$DP/profile.json" "Adopt profile.json")"
++check "two push failures in one run: one ACTION row" "[ \"\$(grep -cxF 'ACTION||run git push in $DPD' '$C/summary')\" = 1 ]"
++
++# ---------------------------------------------------------------------------
++# Through deploy_managed_file (interactive adopt)
++# ---------------------------------------------------------------------------
++if $HAVE_PTY; then
++    setup_case adopt-dotprofile
++    printf 'local edit\n' > "$C/dest/r.md"
++    printf 'unrelated hand edit\n' > "$DP/notes.md"
++    # Unresolved caller, as deploy-harness (dotprofile from config.json, no resolver call)
++    RUN_UNRESOLVED=1 run_lib "C='$C' SRCF='$DP/claude/rules/r.md' DEST='$C/dest/r.md' ADOPT='$DP/claude/rules/r.md'; $DMF" "a\n"
++    check "accept & adopt into the dotprofile: result accept & adopt, committed-pushed" "[ \"\$(result)\" = 'accept & adopt' ] && [ \"\$(push_state)\" = committed-pushed ]"
++    check "accept & adopt: remote has LOCAL, commit is that file only" "remote_has claude/rules/r.md 'local edit' && [ \"\$(committed_files)\" = 'claude/rules/r.md ' ] && [ \"\$(head_msg)\" = 'Adopt r.md from the deployed copy' ]"
++    check "accept & adopt: unrelated change not committed, no 'Uncommitted change' line" "[ -n \"\$(git -C '$DP' diff --name-only -- notes.md)\" ] && ! grep -q 'Uncommitted change in' '$LOG'"
++    check "accept & adopt: the backup file is not committed" "! git -C '$REMOTE' ls-tree -r --name-only main | grep -q 'bak'"
++
++    setup_case merge-dotprofile
++    printf '#!/usr/bin/env bash\ncat > /dev/null\nprintf "# Title\\nmerged line\\n"\n' > "$C/bin/claude"; chmod +x "$C/bin/claude"
++    printf '# Title\nsource line\n' > "$DP/claude/rules/r.md"; g "$DP" commit -q -am src; g "$DP" push -q
++    printf '# Title\nlocal line\n' > "$C/dest/r.md"
++    run_lib "C='$C' SRCF='$DP/claude/rules/r.md' DEST='$C/dest/r.md' ADOPT='$DP/claude/rules/r.md'; $DMF" "m\ny\n"
++    check "merge & adopt into the dotprofile: committed and pushed" "[ \"\$(result)\" = 'accept & adopt' ] && [ \"\$(push_state)\" = committed-pushed ] && remote_has claude/rules/r.md \"\$(printf '# Title\nmerged line')\""
++
++    setup_case json-dotprofile
++    printf '{"a":9,"b":2}\n' > "$C/dest/profile.json"
++    run_lib "C='$C' SRCF='$DP/profile.json' DEST='$C/dest/profile.json' ADOPT='$DP/profile.json'; $DMF" "a\n"
++    check "JSON field adopt into the dotprofile: committed and pushed" "[ \"\$(result)\" = 'accept & adopt' ] && [ \"\$(push_state)\" = committed-pushed ] && [ \"\$(git -C '$REMOTE' show main:profile.json | tr -d ' \n')\" = '{\"a\":9,\"b\":2}' ]"
++
++    setup_case adopt-push-fail
++    g "$DP" remote remove origin
++    printf 'local edit\n' > "$C/dest/r.md"
++    run_lib "C='$C' SRCF='$DP/claude/rules/r.md' DEST='$C/dest/r.md' ADOPT='$DP/claude/rules/r.md'; $DMF" "a\n"
++    check "adopt, push fails: outcome still accept & adopt, files written" "[ \"\$(result)\" = 'accept & adopt' ] && grep -qx 'local edit' '$DP/claude/rules/r.md' && grep -qx 'local edit' '$C/dest/r.md' && [ \"\$(cat '$C/rc')\" = 0 ]"
++    check "adopt, push fails: push-failed, WARN + ACTION" "[ \"\$(push_state)\" = push-failed ] && grep -q '\[warn\] dotprofile push failed' '$LOG' && grep -qxF 'ACTION||run git push in $DPD' '$C/summary'"
++
++    setup_case adopt-other-repo
++    printf 'local edit\n' > "$C/dest/o.md"
++    run_lib "C='$C' SRCF='$OTHER/o.md' DEST='$C/dest/o.md' ADOPT='$OTHER/o.md'; $DMF" "a\n"
++    check "adopt outside the dotprofile: working tree only, not committed" "[ \"\$(result)\" = 'accept & adopt' ] && [ \"\$(push_state)\" = not-dotprofile ] && grep -qx 'local edit' '$OTHER/o.md' && [ \"\$(git -C '$OTHER' rev-list --count HEAD)\" = 1 ]"
++    check "adopt outside the dotprofile: 'Uncommitted change' logged, dotprofile untouched" "grep -q 'Uncommitted change in' '$LOG' && [ \"\$(commits)\" = 1 ]"
++else
++    printf 'SKIP interactive cases (no python3 pty on this platform)\n'; SKIP=$((SKIP + 1))
++fi
++
++# ---------------------------------------------------------------------------
++# No adopt: overwrite never commits
++# ---------------------------------------------------------------------------
++setup_case overwrite-no-commit
++printf 'local edit\n' > "$C/dest/r.md"
++run_lib "C='$C' SRCF='$DP/claude/rules/r.md' DEST='$C/dest/r.md' ADOPT='$DP/claude/rules/r.md'; $DMF"
++check "non-interactive overwrite: dotprofile untouched, helper not called" "[ \"\$(result)\" = updated ] && [ \"\$(push_state)\" = unset ] && [ \"\$(commits)\" = 1 ]"
++
++printf '\n%d passed, %d failed, %d skipped\n' "$PASS" "$FAIL" "$SKIP"
++[ "$FAIL" -eq 0 ]

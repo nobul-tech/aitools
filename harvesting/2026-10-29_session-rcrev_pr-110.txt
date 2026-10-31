@@ -1,0 +1,17 @@
+.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-H2-Cursor/S3-H2-Cursor-Review-reverify.md
+.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-H2-Cursor/S3-H2-Cursor-Review-verdict.md
+.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-H2-Cursor/S3-H2-Cursor-drafts/reference/tool-ops-cursor.md.edit.txt
+.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-H2-Cursor/S3-H2-Cursor-drafts/registries/tool-ops.json.edit.txt
+.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-H2-Cursor/S3-H2-Cursor-handback.md
+.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-H2-Manifest/S3-H2-Manifest-drafts/dot-claude/rules/managed-file-deployment.md
+.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-H2-Manifest/S3-H2-Manifest-drafts/reference/harness.md
+.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-H2-Manifest/S3-H2-Manifest-drafts/reference/managed-file-deployment.md
+.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-H2-Manifest/S3-H2-Manifest-handback.md
+scripts/deploy-harness.ps1
+scripts/deploy-harness.sh
+scripts/setup-user-cursor.ps1
+scripts/setup-user-cursor.sh
+tests/deploy-harness/test-deploy-harness.sh
+tests/rules-fanout-cursor/convert-rule.ps1
+tests/rules-fanout-cursor/step4-driver.ps1
+tests/rules-fanout-cursor/test-rules-fanout-cursor.sh

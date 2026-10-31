@@ -1,0 +1,244 @@
+== decision 1: --alias <new> without a terminal creates this machine's profile (Review3 #82 M1)
+  ok   alias-new: bash exit 0
+  ok   alias-new: pwsh exit 0
+  ok   alias-new: summary rows identical
+  ok   alias-new: profile.json bytes identical
+  ok   alias-new: remote commits identical
+  ok   alias-new: profiles.aaaaaaaa-1111-2222-3333-444444444444 alias spare
+  ok   alias-new: profile.json /"id": "aaaaaaaa-1111-2222-3333-444444444444"/
+  ok   alias-new: row OK|machine profile|created (spare)
+  ok   alias-new: remote has 'Register machine profile: spare'
+  ok   alias-new: config.json machineId 'aaaaaaaa-1111-2222-3333-444444444444'
+  ok   alias-new: output has '────'
+  ok   alias-new: machine.shell from $SHELL
+== re-run: verified, no new commit
+  ok   alias-new-rerun: exit 0
+  ok   alias-new-rerun: row OK|machine profile|verified (spare)
+  ok   alias-new-rerun: remote has 2 commit(s)
+== decision 1: --alias of another machine's profile, no terminal -> refused (exit 1)
+  ok   alias-other: bash exit 1
+  ok   alias-other: pwsh exit 1
+  ok   alias-other: summary rows identical
+  ok   alias-other: profile.json bytes identical
+  ok   alias-other: remote commits identical
+  ok   alias-other: row ERROR|machine profile|alias used by another machine
+  ok   alias-other: profile.json has no /"aaaaaaaa-1111-2222-3333-444444444444"/
+  ok   alias-other: the other machine's profile is untouched
+  ok   alias-other: remote has 1 commit(s)
+== an unregistered machine without --alias and without a terminal -> ERROR, exit 1
+  ok   unregistered-notty: bash exit 1
+  ok   unregistered-notty: pwsh exit 1
+  ok   unregistered-notty: summary rows identical
+  ok   unregistered-notty: profile.json bytes identical
+  ok   unregistered-notty: remote commits identical
+  ok   unregistered-notty: row ERROR|machine profile|not registered (no terminal)
+  ok   unregistered-notty: row ACTION||Run: aitools user init --alias <name> (or on a terminal)
+== --alias naming a profile no machine owns, no terminal -> not claimed (ERROR + ACTION, exit 1)
+  ok   alias-claim: bash exit 1
+  ok   alias-claim: pwsh exit 1
+  ok   alias-claim: summary rows identical
+  ok   alias-claim: profile.json bytes identical
+  ok   alias-claim: remote commits identical
+  ok   alias-claim: row ERROR|machine profile|not claimed (no terminal)
+  ok   alias-claim: row ACTION||Run: aitools user init on a terminal to claim nobul-mac (or --alias <another name>)
+  ok   alias-claim: profile.json has no /"aaaaaaaa-1111-2222-3333-444444444444"/
+== batch 5: legacy profiles are re-keyed (migrate), the writer's re-key ACTION clears
+  ok   migrate: bash exit 0
+  ok   migrate: pwsh exit 0
+  ok   migrate: summary rows identical
+  ok   migrate: profile.json bytes identical
+  ok   migrate: remote commits identical
+  ok   migrate: row OK|profile keys|re-keyed by machine id
+  ok   migrate: profiles.aaaaaaaa-1111-2222-3333-444444444444 alias nobul-mac
+  ok   migrate: profiles.bbbbbbbb-1111-2222-3333-444444444444 alias laptop
+  ok   migrate: remote has 'Migrate machine profiles to id keys'
+  ok   migrate: no row /re-keys machine profiles/
+  ok   migrate: config.json machineId 'aaaaaaaa-1111-2222-3333-444444444444'
+== decision 6: Path 1 without profile.json -> scaffold, committed and pushed
+  ok   scaffold-path1: bash exit 0
+  ok   scaffold-path1: pwsh exit 0
+  ok   scaffold-path1: summary rows identical
+  ok   scaffold-path1: profile.json bytes identical
+  ok   scaffold-path1: remote commits identical
+  ok   scaffold-path1: profiles.aaaaaaaa-1111-2222-3333-444444444444 alias probe-host
+  ok   scaffold-path1: profile.json /"schemaRevision": "2.2"/
+  ok   scaffold-path1: profile.json /"github": "nobul-jose"/
+  ok   scaffold-path1: remote has 'Register machine profile: probe-host'
+  ok   scaffold-path1: remote has 'Add claude/CLAUDE.md template'
+== decision 6: Path 3 (no dotprofile) -> created, scaffold reaches the (gh) remote
+  ok   scaffold-path3: bash exit 0
+  ok   scaffold-path3: pwsh exit 0
+  ok   scaffold-path3: summary rows identical
+  ok   scaffold-path3: profile.json bytes identical
+  ok   scaffold-path3: GitHub remote commits identical
+  ok   scaffold-path3: profiles.aaaaaaaa-1111-2222-3333-444444444444 alias first
+  ok   scaffold-path3: remote has 'Initial commit: profile and session archive structure'
+  ok   scaffold-path3: remote has 'Add claude/CLAUDE.md template'
+  ok   scaffold-path3: profile.json on the remote
+  ok   scaffold-path3: row OK|dotprofile|created
+== decision 2 switch = 0 (default): cached machineAlias, no terminal -> ERROR, exit 1 (same as unregistered)
+  ok   cached-alias-0: bash exit 1
+  ok   cached-alias-0: pwsh exit 1
+  ok   cached-alias-0: summary rows identical
+  ok   cached-alias-0: profile.json bytes identical
+  ok   cached-alias-0: remote commits identical
+  ok   cached-alias-0: row ERROR|machine profile|not registered (no terminal)
+  ok   cached-alias-0: profile.json has no /"aaaaaaaa-1111-2222-3333-444444444444"/
+== decision 2 switch = 1: cached machineAlias -> claimed without asking
+  ok   cached-alias-1: bash exit 0
+  ok   cached-alias-1: pwsh exit 0
+  ok   cached-alias-1: summary rows identical
+  ok   cached-alias-1: profile.json bytes identical
+  ok   cached-alias-1: remote commits identical
+  ok   cached-alias-1: profiles.aaaaaaaa-1111-2222-3333-444444444444 alias nobul-mac
+  ok   decision 2 switch: one line per entry point, default 0 / $false
+== Review3 #82 minor 5: uncommitted edits to profile.json are never committed
+  ok   dirty: bash exit 1
+  ok   dirty: pwsh exit 1
+  ok   dirty: summary rows identical
+  ok   dirty: profile.json bytes identical
+  ok   dirty: remote commits identical
+  ok   dirty: row ERROR|machine profile|not registered (local edits)
+  ok   dirty: profile.json /"edited-host"/
+  ok   dirty: profile.json has no /"aaaaaaaa-1111-2222-3333-444444444444"/
+  ok   dirty: remote has 1 commit(s)
+  ok   dirty-registered: bash exit 0
+  ok   dirty-registered: pwsh exit 0
+  ok   dirty-registered: summary rows identical
+  ok   dirty-registered: profile.json bytes identical
+  ok   dirty-registered: remote commits identical
+  ok   dirty-registered: row WARN|machine profile|not refreshed (local edits)
+  ok   dirty-registered: remote has 2 commit(s)
+== Review3 #82 minor 4: a rejected push (remote ahead) is told to pull --rebase
+  ok   push-rejected: bash exit 0
+  ok   push-rejected: pwsh exit 0
+  ok   push-rejected: summary rows identical
+  ok   push-rejected: profile.json bytes identical
+  ok   push-rejected: remote commits identical
+  ok   push-rejected: output has 'git pull --rebase, then git push'
+  ok   push-rejected: row ACTION||git pull --rebase, then git push in <D>/home/repos/aitools-nobul-jose
+  ok   push-rejected: row WARN|machine profile|created (spare)
+== D-TS13: the hooks review aborted (exit 2) -> user init exits 2
+  ok   hook-abort: bash exit 2
+  ok   hook-abort: pwsh exit 2
+  ok   hook-abort: summary rows identical
+  ok   hook-abort: profile.json bytes identical
+  ok   hook-abort: remote commits identical
+== review M1: a relative reposPath is refused (nothing created under the current directory)
+  ok   relative-repos: bash exit 1
+  ok   relative-repos: pwsh exit 1
+  ok   relative-repos: summary rows identical
+  ok   relative-repos: profile.json bytes identical
+  ok   relative-repos: remote commits identical
+  ok   relative-repos: row ERROR|dotprofile|reposPath not absolute
+  ok   relative-repos: nothing created under the cwd
+== review M2: id undetectable (via=config) -> WARN, the cached machineId survives two runs
+  ok   via-config: bash exit 0
+  ok   via-config: pwsh exit 0
+  ok   via-config: summary rows identical
+  ok   via-config: profile.json bytes identical
+  ok   via-config: remote commits identical
+  ok   via-config: row WARN|machine profile|not refreshed (no machine id)
+  ok   via-config: config.json machineId 'aaaaaaaa-1111-2222-3333-444444444444'
+  ok   via-config-rerun: second run exit 0
+  ok   via-config-rerun: config.json machineId 'aaaaaaaa-1111-2222-3333-444444444444'
+== review m3: --alias wins over a stale AITOOLS_MACHINE_ALIAS
+  ok   env-alias-stale: bash exit 0
+  ok   env-alias-stale: pwsh exit 0
+  ok   env-alias-stale: summary rows identical
+  ok   env-alias-stale: profile.json bytes identical
+  ok   env-alias-stale: remote commits identical
+  ok   env-alias-stale: profiles.aaaaaaaa-1111-2222-3333-444444444444 alias spare
+  ok   env-alias-stale: output has 'AITOOLS_MACHINE_ALIAS=bogus ignored'
+== Path 2: the GitHub repo exists, no local clone -> cloned, identity from the profile, registered
+  ok   path2: bash exit 0
+  ok   path2: pwsh exit 0
+  ok   path2: summary rows identical
+  ok   path2: profile.json bytes identical
+  ok   path2: remote commits identical
+  ok   path2: row OK|dotprofile|cloned
+  ok   path2: profiles.aaaaaaaa-1111-2222-3333-444444444444 alias spare
+  ok   path2: remote has 'Register machine profile: spare'
+  ok   path2: clone's git identity from identity.git
+== v1 profile.json -> v2 revision 2.2, this machine under its id, other machines kept, committed
+  ok   v1-migrate: bash exit 0
+  ok   v1-migrate: pwsh exit 0
+  ok   v1-migrate: summary rows identical
+  ok   v1-migrate: profile.json bytes identical
+  ok   v1-migrate: remote commits identical
+  ok   v1-migrate: profiles.aaaaaaaa-1111-2222-3333-444444444444 alias mac1
+  ok   v1-migrate: version 2, revision 2.2
+  ok   v1-migrate: the other v1 machine kept (machine1)
+  ok   v1-migrate: cursor section kept
+  ok   v1-migrate: remote has 'Migrate profile.json from v1 to v2'
+  ok   v1-migrate: config.json written by setup-user-config
+== profile-check.js reads machineId (id keys; legacy machineAlias kept)
+  ok   profile-check: unknown machineId reported
+  ok   profile-check: machineId in the result
+  ok   profile-check: id-keyed machineId found
+  ok   profile-check: legacy alias-keyed profile found by machine.id
+== interactive (pty): claim an unregistered profile; menus identical in both shells
+  ok   pty-claim: bash exit 0
+  ok   pty-claim: pwsh exit 0
+  ok   pty-claim: summary rows identical
+  ok   pty-claim: profile.json bytes identical
+  ok   pty-claim: remote commits identical
+  ok   pty-claim: profiles.aaaaaaaa-1111-2222-3333-444444444444 alias nobul-mac
+  ok   pty-claim: the other machine's profile is untouched
+  ok   pty-claim: output has '[-] laptop (registered to another machine)'
+  ok   pty-claim: output has '[1] nobul-mac'
+  ok   pty-claim: menus identical
+== interactive (pty): hostname suggestion on another machine's profile carries the label (Review3 #82 M2)
+  ok   pty-hostname-other: bash exit 1
+  ok   pty-hostname-other: pwsh exit 1
+  ok   pty-hostname-other: summary rows identical
+  ok   pty-hostname-other: profile.json bytes identical
+  ok   pty-hostname-other: remote commits identical
+  ok   pty-hostname-other: output has '[-] laptop (suggested, registered to another machine)'
+  ok   pty-hostname-other: output has 'is registered to another machine'
+  ok   pty-hostname-other: row WARN|machine profile|skipped
+  ok   pty-hostname-other: profile.json has no /"aaaaaaaa-1111-2222-3333-444444444444"/
+== interactive (pty): alias of another machine's profile -> confirm -> shared alias, other profile untouched
+  ok   pty-dup-confirm: bash exit 0
+  ok   pty-dup-confirm: pwsh exit 0
+  ok   pty-dup-confirm: summary rows identical
+  ok   pty-dup-confirm: profile.json bytes identical
+  ok   pty-dup-confirm: remote commits identical
+  ok   pty-dup-confirm: profiles.aaaaaaaa-1111-2222-3333-444444444444 alias laptop
+  ok   pty-dup-confirm: the other machine's profile is untouched
+  ok   pty-dup-confirm: output has 'is used by another machine's profile (bbbbbbbb-1111-2222-3333-444444444444). Use it for this machine too? [y/N]'
+== interactive (pty): ... declined -> skipped (WARN row; not registered = exit 1)
+  ok   pty-dup-decline: bash exit 1
+  ok   pty-dup-decline: pwsh exit 1
+  ok   pty-dup-decline: summary rows identical
+  ok   pty-dup-decline: profile.json bytes identical
+  ok   pty-dup-decline: remote commits identical
+  ok   pty-dup-decline: row WARN|machine profile|skipped
+  ok   pty-dup-decline: profile.json has no /"aaaaaaaa-1111-2222-3333-444444444444"/
+== interactive (pty): --alias naming a profile no machine owns -> confirm -> claimed
+  ok   pty-claim-confirm: bash exit 0
+  ok   pty-claim-confirm: pwsh exit 0
+  ok   pty-claim-confirm: summary rows identical
+  ok   pty-claim-confirm: profile.json bytes identical
+  ok   pty-claim-confirm: remote commits identical
+  ok   pty-claim-confirm: profiles.aaaaaaaa-1111-2222-3333-444444444444 alias nobul-mac
+  ok   pty-claim-confirm: no profiles.nobul-mac
+  ok   pty-claim-confirm: output has 'names profile nobul-mac, which belongs to no machine. Claim it for this machine? [y/N]'
+== interactive (pty): ... declined -> skipped (WARN row; not registered = exit 1)
+  ok   pty-claim-decline: bash exit 1
+  ok   pty-claim-decline: pwsh exit 1
+  ok   pty-claim-decline: summary rows identical
+  ok   pty-claim-decline: profile.json bytes identical
+  ok   pty-claim-decline: remote commits identical
+  ok   pty-claim-decline: row WARN|machine profile|skipped
+  ok   pty-claim-decline: profile.json has no /"aaaaaaaa-1111-2222-3333-444444444444"/
+== interactive (pty) with --force: no prompt; an unregistered machine is refused like no terminal
+  ok   pty-force: bash exit 1
+  ok   pty-force: pwsh exit 1
+  ok   pty-force: summary rows identical
+  ok   pty-force: profile.json bytes identical
+  ok   pty-force: remote commits identical
+  ok   pty-force: row ERROR|machine profile|not registered (no terminal)
+  ok   pty-force: --force did not prompt
+
+test-user-init: 216 passed, 0 failed

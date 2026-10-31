@@ -75,7 +75,7 @@ reference existing is not enough).
 | Step | Today (current rules, hand-written scripts) | After M2 |
 |------|----------------------|----------|
 | 3 Registry data | Fields the current `/tool-registry` skill requires | Every field in the tree reference "Tool registry schema 1.1" |
-| 4 Setup scripts | `.claude/rules/script-standards.md` and `.claude/rules/tool-lifecycle.md` ("Install cleanup", "PATH refresh after install") | The tree reference "Setup script shape after migration" |
+| 4 Setup scripts | `.claude/rules/script-standards.md` and `shared/rules/tool-lifecycle.md` ("Install cleanup", "PATH refresh after install") | The tree reference "Setup script shape after migration" |
 | 5 Onboarding | As written | Plus: regenerate tool specs (`scripts/gen-tool-specs.py`) and commit them with the registry change |
 | 6 Verify | Smoke test pattern, `bash -n`, PS1 parser | Plus: the tree reference "Test matrix" and the pre-commit "Tool support conformance" step |
 
@@ -83,8 +83,8 @@ reference existing is not enough).
 
 Read these before step 1; do not work from memory:
 
-1. `.claude/rules/tool-lifecycle.md` — gates, onboarding checklist, update policy
-2. `.claude/rules/tool-evaluation.md` — evaluation principles
+1. `shared/rules/tool-lifecycle.md` — gates, onboarding checklist, update policy
+2. `shared/rules/tool-evaluation.md` — evaluation principles
 3. `reference/tool-support-decision-tree.md` — read for direction; binding only after M2 (schema 1.1)
 4. `/tool-registry` skill — how to read and write the registry
 5. `/tool-eval` skill — the evaluation process you may have to run
@@ -133,7 +133,7 @@ Create or migrate `scripts/setup-<tool>.sh` and `.ps1` (always both):
 - Today: follow `.claude/rules/script-standards.md` block order, logging,
   summary rows and external-command error handling; install via the
   approved preferred method; detect and replace old installs from
-  non-preferred sources (`.claude/rules/tool-lifecycle.md` "Install
+  non-preferred sources (`shared/rules/tool-lifecycle.md` "Install
   cleanup").
 - After M2: shape per the tree reference "Setup script shape after
   migration" (bash and PowerShell): lib, OS guard, spec,
@@ -144,8 +144,10 @@ Create or migrate `scripts/setup-<tool>.sh` and `.ps1` (always both):
   `Invoke-ToolCustomInstall`.
 - Keep tool-specific post-config (auth checks, GOPATH, NSS trust) after the
   install, and only when the script did not exit 2.
-- Plans touching 3+ code files follow `.claude/rules/plan-execution.md`
-  (verbatim edits, fresh sub-agent per 2-3 file batch, verification between).
+- For plans touching 3+ code files, the sub-agent batch pattern (verbatim
+  edits, fresh sub-agent per 2-3 file batch, verification between) is in
+  `reference/plan-execution-detail.md`; the rule that required it was
+  retired on 2026-10-31.
 
 ### 5. Onboarding checklist (first support on a platform)
 
@@ -185,7 +187,7 @@ commander's dotprofile): `bash scripts/build-deploy.sh` (verify the new
   `/tool-registry`; mark health flags that changed via `/tool-eval`.
 - **Rule**: if this run settled a decision the tool-lifecycle rule does not
   state (a new channel, a new menu option, a new deviation from the decision
-  tree), draft the `.claude/rules/tool-lifecycle.md` edit and present it —
+  tree), draft the `shared/rules/tool-lifecycle.md` edit and present it —
   do not leave the decision only in a script or a plan.
 - **Reference**: after M2, new probe kinds, install kinds, or leaves go into
   `reference/tool-support-decision-tree.md` (protected, present for review).
@@ -208,10 +210,10 @@ and `INCIDENT:` lines for deviations found.
 
 ## Cross-References (aitools repo paths)
 
-- Lifecycle rule: `.claude/rules/tool-lifecycle.md`
+- Lifecycle rule: `shared/rules/tool-lifecycle.md`
 - Decision tree: `reference/tool-support-decision-tree.md`
 - Framework: `reference/framework-tool-lifecycle.md`
-- Evaluation: `/tool-eval`, `.claude/rules/tool-evaluation.md`
+- Evaluation: `/tool-eval`, `shared/rules/tool-evaluation.md`
 - Registry: `/tool-registry`
 - Workspace tool requests from other repos: `rfcs/RFC-0001-workspace-tool-requests.md`
 - Profile exceptions contract: `reference/user-repo.md` (`profiles.<machineId>.toolExceptions`)

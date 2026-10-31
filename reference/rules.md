@@ -105,9 +105,9 @@ snapshots only drifted from their sources.
 
 ## 4. Anatomy of a rule
 
-Built from the approved exemplars: `@.claude/rules/tool-lifecycle.md`,
+Built from the approved exemplars: `@shared/rules/tool-lifecycle.md`,
 `@.claude/rules/frameworks.md`, `@.claude/rules/glossary.md`,
-`@shared/rules/scratch.md`, `@shared/rules/hook-lifecycle.md`, and the user
+`@shared/rules/scratch.md`, `@.claude/rules/hook-lifecycle.md`, and the user
 rule `delegation.md` (dotprofile `claude/rules/delegation.md`, deployed to
 `~/.claude/rules/delegation.md`), which the mission names as the model of a
 user rule.
@@ -115,7 +115,7 @@ user rule.
 1. **Frontmatter `paths:`** (optional). A list of globs; the rule applies when
    the agent works on matching files (section 5). 9 of the 24
    `.claude/rules/*.md` have it (recounted at `40777f8`; `grep -L '^paths:'`
-   lists the other 15), plus `shared/rules/hook-lifecycle.md`.
+   lists the other 15), plus `.claude/rules/hook-lifecycle.md`.
 2. **Title** `## <Name>`. Project rules in aitools end in "(this repo)"
    (every `.claude/rules/*.md`); shared and user rules do not
    (`shared/rules/*.md`, `delegation.md`). The suffix is a convention seen
@@ -127,12 +127,12 @@ user rule.
    one yet (e.g. `@.claude/rules/deploy-paths.md`, `@.claude/rules/git-safety.md`).
 4. **Decisions table** (`| ID | Decision | Date | By |`) when the rule
    records commander decisions (`delegation.md` D-DEL1..D-DEL4,
-   `@shared/rules/hook-lifecycle.md` SD-2).
+   `@.claude/rules/hook-lifecycle.md` SD-2).
 5. **Governing principle**: the one idea the rule enforces.
 6. **Directives**: what to do and not do; tables where several cases apply.
 7. **Trigger directive** `### When to invoke /<skill>`: "Invoke the `/<skill>`
    skill when ANY of these arise:" + a bullet list ending with the user
-   naming the skill (`@.claude/rules/glossary.md`, `@.claude/rules/tool-ops.md`,
+   naming the skill (`@.claude/rules/glossary.md`, `@shared/rules/tool-ops.md`,
    `@.claude/rules/incident-governance.md`, `@shared/rules/scratch.md`).
 8. **Enforcement** (optional): the prevention / detection / audit mechanisms
    and their state (`@shared/rules/scratch.md` "Enforcement").
@@ -155,7 +155,7 @@ convention", "Function and library attribution"):
 
 A rule in a scope other than project (shared, dotprofile) writes aitools
 paths as "aitools `<path>`", because it is read in any repo
-(`@shared/rules/hook-lifecycle.md` "Paths below are relative to the aitools
+(`@.claude/rules/hook-lifecycle.md` "Paths below are relative to the aitools
 clone").
 
 ## 5. Scopes

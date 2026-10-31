@@ -1,0 +1,61 @@
+#103 [OPEN] Commit and push dotprofile adopt targets from the managed-file library (N-Q2)
+FILES: .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Adopt/S3-MF-Adopt-Review-pr103.md, .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Adopt/S3-MF-Adopt-drafts/reference/managed-file-deployment.md.edit.txt, .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Adopt/S3-MF-Adopt-report.md, .github/workflows/check.yml, scripts/aitools-lib.ps1, scripts/aitools-lib.sh, scripts/setup-user-claude.ps1, scripts/setup-user-claude.sh, tests/managed-files/test-adopt-push.ps1, tests/managed-files/test-adopt-push.sh
+
+## Summary
+
+An adopt into the dotprofile through the managed-file library (`deploy_managed_file` / `Deploy-ManagedFile` accept & adopt and merge & adopt, `review_json_fields` / `Review-JsonFields` field adopt) is now committed (that one file) and pushed by the library. Adopt targets outside the dotprofile (the aitools repo) stay working-tree changes, as before.
+
+## Why
+
+N-Q2 (dotprofile writes auto-commit and push) and M3-FINISH item 1 (commander 2026-10-22): "an adopt into the dotprofile through the library ... must commit and push it, like setup-user-claude's rules path already does. One shared lib helper; never commit unrelated changes (pathspec commit); push failure = WARN + ACTION." Rule: `.claude/rules/managed-file-deployment.md` "Adopt target". Before this PR the library said "never commits or pushes" and only setup-user-claude's rules loop committed, and only after merge & adopt.
+
+## Changes
+
+- `scripts/aitools-lib.sh` / `scripts/aitools-lib.ps1`: new helper `dotprofile_commit_push` / `Invoke-DotprofileCommitPush`; `_managed_adopt_notice` / `Write-ManagedAdoptNotice` (called by the adopt path only after the adopt write and its validation succeeded) calls it and keeps the "Uncommitted change in <repo>" line for non-dotprofile targets. Header comments updated. No change to the profile-runner section (`_aitlib_profile_run` / `Invoke-AitLibProfile` are only called).
+- `scripts/setup-user-claude.sh` / `.ps1`: removed the private rules-path commit+push block (now done by the library, for accept and merge alike). Behaviour note: the old PS1 block ran `git commit` without a pathspec, so it committed everything staged in the dotprofile; the old bash block discarded git's stderr. The summary row for a failed push changes from `WARN|claude rules|<rule> not pushed` to a warning + ACTION `run git push in <dotprofile>` (as user init does).
+- `tests/managed-files/test-adopt-push.sh` / `.ps1` (new) and three CI jobs in `.github/workflows/check.yml`.
+
+## Contract
+
+`dotprofile_commit_push FILE MESSAGE` (bash) / `Invoke-DotprofileCommitPush -File FILE -Message MESSAGE` (PS1)
+
+- In the dotprofile = FILE's git top level equals the dotprofile's git top level. Dotprofile = `AITLIB_USER_REPO_PATH` / `$script:AitLibUserRepoPath` when the caller ran the resolver (set, even to `""`), else a quiet resolver call (no ERROR row).
+- Pathspec commit: `git add -- FILE`, `git commit -m MESSAGE -- FILE`. Push: `GIT_TERMINAL_PROMPT=0`, ssh BatchMode unless `GIT_SSH_COMMAND` is set. git output -> deploy.log detail.
+- Result global `AITLIB_DOTPROFILE_PUSH` / `$script:AitLibDotprofilePush`:
+  - `committed-pushed`: ok line
+  - `unchanged`: file matches HEAD; no commit, no push, no warning
+  - `commit-failed`: warn + ACTION `commit and push <file> in <dotprofile>` (also when the dotprofile is not a git repository)
+  - `push-failed`: warn + ACTION `git pull --rebase, then git push in <dotprofile>` (rejected / non-fast-forward / fetch first) or `run git push in <dotprofile>`
+  - `not-dotprofile`: detail line only
+- Always returns 0 (bash) / writes nothing to the output stream (PS1, it runs inside `Deploy-ManagedFile`). ACTIONs once per run. The deploy result stays `accept & adopt`.
+- Adopt-path commit message: `Adopt <file name> from the deployed copy`.
+
+## Verification (macOS, this machine)
+
+- `bash tests/managed-files/test-adopt-push.sh`: 28 passed, 0 failed (adopt/merge/JSON adopt into a temp dotprofile with a bare remote -> committed + pushed, commit holds that file only; unrelated unstaged and staged changes not committed; push failure -> WARN + ACTION, outcome still accept & adopt, exit 0; rejected push -> pull --rebase ACTION; commit failure (pre-commit hook) -> WARN + ACTION; two failures -> one ACTION; adopt outside the dotprofile -> no commit; resolver fallback for an unresolved caller, as deploy-harness)
+- `pwsh -NoProfile -File tests/managed-files/test-adopt-push.ps1`: 23 passed, 0 failed
+- `bash tests/managed-files/test-managed-files.sh`: 57 passed, 0 failed (no regression)
+- `pwsh -NoProfile -File tests/managed-files/test-managed-files.ps1`: 39 passed, 0 failed
+- `bash -n` and the pwsh parser on every touched script: OK
+- `bash scripts/check-pre-commit.sh`: 12 PASS, 6 WARN, 1 FAIL (step 6: the known `harvesting/2026-07-09_session-ba4c0c12-7_build-deploy-prefix.sh` 100644)
+- `bash scripts/check-pre-push.sh`: 6 PASS, 3 WARN, 1 FAIL (step 7: the known stale dotprofile `deploy/`)
+
+## Not run
+
+- Windows (Git Bash and native pwsh): CI only. The PS1 resolver fallback inside the helper runs only on Windows (`aitools-profile.ps1` refuses other OSes), so on macOS the PS1 test starts as a caller that already resolved the dotprofile.
+- Linux: CI only.
+- No run against a real HOME or the real dotprofile (by design).
+
+## Protected-file drafts awaiting approval
+
+- `reference/managed-file-deployment.md` "Caller Responsibilities" (N-Q2 bullet: helper name, contract, result values): `.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Adopt/S3-MF-Adopt-drafts/reference/managed-file-deployment.md.edit.txt`
+- `.claude/rules/managed-file-deployment.md` "Adopt target" already matches the code: no edit proposed.
+
+## Follow-ups
+
+- Fresh machine without a git identity: `ui_commit` (scripts/aitools) falls back to the profile's `identity.git`; this helper does not (the commit fails -> warn + ACTION). Moving that fallback into the helper needs a JSON reader in the lib.
+- `display_path` exists only in bash, so PS1 log lines show the full path where bash shows `~/...` (same as the existing adopt notice).
+- `dotprofile_commit_push` could replace the ad hoc commit/push in `scripts/aitools` `ui_commit` (owned by another mission).
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+

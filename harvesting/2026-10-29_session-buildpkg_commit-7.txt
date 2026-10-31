@@ -1,0 +1,35 @@
+Apply independent review fixes to the build-package plan set and scaffolding
+
+What: resolves reviewer findings F1-F13 and nits N1-N8
+(S3-BuildPkg-Reviewer-verdict.md):
+- F1: per-step summary tool names (`build stage|pkg|intune|deb|dry-run`)
+  so show_summary's one-row-per-tool dedup keeps every row; tests add a
+  standalone-panel case (36 cases).
+- F2: deploy-paths.md "Equivalence" now lists the seven reported
+  differences of the package path instead of claiming identical rows.
+- F3/N4: relay mirror n/a in package mode; version from VERSION.
+- F4-F13: batch file lists and dependencies (B3b test-hookin, B4/B8a/
+  B9a/B10b after B5a+B5b), install-system.ps1 header = pwsh 7 by full
+  path, every remediation item on an existing lettered batch (new B5c,
+  B5d, B6d2, B6g, B6h, B7g2, B7j-B7m; RM-47 scheduled; RM-117/118 added),
+  privileged-run guard callers, launcher exit policy in the P-1 text,
+  B2 pseudocode errors, system-phase writes, staleness (B0 done, #99
+  merged), design 3(a) host detection = platform then tool.
+- Nits: control.in render rules, launcher headers, Windows 11, winget
+  first-sign-in risk, B12 dependencies, runuser HOME, Maintainer open
+  question.
+
+Why: mission BUILD-PKG requires an independent review; verdict APPROVE
+WITH CHANGES. Protected-file review waived by the commander for this
+mission's docs.
+
+Verification (tested: macOS): test-cli.sh 36 passed under bash 5.3.15
+and /bin/bash 3.2.57 (delegate); orchestrator re-run under an isolated
+HOME: 36 passed, 0 failed. bash -n and the pwsh parser on every edited
+script (delegate). Remediation table check: 118 rows, every batch exists
+in plan section 4. Orchestrator read the deploy-paths.md diff.
+check-pre-commit: only the known step 6 FAIL.
+
+Not run: Windows PowerShell 5.1 parse; Windows and Linux hosts.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

@@ -1,0 +1,9 @@
+managed-file-deployment: state machine for the approved target model
+
+Replaces the State Machine section with the approved model: SOURCE is the
+source of truth, no ancestor or deploy state, one review menu, adopt and
+merge copied to the repo immediately, restore-and-continue on failure, JSON
+reviewed per field. Menus, Return Values and Deploy State still describe
+today's code until mission HARNESS batch B1. Commander-approved, 2026-10-21.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

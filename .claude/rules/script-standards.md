@@ -235,7 +235,7 @@ or failure signature = one entry in the table. See `@reference/script-standards-
 the process.
 
 Install fields in `BuildPrereqs` entries must reference methods derived from official
-tool documentation. See `@.claude/rules/tool-lifecycle.md` Install method discovery.
+tool documentation. See `@shared/rules/tool-lifecycle.md` Install method discovery.
 
 ### KnownPaths empirical verification
 

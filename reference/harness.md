@@ -69,7 +69,7 @@ See `@CLAUDE.md` for the full project description.
 by `/tool-registry` skill. Each gets setup scripts, platform lifecycle
 tracking, and operational metadata (via `/tool-ops` skill). Standing
 orders and hooks enforce tool selection. See
-`@.claude/rules/tool-lifecycle.md` for the onboarding process.
+`@shared/rules/tool-lifecycle.md` for the onboarding process.
 
 **Frameworks** — governance structures built by adopting concepts from
 established disciplines. Each bridges a discipline and the harness

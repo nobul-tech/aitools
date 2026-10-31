@@ -1,0 +1,10 @@
+.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Adopt/S3-MF-Adopt-Review-pr103.md
+.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Adopt/S3-MF-Adopt-drafts/reference/managed-file-deployment.md.edit.txt
+.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Adopt/S3-MF-Adopt-report.md
+.github/workflows/check.yml
+scripts/aitools-lib.ps1
+scripts/aitools-lib.sh
+scripts/setup-user-claude.ps1
+scripts/setup-user-claude.sh
+tests/managed-files/test-adopt-push.ps1
+tests/managed-files/test-adopt-push.sh

@@ -25,7 +25,8 @@ sequential dependencies without formally amending the plan first.
 - `@.claude/rules/incident-governance.md` — tracks defects, not
   process. The decision tree classifies findings but doesn't govern
   how plans are followed.
-- `@.claude/rules/plan-execution.md` — covers code batch mechanics
+- The plan-execution rule (project rule, retired 2026-10-31; its pattern
+  is kept in `@reference/plan-execution-detail.md`) — covers code batch mechanics
   (sub-agent execution pattern). Does not address plan sequencing or
   deviation protocols.
 - `/planning` skill — covers plan creation strategy (context budgets,

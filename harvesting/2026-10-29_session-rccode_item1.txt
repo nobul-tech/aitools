@@ -1,0 +1,581 @@
+######## setup-user-claude
+== origin/main scripts/setup-user-claude.sh
+288:# --- BEGIN rules deployment (extracted by build-deploy) ---
+290:RULES_SRC=""
+292:    RULES_SRC="$USER_REPO_PATH/claude/rules"
+295:RULES_DEST="$CLAUDE_DIR/rules"
+297:# --- BEGIN rules deploy logic (extracted by build-deploy) ---
+349:            _rule_adopt_path=""
+351:                _rule_adopt_path="$USER_REPO_PATH/claude/rules/$rule_name"
+428:# --- END rules deploy logic (extracted by build-deploy) ---
+429:# --- END rules deployment (extracted by build-deploy) ---
+== origin/main scripts/setup-user-claude.ps1
+306:# --- BEGIN rules deployment (extracted by build-deploy) ---
+308:$rulesSrc = ""
+310:    $candidateRules = Join-Path $userRepoPath "claude\rules"
+311:    if (Test-Path $candidateRules) {
+312:        $rulesSrc = $candidateRules
+316:$rulesDest = Join-Path $claudeDir "rules"
+318:# --- BEGIN rules deploy logic (extracted by build-deploy) ---
+380:            $ruleAdoptPath = ""
+381:            if ($userRepoPath) { $ruleAdoptPath = Join-Path (Join-Path $userRepoPath "claude\rules") $rf.Name }
+460:# --- END rules deploy logic (extracted by build-deploy) ---
+461:# --- END rules deployment (extracted by build-deploy) ---
+== origin/fix/mf-dotprofile-adopt-push scripts/setup-user-claude.sh
+288:# --- BEGIN rules deployment (extracted by build-deploy) ---
+290:RULES_SRC=""
+292:    RULES_SRC="$USER_REPO_PATH/claude/rules"
+295:RULES_DEST="$CLAUDE_DIR/rules"
+297:# --- BEGIN rules deploy logic (extracted by build-deploy) ---
+349:            _rule_adopt_path=""
+351:                _rule_adopt_path="$USER_REPO_PATH/claude/rules/$rule_name"
+408:# --- END rules deploy logic (extracted by build-deploy) ---
+409:# --- END rules deployment (extracted by build-deploy) ---
+== origin/fix/mf-dotprofile-adopt-push scripts/setup-user-claude.ps1
+306:# --- BEGIN rules deployment (extracted by build-deploy) ---
+308:$rulesSrc = ""
+310:    $candidateRules = Join-Path $userRepoPath "claude\rules"
+311:    if (Test-Path $candidateRules) {
+312:        $rulesSrc = $candidateRules
+316:$rulesDest = Join-Path $claudeDir "rules"
+318:# --- BEGIN rules deploy logic (extracted by build-deploy) ---
+380:            $ruleAdoptPath = ""
+381:            if ($userRepoPath) { $ruleAdoptPath = Join-Path (Join-Path $userRepoPath "claude\rules") $rf.Name }
+437:# --- END rules deploy logic (extracted by build-deploy) ---
+438:# --- END rules deployment (extracted by build-deploy) ---
+== origin/fix/mf-audit-claude-build scripts/setup-user-claude.sh
+288:# --- BEGIN rules deployment (extracted by build-deploy) ---
+290:RULES_SRC=""
+292:    RULES_SRC="$USER_REPO_PATH/claude/rules"
+295:RULES_DEST="$CLAUDE_DIR/rules"
+297:# --- BEGIN rules deploy logic (extracted by build-deploy) ---
+349:            _rule_adopt_path=""
+351:                _rule_adopt_path="$USER_REPO_PATH/claude/rules/$rule_name"
+408:# --- END rules deploy logic (extracted by build-deploy) ---
+409:# --- END rules deployment (extracted by build-deploy) ---
+== origin/fix/mf-audit-claude-build scripts/setup-user-claude.ps1
+316:# --- BEGIN rules deployment (extracted by build-deploy) ---
+318:$rulesSrc = ""
+320:    $candidateRules = Join-Path $userRepoPath "claude\rules"
+321:    if (Test-Path $candidateRules) {
+322:        $rulesSrc = $candidateRules
+326:$rulesDest = Join-Path $claudeDir "rules"
+328:# --- BEGIN rules deploy logic (extracted by build-deploy) ---
+390:            $ruleAdoptPath = ""
+391:            if ($userRepoPath) { $ruleAdoptPath = Join-Path (Join-Path $userRepoPath "claude\rules") $rf.Name }
+447:# --- END rules deploy logic (extracted by build-deploy) ---
+448:# --- END rules deployment (extracted by build-deploy) ---
+== origin/fix/mf-lib-runner-result scripts/setup-user-claude.sh
+288:# --- BEGIN rules deployment (extracted by build-deploy) ---
+290:RULES_SRC=""
+292:    RULES_SRC="$USER_REPO_PATH/claude/rules"
+295:RULES_DEST="$CLAUDE_DIR/rules"
+297:# --- BEGIN rules deploy logic (extracted by build-deploy) ---
+349:            _rule_adopt_path=""
+351:                _rule_adopt_path="$USER_REPO_PATH/claude/rules/$rule_name"
+408:# --- END rules deploy logic (extracted by build-deploy) ---
+409:# --- END rules deployment (extracted by build-deploy) ---
+== origin/fix/mf-lib-runner-result scripts/setup-user-claude.ps1
+306:# --- BEGIN rules deployment (extracted by build-deploy) ---
+308:$rulesSrc = ""
+310:    $candidateRules = Join-Path $userRepoPath "claude\rules"
+311:    if (Test-Path $candidateRules) {
+312:        $rulesSrc = $candidateRules
+316:$rulesDest = Join-Path $claudeDir "rules"
+318:# --- BEGIN rules deploy logic (extracted by build-deploy) ---
+380:            $ruleAdoptPath = ""
+381:            if ($userRepoPath) { $ruleAdoptPath = Join-Path (Join-Path $userRepoPath "claude\rules") $rf.Name }
+437:# --- END rules deploy logic (extracted by build-deploy) ---
+438:# --- END rules deployment (extracted by build-deploy) ---
+== origin/fix/mf-lib-relay scripts/setup-user-claude.sh
+288:# --- BEGIN rules deployment (extracted by build-deploy) ---
+290:RULES_SRC=""
+292:    RULES_SRC="$USER_REPO_PATH/claude/rules"
+295:RULES_DEST="$CLAUDE_DIR/rules"
+297:# --- BEGIN rules deploy logic (extracted by build-deploy) ---
+349:            _rule_adopt_path=""
+351:                _rule_adopt_path="$USER_REPO_PATH/claude/rules/$rule_name"
+408:# --- END rules deploy logic (extracted by build-deploy) ---
+409:# --- END rules deployment (extracted by build-deploy) ---
+== origin/fix/mf-lib-relay scripts/setup-user-claude.ps1
+306:# --- BEGIN rules deployment (extracted by build-deploy) ---
+308:$rulesSrc = ""
+310:    $candidateRules = Join-Path $userRepoPath "claude\rules"
+311:    if (Test-Path $candidateRules) {
+312:        $rulesSrc = $candidateRules
+316:$rulesDest = Join-Path $claudeDir "rules"
+318:# --- BEGIN rules deploy logic (extracted by build-deploy) ---
+380:            $ruleAdoptPath = ""
+381:            if ($userRepoPath) { $ruleAdoptPath = Join-Path (Join-Path $userRepoPath "claude\rules") $rf.Name }
+437:# --- END rules deploy logic (extracted by build-deploy) ---
+438:# --- END rules deployment (extracted by build-deploy) ---
+== origin/fix/mf-installer-relay scripts/setup-user-claude.sh
+288:# --- BEGIN rules deployment (extracted by build-deploy) ---
+290:RULES_SRC=""
+292:    RULES_SRC="$USER_REPO_PATH/claude/rules"
+295:RULES_DEST="$CLAUDE_DIR/rules"
+297:# --- BEGIN rules deploy logic (extracted by build-deploy) ---
+349:            _rule_adopt_path=""
+351:                _rule_adopt_path="$USER_REPO_PATH/claude/rules/$rule_name"
+408:# --- END rules deploy logic (extracted by build-deploy) ---
+409:# --- END rules deployment (extracted by build-deploy) ---
+== origin/fix/mf-installer-relay scripts/setup-user-claude.ps1
+306:# --- BEGIN rules deployment (extracted by build-deploy) ---
+308:$rulesSrc = ""
+310:    $candidateRules = Join-Path $userRepoPath "claude\rules"
+311:    if (Test-Path $candidateRules) {
+312:        $rulesSrc = $candidateRules
+316:$rulesDest = Join-Path $claudeDir "rules"
+318:# --- BEGIN rules deploy logic (extracted by build-deploy) ---
+380:            $ruleAdoptPath = ""
+381:            if ($userRepoPath) { $ruleAdoptPath = Join-Path (Join-Path $userRepoPath "claude\rules") $rf.Name }
+437:# --- END rules deploy logic (extracted by build-deploy) ---
+438:# --- END rules deployment (extracted by build-deploy) ---
+######## setup-user-cursor
+== origin/main scripts/setup-user-cursor.sh
+389:HARNESS_RULES_DIR="$HOME/.aitools/rules"
+390:CURSOR_RULES_DIR="$CURSOR_DIR/rules"
+== origin/main scripts/setup-user-cursor.ps1
+383:$harnessRulesDir = Join-Path $env:USERPROFILE ".aitools\rules"
+384:$cursorRulesDir = Join-Path $cursorDir "rules"
+== origin/feature/harness-cursor-user-rules scripts/setup-user-cursor.sh
+10:#   4. Fans the user-level harness rules (~/.aitools/rules) out to Cursor's user
+16:# ~/.cursor/rules/ (additive deploy, pruned against the rules manifest):
+18:#            ~/.aitools/rules/.aitools-rules-manifest is shared or dotprofile
+19:#            (user-level rules only; commander decision 2026-10-22). *.bak.*
+20:#            backups, the manifest and non-.md files are not fanned out.
+21:#   Removed (backup kept): <name>.mdc for a manifest name whose source is
+28:#   No manifest, or one with another first line: nothing fanned out, nothing
+395:# converted form of it. Cursor gets user-level rules only (commander decision
+396:# 2026-10-22): the rules manifest deploy-harness writes (PR #100 contract)
+403:HARNESS_RULES_DIR="$HOME/.aitools/rules"
+404:CURSOR_RULES_DIR="$CURSOR_DIR/rules"
+491:# Print the rules manifest $1 (deploy-harness section 5b, PR #100 contract) as
+498:RULES_MANIFEST_HEADER="# aitools rules manifest v1"
+499:read_rules_manifest() {
+556:RULES_MANIFEST="$HARNESS_RULES_DIR/.aitools-rules-manifest"
+559:ENTITLED_NAMES=""   # manifest names Cursor gets (source shared or dotprofile)
+571:    # Safe behaviour: without the manifest the source of each rule is unknown,
+573:    # nothing is removed (a user-level rule could be taken for a project rule)
+574:    log_warn "No rules manifest at $(display_path "$RULES_MANIFEST") -- Cursor rules left unchanged (nothing fanned out, nothing removed)"
+575:    write_summary WARN "cursor rules" "no rules manifest"
+576:    write_summary ACTION "" "Run aitools to rebuild ~/.aitools/rules and its manifest"
+578:    manifest_out=""
+579:    if ! manifest_out=$(read_rules_manifest "$RULES_MANIFEST" 2>&1); then
+580:        log_error "Cannot read the rules manifest $(display_path "$RULES_MANIFEST"): $manifest_out"
+581:        write_summary ERROR "cursor rules" "cannot read rules manifest"
+582:    elif [ "$manifest_out" = "header-bad" ]; then
+583:        log_warn "Rules manifest $(display_path "$RULES_MANIFEST"): the first line is not \"$RULES_MANIFEST_HEADER\" -- Cursor rules left unchanged (nothing fanned out, nothing removed)"
+584:        write_summary WARN "cursor rules" "rules manifest not v1"
+585:        write_summary ACTION "" "Run aitools to rebuild ~/.aitools/rules and its manifest"
+592:                    log_warn "Rules manifest $(display_path "$RULES_MANIFEST"): line ignored: ${m_line#invalid"$TAB"}" ;;
+611:        done <<< "$manifest_out"
+617:    # contract), that the manifest lists as a user-level rule
+628:        # The glob skips hidden files, so the manifest itself is never listed.
+635:        # Cursor gets user-level rules only (commander decision 2026-10-22)
+639:                log_detail "Not fanned out: $rule_base (a project or retired rule in the rules manifest)"
+641:                log "Not fanned out: $rule_base (not in the rules manifest)"
+660:    # A user-level name in the manifest with no file: nothing to fan out
+664:            log_warn "Not fanned out: $m_name is in the rules manifest but not in $(display_path "$HARNESS_RULES_DIR") (run aitools to rebuild it)"
+669:        log "No user-level rules in $(display_path "$HARNESS_RULES_DIR") -- skipping"
+670:        write_summary OK "cursor rules" "n/a (no user-level rules)"
+752:            # Deployed this run from a user-level rule whose name differs only in case
+788:                log_warn "Kept $rm_dest: the rules manifest lists $rm_name as $rm_src (Cursor gets user-level rules only), but this file was not created by the fan-out (no aitools-fanout marker, no matching harness copy) -- Cursor still loads it; remove it if it is an old fan-out copy"
+808:            log "Removed $rm_dest ($rm_src rule: Cursor gets user-level rules only; $rm_why; backup kept)"
+882:                        write_summary OK "cursor rules" "n/a (no user-level rules)"
+884:                    log_ok "Cursor rules: no user-level rules, $N_REMOVED removed, $_DT_PRESERVED preserved in $(display_path "$CURSOR_RULES_DIR")"
+== origin/feature/harness-cursor-user-rules scripts/setup-user-cursor.ps1
+9:#   4. Fans the user-level harness rules (%USERPROFILE%\.aitools\rules) out to Cursor's
+16:# %USERPROFILE%\.cursor\rules\ (additive deploy, pruned against the rules manifest):
+18:#            .aitools\rules\.aitools-rules-manifest is shared or dotprofile
+19:#            (user-level rules only; commander decision 2026-10-22). *.bak.*
+20:#            backups, the manifest and non-.md files are not fanned out.
+21:#   Removed (backup kept): <name>.mdc for a manifest name whose source is
+28:#   No manifest, or one with another first line: nothing fanned out, nothing
+390:# form of it. Cursor gets user-level rules only (commander decision
+391:# 2026-10-22): the rules manifest deploy-harness writes (PR #100 contract)
+398:$harnessRulesDir = Join-Path $env:USERPROFILE ".aitools\rules"
+399:$cursorRulesDir = Join-Path $cursorDir "rules"
+496:# Read the rules manifest (deploy-harness section 5b, PR #100 contract).
+501:# when the file cannot be read. Parity: read_rules_manifest in setup-user-cursor.sh.
+502:$rulesManifestHeader = "# aitools rules manifest v1"
+543:$rulesManifest = Join-Path $harnessRulesDir ".aitools-rules-manifest"
+544:$entitledNames = New-Object System.Collections.Generic.List[string]   # manifest names Cursor gets (shared, dotprofile)
+563:        # Safe behaviour: without the manifest the source of each rule is unknown,
+565:        # nothing is removed (a user-level rule could be taken for a project rule)
+566:        LogWarn "No rules manifest at $rulesManifest -- Cursor rules left unchanged (nothing fanned out, nothing removed)"
+567:        Write-Summary "WARN" "cursor rules" "no rules manifest"
+568:        Write-Summary "ACTION" "" "Run aitools to rebuild ~/.aitools/rules and its manifest"
+571:        $manifest = $null
+573:            $manifest = Read-RulesManifest $rulesManifest
+575:            LogError "Cannot read the rules manifest ${rulesManifest}: $_"
+576:            Write-Summary "ERROR" "cursor rules" "cannot read rules manifest"
+579:        if ($manifest -and $manifest.Status -eq "header-bad") {
+580:            LogWarn "Rules manifest ${rulesManifest}: the first line is not `"$rulesManifestHeader`" -- Cursor rules left unchanged (nothing fanned out, nothing removed)"
+581:            Write-Summary "WARN" "cursor rules" "rules manifest not v1"
+582:            Write-Summary "ACTION" "" "Run aitools to rebuild ~/.aitools/rules and its manifest"
+584:        } elseif ($manifest) {
+585:            foreach ($bad in $manifest.Invalid) { LogWarn "Rules manifest ${rulesManifest}: line ignored: $bad" }
+586:            foreach ($r in $manifest.Rules) {
+599:    # contract), that the manifest lists as a user-level rule
+604:        # Hidden files (the manifest among them) are skipped silently
+613:        # Cursor gets user-level rules only (commander decision 2026-10-22)
+616:                LogDetail "Not fanned out: $($entry.Name) (a project or retired rule in the rules manifest)"
+618:                Log "Not fanned out: $($entry.Name) (not in the rules manifest)"
+633:    # A user-level name in the manifest with no file: nothing to fan out
+636:            LogWarn "Not fanned out: $name is in the rules manifest but not in $harnessRulesDir (run aitools to rebuild it)"
+641:        Log "No user-level rules in $harnessRulesDir -- skipping"
+642:        Write-Summary "OK" "cursor rules" "n/a (no user-level rules)"
+717:            # Deployed this run from a user-level rule whose name differs only in case
+763:                LogWarn "Kept ${rmDest}: the rules manifest lists $($r.Name) as $($r.Source) (Cursor gets user-level rules only), but this file was not created by the fan-out (no aitools-fanout marker, no matching harness copy) -- Cursor still loads it; remove it if it is an old fan-out copy"
+806:            Log "Removed $rmDest ($($r.Source) rule: Cursor gets user-level rules only; $rmWhy; backup kept)"
+870:                        Write-Summary "OK" "cursor rules" "n/a (no user-level rules)"
+872:                    LogOk "Cursor rules: no user-level rules, $removedCount removed, $($script:dtPreserved) preserved in $cursorRulesDir"
+== origin/fix/mf-audit-consumers scripts/setup-user-cursor.sh
+390:HARNESS_RULES_DIR="$HOME/.aitools/rules"
+391:CURSOR_RULES_DIR="$CURSOR_DIR/rules"
+== origin/fix/mf-audit-consumers scripts/setup-user-cursor.ps1
+386:$harnessRulesDir = Join-Path $env:USERPROFILE ".aitools\rules"
+387:$cursorRulesDir = Join-Path $cursorDir "rules"
+######## deploy-harness
+== origin/main scripts/deploy-harness.sh
+24:# Name conflicts: the first source wins; each skipped duplicate is log_error +
+34:# Exit: 0 done (warnings possible), 1 errors (incl. duplicates, config.json
+149:# 4. Plan: every source file, conflicts resolved (first source wins)
+238:                    log_error "Duplicate $kind name: $unit in $label ($(display_path "$src_dir/$unit")) skipped; kept $w_unit from $w_label (first source wins)"
+260:add_source rules      "shared/rules"     "$REPO_DIR/shared/rules"    "$HARNESS_DIR/rules"      flat-md
+261:add_source rules      ".claude/rules"    "$REPO_DIR/.claude/rules"   "$HARNESS_DIR/rules"      flat-md
+263:    add_source rules  "dotprofile"       "$DOTPROFILE/claude/rules"  "$HARNESS_DIR/rules"      flat-md
+384:log "harness files: $N_PLANNED planned, $N_ADDED added, $N_UPDATED updated, $N_ACCEPTED accepted, $N_VERIFIED verified, $N_SKIPPED skipped, $N_FAILED failed, $N_PRESERVED preserved, $DUPLICATES duplicate(s)"
+== origin/main scripts/deploy-harness.ps1
+25:# Name conflicts: the first source wins; each skipped duplicate is LogError +
+35:# Exit: 0 done (warnings possible), 1 errors (incl. duplicates, config.json
+144:# 4. Plan: every source file, conflicts resolved (first source wins)
+148:$duplicates = 0
+219:                $script:duplicates++
+221:                LogError "Duplicate $Kind name: $unit in $Label ($(Join-Path $SrcDir $unit)) skipped; kept $($w.Unit) from $($w.Label) (first source wins)"
+244:Add-Source -Kind "rules"      -Label "shared/rules"   -SrcDir (Join-Path (Join-Path $repoDir "shared") "rules")   -DestDir (Join-Path $harnessDir "rules")      -Layout "flat-md"
+245:Add-Source -Kind "rules"      -Label ".claude/rules"  -SrcDir (Join-Path (Join-Path $repoDir ".claude") "rules")  -DestDir (Join-Path $harnessDir "rules")      -Layout "flat-md"
+247:    Add-Source -Kind "rules"  -Label "dotprofile"     -SrcDir (Join-Path (Join-Path $dotprofile "claude") "rules") -DestDir (Join-Path $harnessDir "rules")     -Layout "flat-md"
+343:Log "harness files: $($plan.Count) planned, $nAdded added, $nUpdated updated, $nAccepted accepted, $nVerified verified, $nSkipped skipped, $nFailed failed, $nPreserved preserved, $duplicates duplicate(s)"
+== origin/feature/harness-rules-manifest scripts/deploy-harness.sh
+24:#   ~/.aitools/rules/.aitools-rules-manifest <- written every run (sole owner): one
+26:#                                     shared | aitools | dotprofile | retired (section 5b)
+27:# Name conflicts: the first source wins; each skipped duplicate is log_error +
+30:# Retired rules: a rule in the previous manifest that no source has any more is
+32:#   this run); the manifest keeps its "retired" line until a source has it again.
+40:# Exit: 0 done (warnings possible), 1 errors (incl. duplicates, config.json
+155:# 4. Plan: every source file, conflicts resolved (first source wins)
+202:        log_error "Source $label: cannot record it as listed -- its retired rules are kept this run"
+250:                    log_error "Duplicate $kind name: $unit in $label ($(display_path "$src_dir/$unit")) skipped; kept $w_unit from $w_label (first source wins)"
+272:add_source rules      "shared/rules"     "$REPO_DIR/shared/rules"    "$HARNESS_DIR/rules"      flat-md
+273:add_source rules      ".claude/rules"    "$REPO_DIR/.claude/rules"   "$HARNESS_DIR/rules"      flat-md
+275:    add_source rules  "dotprofile"       "$DOTPROFILE/claude/rules"  "$HARNESS_DIR/rules"      flat-md
+357:# 5b. Rules manifest (~/.aitools/rules/.aitools-rules-manifest), retired rules
+361:# line "# aitools rules manifest v1", then "<file name><TAB><source>" sorted by
+363:# (aitools .claude/rules), dotprofile (dotprofile claude/rules), retired. The
+364:# source is the one that won (first source wins). No .md extension: consumers
+366:# Retired: a name in the previous manifest that no source has this run (names
+369:# ls-files failed, no dotprofile) keeps its line. A retired name's file in
+371:# the line stays until a source has the name again. No previous manifest
+372:# (first run): nothing is retired. A previous manifest with another header:
+373:# warning, nothing retired, rewritten.
+374:RULES_MANIFEST_HEADER="# aitools rules manifest v1"
+377:# rules_manifest_plan PREV NEW ACTIONS -- from $SEEN (rule winners), $LISTED and
+378:# the previous manifest PREV (may be absent): write the new manifest to NEW and
+379:# one action per line to ACTIONS: "retire<TAB>name<TAB>was" (retired this run),
+380:# "stale<TAB>name" (retired before), "keep<TAB>name<TAB>source" (source not
+383:rules_manifest_plan() {
+411:                print $a "warn\tthe first line is not \"$header\" -- nothing retired this run\n";
+419:                            || $src !~ /\A(?:shared|aitools|dotprofile|retired)\z/) {
+425:                    if ($src eq "retired") {
+426:                        $lines{$name} = "retired";
+429:                        $lines{$name} = "retired";
+444:    ' "$SEEN" "$LISTED" "$1" "$2" "$3" "$RULES_MANIFEST_HEADER"
+447:# retire_rule_file NAME -- back up and remove ~/.aitools/rules/NAME (a retired rule)
+451:        log "[DRY RUN] Would back up and remove $(display_path "$f") (retired rule)"
+466:    log "Removed $(display_path "$f") (retired rule; backup kept)"
+467:    write_summary DETAIL "$TOOL" "$(short "retired: rules/$name")"
+470:# write_rules_manifest -- section 5b: retire, then write the manifest (temp file + move)
+471:write_rules_manifest() {
+472:    local manifest="$HARNESS_DIR/rules/.aitools-rules-manifest"
+473:    local new="$WORK/rules-manifest.new" actions="$WORK/rules-manifest.actions"
+474:    local tmp="$manifest.tmp" kind name extra n
+475:    if ! rules_manifest_plan "$manifest" "$new" "$actions" 2> "$WORK/rules-manifest.err"; then
+476:        log_error "Rules manifest: $(cat "$WORK/rules-manifest.err") -- manifest not written, nothing retired"
+477:        write_summary ERROR "$TOOL" "rules manifest not written"
+483:                log_warn "Rules manifest $(display_path "$manifest"): $name" ;;
+485:                log "Rules manifest: $name kept as $extra (source not listed this run -- not retired)" ;;
+497:        log "[DRY RUN] Would write $(display_path "$manifest") ($n rule line(s))"
+501:        log_error "Rules manifest: cannot write $(display_path "$tmp") -- manifest not written"
+502:        write_summary ERROR "$TOOL" "rules manifest not written"
+505:    if ! mv -f "$tmp" "$manifest"; then
+506:        log_error "Rules manifest: cannot move $(display_path "$tmp") to $(display_path "$manifest") -- manifest not written"
+507:        write_summary ERROR "$TOOL" "rules manifest not written"
+511:    log "Rules manifest: wrote $(display_path "$manifest") ($n rule line(s))"
+514:write_rules_manifest
+540:            next if $b =~ /\A\.aitools-rules-manifest(?:\.tmp)?\z/;   # section 5b writes it
+557:log "harness files: $N_PLANNED planned, $N_ADDED added, $N_UPDATED updated, $N_ACCEPTED accepted, $N_VERIFIED verified, $N_SKIPPED skipped, $N_FAILED failed, $N_PRESERVED preserved, $N_RETIRED retired, $DUPLICATES duplicate(s)"
+== origin/feature/harness-rules-manifest scripts/deploy-harness.ps1
+25:#   .aitools\rules\.aitools-rules-manifest <- written every run (sole owner): one
+27:#                                   shared | aitools | dotprofile | retired (section 5b)
+28:# Name conflicts: the first source wins; each skipped duplicate is LogError +
+31:# Retired rules: a rule in the previous manifest that no source has any more is
+33:#   this run); the manifest keeps its "retired" line until a source has it again.
+41:# Exit: 0 done (warnings possible), 1 errors (incl. duplicates, config.json
+150:# 4. Plan: every source file, conflicts resolved (first source wins)
+155:$duplicates = 0
+227:                $script:duplicates++
+229:                LogError "Duplicate $Kind name: $unit in $Label ($(Join-Path $SrcDir $unit)) skipped; kept $($w.Unit) from $($w.Label) (first source wins)"
+252:Add-Source -Kind "rules"      -Label "shared/rules"   -SrcDir (Join-Path (Join-Path $repoDir "shared") "rules")   -DestDir (Join-Path $harnessDir "rules")      -Layout "flat-md"
+253:Add-Source -Kind "rules"      -Label ".claude/rules"  -SrcDir (Join-Path (Join-Path $repoDir ".claude") "rules")  -DestDir (Join-Path $harnessDir "rules")      -Layout "flat-md"
+255:    Add-Source -Kind "rules"  -Label "dotprofile"     -SrcDir (Join-Path (Join-Path $dotprofile "claude") "rules") -DestDir (Join-Path $harnessDir "rules")     -Layout "flat-md"
+326:# 5b. Rules manifest (.aitools\rules\.aitools-rules-manifest), retired rules
+330:# line "# aitools rules manifest v1", then "<file name><TAB><source>" sorted by
+332:# .claude/rules), dotprofile (dotprofile claude/rules), retired. The source is
+333:# the one that won (first source wins). No .md extension: consumers that copy
+335:# Retired: a name in the previous manifest that no source has this run (names
+338:# ls-files failed, no dotprofile) keeps its line. A retired name's file in
+340:# the line stays until a source has the name again. No previous manifest
+341:# (first run): nothing is retired. A previous manifest with another header:
+342:# warning, nothing retired, rewritten. Same outcomes as deploy-harness.sh.
+343:$rulesManifestHeader = "# aitools rules manifest v1"
+347:# previous manifest PREV (may be absent): @{ Lines = sorted manifest lines;
+366:            $actions.Add(@{ Kind = "warn"; Name = "the first line is not `"$rulesManifestHeader`" -- nothing retired this run"; Extra = "" })
+374:                        $src -cnotmatch '\A(?:shared|aitools|dotprofile|retired)\z') {
+379:                if ($src -ceq "retired") {
+380:                    $lines[$name] = "retired"
+383:                    $lines[$name] = "retired"
+399:# Remove-RetiredRule NAME -- back up and remove .aitools\rules\NAME (a retired rule)
+403:        Log "[DRY RUN] Would back up and remove $f (retired rule)"
+430:    Log "Removed $f (retired rule; backup kept)"
+431:    Write-Summary "DETAIL" $tool (Get-ShortDetail "retired: rules/$Name")
+434:# Write-RulesManifest -- section 5b: retire, then write the manifest (temp file + move)
+436:    $manifest = Join-Path (Join-Path $harnessDir "rules") ".aitools-rules-manifest"
+437:    $tmp = "$manifest.tmp"
+439:        $mp = Get-RulesManifestPlan $manifest
+441:        LogError "Rules manifest: $_ -- manifest not written, nothing retired"
+442:        Write-Summary "ERROR" $tool "rules manifest not written"
+447:            "warn" { LogWarn "Rules manifest ${manifest}: $($a.Name)" }
+448:            "keep" { Log "Rules manifest: $($a.Name) kept as $($a.Extra) (source not listed this run -- not retired)" }
+459:        Log "[DRY RUN] Would write $manifest ($n rule line(s))"
+466:        [IO.File]::Move($tmp, $manifest, $true)
+468:        LogError "Rules manifest: cannot write ${manifest}: $_ -- manifest not written"
+469:        Write-Summary "ERROR" $tool "rules manifest not written"
+475:    Log "Rules manifest: wrote $manifest ($n rule line(s))"
+497:        if ($f.Name -eq ".aitools-rules-manifest" -or $f.Name -eq ".aitools-rules-manifest.tmp") { continue }   # section 5b writes it
+507:Log "harness files: $($plan.Count) planned, $nAdded added, $nUpdated updated, $nAccepted accepted, $nVerified verified, $nSkipped skipped, $nFailed failed, $nPreserved preserved, $nRetired retired, $duplicates duplicate(s)"
+== origin/feature/harness-cursor-user-rules scripts/deploy-harness.sh
+24:#   ~/.aitools/rules/.aitools-rules-manifest <- written every run (sole owner): one
+26:#                                     shared | aitools | dotprofile | retired (section 5b)
+27:# Name conflicts: the first source wins; each skipped duplicate is log_error +
+30:# Retired rules: a rule in the previous manifest that no source has any more is
+32:#   this run); the manifest keeps its "retired" line until a source has it again.
+40:# Exit: 0 done (warnings possible), 1 errors (incl. duplicates, config.json
+155:# 4. Plan: every source file, conflicts resolved (first source wins)
+202:        log_error "Source $label: cannot record it as listed -- its retired rules are kept this run"
+250:                    log_error "Duplicate $kind name: $unit in $label ($(display_path "$src_dir/$unit")) skipped; kept $w_unit from $w_label (first source wins)"
+272:add_source rules      "shared/rules"     "$REPO_DIR/shared/rules"    "$HARNESS_DIR/rules"      flat-md
+273:add_source rules      ".claude/rules"    "$REPO_DIR/.claude/rules"   "$HARNESS_DIR/rules"      flat-md
+275:    add_source rules  "dotprofile"       "$DOTPROFILE/claude/rules"  "$HARNESS_DIR/rules"      flat-md
+357:# 5b. Rules manifest (~/.aitools/rules/.aitools-rules-manifest), retired rules
+361:# line "# aitools rules manifest v1", then "<file name><TAB><source>" sorted by
+363:# (aitools .claude/rules), dotprofile (dotprofile claude/rules), retired. The
+364:# source is the one that won (first source wins). No .md extension: consumers
+366:# Retired: a name in the previous manifest that no source has this run (names
+369:# ls-files failed, no dotprofile) keeps its line. A retired name's file in
+371:# the line stays until a source has the name again. No previous manifest
+372:# (first run): nothing is retired. A previous manifest with another header:
+373:# warning, nothing retired, rewritten.
+374:RULES_MANIFEST_HEADER="# aitools rules manifest v1"
+377:# rules_manifest_plan PREV NEW ACTIONS -- from $SEEN (rule winners), $LISTED and
+378:# the previous manifest PREV (may be absent): write the new manifest to NEW and
+379:# one action per line to ACTIONS: "retire<TAB>name<TAB>was" (retired this run),
+380:# "stale<TAB>name" (retired before), "keep<TAB>name<TAB>source" (source not
+383:rules_manifest_plan() {
+411:                print $a "warn\tthe first line is not \"$header\" -- nothing retired this run\n";
+419:                            || $src !~ /\A(?:shared|aitools|dotprofile|retired)\z/) {
+425:                    if ($src eq "retired") {
+426:                        $lines{$name} = "retired";
+429:                        $lines{$name} = "retired";
+444:    ' "$SEEN" "$LISTED" "$1" "$2" "$3" "$RULES_MANIFEST_HEADER"
+447:# retire_rule_file NAME -- back up and remove ~/.aitools/rules/NAME (a retired rule)
+451:        log "[DRY RUN] Would back up and remove $(display_path "$f") (retired rule)"
+466:    log "Removed $(display_path "$f") (retired rule; backup kept)"
+467:    write_summary DETAIL "$TOOL" "$(short "retired: rules/$name")"
+470:# write_rules_manifest -- section 5b: retire, then write the manifest (temp file + move)
+471:write_rules_manifest() {
+472:    local manifest="$HARNESS_DIR/rules/.aitools-rules-manifest"
+473:    local new="$WORK/rules-manifest.new" actions="$WORK/rules-manifest.actions"
+474:    local tmp="$manifest.tmp" kind name extra n
+475:    if ! rules_manifest_plan "$manifest" "$new" "$actions" 2> "$WORK/rules-manifest.err"; then
+476:        log_error "Rules manifest: $(cat "$WORK/rules-manifest.err") -- manifest not written, nothing retired"
+477:        write_summary ERROR "$TOOL" "rules manifest not written"
+483:                log_warn "Rules manifest $(display_path "$manifest"): $name" ;;
+485:                log "Rules manifest: $name kept as $extra (source not listed this run -- not retired)" ;;
+497:        log "[DRY RUN] Would write $(display_path "$manifest") ($n rule line(s))"
+501:        log_error "Rules manifest: cannot write $(display_path "$tmp") -- manifest not written"
+502:        write_summary ERROR "$TOOL" "rules manifest not written"
+505:    if ! mv -f "$tmp" "$manifest"; then
+506:        log_error "Rules manifest: cannot move $(display_path "$tmp") to $(display_path "$manifest") -- manifest not written"
+507:        write_summary ERROR "$TOOL" "rules manifest not written"
+511:    log "Rules manifest: wrote $(display_path "$manifest") ($n rule line(s))"
+514:write_rules_manifest
+540:            next if $b =~ /\A\.aitools-rules-manifest(?:\.tmp)?\z/;   # section 5b writes it
+557:log "harness files: $N_PLANNED planned, $N_ADDED added, $N_UPDATED updated, $N_ACCEPTED accepted, $N_VERIFIED verified, $N_SKIPPED skipped, $N_FAILED failed, $N_PRESERVED preserved, $N_RETIRED retired, $DUPLICATES duplicate(s)"
+== origin/feature/harness-cursor-user-rules scripts/deploy-harness.ps1
+25:#   .aitools\rules\.aitools-rules-manifest <- written every run (sole owner): one
+27:#                                   shared | aitools | dotprofile | retired (section 5b)
+28:# Name conflicts: the first source wins; each skipped duplicate is LogError +
+31:# Retired rules: a rule in the previous manifest that no source has any more is
+33:#   this run); the manifest keeps its "retired" line until a source has it again.
+41:# Exit: 0 done (warnings possible), 1 errors (incl. duplicates, config.json
+150:# 4. Plan: every source file, conflicts resolved (first source wins)
+155:$duplicates = 0
+227:                $script:duplicates++
+229:                LogError "Duplicate $Kind name: $unit in $Label ($(Join-Path $SrcDir $unit)) skipped; kept $($w.Unit) from $($w.Label) (first source wins)"
+252:Add-Source -Kind "rules"      -Label "shared/rules"   -SrcDir (Join-Path (Join-Path $repoDir "shared") "rules")   -DestDir (Join-Path $harnessDir "rules")      -Layout "flat-md"
+253:Add-Source -Kind "rules"      -Label ".claude/rules"  -SrcDir (Join-Path (Join-Path $repoDir ".claude") "rules")  -DestDir (Join-Path $harnessDir "rules")      -Layout "flat-md"
+255:    Add-Source -Kind "rules"  -Label "dotprofile"     -SrcDir (Join-Path (Join-Path $dotprofile "claude") "rules") -DestDir (Join-Path $harnessDir "rules")     -Layout "flat-md"
+326:# 5b. Rules manifest (.aitools\rules\.aitools-rules-manifest), retired rules
+330:# line "# aitools rules manifest v1", then "<file name><TAB><source>" sorted by
+332:# .claude/rules), dotprofile (dotprofile claude/rules), retired. The source is
+333:# the one that won (first source wins). No .md extension: consumers that copy
+335:# Retired: a name in the previous manifest that no source has this run (names
+338:# ls-files failed, no dotprofile) keeps its line. A retired name's file in
+340:# the line stays until a source has the name again. No previous manifest
+341:# (first run): nothing is retired. A previous manifest with another header:
+342:# warning, nothing retired, rewritten. Same outcomes as deploy-harness.sh.
+343:$rulesManifestHeader = "# aitools rules manifest v1"
+347:# previous manifest PREV (may be absent): @{ Lines = sorted manifest lines;
+366:            $actions.Add(@{ Kind = "warn"; Name = "the first line is not `"$rulesManifestHeader`" -- nothing retired this run"; Extra = "" })
+374:                        $src -cnotmatch '\A(?:shared|aitools|dotprofile|retired)\z') {
+379:                if ($src -ceq "retired") {
+380:                    $lines[$name] = "retired"
+383:                    $lines[$name] = "retired"
+399:# Remove-RetiredRule NAME -- back up and remove .aitools\rules\NAME (a retired rule)
+403:        Log "[DRY RUN] Would back up and remove $f (retired rule)"
+430:    Log "Removed $f (retired rule; backup kept)"
+431:    Write-Summary "DETAIL" $tool (Get-ShortDetail "retired: rules/$Name")
+434:# Write-RulesManifest -- section 5b: retire, then write the manifest (temp file + move)
+436:    $manifest = Join-Path (Join-Path $harnessDir "rules") ".aitools-rules-manifest"
+437:    $tmp = "$manifest.tmp"
+439:        $mp = Get-RulesManifestPlan $manifest
+441:        LogError "Rules manifest: $_ -- manifest not written, nothing retired"
+442:        Write-Summary "ERROR" $tool "rules manifest not written"
+447:            "warn" { LogWarn "Rules manifest ${manifest}: $($a.Name)" }
+448:            "keep" { Log "Rules manifest: $($a.Name) kept as $($a.Extra) (source not listed this run -- not retired)" }
+459:        Log "[DRY RUN] Would write $manifest ($n rule line(s))"
+466:        [IO.File]::Move($tmp, $manifest, $true)
+468:        LogError "Rules manifest: cannot write ${manifest}: $_ -- manifest not written"
+469:        Write-Summary "ERROR" $tool "rules manifest not written"
+475:    Log "Rules manifest: wrote $manifest ($n rule line(s))"
+497:        if ($f.Name -eq ".aitools-rules-manifest" -or $f.Name -eq ".aitools-rules-manifest.tmp") { continue }   # section 5b writes it
+507:Log "harness files: $($plan.Count) planned, $nAdded added, $nUpdated updated, $nAccepted accepted, $nVerified verified, $nSkipped skipped, $nFailed failed, $nPreserved preserved, $nRetired retired, $duplicates duplicate(s)"
+== origin/feature/harness-mdm-followups scripts/deploy-harness.sh
+26:#   ~/.aitools/rules/.aitools-rules-manifest <- written every run (sole owner): one
+28:#                                     shared | aitools | dotprofile | retired (section 5b)
+29:# Name conflicts: the first source wins; each skipped duplicate is log_error +
+32:# Retired rules: a rule in the previous manifest that no source has any more is
+34:#   this run); the manifest keeps its "retired" line until a source has it again.
+46:# Exit: 0 done (warnings possible), 1 errors (incl. duplicates, config.json
+178:# 4. Plan: every source file, conflicts resolved (first source wins)
+225:        log_error "Source $label: cannot record it as listed -- its retired rules are kept this run"
+273:                    log_error "Duplicate $kind name: $unit in $label ($(display_path "$src_dir/$unit")) skipped; kept $w_unit from $w_label (first source wins)"
+295:add_source rules      "shared/rules"     "$REPO_DIR/shared/rules"    "$HARNESS_DIR/rules"      flat-md
+296:add_source rules      ".claude/rules"    "$REPO_DIR/.claude/rules"   "$HARNESS_DIR/rules"      flat-md
+298:    add_source rules  "dotprofile"       "$DOTPROFILE/claude/rules"  "$HARNESS_DIR/rules"      flat-md
+380:# 5b. Rules manifest (~/.aitools/rules/.aitools-rules-manifest), retired rules
+384:# line "# aitools rules manifest v1", then "<file name><TAB><source>" sorted by
+386:# (aitools .claude/rules), dotprofile (dotprofile claude/rules), retired. The
+387:# source is the one that won (first source wins). No .md extension: consumers
+389:# Retired: a name in the previous manifest that no source has this run (names
+392:# ls-files failed, no dotprofile) keeps its line. A retired name's file in
+394:# the line stays until a source has the name again. No previous manifest
+395:# (first run): nothing is retired. A previous manifest with another header:
+396:# warning, nothing retired, rewritten.
+397:RULES_MANIFEST_HEADER="# aitools rules manifest v1"
+400:# rules_manifest_plan PREV NEW ACTIONS -- from $SEEN (rule winners), $LISTED and
+401:# the previous manifest PREV (may be absent): write the new manifest to NEW and
+402:# one action per line to ACTIONS: "retire<TAB>name<TAB>was" (retired this run),
+403:# "stale<TAB>name" (retired before), "keep<TAB>name<TAB>source" (source not
+406:rules_manifest_plan() {
+434:                print $a "warn\tthe first line is not \"$header\" -- nothing retired this run\n";
+442:                            || $src !~ /\A(?:shared|aitools|dotprofile|retired)\z/) {
+448:                    if ($src eq "retired") {
+449:                        $lines{$name} = "retired";
+452:                        $lines{$name} = "retired";
+467:    ' "$SEEN" "$LISTED" "$1" "$2" "$3" "$RULES_MANIFEST_HEADER"
+470:# retire_rule_file NAME -- back up and remove ~/.aitools/rules/NAME (a retired rule)
+474:        log "[DRY RUN] Would back up and remove $(display_path "$f") (retired rule)"
+489:    log "Removed $(display_path "$f") (retired rule; backup kept)"
+490:    write_summary DETAIL "$TOOL" "$(short "retired: rules/$name")"
+493:# write_rules_manifest -- section 5b: retire, then write the manifest (temp file + move)
+494:write_rules_manifest() {
+495:    local manifest="$HARNESS_DIR/rules/.aitools-rules-manifest"
+496:    local new="$WORK/rules-manifest.new" actions="$WORK/rules-manifest.actions"
+497:    local tmp="$manifest.tmp" kind name extra n
+498:    if ! rules_manifest_plan "$manifest" "$new" "$actions" 2> "$WORK/rules-manifest.err"; then
+499:        log_error "Rules manifest: $(cat "$WORK/rules-manifest.err") -- manifest not written, nothing retired"
+500:        write_summary ERROR "$TOOL" "rules manifest not written"
+506:                log_warn "Rules manifest $(display_path "$manifest"): $name" ;;
+508:                log "Rules manifest: $name kept as $extra (source not listed this run -- not retired)" ;;
+520:        log "[DRY RUN] Would write $(display_path "$manifest") ($n rule line(s))"
+524:        log_error "Rules manifest: cannot write $(display_path "$tmp") -- manifest not written"
+525:        write_summary ERROR "$TOOL" "rules manifest not written"
+528:    if ! mv -f "$tmp" "$manifest"; then
+529:        log_error "Rules manifest: cannot move $(display_path "$tmp") to $(display_path "$manifest") -- manifest not written"
+530:        write_summary ERROR "$TOOL" "rules manifest not written"
+534:    log "Rules manifest: wrote $(display_path "$manifest") ($n rule line(s))"
+537:write_rules_manifest
+563:            next if $b =~ /\A\.aitools-rules-manifest(?:\.tmp)?\z/;   # section 5b writes it
+580:log "harness files: $N_PLANNED planned, $N_ADDED added, $N_UPDATED updated, $N_ACCEPTED accepted, $N_VERIFIED verified, $N_SKIPPED skipped, $N_FAILED failed, $N_PRESERVED preserved, $N_RETIRED retired, $DUPLICATES duplicate(s)"
+== origin/feature/harness-mdm-followups scripts/deploy-harness.ps1
+27:#   .aitools\rules\.aitools-rules-manifest <- written every run (sole owner): one
+29:#                                   shared | aitools | dotprofile | retired (section 5b)
+30:# Name conflicts: the first source wins; each skipped duplicate is LogError +
+33:# Retired rules: a rule in the previous manifest that no source has any more is
+35:#   this run); the manifest keeps its "retired" line until a source has it again.
+47:# Exit: 0 done (warnings possible), 1 errors (incl. duplicates, config.json
+177:# 4. Plan: every source file, conflicts resolved (first source wins)
+182:$duplicates = 0
+254:                $script:duplicates++
+256:                LogError "Duplicate $Kind name: $unit in $Label ($(Join-Path $SrcDir $unit)) skipped; kept $($w.Unit) from $($w.Label) (first source wins)"
+279:Add-Source -Kind "rules"      -Label "shared/rules"   -SrcDir (Join-Path (Join-Path $repoDir "shared") "rules")   -DestDir (Join-Path $harnessDir "rules")      -Layout "flat-md"
+280:Add-Source -Kind "rules"      -Label ".claude/rules"  -SrcDir (Join-Path (Join-Path $repoDir ".claude") "rules")  -DestDir (Join-Path $harnessDir "rules")      -Layout "flat-md"
+282:    Add-Source -Kind "rules"  -Label "dotprofile"     -SrcDir (Join-Path (Join-Path $dotprofile "claude") "rules") -DestDir (Join-Path $harnessDir "rules")     -Layout "flat-md"
+353:# 5b. Rules manifest (.aitools\rules\.aitools-rules-manifest), retired rules
+357:# line "# aitools rules manifest v1", then "<file name><TAB><source>" sorted by
+359:# .claude/rules), dotprofile (dotprofile claude/rules), retired. The source is
+360:# the one that won (first source wins). No .md extension: consumers that copy
+362:# Retired: a name in the previous manifest that no source has this run (names
+365:# ls-files failed, no dotprofile) keeps its line. A retired name's file in
+367:# the line stays until a source has the name again. No previous manifest
+368:# (first run): nothing is retired. A previous manifest with another header:
+369:# warning, nothing retired, rewritten. Same outcomes as deploy-harness.sh.
+370:$rulesManifestHeader = "# aitools rules manifest v1"
+374:# previous manifest PREV (may be absent): @{ Lines = sorted manifest lines;
+393:            $actions.Add(@{ Kind = "warn"; Name = "the first line is not `"$rulesManifestHeader`" -- nothing retired this run"; Extra = "" })
+401:                        $src -cnotmatch '\A(?:shared|aitools|dotprofile|retired)\z') {
+406:                if ($src -ceq "retired") {
+407:                    $lines[$name] = "retired"
+410:                    $lines[$name] = "retired"
+426:# Remove-RetiredRule NAME -- back up and remove .aitools\rules\NAME (a retired rule)
+430:        Log "[DRY RUN] Would back up and remove $f (retired rule)"
+457:    Log "Removed $f (retired rule; backup kept)"
+458:    Write-Summary "DETAIL" $tool (Get-ShortDetail "retired: rules/$Name")
+461:# Write-RulesManifest -- section 5b: retire, then write the manifest (temp file + move)
+463:    $manifest = Join-Path (Join-Path $harnessDir "rules") ".aitools-rules-manifest"
+464:    $tmp = "$manifest.tmp"
+466:        $mp = Get-RulesManifestPlan $manifest
+468:        LogError "Rules manifest: $_ -- manifest not written, nothing retired"
+469:        Write-Summary "ERROR" $tool "rules manifest not written"
+474:            "warn" { LogWarn "Rules manifest ${manifest}: $($a.Name)" }
+475:            "keep" { Log "Rules manifest: $($a.Name) kept as $($a.Extra) (source not listed this run -- not retired)" }
+486:        Log "[DRY RUN] Would write $manifest ($n rule line(s))"
+493:        [IO.File]::Move($tmp, $manifest, $true)
+495:        LogError "Rules manifest: cannot write ${manifest}: $_ -- manifest not written"
+496:        Write-Summary "ERROR" $tool "rules manifest not written"
+502:    Log "Rules manifest: wrote $manifest ($n rule line(s))"
+524:        if ($f.Name -eq ".aitools-rules-manifest" -or $f.Name -eq ".aitools-rules-manifest.tmp") { continue }   # section 5b writes it
+534:Log "harness files: $($plan.Count) planned, $nAdded added, $nUpdated updated, $nAccepted accepted, $nVerified verified, $nSkipped skipped, $nFailed failed, $nPreserved preserved, $nRetired retired, $duplicates duplicate(s)"

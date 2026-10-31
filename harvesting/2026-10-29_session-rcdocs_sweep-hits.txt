@@ -1,0 +1,235 @@
+=== fan-out
+origin/main:.claude/rules/managed-file-deployment.md:48:| aitools repo + dotprofile -> `~/.aitools/` (`deploy-harness`) | First source wins on a name conflict: `shared/`, then `.claude/`, then dotprofile `claude/rules/` | reference, registries, hooks, skills, rules (one flat directory), bin; config.json generated from profile.json. Rules reach the tools through the `setup-user-claude` / `setup-user-cursor` fan-out. Detail: `@reference/harness.md` "Deployed harness (`~/.aitools`)" |
+origin/main:reference/harness.md:154:  tool's own location (`~/.claude/rules/`), which the fan-out in
+origin/main:reference/tool-ops-claude-code.md:316:  of fan-out under the session that runs it. Encode deeper structure in the
+=== fans out
+(no hits)
+=== fan out
+(no hits)
+=== aitools/rules
+(no hits)
+=== step 7
+origin/main:reference/ait-shellintegration.md:141:- Install wiring: `@scripts/aitools-install.sh` / `.ps1` (Step 7)
+origin/main:reference/framework-adoption.md:80:  proposed pulling step 7 forward" — not "the process is broken."
+origin/main:reference/incident-020-process-discipline.md:15:the agent proposed pulling step 7 (/aitools-dev skill) forward to
+origin/main:reference/incident-020-process-discipline.md:53:  step 7 forward revealed that the framework itself lacked a concept
+origin/main:reference/tool-support-decision-tree.md:666:Planned hook (framework-adoption.md step 7; build later, observe first):
+origin/main:shared/skills/aitool-continue/SKILL.md:289:### Step 7: Adopt operative behavior
+origin/main:shared/skills/aitool-eval/SKILL.md:259:### Step 7: Recommend
+origin/main:shared/skills/handoff/SKILL.md:420:- **READY**: Proceed to step 7.
+origin/main:shared/skills/handoff/SKILL.md:465:changes, added references, wording clarifications), proceed to step 7.
+origin/main:shared/skills/handoff/SKILL.md:471:### Step 7: Present to user
+origin/main:shared/skills/optimize-plan/SKILL.md:84:### Step 7: Present findings
+=== Step 7
+origin/main:reference/ait-shellintegration.md:141:- Install wiring: `@scripts/aitools-install.sh` / `.ps1` (Step 7)
+origin/main:reference/framework-adoption.md:80:  proposed pulling step 7 forward" — not "the process is broken."
+origin/main:reference/incident-020-process-discipline.md:15:the agent proposed pulling step 7 (/aitools-dev skill) forward to
+origin/main:reference/incident-020-process-discipline.md:53:  step 7 forward revealed that the framework itself lacked a concept
+origin/main:reference/tool-support-decision-tree.md:666:Planned hook (framework-adoption.md step 7; build later, observe first):
+origin/main:shared/skills/aitool-continue/SKILL.md:289:### Step 7: Adopt operative behavior
+origin/main:shared/skills/aitool-eval/SKILL.md:259:### Step 7: Recommend
+origin/main:shared/skills/handoff/SKILL.md:420:- **READY**: Proceed to step 7.
+origin/main:shared/skills/handoff/SKILL.md:465:changes, added references, wording clarifications), proceed to step 7.
+origin/main:shared/skills/handoff/SKILL.md:471:### Step 7: Present to user
+origin/main:shared/skills/optimize-plan/SKILL.md:84:### Step 7: Present findings
+=== deploy-harness
+origin/main:.claude/rules/aitools-workspace.md:49:| `reference/` | Copy of the aitools repo `reference/` tree (git-tracked files, same relative paths) — deployed by `deploy-harness` |
+origin/main:.claude/rules/aitools-workspace.md:50:| `registries/` | Copy of the aitools repo `registries/` (the registries stay in the repo; SD-8-reg) — deployed by `deploy-harness` |
+origin/main:.claude/rules/aitools-workspace.md:51:| `hooks/` | Hook scripts from `shared/hooks/` and `.claude/hooks/`, one flat directory — deployed by `deploy-harness` (settings.json still points at `~/.claude/hooks`) |
+origin/main:.claude/rules/aitools-workspace.md:52:| `rules/` | Rules from `shared/rules/`, `.claude/rules/` and the dotprofile `claude/rules/`, one flat directory — deployed by `deploy-harness`; copied to each tool's rules location by `setup-user-claude` / `setup-user-cursor` |
+origin/main:.claude/rules/aitools-workspace.md:53:| `skills/` | Skill directories from `shared/skills/` and `.claude/skills/` — deployed by `deploy-harness` |
+origin/main:.claude/rules/aitools-workspace.md:54:| `bin/` | Deployed harness Python CLIs (`harness-db.py`, `read-session.py`, `read-session-full.py`) — deployed by `deploy-harness` (`aitools install` also copies them until its bin step is removed), called by hooks via absolute path so every project resolves them |
+origin/main:.claude/rules/managed-file-deployment.md:48:| aitools repo + dotprofile -> `~/.aitools/` (`deploy-harness`) | First source wins on a name conflict: `shared/`, then `.claude/`, then dotprofile `claude/rules/` | reference, registries, hooks, skills, rules (one flat directory), bin; config.json generated from profile.json. Rules reach the tools through the `setup-user-claude` / `setup-user-cursor` fan-out. Detail: `@reference/harness.md` "Deployed harness (`~/.aitools`)" |
+origin/main:.claude/skills/tool-ops/SKILL.md:51:   (Windows). `aitools` (deploy-harness) mirrors the repo `reference/`
+origin/main:reference/harness.md:104:`scripts/deploy-harness.sh` / `.ps1` builds the deployed harness in
+origin/main:reference/harness.md:177:- Deployed harness: `@scripts/deploy-harness.sh` / `.ps1`;
+origin/main:reference/script-standards-detail.md:221:| `harness files` | deploy-harness |
+origin/main:shared/skills/aitool-ops/SKILL.md:64:   (Windows). `aitools` (deploy-harness) mirrors the aitools repo
+origin/main:shared/skills/scratch/SKILL.md:204:  deploy-harness ships a path for `shared/rules/`)
+=== abort
+origin/main:.claude/rules/agentic-standards.md:91:| abort | unchanged | unchanged; the script logs an error and exits 2 |
+origin/main:.claude/rules/interactive-menus.md:12:`[m]erge & adopt` / `[s]kip` / `[x]abort`. `[a]` and `[m]` appear only when
+origin/main:.claude/rules/interactive-menus.md:56:### Abort
+origin/main:.claude/rules/interactive-menus.md:58:`[x]abort` logs an error and exits 2; a bare exit 2 is a user abort
+origin/main:.claude/rules/interactive-menus.md:59:(D-TS13). Abort ends this setup script; the installer continues with the
+origin/main:.claude/rules/interactive-menus.md:88:one review with `[o]verwrite` / `[a]ccept & adopt` / `[s]kip` / `[x]abort`
+origin/main:.claude/rules/interactive-menus.md:92:own review, `[a]ccept & adopt` / `[s]kip` / `[x]abort` (no overwrite, which
+origin/main:.claude/rules/interactive-menus.md:105:`abort` is not: it ends the script (exit 2) and nothing is applied.
+origin/main:.claude/rules/interactive-menus.md:119:  [x]abort    : stop the run
+origin/main:.claude/rules/interactive-menus.md:122:(`[x]abort` ends this setup script with exit 2; the installer continues
+origin/main:.claude/rules/managed-file-deployment.md:19:| Markdown | Interactive diff review via `deploy_managed_file` (SOURCE is the source of truth; one menu: overwrite / accept & adopt / merge & adopt / skip / abort) | CLAUDE.md, `~/.claude/rules/*.md`, skill SKILL.md files |
+origin/main:.claude/rules/managed-file-deployment.md:20:| JSON config | Read-then-merge on managed fields. Profile-sourced fields (settings.json) use granular field-level review (`sync_managed_json` / `Sync-ManagedJson`: auto-adopt when profile silent, per-leaf overwrite/adopt/skip/abort on divergence); harness-managed keys (e.g. `hooks`) reconcile silently. JSON deployed through `deploy_managed_file` is reviewed field by field with SOURCE owning every field (`review_json_fields` / `Review-JsonFields`; no merge) | settings.json, cli-config.json, mcp.json, deployed JSON |
+origin/main:.claude/rules/script-standards.md:194:2. **Check exit codes** -- `$LASTEXITCODE` (PS1) or wrap to prevent `set -e` abort (bash)
+origin/main:.cursor/rules/agentic-standards.mdc:97:| abort | unchanged | unchanged; the script logs an error and exits 2 |
+origin/main:.cursor/rules/interactive-menus.mdc:10:`[s]kip` / `[x]abort`; `[a]` and `[m]` only when the caller passed an adopt
+origin/main:.cursor/rules/interactive-menus.mdc:23:`[x]abort` logs an error and exits 2; a bare exit 2 is a user abort (D-TS13); it ends this setup script and the installer continues with the next script.
+origin/main:.cursor/rules/managed-file-deployment.mdc:15:| Markdown | Interactive diff review via `deploy_managed_file` (SOURCE is the source of truth; one menu: overwrite / accept & adopt / merge & adopt / skip / abort) | CLAUDE.md, `~/.claude/rules/*.md`, skill SKILL.md files |
+origin/main:.cursor/rules/managed-file-deployment.mdc:16:| JSON config | Read-then-merge on managed fields. Profile-sourced fields (settings.json) use granular field-level review (`sync_managed_json`: auto-adopt when profile silent, per-leaf overwrite/adopt/skip/abort on divergence); harness-managed keys (e.g. `hooks`) reconcile silently. JSON deployed through `deploy_managed_file` is reviewed field by field with SOURCE owning every field (`review_json_fields`; no merge) | settings.json, cli-config.json, mcp.json, deployed JSON |
+origin/main:reference/managed-file-deployment.md:96:              +-- [x]abort          --> log error, exit 2
+origin/main:reference/managed-file-deployment.md:136:  [x]abort          : stop this script (exit 2)
+origin/main:reference/managed-file-deployment.md:149:  [x]abort          : stop this script (exit 2)
+origin/main:reference/managed-file-deployment.md:164:  [x]abort         : stop this script (exit 2)
+origin/main:reference/managed-file-deployment.md:168:JSON. Overwrite, adopt and skip apply to one field; abort applies to the
+origin/main:reference/managed-file-deployment.md:171:### [x]abort
+origin/main:reference/managed-file-deployment.md:173:`[x]abort` logs an error and exits 2. A bare exit 2 is a user abort
+origin/main:reference/managed-file-deployment.md:174:(D-TS13 as decided 2026-10-21). Abort ends this setup
+origin/main:reference/managed-file-deployment.md:207:| (exit 2) | Always | User aborted |
+origin/main:reference/managed-file-deployment.md:221:| (exit 2) | User aborted | No | No |
+origin/main:reference/managed-file-deployment.md:487:  now) / `[s]kip` (keep it in LOCAL only) / `[x]abort`. There is no
+origin/main:reference/managed-file-deployment.md:491:  its last field is reviewed; `[x]abort` on any field writes nothing.
+origin/main:reference/managed-file-deployment.md:513:  (settings.json value → profile.json) / `[s]kip` / `[x]abort` (exit 2;
+origin/main:reference/script-standards-detail.md:525:Wrap install commands to catch failure without hard-aborting:
+origin/main:reference/script-standards-detail.md:795:**Wrong** -- `set -e` hard-abort with no summary:
+origin/main:reference/tool-support-decision-tree.md:5:> change it: D-TS13 reversed (no abort marker), D-TS10/11/12 decided, the exception
+origin/main:reference/tool-support-decision-tree.md:55:| D-TS3 | Found installed: preferred = update and verify; non-preferred or unknown = non-interactive/force changes nothing (WARN + ACTION), interactive = replace (install first, verify it resolves, then remove) / keep / abort; unknown never auto-removed | same |
+origin/main:reference/tool-support-decision-tree.md:65:| D-TS13 | Exit 2 from a setup script is a user abort (`[x]abort` in the tool menu or a managed-file menu). There is no abort-marker file. Runners stop the run on exit 2 (section 7.5) | Commander, 2026-10-21 (reversed from the marker design: "exit 2 = abort is fine for a user abort; avoid this") |
+origin/main:reference/tool-support-decision-tree.md:97:  M -- "[x]abort" --> AB[[ABORT]]
+origin/main:reference/tool-support-decision-tree.md:169:| ABORT | `log_warn "<tool>: aborted by user -- unchanged"` | WARN `<ver> (aborted)` | `re-run aitools install to decide <tool>` | 2 |
+origin/main:reference/tool-support-decision-tree.md:185:- Exit 2 means user abort (D-TS13, section 7.5).
+origin/main:reference/tool-support-decision-tree.md:243:  context (`if`, `||`) so `set -e` never aborts on a non-match.
+origin/main:reference/tool-support-decision-tree.md:431:  [x]abort  : change nothing and stop the run
+origin/main:reference/tool-support-decision-tree.md:442:- **Exit 2 = user abort (D-TS13, reversed 2026-10-21).** A setup script exits 2
+origin/main:reference/tool-support-decision-tree.md:443:  only for `[x]abort`: the tool menu (`tool_method_menu` /
+origin/main:reference/tool-support-decision-tree.md:447:  abort-marker file: the commander chose bare exit 2 over the marker design.
+origin/main:reference/tool-support-decision-tree.md:451:  `/bin/bash` 3.2.57, 2026-10-21); such a failure reads as an abort and stops the
+origin/main:reference/tool-support-decision-tree.md:462:    where most managed-file `[x]abort` choices happen;
+origin/main:reference/tool-support-decision-tree.md:465:    "Done" regardless). Exit 2 = print "aborted by user" instead of "Done" and
+origin/main:reference/tool-support-decision-tree.md:473:  - exit 2 = user abort. The runner writes no failure row, logs `aborted by
+origin/main:reference/tool-support-decision-tree.md:475:    reports the abort to its caller: the installers skip their remaining
+origin/main:reference/tool-support-decision-tree.md:478:    (`DEPLOY_ABORTED` / `$script:DeployAborted`), never through their return
+origin/main:reference/tool-support-decision-tree.md:480:    entry point then renders the summary, prints "aborted by user" instead of
+origin/main:reference/tool-support-decision-tree.md:482:    `[x]abort` ("stop the run") behave as documented in both the install and
+origin/main:reference/tool-support-decision-tree.md:487:  ABORT and which the script turns into `exit 2` as in
+origin/main:reference/tool-support-decision-tree.md:707:| pty, `x` | -- | ABORT, exit 2; installer stops; `aitools` prints "aborted by user" |
+origin/main:reference/tool-support-decision-tree.md:708:| exit 2 from a failure (accepted risk) | a helper returns 2 outside conditional context (stub) | reads as an abort: the run stops (D-TS13 reversed); the guards in section 7.5 keep it rare |
+origin/main:reference/tool-support-decision-tree.md:709:| sync path, managed-file `x` | `aitools` with no arguments (and `aitools gitpull`), pty, a `setup-user-*` review answered `x` | `deploy_configs` / `Deploy-Configs` write no ERROR row and skip the remaining deploy scripts; summary rendered; "aborted by user"; exit 2 |
+origin/main:reference/tool-support-decision-tree.md:710:| sync path, two failures | two deploy-script stubs exit 1 (`deploy_configs` returns 2) | "Completed with 2 error(s)", exit 1; not reported as an abort |
+origin/main:reference/tool-support-decision-tree.md:711:| install path, managed-file `x` | `aitools install`, Step 21 review answered `x` | installer exits 2; the entry point reads the exit code and prints "aborted by user"; exit 2 |
+origin/main:reference/tool-support-decision-tree.md:712:| script run by hand, `x` | pty | menu logs the abort, exits 2 |
+origin/main:reference/tool-support-decision-tree.md:713:| `aitools user init`, hooks review `x` | pty, `setup-user-hooks` review answered `x` | "aborted by user", not "Done"; exit 2 |
+origin/main:reference/tool-support-decision-tree.md:715:| entry point re-exec | deploy list changed, `aitools` re-executes itself | an abort in the re-executed run exits 2 through the outer process |
+origin/main:reference/tool-support-decision-tree.md:718:| Windows bash runner, pwsh child, `x` | Git Bash `aitools` sync, `setup-user-*.ps1` answered `x` | the pwsh child exits 2; bash reads it; abort reported (UNVERIFIED until run on Windows) |
+origin/main:reference/tool-support-decision-tree.md:730:| D-TS13 reversed | No abort marker: section 1 term removed, D-TS13 row, section 3 ABORT row and note, section 7.2 `tool_method_menu`, section 7.5 rewritten (bare exit 2 = user abort, accepted risk stated), section 10 rows |
+origin/main:reference/user-repo.md:81:- **`claude.settings`** -- the source of truth for `~/.claude/settings.json` (verbatim keys, EXCEPT `hooks`, which the manifest owns via `setup-user-hooks`). Synced by `setup-user-settings` via `sync_managed_json`: a key absent here is auto-adopted from settings.json (no prompt); on divergence a granular per-leaf menu (overwrite/adopt/skip/abort) runs; `permissions.{allow,ask,deny}` are reconciled per rule. Legacy flat keys (`autoMemory`/`alwaysThinking`/`effortLevel` under `claude`) are auto-migrated into `claude.settings` as `autoMemoryEnabled`/`alwaysThinkingEnabled`/`effortLevel`.
+origin/main:shared/skills/tool-adopt/SKILL.md:141:  exit 2 on abort, tool-specific steps only when `rc` is 0, exit footer.
+=== exit 2
+origin/main:.claude/rules/hook-rollout.md:27:3. **Enforce**: Set the mode variable to `"enforce"`. Hook blocks violations (exit 2).
+origin/main:.claude/rules/hook-rollout.md:41:   (exit 2 in enforce, log entry in observe):
+origin/main:.claude/rules/hook-rollout.md:52:   two-line command whose first line is `sed -n 1p file` exit 2).
+origin/main:.claude/rules/hook-rollout.md:80:  - `"enforce"` — zero false positives confirmed in log; blocks violations (exit 2)
+origin/main:.claude/rules/interactive-menus.md:58:`[x]abort` logs an error and exits 2; a bare exit 2 is a user abort
+origin/main:.claude/rules/interactive-menus.md:105:`abort` is not: it ends the script (exit 2) and nothing is applied.
+origin/main:.claude/rules/interactive-menus.md:122:(`[x]abort` ends this setup script with exit 2; the installer continues
+origin/main:.cursor/rules/hook-rollout.mdc:13:3. **Enforce**: per-check mode variable set to `"enforce"`, blocks violations (exit 2)
+origin/main:.cursor/rules/hook-rollout.mdc:25:3. Violation test: same with a known-bad command → must exit 2 (enforce) or log entry (observe)
+origin/main:.cursor/rules/interactive-menus.mdc:23:`[x]abort` logs an error and exits 2; a bare exit 2 is a user abort (D-TS13); it ends this setup script and the installer continues with the next script.
+origin/main:reference/managed-file-deployment.md:96:              +-- [x]abort          --> log error, exit 2
+origin/main:reference/managed-file-deployment.md:136:  [x]abort          : stop this script (exit 2)
+origin/main:reference/managed-file-deployment.md:149:  [x]abort          : stop this script (exit 2)
+origin/main:reference/managed-file-deployment.md:164:  [x]abort         : stop this script (exit 2)
+origin/main:reference/managed-file-deployment.md:173:`[x]abort` logs an error and exits 2. A bare exit 2 is a user abort
+origin/main:reference/managed-file-deployment.md:175:script (exit 2); the installer continues with the next script. (Today the
+origin/main:reference/managed-file-deployment.md:207:| (exit 2) | Always | User aborted |
+origin/main:reference/managed-file-deployment.md:221:| (exit 2) | User aborted | No | No |
+origin/main:reference/managed-file-deployment.md:272:- **Exit 2** is not trapped by the caller: it ends the script.
+origin/main:reference/managed-file-deployment.md:513:  (settings.json value → profile.json) / `[s]kip` / `[x]abort` (exit 2;
+origin/main:reference/tool-support-decision-tree.md:19:helper contract, the installer and entry-point contract for exit 2, the tool
+origin/main:reference/tool-support-decision-tree.md:65:| D-TS13 | Exit 2 from a setup script is a user abort (`[x]abort` in the tool menu or a managed-file menu). There is no abort-marker file. Runners stop the run on exit 2 (section 7.5) | Commander, 2026-10-21 (reversed from the marker design: "exit 2 = abort is fine for a user abort; avoid this") |
+origin/main:reference/tool-support-decision-tree.md:185:- Exit 2 means user abort (D-TS13, section 7.5).
+origin/main:reference/tool-support-decision-tree.md:400:| `tool_exception_record` | `Set-ToolException` | slug, method, path, version | 0 written (committed and pushed, or a commit/push warning) / 1 failed / 3 refused: no dotprofile, or the machine profile matched by hostname only or not at all. Wraps `aitools-profile.sh` / `.ps1 exception-set` (its exit 2 maps to 1: no lib helper returns 2) |
+origin/main:reference/tool-support-decision-tree.md:442:- **Exit 2 = user abort (D-TS13, reversed 2026-10-21).** A setup script exits 2
+origin/main:reference/tool-support-decision-tree.md:447:  abort-marker file: the commander chose bare exit 2 over the marker design.
+origin/main:reference/tool-support-decision-tree.md:465:    "Done" regardless). Exit 2 = print "aborted by user" instead of "Done" and
+origin/main:reference/tool-support-decision-tree.md:466:    exit 2; any other non-zero = log_error and exit 1;
+origin/main:reference/tool-support-decision-tree.md:468:    installer and then `aitools user init` and `aitools`. On installer exit 2
+origin/main:reference/tool-support-decision-tree.md:469:    they skip the later steps and exit 2. `bootstrap.ps1` launches the
+origin/main:reference/tool-support-decision-tree.md:473:  - exit 2 = user abort. The runner writes no failure row, logs `aborted by
+origin/main:reference/tool-support-decision-tree.md:476:    steps, render the summary and exit 2; `deploy_configs` / `Deploy-Configs`
+origin/main:reference/tool-support-decision-tree.md:487:  ABORT and which the script turns into `exit 2` as in
+origin/main:reference/tool-support-decision-tree.md:493:  command, so a native command that returned 2 reads as exit 2 there, while
+origin/main:reference/tool-support-decision-tree.md:502:- Outside this contract: the relay outbound prompt's `[q]` (exit 2,
+origin/main:reference/tool-support-decision-tree.md:504:  summary and is not a setup script; its exit 2 is the entry point's own.
+origin/main:reference/tool-support-decision-tree.md:527:if [ "$rc" -eq 2 ]; then exit 2; fi
+origin/main:reference/tool-support-decision-tree.md:547:if ($rc -eq 2) { exit 2 }
+origin/main:reference/tool-support-decision-tree.md:707:| pty, `x` | -- | ABORT, exit 2; installer stops; `aitools` prints "aborted by user" |
+origin/main:reference/tool-support-decision-tree.md:708:| exit 2 from a failure (accepted risk) | a helper returns 2 outside conditional context (stub) | reads as an abort: the run stops (D-TS13 reversed); the guards in section 7.5 keep it rare |
+origin/main:reference/tool-support-decision-tree.md:709:| sync path, managed-file `x` | `aitools` with no arguments (and `aitools gitpull`), pty, a `setup-user-*` review answered `x` | `deploy_configs` / `Deploy-Configs` write no ERROR row and skip the remaining deploy scripts; summary rendered; "aborted by user"; exit 2 |
+origin/main:reference/tool-support-decision-tree.md:711:| install path, managed-file `x` | `aitools install`, Step 21 review answered `x` | installer exits 2; the entry point reads the exit code and prints "aborted by user"; exit 2 |
+origin/main:reference/tool-support-decision-tree.md:713:| `aitools user init`, hooks review `x` | pty, `setup-user-hooks` review answered `x` | "aborted by user", not "Done"; exit 2 |
+origin/main:reference/tool-support-decision-tree.md:714:| bootstrap, installer `x` | `bootstrap.sh` / `.ps1`, a review answered `x` during the install | `user init` and the rebuild skipped; exit 2 |
+origin/main:reference/tool-support-decision-tree.md:730:| D-TS13 reversed | No abort marker: section 1 term removed, D-TS13 row, section 3 ABORT row and note, section 7.2 `tool_method_menu`, section 7.5 rewritten (bare exit 2 = user abort, accepted risk stated), section 10 rows |
+origin/main:shared/skills/tool-adopt/SKILL.md:141:  exit 2 on abort, tool-specific steps only when `rc` is 0, exit footer.
+origin/main:shared/skills/tool-adopt/SKILL.md:146:  install, and only when the script did not exit 2.
+=== stop the run
+origin/main:.claude/rules/interactive-menus.md:119:  [x]abort    : stop the run
+origin/main:reference/tool-support-decision-tree.md:65:| D-TS13 | Exit 2 from a setup script is a user abort (`[x]abort` in the tool menu or a managed-file menu). There is no abort-marker file. Runners stop the run on exit 2 (section 7.5) | Commander, 2026-10-21 (reversed from the marker design: "exit 2 = abort is fine for a user abort; avoid this") |
+origin/main:reference/tool-support-decision-tree.md:431:  [x]abort  : change nothing and stop the run
+origin/main:reference/tool-support-decision-tree.md:482:    `[x]abort` ("stop the run") behave as documented in both the install and
+=== only writer
+(no hits)
+=== sole writer
+(no hits)
+=== single config writer
+origin/main:.claude/rules/config-file-safety.md:166:- Single config writer: `@scripts/setup-user-config.sh` / `.ps1` (config.json; bootstrap + derived keys)
+origin/main:.cursor/rules/config-file-safety.mdc:60:- Single config writer: `scripts/setup-user-config.sh` / `.ps1` (config.json; bootstrap + derived keys)
+=== parity
+origin/main:.claude/rules/cross-platform.md:58:- **PowerShell parity** is at the library level. A `.ps1` behind the Windows
+origin/main:.claude/rules/interactive-menus.md:16:### Cross-platform parity
+origin/main:.claude/rules/interactive-menus.md:20:validate this (`check-post-push` step 29: Menu parity audit).
+origin/main:.claude/skills/audit/tests/expected-behaviors.md:13:- Should detect `@.claude/rules/cursor-rule-parity.md` as broken (deleted in v0.54)
+origin/main:.cursor/rules/cursor-rule-parity.mdc:7:## Cursor Rule Parity (this repo)
+origin/main:.cursor/rules/documentation-standards.mdc:36:- **Cursor parity** — `.cursor/rules/*.mdc` mirrors `.claude/rules/*.md`. See `@.claude/rules/cursor-rule-parity.md`
+origin/main:.cursor/rules/tool-lifecycle.mdc:138:- If the new tool's file type doesn't match an existing row, add a row (both rule and reference, plus Cursor `.mdc` parity)
+origin/main:reference/cursor-practices.md:160:| `.claude/rules/cursor-rule-parity.md` | `.cursor/rules/cursor-rule-parity.mdc` | Identical |
+origin/main:reference/framework-managed-file-deployment.md:35:- Menu parity audit (check-post-push step 29) verifies PS1 and bash
+origin/main:reference/path-targeted-hooks-analysis.md:20:### 3. Platform Dispatch Parity
+origin/main:reference/path-targeted-hooks-analysis.md:74:| shared/shell/aliases.sh | Parity loss | "Update .ps1 too." |
+origin/main:reference/post-push-checklist.md:182:### 29. Deployment menu parity audit
+origin/main:reference/post-push-checklist.md:203:### 32. Hook-registration parity audit
+origin/main:reference/post-push-checklist.md:208:`scripts/check-hook-parity.py` (python3, or python as fallback) against four
+origin/main:reference/post-push-checklist.md:226:(Linux job, "Hook-registration parity audit").
+origin/main:reference/tool-registry.md:740:uv is the single Python manager on macOS, Windows, and Linux (parity). Requires uv installed first (`setup-uv` runs before `setup-python` in `aitools-install`).
+origin/main:reference/tool-support-decision-tree.md:288:## 7. Library helpers (bash + PowerShell parity)
+origin/main:reference/tool-support-decision-tree.md:660:The existing menu parity audit (`check-post-push` step 29) extends to
+origin/main:reference/tool-support-decision-tree.md:746:- Menus, console I/O, parity: `@.claude/rules/interactive-menus.md`
+=== twin
+origin/main:.claude/rules/agentic-standards.md:50:`prompt_diff_review` in `@scripts/aitools-lib.sh` (twin: `Prompt-DiffReview`
+origin/main:.claude/rules/interactive-menus.md:49:`prompt_json_field_review` and their PS1 twins) MUST handle:
+origin/main:.cursor/rules/agentic-standards.mdc:56:`prompt_diff_review` in `@scripts/aitools-lib.sh` (twin: `Prompt-DiffReview`
+origin/main:reference/managed-file-deployment.md:42:`Get-DeployShadow` and their bash twins), and the auto-merge menu.
+=== only when .*shared
+(no hits)
+=== shared/ change
+(no hits)
+=== shared/ is modified
+(no hits)
+=== deploy drift
+origin/main:reference/pre-commit-checklist.md:54:## 10. Deploy drift check
+=== deploy-drift
+origin/main:.claude/rules/deploy-paths.md:39:3. Verify the dotprofile `deploy/` includes the change (the shared `aitools/deploy/` is frozen, so pre-commit deploy-drift steps 3+10 no longer apply to it)
+=== user init
+origin/main:.claude/rules/script-standards.md:297:3. **Name the exact fix command** -- e.g., "run `aitools user init` to write userRepoPath" --
+origin/main:README.md:29:**One-liner (recommended)** — installs prerequisites (package manager + git), clones the repo, runs the full installer, then (interactive only) `aitools user init` to load your dotprofile. Idempotent; re-run anytime.
+origin/main:README.md:64:aitools user init                # Set up user repo + session archive hook
+origin/main:reference/claude-code-effectiveness.md:117:- **Remediation**: Added `.claude/rules/surface-silent-failures.md` rule. Technical fix: user ran `aitools user init` to set `userRepoPath`
+origin/main:reference/managed-file-deployment.md:402:`aitools user init`. If not configured, dotprofile features are skipped
+origin/main:reference/post-push-checklist.md:12:2. **Defer** -- requires planning or user action (e.g., `aitools user init`): add to ROADMAP.md or note in session
+origin/main:reference/post-push-checklist.md:55:`aitools user init`."
+origin/main:reference/tool-ops-claude-code.md:197:- **Scaffolding**: `aitools user init` copies `shared/claude-shared.md` to `<userRepoPath>/claude/CLAUDE.md` if missing.
+origin/main:reference/tool-support-decision-tree.md:45:| runner | A loop that launches setup scripts and reads their exit codes: `validate_and_run` / `Invoke-ValidatedScript` in the installers, and `deploy_configs` / `Deploy-Configs` in the entry points `scripts/aitools` / `aitools.ps1`. Section 7.5 also binds the other launch sites (`aitools user init`, `bootstrap.sh` / `.ps1`) |
+origin/main:reference/tool-support-decision-tree.md:168:| KEEP | `log "tool exception recorded: <tool> via <method> at <path>"` (info); the writer commits and pushes profile.json (N-Q2, section 8) | OK `<ver> (kept)`; WARN `<ver> (kept, not saved)` when the write is refused or fails; WARN `<ver> (kept, not pushed)` when the commit or push fails | refused or failed write: `log_warn` + ACTION `run aitools user init to remember tool choices`; commit or push failed: `log_warn` + ACTION `run git push in <userRepoPath>` | 0 |
+origin/main:reference/tool-support-decision-tree.md:463:  - `aitools user init` in both entry points, which launches
+origin/main:reference/tool-support-decision-tree.md:468:    installer and then `aitools user init` and `aitools`. On installer exit 2
+origin/main:reference/tool-support-decision-tree.md:623:  `log_warn` + ACTION `run aitools user init to remember tool choices`) in every
+origin/main:reference/tool-support-decision-tree.md:695:| `k`, profile matched by hostname | resolver `via=hostname` | KEEP with WARN `(kept, not saved)`; nothing written; ACTION `run aitools user init ...` |
+origin/main:reference/tool-support-decision-tree.md:713:| `aitools user init`, hooks review `x` | pty, `setup-user-hooks` review answered `x` | "aborted by user", not "Done"; exit 2 |
+origin/main:reference/tool-support-decision-tree.md:714:| bootstrap, installer `x` | `bootstrap.sh` / `.ps1`, a review answered `x` during the install | `user init` and the rebuild skipped; exit 2 |
+origin/main:reference/user-repo.md:85:- **v1 migration** -- v1 (flat schema) is auto-detected by absence of `"version": 2`. Future `aitools user init` will migrate v1 to v2.
+origin/main:reference/user-repo.md:127:- **`userRepoPath`** -- path to the user's private companion repo. Set by `aitools user init`.
+origin/main:reference/user-repo.md:128:- **`machineAlias`** -- selects the profile from `profile.json`. Set during `user init` or manually.
+origin/main:reference/user-repo.md:219:| `aitools user init` | Set up user repo and configure hook |
+=== setup-user-config
+origin/main:.claude/rules/config-file-safety.md:166:- Single config writer: `@scripts/setup-user-config.sh` / `.ps1` (config.json; bootstrap + derived keys)
+origin/main:.cursor/rules/config-file-safety.mdc:60:- Single config writer: `scripts/setup-user-config.sh` / `.ps1` (config.json; bootstrap + derived keys)
+origin/main:reference/harness.md:110:writer, `scripts/setup-user-config.sh` / `.ps1`.
+origin/main:reference/tool-support-decision-tree.md:610:  promoted to WARN by machine-profile warnings that setup-user-config already

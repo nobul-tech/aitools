@@ -1,0 +1,96 @@
+
+=== mcp remove then add sh 119-145
+9:# Managed: MCP server registration (via `claude mcp add`).
+128:    if claude mcp remove "$name" --scope user 2>/dev/null; then
+133:    if claude mcp add "$@"; then
+206:# MCP servers via `claude mcp add`.
+
+=== skills SKILL.md only 124
+79:        [ -f "$skill_dir/SKILL.md" ] || continue
+88:        [ -f "$skill_dir/SKILL.md" ] || continue
+110:    if [ -n "$DOTPROFILE_SKILLS" ] && [ -f "$DOTPROFILE_SKILLS/$skill_name/SKILL.md" ]; then
+111:        src="$DOTPROFILE_SKILLS/$skill_name/SKILL.md"
+112:    elif [ -f "$SKILLS_SRC/$skill_name/SKILL.md" ]; then
+113:        src="$SKILLS_SRC/$skill_name/SKILL.md"
+120:    local dest="$dest_dir/SKILL.md"
+133:                _other="$_other_base/$skill_name/SKILL.md"
+193:        [ -f "$skill_dir/SKILL.md" ] || continue
+218:                        if ! adopt_managed_file "$skill_dir/SKILL.md" "$USER_REPO_PATH/claude/skills/$skill_name/SKILL.md" || [ "$ERRORS" -gt "$_errors_before" ]; then
+
+=== lib ps1 New-Item 569
+569:        New-Item -ItemType Directory -Path $script:logDir -Force | Out-Null
+972:        New-Item -ItemType Directory -Path $snapDir -Force -ErrorAction Stop | Out-Null
+1005:                New-Item -ItemType Directory -Path $dir -Force -ErrorAction Stop | Out-Null
+1519:        New-Item -ItemType Directory -Path $tmpDir -ErrorAction Stop | Out-Null
+2068:        New-Item -ItemType Directory -Path $work -Force -ErrorAction Stop | Out-Null
+2243:            New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
+2599:        if (-not (Test-Path $liveDir)) { New-Item -ItemType Directory -Path $liveDir -Force | Out-Null }
+
+=== DH bin not gated 266-272
+22:#   ~/.aitools/bin/<cli>           <- <aitools>/scripts/{harness-db.py,read-session.py,read-session-full.py}
+266:for cli in harness-db.py read-session.py read-session-full.py; do
+
+=== longpaths ps1 219-239
+227:    $val = Get-ItemProperty $longPathsKey -Name LongPathsEnabled -ErrorAction SilentlyContinue
+228:    if ($val -and $val.LongPathsEnabled -eq 1) { $longPathsEnabled = $true }
+236:    LogWarn "Windows long paths disabled (LongPathsEnabled=0) -- cargo/git may fail on deep paths"
+237:    LogWarn "Fix (run as admin): Set-ItemProperty '$longPathsKey' -Name LongPathsEnabled -Value 1"
+238:    Write-Summary "ACTION" "" "Enable long paths (admin): Set-ItemProperty '$longPathsKey' -Name LongPathsEnabled -Value 1"
+
+=== perl linux verify 87-106
+101:            log_error "  Debian/Ubuntu: sudo apt-get install -y perl"
+104:            write_summary ACTION "" "Install perl via package manager"
+
+=== rust msvc 66-85
+82:    LogWarn "Install: winget install Microsoft.VisualStudio.2022.BuildTools"
+
+=== claude scutil 99-103
+94:# macOS `scutil --get LocalHostName` only, never the DNS-derived kernel name;
+99:if [ -x /usr/sbin/scutil ]; then
+100:    MACHINE_HOST=$(/usr/sbin/scutil --get LocalHostName 2>&1) || _host_rc=$?
+
+=== hooks includes(hookId)
+306:        if (rule.hooks && rule.hooks.some(h => h.command && h.command.includes(hookId))) {
+309:                    if (h.command && h.command.includes(hookId)) {
+324:        const isMatch = rule.hooks && rule.hooks.some(h => h.command && h.command.includes(hookId));
+337:        return !(rule.hooks && rule.hooks.some(h => h.command && h.command.includes(hookId)));
+355:const lostKeys = beforeKeys.filter(k => !afterKeys.includes(k));
+393:            const c = (_v.hooks[r.event] || []).filter(rule => rule.hooks && rule.hooks.some(h => h.command && h.command.includes(r.hookId))).length;
+
+=== settings sync_managed_json profile
+83:    # A missing settings.json is not skipped: sync_managed_json creates it from the
+135:    if ! sync_managed_json "$SETTINGS_FILE" "$PROFILE_FILE" "claude.settings" "hooks" "$DEPRECATED_RULES"; then
+
+=== aitools-install.ps1 git config longpaths 242
+242:$gitLongPaths = git config --global core.longpaths 2>$null
+244:    Log "Setting git config --global core.longpaths true..."
+245:    $longPathsOut = git config --global core.longpaths true 2>&1 | Out-String
+253:        LogWarn "git config --global core.longpaths true failed (exit $longPathsRc) -- deep paths may fail"
+
+=== bootstrap.ps1 UserInteractive
+57:# Interactive only. [Environment]::UserInteractive is false in headless/MDM runs.
+59:if ([Environment]::UserInteractive -and $aitoolsCmd) {
+
+=== bootstrap.sh -t 0
+92:if [ -t 0 ] && [ -x "$HOME/.local/bin/aitools" ]; then
+
+=== install winget pwsh sh 96-116
+100:            pwsh_install_out=$(powershell.exe -NoProfile -Command 'winget install --id Microsoft.PowerShell --source winget --accept-package-agreements --accept-source-agreements' 2>&1) || pwsh_install_rc=$?
+
+=== cimcp ps1 node exit 37-39
+37:if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
+38-    LogError "Node.js not found. Install via 'aitools install' or manually: https://nodejs.org"
+39-    exit 1
+
+=== lib env warn text 675
+/Users/new-jose/repos/aitools/scripts/aitools-lib.sh:675:        log_warn "AITOOLS_ENVIRONMENT='$_AITOOLS_ENVIRONMENT_REQUESTED' ignored (valid: local; claude-code-web on Linux only) -- environment is $AITOOLS_ENVIRONMENT"
+/Users/new-jose/repos/aitools/scripts/aitools-lib.ps1:582:        LogWarn "AITOOLS_ENVIRONMENT='$($script:AitoolsEnvironmentRequested)' ignored (valid: local; claude-code-web on Linux only) -- environment is $($script:AitoolsEnvironment)"
+
+=== deploy.jsonl jsonl_record
+467:# Child-script log relay to deploy.jsonl (moved from the installers' "install
+471:# ("[ts] [script] [level] msg") to deploy.jsonl -- the child already wrote it to
+474:#   jsonl_record TS SCRIPT LEVEL MSG   append one deploy.jsonl record
+526:# jsonl_record TS SCRIPT LEVEL MSG -- append one record to deploy.jsonl in the log
+532:    local f="${LOG_DIR:-$AITOOLS_LOG_DIR}/deploy.jsonl" ts sc lv msg
+537:        log_detail "deploy.jsonl: write failed ($f)"
+543:# deploy.jsonl when it is a structured log line, count its warn/error level

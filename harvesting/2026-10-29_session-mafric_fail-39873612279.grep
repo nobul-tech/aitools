@@ -1,0 +1,18 @@
+macos	User init tests (bash 5 + pwsh parity, pty menus)	2026-10-22T23:50:15.1793250Z   ok   alias-other: row ERROR|machine profile|alias used by another machine
+macos	User init tests (bash 5 + pwsh parity, pty menus)	2026-10-22T23:50:15.2127800Z == an unregistered machine without --alias and without a terminal -> ERROR, exit 1
+macos	User init tests (bash 5 + pwsh parity, pty menus)	2026-10-22T23:50:18.0714250Z   ok   unregistered-notty: row ERROR|machine profile|not registered (no terminal)
+macos	User init tests (bash 5 + pwsh parity, pty menus)	2026-10-22T23:50:31.7408320Z == decision 2 switch = 0 (default): cached machineAlias, no terminal -> ERROR, exit 1 (same as unregistered)
+macos	User init tests (bash 5 + pwsh parity, pty menus)	2026-10-22T23:50:34.6362410Z   ok   cached-alias-0: row ERROR|machine profile|not registered (no terminal)
+macos	User init tests (bash 5 + pwsh parity, pty menus)	2026-10-22T23:50:40.5033080Z   ok   dirty: row ERROR|machine profile|not registered (local edits)
+macos	User init tests (bash 5 + pwsh parity, pty menus)	2026-10-22T23:50:43.5232090Z error: src refspec main does not match any
+macos	User init tests (bash 5 + pwsh parity, pty menus)	2026-10-22T23:50:43.5236040Z error: failed to push some refs to '/var/folders/s6/5hzmn6lx4dz5nxs7k_0slzph0000gn/T/tmp.hx595Uafef/push-rejected.bash/remote.git'
+macos	User init tests (bash 5 + pwsh parity, pty menus)	2026-10-22T23:50:43.9572140Z ##[error]Process completed with exit code 1.
+linux	User init tests (bash + pwsh parity, pty menus)	2026-10-22T23:48:34.5893042Z   ok   alias-other: row ERROR|machine profile|alias used by another machine
+linux	User init tests (bash + pwsh parity, pty menus)	2026-10-22T23:48:34.6082371Z == an unregistered machine without --alias and without a terminal -> ERROR, exit 1
+linux	User init tests (bash + pwsh parity, pty menus)	2026-10-22T23:48:36.5260212Z   ok   unregistered-notty: row ERROR|machine profile|not registered (no terminal)
+linux	User init tests (bash + pwsh parity, pty menus)	2026-10-22T23:48:44.8155447Z == decision 2 switch = 0 (default): cached machineAlias, no terminal -> ERROR, exit 1 (same as unregistered)
+linux	User init tests (bash + pwsh parity, pty menus)	2026-10-22T23:48:46.6077409Z   ok   cached-alias-0: row ERROR|machine profile|not registered (no terminal)
+linux	User init tests (bash + pwsh parity, pty menus)	2026-10-22T23:48:50.5563536Z   ok   dirty: row ERROR|machine profile|not registered (local edits)
+linux	User init tests (bash + pwsh parity, pty menus)	2026-10-22T23:48:52.3712849Z error: src refspec main does not match any
+linux	User init tests (bash + pwsh parity, pty menus)	2026-10-22T23:48:52.3713272Z error: failed to push some refs to '/tmp/tmp.F0THd5C1YK/push-rejected.bash/remote.git'
+linux	User init tests (bash + pwsh parity, pty menus)	2026-10-22T23:48:52.5534481Z ##[error]Process completed with exit code 1.

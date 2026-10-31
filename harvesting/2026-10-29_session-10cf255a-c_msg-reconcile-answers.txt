@@ -1,0 +1,14 @@
+Record the commander's answers to the RECONCILE plan questions
+
+plans/fan-plan-reconciliation.md section 4 now opens with a table of the
+commander's answers of 2026-10-26 (session 10cf255a-c), binding over the
+suggested answers:
+- Q3 reversed: Cursor also gets the aitools project rules in user space,
+  not user-level only, so #110's filter is to be undone (code + docs).
+- Q7 reversed: no confirmation for `--alias` claiming an unowned profile;
+  keep the code, document the behaviour, fix the --claim comments.
+- Q5, Q6, Q8, Q10, Q11, Q15 yes; Q16 (D1-D21) accepted; Q1, Q2, Q9, Q12,
+  Q13, Q14 covered by earlier decisions.
+Plans go directly to main (CLAUDE.md channel exception). Docs only.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

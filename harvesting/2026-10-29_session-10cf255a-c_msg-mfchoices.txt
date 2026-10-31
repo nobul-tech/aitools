@@ -1,0 +1,10 @@
+aitools-lib: document what every managed-file review choice does
+
+Adds a "Review choices" block above prompt_diff_review / Prompt-DiffReview:
+terms (SOURCE, LOCAL, ANCESTOR, ADOPT TARGET), when no menu is shown, and
+the exact effect of accept & adopt, accept, overwrite, adopt, merge, skip
+and abort in both menus. Records a verified known limitation: a merge that
+is not adopted is reverted by the next run's silent auto-deploy. Fixes the
+return-value lists, which omitted merge-adopt. Comments only.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

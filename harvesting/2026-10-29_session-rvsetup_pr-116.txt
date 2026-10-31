@@ -1,0 +1,154 @@
+#116 [OPEN] Installers and user init use the lib relay (A-1, A-12..A-18)
+FILES: .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Adopt/S3-MF-Adopt-Review-pr103.md, .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Adopt/S3-MF-Adopt-drafts/reference/managed-file-deployment.md.edit.txt, .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Adopt/S3-MF-Adopt-report.md, .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-NoMachine/S3-MF-NoMachine-Review-pr98.md, .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-NoMachine/S3-MF-NoMachine-report.md, .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Relay/S3-MF-Relay-ReviewA-pr115.md, .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Relay/S3-MF-Relay-ReviewB-pr116.md, .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Relay/S3-MF-Relay-report.md, .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Runner/S3-MF-Runner-Review-pr113.md, .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Runner/S3-MF-Runner-plan.md, .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Runner/S3-MF-Runner-report.md, .github/workflows/check.yml, scripts/aitools, scripts/aitools-install.ps1, scripts/aitools-install.sh, scripts/aitools-lib.ps1, scripts/aitools-lib.sh, scripts/aitools.ps1, scripts/setup-user-claude.ps1, scripts/setup-user-claude.sh, scripts/setup-user-config.ps1, scripts/setup-user-config.sh, tests/managed-files/test-adopt-push.ps1, tests/managed-files/test-adopt-push.sh, tests/profile/test-config.sh, tests/profile/test-install.sh, tests/profile/test-lib.sh, tests/profile/test-user-init.sh
+
+## Summary
+
+FIX-2 of M3-FINISH item 7. The installers' Step 5 and `aitools user init` now run their child scripts through the lib relay (`run_child_relayed` / `Invoke-ChildRelayed`), and the installers' private relay copies are gone. As a result:
+
+- child warnings and errors are counted;
+- every failed child gets an ERROR summary row;
+- the children's lines reach deploy.jsonl.
+
+An unwritable deploy.jsonl is one warning, and the run goes on. Step 3 failures get an ERROR row and skip Step 5. A missing `--alias` value is logged through the lib.
+
+Audit findings: A-1, A-12, A-13, A-14, A-15, A-16, A-17, A-18.
+
+**Branch:** `fix/mf-installer-relay` is stacked on #115 (`fix/mf-lib-relay`): PR A's head 4c55ec0, then a `--no-ff` merge of its review fixes 2ae798a. FIX-2's own commits are 1e44578, 7a16400 and ccccbd8.
+
+## Why
+
+| id | sev | problem (audit, at 8a9dcb5) |
+|---|---|---|
+| A-1 | medium | The installers defined their own `jsonl_write` / `relay_child_log` / `run_config_writer` (PS: `Write-JsonlRecord` / `Send-ChildLogLine` / `Invoke-ConfigWriter`), which shadowed the lib's copy. The two copies had already diverged: the bash copy did not count error lines, the PS copy did not strip CR/ANSI, and the run_id came from separate code. |
+| A-12 | medium | user init ran setup-user-config and setup-user-hooks directly. Their warnings were not counted, and none of their lines reached deploy.jsonl. |
+| A-13 | low | A non-zero exit from setup-user-hooks (other than 2 or 127) gave no ERROR row. |
+| A-14 | low | user init ran `rm -f "$AITOOLS_SUMMARY_FILE"` unchecked. |
+| A-15 | low | `--alias` without a value printed a raw stderr line before the lib loaded. |
+| A-16 | medium | The bash installer's deploy.jsonl append was unguarded under `set -e`, so an unwritable file ended the installer mid-step with no summary. |
+| A-17 | low | A relative repos path that could not be resolved gave an error with no row, and Step 5 still ran. In PS there was no failure branch at all. |
+| A-18 | low | A Step 5 writer that exited non-zero gave one error and no row. |
+
+## Changes
+
+### A-1, A-18: installers (`scripts/aitools-install.sh` / `.ps1`)
+
+- **Removed:** the private relay bodies and the JSONL globals (`LOG_JSONL`, `RUN_ID`, `HOST_NAME`; PS `$logJsonl`, `$runId`, `$hostName`, `$osName`).
+- **Log override:** the `log` / `Log` override calls the lib's `jsonl_record` / `Write-JsonlRecord`.
+- **Step 5:**
+  - bash: `run_child_relayed --summary-tool "aitools config" "Step 5: setup-user-config.sh" ...`
+  - PS: `Invoke-ChildRelayed "Step 5: setup-user-config.ps1" $Writer $WriterArgs "aitools config"`
+  - A writer that dies before writing a row gets `ERROR|aitools config|script failed (exit N)`. A writer that wrote its own ERROR row gets no second one (#115's rule).
+- **Kept as thin wrappers:** the installer block still has `jsonl_write`, `run_config_writer` and `Invoke-ConfigWriter`, because tests/profile/test-config.sh calls those names and another mission owns that file. They have no logic of their own (see Follow-ups). PS `Write-JsonlRecord` is now the lib's.
+- **Run id:** both installers export `AITOOLS_RUN_ID` (6 random bytes as hex) when it is unset. The installer's records, its relayed children and any child that relays its own children (deploy-harness, #106) then share one run_id.
+
+### A-16: lib (`scripts/aitools-lib.sh` / `.ps1`)
+
+- The first failed write in `jsonl_record` / `Write-JsonlRecord` is one `log_warn`: `deploy.jsonl: cannot write <path> -- structured log records are skipped for the rest of this run`. Later records are skipped.
+- The flag is set before the warning, so the installer's log override, which writes a record for every log line, cannot recurse.
+- PS writes the exception text as a detail line, so the warning text matches bash.
+
+### A-17: installer Step 3
+
+- New helpers `resolve_repos_dir` / `Resolve-ReposDir`. A path that cannot be created gets ERROR `aitools config` `repos dir not created`; one that cannot be resolved gets `repos path not absolute`. Each is one error, and Step 5 is skipped with an info line.
+- **Bug found by the new test:** in PS, `New-Item -ItemType Directory -Force -ErrorAction Stop` returned `$null` with no error when a parent was a file (pwsh 7, macOS; probe below). The old Step 3 carried on silently there. It now uses `[IO.Directory]::CreateDirectory` and then checks with `Test-Path -PathType Container`.
+
+### A-12, A-13: user init (`scripts/aitools` / `aitools.ps1`)
+
+- setup-user-config and setup-user-hooks run through the relay, with summary tools `aitools config` and `claude hooks`. PS runs both in-process.
+- **Git Bash exception (review B M-1):** on Git Bash the writer is relayed through `pwsh -File`, but the hooks child runs directly. Its PowerShell review menus write their prompt with `[Console]::Write` and no newline, so the relay's line reader would hide the prompt until the user answered. The direct path keeps the relay's outcome: one error and the same row rule. On that path the hooks child's lines do not reach deploy.jsonl (follow-up).
+- The fixed `ERROR|aitools config|setup-user-config failed` row is replaced by the relay rule: the writer's own ERROR row, or else the relay's `script failed (exit N)`.
+- Exit 2 from hooks still returns 2 (D-TS13). The relay now records it as one error plus `ERROR|claude hooks|aborted (exit 2)` when the hook script wrote no row.
+- A missing hooks script keeps its own `setup script missing` row.
+
+### A-14: user init (bash)
+
+- A stale run summary that cannot be removed is now a `log_warn`.
+
+### A-15: `--alias` without a value
+
+- **bash:** the error is queued while parsing and logged through the lib after `logging_init` (`--alias needs a value (aitools user init --alias <name>)`, exit 1). A value that starts with `-` counts as missing.
+- **PS:** a missing value is a pwsh parameter-binding error raised before the script runs. That covers `--alias` as the last word, and `--alias` followed by one of the script's switches such as `--force` (corrected by review B m-1). It cannot be logged through the lib. A value that looks like an option (e.g. `-x`) gets the same error as bash after the lib loads.
+
+### Tests
+
+- **`tests/profile/test-install.sh` (new):** it extracts the installers' "install log helpers" and "install log override" blocks, in bash 5, bash 3.2 and pwsh. Cases:
+  - step5-warn: the warning is counted; the lines reach deploy.jsonl with one run_id, and the console.
+  - step5-crash: one error and the relay's row.
+  - step5-ownrow: no second row.
+  - jsonl-blocked: deploy.jsonl is a directory. One warning, and the run reaches the end.
+  - Step 3: relative path, uncreatable path, and unresolvable path (bash, skipped as root).
+- **`tests/profile/test-user-init.sh`:**
+  - hook-abort: the `aborted (exit 2)` row.
+  - hook-crash: exactly one relay row.
+  - relay-jsonl: the hook warning and the writer lines reach deploy.jsonl in both shells.
+  - alias-novalue (bash): `--alias` and `--alias --force`.
+- **`.github/workflows/check.yml`:** test-install runs on macOS (bash 5 and 3.2) and Linux.
+
+## Assumptions
+
+- **I-1 (deploy.jsonl definition, undecided; draft #162):** I used the audit's suggested answer: deploy.jsonl mirrors every child setup script run through the lib relay. Applied to installer Step 5 and to user init's two children.
+  - The other installer steps (`validate_and_run` / `Invoke-ValidatedScript`: gh, tools, Step 21 deploy scripts) and the `aitools` sync deploy loop still run their children directly. They are not audit findings. Relaying them would also move every setup script's stdout off the terminal (tools' progress output, ordering against `/dev/tty` prompts) and change the installer's error rows. Listed under Follow-ups.
+- **Warnings counted in user init:** the relay adds the children's warnings to user init's WARNINGS, as A-12 asks. user init writes no rows after its children and has no exit footer, so the count cannot be seen in the panel today. The tests check the relayed lines (console, deploy.jsonl), not the counter.
+- **A user abort in the hooks review** is now an ERROR row (`aborted (exit 2)`) plus one counted error, as #115 decided and its review accepted. Before, it was only an info line.
+
+## Merge order
+
+1. #113, then #115 (`fix/mf-lib-relay`), then **this PR**.
+2. **Conflict with #106** (`feature/harness-hookin`): both PRs change the installers' JSONL lines (`git merge-tree` shows conflicts in `aitools-install.sh` and `aitools-install.ps1`). Whichever merges second keeps both changes:
+   - this PR's removal of `RUN_ID` / `LOG_JSONL` / `HOST_NAME` and the new `AITOOLS_RUN_ID` export;
+   - #106's Step 8b `run_harness_step` / `Invoke-HarnessStep`, which already use the lib relay. They could also pass `--summary-tool "harness files"`.
+
+## Verification (tested: macOS arm64; isolated HOME and AITOOLS_LOG_DIR under the worktree scratch)
+
+- `bash -n` (bash 5.3, /bin/bash 3.2.57) and the pwsh parser are clean on aitools-lib.sh/.ps1, aitools-install.sh/.ps1, aitools/aitools.ps1, test-install.sh and test-user-init.sh.
+- Suites (bash 5 + pwsh / /bin/bash 3.2 `--bash-only`):
+
+  | Suite | Base (#115 head) | This PR |
+  |---|---|---|
+  | test-install | -- | 41/0, 22/0 (after the review fixes) |
+  | test-user-init | 229/0, 128/0 | **252/0, 141/0** |
+  | test-config | 269/0, 174/0 | 269/0, 174/0 (unchanged file; extracts the new block) |
+  | test-lib | 361/0, 160/0 | 361/0, 160/0 |
+  | test-profile | 689/0, 498/0 | 689/0, 498/0 |
+
+- Other suites: tests/logging sh 24/0 (both shells), ps 15/0 (5 skipped); managed-files sh 57/0, ps 39/0; adopt-push sh 28/0, ps 23/0; deploy-harness 45/0.
+- **Negative control** (the new tests against the pre-FIX-2 scripts at `origin/fix/mf-lib-relay`):
+  - test-user-init: 243 passed, 9 failed. Every new assertion fails except two the old code also met (`--alias --force` exit 1; the raw text).
+  - test-install: 7 passed, 32 failed. The old installers have neither block, so this control is structural.
+- **Probes** (scratch):
+  - `probe-alias.sh`: pwsh `--alias` with no value fails at binding (exit 1, before the script); `--alias --force` binds `--force`.
+  - `probe-newitem.ps1`: `New-Item -Force -ErrorAction Stop` under a file returned `$null` without throwing; `CreateDirectory` threw.
+- **check-pre-commit:** step 6 FAIL (known: the harvesting file mode; `tests/profile/test-install.sh` is 100755). WARNs on steps 3, 5, 9 and 11 (the live dotprofile has uncommitted changes I did not touch).
+- **check-pre-push** (isolated HOME; config.json points at the dotprofile, which step 7 only `git archive`s):
+  - Step 7 FAIL is the known stale dotprofile `deploy/`; the fresh build's dry runs were clean.
+  - Run before ccccbd8, which adds 18 lines to the two installers and was syntax- and test-checked.
+
+## Review
+
+Independent review by S3-MF-Relay-ReviewB: **changes requested**, with 0 blocking, 1 major, 4 minors and 4 nits (https://github.com/nobul-tech/aitools/pull/116#issuecomment-6357712321; file `.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Relay/S3-MF-Relay-ReviewB-pr116.md`).
+
+Fixed in 1605d6e: M-1, m-1, m-2, m-4 (partly), n-1 and n-2. Not changed, with reasons: m-3 and n-3. The author's response, finding by finding: https://github.com/nobul-tech/aitools/pull/116#issuecomment-6357837757
+
+## Not run
+
+- Windows and Git Bash, including the relayed `pwsh -File` children of bash user init and the in-process PS relay on Windows.
+- The full installer (incident #89): the helpers are tested by extraction.
+- The A-14 failure path (a summary file that cannot be removed).
+- The root skip paths.
+- `build-deploy.sh` against the real dotprofile.
+
+## Protected-file drafts awaiting approval
+
+None.
+
+## Follow-ups
+
+- **tests/profile/test-config.sh** (owner: S3-MF-Fix3 mission): point its installer-block cases at the lib names (`jsonl_record`, `run_child_relayed`) and drop the thin wrappers `jsonl_write`, `run_config_writer` and `Invoke-ConfigWriter` from the installers. Optional: delete its Step 5 cases, which test-install.sh now covers.
+- **deploy.jsonl coverage beyond the findings (I-1):** the decision on whether `validate_and_run` / `Invoke-ValidatedScript` and the `aitools` sync deploy loop also use the relay, given the stdout-not-a-terminal effect above.
+- **A-5:** not fixed. It depends on the undecided I-2 (ACTION pairing) / incident draft #147.
+- **Git Bash user init hooks (review B M-1):** relay the hooks child once the relay can pass partial lines through, or once the PS menus prompt on the console, not stdout. Until then, its lines are not in deploy.jsonl.
+- **sync path (`scripts/aitools`):** it still has an unchecked `rm -f "$AITOOLS_SUMMARY_FILE"`, the same pattern as A-14; not in the finding.
+- **PS:** a missing last `-Alias` value cannot be logged through the lib unless the parameter declaration changes (for example, parsing `-Alias` from `$Remaining`).
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+

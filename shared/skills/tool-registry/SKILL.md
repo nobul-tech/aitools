@@ -11,7 +11,7 @@ description: "Read and update managed tool entries in the registry.
 tool entries, adding new entries, updating install methods, and
 tracking versions. **Scope**: Registry data operations only. NOT the
 evaluation process (use `/tool-eval`). NOT lifecycle gates or
-onboarding checklists (`@.claude/rules/tool-lifecycle.md`).
+onboarding checklists (`@shared/rules/tool-lifecycle.md`).
 **Audience**: Any agent that needs to look up a tool's install method,
 verify a version, or write a registry entry after evaluation.
 
@@ -135,7 +135,7 @@ Key sections per CLI tool (`tools.<slug>`):
 ## Cross-References
 
 - Evaluation process: `/tool-eval` skill
-- Evaluation principles: `@.claude/rules/tool-evaluation.md`
-- Lifecycle gates: `@.claude/rules/tool-lifecycle.md`
+- Evaluation principles: `@shared/rules/tool-evaluation.md`
+- Lifecycle gates: `@shared/rules/tool-lifecycle.md`
 - Registry data: `@registries/tool-registry.json`
 - Evaluation research: `reference/evaluations/`

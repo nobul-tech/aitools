@@ -1,0 +1,20 @@
+Add BUILD-PKG design decisions contract (BP-1..BP-20, batches B0-B14)
+
+What: S3-BuildPkg-decisions.md, the orchestrator's synthesis of the
+wave-1 reviews and research: payload = public aitools tree at a pinned
+ref (no personal data), package path runs the dev-path scripts, bash-only
+build-package.sh with native build hosts, packaging/ launchers, installer
+package mode, run context per OS, prerequisites as separate packages,
+one Architecture-all .deb for Ubuntu 22.04 and 24.04, console-user API,
+updates/detection/logging, batch IDs shared by the plan and remediation
+writers, PR-owned files, and proposals P-1..P-7 for the commander.
+
+Why: mission BUILD-PKG commander decisions 2026-10-26; the contract pins
+names so the parallel writers do not drift (handoff 2026-10-22 section I).
+
+Verification: each decision cites its wave-1 source file; PR-owned file
+list from gh pr list --json files (2026-10-26).
+
+Not run: no code.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
