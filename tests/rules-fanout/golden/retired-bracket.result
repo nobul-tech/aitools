@@ -1,0 +1,8 @@
+exit code: 0
+# ~/.claude/rules (path md5)
+[r].md.bak.TS 91b2a69d8f6c8d7f9e6ffee123e68845
+a.md da3250eb6bb5d78d74f8c21e209d6e9c
+# summary rows
+DETAIL|claude rules|added: a.md
+DETAIL|claude rules|removed: [r].md
+OK|claude rules|1 added, 1 removed

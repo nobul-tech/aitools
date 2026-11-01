@@ -9,28 +9,43 @@
 #
 # Safe to re-run: every case runs a copy of scripts/ in a temp aitools checkout,
 # under its own temp HOME, with a temp git dotprofile (all removed on exit); the
-# real HOME, ~/.aitools and dotprofile are never touched. With pwsh on PATH every
-# case also runs setup-user-claude.ps1 (a copy with its Windows OS guard off) and
-# compares its ~/.claude/rules tree and summary rows with the .sh run (parity).
-# Platform: macOS, Linux (perl, git; pwsh and python3 optional: their cases are
-# skipped). Exit 1 if any case fails. Spec: plans/rules-fanout-claude.md.
+# real HOME, ~/.aitools and dotprofile are never touched.
+#
+# Platform targeting (plans/ci-platform-targeting.md): each script runs only
+# where its OS guard allows. macOS/Linux run setup-user-claude.sh; Windows (Git
+# Bash) runs setup-user-claude.ps1 with native pwsh (no guard bypass). Every
+# check runs against the run of that language. Parity between the two is
+# checked against the committed golden results in tests/rules-fanout/golden/
+# (exit code, ~/.claude/rules tree, summary rows per case; tests/lib/
+# platform-lib.sh golden_match). AITOOLS_TEST_UPDATE_GOLDEN=1 on macOS/Linux
+# rewrites them.
+# Platform: macOS, Linux (.sh), Windows Git Bash (.ps1); perl, git; python3
+# optional (pty cases; on Windows also pywinpty). Exit 1 if any case fails.
+# Spec: plans/rules-fanout-claude.md.
 #
 # Usage: bash tests/rules-fanout/test-rules-fanout.sh [--bash-only] [--help]
+#   --bash-only  accepted for compatibility: macOS/Linux always run only .sh
 
 set -uo pipefail
 
-BASH_ONLY=false
 for arg in "$@"; do
     case "$arg" in
-        --help|-h) perl -ne 'print if $. >= 2 && $. <= 18' "$0"; exit 0 ;;
-        --bash-only) BASH_ONLY=true ;;
+        --help|-h) perl -ne 'print if $. >= 2 && $. <= 27' "$0"; exit 0 ;;
+        --bash-only) ;;
         *) printf 'Unknown option: %s (see --help)\n' "$arg"; exit 1 ;;
     esac
 done
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# shellcheck source=../lib/platform-lib.sh
+. "$ROOT/tests/lib/platform-lib.sh"
+# L: the language this platform runs, sh (macOS/Linux) or ps (Windows); also
+# the name of the case's HOME, output and summary files
+if [ "$TEST_LANG" = ps1 ]; then L=ps; else L=sh; fi
 PTY="$ROOT/tests/managed-files/pty-run.py"
 TMP_ROOT="$(mktemp -d)"
+GOLDEN_DIR="$ROOT/tests/rules-fanout/golden"
+GOLDEN_TMP="$TMP_ROOT"
 cleanup() {
     # chmod 000 cases: restore so rm can remove them
     chmod -R u+rwx "$TMP_ROOT" 2>/dev/null || printf 'warn: chmod restore failed under %s\n' "$TMP_ROOT"
@@ -49,8 +64,8 @@ check() {  # name, condition (eval'd)
         printf 'PASS %s\n' "$1"; PASS=$((PASS + 1))
     else
         printf 'FAIL %s\n' "$1"; FAIL=$((FAIL + 1))
-        if [ -n "$C" ] && [ -f "$C/sh.out" ]; then
-            perl -pe 's/\e\[[0-9;]*m//g; s/^/      | /' "$C/sh.out" | tail -n 25
+        if [ -n "$C" ] && [ -f "$C/$L.out" ]; then
+            perl -pe 's/\e\[[0-9;]*m//g; s/^/      | /' "$C/$L.out" | tail -n 25
         fi
     fi
 }
@@ -62,10 +77,14 @@ for t in perl git; do
         exit 0
     fi
 done
-HAVE_PWSH=false
-if ! $BASH_ONLY && command -v pwsh >/dev/null 2>&1; then HAVE_PWSH=true; fi
+if [ "$L" = ps ] && ! command -v pwsh >/dev/null 2>&1; then
+    printf 'FAIL pwsh is not on PATH: setup-user-claude.ps1 cannot be tested on Windows\n'
+    exit 1
+fi
 HAVE_PTY=false
 if command -v python3 >/dev/null 2>&1 && [ -f "$PTY" ]; then HAVE_PTY=true; fi
+# Windows pty = pywinpty (ConPTY); python3 -c's failure means "not installed"
+if $HAVE_PTY && [ "$TEST_PLATFORM" = windows ] && ! python3 -c 'import winpty' >/dev/null 2>&1; then HAVE_PTY=false; fi
 CAN_CHMOD_READ=true   # chmod 000 blocks reads (not for root, not under Git Bash)
 case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) CAN_CHMOD_READ=false ;; esac
 if [ "$(id -u)" = 0 ]; then CAN_CHMOD_READ=false; fi
@@ -82,11 +101,10 @@ gitc() { git -c user.name=test -c user.email=test@example.invalid -c commit.gpgs
 fixture_fail() { printf 'FATAL fixture setup failed: %s\n' "$1"; exit 1; }
 A="$TMP_ROOT/aitools"
 mkdir -p "$A/scripts" "$A/shared/rules" "$A/.claude/rules" || fixture_fail "mkdir $A"
-for f in setup-user-claude.sh aitools-lib.sh aitools-lib.ps1 aitools-profile.sh aitools-profile.ps1 aitools-json.pl aitools-json.ps1; do
+# Unchanged copies, OS guards included: the .ps1 runs only on Windows
+for f in setup-user-claude.sh setup-user-claude.ps1 aitools-lib.sh aitools-lib.ps1 aitools-profile.sh aitools-profile.ps1 aitools-json.pl aitools-json.ps1; do
     cp "$ROOT/scripts/$f" "$A/scripts/$f" || fixture_fail "cp scripts/$f"
 done
-perl -pe 's/-and -not \$IsWindows\)/-and \$false)/' "$ROOT/scripts/setup-user-claude.ps1" > "$A/scripts/setup-user-claude.ps1" || fixture_fail "OS-guard copy of setup-user-claude.ps1"
-grep -q -- '-and \$false)' "$A/scripts/setup-user-claude.ps1" || fixture_fail "OS guard not patched in setup-user-claude.ps1"
 cp "$ROOT/shared/claude-shared.md" "$A/shared/claude-shared.md" || fixture_fail "cp shared/claude-shared.md"
 # A package payload (git archive) has the same files but no .git: adopt into it
 # is never offered (BUILD-PKG BP-6). The fan-out counts only a git checkout.
@@ -120,62 +138,81 @@ manifest() {
     } > "$H/.aitools/rules/.aitools-rules-manifest"
 }
 
-# run_one LANG [FLAG]: run setup-user-claude.<LANG> non-interactively under $C/<LANG>
+# run_one [FLAG]: run setup-user-claude.<L> non-interactively under $C/<L>.
+# Native pwsh (Windows) gets native paths; its CRs are stripped from the output
+# and the summary so the checks read the same text in both languages.
 run_one() {
-    local lang="$1" flag="${2:-}" h="$C/$1"
+    local flag="${1:-}" h="$C/$L"
     local e=(env -u AITOOLS_FORCE -u AITOOLS_DRY_RUN -u AITOOLS_USER_REPO_PATH -u AITOOLS_PROFILE_FILE
         -u AITOOLS_PROFILE_SH -u AITOOLS_PROFILE_PS1
-        HOME="$h" USERPROFILE="$h" AITOOLS_LOG_DIR="$h/logs" AITOOLS_SUMMARY_FILE="$C/$lang.summary"
-        AITOOLS_PROFILE_TEST_ANY_OS=1 GIT_CONFIG_GLOBAL="$h/.gitconfig" GIT_CONFIG_NOSYSTEM=1)
-    : > "$C/$lang.summary"
-    if [ "$lang" = sh ]; then
+        HOME="$(native_path "$h")" USERPROFILE="$(native_path "$h")" AITOOLS_LOG_DIR="$(native_path "$h/logs")"
+        AITOOLS_SUMMARY_FILE="$(native_path "$C/$L.summary")"
+        GIT_CONFIG_GLOBAL="$(native_path "$h/.gitconfig")" GIT_CONFIG_NOSYSTEM=1)
+    : > "$C/$L.summary"
+    if [ "$L" = sh ]; then
         "${e[@]}" "$TB" "$REPO/scripts/setup-user-claude.sh" ${flag:+"$flag"} < /dev/null > "$C/sh.out" 2>&1
     else
-        "${e[@]}" pwsh -NoProfile -File "$REPO/scripts/setup-user-claude.ps1" ${flag:+"$flag"} < /dev/null > "$C/ps.out" 2>&1
+        "${e[@]}" pwsh -NoProfile -NonInteractive -File "$(native_path "$REPO/scripts/setup-user-claude.ps1")" ${flag:+"$flag"} < /dev/null > "$C/ps.out" 2>&1
     fi
-    echo $? > "$C/$lang.rc"
+    echo $? > "$C/$L.rc"
+    if [ "$L" = ps ]; then strip_cr "$C/ps.out" "$C/ps.summary"; fi
+}
+strip_cr() {  # strip_cr FILE...: remove CRs in place (pwsh console output on Windows)
+    perl -pi -e 's/\r//g' "$@" || printf 'warn: could not strip CRs from %s\n' "$*"
 }
 
-# run_pty LANG INPUT: the same on a pty (review menu), keystrokes INPUT
+# run_pty INPUT: the same on a pty (review menu), keystrokes INPUT
 run_pty() {
-    local lang="$1" input="$2" h="$C/$1" cmd
-    : > "$C/$lang.summary"
-    if [ "$lang" = sh ]; then cmd=("$TB" "$REPO/scripts/setup-user-claude.sh"); else cmd=(pwsh -NoProfile -File "$REPO/scripts/setup-user-claude.ps1"); fi
+    local input="$1" h="$C/$L" cmd
+    : > "$C/$L.summary"
+    if [ "$L" = sh ]; then
+        cmd=("$TB" "$REPO/scripts/setup-user-claude.sh")
+    else
+        cmd=(pwsh -NoProfile -File "$(native_path "$REPO/scripts/setup-user-claude.ps1")")
+    fi
     env -u AITOOLS_FORCE -u AITOOLS_DRY_RUN -u AITOOLS_USER_REPO_PATH -u AITOOLS_PROFILE_FILE \
         -u AITOOLS_PROFILE_SH -u AITOOLS_PROFILE_PS1 \
-        HOME="$h" USERPROFILE="$h" AITOOLS_LOG_DIR="$h/logs" AITOOLS_SUMMARY_FILE="$C/$lang.summary" \
-        AITOOLS_PROFILE_TEST_ANY_OS=1 GIT_CONFIG_GLOBAL="$h/.gitconfig" GIT_CONFIG_NOSYSTEM=1 \
-        python3 "$PTY" --input "$input" --log "$C/$lang.out" -- "${cmd[@]}"
-    echo $? > "$C/$lang.rc"
+        HOME="$(native_path "$h")" USERPROFILE="$(native_path "$h")" AITOOLS_LOG_DIR="$(native_path "$h/logs")" \
+        AITOOLS_SUMMARY_FILE="$(native_path "$C/$L.summary")" \
+        GIT_CONFIG_GLOBAL="$(native_path "$h/.gitconfig")" GIT_CONFIG_NOSYSTEM=1 \
+        python3 "$(native_path "$PTY")" --input "$input" --log "$(native_path "$C/$L.out")" -- "${cmd[@]}"
+    echo $? > "$C/$L.rc"
+    if [ "$L" = ps ]; then strip_cr "$C/ps.out" "$C/ps.summary"; fi
 }
 
-# case_run NAME SEED_FN [SH_FLAG PS_FLAG]: fresh HOMEs $C/sh and $C/ps (the
-# latter only with pwsh), each with config.json -> the fixture dotprofile,
-# seeded by SEED_FN, then one run per language
+# case_run NAME SEED_FN [SH_FLAG PS_FLAG]: a fresh HOME $C/<L> with config.json
+# -> the fixture dotprofile, seeded by SEED_FN, then one run of the language
+# of this platform (with its own flag spelling)
 case_run() {
     C="$TMP_ROOT/$1"
-    local seed="$2" shf="${3:-}" psf="${4:-}" lang
+    local seed="$2" shf="${3:-}" psf="${4:-}"
     mkdir -p "$C"
-    for lang in sh ps; do
-        if [ "$lang" = ps ] && [ "$HAVE_PWSH" != "true" ]; then continue; fi
-        H="$C/$lang"
-        mkdir -p "$H/.aitools"
-        printf '{"userRepoPath":"%s","machineAlias":"m1"}\n' "$DP" > "$H/.aitools/config.json"
-        printf '[user]\n\tname = Test\n\temail = test@example.invalid\n[commit]\n\tgpgsign = false\n' > "$H/.gitconfig"
-        "$seed"
-        if [ "$lang" = sh ]; then run_one sh "$shf"; else run_one ps "$psf"; fi
-    done
+    H="$C/$L"
+    mkdir -p "$H/.aitools"
+    printf '{"userRepoPath":"%s","machineAlias":"m1"}\n' "$(native_path "$DP")" > "$H/.aitools/config.json"
+    printf '[user]\n\tname = Test\n\temail = test@example.invalid\n[commit]\n\tgpgsign = false\n' > "$H/.gitconfig"
+    "$seed"
+    if [ "$L" = sh ]; then run_one "$shf"; else run_one "$psf"; fi
 }
-rerun() {  # rerun [SH_FLAG PS_FLAG]: run again in the same HOMEs
-    run_one sh "${1:-}"
-    if [ "$HAVE_PWSH" = "true" ]; then run_one ps "${2:-}"; fi
+rerun() {  # rerun [SH_FLAG PS_FLAG]: run again in the same HOME
+    if [ "$L" = sh ]; then run_one "${1:-}"; else run_one "${2:-}"; fi
 }
 
-rc() { cat "$C/${1:-sh}.rc"; }
-row() { grep -qxF "$1" "$C/${2:-sh}.summary"; }                  # exact summary row
-nondetail() { grep -F '|claude rules|' "$C/${1:-sh}.summary" | grep -v '^DETAIL' | tail -n 1; }
-R() { printf '%s' "$C/${1:-sh}/.claude/rules"; }                  # the deployed rules dir
-logged() { cat "$C/${2:-sh}/logs/"*.log 2>/dev/null | grep -qF "$1"; }  # in the run's log files (none: no match)
+rc() { cat "$C/$L.rc"; }
+row() { grep -qxF "$1" "$C/$L.summary"; }                  # exact summary row
+nondetail() { grep -F '|claude rules|' "$C/$L.summary" | grep -v '^DETAIL' | tail -n 1; }
+R() { printf '%s' "$C/$L/.claude/rules"; }                  # the deployed rules dir
+# logged TEXT: TEXT in the run's log files (none: no match). On Windows the
+# log is read with / separators (pwsh joins native paths with \): TEXT names
+# paths in native form (native_path), which is the plain path elsewhere.
+logged() {
+    if [ "$TEST_PLATFORM" = windows ]; then
+        cat "$C/$L/logs/"*.log 2>/dev/null | perl -pe 's/\r//; tr{\\}{/}' | grep -qF "$1"
+    else
+        cat "$C/$L/logs/"*.log 2>/dev/null | grep -qF "$1"
+    fi
+}
+NA="$(native_path "$A")"; NDP="$(native_path "$DP")"   # the checkout and dotprofile as the script names them
 
 # tree_sig DIR: "<path> <md5>" per file, backup time stamps normalized
 tree_sig() {
@@ -194,33 +231,32 @@ tree_sig() {
 }
 rows() { grep -E '^(ACTION\||[A-Z]+\|claude rules\|)' "$1" | LC_ALL=C sort; }
 
-# parity CASE: the .ps1 run of the case gave the .sh run's exit code, tree and rows
+# parity CASE: this run's exit code, ~/.claude/rules tree and summary rows equal
+# the golden result tests/rules-fanout/golden/CASE.result, which the .sh run
+# (macOS/Linux) and the .ps1 run (Windows) must both give
 parity() {
-    if [ "$HAVE_PWSH" != "true" ]; then skip "parity ps1: $1 (pwsh not on PATH or --bash-only)"; return; fi
-    tree_sig "$(R sh)" > "$C/tree-sh"; tree_sig "$(R ps)" > "$C/tree-ps"
-    rows "$C/sh.summary" > "$C/rows-sh"; rows "$C/ps.summary" > "$C/rows-ps"
-    check "parity ps1: $1: exit code" "[ \"\$(rc ps)\" = \"\$(rc sh)\" ] || { tail -n 20 '$C/ps.out'; false; }"
-    check "parity ps1: $1: ~/.claude/rules" "cmp -s '$C/tree-sh' '$C/tree-ps' || { diff '$C/tree-sh' '$C/tree-ps'; false; }"
-    check "parity ps1: $1: summary rows" "cmp -s '$C/rows-sh' '$C/rows-ps' || { diff '$C/rows-sh' '$C/rows-ps'; false; }"
+    { printf 'exit code: %s\n' "$(rc)"
+      printf '# ~/.claude/rules (path md5)\n'; tree_sig "$(R)"
+      printf '# summary rows\n'; rows "$C/$L.summary"
+    } > "$C/$1.result"
+    check "parity: $1: exit code, ~/.claude/rules and summary rows match golden (sh and ps share it)" "golden_match '$1.result' '$C/$1.result'"
 }
 
 # ---------------------------------------------------------------------------
 # Lib helpers: tracker "removed" and unknown outcomes, rule_name_kind
 # ---------------------------------------------------------------------------
 C="$TMP_ROOT/lib"; mkdir -p "$C"
-env HOME="$C" AITOOLS_LOG_DIR="$C/logs" AITOOLS_SUMMARY_FILE="$C/sh.summary" "$TB" -c '
-    source "$1/scripts/aitools-lib.sh"; logging_init "test-rules-fanout"
-    deploy_tracker_init
-    deploy_tracker_record removed "t" "x.md"
-    deploy_tracker_record bogus "t" "y.md"
-    deploy_tracker_summary "t"
-    printf "TEXT=%s\n" "$DEPLOY_TRACKER_TEXT"
-    for n in a.md A.MD b.Md x.md.bak.1 X.MD.BAK.2026 odd.bak.2026.md .hidden.md notes.txt; do printf "%s=%s\n" "$n" "$(rule_name_kind "$n")"; done
-' _ "$A" > "$C/sh.out" 2>&1
-check "lib sh: removed outcome: DETAIL row and count" "row 'DETAIL|t|removed: x.md' && grep -qx 'TEXT=1 removed, 1 failed' '$C/sh.out'"
-check "lib sh: unknown outcome: logged, counted as failed, ERROR row" "row 'DETAIL|t|failed: y.md' && row 'ERROR|t|1 failed' && grep -q 'unknown outcome \"bogus\"' '$C/sh.out'"
-check "lib sh: rule_name_kind is case-insensitive" "grep -qx 'A.MD=rule' '$C/sh.out' && grep -qx 'b.Md=rule' '$C/sh.out' && grep -qx 'X.MD.BAK.2026=backup' '$C/sh.out' && grep -qx 'odd.bak.2026.md=backup' '$C/sh.out' && grep -qx '.hidden.md=hidden' '$C/sh.out' && grep -qx 'notes.txt=other' '$C/sh.out'"
-if [ "$HAVE_PWSH" = "true" ]; then
+if [ "$L" = sh ]; then
+    env HOME="$C" AITOOLS_LOG_DIR="$C/logs" AITOOLS_SUMMARY_FILE="$C/sh.summary" "$TB" -c '
+        source "$1/scripts/aitools-lib.sh"; logging_init "test-rules-fanout"
+        deploy_tracker_init
+        deploy_tracker_record removed "t" "x.md"
+        deploy_tracker_record bogus "t" "y.md"
+        deploy_tracker_summary "t"
+        printf "TEXT=%s\n" "$DEPLOY_TRACKER_TEXT"
+        for n in a.md A.MD b.Md x.md.bak.1 X.MD.BAK.2026 odd.bak.2026.md .hidden.md notes.txt; do printf "%s=%s\n" "$n" "$(rule_name_kind "$n")"; done
+    ' _ "$A" > "$C/sh.out" 2>&1
+else
     cat > "$C/lib.ps1" <<'PS1'
 param([string]$Repo)
 . (Join-Path (Join-Path $Repo "scripts") "aitools-lib.ps1")
@@ -232,13 +268,18 @@ Write-DeployTrackerSummary -ToolName "t"
 [Console]::WriteLine("TEXT=$($script:deployTrackerText)")
 foreach ($n in @("a.md", "A.MD", "b.Md", "x.md.bak.1", "X.MD.BAK.2026", "odd.bak.2026.md", ".hidden.md", "notes.txt")) { [Console]::WriteLine("$n=$(Get-RuleNameKind $n)") }
 PS1
-    env HOME="$C" USERPROFILE="$C" AITOOLS_LOG_DIR="$C/logs-ps" AITOOLS_SUMMARY_FILE="$C/ps.summary" \
-        pwsh -NoProfile -File "$C/lib.ps1" "$A" > "$C/ps.out" 2>&1
-    check "lib parity: tracker rows" "cmp -s '$C/sh.summary' '$C/ps.summary' || { diff '$C/sh.summary' '$C/ps.summary'; false; }"
-    check "lib parity: summary text and kinds" "diff <(grep -E '^(TEXT=|[^ ]+=(rule|backup|hidden|other)$)' '$C/sh.out') <(grep -E '^(TEXT=|[^ ]+=(rule|backup|hidden|other)$)' '$C/ps.out')"
-else
-    skip "lib parity (pwsh not on PATH or --bash-only)"
+    env HOME="$(native_path "$C")" USERPROFILE="$(native_path "$C")" AITOOLS_LOG_DIR="$(native_path "$C/logs-ps")" \
+        AITOOLS_SUMMARY_FILE="$(native_path "$C/ps.summary")" \
+        pwsh -NoProfile -NonInteractive -File "$(native_path "$C/lib.ps1")" "$(native_path "$A")" < /dev/null > "$C/ps.out" 2>&1
+    strip_cr "$C/ps.out" "$C/ps.summary"
 fi
+check "lib $L: removed outcome: DETAIL row and count" "row 'DETAIL|t|removed: x.md' && grep -qx 'TEXT=1 removed, 1 failed' '$C/$L.out'"
+check "lib $L: unknown outcome: logged, counted as failed, ERROR row" "row 'DETAIL|t|failed: y.md' && row 'ERROR|t|1 failed' && grep -q 'unknown outcome \"bogus\"' '$C/$L.out'"
+check "lib $L: rule_name_kind is case-insensitive" "grep -qx 'A.MD=rule' '$C/$L.out' && grep -qx 'b.Md=rule' '$C/$L.out' && grep -qx 'X.MD.BAK.2026=backup' '$C/$L.out' && grep -qx 'odd.bak.2026.md=backup' '$C/$L.out' && grep -qx '.hidden.md=hidden' '$C/$L.out' && grep -qx 'notes.txt=other' '$C/$L.out'"
+# Parity (was: sh and ps output compared on one machine): both match the golden files
+grep -E '^(TEXT=|[^ ]+=(rule|backup|hidden|other)$)' "$C/$L.out" > "$C/lib.kinds"
+check "lib parity: tracker rows match golden" "golden_match lib.summary '$C/$L.summary'"
+check "lib parity: summary text and kinds match golden" "golden_match lib.kinds '$C/lib.kinds'"
 
 # ---------------------------------------------------------------------------
 # No harness rules: nothing deployed, ~/.claude/rules untouched, exit 0
@@ -246,7 +287,7 @@ fi
 seed_missing() { deployed mine.md 'mine'; }
 case_run missing seed_missing
 check "missing: exit 0, row n/a (no harness rules)" "[ \"\$(rc)\" = 0 ] && [ \"\$(nondetail)\" = 'OK|claude rules|n/a (no harness rules)' ]"
-check "missing: ~/.claude/rules untouched, no directory backup" "grep -qx mine '$(R)/mine.md' && [ \"\$(ls '$(R)')\" = mine.md ] && ! ls '$C/sh/.claude' | grep -q 'rules.bak'"
+check "missing: ~/.claude/rules untouched, no directory backup" "grep -qx mine '$(R)/mine.md' && [ \"\$(ls '$(R)')\" = mine.md ] && ! ls '$C/$L/.claude' | grep -q 'rules.bak'"
 check "missing: the dotprofile's claude/rules is not deployed" "[ ! -e '$(R)/d.md' ] && [ ! -e '$(R)/only-dp.md' ]"
 parity missing
 
@@ -272,20 +313,21 @@ case_run fanout seed_fanout
 check "fanout: exit 0, row 4 added" "[ \"\$(rc)\" = 0 ] && [ \"\$(nondetail)\" = 'OK|claude rules|4 added' ]"
 check "fanout: shared, aitools, dotprofile and upper-case .MD rules deployed" "grep -qx '## shared s' '$(R)/s.md' && grep -qx '## project p' '$(R)/p.md' && grep -qx '## dot d' '$(R)/d.md' && [ -f '$(R)/UP.MD' ]"
 check "fanout: *.bak.* (any case), hidden, non-.md and nested files skipped" "[ ! -e '$(R)/s.md.bak.2026-10-22T010203Z' ] && [ ! -e '$(R)/odd.bak.2026.md' ] && [ ! -e '$(R)/Up.MD.BAK.1' ] && [ ! -e '$(R)/.hidden.md' ] && [ ! -e '$(R)/notes.txt' ] && [ ! -e '$(R)/nested.md' ] && [ ! -e '$(R)/subdir' ]"
-check "fanout: non-rule file logged, manifest and backups silent" "grep -q 'Ignoring non-rule file in harness rules: notes.txt' '$C/sh.out' && ! grep -q 'aitools-rules-manifest' '$C/sh.out' && ! grep -q 's.md.bak' '$C/sh.out'"
-check "fanout: unmanaged rule preserved" "grep -qx mine '$(R)/mine.md' && grep -q 'Preserved unmanaged rule: mine.md' '$C/sh.out'"
+check "fanout: non-rule file logged, manifest and backups silent" "grep -q 'Ignoring non-rule file in harness rules: notes.txt' '$C/$L.out' && ! grep -q 'aitools-rules-manifest' '$C/$L.out' && ! grep -q 's.md.bak' '$C/$L.out'"
+check "fanout: unmanaged rule preserved" "grep -qx mine '$(R)/mine.md' && grep -q 'Preserved unmanaged rule: mine.md' '$C/$L.out'"
 check "fanout: dotprofile-only rule not deployed (not in ~/.aitools/rules)" "[ ! -e '$(R)/only-dp.md' ]"
 parity fanout
 rerun
 check "fanout rerun: row 4 verified, nothing written" "[ \"\$(nondetail)\" = 'OK|claude rules|4 verified' ] && ! ls '$(R)' | grep -q '\.bak\.'"
 parity fanout-rerun
-printf '## shared s\nlocal edit\n' > "$(R sh)/s.md"
-if [ "$HAVE_PWSH" = "true" ]; then printf '## shared s\nlocal edit\n' > "$(R ps)/s.md"; fi
+printf '## shared s\nlocal edit\n' > "$(R)/s.md"
 rerun
 check "fanout edited, non-interactive: overwritten, backup kept, WARN row" "[ \"\$(nondetail)\" = 'WARN|claude rules|1 updated, 3 verified' ] && grep -qx '## shared s' '$(R)/s.md' && ls '$(R)' | grep -q '^s\.md\.bak\.'"
 parity fanout-edited
-printf '## shared s\nlocal edit 2\n' > "$(R sh)/s.md"
-if [ "$HAVE_PWSH" = "true" ]; then printf '## shared s\nlocal edit 2\n' > "$(R ps)/s.md"; fi
+printf '## shared s\nlocal edit 2\n' > "$(R)/s.md"
+# The edited run's backup is checked above; removed so the tree holds one backup
+# whether or not the next run's stamp falls in the same second (golden file)
+rm -f "$(R)"/s.md.bak.*
 rerun --force -Force
 check "fanout --force: overwritten" "[ \"\$(rc)\" = 0 ] && grep -qx '## shared s' '$(R)/s.md' && [ \"\$(nondetail)\" = 'WARN|claude rules|1 updated, 3 verified' ]"
 parity fanout-force
@@ -304,11 +346,11 @@ case_run retired seed_retired
 check "retired: exit 0, row 1 added, 2 removed (WARN: a kept file still loads)" "[ \"\$(rc)\" = 0 ] && [ \"\$(nondetail)\" = 'WARN|claude rules|1 added, 2 removed' ]"
 check "retired: copies removed, backups kept" "[ ! -e '$(R)/gone.md' ] && [ ! -e '$(R)/old.md' ] && ls '$(R)' | grep -q '^gone\.md\.bak\.' && ls '$(R)' | grep -q '^old\.md\.bak\.'"
 check "retired: removals in DETAIL rows" "row 'DETAIL|claude rules|removed: gone.md' && row 'DETAIL|claude rules|removed: old.md'"
-check "retired: a retired rule still in ~/.aitools/rules is not fanned out" "grep -q 'Not fanned out: old.md (retired in the rules manifest)' '$C/sh.out' && ! row 'DETAIL|claude rules|added: old.md'"
+check "retired: a retired rule still in ~/.aitools/rules is not fanned out" "grep -q 'Not fanned out: old.md (retired in the rules manifest)' '$C/$L.out' && ! row 'DETAIL|claude rules|added: old.md'"
 check "retired: user file with a retired name kept, ACTION row" "grep -qx 'my own' '$(R)/mine2.md' && row 'ACTION||Claude Code still loads retired rules in ~/.claude/rules: mine2.md -- delete them unless you wrote them'"
 parity retired
 case_run retired-dry seed_retired --dry-run -DryRun
-check "retired dry run: nothing written, row dry run, removal previewed" "[ \"\$(rc)\" = 0 ] && [ \"\$(nondetail)\" = 'WARN|claude rules|dry run (no files written)' ] && [ -f '$(R)/gone.md' ] && [ -f '$(R)/old.md' ] && [ ! -e '$(R)/a.md' ] && grep -q 'DRY RUN\] Would back up and remove gone.md' '$C/sh.out'"
+check "retired dry run: nothing written, row dry run, removal previewed" "[ \"\$(rc)\" = 0 ] && [ \"\$(nondetail)\" = 'WARN|claude rules|dry run (no files written)' ] && [ -f '$(R)/gone.md' ] && [ -f '$(R)/old.md' ] && [ ! -e '$(R)/a.md' ] && grep -q 'DRY RUN\] Would back up and remove gone.md' '$C/$L.out'"
 parity retired-dry
 
 # A retired name holding [ ]: removed only with its backup (review RC-1: a
@@ -339,7 +381,7 @@ parity retired-case
 # ---------------------------------------------------------------------------
 seed_nomanifest() { harness a.md 'rule a'; harness b.md 'rule b'; }
 case_run nomanifest seed_nomanifest
-check "no manifest: everything fanned out, adopt not offered" "[ \"\$(rc)\" = 0 ] && [ \"\$(nondetail)\" = 'OK|claude rules|2 added' ] && grep -q 'No rules manifest' '$C/sh.out' && logged 'claude rules: a.md source=unknown adopt=none'"
+check "no manifest: everything fanned out, adopt not offered" "[ \"\$(rc)\" = 0 ] && [ \"\$(nondetail)\" = 'OK|claude rules|2 added' ] && grep -q 'No rules manifest' '$C/$L.out' && logged 'claude rules: a.md source=unknown adopt=none'"
 parity nomanifest
 
 seed_badheader() {
@@ -353,7 +395,7 @@ parity badheader
 
 seed_invalid() { manifest 'bad.txt|shared' 'a.md|unknown' 'b.md|shared'; harness a.md 'rule a'; harness b.md 'rule b'; }
 case_run invalid seed_invalid
-check "invalid lines: warned, rules still fanned out" "[ \"\$(rc)\" = 0 ] && [ \"\$(nondetail)\" = 'WARN|claude rules|2 added' ] && grep -q 'line ignored: bad.txt<TAB>shared' '$C/sh.out' && logged 'claude rules: a.md source=unknown adopt=none'"
+check "invalid lines: warned, rules still fanned out" "[ \"\$(rc)\" = 0 ] && [ \"\$(nondetail)\" = 'WARN|claude rules|2 added' ] && grep -q 'line ignored: bad.txt<TAB>shared' '$C/$L.out' && logged 'claude rules: a.md source=unknown adopt=none'"
 parity invalid
 
 # ---------------------------------------------------------------------------
@@ -365,32 +407,26 @@ seed_adoptmap() {
     printf '## shared s\n' > "$A/shared/rules/s.md"; printf '## project p\n' > "$A/.claude/rules/p.md"
 }
 case_run adoptmap seed_adoptmap
-for lang in sh ps; do
-    if [ "$lang" = ps ] && [ "$HAVE_PWSH" != "true" ]; then continue; fi
-    # The full adopt path, as one log line (a split match could pass on
-    # "adopt=none" plus the deploy destination's ".../.claude/rules/p.md")
-    check "adopt map $lang: shared -> aitools shared/rules" "logged 'claude rules: s.md source=shared adopt=$A/shared/rules/s.md' $lang"
-    check "adopt map $lang: aitools -> aitools .claude/rules" "logged 'claude rules: p.md source=aitools adopt=$A/.claude/rules/p.md' $lang"
-    check "adopt map $lang: dotprofile -> dotprofile claude/rules" "logged 'claude rules: d.md source=dotprofile adopt=$DP/claude/rules/d.md' $lang"
-    check "adopt map $lang: no repo file -> none" "logged 'claude rules: z.md source=dotprofile adopt=none' $lang"
-done
+# The full adopt path, as one log line (a split match could pass on
+# "adopt=none" plus the deploy destination's ".../.claude/rules/p.md")
+check "adopt map $L: shared -> aitools shared/rules" "logged 'claude rules: s.md source=shared adopt=$NA/shared/rules/s.md'"
+check "adopt map $L: aitools -> aitools .claude/rules" "logged 'claude rules: p.md source=aitools adopt=$NA/.claude/rules/p.md'"
+check "adopt map $L: dotprofile -> dotprofile claude/rules" "logged 'claude rules: d.md source=dotprofile adopt=$NDP/claude/rules/d.md'"
+check "adopt map $L: no repo file -> none" "logged 'claude rules: z.md source=dotprofile adopt=none'"
 
 if $HAVE_PTY; then
-    for lang in sh ps; do
-        if [ "$lang" = ps ] && [ "$HAVE_PWSH" != "true" ]; then continue; fi
-        printf '## dot d\nmy edit %s\n' "$lang" > "$C/$lang/.claude/rules/d.md"
-        printf '## project p\nmy edit %s\n' "$lang" > "$C/$lang/.claude/rules/p.md"
-        run_pty "$lang" 'a\na\n'
-        check "adopt $lang: dotprofile rule written to the dotprofile and committed" "grep -qx 'my edit $lang' '$DP/claude/rules/d.md' && git -C '$DP' log -1 --format=%s | grep -q 'd.md'"
-        check "adopt $lang: aitools rule written to the aitools working tree" "grep -qx 'my edit $lang' '$A/.claude/rules/p.md'"
-        check "adopt $lang: DETAIL rows" "row 'DETAIL|claude rules|accept & adopt: d.md' $lang && row 'DETAIL|claude rules|accept & adopt: p.md' $lang"
-        # abort: exit 2 from the library, no claude rules row, the local file kept
-        printf '## shared s\nlocal %s\n' "$lang" > "$C/$lang/.claude/rules/s.md"
-        run_pty "$lang" 'x\n'
-        check "abort $lang: exit 2, no claude rules row, local file kept" "[ \"\$(rc $lang)\" = 2 ] && [ -z \"\$(nondetail $lang)\" ] && grep -qx 'local $lang' '$C/$lang/.claude/rules/s.md'"
-    done
+    printf '## dot d\nmy edit %s\n' "$L" > "$C/$L/.claude/rules/d.md"
+    printf '## project p\nmy edit %s\n' "$L" > "$C/$L/.claude/rules/p.md"
+    run_pty 'a\na\n'
+    check "adopt $L: dotprofile rule written to the dotprofile and committed" "perl -pe 's/\r//' '$DP/claude/rules/d.md' | grep -qx 'my edit $L' && git -C '$DP' log -1 --format=%s | grep -q 'd.md'"
+    check "adopt $L: aitools rule written to the aitools working tree" "perl -pe 's/\r//' '$A/.claude/rules/p.md' | grep -qx 'my edit $L'"
+    check "adopt $L: DETAIL rows" "row 'DETAIL|claude rules|accept & adopt: d.md' && row 'DETAIL|claude rules|accept & adopt: p.md'"
+    # abort: exit 2 from the library, no claude rules row, the local file kept
+    printf '## shared s\nlocal %s\n' "$L" > "$C/$L/.claude/rules/s.md"
+    run_pty 'x\n'
+    check "abort $L: exit 2, no claude rules row, local file kept" "[ \"\$(rc)\" = 2 ] && [ -z \"\$(nondetail)\" ] && grep -qx 'local $L' '$C/$L/.claude/rules/s.md'"
 else
-    skip "adopt and abort on a pty (python3 not found)"
+    skip "adopt and abort on a pty (python3 not found; on Windows also pywinpty)"
 fi
 printf '## project p\n' > "$A/.claude/rules/p.md"
 
@@ -403,10 +439,7 @@ seed_payload() {
 REPO="$PAYLOAD"
 case_run payload seed_payload
 REPO="$A"
-for lang in sh ps; do
-    if [ "$lang" = ps ] && [ "$HAVE_PWSH" != "true" ]; then continue; fi
-    check "payload $lang: no adopt into a checkout without .git" "logged 'claude rules: s.md source=shared adopt=none' $lang && logged 'claude rules: p.md source=aitools adopt=none' $lang && logged 'claude rules: d.md source=dotprofile adopt=$DP/claude/rules/d.md' $lang"
-done
+check "payload $L: no adopt into a checkout without .git" "logged 'claude rules: s.md source=shared adopt=none' && logged 'claude rules: p.md source=aitools adopt=none' && logged 'claude rules: d.md source=dotprofile adopt=$NDP/claude/rules/d.md'"
 parity payload
 
 # ---------------------------------------------------------------------------
@@ -423,10 +456,11 @@ if $CASE_SENSITIVE_FS; then
     seed_dupcase() { harness a.md 'lower'; harness A.md 'upper'; }
     case_run dupcase seed_dupcase
     # The first in ordinal (byte) order wins on every locale: A.md (0x41) before
-    # a.md (0x61). Parity then requires pwsh to deploy the same file.
+    # a.md (0x61). No golden parity file: only Linux runs this case (macOS and
+    # Windows file systems are case-insensitive, so the .ps1 never runs it and
+    # macOS cannot write the golden file); the checks pin the result.
     check "case-only duplicate: the first wins, the second failed" "[ \"\$(rc)\" = 1 ] && [ \"\$(nondetail)\" = 'ERROR|claude rules|1 failed' ]"
     check "case-only duplicate: ordinal order, A.md deployed and a.md failed" "[ -f '$(R)/A.md' ] && [ ! -e '$(R)/a.md' ] && row 'DETAIL|claude rules|failed: a.md'"
-    parity dupcase
 else
     skip "case-only duplicate (case-insensitive file system)"
 fi
@@ -445,8 +479,7 @@ if $CAN_CHMOD_READ; then
     case_run unreadable seed_unreadable
     check "unreadable harness dir: ERROR row, exit 1" "[ \"\$(rc)\" = 1 ] && [ \"\$(nondetail)\" = 'ERROR|claude rules|cannot read harness rules' ]"
     parity unreadable
-    chmod 755 "$C/sh/.aitools/rules"
-    if [ -d "$C/ps/.aitools/rules" ]; then chmod 755 "$C/ps/.aitools/rules"; fi
+    chmod 755 "$C/$L/.aitools/rules"
 
     # Unreadable manifest (review RC-2): the fan-out still runs, the final row is ERROR
     seed_manifest_unreadable() { manifest 'a.md|shared'; harness a.md 'rule a'; chmod 000 "$H/.aitools/rules/.aitools-rules-manifest"; }
@@ -461,18 +494,18 @@ fi
 # the script still reaches its exit footer
 seed_nocreate() { harness a.md 'rule a'; mkdir -p "$H/.claude"; printf 'not a dir\n' > "$H/.claude/rules"; }
 case_run nocreate seed_nocreate
-check "cannot create rules dir: ERROR row, exit 1, file untouched" "[ \"\$(rc)\" = 1 ] && [ \"\$(nondetail)\" = 'ERROR|claude rules|cannot create rules dir' ] && grep -qx 'not a dir' '$C/sh/.claude/rules' && grep -q 'FAILED with' '$C/sh.out'"
+check "cannot create rules dir: ERROR row, exit 1, file untouched" "[ \"\$(rc)\" = 1 ] && [ \"\$(nondetail)\" = 'ERROR|claude rules|cannot create rules dir' ] && grep -qx 'not a dir' '$C/$L/.claude/rules' && grep -q 'FAILED with' '$C/$L.out'"
 parity nocreate
 # The dry run previews that error (audit B N3): same row, exit 1, nothing written
 case_run nocreate-dry seed_nocreate --dry-run -DryRun
-check "cannot create rules dir, dry run: same ERROR row, exit 1, file untouched" "[ \"\$(rc)\" = 1 ] && [ \"\$(nondetail)\" = 'ERROR|claude rules|cannot create rules dir' ] && grep -qx 'not a dir' '$C/sh/.claude/rules' && grep -q 'not a directory (dry run)' '$C/sh.out'"
+check "cannot create rules dir, dry run: same ERROR row, exit 1, file untouched" "[ \"\$(rc)\" = 1 ] && [ \"\$(nondetail)\" = 'ERROR|claude rules|cannot create rules dir' ] && grep -qx 'not a dir' '$C/$L/.claude/rules' && grep -q 'not a directory (dry run)' '$C/$L.out'"
 parity nocreate-dry
 
 # A directory at the manifest path is unreadable, not absent (audit B N5): the
 # fan-out runs, the manifest is a failed item, the final row is ERROR
 seed_manifest_dir() { harness a.md 'rule a'; mkdir -p "$H/.aitools/rules/.aitools-rules-manifest"; }
 case_run manifest-dir seed_manifest_dir
-check "manifest is a directory: unreadable, rules fanned out, final row ERROR, exit 1" "[ \"\$(rc)\" = 1 ] && [ -f '$(R)/a.md' ] && row 'ERROR|claude rules|cannot read rules manifest' && row 'DETAIL|claude rules|failed: .aitools-rules-manifest' && [ \"\$(nondetail)\" = 'ERROR|claude rules|1 failed' ] && ! grep -q 'No rules manifest' '$C/sh.out'"
+check "manifest is a directory: unreadable, rules fanned out, final row ERROR, exit 1" "[ \"\$(rc)\" = 1 ] && [ -f '$(R)/a.md' ] && row 'ERROR|claude rules|cannot read rules manifest' && row 'DETAIL|claude rules|failed: .aitools-rules-manifest' && [ \"\$(nondetail)\" = 'ERROR|claude rules|1 failed' ] && ! grep -q 'No rules manifest' '$C/$L.out'"
 parity manifest-dir
 
 printf '\n%d passed, %d failed, %d skipped\n' "$PASS" "$FAIL" "$SKIP"
