@@ -1,6 +1,6 @@
 # CI platform targeting: every script tested only where it runs
 
-Version 1.0 (2026-11-01). Owner: Session Commander e99e5ef9-9. Branch
+Version 1.1 (2026-11-01; v1.0 same day). Owner: Session Commander e99e5ef9-9. Branch
 `feature/ci-platform-targeting`, one PR (commander: "Branch + PR",
 "Everything at once").
 
@@ -107,6 +107,21 @@ Inventory 2026-11-01 (guard regex over every tracked script, excluding
 
 ## Status
 
+Version 1.1 (2026-11-01): PR #139 green on all three jobs (run
+41270206290 on b6d993d: linux 348 s, macOS 1,242 s, windows 1,595 s; no
+warning annotations). Ready for the commander's review; not merged.
+
 | Batch | State |
 |---|---|
-| B1-B7 | not started |
+| B1 | done: checkout@v7, macos-15, ubuntu-24.04, setup-python@v7.0.0, pty-run.py 30 s; the pwsh steps are gone from linux/macos |
+| B2 | done: `AITOOLS_PROFILE_TEST_ANY_OS` removed; `tests/os-guards` macOS 35/35, Windows 33/33 |
+| B3 | done: `tests/lib/platform-lib.sh`; b8-consumers converted |
+| B4 | done: every heavy suite converted by S3-Inst, S3-Deploy, S3-Skill, S3-Fan, S3-Cfg, S3-Prof (367 goldens; `user-init-harness.ps1` and `step4-driver.ps1` deleted) |
+| B5 | done: two fix-forward rounds (CI runs 41265193554, 41267819083); every cause was in the test harness, no script change |
+| B6 | done: pywinpty 3.1.2, hash-pinned, CI-only; interactive cases run on windows |
+| B7 | done, with one change: CLAUDE.md tests line and release notes v0.75.0. cross-platform.md got exemption rows and an enforcement paragraph instead of a test matrix; the matrix is this plan's "Platform targets" table |
+
+Open items A1 and A2 are still open (not in this PR). Follow-ups: PR #139
+"Follow-ups" (dotprofile `deploy/` rebuild after merge, Windows symlink /
+chmod / read-only coverage, the vacuous fakegit.calls check on windows,
+platform-lib helper consolidation, optional product hardening).
