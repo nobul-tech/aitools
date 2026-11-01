@@ -1,0 +1,17 @@
+alias	
+via	none
+key	
+owner	absent
+legacy	false
+environment	local
+machineId	11111111-2222
+hostname	elsewhere
+profileFile	<TMP>/idk/home/repos/aitools-nobul-jose/profile.json
+userRepoPath	<TMP>/idk/home/repos/aitools-nobul-jose
+userRepoVia	convention
+name	Jose
+company	nobul-tech
+gitName	Jose
+gitEmail	jose@nobul.tech
+github	nobul-jose
+error	no profile matches this machine (machine.id 11111111-2222, hostname elsewhere) -- run: aitools user init

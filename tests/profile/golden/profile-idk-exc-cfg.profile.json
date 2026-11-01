@@ -1,0 +1,38 @@
+{
+  "version": 2,
+  "identity": {
+    "github": "nobul-jose",
+    "email": "jose@nobul.tech",
+    "name": "Jose",
+    "company": "nobul-tech",
+    "git": {
+      "name": "Jose",
+      "email": "jose@nobul.tech"
+    }
+  },
+  "profiles": {
+    "3d4df2a5-7d91-5af9-9944-4feebaae3cf5": {
+      "alias": "nobul-mac",
+      "machine": {
+        "id": "3d4df2a5-7d91-5af9-9944-4feebaae3cf5",
+        "hostname": "nobul-mac",
+        "os": "darwin"
+      }
+    },
+    "0b1c2d3e-0000-1111-2222-333344445555": {
+      "alias": "laptop",
+      "company": "Nobul",
+      "machine": {
+        "id": "0b1c2d3e-0000-1111-2222-333344445555",
+        "hostname": "Joses-MBP",
+        "os": "darwin"
+      }
+    },
+    "old-pc": {
+      "machine": {
+        "hostname": "NewcoPC",
+        "os": "win32"
+      }
+    }
+  }
+}

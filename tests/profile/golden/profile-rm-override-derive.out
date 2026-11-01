@@ -1,0 +1,15 @@
+derived.githubUser	nobul-jose
+derived.userRepoPath	<TMP>/rm-id/home/repos/aitools-nobul-jose
+derived.machineId	
+derived.machineAlias	
+userRepoVia	convention
+via	override
+key	laptop
+owner	unregistered
+legacy	true
+company	Nobul
+machineId	3D4DF2A5-7D91-5AF9-9944-4FEEBAAE3CF5
+hostname	nobul-mac
+aliases	laptop, nobul-mac, workstation
+warn	profile "laptop" has no machine.id -- run: aitools user init (registers this machine)
+warn	machine alias from AITOOLS_MACHINE_ALIAS -- not saved to config.json

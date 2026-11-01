@@ -1,0 +1,16 @@
+slug	go
+alias	nobul-mac
+via	id
+key	nobul-mac
+owner	this
+legacy	true
+profileFile	<TMP>/exc/home/repos/aitools-nobul-jose/profile.json
+found	true
+platform	macos
+method	pkg-installer
+path	/usr/local/bin/go
+version	1.22.5
+decidedAt	2026-10-21T12:00:00Z
+decidedBy	setup-go
+reason	
+warn	profile "nobul-mac" is keyed by alias -- run: aitools-profile migrate (re-keys profiles by machine id)

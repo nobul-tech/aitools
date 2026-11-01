@@ -1,0 +1,4 @@
+path	<TMP>/urp-config-stale/home/repos/aitools-nobul-jose
+via	convention
+expected	
+warn	config.json userRepoPath does not exist: <TMP>/urp-config-stale/home/gone

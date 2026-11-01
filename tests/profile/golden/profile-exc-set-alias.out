@@ -1,0 +1,12 @@
+result	refused
+slug	go
+alias	laptop
+via	alias
+key	laptop
+owner	unregistered
+legacy	true
+profileFile	<TMP>/exc/home/repos/aitools-nobul-jose/profile.json
+committed	false
+pushed	false
+warn	profile "laptop" has no machine.id -- run: aitools user init (registers this machine)
+error	machine profile "laptop" is not registered to this machine -- run: aitools user init to remember tool choices

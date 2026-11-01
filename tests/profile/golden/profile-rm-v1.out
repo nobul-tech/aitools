@@ -1,0 +1,17 @@
+alias	
+via	none
+key	
+owner	absent
+legacy	false
+environment	local
+machineId	3D4DF2A5-7D91-5AF9-9944-4FEEBAAE3CF5
+hostname	nobul-mac
+profileFile	<TMP>/rm-v1/home/repos/aitools-nobul-jose/profile.json
+userRepoPath	<TMP>/rm-v1/home/repos/aitools-nobul-jose
+userRepoVia	convention
+name	
+company	
+gitName	
+gitEmail	
+github	
+error	profile.json is not v2

@@ -1,0 +1,9 @@
+result	failed
+key	
+alias	
+owner	
+ownerKey	
+claimed	
+machineId	
+hostname	
+error	profile.json not found (use --create): <TMP>/reg-create/home/none.json

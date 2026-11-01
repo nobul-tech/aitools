@@ -1,0 +1,17 @@
+alias	workstation
+via	hostname
+key	workstation
+owner	unregistered
+legacy	true
+environment	local
+machineId	0B1C2D3E-0000-1111-2222-333344445555
+hostname	newco-pc
+profileFile	<TMP>/rm-hostname/home/repos/aitools-nobul-jose/profile.json
+userRepoPath	<TMP>/rm-hostname/home/repos/aitools-nobul-jose
+userRepoVia	convention
+name	pepe
+company	nobul-tech
+gitName	Jose
+gitEmail	jose@nobul.tech
+github	nobul-jose
+warn	matched by hostname only (legacy) -- run: aitools user init (registers machine.id)

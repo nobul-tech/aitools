@@ -1,0 +1,18 @@
+alias	laptop
+via	id
+key	0b1c2d3e-0000-1111-2222-333344445555
+owner	this
+legacy	false
+environment	local
+machineId	0B1C2D3E-0000-1111-2222-333344445555
+hostname	nobul-mac
+profileFile	<TMP>/idk-cfg/home/repos/aitools-nobul-jose/profile.json
+userRepoPath	<TMP>/idk-cfg/home/repos/aitools-nobul-jose
+userRepoVia	convention
+name	Jose
+company	Nobul
+gitName	Jose
+gitEmail	jose@nobul.tech
+github	nobul-jose
+warn	config.json machineId "3d4df2a5-7d91-5af9-9944-4feebaae3cf5" disagrees with machine.id match "0b1c2d3e-0000-1111-2222-333344445555" -- machine.id wins
+warn	profile "laptop" was registered with hostname "Joses-MBP", this machine is "nobul-mac" -- renamed (run: aitools user init to update it), or a clone that shares machine id 0B1C2D3E-0000-1111-2222-333344445555

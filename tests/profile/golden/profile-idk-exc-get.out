@@ -1,0 +1,15 @@
+slug	go
+alias	nobul-mac
+via	id
+key	3d4df2a5-7d91-5af9-9944-4feebaae3cf5
+owner	this
+legacy	false
+profileFile	<TMP>/idk-exc/home/repos/aitools-nobul-jose/profile.json
+found	true
+platform	macos
+method	pkg-installer
+path	/usr/local/bin/go
+version	1.22.5
+decidedAt	2026-10-21T12:00:00Z
+decidedBy	setup-go
+reason	
