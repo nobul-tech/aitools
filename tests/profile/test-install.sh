@@ -19,13 +19,29 @@
 #   step3-*        Step 3 (resolve_repos_dir / Resolve-ReposDir): a relative path
 #                  made absolute; a path that cannot be created, or (bash) not
 #                  resolved, is one error and one ERROR row "aitools config"
-# Platform: macOS/Linux (pwsh runs the .ps1 blocks on any OS). Safe to re-run.
-# Usage: bash tests/profile/test-install.sh [--bash-only]
+#
+# Platform targeting (plans/ci-platform-targeting.md): each half runs only where
+# its installer runs. macOS/Linux run the bash blocks (aitools-install.sh with
+# aitools-lib.sh); Windows (Git Bash) runs the PowerShell blocks
+# (aitools-install.ps1 with aitools-lib.ps1) with native pwsh, paths in Windows
+# form (cygpath -m), HOME and USERPROFILE both set. There is no sh-vs-ps1 parity
+# comparison here: every check is an explicit expectation, the same text for
+# both languages, so the suite has no golden files.
+# Safe to re-run: an isolated HOME under a temp dir (removed on exit).
+# Usage: bash tests/profile/test-install.sh [--bash-only] [--help]
+#   --bash-only  accepted for compatibility: macOS/Linux always run only bash
 #   AITOOLS_TEST_BASH=/bin/bash runs the bash harness under another bash (macOS 3.2)
 
 set -euo pipefail
 
+if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
+    perl -ne 'print if $. >= 2 && $. <= 33' "$0"
+    exit 0
+fi
+
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# shellcheck source=../lib/platform-lib.sh
+. "$REPO/tests/lib/platform-lib.sh"
 WORK="$(mktemp -d)"
 cleanup() {
     # a case leaves a directory without permissions: restore before removing
@@ -34,13 +50,36 @@ cleanup() {
 }
 trap cleanup EXIT
 BASH_BIN="${AITOOLS_TEST_BASH:-bash}"
-USE_PS=true
-if [ "${1:-}" = "--bash-only" ] || ! command -v pwsh >/dev/null 2>&1; then USE_PS=false; fi
+LANG_RUN="$TEST_LANG"   # sh on macOS/Linux, ps1 on Windows
 
 PASS=0
 FAIL=0
 ok()  { PASS=$((PASS + 1)); printf '  ok   %s\n' "$1"; }
 bad() { FAIL=$((FAIL + 1)); printf '  FAIL %s\n' "$1"; }
+
+if [ "$LANG_RUN" = ps1 ] && ! command -v pwsh >/dev/null 2>&1; then
+    printf '  FAIL pwsh is not on PATH: the .ps1 installer blocks cannot be tested on Windows\n'
+    exit 1
+fi
+
+# np P -- native_path for a non-empty P ("" stays "")
+np() { if [ -n "$1" ]; then native_path "$1"; fi; }
+
+# from_native FILE -- Windows: rewrite, in place, the forms of $WORK that native
+# pwsh prints (C:/..., C:\..., JSON-escaped C:\\..., /c/...) back to $WORK, with
+# the separators after it turned into slashes, and remove CRs. A no-op elsewhere.
+from_native() {
+    [ "$TEST_PLATFORM" = windows ] || return 0
+    FN_POSIX="$WORK" FN_NATIVE="$(native_path "$WORK")" perl -pi -e '
+        BEGIN {
+            my $n = $ENV{FN_NATIVE}; (my $b = $n) =~ s{/}{\\}g; (my $j = $b) =~ s{\\}{\\\\}g;
+            my $u = $n; $u =~ s{^([A-Za-z]):}{"/" . lc($1)}e;
+            @fn_re = map { qr/\Q$_\E/i } grep { length } ($j, $b, $n, $u);
+        }
+        s/\r//g;
+        for my $re (@fn_re) { s{$re([^\s"\x27|()]*)}{my $r = $1; $r =~ s{\\\\}{/}g; $r =~ tr{\\}{/}; "$ENV{FN_POSIX}$r"}ge; }
+    ' "$1"
+}
 
 H="$WORK/home"
 
@@ -159,13 +198,20 @@ run_h() {
             WRITER="$WORK/writer.sh" WRITER_MODE="${WRITER_MODE:-quiet}" \
             "$BASH_BIN" "$WORK/harness.sh" "$REPO" "$mode" ${path:+"$path"}) > "$WORK/out.txt" 2>&1 || RC=$?
     else
-        (cd "$H" && env HOME="$H" AITOOLS_LOG_DIR="$H/.aitools/logs" AITOOLS_SUMMARY_FILE="$H/summary.txt" \
-            WRITER="$WORK/writer.ps1" WRITER_MODE="${WRITER_MODE:-quiet}" \
-            pwsh -NoProfile -File "$WORK/harness.ps1" -Repo "$REPO" -Mode "$mode" -ReposPath "$path") > "$WORK/out.txt" 2>&1 || RC=$?
+        # Native pwsh (Windows): Windows paths; MSYS argument conversion off, so
+        # Git Bash passes every argument as written
+        (cd "$H" && env HOME="$(native_path "$H")" USERPROFILE="$(native_path "$H")" \
+            AITOOLS_LOG_DIR="$(native_path "$H/.aitools/logs")" AITOOLS_SUMMARY_FILE="$(native_path "$H/summary.txt")" \
+            WRITER="$(native_path "$WORK/writer.ps1")" WRITER_MODE="${WRITER_MODE:-quiet}" \
+            MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' \
+            pwsh -NoProfile -NonInteractive -File "$(native_path "$WORK/harness.ps1")" -Repo "$(native_path "$REPO")" \
+            -Mode "$mode" -ReposPath "$(np "$path")") > "$WORK/out.txt" 2>&1 || RC=$?
+        from_native "$WORK/out.txt"
+        from_native "$H/summary.txt"
     fi
     perl -pi -e 's/\e\[[0-9;]*m//g; s/\r//g' "$WORK/out.txt"
     OUT="$WORK/out.txt"
-    SUM=$(cat "$H/summary.txt")
+    SUM=$(perl -pe 's/\r//g' "$H/summary.txt")
 }
 fresh() { rm -rf "$H"; mkdir -p "$H/.aitools/logs"; }
 want_end() {  # want_end NAME "errors=E warnings=W"
@@ -190,8 +236,8 @@ count_out() {  # count_out NAME TEXT N
 }
 
 IMPLS="bash"
-if $USE_PS; then IMPLS="bash ps"; fi
-printf 'installer Step 3 / Step 5 on the lib relay (pwsh: %s)\n' "$USE_PS"
+if [ "$LANG_RUN" = ps1 ]; then IMPLS="ps"; fi
+printf 'installer Step 3 / Step 5 on the lib relay (%s: %s)\n' "$TEST_PLATFORM" "$IMPLS"
 for impl in $IMPLS; do
     # A-1: a writer warning is counted, its lines reach deploy.jsonl and the console
     fresh; WRITER_MODE=warn run_h "$impl" step5
@@ -239,6 +285,9 @@ for impl in $IMPLS; do
     fresh; run_h "$impl" step3 repos
     got=$(perl -ne 'print "$1\n" if /^REPOS=(.*)$/' "$OUT")
     if [ "$got" = "$H/repos" ] || [ "$got" = "$(cd "$H" && pwd -P)/repos" ]; then ok "step3-relative ($impl): $got"
+    elif [ "$TEST_PLATFORM" = windows ] && [ -d "$H/repos" ] && printf '%s' "$got" | grep -Eq '^[A-Za-z]:[\\/].*[\\/]home[\\/]repos$'; then
+        # pwsh printed the temp root in another spelling (8.3 short name or long name) than cygpath
+        ok "step3-relative ($impl): $got (absolute, created)"
     else bad "step3-relative ($impl): '$got', want $H/repos"; perl -pe 's/^/       /' "$OUT"; fi
     want_sum "step3-relative ($impl)" ""
     # a path that cannot be created (under a file): one error, one row
@@ -251,8 +300,11 @@ done
 
 # A-17, bash: a relative path that exists but cannot be entered is not resolved.
 # (PowerShell resolves it with GetFullPath, which does not enter the directory.)
-# Root ignores the missing permission, so the case is skipped as root.
-if [ "$(id -u)" -eq 0 ]; then
+# Root ignores the missing permission, so the case is skipped as root. bash only:
+# macOS/Linux.
+if [ "$LANG_RUN" != sh ]; then
+    printf '  skip step3-unresolvable (bash installer only: macOS/Linux)\n'
+elif [ "$(id -u)" -eq 0 ]; then
     printf '  skip step3-unresolvable (running as root)\n'
 else
     fresh; mkdir -p "$H/locked"; chmod 000 "$H/locked"
@@ -263,6 +315,6 @@ else
     want_sum "step3-unresolvable (bash)" "ERROR|aitools config|repos path not absolute"
 fi
 
-printf '\n%s passed, %s failed\n' "$PASS" "$FAIL"
+printf '\n%s passed, %s failed (%s: %s)\n' "$PASS" "$FAIL" "$TEST_PLATFORM" "$IMPLS"
 if [ "$FAIL" -gt 0 ]; then exit 1; fi
 exit 0
