@@ -1,0 +1,5 @@
+# exit code
+0
+# skills tree (path md5 [x]; symlinks not listed)
+mine/SKILL.md d92bf619dc8282f474be4bfbce48183f
+# summary rows (ACTION and skills, sorted)

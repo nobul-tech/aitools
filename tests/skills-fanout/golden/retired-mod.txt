@@ -1,0 +1,9 @@
+# exit code
+0
+# skills tree (path md5 [x]; symlinks not listed)
+a/SKILL.md 9ebae5e3944e6575a4f94a86bc6da9c2
+gone/SKILL.md f8a1c341da1bb523e5920c47e94d6334
+# summary rows (ACTION and skills, sorted)
+ACTION||Claude Code still loads retired skills in ~/.claude/skills: gone -- delete them unless you wrote them
+DETAIL|claude skills|added: a/SKILL.md
+WARN|claude skills|1 added
