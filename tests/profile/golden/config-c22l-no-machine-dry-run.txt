@@ -1,0 +1,14 @@
+exit 0
+-- summary rows
+OK|aitools config|dry-run: would update
+-- config.json
+{
+  "version": 2,
+  "reposPath": "<TMP>/home/repos",
+  "repoPath": "<TMP>/home/repos/aitools",
+  "custom": { "keep": true },
+  "googleDrives": [ { "path": "/gd", "account": "a@b.c", "label": "" } ],
+  "userRepoPath": "<TMP>/home/repos/aitools-nobul-jose",
+  "machineAlias": "new-mac",
+  "machineId": "bbbbbbbb-5555-6666-7777-888888888888"
+}
