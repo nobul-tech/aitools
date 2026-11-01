@@ -62,19 +62,47 @@ if [ "$LANG_RUN" = ps1 ] && ! command -v pwsh >/dev/null 2>&1; then
     exit 1
 fi
 
-# np P -- native_path for a non-empty P ("" stays "")
-np() { if [ -n "$1" ]; then native_path "$1"; fi; }
+# np P -- P in Windows form ("" stays ""). A path under $WORK gets the native
+# $WORK prefix by string replacement: cygpath refuses a path whose parent is a
+# file ("Not a directory"), which step3-uncreatable passes on purpose (CI run
+# 41265193554)
+NWORK="$(native_path "$WORK")"
+np() {
+    if [ -z "$1" ]; then return 0; fi
+    case "$1" in
+        "$WORK"/*) printf '%s%s' "$NWORK" "${1#"$WORK"}" ;;
+        *) native_path "$1" ;;
+    esac
+}
 
-# from_native FILE -- Windows: rewrite, in place, the forms of $WORK that native
-# pwsh prints (C:/..., C:\..., JSON-escaped C:\\..., /c/...) back to $WORK, with
-# the separators after it turned into slashes, and remove CRs. A no-op elsewhere.
+# WORK_SPELLINGS -- Windows: every spelling of $WORK a native program may print,
+# one per line: cygpath's default form, its long form and its 8.3 short form.
+# The CI temp root is both C:/Users/RUNNER~1/... and C:/Users/runneradmin/...;
+# pwsh prints whichever its API returns (CI run 41265193554). Empty elsewhere.
+WORK_SPELLINGS=""
+if [ "$TEST_PLATFORM" = windows ]; then
+    for ws_opt in "" -l -s; do
+        # shellcheck disable=SC2086  # ws_opt is empty or one option
+        if ws="$(cygpath -m $ws_opt "$WORK")" && [ -n "$ws" ]; then WORK_SPELLINGS="$WORK_SPELLINGS$ws"$'\n'
+        else printf '  note: cygpath -m %s gave no spelling of %s (that spelling is not mapped back)\n' "$ws_opt" "$WORK"; fi
+    done
+fi
+
+# from_native FILE -- Windows: rewrite, in place, every spelling of $WORK that
+# native pwsh prints (each of WORK_SPELLINGS as C:/..., C:\..., JSON-escaped
+# C:\\... and /c/...) back to $WORK, with the separators after it turned into
+# slashes, and remove CRs. A no-op elsewhere.
 from_native() {
     [ "$TEST_PLATFORM" = windows ] || return 0
-    FN_POSIX="$WORK" FN_NATIVE="$(native_path "$WORK")" perl -pi -e '
+    FN_POSIX="$WORK" FN_NATIVES="$WORK_SPELLINGS" perl -pi -e '
         BEGIN {
-            my $n = $ENV{FN_NATIVE}; (my $b = $n) =~ s{/}{\\}g; (my $j = $b) =~ s{\\}{\\\\}g;
-            my $u = $n; $u =~ s{^([A-Za-z]):}{"/" . lc($1)}e;
-            @fn_re = map { qr/\Q$_\E/i } grep { length } ($j, $b, $n, $u);
+            my %seen;
+            for my $n (grep { length } split /\n/, $ENV{FN_NATIVES}) {
+                (my $bs = $n) =~ s{/}{\\}g; (my $js = $bs) =~ s{\\}{\\\\}g;
+                my $us = $n; $us =~ s{^([A-Za-z]):}{"/" . lc($1)}e;
+                $seen{$_} = 1 for grep { length } ($js, $bs, $n, $us);
+            }
+            @fn_re = map { qr/\Q$_\E/i } sort { length($b) <=> length($a) } keys %seen;
         }
         s/\r//g;
         for my $re (@fn_re) { s{$re([^\s"\x27|()]*)}{my $r = $1; $r =~ s{\\\\}{/}g; $r =~ tr{\\}{/}; "$ENV{FN_POSIX}$r"}ge; }

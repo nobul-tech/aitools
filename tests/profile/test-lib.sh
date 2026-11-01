@@ -86,16 +86,34 @@ impl_runs() {
     esac
 }
 
-# from_native FILE -- Windows: rewrite, in place, the forms of $WORK that native
-# pwsh prints (C:/..., C:\..., JSON-escaped C:\\..., /c/...) back to $WORK, with
-# the separators after it turned into slashes, and remove CRs. A no-op elsewhere.
+# WORK_SPELLINGS -- Windows: every spelling of $WORK a native program may print,
+# one per line: cygpath's default form, its long form and its 8.3 short form.
+# The CI temp root is both C:/Users/RUNNER~1/... and C:/Users/runneradmin/...;
+# pwsh prints whichever its API returns (CI run 41265193554). Empty elsewhere.
+WORK_SPELLINGS=""
+if [ "$TEST_PLATFORM" = windows ]; then
+    for ws_opt in "" -l -s; do
+        # shellcheck disable=SC2086  # ws_opt is empty or one option
+        if ws="$(cygpath -m $ws_opt "$WORK")" && [ -n "$ws" ]; then WORK_SPELLINGS="$WORK_SPELLINGS$ws"$'\n'
+        else printf '  note: cygpath -m %s gave no spelling of %s (that spelling is not mapped back)\n' "$ws_opt" "$WORK"; fi
+    done
+fi
+
+# from_native FILE -- Windows: rewrite, in place, every spelling of $WORK that
+# native pwsh prints (each of WORK_SPELLINGS as C:/..., C:\..., JSON-escaped
+# C:\\... and /c/...) back to $WORK, with the separators after it turned into
+# slashes, and remove CRs. A no-op elsewhere.
 from_native() {
     [ "$TEST_PLATFORM" = windows ] || return 0
-    FN_POSIX="$WORK" FN_NATIVE="$(native_path "$WORK")" perl -pi -e '
+    FN_POSIX="$WORK" FN_NATIVES="$WORK_SPELLINGS" perl -pi -e '
         BEGIN {
-            my $n = $ENV{FN_NATIVE}; (my $b = $n) =~ s{/}{\\}g; (my $j = $b) =~ s{\\}{\\\\}g;
-            my $u = $n; $u =~ s{^([A-Za-z]):}{"/" . lc($1)}e;
-            @fn_re = map { qr/\Q$_\E/i } grep { length } ($j, $b, $n, $u);
+            my %seen;
+            for my $n (grep { length } split /\n/, $ENV{FN_NATIVES}) {
+                (my $bs = $n) =~ s{/}{\\}g; (my $js = $bs) =~ s{\\}{\\\\}g;
+                my $us = $n; $us =~ s{^([A-Za-z]):}{"/" . lc($1)}e;
+                $seen{$_} = 1 for grep { length } ($js, $bs, $n, $us);
+            }
+            @fn_re = map { qr/\Q$_\E/i } sort { length($b) <=> length($a) } keys %seen;
         }
         s/\r//g;
         for my $re (@fn_re) { s{$re([^\s"\x27|()]*)}{my $r = $1; $r =~ s{\\\\}{/}g; $r =~ tr{\\}{/}; "$ENV{FN_POSIX}$r"}ge; }
@@ -1008,8 +1026,11 @@ printf '#!/usr/bin/env bash\n: > "%s/tmpro/rc.tmp"\nprintf "%%s\\n" "%s/tmpro/rc
 chmod +x "$WORK/mkfail/mktemp" "$WORK/mkro/mktemp"
 relay_case relay-run-mktemp-fail run 0 "rc=1 child_rc=1
 cw=0 ce=0 warnings=0 errors=1" "-" "ERROR|child tool|not run (mktemp failed)" bash "FAKEBIN=$WORK/mkfail"
-# Review A n3: root ignores the read-only directory (Claude Code web runs as root)
-if [ "$(id -u)" -eq 0 ]; then
+# Review A n3: root ignores the read-only directory (Claude Code web runs as root).
+# bash only (the relay's own temp file in aitools-lib.sh): macOS/Linux
+if [ "$LANG_RUN" != sh ]; then
+    printf '  skip relay-run-rm-fail (bash relay temp file: macOS/Linux)\n'
+elif [ "$(id -u)" -eq 0 ]; then
     printf '  skip relay-run-rm-fail (running as root: a read-only directory does not stop rm)\n'
 else
     relay_case relay-run-rm-fail run 7 "rc=0 child_rc=0

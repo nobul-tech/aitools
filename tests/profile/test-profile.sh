@@ -69,16 +69,34 @@ if [ "$LANG_RUN" = ps1 ] && ! command -v pwsh >/dev/null 2>&1; then
     exit 1
 fi
 
-# from_native FILE -- Windows: rewrite, in place, the forms of $WORK that native
-# pwsh prints (C:/..., C:\..., JSON-escaped C:\\..., /c/...) back to $WORK, with
-# the separators after it turned into slashes, and remove CRs. A no-op elsewhere.
+# WORK_SPELLINGS -- Windows: every spelling of $WORK a native program may print,
+# one per line: cygpath's default form, its long form and its 8.3 short form.
+# The CI temp root is both C:/Users/RUNNER~1/... and C:/Users/runneradmin/...;
+# pwsh prints whichever its API returns (CI run 41265193554). Empty elsewhere.
+WORK_SPELLINGS=""
+if [ "$TEST_PLATFORM" = windows ]; then
+    for ws_opt in "" -l -s; do
+        # shellcheck disable=SC2086  # ws_opt is empty or one option
+        if ws="$(cygpath -m $ws_opt "$WORK")" && [ -n "$ws" ]; then WORK_SPELLINGS="$WORK_SPELLINGS$ws"$'\n'
+        else printf '  note: cygpath -m %s gave no spelling of %s (that spelling is not mapped back)\n' "$ws_opt" "$WORK"; fi
+    done
+fi
+
+# from_native FILE -- Windows: rewrite, in place, every spelling of $WORK that
+# native pwsh prints (each of WORK_SPELLINGS as C:/..., C:\..., JSON-escaped
+# C:\\... and /c/...) back to $WORK, with the separators after it turned into
+# slashes, and remove CRs. A no-op elsewhere.
 from_native() {
     [ "$TEST_PLATFORM" = windows ] || return 0
-    FN_POSIX="$WORK" FN_NATIVE="$NWORK" perl -pi -e '
+    FN_POSIX="$WORK" FN_NATIVES="$WORK_SPELLINGS" perl -pi -e '
         BEGIN {
-            my $n = $ENV{FN_NATIVE}; (my $b = $n) =~ s{/}{\\}g; (my $j = $b) =~ s{\\}{\\\\}g;
-            my $u = $n; $u =~ s{^([A-Za-z]):}{"/" . lc($1)}e;
-            @fn_re = map { qr/\Q$_\E/i } grep { length } ($j, $b, $n, $u);
+            my %seen;
+            for my $n (grep { length } split /\n/, $ENV{FN_NATIVES}) {
+                (my $bs = $n) =~ s{/}{\\}g; (my $js = $bs) =~ s{\\}{\\\\}g;
+                my $us = $n; $us =~ s{^([A-Za-z]):}{"/" . lc($1)}e;
+                $seen{$_} = 1 for grep { length } ($js, $bs, $n, $us);
+            }
+            @fn_re = map { qr/\Q$_\E/i } sort { length($b) <=> length($a) } keys %seen;
         }
         s/\r//g;
         for my $re (@fn_re) { s{$re([^\s"\x27|()]*)}{my $r = $1; $r =~ s{\\\\}{/}g; $r =~ tr{\\}{/}; "$ENV{FN_POSIX}$r"}ge; }
@@ -99,7 +117,7 @@ ID_OTHER="0B1C2D3E-0000-1111-2222-333344445555"
 # as the resolver of this platform reads it: for paths inside fixture files)
 fresh_home() {
     H="$WORK/$1/home"
-    HN="$(native_path "$H")"
+    HN="$(to_native "$H")"
     mkdir -p "$H/repos" "$H/.aitools"
 }
 
@@ -160,11 +178,15 @@ run_impl() {
         # shellcheck disable=SC2086  # CASE_ENV is a list of VAR=value words
         env HOME="$H" AITOOLS_LOG_DIR="$H/.aitools/logs" $CASE_ENV "$BASH_BIN" "$SH" "$@" > "$out" 2>"$out.err" || RC=$?
     else
-        local a nargs=() nenv
+        local a nargs=() nenv hn
         for a in "$@"; do nargs+=("$(to_native "$a")"); done
         nenv="$(to_native "$CASE_ENV")"
+        # The case HOME comes from H here, never from a saved HN: a block that
+        # switches H and back (dc-host) left HN on the other home (CI run
+        # 41265193554: exc-set-same .. exc-set-nopush ran against dc-host)
+        hn="$(to_native "$H")"
         # shellcheck disable=SC2086  # nenv is a list of VAR=value words
-        env HOME="$HN" USERPROFILE="$HN" AITOOLS_LOG_DIR="$HN/.aitools/logs" $nenv MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' \
+        env HOME="$hn" USERPROFILE="$hn" AITOOLS_LOG_DIR="$hn/.aitools/logs" $nenv MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' \
             pwsh -NoProfile -NonInteractive -File "$(native_path "$PS")" ${nargs[@]+"${nargs[@]}"} > "$out" 2>"$out.err" || RC=$?
         from_native "$out"
         from_native "$out.err"
@@ -796,6 +818,7 @@ case_run dc-hostname-not-saved 0 derive-config "${M[@]}"
 expect via hostname; expect derived.machineAlias ""
 expect_line '^warn\tmachine alias "nobul-mac" matched by hostname only -- not saved to config.json$'
 H="$EXC_H"
+HN="$(to_native "$H")"
 
 # Without --decided-at: an identical re-keep is unchanged; a changed one gets a new time
 SET_NOW=(exception-set --slug go --platform macos --method pkg-installer --path /usr/local/bin/go --version 1.22.5 --by setup-go)
