@@ -1,0 +1,8 @@
+exit code: 0
+# ~/.cursor/rules (path md5)
+extra.mdc 3082525a65314c7921dc608677a41c4c
+s.mdc bc72d5ec505f3be28e37bd6f5577f018
+# summary rows
+DETAIL|cursor rules|added: extra.mdc
+DETAIL|cursor rules|added: s.mdc
+OK|cursor rules|2 added

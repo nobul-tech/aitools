@@ -1,0 +1,6 @@
+exit code: 0
+# ~/.cursor/rules (path md5)
+p.mdc b6241c7f943cda574d890a56dd819753
+# summary rows
+ACTION||Cursor still loads retired rules in ~/.cursor/rules: p.mdc -- delete them unless you wrote them
+WARN|cursor rules|n/a (nothing to deploy)

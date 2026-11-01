@@ -1,9 +1,13 @@
 # convert-rule.ps1 -- test helper: run ConvertTo-CursorRule from scripts/setup-user-cursor.ps1
 # on one file and write the result (UTF-8, no BOM) to an output file. The function
 # is loaded from the script's AST, so the script body (and its Windows OS guard)
-# never runs. Used by test-rules-fanout-cursor.sh for the bash/PS1 parity check.
-# With a rule name, the aitools-fanout marker is written (as the fan-out does).
-# Platform: any pwsh 7 (macOS, Linux, Windows).
+# never runs: a unit-test entry to one function, not a run of the script.
+# Used by test-rules-fanout-cursor.sh on Windows only (plans/ci-platform-targeting.md:
+# the .ps1 code is tested where it runs): its converter cases compare the output
+# with the .want texts the bash converter must also give, and it writes the
+# converted fixtures of the fan-out cases. With a rule name, the aitools-fanout
+# marker is written (as the fan-out does).
+# Platform: Windows (pwsh 7; called from Git Bash with native paths).
 # Usage: pwsh -NoProfile -File convert-rule.ps1 <setup-user-cursor.ps1> <in-file> <out-file> [rule-name]
 param([string]$Script, [string]$InFile, [string]$OutFile, [string]$Name = "")
 $ErrorActionPreference = "Stop"
