@@ -47,8 +47,13 @@ When you're uncertain, ask — and suggest an answer with the question.
 - `registries/` — governed JSON registries (tool registry, tool-ops, incidents,
   glossary, frameworks); read and write them only through their skills.
 - `tests/` — test suites, one directory per area. CI (`.github/workflows/check.yml`)
-  runs every suite (`tests/**/test-*.sh`) and fails when one has no CI step (FO-0);
-  the Windows job runs a subset. Run the suites your change touches before pushing.
+  runs every suite (`tests/**/test-*.sh`) and fails when one has no CI step (FO-0).
+  A script is tested only where its OS guard lets it run: linux and macOS run the
+  `.sh` halves, Windows runs the `.ps1` halves on native pwsh, and cross-platform
+  scripts (hooks, Python, the bash entry points) run on all three. sh/ps1 parity is
+  checked against committed golden files (`tests/lib/platform-lib.sh`), and
+  `tests/os-guards` proves every guard refuses the wrong platform
+  (`plans/ci-platform-targeting.md`). Run the suites your change touches before pushing.
 - `deploy/` — the frozen, historical shared baseline (no longer regenerated; `aitools`
   resets it to HEAD before each pull). `build-deploy.sh` writes each user's
   personalized MDM scripts to the dotprofile's `deploy/` (`aitools-<user>/deploy/`).
