@@ -150,12 +150,26 @@ build() {
 
 # Failing git for the MDM runs: the MDM path must not need git. One exception:
 # the terminal review menu displays its diff with `git diff --no-index` (#81);
-# without git it shows "(diff unavailable)" and the menu still works. A .cmd
-# twin for native pwsh on Windows, which cannot run an extensionless script.
+# without git it shows "(diff unavailable)" and the menu still works.
+# Windows: a git.cmd twin records `& git` calls from native pwsh, which cannot
+# run an extensionless script. The review diff starts git through .NET
+# ProcessStartInfo("git"), which finds only git.exe (CI run 41267819083: it
+# found the real one), so fakegit/git.exe is a copy of where.exe: it rejects
+# git's "-c ..." arguments and exits 2 (as Stub-Git-Fail in
+# tests/managed-files/test-managed-files.ps1). Calls to that git.exe are not
+# recorded in fakegit.calls; they fail, which is what the checks need.
 mkdir -p "$TMP_ROOT/fakegit"
 printf '#!/bin/sh\necho "$*" >> "%s/fakegit.calls"\nexit 99\n' "$TMP_ROOT" > "$TMP_ROOT/fakegit/git"
 printf '@echo %%*>> "%s/fakegit.calls"\r\n@exit /b 99\r\n' "$(native_path "$TMP_ROOT")" > "$TMP_ROOT/fakegit/git.cmd"
 chmod +x "$TMP_ROOT/fakegit/git"
+FAKE_GIT_EXE=true
+if [ "$TEST_PLATFORM" = windows ]; then
+    WHERE_EXE="$(cygpath -u "${SYSTEMROOT:-C:\\Windows}")/System32/where.exe"
+    if ! cp "$WHERE_EXE" "$TMP_ROOT/fakegit/git.exe"; then
+        printf 'WARN cannot copy %s to fakegit/git.exe: pwsh can still find the real git.exe\n' "$WHERE_EXE"
+        FAKE_GIT_EXE=false
+    fi
+fi
 
 # ps_args ARGS...: the .sh flags as the .ps1 spells them, one per line
 ps_args() {
@@ -428,8 +442,12 @@ if $HAVE_PTY; then
     perl -pe 's/\e\[[0-9;?]*[A-Za-z]//g; s/\r//g' "$OUT" > "$OUT.plain"
     check "terminal review (MDM): overwrite offered, adopt and merge not; skip keeps LOCAL" \
         "[ \"\$(rc_of pty-mdm)\" = 0 ] && grep -q '\[o\]verwrite' '$OUT.plain' && ! grep -q '\[a\]ccept & adopt' '$OUT.plain' && ! grep -q '\[m\]erge & adopt' '$OUT.plain' && grep -qx 'local edit' '$TMP_ROOT/eq-mdm/.aitools/rules/user1.md' && grep -q '^WARN|harness files|1 skipped' '$TMP_ROOT/pty-mdm.summary'"
-    check "terminal review (MDM) without git: diff unavailable, menu still shown" \
-        "grep -q 'diff unavailable' '$OUT.plain' && grep -q '\[o\]verwrite' '$OUT.plain'"
+    if $FAKE_GIT_EXE; then
+        check "terminal review (MDM) without git: diff unavailable, menu still shown" \
+            "grep -q 'diff unavailable' '$OUT.plain' && grep -q '\[o\]verwrite' '$OUT.plain'"
+    else
+        printf 'SKIP terminal review without git (no fake git.exe: pwsh finds the real git)\n'; SKIP=$((SKIP + 1))
+    fi
 else
     printf 'SKIP terminal review case (no pseudo-terminal: python3 missing, or pywinpty not installed on Windows)\n'; SKIP=$((SKIP + 1))
 fi
@@ -527,10 +545,26 @@ PS_TMPDIR="$TMP_ROOT/pstmp/" run mdm record
 check "damaged record: exit 1, ERROR row, that file not deployed, the others are" \
     "[ \"\$(rc_of record-mdm)\" = 1 ] && grep -q '^ERROR|harness files|1 embedded file(s) damaged' '$TMP_ROOT/record-mdm.summary' && grep -q 'user1.md is damaged' '$TMP_ROOT/record-mdm.out' && [ ! -e '$TMP_ROOT/record-mdm/.aitools/rules/user1.md' ] && [ -f '$TMP_ROOT/record-mdm/.aitools/rules/user2.md' ]"
 if [ "$LANG_RUN" = ps1 ]; then
-    # .ps1: the stage directory is removed in a finally block, also on exit 1
-    perl -pe 's{\\}{/}g' "$TMP_ROOT/record-mdm.out" > "$TMP_ROOT/record-mdm.out.slash"
-    check "ps1 exit 1 after unpacking: the stage directory was created there and removed (finally)" \
-        "grep -qF 'unpacked in $(native_path "$TMP_ROOT/pstmp")/aitools-harness-' '$TMP_ROOT/record-mdm.out.slash' && [ -z \"\$(ls -A '$TMP_ROOT/pstmp')\" ]"
+    # .ps1: the stage directory is removed in a finally block, also on exit 1.
+    # Where it was made: the "unpacked in" path's parent is pstmp. The same
+    # directory is compared with -ef (device and inode), not by spelling: .NET
+    # may print an 8.3 short name or a long one, with \ (CI run 41267819083).
+    # Removed: no aitools-harness-* entry is left in pstmp (other temp files that
+    # pwsh itself makes there are not this script's).
+    STAGE_W=$(perl -ne 's/\e\[[0-9;?]*[A-Za-z]//g; if (/unpacked in (\S+)/) { print $1; exit }' "$TMP_ROOT/record-mdm.out")
+    STAGE_P="$STAGE_W"
+    if [ -n "$STAGE_W" ] && [ "$TEST_PLATFORM" = windows ]; then STAGE_P="$(cygpath -u "$STAGE_W")"; fi
+    stage_ok() {
+        [ -n "$STAGE_W" ] || return 1
+        case "${STAGE_P##*/}" in aitools-harness-*) ;; *) return 1 ;; esac
+        [ "${STAGE_P%/*}" -ef "$TMP_ROOT/pstmp" ] || return 1
+        ! ls -A "$TMP_ROOT/pstmp" | grep -q '^aitools-harness-'
+    }
+    check "ps1 exit 1 after unpacking: the stage directory was created there and removed (finally)" "stage_ok"
+    if ! stage_ok; then
+        printf '      | stage path from the output: %s\n      | pstmp holds:\n' "${STAGE_W:-(no 'unpacked in' line)}"
+        ls -A "$TMP_ROOT/pstmp" | perl -pe 's/^/      |   /'
+    fi
 fi
 # A CRLF copy of the payload (Windows checkout with autocrlf) still verifies
 restore_bad
