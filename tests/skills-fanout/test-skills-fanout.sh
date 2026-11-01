@@ -17,8 +17,9 @@
 # ".ps1 scripts only run on windows"): each case runs ONE language, the one the
 # scripts' OS guards allow here. macOS/Linux run setup-user-claude.sh,
 # setup-user-cursor.sh and deploy-harness.sh; Windows (Git Bash) runs the .ps1
-# scripts with native pwsh (paths via native_path, HOME and USERPROFILE both
-# set, .cmd twins of the stubs). No guard is bypassed: the real scripts run.
+# scripts with native pwsh (paths via native_path; HOME and USERPROFILE both
+# set, in Windows form C:\... as Windows sets USERPROFILE; .cmd twins of the
+# stubs). No guard is bypassed: the real scripts run.
 # Parity between the halves: each parity point writes one record (exit code;
 # the skills tree as "path md5 [x]", relative, LC_ALL=C sorted, a backup file
 # once as "path.bak.TS (backup)", symlinks left out -- they are checked
@@ -167,13 +168,40 @@ manifest() {
     } > "$H/.aitools/skills/.aitools-skills-manifest"
 }
 
+# win_path P: P in Windows form (C:\..., backslashes) on Windows, unchanged
+# elsewhere. HOME and USERPROFILE get this form because Windows sets USERPROFILE
+# that way: with C:/... (native_path) the lib's "~/" display of a path under the
+# home directory never matches (windows CI run 41265193554: the ACTION rows said
+# HOME/.claude/skills instead of ~/.claude/skills).
+win_path() {
+    if [ "$TEST_PLATFORM" = windows ] && command -v cygpath >/dev/null 2>&1; then
+        cygpath -w "$1"
+    else
+        printf '%s' "$1"
+    fi
+}
+# tmp_forms: the temp root in every form a log may print it, one per line: POSIX;
+# on Windows also native (C:/...) and native with long names (C:/Users/runneradmin
+# for C:/Users/RUNNER~1)
+tmp_forms() {
+    local f
+    printf '%s\n' "$TMP_ROOT"
+    [ "$TEST_PLATFORM" = windows ] || return 0
+    for f in -m "-m -l"; do
+        # shellcheck disable=SC2086  # $f is one or two cygpath flags
+        if ! cygpath $f "$TMP_ROOT"; then printf 'warn: cygpath %s failed for %s\n' "$f" "$TMP_ROOT" >&2; fi
+        printf '\n'
+    done
+}
+TMP_FORMS="$(tmp_forms)"
+
 # run_env H SUMMARY [VAR=value...]: sets E, the env command of a run under HOME H
 # (the same words for both languages; paths native on Windows, unchanged elsewhere)
 run_env() {
     local h="$1" s="$2"; shift 2
     E=(env -u AITOOLS_FORCE -u AITOOLS_DRY_RUN -u AITOOLS_USER_REPO_PATH -u AITOOLS_PROFILE_FILE
         -u AITOOLS_PROFILE_SH -u AITOOLS_PROFILE_PS1
-        HOME="$(native_path "$h")" USERPROFILE="$(native_path "$h")" AITOOLS_LOG_DIR="$(native_path "$h/logs")"
+        HOME="$(win_path "$h")" USERPROFILE="$(win_path "$h")" AITOOLS_LOG_DIR="$(native_path "$h/logs")"
         AITOOLS_SUMMARY_FILE="$(native_path "$s")" GIT_CONFIG_GLOBAL="$(native_path "$h/.gitconfig")"
         GIT_CONFIG_NOSYSTEM=1 "$@")
 }
@@ -246,13 +274,21 @@ rc() { cat "$C/${1:-$L}.rc"; }
 row() { grep -qxF "$1" "$C/${2:-$L}.summary"; }                  # exact summary row
 nondetail() { grep -F '|claude skills|' "$C/${1:-$L}.summary" | grep -v '^DETAIL' | tail -n 1; }
 S() { printf '%s' "$C/${1:-$L}/.claude/skills"; }                 # the deployed skills dir
-# lognorm [LANG]: the run's log files, CR removed, the temp root as <TMP> with /
-# separators (tests/lib/platform-lib.sh normalization), so one expected text
-# matches the .sh log and the native-path .ps1 log
+# lognorm [LANG]: the run's log files, CR removed, every backslash a slash, the
+# temp root (any form, tmp_forms; case-insensitive) as <TMP>, so one expected
+# text matches the .sh log and the .ps1 log with its Windows paths. A path the
+# .ps1 builds from $PSScriptRoot or GetFullPath can come back in a form other
+# than the one the suite passed (windows CI run 41265193554: the adopt targets
+# under the aitools checkout did not normalize with the lib's two forms).
 lognorm() {
     local f
     for f in "$C/${1:-$L}/logs/"*.log; do
-        if [ -f "$f" ]; then _golden_normalize "$f"; fi
+        [ -f "$f" ] || continue
+        TMPF="$TMP_FORMS" perl -pe '
+            BEGIN { @t = sort { length($b) <=> length($a) } grep { length } split /\n/, $ENV{TMPF} }
+            s/\r//g; tr{\\}{/};
+            for my $t (@t) { s/\Q$t\E/<TMP>/gi }
+        ' "$f"
     done
 }
 logged() { lognorm "${2:-$L}" | grep -qF -- "$1"; }      # in the run's log files (none: no match)
