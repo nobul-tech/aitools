@@ -31,7 +31,9 @@
 # checks the generated files. The generated and dev deploy-harness run only
 # where their OS guard allows: deploy-harness.sh on macOS/Linux,
 # deploy-harness.ps1 (+ deploy-harness.payload) on Windows with native pwsh
-# (HOME and USERPROFILE set, native paths, .cmd stubs on PATH). Dev and MDM
+# (HOME and USERPROFILE set, native paths, .cmd stubs on PATH). Windows builds
+# also get USERPROFILE (their resolver runs pwsh) and the dotprofile as
+# AITOOLS_USER_REPO_PATH in C:/... form. Dev and MDM
 # are compared on the same machine in the same language; parity between the
 # languages: the normalized summary rows of the equivalence and config.json
 # runs must equal tests/deploy-harness-mdm/golden/ (tests/lib/platform-lib.sh
@@ -47,7 +49,7 @@
 set -uo pipefail
 
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
-    perl -ne 'print if $. >= 2 && $. <= 45' "$0"
+    perl -ne 'print if $. >= 2 && $. <= 47' "$0"
     exit 0
 fi
 if [ "${1:-}" = "--bash-only" ]; then shift; fi
@@ -118,12 +120,28 @@ write_config() {
         "$(cfg_path "$TMP_ROOT" "$form")" "$(cfg_path "$ROOT" "$form")" "$(cfg_path "$DOT" "$form")" > "$1/.aitools/config.json"
 }
 
+# run_build HOME_DIR DOTPROFILE BUILD_SCRIPT -- one build-deploy.sh run, output to
+# $OUT. HOME and USERPROFILE are both the isolated HOME: on Windows the
+# dotprofile resolver runs aitools-profile.ps1 through pwsh, whose $HOME follows
+# USERPROFILE, so HOME alone let it read the runner's real config.json (CI run
+# 41265193554: "No dotprofile found"). On Windows the dotprofile is passed as
+# AITOOLS_USER_REPO_PATH in C:/... form, the way scripts/aitools passes it; on
+# macOS/Linux the build resolves it from the isolated config.json.
+run_build() {
+    if [ "$TEST_PLATFORM" = windows ]; then
+        HOME="$1" USERPROFILE="$(native_path "$1")" AITOOLS_USER_REPO_PATH="$(native_path "$2")" \
+            "$TB" "$3" > "$OUT" 2>&1
+    else
+        env -u AITOOLS_USER_REPO_PATH HOME="$1" "$TB" "$3" > "$OUT" 2>&1
+    fi
+}
+
 # build NAME -- build-deploy.sh into $DOT/deploy, then copy deploy/ to $TMP_ROOT/NAME
 build() {
     local hb="$TMP_ROOT/home-build-$1"
     write_config "$hb" posix
     OUT="$TMP_ROOT/build-$1.out"
-    HOME="$hb" "$TB" "$ROOT/scripts/build-deploy.sh" > "$OUT" 2>&1
+    run_build "$hb" "$DOT" "$ROOT/scripts/build-deploy.sh"
     echo $? > "$TMP_ROOT/build-$1.rc"
     rm -rf "$TMP_ROOT/$1"
     mkdir -p "$TMP_ROOT/$1"
@@ -240,7 +258,8 @@ set_payload_sha() {
 BUILD=b1
 build b1
 G="$TMP_ROOT/b1/deploy"
-check "build: exit 0" "[ \"\$(rc_of build-b1)\" = 0 ]"
+# Exit 0 alone is not a build: a skipped build ("No dotprofile found") exits 0 too.
+check "build: exit 0, not skipped" "[ \"\$(rc_of build-b1)\" = 0 ] && ! grep -q 'skipping deploy build' '$TMP_ROOT/build-b1.out'"
 check "build: deploy-harness.sh/.ps1 and the config writer bundle generated" \
     "[ -f '$G/deploy-harness.sh' ] && [ -f '$G/deploy-harness.ps1' ] && [ -f '$G/setup-user-config.sh' ] && [ -f '$G/setup-user-config.ps1' ] && [ -f '$G/aitools-profile.sh' ] && [ -f '$G/aitools-profile.ps1' ] && [ -f '$G/aitools-json.pl' ] && [ -f '$G/aitools-json.ps1' ]"
 if [ "$TEST_PLATFORM" != windows ]; then
@@ -327,7 +346,7 @@ mkdir -p "$HB_BIG/.aitools"
 printf '{\n  "version": 3,\n  "reposPath": "%s",\n  "repoPath": "%s",\n  "userRepoPath": "%s"\n}\n' \
     "$TMP_ROOT" "$ROOT" "$DOT_BIG" > "$HB_BIG/.aitools/config.json"
 OUT="$TMP_ROOT/build-big.out"
-env -u AITOOLS_USER_REPO_PATH HOME="$HB_BIG" "$TB" "$ROOT/scripts/build-deploy.sh" > "$OUT" 2>&1
+run_build "$HB_BIG" "$DOT_BIG" "$ROOT/scripts/build-deploy.sh"
 echo $? > "$TMP_ROOT/build-big.rc"
 big_sh_over() {
     local sz
@@ -340,9 +359,9 @@ check "size gate (forced): a .sh padded over 1 MB is a WARN with the FX-35 hint,
     "[ \"\$(rc_of build-big)\" = 0 ] && big_sh_over"
 OUT=""
 check "payload: the scripts' sha256 (.sh and .ps1) is the payload's (CRs removed)" \
-    "[ \"\$(perl -MDigest::SHA=sha256_hex -0777 -ne 's/\\r//g; print sha256_hex(\$_)' '$G/deploy-harness.payload')\" = \"\$(perl -ne 'print \$1 if /^MDM_PAYLOAD_SHA256=(\\S+)/' '$G/deploy-harness.sh')\" ] && [ \"\$(perl -ne 'print \$1 if /^MDM_PAYLOAD_SHA256=(\\S+)/' '$G/deploy-harness.sh')\" = \"\$(perl -ne 'print \$1 if /^\\\$mdmPayloadSha256 = \"([0-9a-f]+)\"/' '$G/deploy-harness.ps1')\" ]"
+    "[ -f '$G/deploy-harness.payload' ] && [ -n \"\$(perl -ne 'print \$1 if /^MDM_PAYLOAD_SHA256=(\\S+)/' '$G/deploy-harness.sh')\" ] && [ \"\$(perl -MDigest::SHA=sha256_hex -0777 -ne 's/\\r//g; print sha256_hex(\$_)' '$G/deploy-harness.payload')\" = \"\$(perl -ne 'print \$1 if /^MDM_PAYLOAD_SHA256=(\\S+)/' '$G/deploy-harness.sh')\" ] && [ \"\$(perl -ne 'print \$1 if /^MDM_PAYLOAD_SHA256=(\\S+)/' '$G/deploy-harness.sh')\" = \"\$(perl -ne 'print \$1 if /^\\\$mdmPayloadSha256 = \"([0-9a-f]+)\"/' '$G/deploy-harness.ps1')\" ]"
 check "markers: no marker line copied into the MDM scripts" \
-    "! grep -qE '^# --- (BEGIN|END) (scope|body|config bootstrap check|dotprofile lookup) ' '$G/deploy-harness.sh' && ! grep -qE '^# --- (BEGIN|END) (scope|body|config bootstrap check|dotprofile lookup) ' '$G/deploy-harness.ps1'"
+    "[ -f '$G/deploy-harness.sh' ] && [ -f '$G/deploy-harness.ps1' ] && ! grep -qE '^# --- (BEGIN|END) (scope|body|config bootstrap check|dotprofile lookup) ' '$G/deploy-harness.sh' && ! grep -qE '^# --- (BEGIN|END) (scope|body|config bootstrap check|dotprofile lookup) ' '$G/deploy-harness.ps1'"
 check "markers: sections 1, 3 and 5b extracted, section 2 replaced, scope in the header" \
     "( for f in '$G/deploy-harness.sh' '$G/deploy-harness.ps1'; do grep -q '^# 1\\. config.json' \"\$f\" && grep -q '^# 3\\. The six directories' \"\$f\" && grep -q '^# 5b\\. Rules manifest' \"\$f\" && grep -q '^# 2\\. (MDM) Embedded sources' \"\$f\" && ! grep -q '^# 2\\. Dotprofile' \"\$f\" && grep -q '^# Managed (' \"\$f\" || exit 1; done )"
 check "markers: MDM bootstrap check replaced the dev comment" \
@@ -605,7 +624,8 @@ marker_build() {
     perl -i -pe "$2" "$RC/scripts/$3"
     write_config "$hb" posix
     OUT="$TMP_ROOT/build-$1.out"
-    HOME="$hb" AITOOLS_USER_REPO_PATH="$DOT" "$TB" "$RC/scripts/build-deploy.sh" > "$OUT" 2>&1
+    HOME="$hb" USERPROFILE="$(native_path "$hb")" AITOOLS_USER_REPO_PATH="$(native_path "$DOT")" \
+        "$TB" "$RC/scripts/build-deploy.sh" > "$OUT" 2>&1
     echo $? > "$TMP_ROOT/build-$1.rc"
     cp -p "$TMP_ROOT/$3.orig" "$RC/scripts/$3"
 }
