@@ -202,17 +202,34 @@ rc() { cat "$C/$L.rc"; }
 row() { grep -qxF "$1" "$C/$L.summary"; }                  # exact summary row
 nondetail() { grep -F '|claude rules|' "$C/$L.summary" | grep -v '^DETAIL' | tail -n 1; }
 R() { printf '%s' "$C/$L/.claude/rules"; }                  # the deployed rules dir
-# logged TEXT: TEXT in the run's log files (none: no match). On Windows the
-# log is read with / separators (pwsh joins native paths with \): TEXT names
-# paths in native form (native_path), which is the plain path elsewhere.
-logged() {
-    if [ "$TEST_PLATFORM" = windows ]; then
-        cat "$C/$L/logs/"*.log 2>/dev/null | perl -pe 's/\r//; tr{\\}{/}' | grep -qF "$1"
-    else
-        cat "$C/$L/logs/"*.log 2>/dev/null | grep -qF "$1"
+# logged TEXT: TEXT in the run's log files (none: no match). TEXT holds no
+# path: paths are checked with adopt_is.
+logged() { cat "$C/$L/logs/"*.log 2>/dev/null | perl -pe 's/\r//' | grep -qF "$1"; }
+# adopt_is RULE SOURCE WANT: the run logged "claude rules: RULE source=SOURCE
+# adopt=<path>" and <path> is WANT (a path, or "none"). Paths are compared as
+# locations, not as text: on Windows pwsh can name a directory in 8.3 short
+# form (C:\Users\RUNNER~1\...) where cygpath -m names it in long form, or the
+# other way round (first native CI run 41265193554: both aitools-checkout
+# adopt checks failed while the adopt into that checkout worked), so there
+# both sides go through cygpath -m -l (long form, / separators). Prints what
+# was logged on a mismatch.
+adopt_is() {
+    local got want="$3"
+    got=$(cat "$C/$L/logs/"*.log 2>/dev/null \
+        | R_NAME="$1" R_SRC="$2" perl -ne 's/\r?\n\z//; print "$1\n" if /\[detail\] claude rules: \Q$ENV{R_NAME}\E source=\Q$ENV{R_SRC}\E adopt=(.*)\z/' \
+        | tail -n 1)
+    if [ -z "$got" ]; then
+        printf '      | no "claude rules: %s source=%s adopt=" line in the log\n' "$1" "$2"
+        return 1
     fi
+    if [ "$want" != none ] && [ "$got" != none ] && [ "$TEST_PLATFORM" = windows ]; then
+        got=$(cygpath -m -l "$got") || { printf '      | cygpath -l failed on %s\n' "$got"; return 1; }
+        want=$(cygpath -m -l "$want") || { printf '      | cygpath -l failed on %s\n' "$want"; return 1; }
+    fi
+    if [ "$got" = "$want" ]; then return 0; fi
+    printf '      | adopt=%s (want %s)\n' "$got" "$want"
+    return 1
 }
-NA="$(native_path "$A")"; NDP="$(native_path "$DP")"   # the checkout and dotprofile as the script names them
 
 # tree_sig DIR: "<path> <md5>" per file, backup time stamps normalized
 tree_sig() {
@@ -407,12 +424,12 @@ seed_adoptmap() {
     printf '## shared s\n' > "$A/shared/rules/s.md"; printf '## project p\n' > "$A/.claude/rules/p.md"
 }
 case_run adoptmap seed_adoptmap
-# The full adopt path, as one log line (a split match could pass on
+# The full adopt path, from one log line (a split match could pass on
 # "adopt=none" plus the deploy destination's ".../.claude/rules/p.md")
-check "adopt map $L: shared -> aitools shared/rules" "logged 'claude rules: s.md source=shared adopt=$NA/shared/rules/s.md'"
-check "adopt map $L: aitools -> aitools .claude/rules" "logged 'claude rules: p.md source=aitools adopt=$NA/.claude/rules/p.md'"
-check "adopt map $L: dotprofile -> dotprofile claude/rules" "logged 'claude rules: d.md source=dotprofile adopt=$NDP/claude/rules/d.md'"
-check "adopt map $L: no repo file -> none" "logged 'claude rules: z.md source=dotprofile adopt=none'"
+check "adopt map $L: shared -> aitools shared/rules" "adopt_is s.md shared '$A/shared/rules/s.md'"
+check "adopt map $L: aitools -> aitools .claude/rules" "adopt_is p.md aitools '$A/.claude/rules/p.md'"
+check "adopt map $L: dotprofile -> dotprofile claude/rules" "adopt_is d.md dotprofile '$DP/claude/rules/d.md'"
+check "adopt map $L: no repo file -> none" "adopt_is z.md dotprofile none"
 
 if $HAVE_PTY; then
     printf '## dot d\nmy edit %s\n' "$L" > "$C/$L/.claude/rules/d.md"
@@ -439,7 +456,7 @@ seed_payload() {
 REPO="$PAYLOAD"
 case_run payload seed_payload
 REPO="$A"
-check "payload $L: no adopt into a checkout without .git" "logged 'claude rules: s.md source=shared adopt=none' && logged 'claude rules: p.md source=aitools adopt=none' && logged 'claude rules: d.md source=dotprofile adopt=$NDP/claude/rules/d.md'"
+check "payload $L: no adopt into a checkout without .git" "adopt_is s.md shared none && adopt_is p.md aitools none && adopt_is d.md dotprofile '$DP/claude/rules/d.md'"
 parity payload
 
 # ---------------------------------------------------------------------------
