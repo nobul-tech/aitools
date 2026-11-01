@@ -1,0 +1,9 @@
+exit code: 0
+# ~/.cursor/rules (path md5)
+p.mdc 0d43fbad3bc41f0c17fdf9b17592d8bb
+p.mdc.bak.TS b64dfc545a70d24cb9f8c63b9be0eb69
+s.mdc bc72d5ec505f3be28e37bd6f5577f018
+# summary rows
+DETAIL|cursor rules|updated: p.mdc
+DETAIL|cursor rules|added: s.mdc
+WARN|cursor rules|1 added, 1 updated

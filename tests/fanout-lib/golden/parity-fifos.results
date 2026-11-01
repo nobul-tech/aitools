@@ -1,0 +1,2 @@
+dm-fifo	rc=1
+dm-candfifo	rc=1

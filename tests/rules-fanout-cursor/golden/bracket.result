@@ -1,0 +1,6 @@
+exit code: 0
+# ~/.cursor/rules (path md5)
+br[1].mdc.bak.TS 3e375417f12ca22d90af833f209ca608
+# summary rows
+DETAIL|cursor rules|removed: br[1].mdc
+OK|cursor rules|1 removed

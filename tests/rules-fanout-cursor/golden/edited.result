@@ -1,0 +1,8 @@
+exit code: 0
+# ~/.cursor/rules (path md5)
+e.mdc.bak.TS 3888accd2a71b960fb181e3698fe6b58
+r.mdc.bak.TS 87e7838e140250cd6d7a4d2078ca22c1
+# summary rows
+DETAIL|cursor rules|removed: e.mdc
+DETAIL|cursor rules|removed: r.mdc
+OK|cursor rules|2 removed

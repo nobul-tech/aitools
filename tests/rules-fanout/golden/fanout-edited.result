@@ -1,0 +1,11 @@
+exit code: 0
+# ~/.claude/rules (path md5)
+UP.MD 7d6e7d8d48dacb0d3070b3c70dca57d0
+d.md 17f89b701bf3ec8b3deb27ec483c04c2
+mine.md d92bf619dc8282f474be4bfbce48183f
+p.md 76723fe3ad6b09505ea03b56e498a607
+s.md 5b0855d8da7155bbf6093a816dad767b
+s.md.bak.TS b97cb19c43c4f0041eae4ea081898be7
+# summary rows
+DETAIL|claude rules|updated: s.md
+WARN|claude rules|1 updated, 3 verified

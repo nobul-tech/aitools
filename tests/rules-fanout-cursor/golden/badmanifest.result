@@ -1,0 +1,8 @@
+exit code: 1
+# ~/.cursor/rules (path md5)
+s.mdc bc72d5ec505f3be28e37bd6f5577f018
+# summary rows
+ERROR|cursor rules|cannot read rules manifest
+DETAIL|cursor rules|failed: .aitools-rules-manifest
+DETAIL|cursor rules|added: s.mdc
+ERROR|cursor rules|1 failed

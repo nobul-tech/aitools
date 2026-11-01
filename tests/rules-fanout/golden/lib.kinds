@@ -1,0 +1,9 @@
+TEXT=1 removed, 1 failed
+a.md=rule
+A.MD=rule
+b.Md=rule
+x.md.bak.1=backup
+X.MD.BAK.2026=backup
+odd.bak.2026.md=backup
+.hidden.md=hidden
+notes.txt=other

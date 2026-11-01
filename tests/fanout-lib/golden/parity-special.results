@@ -1,0 +1,1 @@
+bd-special	ok=true reason=- path=r[1]*?.bak.<TS> copied=yes siblings=r1zz.bak.2020-01-01T000000Z,r[1]*?,r[1]*?.bak.2020-01-01T000000Z.bak.2020-01-02T000000Z,r[1]*?.bak.2020-01-03T000000Z,r[1]*?.bak.2020-01-04T000000Z,r[1]*?.bak.2020-01-05T000000Z,r[1]*?.bak.2020-01-06T000000Z,r[1]*?.bak.<TS>,r[1]*?.bak.foo,r[1]*?x.bak.2020-01-07T000000Z

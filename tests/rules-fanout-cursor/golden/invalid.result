@@ -1,0 +1,7 @@
+exit code: 0
+# ~/.cursor/rules (path md5)
+lower.mdc a82c1d22c2fc9e00222322737ec9f909
+# summary rows
+ACTION||Run aitools to rebuild ~/.aitools/rules and its manifest
+DETAIL|cursor rules|added: lower.mdc
+WARN|cursor rules|1 added
