@@ -31,8 +31,8 @@
 #   A read, merge or validation failure leaves the existing file untouched.
 #   -DryRun merges into a system temp file: nothing under ~/.aitools is created or
 #   changed (deploy.log still records the run).
-# Tests only: AITOOLS_PROFILE_TEST_ANY_OS=1 lets the parity tests run this file
-#   with pwsh on macOS/Linux.
+# The OS guard has no override: this file runs on Windows only, and its tests
+#   run on the windows CI job (plans/ci-platform-targeting.md, 2026-11-01).
 #
 # Usage: setup-user-config.ps1 [-ReposPath P] [-RepoPath P] [-DrivesJson JSON]
 #          [-GithubUser U] [-UserRepoPath P] [-MachineId ID | -NoMachine]
@@ -68,7 +68,7 @@ param(
 . (Join-Path $PSScriptRoot "aitools-lib.ps1")
 Initialize-Logging "setup-user-config"
 
-if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows -and $env:AITOOLS_PROFILE_TEST_ANY_OS -ne "1") {
+if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
     LogError "This script is for Windows. On macOS/Linux, use setup-user-config.sh."
     exit 1
 }

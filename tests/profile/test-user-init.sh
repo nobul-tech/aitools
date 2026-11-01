@@ -144,7 +144,7 @@ run() {
         AITOOLS_PROFILE_TEST_MACHINE_ID="$THIS_ID" AITOOLS_PROFILE_TEST_HOSTNAME=probe-host ${CASE_ENV[@]+"${CASE_ENV[@]}"})
     if [ "$impl" = "bash" ]; then
         if [ -n "${PTY_INPUT:-}" ]; then
-            "${e[@]}" python3 "$PTY" --input "$PTY_INPUT" --log "$D/out.txt" --timeout 120 -- "$BASH_BIN" "$R/scripts/aitools" user init "$@" > /dev/null 2>&1 || RC=$?
+            "${e[@]}" python3 "$PTY" --input "$PTY_INPUT" --log "$D/out.txt" -- "$BASH_BIN" "$R/scripts/aitools" user init "$@" > /dev/null 2>&1 || RC=$?
         else
             "${e[@]}" "$BASH_BIN" "$R/scripts/aitools" user init "$@" < /dev/null > "$D/out.txt" 2>&1 || RC=$?
         fi
@@ -154,7 +154,7 @@ run() {
             case "$1" in --alias) pa+=(-Alias "$2"); shift 2 ;; --force) pa+=(-Force); shift ;; *) pa+=("$1"); shift ;; esac
         done
         if [ -n "${PTY_INPUT:-}" ]; then
-            "${e[@]}" AITOOLS_PROFILE_TEST_ANY_OS=1 python3 "$PTY" --input "$PTY_INPUT" --log "$D/out.txt" --timeout 120 -- \
+            "${e[@]}" AITOOLS_PROFILE_TEST_ANY_OS=1 python3 "$PTY" --input "$PTY_INPUT" --log "$D/out.txt" -- \
                 pwsh -NoProfile -File "$HARNESS" -RepoPath "$R" ${pa[@]+"${pa[@]}"} > /dev/null 2>&1 || RC=$?
         else
             "${e[@]}" AITOOLS_PROFILE_TEST_ANY_OS=1 pwsh -NoProfile -File "$HARNESS" -RepoPath "$R" ${pa[@]+"${pa[@]}"} \

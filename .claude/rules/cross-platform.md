@@ -116,6 +116,14 @@ Guards MUST use structured logging. Source `init-logging` before the guard.
 | Entry points sourced or run on any platform (rationale unrecorded, pending approval) | `bootstrap.sh/.ps1`, `hh.sh/.ps1`, `relay-outbound-prompt.sh/.ps1`, `init-hh-hooks.sh` | Bootstrap/shell helpers; each `.sh` also runs in Git Bash |
 | Helper modules (rationale unrecorded, pending approval) | `aitools-json.ps1`, `_validate-ps1.ps1` | Dot-sourced / called by other scripts, never a setup entry point |
 | Analysis tools (rationale unrecorded, pending approval) | `analyze-session.sh` | Read-only session analysis |
+| Installer forwarder (2026-11-01, review-after) | `aitools-install.sh` | Runs on every platform: on Windows (Git Bash) it forwards to `aitools-install.ps1` |
+| Package launchers (2026-11-01, review-after) | `packaging/macos/*.sh`, `packaging/windows/*.ps1` | Run by the package installer on its one platform (design: `@plans/build-package/design.md`) |
+
+`tests/os-guards/test-os-guards.sh` enforces this table: on macOS and Linux
+every Windows-guarded `.ps1` must refuse to run (exit 1, guard message, only
+logs written), on Windows every POSIX-guarded `.sh` must refuse, and a script
+with no guard that this table does not list fails the suite. There is no
+guard override: a test runs a script only on the platforms its guard allows.
 
 ### Dead code from platform guards
 

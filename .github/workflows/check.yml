@@ -23,10 +23,10 @@ jobs:
   # macOS (ARM) -- Primary development platform
   # =====================================================================
   macos:
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Install modern bash via Homebrew
         run: |
@@ -379,10 +379,10 @@ jobs:
   # Linux (Ubuntu) -- CI baseline, validates Linux compatibility
   # =====================================================================
   linux:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Verify bash version
         run: |
@@ -625,7 +625,7 @@ jobs:
         shell: bash
 
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Verify Git Bash version
         shell: bash

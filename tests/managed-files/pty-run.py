@@ -8,7 +8,9 @@ makes the child a session leader with the pty as its controlling terminal.
 Usage: pty-run.py --input TEXT [--log FILE] [--timeout SECONDS] -- CMD [ARGS...]
   --input    keystrokes; backslash escapes are decoded (\\n newline, \\x04 EOF)
   --log      write everything the command printed on the terminal to FILE
-  --timeout  kill the command after this many seconds (default 60)
+  --timeout  kill the command after this many seconds (default 30; commander,
+             2026-11-01). A timeout is reported on stderr with the command
+             and the elapsed time, so a hung case is not a silent stall.
 Exit code: the command's exit code (124 on timeout).
 """
 import argparse
@@ -24,7 +26,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--input", default="")
     ap.add_argument("--log", default="")
-    ap.add_argument("--timeout", type=float, default=60.0)
+    ap.add_argument("--timeout", type=float, default=30.0)
     ap.add_argument("cmd", nargs=argparse.REMAINDER)
     args = ap.parse_args()
     cmd = args.cmd[1:] if args.cmd and args.cmd[0] == "--" else args.cmd
@@ -41,7 +43,8 @@ def main() -> int:
         os._exit(127)
 
     out = bytearray()
-    deadline = time.monotonic() + args.timeout
+    started = time.monotonic()
+    deadline = started + args.timeout
     # Feed one line per prompt: wait until the child has printed something new
     # and gone quiet, then send the next line. Keeps input from being consumed
     # by an earlier read or discarded when a program resets the terminal.
@@ -53,6 +56,10 @@ def main() -> int:
         if time.monotonic() > deadline:
             os.kill(pid, signal.SIGKILL)
             os.waitpid(pid, 0)
+            sys.stderr.write(
+                f"pty-run: timeout after {time.monotonic() - started:.1f}s "
+                f"(--timeout {args.timeout:g}); killed: {' '.join(cmd)}; "
+                f"{len(lines)} input line(s) not sent\n")
             status = 124
             break
         r, _, _ = select.select([fd], [], [], 0.05)
