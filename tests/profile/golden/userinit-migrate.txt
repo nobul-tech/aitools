@@ -1,0 +1,49 @@
+exit 0
+-- summary rows
+OK|dotprofile|verified
+OK|profile keys|re-keyed by machine id
+OK|machine profile|updated (nobul-mac)
+OK|aitools config|updated
+DETAIL|aitools config|googleDrives updated
+DETAIL|aitools config|githubUser updated
+DETAIL|aitools config|userRepoPath updated
+DETAIL|aitools config|machineId updated
+DETAIL|aitools config|machineAlias updated
+OK|claude hooks|stub
+-- profile.json
+{
+  "version": 2,
+  "identity": {
+    "github": "nobul-jose",
+    "name": "Jose",
+    "git": {
+      "name": "Jose",
+      "email": "jose@example.com"
+    }
+  },
+  "profiles": {
+    "aaaaaaaa-1111-2222-3333-444444444444": {
+      "machine": {
+        "id": "AAAAAAAA-1111-2222-3333-444444444444",
+        "hostname": "probe-host",
+        "shell": "pwsh",
+        "os": "<OS>",
+        "arch": "<ARCH>"
+      },
+      "alias": "nobul-mac"
+    },
+    "bbbbbbbb-1111-2222-3333-444444444444": {
+      "machine": {
+        "id": "bbbbbbbb-1111-2222-3333-444444444444",
+        "hostname": "laptop-host"
+      },
+      "alias": "laptop"
+    }
+  }
+}
+-- remote.git commits
+Register machine profile: nobul-mac
+Migrate machine profiles to id keys
+init
+-- gh-remote.git commits
+(none)
