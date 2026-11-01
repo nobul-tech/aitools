@@ -1,0 +1,14 @@
+# exit code
+0
+# skills tree (path md5 [x]; symlinks not listed)
+[r]/SKILL.md 72cfd272ace172fa35026445fbef9b03
+gone/.DS_Store a1586dd675086a8e60ab917ca2c1f7e6
+gone/SKILL.md b1304b81a2e029bff466f2c245f1dbfd
+gone/SKILL.md.bak.TS (backup)
+gone/tests/Thumbs.db d7dcd7b0962ebf7edfeada5c00a237c3
+gone/tests/x.md f38d5e91722573bc0e84b95f2a9db5cd
+mine2/SKILL.md 7015c8a5c7b65735873cd21111804a3d
+old/SKILL.md 814fa5ca98406a903e22b43d9b610105
+# summary rows (ACTION and skills, sorted)
+ACTION||Claude Code still loads retired skills in ~/.claude/skills: mine2 -- delete them unless you wrote them
+WARN|claude skills|dry run (no files written)

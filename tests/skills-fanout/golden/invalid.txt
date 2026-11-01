@@ -1,0 +1,10 @@
+# exit code
+0
+# skills tree (path md5 [x]; symlinks not listed)
+a/SKILL.md 9ebae5e3944e6575a4f94a86bc6da9c2
+b/SKILL.md 6556d9aa037ce00cf0de2d111d566ab0
+# summary rows (ACTION and skills, sorted)
+ACTION||Run aitools to rebuild ~/.aitools/skills and its manifest
+DETAIL|claude skills|added: a/SKILL.md
+DETAIL|claude skills|added: b/SKILL.md
+WARN|claude skills|2 added

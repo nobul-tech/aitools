@@ -1,0 +1,7 @@
+# exit code
+0
+# skills tree (path md5 [x]; symlinks not listed)
+[x]/SKILL.md 7a99ee0b160eb3be7c6b04141e242852
+[x]/a*b?.md 635b9025f4089311965288f3433d4a3e
+# summary rows (ACTION and skills, sorted)
+OK|claude skills|2 verified
