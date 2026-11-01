@@ -13,23 +13,33 @@
 #   unignored -- a dotprofile without the ignore line gets a warning
 #
 # Safe to re-run: every case runs under its own temp HOME and fixture dotprofile
-# (removed on exit), passed by AITOOLS_USER_REPO_PATH; the real HOME and the real
-# dotprofile are never read or written. A stub pwsh on PATH stands in for the PS1
-# validator (exit 0, or exit 1 for the failure case). Needs node, perl and git.
+# (removed on exit), passed by AITOOLS_USER_REPO_PATH (in the C:/... form on
+# Windows, as scripts/aitools passes it); the real HOME and the real dotprofile are
+# never read or written. A stub pwsh on PATH (a bash script, found before the real
+# pwsh on every platform) stands in for the build's PS1 validator (exit 0, or exit 1
+# for the failure case); no .ps1 is run or parsed. Needs node, perl and git.
 # AITOOLS_TEST_BASH picks the bash that runs build-deploy.sh (default: bash).
-# Platform: macOS, Linux (Windows takes the build's Git Bash validation branch,
-# which this stub does not reach). Exit 1 on failure.
 #
-# Usage: bash tests/build-deploy/test-build-deploy-backup.sh [--help]
+# Platform targeting (plans/ci-platform-targeting.md): build-deploy.sh is a bash
+# builder for every platform (cross-platform.md "Build scripts"; Git Bash on
+# Windows), so this suite runs on macOS, Linux and Windows (Git Bash). Both of the
+# build's validation branches (Windows ParseFile, macOS/Linux pwsh) call pwsh and
+# report "PS1 file(s) failed validation" when it fails, so the stub drives either.
+# No .sh/.ps1 pair is under test, so there are no golden files. Exit 1 on failure.
+#
+# Usage: bash tests/build-deploy/test-build-deploy-backup.sh [--bash-only] [--help]
+#   --bash-only  accepted for compatibility (the suite runs only bash)
 
 set -uo pipefail
 
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
-    perl -ne 'print if $. >= 2 && $. <= 24' "$0"
+    perl -ne 'print if $. >= 2 && $. <= 31' "$0"
     exit 0
 fi
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# shellcheck source=../lib/platform-lib.sh
+. "$ROOT/tests/lib/platform-lib.sh"
 TB="${AITOOLS_TEST_BASH:-bash}"
 TMP_ROOT="$(mktemp -d)"
 trap 'rm -rf "$TMP_ROOT"' EXIT
@@ -80,8 +90,9 @@ setup_case() {
 }
 
 run_build() {
+    # USERPROFILE: a child pwsh's home on Windows (only the stub runs here; isolated anyway)
     env -u AITOOLS_PROFILE_FILE -u AITOOLS_MACHINE_ALIAS -u AITOOLS_SUMMARY_FILE \
-        HOME="$C/home" AITOOLS_USER_REPO_PATH="$D" PATH="$C/bin:$PATH" \
+        HOME="$C/home" USERPROFILE="$(native_path "$C/home")" AITOOLS_USER_REPO_PATH="$(native_path "$D")" PATH="$C/bin:$PATH" \
         "$TB" "$ROOT/scripts/build-deploy.sh" < /dev/null > "$C/out" 2>&1
     echo $? > "$C/rc"
 }
@@ -142,7 +153,7 @@ run_build
 check "unignored: exit 0" "[ \"\$(cat '$C/rc')\" = 0 ]"
 check "unignored: warning names the fix" "grep -q \"does not ignore deploy.bak\" '$C/out' && grep -q \"add 'deploy.bak.\\*/'\" '$C/out'"
 
-printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
+printf '\n%d passed, %d failed (%s)\n' "$PASS" "$FAIL" "$TEST_PLATFORM"
 if [ "$FAIL" -gt 0 ]; then
     exit 1
 fi
