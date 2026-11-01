@@ -1,0 +1,17 @@
+alias	nobul-mac
+via	config
+key	3d4df2a5-7d91-5af9-9944-4feebaae3cf5
+owner	this
+legacy	false
+environment	local
+machineId	
+hostname	nobul-mac
+profileFile	<TMP>/idk-cfg/home/repos/aitools-nobul-jose/profile.json
+userRepoPath	<TMP>/idk-cfg/home/repos/aitools-nobul-jose
+userRepoVia	convention
+name	Jose
+company	nobul-tech
+gitName	Jose
+gitEmail	jose@nobul.tech
+github	nobul-jose
+warn	machine id unavailable: no machine id (test value)

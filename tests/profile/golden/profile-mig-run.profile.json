@@ -1,0 +1,48 @@
+{
+  "version": 2,
+  "identity": {
+    "github": "nobul-jose",
+    "email": "jose@nobul.tech",
+    "name": "Jose",
+    "company": "nobul-tech",
+    "git": {
+      "name": "Jose",
+      "email": "jose@nobul.tech"
+    }
+  },
+  "profiles": {
+    "0b1c2d3e-0000-1111-2222-333344445555": {
+      "company": "Nobul",
+      "machine": {
+        "id": "0b1c2d3e-0000-1111-2222-333344445555",
+        "hostname": "Joses-MBP",
+        "os": "darwin"
+      },
+      "alias": "laptop"
+    },
+    "3d4df2a5-7d91-5af9-9944-4feebaae3cf5": {
+      "machine": {
+        "id": "3D4DF2A5-7D91-5AF9-9944-4FEEBAAE3CF5",
+        "hostname": "nobul-mac.local",
+        "os": "darwin"
+      },
+      "alias": "nobul-mac"
+    },
+    "workstation": {
+      "name": "pepe",
+      "machine": {
+        "hostname": "NewcoPC",
+        "hostnames": [
+          "newco-pc"
+        ],
+        "os": "win32"
+      }
+    },
+    "environment:claude-code-web": {
+      "machine": {
+        "environment": "claude-code-web"
+      },
+      "alias": "web"
+    }
+  }
+}

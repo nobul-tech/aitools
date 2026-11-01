@@ -1,0 +1,50 @@
+{
+  "version": 2,
+  "identity": {
+    "github": "nobul-jose",
+    "email": "jose@nobul.tech",
+    "git": {
+      "name": "José \"Pepe\" Palencia",
+      "email": "jose@nobul.tech"
+    }
+  },
+  "claude": {
+    "settings": {
+      "z": [
+        1,
+        2.5,
+        {
+          "a": null,
+          "b": []
+        },
+        {}
+      ],
+      "path": "C:\\Users\\pepe\\repos",
+      "tab": "a\tb",
+      "emoji": "😀",
+      "when": "2026-10-21T12:00:00Z"
+    }
+  },
+  "profiles": {
+    "first": {
+      "machine": {
+        "os": "linux"
+      }
+    },
+    "nobul-mac": {
+      "name": "Jose",
+      "company": "nobul-tech",
+      "machine": {
+        "hostname": "nobul-mac",
+        "os": "darwin",
+        "arch": "ARCH",
+        "shell": "bash"
+      }
+    },
+    "z": {
+      "list": [
+        "a"
+      ]
+    }
+  }
+}

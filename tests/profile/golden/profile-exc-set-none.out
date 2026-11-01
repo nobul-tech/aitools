@@ -1,0 +1,11 @@
+result	refused
+slug	go
+alias	
+via	none
+key	
+owner	absent
+legacy	false
+profileFile	
+committed	false
+pushed	false
+error	no dotprofile profile.json -- run: aitools user init to remember tool choices

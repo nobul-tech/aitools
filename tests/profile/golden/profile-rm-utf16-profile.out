@@ -1,0 +1,18 @@
+alias	
+via	none
+key	
+owner	absent
+legacy	false
+environment	local
+machineId	3D4DF2A5-7D91-5AF9-9944-4FEEBAAE3CF5
+hostname	nobul-mac
+profileFile	<TMP>/urp-utf16/home/u16.json
+userRepoPath	
+userRepoVia	none
+name	
+company	
+gitName	
+gitEmail	
+github	
+warn	<TMP>/urp-utf16/home/.aitools/config.json is UTF-16 encoded, not UTF-8 -- save it as UTF-8 -- resolving without it
+error	<TMP>/urp-utf16/home/u16.json is UTF-16 encoded, not UTF-8 -- save it as UTF-8

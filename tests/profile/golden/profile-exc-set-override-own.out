@@ -1,0 +1,11 @@
+result	created
+slug	go
+alias	nobul-mac
+via	override
+key	nobul-mac
+owner	this
+legacy	true
+profileFile	<TMP>/exc/home/repos/aitools-nobul-jose/profile.json
+committed	false
+pushed	false
+warn	<TMP>/exc/home/repos/aitools-nobul-jose is not a git repository -- profile.json written but not committed

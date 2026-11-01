@@ -1,0 +1,12 @@
+result	refused
+slug	go
+alias	laptop
+via	override
+key	0b1c2d3e-0000-1111-2222-333344445555
+owner	other
+legacy	false
+profileFile	<TMP>/idk-exc/home/repos/aitools-nobul-jose/profile.json
+committed	false
+pushed	false
+warn	profile "laptop" is registered to another machine (machine.id 0b1c2d3e-0000-1111-2222-333344445555, this machine 3D4DF2A5-7D91-5AF9-9944-4FEEBAAE3CF5)
+error	machine profile "laptop" is not registered to this machine -- run: aitools user init to remember tool choices

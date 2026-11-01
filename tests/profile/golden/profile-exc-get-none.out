@@ -1,0 +1,16 @@
+slug	go
+alias	
+via	none
+key	
+owner	absent
+legacy	false
+profileFile	<TMP>/exc/home/repos/aitools-nobul-jose/profile.json
+found	false
+platform	
+method	
+path	
+version	
+decidedAt	
+decidedBy	
+reason	
+error	no profile matches this machine (machine.id 0B1C2D3E-0000-1111-2222-333344445555, hostname elsewhere) -- run: aitools user init

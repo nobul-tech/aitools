@@ -1,0 +1,12 @@
+result	refused
+slug	go
+alias	nobul-mac
+via	config
+key	3d4df2a5-7d91-5af9-9944-4feebaae3cf5
+owner	this
+legacy	false
+profileFile	<TMP>/idk-exc/home/repos/aitools-nobul-jose/profile.json
+committed	false
+pushed	false
+warn	machine id unavailable: no machine id (test value)
+error	machine profile "nobul-mac" matched by config.json machineId only (machine id unavailable) -- tool choice not saved

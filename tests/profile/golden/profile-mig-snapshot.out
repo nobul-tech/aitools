@@ -1,0 +1,7 @@
+result	refused
+profileFile	<TMP>/mig/home/snap.json
+renamed	
+unclaimed	
+committed	false
+pushed	false
+error	profile from AITOOLS_PROFILE_FILE is a read-only snapshot -- not written

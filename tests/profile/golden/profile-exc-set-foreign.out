@@ -1,0 +1,13 @@
+result	refused
+slug	go
+alias	nobul-mac
+via	hostname
+key	nobul-mac
+owner	unregistered
+legacy	true
+profileFile	<TMP>/exc/home/repos/aitools-nobul-jose/profile.json
+committed	false
+pushed	false
+warn	config.json machineAlias "laptop" names a profile registered to another machine (machine.id OTHER-MACHINE) -- ignored
+warn	matched by hostname only (legacy) -- run: aitools user init (registers machine.id)
+error	machine profile "nobul-mac" matched by hostname only -- run: aitools user init to remember tool choices

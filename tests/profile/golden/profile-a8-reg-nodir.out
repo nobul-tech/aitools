@@ -1,0 +1,9 @@
+result	failed
+key	3d4df2a5-7d91-5af9-9944-4feebaae3cf5
+alias	nobul-mac
+owner	
+ownerKey	
+claimed	nobul-mac
+machineId	3D4DF2A5-7D91-5AF9-9944-4FEEBAAE3CF5
+hostname	nobul-mac
+error	register failed: cannot write <TMP>/a69/home/a8none/sub/out.json: No such file or directory

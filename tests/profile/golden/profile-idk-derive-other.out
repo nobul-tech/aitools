@@ -1,0 +1,14 @@
+derived.githubUser	nobul-jose
+derived.userRepoPath	<TMP>/idk-cfg/home/repos/aitools-nobul-jose
+derived.machineId	
+derived.machineAlias	laptop
+userRepoVia	convention
+via	override
+key	0b1c2d3e-0000-1111-2222-333344445555
+owner	other
+legacy	false
+company	Nobul
+machineId	3D4DF2A5-7D91-5AF9-9944-4FEEBAAE3CF5
+hostname	nobul-mac
+aliases	nobul-mac, laptop, old-pc
+warn	profile "laptop" is registered to another machine (machine.id 0b1c2d3e-0000-1111-2222-333344445555, this machine 3D4DF2A5-7D91-5AF9-9944-4FEEBAAE3CF5)
