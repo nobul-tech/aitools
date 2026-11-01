@@ -1,0 +1,4 @@
+ACTION||see deploy.log -- the dotprofile could not be resolved
+ERROR|cursor cli|not merged: dotprofile error
+ERROR|dotprofile|resolver failed
+OK|cursor rules|n/a (no harness rules)

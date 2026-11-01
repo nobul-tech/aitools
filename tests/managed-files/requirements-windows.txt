@@ -1,0 +1,13 @@
+# requirements-windows.txt -- test-only Python dependencies of the windows CI job.
+# Install: python -m pip install --require-hashes -r tests/managed-files/requirements-windows.txt
+#
+# pywinpty: ConPTY backend for tests/managed-files/pty-run.py on Windows (the
+# stdlib pty module is POSIX-only). /tool-eval S2-Winpty 2026-11-01: no hard
+# block; yellow flags (sole maintainer on a personal account, 164 stars;
+# ~1.9M downloads/month, a dependency of jupyter_server and terminado on
+# Windows). Commander, 2026-11-01: "Adopt, spike first". 3.1.2 or later:
+# fixes EOF detection on ConPTY and spawning a path with spaces. No
+# dependencies. Hashes from https://pypi.org/pypi/pywinpty/3.1.2/json.
+pywinpty==3.1.2 \
+    --hash=sha256:220e30a8cccd7f0be3356d4e3e56fdcda2ae45edc1de526b440c4031fe9308da \
+    --hash=sha256:d968dc4300b497f048318387781ed9931dc0038815f25b4f642a1749448769cb

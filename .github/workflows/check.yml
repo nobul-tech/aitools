@@ -69,33 +69,6 @@ jobs:
           fi
           echo "All .sh files passed syntax validation"
 
-      - name: Validate PowerShell script syntax
-        run: |
-          echo "::group::Checking .ps1 files"
-          if command -v pwsh >/dev/null 2>&1; then
-            errors=0
-            for f in scripts/*.ps1 deploy/*.ps1; do
-              [ -f "$f" ] || continue
-              if ! pwsh -NoProfile -Command "
-                \$e = \$null
-                \$null = [System.Management.Automation.Language.Parser]::ParseFile('$f', [ref]\$null, [ref]\$e)
-                if (\$e.Count -gt 0) { \$e | ForEach-Object { Write-Host \"  line \$(\$_.Extent.StartLineNumber): \$(\$_.Message)\" }; exit 1 }
-              " 2>/dev/null; then
-                echo "FAIL: $(basename "$f")"
-                errors=$((errors + 1))
-              fi
-            done
-            echo "::endgroup::"
-            if [ "$errors" -gt 0 ]; then
-              echo "::error::$errors ps1 file(s) failed syntax check"
-              exit 1
-            fi
-            echo "All .ps1 files passed syntax validation"
-          else
-            echo "::warning::pwsh not available, skipping .ps1 validation"
-            echo "::endgroup::"
-          fi
-
       - name: Validate Python script syntax
         run: |
           errors=0
@@ -116,6 +89,12 @@ jobs:
       # "Every test suite is in CI" runs once, in the linux job: the check is
       # static (reads git ls-files and this file), so one copy is enough.
 
+      - name: OS guard tests (Windows-guarded .ps1 refuse macOS, bash 5)
+        run: bash tests/os-guards/test-os-guards.sh
+
+      - name: OS guard tests (macOS /bin/bash 3.2)
+        run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/os-guards/test-os-guards.sh
+
       - name: harness-db delegation score tests (Python)
         run: python3 tests/harness-db/test-delegation-score.py
 
@@ -125,20 +104,11 @@ jobs:
       - name: Logging unit tests (bash)
         run: bash tests/logging/test-logging.sh
 
-      - name: Logging unit tests (PowerShell)
-        run: pwsh -NoProfile -File tests/logging/test-logging.ps1
-
       - name: Managed-file tests (bash)
         run: bash tests/managed-files/test-managed-files.sh
 
-      - name: Managed-file tests (PowerShell)
-        run: pwsh -NoProfile -File tests/managed-files/test-managed-files.ps1
-
       - name: Dotprofile adopt commit+push tests (bash)
         run: bash tests/managed-files/test-adopt-push.sh
-
-      - name: Dotprofile adopt commit+push tests (PowerShell)
-        run: pwsh -NoProfile -File tests/managed-files/test-adopt-push.ps1
 
       - name: Profile resolver tests (bash 5 + pwsh parity)
         run: bash tests/profile/test-profile.sh
@@ -211,7 +181,7 @@ jobs:
         if: ${{ !cancelled() }}
         run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/skills-fanout/test-skills-fanout.sh --bash-only
 
-      - name: Dotprofile resolver consumer tests (bash 5 + pwsh)
+      - name: Dotprofile resolver consumer tests (.sh, bash 5)
         if: ${{ !cancelled() }}
         run: bash tests/b8-consumers/test-b8-consumers.sh
 
@@ -486,6 +456,9 @@ jobs:
             scripts/setup-user-hooks.ps1 \
             scripts/build-deploy.sh
 
+      - name: OS guard tests (Windows-guarded .ps1 refuse Linux)
+        run: bash tests/os-guards/test-os-guards.sh
+
       - name: harness-db delegation score tests (Python)
         run: python3 tests/harness-db/test-delegation-score.py
 
@@ -495,20 +468,11 @@ jobs:
       - name: Logging unit tests (bash)
         run: bash tests/logging/test-logging.sh
 
-      - name: Logging unit tests (PowerShell)
-        run: pwsh -NoProfile -File tests/logging/test-logging.ps1
-
       - name: Managed-file tests (bash)
         run: bash tests/managed-files/test-managed-files.sh
 
-      - name: Managed-file tests (PowerShell)
-        run: pwsh -NoProfile -File tests/managed-files/test-managed-files.ps1
-
       - name: Dotprofile adopt commit+push tests (bash)
         run: bash tests/managed-files/test-adopt-push.sh
-
-      - name: Dotprofile adopt commit+push tests (PowerShell)
-        run: pwsh -NoProfile -File tests/managed-files/test-adopt-push.ps1
 
       - name: Profile resolver tests (bash + pwsh parity, incl. claude-code-web)
         run: bash tests/profile/test-profile.sh
@@ -545,7 +509,7 @@ jobs:
         if: ${{ !cancelled() }}
         run: bash tests/skills-fanout/test-skills-fanout.sh
 
-      - name: Dotprofile resolver consumer tests (bash + pwsh)
+      - name: Dotprofile resolver consumer tests (.sh)
         if: ${{ !cancelled() }}
         run: bash tests/b8-consumers/test-b8-consumers.sh
 
@@ -626,6 +590,25 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@v7
+
+      # Python pinned for the test-only dependencies (plans/ci-platform-targeting.md):
+      # pywinpty (ConPTY backend of tests/managed-files/pty-run.py), hash-pinned.
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v7.0.0
+        with:
+          python-version: '3.12'
+
+      - name: Install Windows test dependencies (pywinpty, hash-pinned)
+        shell: pwsh
+        run: python -m pip install --require-hashes -r tests/managed-files/requirements-windows.txt
+
+      - name: Windows runner probe (HOME isolation, Python, ConPTY)
+        shell: bash
+        run: python tests/managed-files/winpty-probe.py "$(cygpath -w "$BASH")"
+
+      - name: OS guard tests (POSIX-guarded .sh refuse Windows)
+        shell: bash
+        run: bash tests/os-guards/test-os-guards.sh
 
       - name: Verify Git Bash version
         shell: bash
@@ -711,6 +694,14 @@ jobs:
       - name: Dotprofile adopt commit+push tests (PowerShell, native)
         shell: pwsh
         run: pwsh -NoProfile -File tests/managed-files/test-adopt-push.ps1
+
+      # Heavy suites, .ps1 half: Git Bash drives native pwsh; results are
+      # compared with the golden files the macOS/Linux .sh runs produce
+      # (plans/ci-platform-targeting.md).
+      - name: Dotprofile resolver consumer tests (.ps1, native pwsh)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: bash tests/b8-consumers/test-b8-consumers.sh
 
       - name: delegation-duty-guard hook tests (via Git Bash)
         if: ${{ !cancelled() }}
