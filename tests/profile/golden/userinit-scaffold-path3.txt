@@ -1,0 +1,45 @@
+exit 0
+-- summary rows
+OK|machine profile|created (first)
+OK|dotprofile|created
+OK|claude template|created
+OK|aitools config|updated
+DETAIL|aitools config|googleDrives updated
+DETAIL|aitools config|githubUser updated
+DETAIL|aitools config|userRepoPath updated
+DETAIL|aitools config|machineId updated
+DETAIL|aitools config|machineAlias updated
+OK|claude hooks|stub
+-- profile.json
+{
+  "version": 2,
+  "meta": {
+    "schemaRevision": "2.2"
+  },
+  "identity": {
+    "github": "nobul-jose",
+    "email": "tester@example.com",
+    "name": "Tester",
+    "git": {
+      "name": "Tester",
+      "email": "tester@example.com"
+    }
+  },
+  "profiles": {
+    "aaaaaaaa-1111-2222-3333-444444444444": {
+      "alias": "first",
+      "machine": {
+        "id": "aaaaaaaa-1111-2222-3333-444444444444",
+        "hostname": "probe-host",
+        "os": "<OS>",
+        "arch": "<ARCH>",
+        "shell": "pwsh"
+      }
+    }
+  }
+}
+-- remote.git commits
+(none)
+-- gh-remote.git commits
+Add claude/CLAUDE.md template
+Initial commit: profile and session archive structure

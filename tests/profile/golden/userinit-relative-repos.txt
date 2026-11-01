@@ -1,0 +1,18 @@
+exit 1
+-- summary rows
+ERROR|dotprofile|reposPath not absolute
+ACTION||Set an absolute reposPath in <D>/home/.aitools/config.json, then run: aitools user init
+-- profile.json
+{
+  "version": 2,
+  "meta": { "schemaRevision": "2.2" },
+  "identity": { "github": "nobul-jose", "name": "Jose", "company": "nobul-tech", "git": { "name": "Jose", "email": "jose@example.com" } },
+  "profiles": {
+    "bbbbbbbb-1111-2222-3333-444444444444": { "alias": "laptop", "machine": { "id": "bbbbbbbb-1111-2222-3333-444444444444", "hostname": "laptop-host" } },
+    "nobul-mac": { "machine": { "hostname": "old-host" } }
+  }
+}
+-- remote.git commits
+init
+-- gh-remote.git commits
+(none)

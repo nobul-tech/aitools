@@ -1,0 +1,57 @@
+exit 0
+-- summary rows
+OK|dotprofile|verified
+OK|machine profile|created (mac1)
+OK|machine profile|verified (mac1)
+OK|aitools config|updated
+DETAIL|aitools config|googleDrives updated
+DETAIL|aitools config|githubUser updated
+DETAIL|aitools config|userRepoPath updated
+DETAIL|aitools config|machineId updated
+DETAIL|aitools config|machineAlias updated
+OK|claude hooks|stub
+-- profile.json
+{
+  "version": 2,
+  "meta": {
+    "schemaRevision": "2.2"
+  },
+  "identity": {
+    "github": "nobul-jose",
+    "email": "jose@example.com",
+    "name": "Jose",
+    "company": "nobul-tech",
+    "git": {
+      "name": "Jose",
+      "email": "jose@example.com"
+    }
+  },
+  "profiles": {
+    "machine1": {
+      "machine": {
+        "hostname": "other-box",
+        "os": "linux"
+      }
+    },
+    "aaaaaaaa-1111-2222-3333-444444444444": {
+      "alias": "mac1",
+      "machine": {
+        "id": "aaaaaaaa-1111-2222-3333-444444444444",
+        "hostname": "probe-host",
+        "os": "<OS>",
+        "arch": "<ARCH>",
+        "shell": "pwsh"
+      }
+    }
+  },
+  "cursor": {
+    "cli": {
+      "model": "auto"
+    }
+  }
+}
+-- remote.git commits
+Migrate profile.json from v1 to v2
+init
+-- gh-remote.git commits
+(none)

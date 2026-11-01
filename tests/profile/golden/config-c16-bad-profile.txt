@@ -1,0 +1,33 @@
+exit 1
+-- summary rows
+ERROR|profile.json|invalid (see log)
+ACTION||Fix profile.json in the dotprofile (details in deploy.log)
+OK|aitools config|updated
+DETAIL|aitools config|version updated
+-- config.json
+{
+  "version": 3,
+  "reposPath": "<TMP>/home/repos",
+  "repoPath": "<TMP>/home/repos/aitools",
+  "custom": {
+    "keep": true
+  },
+  "googleDrives": [
+    {
+      "path": "/gd",
+      "account": "a@b.c",
+      "label": ""
+    }
+  ],
+  "userRepoPath": "<TMP>/home/repos/aitools-nobul-jose",
+  "machineAlias": "new-mac",
+  "meta": {
+    "intent": {
+      "purpose": "Per-machine pointers that let aitools find its repos and this machine profile, built from profile.json",
+      "scope": "Bootstrap pointers (reposPath, repoPath), detected googleDrives, and values derived from profile.json (githubUser, userRepoPath, machineId, and machineAlias as a display value). NOT identity or preferences (profile.json). NOT hand-edited: setup-user-config is the only writer",
+      "audience": "read_config_key/ReadConfigKey callers, resolve_user_repo_path/Resolve-UserRepoPath, ait-harvest.py, hh, check-lib; written by setup-user-config.sh/.ps1"
+    },
+    "writer": "setup-user-config",
+    "derivedFrom": "profile.json"
+  }
+}

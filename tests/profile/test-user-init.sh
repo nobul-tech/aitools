@@ -1,50 +1,83 @@
 #!/usr/bin/env bash
-# test-user-init.sh -- `aitools user init` (scripts/aitools) and its PowerShell
-# counterpart (the user-init block of scripts/aitools.ps1), end to end.
+# test-user-init.sh -- `aitools user init` (scripts/aitools and scripts/aitools.ps1), end to end.
 #
 # Each case builds an isolated HOME with config.json, a throwaway aitools copy
 # (scripts/ + shared/, git-initialised; setup-user-hooks replaced by a stub that
 # writes one row and exits $HOOK_RC), a gh stub, and a dotprofile with a local
 # bare remote. Machine id and hostname come from the resolver's test overrides
 # (AITOOLS_PROFILE_TEST_MACHINE_ID / _HOSTNAME): never the real machine, HOME or
-# dotprofile. The bash entry point runs whole; PowerShell runs the block between
-# "# --- BEGIN user init ---" and "# --- END user init ---" of aitools.ps1 (the
-# file itself has a Windows-only guard) through tests/profile/user-init-harness.ps1,
-# on a fresh copy of the same fixture. Asserts exit codes, summary rows,
-# profile.json, the remote's commits and the config.json machineId, and that
-# both shells give the same exit code, rows, profile.json bytes and commits.
+# dotprofile. Asserts exit codes, summary rows, profile.json, the remote's
+# commits and the config.json machineId.
 # M3-FINISH item 2: an unregistered machine runs the writer with --no-machine /
 # -NoMachine and gets one machine-profile ERROR (user init's), none of the
 # writer's; a registered machine (also one whose id cannot be detected) does not.
-# Interactive cases run on a pty (tests/managed-files/pty-run.py) and compare
-# the menus line by line.
-# Platform: macOS/Linux (CI: macOS and Linux runners). Safe to re-run.
-# Usage: bash tests/profile/test-user-init.sh [--bash-only]
-#   AITOOLS_TEST_BASH=/bin/bash runs the entry point under another bash (macOS 3.2)
+# Interactive cases run on a pseudo-terminal (tests/managed-files/pty-run.py:
+# POSIX pty, or pywinpty/ConPTY on Windows; SKIP when unavailable).
+#
+# Platform targeting (plans/ci-platform-targeting.md): each entry point runs only
+# where its OS guard allows, and runs whole. macOS/Linux run the bash entry point
+# scripts/aitools; Windows (Git Bash) runs scripts/aitools.ps1 with native pwsh
+# (paths handed to it are native, HOME and USERPROFILE both set, the gh stub also
+# comes as gh.cmd). Parity between the two is checked against committed golden
+# results, one per case: exit code, summary rows, profile.json (this machine's
+# machine.os / machine.arch as <OS> / <ARCH>) and the commit subjects on both
+# remotes (fixture directory as <D>, path separators as /), plus the pty-claim
+# menu: tests/profile/golden/userinit-*.txt (tests/lib/platform-lib.sh
+# golden_match). AITOOLS_TEST_UPDATE_GOLDEN=1 on macOS/Linux rewrites them from
+# the bash run.
+#
+# Safe to re-run: everything lives in a temp directory (removed on exit). Exit 1
+# on failure.
+# Usage: bash tests/profile/test-user-init.sh [--bash-only] [--help]
+#   --bash-only  accepted for compatibility: macOS/Linux always run only the bash entry point
+#   AITOOLS_TEST_BASH=/bin/bash runs the bash entry point under another bash (macOS 3.2)
 
 set -euo pipefail
 
+if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
+    perl -ne 'last unless /^#/; print if $. > 1' "$0"
+    exit 0
+fi
+
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# shellcheck source=../lib/platform-lib.sh
+. "$REPO/tests/lib/platform-lib.sh"
 PTY="$REPO/tests/managed-files/pty-run.py"
-HARNESS="$REPO/tests/profile/user-init-harness.ps1"
 WORK="$(mktemp -d)"
 cleanup() { rm -rf "$WORK"; }
 trap cleanup EXIT
 BASH_BIN="${AITOOLS_TEST_BASH:-bash}"
-USE_PS=true
-if [ "${1:-}" = "--bash-only" ] || ! command -v pwsh >/dev/null 2>&1; then USE_PS=false; fi
-USE_PTY=true
-if ! command -v python3 >/dev/null 2>&1; then USE_PTY=false; fi
+GOLDEN_DIR="$REPO/tests/profile/golden"
+GOLDEN_TMP="$WORK"
+LANG_RUN="$TEST_LANG"   # sh on macOS/Linux, ps1 on Windows
 
 PASS=0
 FAIL=0
+SKIP=0
 ok()  { PASS=$((PASS + 1)); printf '  ok   %s\n' "$1"; }
 bad() { FAIL=$((FAIL + 1)); printf '  FAIL %s\n' "$1"; }
+
+if [ "$LANG_RUN" = ps1 ] && ! command -v pwsh >/dev/null 2>&1; then
+    printf '  FAIL pwsh is not on PATH: aitools.ps1 user init cannot be tested on Windows\n'
+    exit 1
+fi
+USE_PTY=true
+command -v python3 >/dev/null 2>&1 || USE_PTY=false   # no python3: the pty cases SKIP (reported below)
+if [ "$TEST_PLATFORM" = windows ] && $USE_PTY; then
+    # Windows pty = pywinpty (ConPTY); python3 -c's failure means "not installed".
+    if ! python3 -c 'import winpty' >/dev/null 2>&1; then USE_PTY=false; fi
+fi
+
+# win_path P -- P with backslashes as Windows programs print it (cygpath -w); unchanged off Windows
+win_path() {
+    if [ "$TEST_PLATFORM" = windows ]; then cygpath -w "$1"; else printf '%s' "$1"; fi
+}
 
 THIS_ID="AAAAAAAA-1111-2222-3333-444444444444"   # as macOS reports it (upper case)
 THIS_KEY="aaaaaaaa-1111-2222-3333-444444444444"  # the profiles key (lower-cased)
 OTHER_ID="bbbbbbbb-1111-2222-3333-444444444444"
 GH_USER="nobul-jose"
+case "$TEST_PLATFORM" in macos) THIS_OS=darwin ;; linux) THIS_OS=linux ;; *) THIS_OS=win32 ;; esac
 
 # The throwaway aitools copy (one per run; each case gets its own copy of it)
 SRC="$WORK/src"
@@ -85,6 +118,11 @@ esac
 exit 1
 STUB
 chmod +x "$WORK/bin/gh"
+if [ "$LANG_RUN" = ps1 ]; then
+    # Native pwsh cannot run an extensionless bash script: gh.cmd runs the stub with
+    # this Git Bash (absolute path: a bare "bash" can resolve to WSL's shim)
+    printf '@"%s" "%s" %%*\r\n@exit /b %%ERRORLEVEL%%\r\n' "$(cygpath -w "$BASH")" "$(native_path "$WORK/bin/gh")" > "$WORK/bin/gh.cmd"
+fi
 
 PJ_TWO='{
   "version": 2,
@@ -104,17 +142,18 @@ PJ_LEGACY='{
   }
 }'
 
-# fixture CASE IMPL PROFILE_JSON [CONFIG_EXTRA] -- HOME, aitools copy, dotprofile with a bare remote.
+# fixture CASE PROFILE_JSON [CONFIG_EXTRA] -- HOME, aitools copy, dotprofile with a bare remote.
 # PROFILE_JSON "" = a dotprofile without profile.json; "-" = no dotprofile at all.
+# config.json holds the paths as the entry point under test reads them (native on Windows).
 fixture() {
-    local c="$1" impl="$2" pj="$3" extra="${4:-}"
-    D="$WORK/$c.$impl"; rm -rf "$D"
+    local c="$1" pj="$2" extra="${3:-}"
+    D="$WORK/$c"; rm -rf "$D"
     H="$D/home"; R="$D/aitools"; DP="$H/repos/aitools-$GH_USER"; BARE="$D/remote.git"
     mkdir -p "$H/.aitools" "$H/repos"
     cp -R "$SRC" "$R"
     git -C "$R" init -q
     printf '[user]\n\tname = Tester\n\temail = tester@example.com\n[init]\n\tdefaultBranch = main\n' > "$H/.gitconfig"
-    printf '{\n  "version": 3,\n  "reposPath": "%s",\n  "repoPath": "%s"%s\n}\n' "$H/repos" "$R" "$extra" > "$H/.aitools/config.json"
+    printf '{\n  "version": 3,\n  "reposPath": "%s",\n  "repoPath": "%s"%s\n}\n' "$(native_path "$H/repos")" "$(native_path "$R")" "$extra" > "$H/.aitools/config.json"
     if [ "$pj" = "-" ]; then return 0; fi
     git init -q --bare -b main "$BARE"
     mkdir -p "$DP"
@@ -131,96 +170,126 @@ fixture() {
     git -C "$DP" push -q -u origin main
 }
 
-# run IMPL ARGS... -- user init in the fixture; RC, OUT (console), SUM (summary rows)
+# norm_run FILE... -- in place: terminal control sequences (SGR colours; on ConPTY
+# also cursor moves, cursor-forward as spaces, mode and title sequences) and CR
+# removed; the fixture directory (POSIX, native and backslash forms) replaced by
+# <D>, with backslashes in the rest of that path turned into slashes.
+norm_run() {
+    D_P="$D" D_M="$(native_path "$D")" D_W="$(win_path "$D")" perl -pi -e '
+        s/\e\[(\d*)C/" " x ($1 || 1)/ge;
+        s/\e\[[0-9;?]*[ -\/]*[@-~]//g;
+        s/\e\][^\a\e]*(?:\a|\e\\)//g;
+        s/\r//g;
+        for my $t (grep { length } @ENV{qw(D_W D_M D_P)}) {
+            s/\Q$t\E([^\s|"]*)/my $r = $1; $r =~ tr{\\}{\/}; "<D>$r"/ge;
+        }' "$@"
+}
+
+# run ARGS... -- user init of the language under test in the fixture (bash-style
+# options; mapped for aitools.ps1); RC, OUT (console), SUM (summary rows), both normalized
 run() {
-    local impl="$1"; shift
     RC=0
     local here="$PWD"
     cd "$D"
-    local e=(env -u AITOOLS_SUMMARY_FILE -u AITOOLS_MACHINE_ALIAS -u AITOOLS_USER_REPO_PATH -u AITOOLS_PROFILE_FILE -u AITOOLS_FORCE
-        HOME="$H" PATH="$WORK/bin:$PATH" AITOOLS_LOG_DIR="$H/.aitools/logs" AITOOLS_PRESERVE_SUMMARY=1
-        SHELL=/test/bin/pwsh
-        GIT_CONFIG_GLOBAL="$H/.gitconfig" GIT_CONFIG_NOSYSTEM=1 GH_USER="$GH_USER" GH_REMOTE="$D/gh-remote.git" GH_CLONE_SRC="$D/remote.git"
-        AITOOLS_PROFILE_TEST_MACHINE_ID="$THIS_ID" AITOOLS_PROFILE_TEST_HOSTNAME=probe-host ${CASE_ENV[@]+"${CASE_ENV[@]}"})
-    if [ "$impl" = "bash" ]; then
+    local e
+    if [ "$LANG_RUN" = sh ]; then
+        e=(env -u AITOOLS_SUMMARY_FILE -u AITOOLS_MACHINE_ALIAS -u AITOOLS_USER_REPO_PATH -u AITOOLS_PROFILE_FILE -u AITOOLS_FORCE
+            HOME="$H" PATH="$WORK/bin:$PATH" AITOOLS_LOG_DIR="$H/.aitools/logs" AITOOLS_PRESERVE_SUMMARY=1
+            SHELL=/test/bin/pwsh
+            GIT_CONFIG_GLOBAL="$H/.gitconfig" GIT_CONFIG_NOSYSTEM=1 GH_USER="$GH_USER" GH_REMOTE="$D/gh-remote.git" GH_CLONE_SRC="$D/remote.git"
+            AITOOLS_PROFILE_TEST_MACHINE_ID="$THIS_ID" AITOOLS_PROFILE_TEST_HOSTNAME=probe-host ${CASE_ENV[@]+"${CASE_ENV[@]}"})
         if [ -n "${PTY_INPUT:-}" ]; then
             "${e[@]}" python3 "$PTY" --input "$PTY_INPUT" --log "$D/out.txt" -- "$BASH_BIN" "$R/scripts/aitools" user init "$@" > /dev/null 2>&1 || RC=$?
         else
             "${e[@]}" "$BASH_BIN" "$R/scripts/aitools" user init "$@" < /dev/null > "$D/out.txt" 2>&1 || RC=$?
         fi
     else
-        local pa=() a
+        e=(env -u AITOOLS_SUMMARY_FILE -u AITOOLS_MACHINE_ALIAS -u AITOOLS_USER_REPO_PATH -u AITOOLS_PROFILE_FILE -u AITOOLS_FORCE
+            HOME="$(native_path "$H")" USERPROFILE="$(native_path "$H")" PATH="$WORK/bin:$PATH"
+            AITOOLS_LOG_DIR="$(native_path "$H/.aitools/logs")" AITOOLS_PRESERVE_SUMMARY=1
+            GIT_CONFIG_GLOBAL="$(native_path "$H/.gitconfig")" GIT_CONFIG_NOSYSTEM=1 GH_USER="$GH_USER"
+            GH_REMOTE="$(native_path "$D/gh-remote.git")" GH_CLONE_SRC="$(native_path "$D/remote.git")"
+            AITOOLS_PROFILE_TEST_MACHINE_ID="$THIS_ID" AITOOLS_PROFILE_TEST_HOSTNAME=probe-host ${CASE_ENV[@]+"${CASE_ENV[@]}"})
+        local pa=()
         while [ $# -gt 0 ]; do
             case "$1" in --alias) pa+=(-Alias "$2"); shift 2 ;; --force) pa+=(-Force); shift ;; *) pa+=("$1"); shift ;; esac
         done
+        local ps=(pwsh -NoProfile -File "$(native_path "$R/scripts/aitools.ps1")" user init ${pa[@]+"${pa[@]}"})
         if [ -n "${PTY_INPUT:-}" ]; then
-            "${e[@]}" AITOOLS_PROFILE_TEST_ANY_OS=1 python3 "$PTY" --input "$PTY_INPUT" --log "$D/out.txt" -- \
-                pwsh -NoProfile -File "$HARNESS" -RepoPath "$R" ${pa[@]+"${pa[@]}"} > /dev/null 2>&1 || RC=$?
+            "${e[@]}" python3 "$(native_path "$PTY")" --input "$PTY_INPUT" --log "$(native_path "$D/out.txt")" -- "${ps[@]}" > /dev/null 2>&1 || RC=$?
         else
-            "${e[@]}" AITOOLS_PROFILE_TEST_ANY_OS=1 pwsh -NoProfile -File "$HARNESS" -RepoPath "$R" ${pa[@]+"${pa[@]}"} \
-                < /dev/null > "$D/out.txt" 2>&1 || RC=$?
+            "${e[@]}" "${ps[@]}" < /dev/null > "$D/out.txt" 2>&1 || RC=$?
         fi
     fi
     cd "$here"
     OUT="$D/out.txt"
     SUM="$D/summary.txt"
     cp "$H/.aitools/logs/last-summary.txt" "$SUM" 2>/dev/null || : > "$SUM"  # no rows = empty copy (asserted by the cases)
-    # Fixture paths differ per shell (CASE.bash / CASE.ps): compared as <D>
-    D_RE="$D" perl -pi -e 's/\e\[[0-9;]*m//g; s/\r//g; s/\Q$ENV{D_RE}\E/<D>/g' "$OUT" "$SUM"
+    norm_run "$OUT" "$SUM"
 }
 
-# case_run NAME WANT_RC SETUP ARGS... -- SETUP IMPL builds the fixture; runs bash, then pwsh
+# norm_pj FILE -- profile.json as compared: CR removed; this machine's machine.os and
+# machine.arch (platform facts written by register) as <OS> and <ARCH>
+norm_pj() {
+    THIS_KEY="$THIS_KEY" perl -0777 -pe '
+        s/\r//g;
+        my $k = $ENV{THIS_KEY};
+        s{("\Q$k\E"\s*:\s*)(?<o>\{(?:[^{}"]++|"(?:[^"\\]++|\\.)*+"|(?&o))*+\})}{
+            my ($p, $obj) = ($1, $+{o});
+            $obj =~ s/("os"\s*:\s*)"[^"]*"/$1"<OS>"/;
+            $obj =~ s/("arch"\s*:\s*)"[^"]*"/$1"<ARCH>"/;
+            "$p$obj"
+        }ge' "$1"
+}
+# log_subjects BARE -- commit subjects on main of a bare remote ("(none)" when absent)
+log_subjects() {
+    if [ ! -d "$1" ]; then printf '(none)\n'; return 0; fi
+    git -C "$1" log --format=%s main 2>&1 || printf '(no main branch)\n'  # shown in the golden diff
+}
+# result_golden -- this case's result (exit code, summary rows, profile.json, remote
+# commits) must equal the golden file userinit-$CASE.txt (sh and ps1 share it)
+result_golden() {
+    local f="$D/result.txt"
+    {
+        printf 'exit %s\n-- summary rows\n' "$RC"; cat "$SUM"
+        printf -- '-- profile.json\n'
+        if [ -f "$DP/profile.json" ]; then norm_pj "$DP/profile.json"; else printf '(none)\n'; fi
+        printf -- '-- remote.git commits\n'; log_subjects "$D/remote.git"
+        printf -- '-- gh-remote.git commits\n'; log_subjects "$D/gh-remote.git"
+    } > "$f"
+    if golden_match "userinit-$CASE.txt" "$f"; then ok "$CASE: exit, rows, profile.json and commits match golden"
+    else bad "$CASE: result differs from golden userinit-$CASE.txt"; fi
+}
+
+# case_run NAME WANT_RC SETUP ARGS... -- SETUP builds the fixture; one run, then the golden
 case_run() {
     local name="$1" want="$2" setup="$3"; shift 3
     CASE="$name"
-    "$setup" bash
-    run bash "$@"
-    B_RC=$RC; B_D="$D"
-    if [ "$RC" -eq "$want" ]; then ok "$name: bash exit $RC"
-    else bad "$name: bash exit $RC, want $want"; perl -pe 's/^/       /' "$OUT"; fi
-    if $USE_PS; then
-        "$setup" ps
-        run ps "$@"
-        if [ "$RC" -ne "$B_RC" ]; then bad "$name: pwsh exit $RC, bash $B_RC"; perl -pe 's/^/       /' "$OUT"; else ok "$name: pwsh exit $RC"; fi
-        if diff "$B_D/summary.txt" "$D/summary.txt" > "$D/sum.diff"; then ok "$name: summary rows identical"
-        else bad "$name: summary rows differ (bash < > pwsh)"; perl -pe 's/^/       /' "$D/sum.diff"; fi
-        same_file "home/repos/aitools-$GH_USER/profile.json" "profile.json"
-        same_log remote.git "remote commits"
-        same_log gh-remote.git "GitHub remote commits"
-        D="$B_D"; H="$D/home"; DP="$H/repos/aitools-$GH_USER"; BARE="$D/remote.git"; OUT="$D/out.txt"; SUM="$D/summary.txt"
-    fi
-}
-same_file() {  # same_file REL LABEL -- bash and pwsh fixtures hold the same bytes (both absent is fine)
-    if [ ! -e "$B_D/$1" ] && [ ! -e "$D/$1" ]; then return 0; fi
-    if cmp -s "$B_D/$1" "$D/$1"; then ok "$CASE: $2 bytes identical"
-    else bad "$CASE: $2 differs"; diff "$B_D/$1" "$D/$1" | perl -pe 's/^/       /' || true; fi
-}
-same_log() {  # same_log BARE LABEL -- the same commit subjects on the remote
-    if [ ! -d "$B_D/$1" ] && [ ! -d "$D/$1" ]; then return 0; fi
-    local a b
-    a=$(git -C "$B_D/$1" log --format=%s main 2>&1) || a="(no log: $a)"
-    b=$(git -C "$D/$1" log --format=%s main 2>&1) || b="(no log: $b)"
-    if [ "$a" = "$b" ]; then ok "$CASE: $2 identical"; else bad "$CASE: $2 differ"; printf '       bash: %s\n       pwsh: %s\n' "$a" "$b"; fi
+    "$setup"
+    run "$@"
+    if [ "$RC" -eq "$want" ]; then ok "$name: $LANG_RUN exit $RC"
+    else bad "$name: $LANG_RUN exit $RC, want $want"; perl -pe 's/^/       /' "$OUT"; fi
+    result_golden
 }
 has_row() { if grep -qxF "$1" "$SUM"; then ok "$CASE: row $1"; else bad "$CASE: no row '$1'"; perl -pe 's/^/       /' "$SUM"; fi; }
 no_row_like() { if grep -q -- "$1" "$SUM"; then bad "$CASE: unexpected row /$1/"; perl -pe 's/^/       /' "$SUM"; else ok "$CASE: no row /$1/"; fi; }
 out_has() { if grep -qF -- "$1" "$OUT"; then ok "$CASE: output has '$1'"; else bad "$CASE: output lacks '$1'"; perl -pe 's/^/       /' "$OUT"; fi; }
-pj_has() {  # pj_has PERL-REGEX -- the bash dotprofile's profile.json matches (whole file)
+pj_has() {  # pj_has PERL-REGEX -- the dotprofile's profile.json matches (whole file)
     if perl -0777 -ne 'BEGIN { $r = shift @ARGV } exit(/$r/s ? 0 : 1)' "$1" "$DP/profile.json"; then ok "$CASE: profile.json /$1/"
-    else bad "$CASE: profile.json lacks /$1/"; perl -pe 's/^/       /' "$DP/profile.json" 2>/dev/null || true; fi
+    else bad "$CASE: profile.json lacks /$1/"; perl -pe 's/^/       /' "$DP/profile.json" 2>/dev/null || true; fi  # absent file: the FAIL above says so
 }
 pj_lacks() {
     if perl -0777 -ne 'BEGIN { $r = shift @ARGV } exit(/$r/s ? 1 : 0)' "$1" "$DP/profile.json"; then ok "$CASE: profile.json has no /$1/"
     else bad "$CASE: profile.json has /$1/"; fi
 }
-pj_get() {  # pj_get SEG... -- a scalar of the bash dotprofile's profile.json ("" = absent)
+pj_get() {  # pj_get SEG... -- a scalar of the dotprofile's profile.json ("" = absent)
     perl "$REPO/scripts/aitools-json.pl" get "$DP/profile.json" "$@" 2>/dev/null || true  # absent = "" (the caller compares)
 }
 pj_alias() {  # pj_alias KEY ALIAS -- profiles.KEY.alias is ALIAS and its machine.id the key
     local a m
     a=$(pj_get profiles "$1" alias); m=$(pj_get profiles "$1" machine id)
     if [ "$a" = "$2" ] && [ "$(printf '%s' "$m" | tr 'A-Z' 'a-z')" = "$1" ]; then ok "$CASE: profiles.$1 alias $2"
-    else bad "$CASE: profiles.$1 alias '$a' id '$m', want alias $2"; perl -pe 's/^/       /' "$DP/profile.json" 2>/dev/null || true; fi
+    else bad "$CASE: profiles.$1 alias '$a' id '$m', want alias $2"; perl -pe 's/^/       /' "$DP/profile.json" 2>/dev/null || true; fi  # absent file: the FAIL above says so
 }
 pj_no_key() {  # pj_no_key KEY -- profiles has no key KEY
     if perl "$REPO/scripts/aitools-json.pl" type "$DP/profile.json" profiles "$1" > /dev/null 2>&1; then bad "$CASE: profiles.$1 still present"
@@ -236,7 +305,7 @@ remote_has() {  # remote_has BARE SUBJECT -- a commit with this subject reached 
     local subjects
     subjects=$(git -C "$1" log --format=%s main 2>/dev/null) || subjects=""  # no branch = no commits (reported below)
     if grep -qxF -- "$2" <<< "$subjects"; then ok "$CASE: remote has '$2'"
-    else bad "$CASE: remote lacks '$2'"; git -C "$1" log --format='       %s' main 2>&1 || true; fi
+    else bad "$CASE: remote lacks '$2'"; git -C "$1" log --format='       %s' main 2>&1 || true; fi  # the listing is diagnostic only
 }
 remote_count() {  # remote_count BARE N
     local n
@@ -249,16 +318,12 @@ row_count() {  # row_count PREFIX N -- exactly N summary rows start with PREFIX
     if [ "$n" -eq "$2" ]; then ok "$CASE: $2 row(s) '$1'"; else bad "$CASE: $n row(s) '$1', want $2"; perl -pe 's/^/       /' "$SUM"; fi
 }
 # no_machine_flag yes|no -- M3-FINISH item 2: whether setup-user-config ran with
-# --no-machine (bash) / -NoMachine (pwsh), read from its info line in each shell's output
+# --no-machine (bash) / -NoMachine (pwsh), read from its info line in the output
 no_machine_flag() {
-    local f got impl
-    for impl in bash ps; do
-        f="$WORK/$CASE.$impl/out.txt"
-        if [ ! -f "$f" ]; then continue; fi
-        if grep -qF "machine registration is left to the caller" "$f"; then got=yes; else got=no; fi
-        if [ "$got" = "$1" ]; then ok "$CASE ($impl): writer flag --no-machine $1"
-        else bad "$CASE ($impl): writer flag --no-machine $got, want $1"; perl -pe 's/^/       /' "$f"; fi
-    done
+    local got
+    if grep -qF "machine registration is left to the caller" "$OUT"; then got=yes; else got=no; fi
+    if [ "$got" = "$1" ]; then ok "$CASE ($LANG_RUN): writer flag --no-machine $1"
+    else bad "$CASE ($LANG_RUN): writer flag --no-machine $got, want $1"; perl -pe 's/^/       /' "$OUT"; fi
 }
 # unregistered_once -- the machine-profile outcome is reported once, by user init:
 # one "machine profile" ERROR row, none of the writer's (no machine match, its ACTION)
@@ -274,10 +339,11 @@ cfg_id() {  # cfg_id ID -- config.json machineId ("" = absent)
     if [ "$v" = "$1" ]; then ok "$CASE: config.json machineId '${1}'"; else bad "$CASE: config.json machineId '$v', want '$1'"; fi
 }
 
+printf 'user init tests (%s: %s entry point)\n' "$TEST_PLATFORM" "$LANG_RUN"
 CASE_ENV=()
 PTY_INPUT=""
-fx_two() { fixture "$CASE" "$1" "$PJ_TWO"; }
-fx_legacy() { fixture "$CASE" "$1" "$PJ_LEGACY"; }
+fx_two() { fixture "$CASE" "$PJ_TWO"; }
+fx_legacy() { fixture "$CASE" "$PJ_LEGACY"; }
 
 echo "== decision 1: --alias <new> without a terminal creates this machine's profile (Review3 #82 M1)"
 case_run alias-new 0 fx_two --alias spare
@@ -286,17 +352,21 @@ pj_has "\"id\": \"$THIS_KEY\""
 has_row "OK|machine profile|created (spare)"
 remote_has "$BARE" "Register machine profile: spare"
 cfg_id "$THIS_KEY"
-out_has "────"
+# the summary panel: box rule (bash), dashed rule (aitools-lib.ps1 Show-Summary)
+if [ "$LANG_RUN" = sh ]; then out_has "────"; else out_has "------------------------------------------------------------"; fi
 no_machine_flag no
 # machine.shell (Review3 #82 minor 6): bash records the login shell ($SHELL, here
 # /test/bin/pwsh so both shells write the same bytes), aitools.ps1 records pwsh
 if [ "$(pj_get profiles "$THIS_KEY" machine shell)" = "pwsh" ]; then ok "$CASE: machine.shell from \$SHELL"
 else bad "$CASE: machine.shell '$(pj_get profiles "$THIS_KEY" machine shell)'"; fi
+# machine.os / machine.arch: this platform's facts (the golden holds <OS> / <ARCH>)
+if [ "$(pj_get profiles "$THIS_KEY" machine os)" = "$THIS_OS" ]; then ok "$CASE: machine.os $THIS_OS"
+else bad "$CASE: machine.os '$(pj_get profiles "$THIS_KEY" machine os)', want $THIS_OS"; fi
+if [ -n "$(pj_get profiles "$THIS_KEY" machine arch)" ]; then ok "$CASE: machine.arch set"; else bad "$CASE: machine.arch missing"; fi
 
 echo "== re-run: verified, no new commit"
 CASE="alias-new-rerun"
-D="$B_D"; H="$D/home"; DP="$H/repos/aitools-$GH_USER"; BARE="$D/remote.git"
-run bash
+run
 if [ "$RC" -eq 0 ]; then ok "$CASE: exit 0"; else bad "$CASE: exit $RC"; perl -pe 's/^/       /' "$OUT"; fi
 has_row "OK|machine profile|verified (spare)"
 remote_count "$BARE" 2
@@ -330,7 +400,7 @@ no_row_like "re-keys machine profiles"
 cfg_id "$THIS_KEY"
 
 echo "== decision 6: Path 1 without profile.json -> scaffold, committed and pushed"
-fx_noprofile() { fixture "$CASE" "$1" ""; }
+fx_noprofile() { fixture "$CASE" ""; }
 case_run scaffold-path1 0 fx_noprofile
 pj_alias "$THIS_KEY" probe-host
 pj_has "\"schemaRevision\": \"2.2\""
@@ -339,7 +409,7 @@ remote_has "$BARE" "Register machine profile: probe-host"
 remote_has "$BARE" "Add claude/CLAUDE.md template"
 
 echo "== decision 6: Path 3 (no dotprofile) -> created, scaffold reaches the (gh) remote"
-fx_none() { fixture "$CASE" "$1" "-"; }
+fx_none() { fixture "$CASE" "-"; }
 case_run scaffold-path3 0 fx_none --alias first
 pj_alias "$THIS_KEY" first
 remote_has "$D/gh-remote.git" "Initial commit: profile and session archive structure"
@@ -349,7 +419,7 @@ if grep -q "\"$THIS_KEY\"" <<< "$remote_pj"; then ok "$CASE: profile.json on the
 has_row "OK|dotprofile|created"
 
 echo "== decision 2 switch = 0 (default): cached machineAlias, no terminal -> ERROR, exit 1 (same as unregistered)"
-fx_cached() { fixture "$CASE" "$1" "$PJ_TWO" ',
+fx_cached() { fixture "$CASE" "$PJ_TWO" ',
   "machineAlias": "nobul-mac"'; }
 case_run cached-alias-0 1 fx_cached
 has_row "ERROR|machine profile|not registered (no terminal)"
@@ -358,7 +428,7 @@ pj_lacks "\"$THIS_KEY\""
 
 echo "== decision 2 switch = 1: cached machineAlias -> claimed without asking"
 fx_cached_on() {
-    fx_cached "$1"
+    fx_cached
     # .ps1 files are checked out with CRLF (.gitattributes eol=crlf): \r? before the end
     perl -pi -e 's/^AITOOLS_REGISTER_CACHED_ALIAS_SILENTLY=0(\r?)$/AITOOLS_REGISTER_CACHED_ALIAS_SILENTLY=1$1/; s/^(\$script:RegisterCachedAliasSilently = )\$false(\r?)$/$1\$true$2/' \
         "$R/scripts/aitools" "$R/scripts/aitools.ps1"
@@ -372,7 +442,7 @@ if [ "$sw_sh" = "AITOOLS_REGISTER_CACHED_ALIAS_SILENTLY=0" ] && [ "${sw_ps%$'\r'
 else bad "decision 2 switch line not found (or not at its default) in scripts/aitools / aitools.ps1"; fi
 
 echo "== Review3 #82 minor 5: uncommitted edits to profile.json are never committed"
-fx_dirty() { fx_two "$1"; perl -pi -e 's/"old-host"/"edited-host"/' "$DP/profile.json"; }
+fx_dirty() { fx_two; perl -pi -e 's/"old-host"/"edited-host"/' "$DP/profile.json"; }
 case_run dirty 1 fx_dirty --alias spare
 has_row "ERROR|machine profile|not registered (local edits)"
 unregistered_once
@@ -380,7 +450,7 @@ pj_has '"edited-host"'
 pj_lacks "\"$THIS_KEY\""
 remote_count "$BARE" 1
 fx_dirty_reg() {
-    fixture "$CASE" "$1" "$PJ_TWO"
+    fixture "$CASE" "$PJ_TWO"
     perl -0pi -e 's/("profiles": \{)/$1\n    "'"$THIS_KEY"'": { "alias": "mine", "machine": { "id": "'"$THIS_KEY"'", "hostname": "probe-host" } },/' "$DP/profile.json"
     git -C "$DP" -c user.name=T -c user.email=t@x commit -q -am "register"; git -C "$DP" push -q
     perl -pi -e 's/"old-host"/"edited-host"/' "$DP/profile.json"
@@ -392,7 +462,7 @@ remote_count "$BARE" 2
 
 echo "== Review3 #82 minor 4: a rejected push (remote ahead) is told to pull --rebase"
 fx_ahead() {
-    fx_two "$1"
+    fx_two
     local w="$D/other"
     git clone -q -b main "$BARE" "$w"; printf 'x\n' > "$w/other.txt"; git -C "$w" add other.txt
     git -C "$w" -c user.name=O -c user.email=o@x commit -q -m other; git -C "$w" push -q origin main
@@ -409,7 +479,7 @@ case_run hook-abort 2 fx_two --alias spare
 has_row "ERROR|claude hooks|aborted (exit 2)"
 CASE_ENV=()
 
-# jsonl_count CASE IMPL SCRIPT [LEVEL MSG] -- valid records of SCRIPT (with LEVEL and
+# jsonl_count CASE SCRIPT [LEVEL MSG] -- valid records of SCRIPT (with LEVEL and
 # MSG when given) in that fixture's deploy.jsonl; "invalid" when a line is not JSON
 jsonl_count() {
     perl -MJSON::PP -e '
@@ -421,7 +491,7 @@ jsonl_count() {
             next if defined $l && ($o->{level} ne $l || $o->{msg} ne $m);
             $n++;
         }
-        print "$n\n";' "$WORK/$1.$2/home/.aitools/logs/deploy.jsonl" "${@:3}"
+        print "$n\n";' "$WORK/$1/home/.aitools/logs/deploy.jsonl" "${@:2}"
 }
 
 echo "== FIX-2 (A-12, A-13): user init runs setup-user-config and setup-user-hooks through the lib relay"
@@ -435,37 +505,38 @@ CASE_ENV=()
 CASE_ENV=(HOOK_WARN=1)
 case_run relay-jsonl 0 fx_two --alias spare
 out_has "[setup-user-hooks] [warn] stub hook warning"
-for impl in bash ps; do
-    if [ "$impl" = "ps" ] && ! $USE_PS; then continue; fi
-    n=$(jsonl_count relay-jsonl "$impl" setup-user-hooks warn "stub hook warning")
-    if [ "$n" = "1" ]; then ok "relay-jsonl ($impl): hooks warning in deploy.jsonl"
-    else bad "relay-jsonl ($impl): hooks warning records '$n', want 1"; fi
-    n=$(jsonl_count relay-jsonl "$impl" setup-user-config)
-    if [ "$n" != "invalid" ] && [ "$n" -gt 0 ]; then ok "relay-jsonl ($impl): writer lines in deploy.jsonl ($n)"
-    else bad "relay-jsonl ($impl): writer records '$n'"; fi
-done
+n=$(jsonl_count relay-jsonl setup-user-hooks warn "stub hook warning")
+if [ "$n" = "1" ]; then ok "relay-jsonl ($LANG_RUN): hooks warning in deploy.jsonl"
+else bad "relay-jsonl ($LANG_RUN): hooks warning records '$n', want 1"; fi
+n=$(jsonl_count relay-jsonl setup-user-config)
+if [ "$n" != "invalid" ] && [ "$n" -gt 0 ]; then ok "relay-jsonl ($LANG_RUN): writer lines in deploy.jsonl ($n)"
+else bad "relay-jsonl ($LANG_RUN): writer records '$n'"; fi
 CASE_ENV=()
 
 echo "== FIX-2 (A-15): --alias without a value is an error through the lib (bash; pwsh binds it itself)"
 CASE="alias-novalue"
-fx_two bash
-run bash --alias
-if [ "$RC" -eq 1 ]; then ok "$CASE: bash exit 1"; else bad "$CASE: bash exit $RC, want 1"; perl -pe 's/^/       /' "$OUT"; fi
-out_has "[aitools] [error] --alias needs a value (aitools user init --alias <name>)"
-if grep -qF -- "--alias needs a value" "$H/.aitools/logs/deploy.log"; then ok "$CASE: in deploy.log"; else bad "$CASE: not in deploy.log"; fi
-run bash --alias --force
-if [ "$RC" -eq 1 ]; then ok "$CASE: '--alias --force' exit 1"; else bad "$CASE: '--alias --force' exit $RC, want 1"; fi
-out_has "--alias needs a value"
+if [ "$LANG_RUN" = sh ]; then
+    fx_two
+    run --alias
+    if [ "$RC" -eq 1 ]; then ok "$CASE: sh exit 1"; else bad "$CASE: sh exit $RC, want 1"; perl -pe 's/^/       /' "$OUT"; fi
+    out_has "[aitools] [error] --alias needs a value (aitools user init --alias <name>)"
+    if grep -qF -- "--alias needs a value" "$H/.aitools/logs/deploy.log"; then ok "$CASE: in deploy.log"; else bad "$CASE: not in deploy.log"; fi
+    run --alias --force
+    if [ "$RC" -eq 1 ]; then ok "$CASE: '--alias --force' exit 1"; else bad "$CASE: '--alias --force' exit $RC, want 1"; fi
+    out_has "--alias needs a value"
+else
+    printf '  skip %s: bash entry point only (pwsh binds -Alias itself)\n' "$CASE"; SKIP=$((SKIP + 1))
+fi
 
 echo "== review M1: a relative reposPath is refused (nothing created under the current directory)"
-fx_relative() { fixture "$CASE" "$1" "$PJ_TWO"; perl -pi -e 's/"reposPath": "[^"]*"/"reposPath": "repos"/' "$H/.aitools/config.json"; }
+fx_relative() { fixture "$CASE" "$PJ_TWO"; perl -pi -e 's/"reposPath": "[^"]*"/"reposPath": "repos"/' "$H/.aitools/config.json"; }
 case_run relative-repos 1 fx_relative --alias spare
 has_row "ERROR|dotprofile|reposPath not absolute"
 if [ -e "$D/repos" ]; then bad "$CASE: a repos/ directory was created under the cwd"; else ok "$CASE: nothing created under the cwd"; fi
 
 echo "== review M2: id undetectable (via=config) -> WARN, the cached machineId survives two runs"
 fx_viaconfig() {
-    fixture "$CASE" "$1" "$PJ_TWO" ',
+    fixture "$CASE" "$PJ_TWO" ',
   "machineId": "'"$THIS_KEY"'"'
     perl -0pi -e 's/("profiles": \{)/$1\n    "'"$THIS_KEY"'": { "alias": "mine", "machine": { "id": "'"$THIS_KEY"'", "hostname": "probe-host" } },/' "$DP/profile.json"
     git -C "$DP" -c user.name=T -c user.email=t@x commit -q -am "register"; git -C "$DP" push -q
@@ -477,7 +548,7 @@ cfg_id "$THIS_KEY"
 # Registered, id undetectable: machine_key is emptied for the writer, but no flag
 no_machine_flag no
 CASE="via-config-rerun"
-run bash
+run
 if [ "$RC" -eq 0 ]; then ok "$CASE: second run exit 0"; else bad "$CASE: second run exit $RC"; perl -pe 's/^/       /' "$OUT"; fi
 cfg_id "$THIS_KEY"
 CASE_ENV=()
@@ -490,7 +561,7 @@ out_has "AITOOLS_MACHINE_ALIAS=bogus ignored"
 CASE_ENV=()
 
 echo "== Path 2: the GitHub repo exists, no local clone -> cloned, identity from the profile, registered"
-fx_path2() { fx_two "$1"; rm -rf "$DP"; }
+fx_path2() { fx_two; rm -rf "$DP"; }
 CASE_ENV=(GH_REPO_VIEW_RC=0)
 case_run path2 0 fx_path2 --alias spare
 has_row "OK|dotprofile|cloned"
@@ -505,7 +576,7 @@ PJ_V1='{ "name": "Jose", "email": "jose@example.com", "github": "nobul-jose", "c
   "git": { "name": "Jose", "email": "jose@example.com" },
   "machines": [ { "hostname": "probe-host.local", "os": "darwin" }, { "hostname": "other-box", "os": "linux" } ],
   "cursor": { "cli": { "model": "auto" } } }'
-fx_v1() { fixture "$CASE" "$1" "$PJ_V1"; }
+fx_v1() { fixture "$CASE" "$PJ_V1"; }
 case_run v1-migrate 0 fx_v1 --alias mac1
 pj_alias "$THIS_KEY" mac1
 if [ "$(pj_get version)" = "2" ] && [ "$(pj_get meta schemaRevision)" = "2.2" ]; then ok "$CASE: version 2, revision 2.2"; else bad "$CASE: version '$(pj_get version)'"; fi
@@ -518,35 +589,34 @@ if perl "$REPO/scripts/aitools-json.pl" get "$H/.aitools/config.json" machineAli
 else bad "$CASE: config.json has no machineAlias"; fi
 
 echo "== profile-check.js reads machineId (id keys; legacy machineAlias kept)"
+# profile-check.js is a node script for every platform (aitools.ps1 and scripts/aitools call it)
 CASE="profile-check"
-fixture "$CASE" bash "$PJ_TWO" ',
-  "userRepoPath": "'"$WORK"'/profile-check.bash/home/repos/aitools-nobul-jose",
+fixture "$CASE" "$PJ_TWO" ',
+  "userRepoPath": "'"$(native_path "$WORK/profile-check/home/repos/aitools-nobul-jose")"'",
   "machineId": "deadbeef-0000-0000-0000-000000000000"'
-pc=$(node "$REPO/scripts/profile-check.js" --config "$H/.aitools/config.json") || pc=""
+PC_CFG="$(native_path "$H/.aitools/config.json")"
+pc=$(node "$(native_path "$REPO/scripts/profile-check.js")" --config "$PC_CFG") || pc=""
 if grep -q '"code":"MACHINE_ID_UNKNOWN"' <<< "$pc"; then ok "$CASE: unknown machineId reported"; else bad "$CASE: $pc"; fi
 if grep -q '"machineId":"deadbeef-0000-0000-0000-000000000000"' <<< "$pc"; then ok "$CASE: machineId in the result"; else bad "$CASE: $pc"; fi
 perl -pi -e 's/deadbeef-0000-0000-0000-000000000000/'"$OTHER_ID"'/' "$H/.aitools/config.json"
-pc=$(node "$REPO/scripts/profile-check.js" --config "$H/.aitools/config.json") || pc=""
+pc=$(node "$(native_path "$REPO/scripts/profile-check.js")" --config "$PC_CFG") || pc=""
 if grep -q 'MACHINE_ID_UNKNOWN' <<< "$pc"; then bad "$CASE: id-keyed machineId reported: $pc"; else ok "$CASE: id-keyed machineId found"; fi
 perl -pi -e 's/'"$OTHER_ID"'/'"$THIS_ID"'/' "$H/.aitools/config.json"
 perl -pi -e 's/"old-host"/"old-host", "id": "'"$THIS_ID"'"/' "$DP/profile.json"
-pc=$(node "$REPO/scripts/profile-check.js" --config "$H/.aitools/config.json") || pc=""
+pc=$(node "$(native_path "$REPO/scripts/profile-check.js")" --config "$PC_CFG") || pc=""
 if grep -q 'MACHINE_ID_UNKNOWN' <<< "$pc"; then bad "$CASE: legacy (alias-keyed) profile not read: $pc"; else ok "$CASE: legacy alias-keyed profile found by machine.id"; fi
 
 if $USE_PTY; then
-    echo "== interactive (pty): claim an unregistered profile; menus identical in both shells"
+    echo "== interactive (pty): claim an unregistered profile; the menu matches the golden (both shells)"
     PTY_INPUT=$'1\n'
     case_run pty-claim 0 fx_two
     pj_alias "$THIS_KEY" nobul-mac
     pj_other_intact
     out_has "[-] laptop (registered to another machine)"
     out_has "[1] nobul-mac"
-    if $USE_PS; then
-        perl -ne 'print if /^Which profile|^  \[|^Choice/' "$B_D/out.txt" | perl -pe 's/Choice: .*/Choice: /' > "$WORK/menu.bash"
-        perl -ne 'print if /^Which profile|^  \[|^Choice/' "$WORK/pty-claim.ps/out.txt" | perl -pe 's/Choice: .*/Choice: /' > "$WORK/menu.ps"
-        if diff "$WORK/menu.bash" "$WORK/menu.ps" > "$WORK/menu.diff"; then ok "pty-claim: menus identical"
-        else bad "pty-claim: menus differ"; perl -pe 's/^/       /' "$WORK/menu.diff"; fi
-    fi
+    perl -ne 'print if /^Which profile|^  \[|^Choice/' "$OUT" | perl -pe 's/Choice: .*/Choice: /; s/[ \t]+$//' > "$D/menu.txt"
+    if golden_match userinit-pty-claim-menu.txt "$D/menu.txt"; then ok "pty-claim: menu matches golden"
+    else bad "pty-claim: menu differs from golden userinit-pty-claim-menu.txt"; fi
 
     echo "== interactive (pty): hostname suggestion on another machine's profile carries the label (Review3 #82 M2)"
     CASE_ENV=(AITOOLS_PROFILE_TEST_HOSTNAME=laptop-host)
@@ -579,10 +649,11 @@ if $USE_PTY; then
     has_row "ERROR|machine profile|not registered (no terminal)"
     if grep -q "Which profile is this machine" "$OUT"; then bad "$CASE: --force prompted"; else ok "$CASE: --force did not prompt"; fi
     PTY_INPUT=""
-
+else
+    printf '  skip interactive cases (no pseudo-terminal: python3 missing, or pywinpty not installed on Windows)\n'; SKIP=$((SKIP + 1))
 fi
 
 echo ""
-echo "test-user-init: $PASS passed, $FAIL failed"
+echo "test-user-init: $PASS passed, $FAIL failed, $SKIP skipped ($TEST_PLATFORM: $LANG_RUN entry point)"
 if [ "$FAIL" -gt 0 ]; then exit 1; fi
 exit 0
