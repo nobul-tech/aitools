@@ -1,10 +1,12 @@
 # Artifact Harvesting
 
-Version 1.1 (2026-10-31). Merges the rule `artifact-harvesting.md` and
+Version 1.2 (2026-11-01). Merges the rule `artifact-harvesting.md` and
 `reference/framework-artifact-harvesting.md` into one document, and adds a
 description, rebuilt from the code, of what the SessionStart and SessionEnd
-hooks actually do. v1.1: the hook fixes for gaps G1–G6 (section 9) are in
-the code, and sections 4–9 describe the fixed behaviour.
+hooks actually do. v1.1: the hook fixes for gaps G1–G6 are in the code, and
+sections 4–8 describe the fixed behaviour. v1.2: the Known gaps section was
+removed (commander); the gap ids G1–G6 used below are defined in
+`RELEASE_NOTES.md` v0.74.1.
 
 **Intent**: **Purpose**: Be the single reference for artifact harvesting in
 aitools: why it exists (source discipline), what must and must not be
@@ -77,8 +79,10 @@ Extended with:
 ## 3. Criteria (spec) and what implements them
 
 The criteria below are the governance spec. The "Implemented as" column says
-what the code does today; where they differ, the code is behind the spec
-(section 9, G7).
+what the code does today; where they differ, the code is behind the spec.
+Not implemented: the "keep" flag, the 7-day promotion rule, manual-flag
+semantics, the `aitools` sync candidate prompt, harvest KPIs, and the
+"already committed elsewhere" exclusion; `type` is always `code`.
 
 ### 3.1 What MUST be harvested
 
@@ -430,7 +434,7 @@ them (`/harvest` skill, "Commit the artifact + manifest update"). Because
 
 When changing the harvest logic: change `scripts/ait-harvest.py`, keep the
 shims thin, keep the never-delete and always-exit-0 guards, run
-`tests/harvest/test-ait-harvest.py`, and update sections 5, 6 and 9 of this
+`tests/harvest/test-ait-harvest.py`, and update sections 5 and 6 of this
 file in the same change.
 
 ## Cross-references

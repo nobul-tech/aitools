@@ -101,7 +101,8 @@ ARCHIVE_PREFIX_LEN = 8
 # is used ONLY to find such a legacy dir from a session id (SessionEnd) and to
 # recognize the current session's own legacy dir in catch-up. A dir name is
 # never cut to this length (the cut made a 12-char delegate dir resolve to
-# the live session's dir: reference/artifact-harvesting.md gap G1).
+# the live session's dir: gap G1). Gap ids G1-G6 in this file: RELEASE_NOTES.md
+# v0.74.1; design: reference/artifact-harvesting.md.
 LEGACY_SCRATCH_PREFIX_LEN = 10
 
 # Files a session dir holds for the harness, not for the user: the harvest

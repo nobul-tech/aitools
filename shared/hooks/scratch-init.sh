@@ -10,13 +10,14 @@
 #   - Uses session_id from CC hook input for deterministic dir names (R1, #53):
 #     .scratch/session-<full session id> since 2026-10-31. Names are never
 #     cut: the old 10-char cut let ait-harvest.py resolve a longer delegate dir
-#     to the live session (reference/artifact-harvesting.md gap G1). A legacy
+#     to the live session (gap G1, RELEASE_NOTES.md v0.74.1). A legacy
 #     session-<id[:10]> dir of the same session (resumed after the upgrade) is
 #     reused, so a resumed session keeps its files in one dir.
 #   - Discovers handoffs at .aitools/channel/handoffs/ (R3, #53): every
 #     top-level *.md (all naming schemes, issue #138); the newest is the one
 #     with the latest leading YYYY-MM-DD date, undated legacy names last
-#     (gap G4: the old handoff* glob missed every dated handoff)
+#     (gap G4, RELEASE_NOTES.md v0.74.1: the old handoff* glob missed every
+#     dated handoff)
 #   - Registers session in harness SQLite DB if harness-db.py is available
 #   - SQLite integration is OBSERVE mode (log-only, never blocks)
 #   - Output channel: SessionStart plain stdout is added to Claude's

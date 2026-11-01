@@ -1954,16 +1954,6 @@
       "promotedTo": null,
       "pruneAfter": "2026-04-25"
     },
-    "2026-03-26_session-2d439e32-3_events.jsonl": {
-      "harvested": "2026-03-26",
-      "session": "aitools/2026-03-26_2d439e32-3",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
-      "status": "candidate",
-      "promotedTo": null,
-      "pruneAfter": "2026-04-25"
-    },
     "2026-03-26_session-2d439e32-3_export-mission-control.py": {
       "harvested": "2026-03-26",
       "session": "aitools/2026-03-26_2d439e32-3",
@@ -2294,26 +2284,6 @@
       "promotedTo": null,
       "pruneAfter": "2026-04-25"
     },
-    "2026-03-26_session-d3dae79d-9_events.jsonl": {
-      "harvested": "2026-03-26",
-      "session": "aitools/2026-03-26_d3dae79d-9",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
-      "status": "candidate",
-      "promotedTo": null,
-      "pruneAfter": "2026-04-25"
-    },
-    "2026-03-27_session-d5b52bf2-8_events.jsonl": {
-      "harvested": "2026-03-27",
-      "session": "aitools/2026-03-27_d5b52bf2-8",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
-      "status": "candidate",
-      "promotedTo": null,
-      "pruneAfter": "2026-04-26"
-    },
     "2026-03-27_session-8236ca9c-b_assessment-ol.md": {
       "harvested": "2026-03-27",
       "session": "aitools/2026-03-27_8236ca9c-b",
@@ -2350,16 +2320,6 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": "markdown",
-      "status": "candidate",
-      "promotedTo": null,
-      "pruneAfter": "2026-04-26"
-    },
-    "2026-03-27_session-8236ca9c-b_events.jsonl": {
-      "harvested": "2026-03-27",
-      "session": "aitools/2026-03-27_8236ca9c-b",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
       "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-04-26"
@@ -2524,16 +2484,6 @@
       "promotedTo": null,
       "pruneAfter": "2026-04-26"
     },
-    "2026-03-27_session-6e97c17f-c_events.jsonl": {
-      "harvested": "2026-03-27",
-      "session": "aitools/2026-03-27_6e97c17f-c",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
-      "status": "candidate",
-      "promotedTo": null,
-      "pruneAfter": "2026-04-26"
-    },
     "2026-03-27_session-dfbc4091-e_cc-agent-teams-doc.md": {
       "harvested": "2026-03-27",
       "session": "aitools/2026-03-27_dfbc4091-e",
@@ -2554,16 +2504,6 @@
       "promotedTo": null,
       "pruneAfter": "2026-04-26"
     },
-    "2026-03-27_session-dfbc4091-e_events.jsonl": {
-      "harvested": "2026-03-27",
-      "session": "aitools/2026-03-27_dfbc4091-e",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
-      "status": "candidate",
-      "promotedTo": null,
-      "pruneAfter": "2026-04-26"
-    },
     "2026-03-27_session-dfbc4091-e_nested-agent-investigation.md": {
       "harvested": "2026-03-27",
       "session": "aitools/2026-03-27_dfbc4091-e",
@@ -2580,16 +2520,6 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": "markdown",
-      "status": "candidate",
-      "promotedTo": null,
-      "pruneAfter": "2026-04-27"
-    },
-    "2026-03-28_session-f078fb16-e_events.jsonl": {
-      "harvested": "2026-03-28",
-      "session": "aitools/2026-03-28_f078fb16-e",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
       "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-04-27"
@@ -2640,16 +2570,6 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": "markdown",
-      "status": "candidate",
-      "promotedTo": null,
-      "pruneAfter": "2026-04-28"
-    },
-    "2026-03-29_session-fbf7decb-9_events.jsonl": {
-      "harvested": "2026-03-29",
-      "session": "aitools/2026-03-29_fbf7decb-9",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
       "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-04-28"
@@ -2714,16 +2634,6 @@
       "promotedTo": null,
       "pruneAfter": "2026-04-28"
     },
-    "2026-03-29_session-8a9efdbb-0_events.jsonl": {
-      "harvested": "2026-03-29",
-      "session": "aitools/2026-03-29_8a9efdbb-0",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
-      "status": "candidate",
-      "promotedTo": null,
-      "pruneAfter": "2026-04-28"
-    },
     "2026-03-29_session-8a9efdbb-0_f5fa-latest.txt": {
       "harvested": "2026-03-29",
       "session": "aitools/2026-03-29_8a9efdbb-0",
@@ -2774,36 +2684,6 @@
       "promotedTo": null,
       "pruneAfter": "2026-04-28"
     },
-    "2026-06-21_1_session-2f92e654-0_.intelligence-last-check": {
-      "harvested": "2026-06-21",
-      "session": "aitools/2026-06-21_2f92e654-0",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
-      "status": "candidate",
-      "promotedTo": null,
-      "pruneAfter": "2026-07-21"
-    },
-    "2026-06-21_1_session-2f92e654-0_events.jsonl": {
-      "harvested": "2026-06-21",
-      "session": "aitools/2026-06-21_2f92e654-0",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
-      "status": "candidate",
-      "promotedTo": null,
-      "pruneAfter": "2026-07-21"
-    },
-    "2026-06-21_8_session-eafcf161-5_.intelligence-last-check": {
-      "harvested": "2026-06-21",
-      "session": "aitools/2026-06-21_eafcf161-5",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
-      "status": "candidate",
-      "promotedTo": null,
-      "pruneAfter": "2026-07-21"
-    },
     "2026-06-21_8_session-eafcf161-5_acceptance-grep.py": {
       "harvested": "2026-06-21",
       "session": "aitools/2026-06-21_eafcf161-5",
@@ -2835,16 +2715,6 @@
       "pruneAfter": "2026-07-21"
     },
     "2026-06-21_8_session-eafcf161-5_dotprofile-commit-v72.txt": {
-      "harvested": "2026-06-21",
-      "session": "aitools/2026-06-21_eafcf161-5",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
-      "status": "candidate",
-      "promotedTo": null,
-      "pruneAfter": "2026-07-21"
-    },
-    "2026-06-21_8_session-eafcf161-5_events.jsonl": {
       "harvested": "2026-06-21",
       "session": "aitools/2026-06-21_eafcf161-5",
       "description": "Auto-harvested from session scratch",
@@ -3034,32 +2904,12 @@
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
-    "2026-06-21_7_session-46ee1c2b-1_.intelligence-last-check": {
-      "harvested": "2026-06-21",
-      "session": "aitools/2026-06-21_46ee1c2b-1",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
-      "status": "candidate",
-      "promotedTo": null,
-      "pruneAfter": "2026-07-21"
-    },
     "2026-06-21_7_session-46ee1c2b-1_agent-probe.sh": {
       "harvested": "2026-06-21",
       "session": "aitools/2026-06-21_46ee1c2b-1",
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": "bash",
-      "status": "candidate",
-      "promotedTo": null,
-      "pruneAfter": "2026-07-21"
-    },
-    "2026-06-21_7_session-46ee1c2b-1_events.jsonl": {
-      "harvested": "2026-06-21",
-      "session": "aitools/2026-06-21_46ee1c2b-1",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
       "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
@@ -3094,86 +2944,6 @@
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
-    "2026-06-21_2_session-fb6e3243-4_.intelligence-last-check": {
-      "harvested": "2026-06-21",
-      "session": "aitools/2026-06-21_fb6e3243-4",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
-      "status": "candidate",
-      "promotedTo": null,
-      "pruneAfter": "2026-07-21"
-    },
-    "2026-06-21_2_session-fb6e3243-4_events.jsonl": {
-      "harvested": "2026-06-21",
-      "session": "aitools/2026-06-21_fb6e3243-4",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
-      "status": "candidate",
-      "promotedTo": null,
-      "pruneAfter": "2026-07-21"
-    },
-    "2026-06-21_7_session-86a1e226-8_.intelligence-last-check": {
-      "harvested": "2026-06-21",
-      "session": "aitools/2026-06-21_86a1e226-8",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
-      "status": "candidate",
-      "promotedTo": null,
-      "pruneAfter": "2026-07-21"
-    },
-    "2026-06-21_3_session-41894402-b_.intelligence-last-check": {
-      "harvested": "2026-06-21",
-      "session": "aitools/2026-06-21_41894402-b",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
-      "status": "candidate",
-      "promotedTo": null,
-      "pruneAfter": "2026-07-21"
-    },
-    "2026-06-21_7_session-81356750-c_.intelligence-last-check": {
-      "harvested": "2026-06-21",
-      "session": "aitools/2026-06-21_81356750-c",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
-      "status": "candidate",
-      "promotedTo": null,
-      "pruneAfter": "2026-07-21"
-    },
-    "2026-06-21_7_session-81356750-c_events.jsonl": {
-      "harvested": "2026-06-21",
-      "session": "aitools/2026-06-21_81356750-c",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
-      "status": "candidate",
-      "promotedTo": null,
-      "pruneAfter": "2026-07-21"
-    },
-    "2026-06-21_session-dbeefed3-d_.harvested": {
-      "harvested": "2026-06-21",
-      "session": "aitools/2026-06-21_dbeefed3-d",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
-      "status": "candidate",
-      "promotedTo": null,
-      "pruneAfter": "2026-07-21"
-    },
-    "2026-06-21_session-dbeefed3-d_.intelligence-last-check": {
-      "harvested": "2026-06-21",
-      "session": "aitools/2026-06-21_dbeefed3-d",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
-      "status": "candidate",
-      "promotedTo": null,
-      "pruneAfter": "2026-07-21"
-    },
     "2026-06-21_session-dbeefed3-d_dedup-delete-list.txt": {
       "harvested": "2026-06-21",
       "session": "aitools/2026-06-21_dbeefed3-d",
@@ -3190,16 +2960,6 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": "python",
-      "status": "candidate",
-      "promotedTo": null,
-      "pruneAfter": "2026-07-21"
-    },
-    "2026-06-21_session-dbeefed3-d_events.jsonl": {
-      "harvested": "2026-06-21",
-      "session": "aitools/2026-06-21_dbeefed3-d",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
       "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
@@ -3234,72 +2994,12 @@
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
-    "2026-06-21_session-6582170c-4_.intelligence-last-check": {
-      "harvested": "2026-06-21",
-      "session": "aitools/2026-06-21_6582170c-4",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
-      "status": "candidate",
-      "promotedTo": null,
-      "pruneAfter": "2026-07-21"
-    },
-    "2026-06-21_session-6582170c-4_.harvested": {
-      "harvested": "2026-06-21",
-      "session": "aitools/2026-06-21_6582170c-4",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
-      "status": "candidate",
-      "promotedTo": null,
-      "pruneAfter": "2026-07-21"
-    },
-    "2026-06-21_1_session-6582170c-4_.intelligence-last-check": {
-      "harvested": "2026-06-21",
-      "session": "aitools/2026-06-21_6582170c-4",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
-      "status": "candidate",
-      "promotedTo": null,
-      "pruneAfter": "2026-07-21"
-    },
-    "2026-06-21_session-6582170c-4_events.jsonl": {
-      "harvested": "2026-06-21",
-      "session": "aitools/2026-06-21_6582170c-4",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
-      "status": "candidate",
-      "promotedTo": null,
-      "pruneAfter": "2026-07-21"
-    },
     "2026-06-21_session-6582170c-4_scan-blocks.py": {
       "harvested": "2026-06-21",
       "session": "aitools/2026-06-21_6582170c-4",
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": "python",
-      "status": "candidate",
-      "promotedTo": null,
-      "pruneAfter": "2026-07-21"
-    },
-    "2026-06-21_session-c46487f0-8_.intelligence-last-check": {
-      "harvested": "2026-06-21",
-      "session": "aitools/2026-06-21_c46487f0-8",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
-      "status": "candidate",
-      "promotedTo": null,
-      "pruneAfter": "2026-07-21"
-    },
-    "2026-06-21_session-c46487f0-8_events.jsonl": {
-      "harvested": "2026-06-21",
-      "session": "aitools/2026-06-21_c46487f0-8",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
       "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
@@ -3360,36 +3060,6 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": "bash",
-      "status": "candidate",
-      "promotedTo": null,
-      "pruneAfter": "2026-07-21"
-    },
-    "2026-06-21_session-288f147b-1_.intelligence-last-check": {
-      "harvested": "2026-06-21",
-      "session": "aitools/2026-06-21_288f147b-1",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
-      "status": "candidate",
-      "promotedTo": null,
-      "pruneAfter": "2026-07-21"
-    },
-    "2026-06-21_session-9f2f2f47-e_.intelligence-last-check": {
-      "harvested": "2026-06-21",
-      "session": "aitools/2026-06-21_9f2f2f47-e",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
-      "status": "candidate",
-      "promotedTo": null,
-      "pruneAfter": "2026-07-21"
-    },
-    "2026-06-21_session-9f2f2f47-e_events.jsonl": {
-      "harvested": "2026-06-21",
-      "session": "aitools/2026-06-21_9f2f2f47-e",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
       "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
@@ -3484,16 +3154,6 @@
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
-    "2026-06-21_session-5a95b268-9_.intelligence-last-check": {
-      "harvested": "2026-06-21",
-      "session": "aitools/2026-06-21_5a95b268-9",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
-      "status": "candidate",
-      "promotedTo": null,
-      "pruneAfter": "2026-07-21"
-    },
     "2026-06-21_session-5a95b268-9_deploy-hook.sh": {
       "harvested": "2026-06-21",
       "session": "aitools/2026-06-21_5a95b268-9",
@@ -3514,16 +3174,6 @@
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
-    "2026-06-21_session-5a95b268-9_events.jsonl": {
-      "harvested": "2026-06-21",
-      "session": "aitools/2026-06-21_5a95b268-9",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
-      "status": "candidate",
-      "promotedTo": null,
-      "pruneAfter": "2026-07-21"
-    },
     "2026-06-21_session-5a95b268-9_verify-hook.sh": {
       "harvested": "2026-06-21",
       "session": "aitools/2026-06-21_5a95b268-9",
@@ -3533,16 +3183,6 @@
       "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
-    },
-    "2026-06-22_session-3fb694ce-1_.intelligence-last-check": {
-      "harvested": "2026-06-22",
-      "session": "aitools/2026-06-22_3fb694ce-1",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
-      "status": "pruned",
-      "promotedTo": null,
-      "pruneAfter": "2026-07-22"
     },
     "2026-06-22_session-3fb694ce-1_cleanup-testwire.sh": {
       "harvested": "2026-06-22",
@@ -3560,16 +3200,6 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": "python",
-      "status": "pruned",
-      "promotedTo": null,
-      "pruneAfter": "2026-07-22"
-    },
-    "2026-06-22_session-3fb694ce-1_events.jsonl": {
-      "harvested": "2026-06-22",
-      "session": "aitools/2026-06-22_3fb694ce-1",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
       "status": "pruned",
       "promotedTo": null,
       "pruneAfter": "2026-07-22"
@@ -3624,26 +3254,6 @@
       "promotedTo": null,
       "pruneAfter": "2026-07-22"
     },
-    "2026-06-22_session-f3f6466a-e_.harvested": {
-      "harvested": "2026-06-22",
-      "session": "aitools/2026-06-22_f3f6466a-e",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
-      "status": "pruned",
-      "promotedTo": null,
-      "pruneAfter": "2026-07-22"
-    },
-    "2026-06-22_session-f3f6466a-e_.intelligence-last-check": {
-      "harvested": "2026-06-22",
-      "session": "aitools/2026-06-22_f3f6466a-e",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
-      "status": "pruned",
-      "promotedTo": null,
-      "pruneAfter": "2026-07-22"
-    },
     "2026-06-22_session-f3f6466a-e_cleanup-testwire.sh": {
       "harvested": "2026-06-22",
       "session": "aitools/2026-06-22_f3f6466a-e",
@@ -3660,16 +3270,6 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": "python",
-      "status": "pruned",
-      "promotedTo": null,
-      "pruneAfter": "2026-07-22"
-    },
-    "2026-06-22_session-f3f6466a-e_events.jsonl": {
-      "harvested": "2026-06-22",
-      "session": "aitools/2026-06-22_f3f6466a-e",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
       "status": "pruned",
       "promotedTo": null,
       "pruneAfter": "2026-07-22"
@@ -3734,26 +3334,6 @@
       "promotedTo": null,
       "pruneAfter": "2026-07-22"
     },
-    "2026-06-22_session-4c8d96ee-a_events.jsonl": {
-      "harvested": "2026-06-22",
-      "session": "aitools/2026-06-22_4c8d96ee-a",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
-      "status": "pruned",
-      "promotedTo": null,
-      "pruneAfter": "2026-07-22"
-    },
-    "2026-06-22_session-b759f4eb-8_.harvested": {
-      "harvested": "2026-06-22",
-      "session": "aitools/2026-06-22_b759f4eb-8",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
-      "status": "pruned",
-      "promotedTo": null,
-      "pruneAfter": "2026-07-22"
-    },
     "2026-06-22_session-b759f4eb-8_check-toolops-refs.sh": {
       "harvested": "2026-06-22",
       "session": "aitools/2026-06-22_b759f4eb-8",
@@ -3770,16 +3350,6 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": "bash",
-      "status": "pruned",
-      "promotedTo": null,
-      "pruneAfter": "2026-07-22"
-    },
-    "2026-06-22_session-b759f4eb-8_events.jsonl": {
-      "harvested": "2026-06-22",
-      "session": "aitools/2026-06-22_b759f4eb-8",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
       "status": "pruned",
       "promotedTo": null,
       "pruneAfter": "2026-07-22"
@@ -3814,26 +3384,6 @@
       "promotedTo": null,
       "pruneAfter": "2026-07-22"
     },
-    "2026-06-22_session-4c8d96ee-a_.harvested": {
-      "harvested": "2026-06-22",
-      "session": "aitools/2026-06-22_4c8d96ee-a",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
-      "status": "pruned",
-      "promotedTo": null,
-      "pruneAfter": "2026-07-22"
-    },
-    "2026-06-22_session-4c8d96ee-a_.intelligence-last-check": {
-      "harvested": "2026-06-22",
-      "session": "aitools/2026-06-22_4c8d96ee-a",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
-      "status": "pruned",
-      "promotedTo": null,
-      "pruneAfter": "2026-07-22"
-    },
     "2026-06-22_session-4c8d96ee-a_check-toolops-refs.sh": {
       "harvested": "2026-06-22",
       "session": "aitools/2026-06-22_4c8d96ee-a",
@@ -3860,16 +3410,6 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": "bash",
-      "status": "pruned",
-      "promotedTo": null,
-      "pruneAfter": "2026-07-22"
-    },
-    "2026-06-22_1_session-4c8d96ee-a_events.jsonl": {
-      "harvested": "2026-06-22",
-      "session": "aitools/2026-06-22_4c8d96ee-a",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
       "status": "pruned",
       "promotedTo": null,
       "pruneAfter": "2026-07-22"
@@ -4034,86 +3574,6 @@
       "promotedTo": null,
       "pruneAfter": "2026-07-22"
     },
-    "2026-06-22_session-4691443a-4_.intelligence-last-check": {
-      "harvested": "2026-06-22",
-      "session": "aitools/2026-06-22_4691443a-4",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
-      "status": "pruned",
-      "promotedTo": null,
-      "pruneAfter": "2026-07-22"
-    },
-    "2026-06-22_session-4691443a-4_events.jsonl": {
-      "harvested": "2026-06-22",
-      "session": "aitools/2026-06-22_4691443a-4",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
-      "status": "pruned",
-      "promotedTo": null,
-      "pruneAfter": "2026-07-22"
-    },
-    "2026-06-22_session-8a920db5-4_.intelligence-last-check": {
-      "harvested": "2026-06-22",
-      "session": "aitools/2026-06-22_8a920db5-4",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
-      "status": "pruned",
-      "promotedTo": null,
-      "pruneAfter": "2026-07-22"
-    },
-    "2026-06-22_session-8a920db5-4_events.jsonl": {
-      "harvested": "2026-06-22",
-      "session": "aitools/2026-06-22_8a920db5-4",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
-      "status": "pruned",
-      "promotedTo": null,
-      "pruneAfter": "2026-07-22"
-    },
-    "2026-06-25_session-bac1f15c-2_.intelligence-last-check": {
-      "harvested": "2026-06-25",
-      "session": "aitools/2026-06-25_bac1f15c-2",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
-      "status": "pruned",
-      "promotedTo": null,
-      "pruneAfter": "2026-07-25"
-    },
-    "2026-06-25_session-bac1f15c-2_events.jsonl": {
-      "harvested": "2026-06-25",
-      "session": "aitools/2026-06-25_bac1f15c-2",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
-      "status": "pruned",
-      "promotedTo": null,
-      "pruneAfter": "2026-07-25"
-    },
-    "2026-06-28_session-06c9c816-5_.intelligence-last-check": {
-      "harvested": "2026-06-28",
-      "session": "aitools/2026-06-28_06c9c816-5",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
-      "status": "pruned",
-      "promotedTo": null,
-      "pruneAfter": "2026-07-28"
-    },
-    "2026-06-28_session-06c9c816-5_events.jsonl": {
-      "harvested": "2026-06-28",
-      "session": "aitools/2026-06-28_06c9c816-5",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
-      "status": "pruned",
-      "promotedTo": null,
-      "pruneAfter": "2026-07-28"
-    },
     "2026-06-28_session-06c9c816-5_make_test_pdf.py": {
       "harvested": "2026-06-28",
       "session": "aitools/2026-06-28_06c9c816-5",
@@ -4134,32 +3594,12 @@
       "promotedTo": null,
       "pruneAfter": "2026-07-28"
     },
-    "2026-07-09_session-ba4c0c12-7_.intelligence-last-check": {
-      "harvested": "2026-07-09",
-      "session": "aitools/2026-07-09_ba4c0c12-7",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
-      "status": "pruned",
-      "promotedTo": null,
-      "pruneAfter": "2026-08-08"
-    },
     "2026-07-09_session-ba4c0c12-7_build-deploy-prefix.sh": {
       "harvested": "2026-07-09",
       "session": "aitools/2026-07-09_ba4c0c12-7",
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": "bash",
-      "status": "pruned",
-      "promotedTo": null,
-      "pruneAfter": "2026-08-08"
-    },
-    "2026-07-09_session-ba4c0c12-7_events.jsonl": {
-      "harvested": "2026-07-09",
-      "session": "aitools/2026-07-09_ba4c0c12-7",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
       "status": "pruned",
       "promotedTo": null,
       "pruneAfter": "2026-08-08"
@@ -4174,42 +3614,12 @@
       "promotedTo": null,
       "pruneAfter": "2026-08-08"
     },
-    "2026-10-21_session-0d7004b4-8_.intelligence-last-check": {
-      "harvested": "2026-10-21",
-      "session": "aitools/2026-10-21_0d7004b4-8",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
-      "status": "harvested",
-      "promotedTo": null,
-      "pruneAfter": "2026-11-20"
-    },
-    "2026-10-21_session-360aa8f3-8_.intelligence-last-check": {
-      "harvested": "2026-10-21",
-      "session": "aitools/2026-10-21_360aa8f3-8",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
-      "status": "harvested",
-      "promotedTo": null,
-      "pruneAfter": "2026-11-20"
-    },
     "2026-10-21_session-360aa8f3-8_append-incidents.py": {
       "harvested": "2026-10-21",
       "session": "aitools/2026-10-21_360aa8f3-8",
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": "python",
-      "status": "harvested",
-      "promotedTo": null,
-      "pruneAfter": "2026-11-20"
-    },
-    "2026-10-21_session-360aa8f3-8_events.jsonl": {
-      "harvested": "2026-10-21",
-      "session": "aitools/2026-10-21_360aa8f3-8",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
       "status": "harvested",
       "promotedTo": null,
       "pruneAfter": "2026-11-20"
@@ -4293,26 +3703,6 @@
       "status": "harvested",
       "promotedTo": null,
       "pruneAfter": "2026-11-20"
-    },
-    "2026-10-23_session-f486b184-c_.intelligence-last-check": {
-      "harvested": "2026-10-23",
-      "session": "aitools/2026-10-23_f486b184-c",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
-      "status": "harvested",
-      "promotedTo": null,
-      "pruneAfter": "2026-11-22"
-    },
-    "2026-10-23_session-f486b184-c_events.jsonl": {
-      "harvested": "2026-10-23",
-      "session": "aitools/2026-10-23_f486b184-c",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
-      "status": "harvested",
-      "promotedTo": null,
-      "pruneAfter": "2026-11-22"
     },
     "2026-10-23_session-f486b184-c_helper-negative.sh": {
       "harvested": "2026-10-23",
@@ -8514,46 +7904,6 @@
       "promotedTo": null,
       "pruneAfter": "2026-11-28"
     },
-    "2026-10-29_session-10403564-b_.harvested": {
-      "harvested": "2026-10-29",
-      "session": "aitools/2026-10-29_10403564-b",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
-      "status": "harvested",
-      "promotedTo": null,
-      "pruneAfter": "2026-11-28"
-    },
-    "2026-10-29_session-f486b184-c_.harvested": {
-      "harvested": "2026-10-29",
-      "session": "aitools/2026-10-29_f486b184-c",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
-      "status": "harvested",
-      "promotedTo": null,
-      "pruneAfter": "2026-11-28"
-    },
-    "2026-10-29_session-f486b184-c_.intelligence-last-check": {
-      "harvested": "2026-10-29",
-      "session": "aitools/2026-10-29_f486b184-c",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
-      "status": "harvested",
-      "promotedTo": null,
-      "pruneAfter": "2026-11-28"
-    },
-    "2026-10-29_session-f486b184-c_events.jsonl": {
-      "harvested": "2026-10-29",
-      "session": "aitools/2026-10-29_f486b184-c",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
-      "status": "harvested",
-      "promotedTo": null,
-      "pruneAfter": "2026-11-28"
-    },
     "2026-10-29_session-f486b184-c_helper-negative.sh": {
       "harvested": "2026-10-29",
       "session": "aitools/2026-10-29_f486b184-c",
@@ -8694,46 +8044,6 @@
       "promotedTo": null,
       "pruneAfter": "2026-11-28"
     },
-    "2026-10-29_session-8c943007-9_.harvested": {
-      "harvested": "2026-10-29",
-      "session": "aitools/2026-10-29_8c943007-9",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
-      "status": "harvested",
-      "promotedTo": null,
-      "pruneAfter": "2026-11-28"
-    },
-    "2026-10-29_session-a648cbdd-6_.harvested": {
-      "harvested": "2026-10-29",
-      "session": "aitools/2026-10-29_a648cbdd-6",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
-      "status": "harvested",
-      "promotedTo": null,
-      "pruneAfter": "2026-11-28"
-    },
-    "2026-10-29_session-10cf255a-c_.harvested": {
-      "harvested": "2026-10-29",
-      "session": "aitools/2026-10-29_10cf255a-c",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
-      "status": "harvested",
-      "promotedTo": null,
-      "pruneAfter": "2026-11-28"
-    },
-    "2026-10-29_session-10cf255a-c_.intelligence-last-check": {
-      "harvested": "2026-10-29",
-      "session": "aitools/2026-10-29_10cf255a-c",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
-      "status": "harvested",
-      "promotedTo": null,
-      "pruneAfter": "2026-11-28"
-    },
     "2026-10-29_session-10cf255a-c_add-incident-171.py": {
       "harvested": "2026-10-29",
       "session": "aitools/2026-10-29_10cf255a-c",
@@ -8800,16 +8110,6 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": "perl",
-      "status": "harvested",
-      "promotedTo": null,
-      "pruneAfter": "2026-11-28"
-    },
-    "2026-10-29_session-10cf255a-c_events.jsonl": {
-      "harvested": "2026-10-29",
-      "session": "aitools/2026-10-29_10cf255a-c",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
       "status": "harvested",
       "promotedTo": null,
       "pruneAfter": "2026-11-28"
@@ -9323,36 +8623,6 @@
       "status": "harvested",
       "promotedTo": null,
       "pruneAfter": "2026-11-28"
-    },
-    "2026-10-31_session-7f4952ab-3_.harvested": {
-      "harvested": "2026-10-31",
-      "session": "aitools/2026-10-31_7f4952ab-3",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
-      "status": "harvested",
-      "promotedTo": null,
-      "pruneAfter": "2026-11-30"
-    },
-    "2026-10-31_session-7f4952ab-3_.intelligence-last-check": {
-      "harvested": "2026-10-31",
-      "session": "aitools/2026-10-31_7f4952ab-3",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
-      "status": "harvested",
-      "promotedTo": null,
-      "pruneAfter": "2026-11-30"
-    },
-    "2026-10-31_session-7f4952ab-3_events.jsonl": {
-      "harvested": "2026-10-31",
-      "session": "aitools/2026-10-31_7f4952ab-3",
-      "description": "Auto-harvested from session scratch",
-      "type": "code",
-      "language": null,
-      "status": "harvested",
-      "promotedTo": null,
-      "pruneAfter": "2026-11-30"
     }
   }
 }

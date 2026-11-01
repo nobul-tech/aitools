@@ -14,7 +14,7 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ## v0.74.1 -- Fix: harvest hooks use scratch names verbatim, re-harvest only what changed, retry archive commits; handoff discovery (2026-10-31)
 
-Not tagged. Gaps G1-G6 of `reference/artifact-harvesting.md` (new: merges the artifact-harvesting rule and its framework reference, with flow diagrams of the hooks) and issue #138.
+Not tagged. Harvest-hook gaps G1-G6 (defined in the rows below), found 2026-10-31 while writing `reference/artifact-harvesting.md` (new: merges the artifact-harvesting rule and its framework reference, with flow diagrams of the hooks), and issue #138. Follow-up 2026-11-01: 73 junk entries removed from `harvesting/` and the manifest (11 `.harvested`, 28 `.intelligence-last-check`, 34 `events.jsonl`: files the fixed classifier never harvests).
 
 ### Bug fixes
 
