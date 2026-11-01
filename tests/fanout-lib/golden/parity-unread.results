@@ -1,0 +1,10 @@
+m-r-unread	fail
+te-unread	rc=2
+dm-unreadfile	rc=2
+dm-unreadsub	rc=2
+dm-unreadcand	rc=2
+dm-unreaddiffer	rc=2
+dm-unread2	rc=2
+dm-noexec	rc=2
+bd-unread	ok=false reason=cannot list path=- copied=no siblings=d
+bd-partial	ok=false reason=copy failed path=- copied=no siblings=part

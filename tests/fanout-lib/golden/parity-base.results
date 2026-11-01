@@ -1,0 +1,82 @@
+t-removed	DETAIL|t|removed: a.md ;; OK|t|1 removed ;; text=1 removed ;; errors=0
+t-unknown	DETAIL|t|failed: b.md ;; ERROR|t|1 failed ;; text=1 failed ;; errors=1
+t-blank	DETAIL|t|failed: x.md ;; ERROR|t|1 failed ;; text=1 failed ;; errors=1
+t-mix	DETAIL|t|added: a.md ;; DETAIL|t|removed: b.md ;; DETAIL|t|failed: d.md ;; ERROR|t|1 failed ;; text=1 added, 1 removed, 1 verified, 1 failed ;; errors=1
+t-order	DETAIL|t|accept & adopt: a.md ;; DETAIL|t|removed: b.md ;; DETAIL|t|updated: d.md ;; DETAIL|t|added: e.md ;; OK|t|1 added, 1 updated, 1 accepted, 1 removed, 1 verified ;; text=1 added, 1 updated, 1 accepted, 1 removed, 1 verified ;; errors=0
+t-skip	DETAIL|t|removed: a.md ;; DETAIL|t|skipped: b.md ;; WARN|t|1 skipped (user review) ;; text=1 removed ;; errors=0
+t-preserved	OK|t|n/a (nothing to deploy) ;; text=n/a (nothing to deploy) ;; errors=0
+t-skiponly	DETAIL|t|skipped: a.md ;; WARN|t|1 skipped (user review) ;; text=n/a (nothing to deploy) ;; errors=0
+t-case	DETAIL|t|failed: x.md ;; DETAIL|t|failed: y.md ;; DETAIL|t|failed: z.md ;; ERROR|t|3 failed ;; text=3 failed ;; errors=3
+rk-a.md	rule
+sk-a.md	skill
+rk-A.MD	rule
+sk-A.MD	skill
+rk-.hidden.md	hidden
+sk-.hidden.md	hidden
+rk-.aitools-skills-manifest	hidden
+sk-.aitools-skills-manifest	hidden
+rk-x.md.bak.2026-10-22T010203Z	backup
+sk-x.md.bak.2026-10-22T010203Z	backup
+rk-X.MD.BAK.1	backup
+sk-X.MD.BAK.1	backup
+rk-odd.bak.2026.md	backup
+sk-odd.bak.2026.md	backup
+rk-Skill.Bak.1	backup
+sk-Skill.Bak.1	backup
+rk-skill.bak	other
+sk-skill.bak	skill
+rk-notes.txt	other
+sk-notes.txt	skill
+rk-my-skill	other
+sk-my-skill	skill
+rk-My_Skill-2	other
+sk-My_Skill-2	skill
+m-r-ok	rule^a.md^shared ;; rule^b.md^aitools ;; rule^c.md^dotprofile ;; rule^d.md^retired
+m-r-headerbad	header-bad
+m-r-skillshead	header-bad
+m-r-headeronly	(none)
+m-r-invalid	rule^u.md^shared ;; rule^.hidden.md^shared ;; invalid^noext<TAB>shared ;; invalid^sub/x.md<TAB>shared ;; invalid^back\x.md<TAB>shared ;; invalid^y.bak.2.md<TAB>shared ;; invalid^z.md<TAB>bogus ;; invalid^w.md ;; invalid^v.md<TAB>shared<TAB>extra ;; invalid^U.md<TAB>dotprofile ;; invalid^<TAB>shared ;; invalid^my-skill<TAB>shared
+m-r-bom	rule^a.md^shared
+m-r-crlf	rule^a.md^shared ;; rule^b.md^aitools ;; invalid^e.md<TAB>shared<CR>
+m-r-nolf	(none)
+m-r-crnolf	header-bad
+m-r-empty	header-bad
+m-r-dir	fail
+m-r-missing	fail
+m-s-ok	rule^my-skill^shared ;; rule^Other^aitools ;; rule^third^dotprofile ;; rule^gone^retired
+m-s-ruleshead	header-bad
+m-s-invalid	rule^dup^shared ;; rule^ok.md^shared ;; rule^My Skill^dotprofile ;; invalid^.hidden<TAB>shared ;; invalid^a/b<TAB>shared ;; invalid^a\b<TAB>shared ;; invalid^x.bak.1<TAB>shared ;; invalid^DUP<TAB>aitools ;; invalid^q<TAB>nope ;; invalid^<TAB>shared
+m-s-bomcrlf	rule^my-skill^shared
+m-s-rulesfile	header-bad
+m-kind-caps	fail
+m-kind-bogus	fail
+te-trailing	rc=0
+te-nonl	rc=0
+te-differ	rc=1
+te-innercr	rc=1
+te-emptynl	rc=0
+te-bytes	rc=0
+te-missing	rc=2
+te-missing1	rc=2
+te-dir	rc=2
+te-emptyarg	rc=2
+dm-match	rc=0
+dm-extra	rc=1
+dm-candextra	rc=0
+dm-differ	rc=1
+dm-innercr	rc=1
+dm-bak	rc=0
+dm-empty	rc=1
+dm-onlybak	rc=1
+dm-emptysub	rc=1
+dm-hidden	rc=1
+dm-candmissing	rc=1
+dm-canddir	rc=1
+dm-targetfile	rc=1
+dm-targetmissing	rc=1
+dm-emptytarget	rc=1
+dm-emptycand	rc=1
+bd-plain	ok=true reason=- path=rules.bak.<TS> copied=yes siblings=rules,rules.bak.<TS>
+bd-nomd	ok=false reason=no top-level *.md path=- copied=no siblings=d
+bd-missing	ok=false reason=no directory path=- copied=no siblings=(none)
+bd-mdcase	ok=true reason=- path=upper.bak.<TS> copied=yes siblings=upper,upper.bak.<TS>
