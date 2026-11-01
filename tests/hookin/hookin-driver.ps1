@@ -1,15 +1,18 @@
 # hookin-driver.ps1 -- run one PowerShell deploy-harness hook-in for test-hookin.sh
 #
 # Loads the lib from SCRIPTS_DIR (a fixture copy) and the function under test from
-# the real entry point, parsed with the PowerShell AST, then runs it once:
+# the real entry point, parsed with the PowerShell AST (only the function
+# definitions are loaded; the entry point itself is not run), then runs it once:
 #   loop  -- Invoke-DeployAbort + Deploy-Configs from scripts/aitools.ps1, run on
 #            SCRIPTS_DIR; prints "LOOP rc=<errors> aborted=<True|False>"
 #   step  -- Invoke-HarnessStep from scripts/aitools-install.ps1, run on
 #            SCRIPTS_DIR/deploy-harness.ps1 (with @{ SkipConfig = $true } when
 #            -SkipConfig is given, as Step 8b passes it); prints "STEP rc=<n>"
 # The caller sets USERPROFILE/HOME, AITOOLS_LOG_DIR and AITOOLS_SUMMARY_FILE to an
-# isolated test directory. Platform: any pwsh 7 (the fixture deploy-harness.ps1 has
-# its Windows guard removed by the test). Test helper only: not deployed.
+# isolated test directory. Platform: Windows (pwsh 7), like the entry points it
+# loads from; test-hookin.sh runs it only on Windows, and the fixture
+# deploy-harness.ps1 is the real script with its Windows guard intact
+# (plans/ci-platform-targeting.md). Test helper only: not deployed.
 #
 # Usage: pwsh -NoProfile -File hookin-driver.ps1 -Mode loop|step -ScriptsDir DIR -RepoRoot DIR [-SkipConfig]
 
@@ -22,6 +25,12 @@ param(
 
 . (Join-Path $ScriptsDir "aitools-lib.ps1")
 Initialize-Logging "aitools"
+
+# --- OS guard (the functions under test are Windows code) ---
+if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
+    LogError "This script is for Windows. On macOS/Linux, use the .sh version."
+    exit 1
+}
 
 # Load-Functions FILE NAMES -- define the named top-level functions of FILE here
 function Load-Functions([string]$File, [string[]]$Names) {
