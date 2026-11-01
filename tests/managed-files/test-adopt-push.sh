@@ -10,8 +10,9 @@
 # dotprofile git repo and a bare remote, removed on exit. The real dotprofile is
 # never touched (AITOOLS_USER_REPO_PATH points into the temp dir; git's global
 # and system config are ignored). Interactive cases run on a pseudo-terminal
-# (tests/managed-files/pty-run.py, python3). Platform: macOS, Linux (Git Bash:
-# pty cases are skipped). Exit 1 if any case fails.
+# (tests/managed-files/pty-run.py, python3). Platform: macOS, Linux, Windows Git
+# Bash (pty cases through pywinpty there; skipped, with the reason, when it is
+# not installed). Exit 1 if any case fails.
 # Spec: .claude/rules/managed-file-deployment.md "Adopt target";
 # reference/managed-file-deployment.md.
 #
@@ -37,8 +38,12 @@ PASS=0
 FAIL=0
 SKIP=0
 HAVE_PTY=true
-case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) HAVE_PTY=false ;; esac
 command -v python3 >/dev/null 2>&1 || HAVE_PTY=false
+case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*)
+        # Windows pty = pywinpty (ConPTY); python3 -c's failure means "not installed".
+        if $HAVE_PTY && ! python3 -c 'import winpty' >/dev/null 2>&1; then HAVE_PTY=false; fi ;;
+esac
 
 check() {  # name, condition (eval'd)
     if eval "$2"; then
@@ -217,7 +222,7 @@ if $HAVE_PTY; then
     check "adopt outside the dotprofile: working tree only, not committed" "[ \"\$(result)\" = 'accept & adopt' ] && [ \"\$(push_state)\" = not-dotprofile ] && grep -qx 'local edit' '$OTHER/o.md' && [ \"\$(git -C '$OTHER' rev-list --count HEAD)\" = 1 ]"
     check "adopt outside the dotprofile: 'Uncommitted change' logged, dotprofile untouched" "grep -q 'Uncommitted change in' '$LOG' && [ \"\$(commits)\" = 1 ]"
 else
-    printf 'SKIP interactive cases (no python3 pty on this platform)\n'; SKIP=$((SKIP + 1))
+    printf 'SKIP interactive cases (no pseudo-terminal: python3 missing, or pywinpty not installed on Windows)\n'; SKIP=$((SKIP + 1))
 fi
 
 # ---------------------------------------------------------------------------

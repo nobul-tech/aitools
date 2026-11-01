@@ -6,8 +6,10 @@
 # Safe to re-run: every case runs in its own temp HOME, removed on exit.
 # Interactive cases run on a pseudo-terminal (tests/managed-files/pty-run.py,
 # python3). The AI merge uses a stub `claude` on PATH; no real AI is called.
-# Platform: macOS, Linux (Git Bash: pty cases need python3 pty, unavailable on
-# Windows -- they are skipped there). Exit 1 if any case fails.
+# Platform: macOS, Linux, Windows Git Bash (aitools-lib.sh also runs there: the
+# bash entry point sources it). On Windows the pty cases run through pywinpty
+# (ConPTY, tests/managed-files/requirements-windows.txt) and are skipped, with
+# the reason, when it is not installed. Exit 1 if any case fails.
 # Spec: .claude/rules/agentic-standards.md "Managed-file review choices and
 # merge"; reference/managed-file-deployment.md; .claude/rules/interactive-menus.md.
 #
@@ -33,8 +35,13 @@ FAIL=0
 SKIP=0
 HAVE_PTY=true
 HAVE_READONLY=true   # chmod 555/444 does not block writes under Git Bash
-case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) HAVE_PTY=false; HAVE_READONLY=false ;; esac
 command -v python3 >/dev/null 2>&1 || HAVE_PTY=false
+case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*)
+        HAVE_READONLY=false
+        # Windows pty = pywinpty (ConPTY); python3 -c's failure means "not installed".
+        if $HAVE_PTY && ! python3 -c 'import winpty' >/dev/null 2>&1; then HAVE_PTY=false; fi ;;
+esac
 
 check() {  # name, condition (eval'd)
     if eval "$2"; then
@@ -266,7 +273,7 @@ if $HAVE_PTY; then
     check "display, git diff fails: warning logged, menu still works" \
         "grep -q '\[warn\] Review diff unavailable' '$LOG' && has_line '$C/plain' '  (diff unavailable -- see deploy log)' && [ \"\$(result)\" = skipped ]"
 else
-    printf 'SKIP interactive cases (no python3 pty on this platform)\n'; SKIP=$((SKIP + 1))
+    printf 'SKIP interactive cases (no pseudo-terminal: python3 missing, or pywinpty not installed on Windows)\n'; SKIP=$((SKIP + 1))
 fi
 
 # ---------------------------------------------------------------------------

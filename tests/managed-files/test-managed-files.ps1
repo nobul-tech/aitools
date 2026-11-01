@@ -4,9 +4,10 @@
 #
 # Safe to re-run: every case runs in a child pwsh with its own temp HOME/log dir,
 # removed on exit. Interactive cases run on a pseudo-terminal
-# (tests/managed-files/pty-run.py, python3; skipped on Windows). The AI merge
-# uses a stub `claude` on PATH; no real AI is called.
-# Platform: macOS, Linux (pwsh 7); Windows runs the non-interactive cases.
+# (tests/managed-files/pty-run.py, python3; pywinpty/ConPTY on Windows). The AI
+# merge uses a stub `claude` on PATH; no real AI is called.
+# Platform: Windows (pwsh 7; aitools-lib.ps1 is a Windows library, so CI runs
+# this suite on the windows job only, plans/ci-platform-targeting.md).
 # Exit 1 if any case fails.
 #
 # Usage: pwsh -NoProfile -File tests/managed-files/test-managed-files.ps1 [-Help]
@@ -23,8 +24,13 @@ New-Item -ItemType Directory -Path $tmpRoot | Out-Null
 $pwshExe = (Get-Process -Id $PID).Path
 
 $script:pass = 0; $script:fail = 0; $script:skip = 0
-$havePty = (-not $IsWindows) -and [bool](Get-Command python3 -ErrorAction SilentlyContinue)
+$havePty = [bool](Get-Command python3 -ErrorAction SilentlyContinue)
 # Get-Command exempt: command-existence check; $havePty is the fallback branch
+if ($havePty -and $IsWindows) {
+    # Windows pty = pywinpty (ConPTY); a failing import means "not installed".
+    & python3 -c "import winpty" 2>$null
+    $havePty = ($LASTEXITCODE -eq 0)
+}
 
 function Check([string]$Name, [bool]$Cond) {
     if ($Cond) { Write-Output "PASS $Name"; $script:pass++ }
@@ -245,7 +251,7 @@ try {
         Run-Lib "`$src='$C/src.md'; `$dest='$C/dest/a.md'; `$adopt=''; $dmf" "s\n"
         Check "display, git diff fails: warning logged, menu still works" ((Log) -match "\[warn\] Review diff unavailable" -and (HasLine "  (diff unavailable -- see deploy log)") -and (Result) -eq "skipped")
     } else {
-        Write-Output "SKIP interactive cases (no python3 pty on this platform)"; $script:skip++
+        Write-Output "SKIP interactive cases (no pseudo-terminal: python3 missing, or pywinpty not installed on Windows)"; $script:skip++
     }
 } finally {
     if (-not $IsWindows) { & chmod -R u+w $tmpRoot }

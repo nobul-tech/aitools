@@ -9,8 +9,9 @@
 # throwaway dotprofile git repo and a bare remote, removed on exit. The real
 # dotprofile is never touched (AITOOLS_USER_REPO_PATH points into the temp dir;
 # git's global and system config are ignored). Interactive cases run on a
-# pseudo-terminal (tests/managed-files/pty-run.py, python3; skipped on Windows).
-# Platform: macOS, Linux (pwsh 7); Windows runs the non-interactive cases.
+# pseudo-terminal (tests/managed-files/pty-run.py, python3; pywinpty/ConPTY on
+# Windows). Platform: Windows (pwsh 7; aitools-lib.ps1 is a Windows library, so
+# CI runs this suite on the windows job only, plans/ci-platform-targeting.md).
 # Exit 1 if any case fails.
 #
 # Usage: pwsh -NoProfile -File tests/managed-files/test-adopt-push.ps1 [-Help]
@@ -31,8 +32,13 @@ $env:GIT_CONFIG_GLOBAL = Join-Path $tmpRoot "gitconfig"
 $env:GIT_CONFIG_NOSYSTEM = "1"
 
 $script:pass = 0; $script:fail = 0; $script:skip = 0
-$havePty = (-not $IsWindows) -and [bool](Get-Command python3 -ErrorAction SilentlyContinue)
+$havePty = [bool](Get-Command python3 -ErrorAction SilentlyContinue)
 # Get-Command exempt: command-existence check; $havePty is the fallback branch
+if ($havePty -and $IsWindows) {
+    # Windows pty = pywinpty (ConPTY); a failing import means "not installed".
+    & python3 -c "import winpty" 2>$null
+    $havePty = ($LASTEXITCODE -eq 0)
+}
 
 function Check([string]$Name, [bool]$Cond) {
     if ($Cond) { Write-Output "PASS $Name"; $script:pass++ }
@@ -183,7 +189,7 @@ try {
         Check "adopt outside the dotprofile: working tree only, not committed" ((Result) -eq "accept & adopt" -and (PushState) -eq "not-dotprofile" -and (Txt "other/o.md") -eq "local edit" -and (& git -C $OTHER rev-list --count HEAD | Out-String).Trim() -eq "1")
         Check "adopt outside the dotprofile: 'Uncommitted change' logged" ((Log) -match "Uncommitted change in")
     } else {
-        Write-Output "SKIP interactive cases (no python3 pty on this platform)"; $script:skip++
+        Write-Output "SKIP interactive cases (no pseudo-terminal: python3 missing, or pywinpty not installed on Windows)"; $script:skip++
     }
 
     # --- No adopt: overwrite never commits ---
