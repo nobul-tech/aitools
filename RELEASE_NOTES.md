@@ -28,7 +28,7 @@ Not tagged. PR #139, plan `plans/ci-platform-targeting.md`. Commander orders 202
 | 6 | `tests/managed-files/pty-run.py`: default `--timeout` 30 s with a timeout message on stderr (the `--timeout 120` overrides are gone); a Windows backend on pywinpty 3.1.2 (ConPTY), hash-pinned in `tests/managed-files/requirements-windows.txt` and installed only on the CI runner (evaluated 2026-11-01: adopted with yellow flags, sole maintainer and low adoption). Interactive menu cases now run on windows (managed-files, adopt-push, user-init) |
 | 7 | `.claude/rules/cross-platform.md`: exemption rows for entry points with Windows branches (`aitools-install.sh`, `aitools`, `scripts/githooks/pre-commit`) and package launchers, and an enforcement paragraph naming `tests/os-guards` |
 
-CI times, run 41267819083: linux 418 s (was 1,126 s), macOS 974 s (was 1,519-1,681 s), windows 1,554 s (was 140 s).
+CI times, runs 41267819083 and 41270206290 (the first all-green run): linux 348-418 s (was 1,126 s), macOS 974-1,242 s (was 1,519-1,681 s; the slower run had GitHub's macOS arm64 capacity notice), windows 1,554-1,595 s (was 140 s). No warning annotations remain on any job.
 
 Coverage gaps on windows, recorded by the suites as SKIP with a reason: symlink, chmod and read-only cases; the 64 KB diff case under ConPTY; setup-user-claude.sh cases (POSIX-only script).
 
