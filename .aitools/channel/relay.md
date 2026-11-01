@@ -1397,3 +1397,29 @@ agent commander, engineer:    No one session gets to claim the whole story — b
 - Whether the dotprofile `deploy/` in 825aed4 matches main's build output (it has no `deploy-harness.*`).
 - What M3-FINISH and HARNESS-2 shipped after 02:16Z.
 - Whether any PS1 path works on Windows. Nothing from this session ran there.
+
+### e99e5ef9-9 (2026-11-01T00:10Z)
+
+**State**: functional
+**Context loaded**: the artifact-harvesting rule and framework reference, every SessionStart/SessionEnd hook, `scripts/ait-harvest.py` in full, `harness-db.py` scratch lookups, the `/harvest`, `/handoff` and `/investigate` skills, live state of `.scratch/`, `harvesting/`, the harvest manifest and the dotprofile
+**Mission**: merge the harvesting rule and reference into `reference/artifact-harvesting.md`; then fix the harvest hook bugs found while documenting them. Commits 63b7c85 and 41139ef (aitools), 9132ac6 (dotprofile `deploy/`); issue #138
+
+#### What I learned
+
+- **Reading the code against live state finds what reading the code alone does not.** The 10-char truncation looked harmless until the missing `.scratch/.current-session` and a `.harvested` marker written the second this session's dir was created pointed at one 12-char delegate dir (`session-s3maverify99`). That dir had made every SessionStart in aitools hijack the new session's scratch dir since Oct 26.
+- **Two hooks of one event run in parallel, and a fallback that reads shared state is a race.** The pointer fallback was the bug. A known session id now never falls back to it.
+- **A failed git step plus an "already done" check means the step is never retried.** A zero-byte dotprofile `.git/index.lock` sat there for two days, and 300+ archived transcripts stayed uncommitted. Catch-up now commits pending archives and reports a stale lock on SessionStart stdout.
+- **Writer and reader of a name contract need one test.** Handoff discovery globbed `handoff*` in the same commit that made the router write `<date>_session-...`, so the banner pointed at a June handoff (#138).
+- **A test I wrote passing on its first run proved nothing until I ran it against the pre-fix helper** (`AIT_HARVEST_PY_OVERRIDE`): 12 of 14 then failed, as they should.
+
+#### CC defaults I caught
+
+- I first exported HEAD's helper with `git show --output`, got a file that was not the module, and nearly read 13 errors as "the tests catch the bugs". I re-exported it with a redirect, and only then did the failures mean anything.
+- I pushed past a red pre-push step 3 only after reading all 21 hits (the known #134 false positives) and running an independent credential-format scan.
+
+#### What I still don't know
+
+- Whether the fixes behave on Windows hosts outside CI (CI windows: green on 41139ef).
+- Why `tests/skills-fanout` "adopt ps: DETAIL rows" stalled 60 s and failed once in CI (run 41254096114, linux). It passed on a rerun of the job; flaky, not caused by this change.
+- The CI macOS job is pinned to `macos-14`, which GitHub retires on 2026-11-02. Both of today's macOS jobs were cancelled by a scheduled brownout. It needs `runs-on: macos-15` (not changed: commander's call).
+- The deployed hooks in `~/.claude/hooks` are still the old ones until the next `aitools` run. Sessions in aitools pick up the new `ait-harvest.py` from the repo at once; `scratch-init.sh` changes only after a deploy.
