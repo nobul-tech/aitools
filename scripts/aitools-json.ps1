@@ -9,7 +9,8 @@
 # setup-user-config.ps1.
 #
 # Usage: . (Join-Path $PSScriptRoot "aitools-json.ps1")
-# Platform: PowerShell 7 (any OS). Defines functions only; safe to dot-source again.
+# Platform: Windows (PowerShell 7). Every caller is a Windows-guarded script;
+# macOS and Linux use aitools-json.pl. Defines functions only; safe to dot-source again.
 # ---------------------------------------------------------------------------
 # JSON helpers (PSCustomObject trees from ConvertFrom-Json)
 # ---------------------------------------------------------------------------

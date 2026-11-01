@@ -27,6 +27,13 @@ Not tagged. PR #139, plan `plans/ci-platform-targeting.md`. Commander orders 202
 | 5 | Runner and Node.js warnings: `actions/checkout@v7` (node24), `macos-15` (macos-14 retires 2026-11-02; brownouts were cancelling jobs), `ubuntu-24.04`, `actions/setup-python@v7.0.0` (Python 3.12 on windows) |
 | 6 | `tests/managed-files/pty-run.py`: default `--timeout` 30 s with a timeout message on stderr (the `--timeout 120` overrides are gone); a Windows backend on pywinpty 3.1.2 (ConPTY), hash-pinned in `tests/managed-files/requirements-windows.txt` and installed only on the CI runner (evaluated 2026-11-01: adopted with yellow flags, sole maintainer and low adoption). Interactive menu cases now run on windows (managed-files, adopt-push, user-init) |
 | 7 | `.claude/rules/cross-platform.md`: exemption rows for entry points with Windows branches (`aitools-install.sh`, `aitools`, `scripts/githooks/pre-commit`) and package launchers, and an enforcement paragraph naming `tests/os-guards` |
+| 8 | `scripts/aitools-json.ps1` header: "Platform: PowerShell 7 (any OS)" became "Platform: Windows (PowerShell 7)"; every caller is a Windows-guarded script and macOS/Linux use `aitools-json.pl` (plan open item A1, commander 2026-11-01). Open item A2 (do the `check-*.ps1` checks run on macOS/Linux?) is issue #140, not changed here |
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 9 | Medium | `check-post-push` step 23 always failed: `check-script-compliance.sh` check 12 ("write_summary valid categories") reported `setup-user-config.sh(1) setup-user-config.ps1(1)` as invalid categories. Both were comments that mention `write_summary` / `Write-Summary`; every call uses a valid category. The comment filter `grep -v '^\s*#'` ran after `grep -n`, whose `N:` prefix meant no line ever started with `#`. Check 12 now works as its `.ps1` twin does: per line, comment lines skipped first, each call judged by its category word, failures reported as `file:line(category)`. Verified with probe scripts (an invalid `BOGUS` call is still caught in both `.sh` and `.ps1` targets; comments are not) |
 
 CI times, runs 41267819083 and 41270206290 (the first all-green run): linux 348-418 s (was 1,126 s), macOS 974-1,242 s (was 1,519-1,681 s; the slower run had GitHub's macOS arm64 capacity notice), windows 1,554-1,595 s (was 140 s). No warning annotations remain on any job.
 
