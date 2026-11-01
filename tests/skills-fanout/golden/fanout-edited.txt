@@ -1,0 +1,14 @@
+# exit code
+0
+# skills tree (path md5 [x]; symlinks not listed)
+d1/SKILL.md 20ea191f581074e77a618c1fba739d53
+dup/SKILL.md c8a71c6e5904450eed13a1795322fcf7
+mine/SKILL.md d92bf619dc8282f474be4bfbce48183f
+p1/SKILL.md 65c05849b6ba89799980c4317d77e0a8
+s1/SKILL.md 1c14132e8664b3845b2cb862b8207bd5
+s1/SKILL.md.bak.TS (backup)
+s1/scripts/run.sh 3e2b31c72181b87149ff995e7202c0e3 x
+s1/tests/expected-behaviors.md 6983b4cd210aab338877de6d3b33c926
+# summary rows (ACTION and skills, sorted)
+DETAIL|claude skills|updated: s1/SKILL.md
+WARN|claude skills|1 updated, 5 verified

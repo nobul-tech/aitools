@@ -1,0 +1,4 @@
+exit 1
+-- summary rows
+ERROR|aitools config|bad arguments
+-- config.json

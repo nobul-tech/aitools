@@ -1,0 +1,7 @@
+result	failed
+profileFile	<TMP>/mig/home/repos/aitools-nobul-jose/profile.json
+renamed	
+unclaimed	
+committed	false
+pushed	false
+error	profile.json has no profiles object

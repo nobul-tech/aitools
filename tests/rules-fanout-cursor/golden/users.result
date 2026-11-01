@@ -1,0 +1,20 @@
+exit code: 0
+# ~/.cursor/rules (path md5)
+d.mdc 88c8230ef81ca6577208b2651c0b4c14
+gone.mdc.bak.TS 7b0a2b8ba252a9afdeadc9cdb0c9271d
+mine.mdc c21551b4581b29ec5067c62c053bbe59
+old.mdc da52661ec088b97e5adf72ee83d94c1c
+p.mdc 71eb19944adda770aef2117f4f566862
+p.mdc.bak.TS 00a6d88c246663d1fdb0361b766f06d5
+q.mdc 76f081cba0acaaaab4a29e6990f091e3
+s.mdc bc72d5ec505f3be28e37bd6f5577f018
+u.mdc 8d2c6568ed12b2a6d31acd4fe643e32a
+u.mdc.bak.TS cce62638255957c76ddd44915420bc9f
+# summary rows
+DETAIL|cursor rules|added: d.mdc
+DETAIL|cursor rules|added: p.mdc
+DETAIL|cursor rules|added: s.mdc
+DETAIL|cursor rules|updated: u.mdc
+DETAIL|cursor rules|removed: gone.mdc
+ACTION||Cursor still loads retired rules in ~/.cursor/rules: old.mdc -- delete them unless you wrote them
+WARN|cursor rules|3 added, 1 updated, 1 removed, 1 verified

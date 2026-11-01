@@ -1,0 +1,4 @@
+path	<TMP>/urp-scan/home/repos/aitools-nobul-jose
+via	scan
+expected	
+warn	githubUser unknown -- used the only dotprofile under <TMP>/urp-scan/home/repos

@@ -1,0 +1,8 @@
+exit code: 0
+# ~/.claude/rules (path md5)
+gone.md b584d999601d3a3407deb44178987e1f
+mine2.md 7015c8a5c7b65735873cd21111804a3d
+old.md 346b92255b764fc9d5b063c7c9b6bead
+# summary rows
+ACTION||Claude Code still loads retired rules in ~/.claude/rules: mine2.md -- delete them unless you wrote them
+WARN|claude rules|dry run (no files written)

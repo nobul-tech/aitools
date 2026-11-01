@@ -1,0 +1,9 @@
+result	unchanged
+key	3d4df2a5-7d91-5af9-9944-4feebaae3cf5
+alias	spare
+owner	this
+ownerKey	
+claimed	
+machineId	3D4DF2A5-7D91-5AF9-9944-4FEEBAAE3CF5
+hostname	nobul-mac
+warn	alias "spare" is used by 2 machines (0b1c2d3e-0000-1111-2222-333344445555, 3d4df2a5-7d91-5af9-9944-4feebaae3cf5)

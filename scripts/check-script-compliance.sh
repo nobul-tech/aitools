@@ -296,23 +296,29 @@ fi
 # ---------------------------------------------------------------------------
 step12_fail=0
 step12_details=""
-valid_cats="OK|WARN|ERROR|ACTION|DETAIL"
-for f in "${SH_SCRIPTS[@]}"; do
-    bad_cats=$(grep -n 'write_summary' "$f" 2>/dev/null | grep -v '^\s*#' | grep -vE "write_summary (${valid_cats}) " || true)
-    if [ -n "$bad_cats" ]; then
-        count=$(echo "$bad_cats" | wc -l | tr -d ' ')
-        step12_fail=$((step12_fail + count))
-        step12_details="${step12_details} $(basename "$f")(${count})"
+# Same rule as the .ps1 twin (check-script-compliance.ps1 step 12): per line,
+# a comment line is skipped, and a call is judged by the category word right
+# after the function name. The old `grep -n | grep -v '^\s*#'` pipeline never
+# skipped a comment (grep -n puts "N:" before the "#"), so a comment that
+# mentions write_summary was reported as an invalid category.
+# step12_check FILE REGEX: count and record "name:line(category)" per invalid one
+step12_check() {
+    local f="$1" found
+    if ! found=$(S12_RE="$2" S12_NAME="$(basename "$f")" perl -ne '
+        BEGIN { $re = qr/$ENV{S12_RE}/i; %ok = map { $_ => 1 } qw(OK WARN ERROR ACTION DETAIL) }
+        next if /^\s*#/;
+        print "$ENV{S12_NAME}:$.($1)\n" if /$re/ && !$ok{uc $1};
+    ' "$f"); then
+        step12_fail=$((step12_fail + 1))
+        step12_details="${step12_details} $(basename "$f")(scan failed)"
+        return 0
     fi
-done
-for f in "${PS1_SCRIPTS[@]}"; do
-    bad_cats=$(grep -n 'Write-Summary' "$f" 2>/dev/null | grep -v '^\s*#' | grep -vE "Write-Summary \"(${valid_cats})\"" || true)
-    if [ -n "$bad_cats" ]; then
-        count=$(echo "$bad_cats" | wc -l | tr -d ' ')
-        step12_fail=$((step12_fail + count))
-        step12_details="${step12_details} $(basename "$f")(${count})"
-    fi
-done
+    [ -n "$found" ] || return 0
+    step12_fail=$((step12_fail + $(printf '%s\n' "$found" | wc -l | tr -d ' ')))
+    step12_details="${step12_details} $(printf '%s' "$found" | tr '\n' ' ')"
+}
+for f in "${PS1_SCRIPTS[@]}"; do step12_check "$f" 'Write-Summary\s+"(\w+)"'; done
+for f in "${SH_SCRIPTS[@]}"; do step12_check "$f" 'write_summary\s+(\w+)\s'; done
 
 if [ "$step12_fail" -eq 0 ]; then
     step_pass "12" "write_summary valid categories" "all use OK/WARN/ERROR/ACTION/DETAIL"

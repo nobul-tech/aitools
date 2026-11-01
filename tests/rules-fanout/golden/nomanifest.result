@@ -1,0 +1,8 @@
+exit code: 0
+# ~/.claude/rules (path md5)
+a.md da3250eb6bb5d78d74f8c21e209d6e9c
+b.md 0f8861f21d445c287fd0aa0e3cae37b2
+# summary rows
+DETAIL|claude rules|added: a.md
+DETAIL|claude rules|added: b.md
+OK|claude rules|2 added

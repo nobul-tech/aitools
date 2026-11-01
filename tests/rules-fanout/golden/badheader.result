@@ -1,0 +1,8 @@
+exit code: 0
+# ~/.claude/rules (path md5)
+a.md da3250eb6bb5d78d74f8c21e209d6e9c
+x.md c60bd8b984903d51ec21168ccf8b5414
+# summary rows
+ACTION||Run aitools to rebuild ~/.aitools/rules and its manifest
+DETAIL|claude rules|added: a.md
+WARN|claude rules|1 added

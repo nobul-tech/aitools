@@ -4,9 +4,10 @@
 #
 # Safe to re-run: every case runs in a child pwsh with its own temp HOME/log dir,
 # removed on exit. Interactive cases run on a pseudo-terminal
-# (tests/managed-files/pty-run.py, python3; skipped on Windows). The AI merge
-# uses a stub `claude` on PATH; no real AI is called.
-# Platform: macOS, Linux (pwsh 7); Windows runs the non-interactive cases.
+# (tests/managed-files/pty-run.py, python3; pywinpty/ConPTY on Windows). The AI
+# merge uses a stub `claude` on PATH; no real AI is called.
+# Platform: Windows (pwsh 7; aitools-lib.ps1 is a Windows library, so CI runs
+# this suite on the windows job only, plans/ci-platform-targeting.md).
 # Exit 1 if any case fails.
 #
 # Usage: pwsh -NoProfile -File tests/managed-files/test-managed-files.ps1 [-Help]
@@ -23,8 +24,13 @@ New-Item -ItemType Directory -Path $tmpRoot | Out-Null
 $pwshExe = (Get-Process -Id $PID).Path
 
 $script:pass = 0; $script:fail = 0; $script:skip = 0
-$havePty = (-not $IsWindows) -and [bool](Get-Command python3 -ErrorAction SilentlyContinue)
+$havePty = [bool](Get-Command python3 -ErrorAction SilentlyContinue)
 # Get-Command exempt: command-existence check; $havePty is the fallback branch
+if ($havePty -and $IsWindows) {
+    # Windows pty = pywinpty (ConPTY); a failing import means "not installed".
+    & python3 -c "import winpty" 2>$null
+    $havePty = ($LASTEXITCODE -eq 0)
+}
 
 function Check([string]$Name, [bool]$Cond) {
     if ($Cond) { Write-Output "PASS $Name"; $script:pass++ }
@@ -47,10 +53,32 @@ function Setup-Case([string]$Name) {
 
 function Stub-Claude([string]$Kind) {
     $text = if ($Kind -eq "good") { "# Title`nmerged line" } else { "Sure, here is the merge" }
+    if ($IsWindows) {
+        # Native Windows runs a .cmd, not an extensionless bash script: read the
+        # prompt from stdin (discarded), print the canned answer line by line.
+        $lines = ($text -split "`n" | ForEach-Object { "echo $_" }) -join "`r`n"
+        [IO.File]::WriteAllText((Join-Path $script:C "bin/claude.cmd"), "@echo off`r`nmore > nul`r`n$lines`r`n")
+        return
+    }
     $stub = "#!/usr/bin/env bash`ncat > /dev/null`nprintf '%s\n' '$($text -replace "`n", "' '")'`n"
     $path = Join-Path $script:C "bin/claude"
     [IO.File]::WriteAllText($path, $stub)
     & chmod +x $path
+}
+
+# Stub-Git-Fail: a `git` on PATH that fails (exit > 1, which the review diff
+# treats as an error; exit 1 means "files differ").
+# Windows: the lib starts git with [Diagnostics.ProcessStartInfo]("git"), which
+# only finds git.exe, never git.cmd. So bin/git.exe is a copy of where.exe:
+# given git's arguments ("-c core.quotePath=false ...") where.exe rejects the
+# option and exits 2. bin/git.cmd (exit 128) covers `& git` calls.
+function Stub-Git-Fail {
+    if ($IsWindows) {
+        Copy-Item -LiteralPath (Join-Path $env:SystemRoot "System32\where.exe") -Destination (Join-Path $script:C "bin/git.exe")
+        [IO.File]::WriteAllText((Join-Path $script:C "bin/git.cmd"), "@exit /b 128`r`n")
+        return
+    }
+    [IO.File]::WriteAllText((Join-Path $script:C "bin/git"), "#!/usr/bin/env bash`nexit 128`n"); & chmod +x (Join-Path $script:C "bin/git")
 }
 
 # Run-Lib <snippet> [input]: dot-source the lib in a child pwsh under the case HOME.
@@ -88,8 +116,10 @@ $Snippet
 
 $esc = [string][char]27
 function Out { $f = Join-Path $script:C "out"; if (Test-Path $f) { Get-Content $f -Raw } else { "" } }
-# Plain: the terminal output as lines, without colour/terminal codes and carriage returns
-function Plain { @(((Out) -replace "$esc\[[0-9;?]*[A-Za-z]", "" -replace "$esc[=>]", "" -replace "`r", "") -split "`n") }
+# Plain: the terminal output as lines, without colour/terminal codes and carriage
+# returns. OSC sequences (window title, ESC ] ... BEL or ESC \) are removed too:
+# ConPTY on Windows emits one ("ESC ]0;Administrator: ...pwsh.exe BEL").
+function Plain { @(((Out) -replace "$esc\][^\a$esc]*(\a|$esc\\)", "" -replace "$esc\[[0-9;?]*[A-Za-z]", "" -replace "$esc[=>]", "" -replace "`r", "") -split "`n") }
 function HasLine([string]$Line) { (Plain) -ccontains $Line }
 
 function Result { $f = Join-Path $script:C "result"; if (Test-Path $f) { (Get-Content $f -Raw).Trim() } else { "" } }
@@ -241,11 +271,11 @@ try {
         Check "display, diff over 64 KB: menu shown, run continues, full diff logged" ((Rc) -eq "0" -and (Result) -eq "skipped" -and (HasLine "  ... (5973 more lines -- full diff in deploy log)") -and $logDiff -eq 6003)
 
         Setup-Case "display-nogit"; W "src.md" "new"; W "dest/a.md" "old"
-        [IO.File]::WriteAllText((Join-Path $C "bin/git"), "#!/usr/bin/env bash`nexit 128`n"); & chmod +x (Join-Path $C "bin/git")
+        Stub-Git-Fail
         Run-Lib "`$src='$C/src.md'; `$dest='$C/dest/a.md'; `$adopt=''; $dmf" "s\n"
         Check "display, git diff fails: warning logged, menu still works" ((Log) -match "\[warn\] Review diff unavailable" -and (HasLine "  (diff unavailable -- see deploy log)") -and (Result) -eq "skipped")
     } else {
-        Write-Output "SKIP interactive cases (no python3 pty on this platform)"; $script:skip++
+        Write-Output "SKIP interactive cases (no pseudo-terminal: python3 missing, or pywinpty not installed on Windows)"; $script:skip++
     }
 } finally {
     if (-not $IsWindows) { & chmod -R u+w $tmpRoot }

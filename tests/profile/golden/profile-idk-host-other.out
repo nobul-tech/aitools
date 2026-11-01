@@ -1,0 +1,18 @@
+alias	laptop
+via	hostname
+key	0b1c2d3e-0000-1111-2222-333344445555
+owner	other
+legacy	false
+environment	local
+machineId	99999999-0000
+hostname	joses-mbp
+profileFile	<TMP>/idk/home/repos/aitools-nobul-jose/profile.json
+userRepoPath	<TMP>/idk/home/repos/aitools-nobul-jose
+userRepoVia	convention
+name	Jose
+company	Nobul
+gitName	Jose
+gitEmail	jose@nobul.tech
+github	nobul-jose
+warn	matched by hostname only (legacy) -- run: aitools user init (registers machine.id)
+warn	profile "laptop" is registered to another machine (machine.id 0b1c2d3e-0000-1111-2222-333344445555, this machine 99999999-0000)

@@ -1,0 +1,11 @@
+result	refused
+slug	go
+alias	
+via	none
+key	
+owner	absent
+legacy	false
+profileFile	<TMP>/exc/home/snap.json
+committed	false
+pushed	false
+error	profile from AITOOLS_PROFILE_FILE is a read-only snapshot -- not written

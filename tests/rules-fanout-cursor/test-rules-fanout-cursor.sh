@@ -10,38 +10,54 @@
 #
 # Safe to re-run: every case runs the real script in its own temp HOME (removed
 # on exit) with stub rg/agent on PATH, so no installer runs and the real
-# ~/.cursor is never touched. With pwsh on PATH, ConvertTo-CursorRule in
-# setup-user-cursor.ps1 is checked against the bash converter, and the manifest
-# cases run step 4 of the .ps1 (step4-driver.ps1, isolated USERPROFILE) and
-# compare its ~/.cursor/rules tree and summary rows with the .sh run (parity).
-# The pty cases need python3 (tests/managed-files/pty-run.py).
-# Platform: macOS, Linux (not Git Bash: setup-user-cursor.sh's OS guard exits
-# there, so the Windows CI job does not run this suite). Exit 1 if any case fails.
+# ~/.cursor is never touched.
+#
+# Platform targeting (plans/ci-platform-targeting.md): each script runs only
+# where its OS guard allows. macOS/Linux run setup-user-cursor.sh and the bash
+# converter; Windows (Git Bash) runs the whole setup-user-cursor.ps1 with native
+# pwsh (stub rg.cmd/agent.cmd on PATH; no guard bypass) and ConvertTo-CursorRule
+# through convert-rule.ps1. Every check runs against the run of that language.
+# The converter cases compare with their committed .want texts, which both
+# converters must give; the fan-out cases compare their exit code,
+# ~/.cursor/rules tree and summary rows with the committed golden results in
+# tests/rules-fanout-cursor/golden/ (tests/lib/platform-lib.sh golden_match).
+# AITOOLS_TEST_UPDATE_GOLDEN=1 on macOS/Linux rewrites them.
+# The pty cases need python3 (tests/managed-files/pty-run.py; on Windows also
+# pywinpty).
+# Platform: macOS, Linux (.sh), Windows Git Bash (.ps1). Exit 1 if any case fails.
 # Spec: .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-H-Cursor/
 # S3-H-Cursor-research.md; .claude/rules/managed-file-deployment.md.
 #
 # Usage: bash tests/rules-fanout-cursor/test-rules-fanout-cursor.sh [--bash-only] [--help]
-#   --bash-only  skip the PowerShell runs (parity cases are reported SKIP)
+#   --bash-only  accepted for compatibility: macOS/Linux always run only .sh
 #   AITOOLS_TEST_BASH=/bin/bash runs the script under that bash (CI: macOS 3.2)
 
 set -uo pipefail
 
-BASH_ONLY=false
 for arg in "$@"; do
     case "$arg" in
-        --help|-h) perl -ne 'print if $. >= 2 && $. <= 25' "$0"; exit 0 ;;
-        --bash-only) BASH_ONLY=true ;;
+        --help|-h) perl -ne 'print if $. >= 2 && $. <= 33' "$0"; exit 0 ;;
+        --bash-only) ;;
         *) printf 'Unknown option: %s (see --help)\n' "$arg"; exit 1 ;;
     esac
 done
 TB="${AITOOLS_TEST_BASH:-bash}"
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# shellcheck source=../lib/platform-lib.sh
+. "$ROOT/tests/lib/platform-lib.sh"
+LANG_RUN="$TEST_LANG"   # sh on macOS/Linux, ps1 on Windows
 SCRIPT="$ROOT/scripts/setup-user-cursor.sh"
 SCRIPT_PS1="$ROOT/scripts/setup-user-cursor.ps1"
 HELPER_PS1="$ROOT/tests/rules-fanout-cursor/convert-rule.ps1"
 TMP_ROOT="$(mktemp -d)"
 trap 'rm -rf "$TMP_ROOT"' EXIT
+GOLDEN_DIR="$ROOT/tests/rules-fanout-cursor/golden"
+GOLDEN_TMP="$TMP_ROOT"
+if [ "$LANG_RUN" = ps1 ] && ! command -v pwsh >/dev/null 2>&1; then
+    printf 'FAIL pwsh is not on PATH: setup-user-cursor.ps1 cannot be tested on Windows\n'
+    exit 1
+fi
 
 PASS=0
 FAIL=0
@@ -58,13 +74,17 @@ check() {  # name, condition (eval'd)
     fi
 }
 
-# setup_case <name>: fresh HOME and stub bin (rg, agent: version only)
+# setup_case <name>: fresh HOME and stub bin (rg, agent: version only). The
+# stubs come in two forms: a bash script for the .sh runs and a .cmd file for
+# native pwsh on Windows, which cannot run an extensionless bash script.
 setup_case() {
     C="$TMP_ROOT/$1"
     H="$C/home"
     mkdir -p "$H" "$C/bin"
     printf '#!/usr/bin/env bash\necho "ripgrep 14.1.0"\n' > "$C/bin/rg"
     printf '#!/usr/bin/env bash\necho "2026.05.21-stub"\n' > "$C/bin/agent"
+    printf '@echo ripgrep 14.1.0\r\n' > "$C/bin/rg.cmd"
+    printf '@echo 2026.05.21-stub\r\n' > "$C/bin/agent.cmd"
     chmod +x "$C/bin/rg" "$C/bin/agent"
     : > "$C/summary"
 }
@@ -94,24 +114,77 @@ seed_rules() {
     printf 'nested\n' > "$H/.aitools/rules/subdir/nested.md"
 }
 
-# run_script [args...]: run setup-user-cursor.sh non-interactively under the case HOME
+# run_script [--dry-run] [--force]: run setup-user-cursor.sh (macOS/Linux) or
+# the whole setup-user-cursor.ps1 (Windows, native pwsh: native paths, the
+# flags spelled -DryRun / -Force) non-interactively under the case HOME. CRs of
+# the pwsh output and summary are stripped so the checks read the same text.
 run_script() {
-    env HOME="$C/home" AITOOLS_LOG_DIR="$C/logs" AITOOLS_SUMMARY_FILE="$C/summary" \
-        PATH="$C/bin:$PATH" "$TB" "$SCRIPT" "$@" < /dev/null > "$C/out" 2>&1
-    echo $? > "$C/rc"
+    if [ "$LANG_RUN" = sh ]; then
+        env HOME="$C/home" AITOOLS_LOG_DIR="$C/logs" AITOOLS_SUMMARY_FILE="$C/summary" \
+            PATH="$C/bin:$PATH" "$TB" "$SCRIPT" "$@" < /dev/null > "$C/out" 2>&1
+        echo $? > "$C/rc"
+    else
+        local a ps_args=()
+        for a in "$@"; do
+            case "$a" in
+                --dry-run) ps_args+=(-DryRun) ;;
+                --force) ps_args+=(-Force) ;;
+                *) ps_args+=("$a") ;;
+            esac
+        done
+        env HOME="$(native_path "$C/home")" USERPROFILE="$(native_path "$C/home")" \
+            AITOOLS_LOG_DIR="$(native_path "$C/logs")" AITOOLS_SUMMARY_FILE="$(native_path "$C/summary")" \
+            PATH="$C/bin:$PATH" \
+            pwsh -NoProfile -NonInteractive -File "$(native_path "$SCRIPT_PS1")" ${ps_args[@]+"${ps_args[@]}"} < /dev/null > "$C/out" 2>&1
+        echo $? > "$C/rc"
+        strip_cr "$C/out" "$C/summary"
+    fi
 }
+strip_cr() {  # strip_cr FILE...: remove CRs in place (pwsh console output on Windows)
+    perl -pi -e 's/\r//g' "$@" || printf 'warn: could not strip CRs from %s\n' "$*"
+}
+# force_note: the log text of a --force overwrite in the language under test
+force_note() { if [ "$LANG_RUN" = sh ]; then printf -- '(--force)'; else printf -- '(-Force)'; fi; }
+
+# Real symlinks, dangling ones included (broken, drydup, dangtarget). Git Bash
+# copies the target instead of linking unless native symlinks are enabled, and
+# cannot make a dangling native link: those cases are skipped there.
+SYMLINKS=true
+if ! ln -s "$TMP_ROOT/nowhere-probe" "$TMP_ROOT/dangling-probe" 2>/dev/null || [ ! -L "$TMP_ROOT/dangling-probe" ]; then
+    SYMLINKS=false
+fi
 
 rc() { cat "$C/rc"; }
 row() { grep -F "|cursor rules|" "$C/summary" | grep -v '^DETAIL' | tail -n 1; }
 R="$TMP_ROOT/r"  # shorthand for the deployed rules dir, set per case
 
 # --- converter golden cases (via the script's own function) ------------------
-# Extract cursor_rule_from_md from the script and run it on sample inputs.
+# conv IN [NAME]: the converter of the language under test on file IN, on
+# stdout. sh: cursor_rule_from_md extracted from setup-user-cursor.sh. ps1
+# (Windows): ConvertTo-CursorRule loaded from setup-user-cursor.ps1's AST by
+# convert-rule.ps1 (the script body and its guard never run). It is also the
+# fixture generator of the fan-out cases, so each platform seeds them with its
+# own converter; the .want files below are the texts both must give.
 CONV="$TMP_ROOT/conv.sh"
 perl -ne 'print if /^CURSOR_FANOUT_MARKER=/ || (/^cursor_rule_from_md\(\) \{/ .. /^\}/)' "$SCRIPT" > "$CONV"
 GOLD="$TMP_ROOT/gold"
 mkdir -p "$GOLD"
-conv() { bash -c "source '$CONV'; cursor_rule_from_md '$1' '${2:-}'"; }
+conv() {
+    if [ "$LANG_RUN" = sh ]; then
+        bash -c "source '$CONV'; cursor_rule_from_md '$1' '${2:-}'"
+    else
+        local o="$TMP_ROOT/conv-ps.out"
+        rm -f "$o"
+        if ! pwsh -NoProfile -NonInteractive -File "$(native_path "$HELPER_PS1")" "$(native_path "$SCRIPT_PS1")" \
+                "$(native_path "$1")" "$(native_path "$o")" "${2:-}" > "$TMP_ROOT/conv-ps.log" 2>&1 \
+                || [ ! -f "$o" ]; then
+            printf 'conv: convert-rule.ps1 failed on %s:\n' "$1" >&2
+            cat "$TMP_ROOT/conv-ps.log" >&2
+            return 1
+        fi
+        cat "$o"
+    fi
+}
 
 printf 'Body line\n' > "$GOLD/nofm.md"
 printf -- '---\nalwaysApply: true\n---\nBody line\n' > "$GOLD/nofm.want"
@@ -192,19 +265,8 @@ check "resolve: the repo's path-scoped rules produce globs (count $RESOLVE_COUNT
 check "resolve: every repo paths: glob is anchored (**/ or absolute)" "[ -z \"\$RESOLVE_BAD\" ]"
 check "resolve: config-file-safety scripts/** resolves in a repo under HOME" "grep -qxF '  - **/scripts/**' '$GOLD/repo-config-file-safety.md.mdc' && glob_match '**/scripts/**' 'repos/aitools/scripts/setup-x.sh'"
 
-# --- PS1 parity: ConvertTo-CursorRule gives the same bytes --------------------
-if ! $BASH_ONLY && command -v pwsh >/dev/null 2>&1; then
-    for g in $GOLDEN; do
-        pwsh -NoProfile -File "$HELPER_PS1" "$SCRIPT_PS1" "$GOLD/$g.md" "$GOLD/$g.ps1.got" > "$GOLD/$g.ps1.log" 2>&1
-        check "parity ps1: $g" "cmp -s '$GOLD/$g.ps1.got' '$GOLD/$g.got'"
-    done
-    for g in paths nofm; do
-        pwsh -NoProfile -File "$HELPER_PS1" "$SCRIPT_PS1" "$GOLD/$g.md" "$GOLD/$g.named.ps1.got" "$g.md" > "$GOLD/$g.named.ps1.log" 2>&1
-        check "parity ps1: $g with marker" "cmp -s '$GOLD/$g.named.ps1.got' '$GOLD/$g.named.got'"
-    done
-else
-    printf 'SKIP parity ps1 (pwsh not on PATH or --bash-only)\n'; SKIP=$((SKIP + 1))
-fi
+# (PS1 parity of the converter: the "convert:" cases above run the converter of
+# the language under test against the same .want texts on every platform.)
 
 # --- case: missing ~/.aitools/rules -> info + OK n/a, nothing created ----------
 setup_case missing
@@ -259,7 +321,7 @@ check "edited: backup not reported as preserved" "! grep -q 'Preserved unmanaged
 printf 'local edit 2\n' >> "$R/scoped.mdc"
 run_script --force
 check "force: exit 0" "[ \"\$(rc)\" = 0 ]"
-check "force: overwrite (--force)" "grep -q 'scoped.mdc -- overwriting (--force)' '$C/out'"
+check "force: overwrite $(force_note)" "grep -qF 'scoped.mdc -- overwriting $(force_note)' '$C/out'"
 check "force: source content restored" "! grep -q 'local edit 2' '$R/scoped.mdc'"
 
 # --- case: an x.mdc next to x.md is not a second source (contract: *.md only) -
@@ -291,15 +353,19 @@ else
 fi
 
 # --- case: dangling symlink in the source -> error, not a silent skip ---------
-setup_case broken
-manifest "broken.md|shared" "good.md|shared"
-printf 'ok\n' > "$H/.aitools/rules/good.md"
-ln -s "$H/nowhere.md" "$H/.aitools/rules/broken.md"
-run_script
-check "broken: exit 1" "[ \"\$(rc)\" = 1 ]"
-check "broken: dangling symlink logged" "grep -q 'Failed: broken.md: dangling symlink' '$C/out'"
-check "broken: good rule still deployed" "[ -f '$H/.cursor/rules/good.mdc' ]"
-check "broken: ERROR row" "grep -qxF 'ERROR|cursor rules|1 failed' '$C/summary'"
+if $SYMLINKS; then
+    setup_case broken
+    manifest "broken.md|shared" "good.md|shared"
+    printf 'ok\n' > "$H/.aitools/rules/good.md"
+    ln -s "$H/nowhere.md" "$H/.aitools/rules/broken.md"
+    run_script
+    check "broken: exit 1" "[ \"\$(rc)\" = 1 ]"
+    check "broken: dangling symlink logged" "grep -q 'Failed: broken.md: dangling symlink' '$C/out'"
+    check "broken: good rule still deployed" "[ -f '$H/.cursor/rules/good.mdc' ]"
+    check "broken: ERROR row" "grep -qxF 'ERROR|cursor rules|1 failed' '$C/summary'"
+else
+    printf 'SKIP broken (no dangling symlinks here)\n'; SKIP=$((SKIP + 1))
+fi
 
 # --- case: unreadable harness rules dir -> ERROR row (PS1 parity) -------------
 setup_case unreadable
@@ -335,23 +401,25 @@ check "dry: would-create logged" "grep -q 'Would create: plain.mdc' '$C/out'"
 check "dry: dry-run row" "grep -q '|cursor rules|dry run (no files written)' '$C/summary'"
 
 # --- case: dry run with a failure -> ERROR row, not OK ------------------------
-setup_case drydup
-manifest "d.md|shared" "gone.md|shared"
-printf 'a\n' > "$H/.aitools/rules/d.md"
-ln -s "$H/nowhere.md" "$H/.aitools/rules/gone.md"
-run_script --dry-run
-check "drydup: exit 1" "[ \"\$(rc)\" = 1 ]"
-check "drydup: ERROR row" "grep -qxF 'ERROR|cursor rules|1 failed (dry run)' '$C/summary'"
+if $SYMLINKS; then
+    setup_case drydup
+    manifest "d.md|shared" "gone.md|shared"
+    printf 'a\n' > "$H/.aitools/rules/d.md"
+    ln -s "$H/nowhere.md" "$H/.aitools/rules/gone.md"
+    run_script --dry-run
+    check "drydup: exit 1" "[ \"\$(rc)\" = 1 ]"
+    check "drydup: ERROR row" "grep -qxF 'ERROR|cursor rules|1 failed (dry run)' '$C/summary'"
+else
+    printf 'SKIP drydup (no dangling symlinks here)\n'; SKIP=$((SKIP + 1))
+fi
 
-# --- manifest cases: run by the .sh, then (pwsh on PATH) by the .ps1's step 4 --
+# --- manifest cases: run by the script of this platform's language -----------
 # Commander decision 2026-10-26 (RECONCILE Q3, reverses PR #110's filter):
 # Cursor gets every rule the manifest does not retire; the .mdc of a retired
-# rule is removed when the fan-out created it. Each case seeds $H twice: $C/home for
-# the .sh, $C/home-ps for step4-driver.ps1; the parity check compares the
-# resulting ~/.cursor/rules trees and the "cursor rules" / ACTION summary rows.
-DRIVER_PS1="$ROOT/tests/rules-fanout-cursor/step4-driver.ps1"
-HAVE_PWSH=false
-if ! $BASH_ONLY && command -v pwsh >/dev/null 2>&1; then HAVE_PWSH=true; fi
+# rule is removed when the fan-out created it. Each case seeds $C/home and runs
+# the whole script once (.sh on macOS/Linux, .ps1 on Windows); the parity check
+# compares the exit code, the resulting ~/.cursor/rules tree and the "cursor
+# rules" / ACTION summary rows with the golden result both languages must give.
 
 # tree_sig DIR: one line per file under DIR, "<path> <md5>", backup time stamps
 # normalized (.bak.TS) so two runs compare
@@ -371,32 +439,15 @@ tree_sig() {
 }
 rows() { grep -E '^(ACTION\||[A-Z]+\|cursor rules\|)' "$1" | grep -v '^DETAIL|cursor rules|verified'; }
 
-run_ps1() {  # [args]: step 4 of setup-user-cursor.ps1 under $C/home-ps
-    env HOME="$C/home-ps" USERPROFILE="$C/home-ps" AITOOLS_LOG_DIR="$C/logs-ps" \
-        AITOOLS_SUMMARY_FILE="$C/summary-ps" pwsh -NoProfile -File "$DRIVER_PS1" "$SCRIPT_PS1" "$@" \
-        < /dev/null > "$C/out-ps" 2>&1
-    echo $? > "$C/rc-ps"
-}
-
-# parity <case> <seed function> [ps1 args]: reseed under $C/home-ps, run the
-# .ps1, compare with the .sh run already in $C/home
+# parity <case>: this run's exit code, ~/.cursor/rules tree and summary rows
+# equal the golden result tests/rules-fanout-cursor/golden/<case>.result, which
+# the .sh run (macOS/Linux) and the .ps1 run (Windows) must both give
 parity() {
-    if [ "$HAVE_PWSH" != "true" ]; then
-        printf 'SKIP parity ps1: %s (pwsh not on PATH)\n' "$1"; SKIP=$((SKIP + 1)); return
-    fi
-    local case_name="$1" seed="$2" saved_h="$H"
-    shift 2
-    H="$C/home-ps"; mkdir -p "$H"; : > "$C/summary-ps"
-    "$seed"
-    run_ps1 "$@"
-    H="$saved_h"
-    tree_sig "$C/home/.cursor/rules" > "$C/tree-sh"
-    tree_sig "$C/home-ps/.cursor/rules" > "$C/tree-ps"
-    rows "$C/summary" > "$C/rows-sh"
-    rows "$C/summary-ps" > "$C/rows-ps"
-    check "parity ps1: $case_name: exit code" "[ \"\$(cat '$C/rc-ps')\" = \"\$(rc)\" ] || { tail -n 20 '$C/out-ps'; false; }"
-    check "parity ps1: $case_name: ~/.cursor/rules" "cmp -s '$C/tree-sh' '$C/tree-ps' || { diff '$C/tree-sh' '$C/tree-ps'; false; }"
-    check "parity ps1: $case_name: summary rows" "cmp -s '$C/rows-sh' '$C/rows-ps' || { diff '$C/rows-sh' '$C/rows-ps'; false; }"
+    { printf 'exit code: %s\n' "$(rc)"
+      printf '# ~/.cursor/rules (path md5)\n'; tree_sig "$C/home/.cursor/rules"
+      printf '# summary rows\n'; rows "$C/summary"
+    } > "$C/$1.result"
+    check "parity: $1: exit code, ~/.cursor/rules and summary rows match golden (sh and ps share it)" "golden_match '$1.result' '$C/$1.result'"
 }
 
 # A: every source fanned out (aitools too), retired pruned, user files kept
@@ -438,10 +489,7 @@ check "users: unrelated user rule kept" "grep -q 'mine' '$R/mine.mdc' && grep -q
 check "users: retired names logged as not fanned out only when present" "! grep -q 'Not fanned out: gone.md' '$C/out'"
 check "users: *.bak.* source skipped silently" "! ls '$R' | grep -q '^s\.md\.bak' && ! grep -q 's.md.bak' '$C/out'"
 check "users: manifest ignored silently" "! grep -q 'aitools-rules-manifest' '$C/out' && [ ! -e '$R/.aitools-rules-manifest' ]"
-parity users seed_users
-if [ "$HAVE_PWSH" = "true" ]; then
-    check "users: .ps1 ignores the manifest silently" "[ -s '$C/out-ps' ] && ! grep -q 'aitools-rules-manifest' '$C/out-ps'"
-fi
+parity users
 BAKS=$(ls "$R" | grep -c '\.bak\.')
 run_script
 check "users rerun: row 5 verified" "grep -qxF 'WARN|cursor rules|5 verified' '$C/summary'"
@@ -463,7 +511,7 @@ check "nomanifest: info log" "grep -q '\[info\] No rules manifest at .* -- every
 # The row is WARN only because p.mdc was overwritten non-interactively (a warn)
 check "nomanifest: no manifest WARN, no ACTION; row 1 added, 1 updated" "! grep -q '\[warn\] No rules manifest' '$C/out' && ! grep -q '^ACTION' '$C/summary' && grep -qxF 'WARN|cursor rules|1 added, 1 updated' '$C/summary' && grep -q 'p.mdc -- overwriting (non-interactive)' '$C/out'"
 check "nomanifest: both rules fanned out with the marker" "grep -qF '${MARK}s.md;' '$H/.cursor/rules/s.mdc' && grep -qF '${MARK}p.md;' '$H/.cursor/rules/p.mdc'"
-parity nomanifest seed_nomanifest
+parity nomanifest
 
 # C: another first line -> every rule fanned out + WARN log + ACTION
 seed_badheader() {
@@ -478,7 +526,7 @@ check "badheader: exit 0" "[ \"\$(rc)\" = 0 ]"
 check "badheader: warned, with the ACTION's instruction" "grep -q '\[warn\] Rules manifest .*the first line is not.* -- Run aitools to rebuild ~/.aitools/rules and its manifest' '$C/out'"
 check "badheader: ACTION row" "grep -qxF 'ACTION||Run aitools to rebuild ~/.aitools/rules and its manifest' '$C/summary'"
 check "badheader: fanned out (its retired line not read), row WARN 1 added" "[ -f '$H/.cursor/rules/s.mdc' ] && grep -qxF 'WARN|cursor rules|1 added' '$C/summary'"
-parity badheader seed_badheader
+parity badheader
 
 # C2: an unreadable manifest (a directory at its path) -> ERROR row, the
 # fan-out continues, the manifest counted as a failed item
@@ -493,7 +541,7 @@ check "badmanifest: exit 1" "[ \"\$(rc)\" = 1 ]"
 check "badmanifest: ERROR row cannot read rules manifest" "grep -qxF 'ERROR|cursor rules|cannot read rules manifest' '$C/summary'"
 check "badmanifest: fan-out continued" "[ -f '$H/.cursor/rules/s.mdc' ] && grep -qxF 'DETAIL|cursor rules|added: s.mdc' '$C/summary'"
 check "badmanifest: manifest counted failed, final row ERROR 1 failed" "grep -qxF 'DETAIL|cursor rules|failed: .aitools-rules-manifest' '$C/summary' && [ \"\$(row)\" = 'ERROR|cursor rules|1 failed' ]"
-parity badmanifest seed_badmanifest
+parity badmanifest
 
 # D: invalid lines ignored with a warning; case-insensitive names
 seed_invalid() {
@@ -508,7 +556,7 @@ check "invalid: 6 lines ignored with a warning" "[ \"\$(grep -c 'line ignored' '
 check "invalid: name matched case-insensitively" "[ -f '$H/.cursor/rules/lower.mdc' ] && ! grep -q 'Not fanned out: Lower.md is in the rules manifest' '$C/out'"
 check "invalid: WARN row" "grep -qxF 'WARN|cursor rules|1 added' '$C/summary'"
 check "invalid: one ACTION row to rebuild the manifest" "[ \"\$(grep -cxF 'ACTION||Run aitools to rebuild ~/.aitools/rules and its manifest' '$C/summary')\" = 1 ]"
-parity invalid seed_invalid
+parity invalid
 
 # D2: an upper-case .MD extension is a rule (rule_name_kind is case-insensitive).
 # No manifest here: the lib's manifest reader takes *.md names case-sensitively
@@ -522,7 +570,7 @@ seed_upper
 run_script
 check "upper: exit 0" "[ \"\$(rc)\" = 0 ]"
 check "upper: Up.MD -> Up.mdc" "[ -f '$H/.cursor/rules/Up.mdc' ] && grep -qF '${MARK}Up.MD;' '$H/.cursor/rules/Up.mdc' && grep -qxF 'OK|cursor rules|1 added' '$C/summary'"
-parity upper seed_upper
+parity upper
 
 # E: only a retired rule -> row reports the removal (#87 file, matched through
 # the backup deploy-harness left when it retired the rule)
@@ -538,7 +586,7 @@ run_script
 check "onlyremove: exit 0" "[ \"\$(rc)\" = 0 ]"
 check "onlyremove: OK row 1 removed" "grep -qxF 'OK|cursor rules|1 removed' '$C/summary'"
 check "onlyremove: p.mdc removed, backup with the same text kept" "[ ! -e '$H/.cursor/rules/p.mdc' ] && ls '$H/.cursor/rules' | grep -q '^p\.mdc\.bak\.' && grep -q 'Removed p.mdc (retired rule; same content as the conversion of p.md.bak.2026-10-22T010203Z; backup kept)' '$C/out'"
-parity onlyremove seed_onlyremove
+parity onlyremove
 
 # E1: an aitools rule is no longer pruned (PR #110 removed it; FD-2)
 seed_aitools() {
@@ -552,7 +600,7 @@ seed_aitools
 run_script
 check "aitools: exit 0" "[ \"\$(rc)\" = 0 ]"
 check "aitools: p.mdc kept and verified, nothing removed" "[ -f '$H/.cursor/rules/p.mdc' ] && grep -qxF 'OK|cursor rules|1 verified' '$C/summary' && ! ls '$H/.cursor/rules' | grep -q '\.bak\.'"
-parity aitools seed_aitools
+parity aitools
 
 # E2: a name with [ ] is backed up before removal (Backup-File -LiteralPath)
 seed_bracket() {
@@ -566,7 +614,7 @@ seed_bracket
 run_script
 check "bracket: exit 0" "[ \"\$(rc)\" = 0 ]"
 check "bracket: removed with a backup" "[ ! -e '$H/.cursor/rules/br[1].mdc' ] && ls '$H/.cursor/rules' | grep -qF 'br[1].mdc.bak.' && grep -qxF 'OK|cursor rules|1 removed' '$C/summary'"
-parity bracket seed_bracket
+parity bracket
 
 # E3 (review finding 1): #87 files of rules edited before they were retired
 # are recognised through the backups deploy-harness left beside the harness copy
@@ -586,7 +634,7 @@ check "edited: exit 0" "[ \"\$(rc)\" = 0 ]"
 check "edited: old copy of an edited retired rule removed" "[ ! -e '$H/.cursor/rules/e.mdc' ] && grep -q 'Removed e.mdc (retired rule.*e.md.bak.2026-10-21T010203Z' '$C/out'"
 check "edited: old copy of a retired rule removed" "[ ! -e '$H/.cursor/rules/r.mdc' ]"
 check "edited: OK row 2 removed" "grep -qxF 'OK|cursor rules|2 removed' '$C/summary'"
-parity edited seed_edited
+parity edited
 
 # E4 (review finding 3): marker text after a body --- line is not the marker
 seed_bodymark() {
@@ -602,7 +650,7 @@ check "bodymark: exit 0" "[ \"\$(rc)\" = 0 ]"
 check "bodymark: retired harness copy not fanned out" "grep -q 'Not fanned out: p.md (retired in the rules manifest)' '$C/out'"
 check "bodymark: user file kept" "grep -q '^mine' '$H/.cursor/rules/p.mdc' && grep -q 'Kept p.mdc' '$C/out'"
 check "bodymark: WARN row (nothing to deploy) and ACTION" "grep -qxF 'WARN|cursor rules|n/a (nothing to deploy)' '$C/summary' && grep -qxF 'ACTION||Cursor still loads retired rules in ~/.cursor/rules: p.mdc -- delete them unless you wrote them' '$C/summary'"
-parity bodymark seed_bodymark
+parity bodymark
 
 # E5 (review finding 4): a manifest ending in a lone CR -- both scripts reject
 # the line; the rule is still fanned out (only retired names are withheld)
@@ -617,7 +665,7 @@ seed_lonecr
 run_script
 check "lonecr: last line ignored with a warning (b.md not retired)" "grep -q 'line ignored: b.md<TAB>retired' '$C/out' && [ -f '$H/.cursor/rules/b.mdc' ]"
 check "lonecr: WARN row 2 added" "grep -qxF 'WARN|cursor rules|2 added' '$C/summary'"
-parity lonecr seed_lonecr
+parity lonecr
 
 # F: dry run -> removal only logged
 setup_case dryprune
@@ -626,7 +674,7 @@ run_script --dry-run
 check "dryprune: exit 0" "[ \"\$(rc)\" = 0 ]"
 check "dryprune: would-remove logged" "grep -q 'Would back up and remove p.mdc (retired rule' '$C/out'"
 check "dryprune: p.mdc still there, no backup" "[ \"\$(ls '$H/.cursor/rules')\" = 'p.mdc' ]"
-parity dryprune seed_onlyremove -DryRun
+parity dryprune
 
 # G: a listed rule with no file -> warning
 seed_missing() {
@@ -640,7 +688,7 @@ check "missingsrc: exit 0" "[ \"\$(rc)\" = 0 ]"
 check "missingsrc: warned" "grep -q 'Not fanned out: t.md is in the rules manifest but not in' '$C/out'"
 check "missingsrc: WARN row 1 added" "grep -qxF 'WARN|cursor rules|1 added' '$C/summary'"
 check "missingsrc: ACTION row to rebuild the manifest" "grep -qxF 'ACTION||Run aitools to rebuild ~/.aitools/rules and its manifest' '$C/summary'"
-parity missingsrc seed_missing
+parity missingsrc
 
 # G2: a rule the manifest does not list is fanned out too (Claude parity, FAN-PLAN D1)
 seed_unlisted() {
@@ -652,7 +700,7 @@ setup_case unlisted
 seed_unlisted
 run_script
 check "unlisted: exit 0, both fanned out" "[ \"\$(rc)\" = 0 ] && [ -f '$H/.cursor/rules/extra.mdc' ] && grep -qxF 'OK|cursor rules|2 added' '$C/summary'"
-parity unlisted seed_unlisted
+parity unlisted
 
 # H: something that is not a directory at ~/.cursor/rules -> ERROR row
 seed_nocreate() {
@@ -666,14 +714,14 @@ seed_nocreate
 run_script
 check "nocreate: exit 1, ERROR row" "[ \"\$(rc)\" = 1 ] && [ \"\$(row)\" = 'ERROR|cursor rules|cannot create rules dir' ]"
 check "nocreate: the file in the way kept" "grep -qx 'a file' '$H/.cursor/rules'"
-parity nocreate seed_nocreate
+parity nocreate
 
-# errors COUNT: the number of [error] log lines a run printed (sh: $C/out, ps: $C/out-ps)
+# errors COUNT: the number of [error] log lines a run printed ($C/out)
 errcount() { perl -ne '$n++ if /\[error\]/; END { print $n + 0 }' "$1"; }
 
 # H1 (audit B1): a dangling symlink at a target name -- the deploy fails once,
 # and validation does not report it a second time (.ps1 Test-Path -PathType Leaf
-# is true for a dangling link); same error count in both shells
+# is true for a dangling link); the same error count in both languages (golden)
 seed_dangtarget() {
     manifest "s.md|shared" "t.md|shared"
     printf '## Shared rule\n' > "$H/.aitools/rules/s.md"
@@ -681,14 +729,17 @@ seed_dangtarget() {
     mkdir -p "$H/.cursor/rules"
     ln -s "$H/nowhere.mdc" "$H/.cursor/rules/s.mdc"
 }
-setup_case dangtarget
-seed_dangtarget
-run_script
-check "dangtarget: exit 1, ERROR 1 failed, t.mdc deployed" "[ \"\$(rc)\" = 1 ] && [ \"\$(row)\" = 'ERROR|cursor rules|1 failed' ] && [ -f '$H/.cursor/rules/t.mdc' ]"
-check "dangtarget: no second Validation error" "! grep -q 'Validation failed' '$C/out'"
-parity dangtarget seed_dangtarget
-if [ "$HAVE_PWSH" = "true" ]; then
-    check "parity ps1: dangtarget: same number of error lines ($(errcount "$C/out"))" "[ \"\$(errcount '$C/out')\" = \"\$(errcount '$C/out-ps')\" ] && ! grep -q 'Validation failed' '$C/out-ps'"
+if $SYMLINKS; then
+    setup_case dangtarget
+    seed_dangtarget
+    run_script
+    check "dangtarget: exit 1, ERROR 1 failed, t.mdc deployed" "[ \"\$(rc)\" = 1 ] && [ \"\$(row)\" = 'ERROR|cursor rules|1 failed' ] && [ -f '$H/.cursor/rules/t.mdc' ]"
+    check "dangtarget: no second Validation error" "! grep -q 'Validation failed' '$C/out'"
+    parity dangtarget
+    printf 'error lines: %s\n' "$(errcount "$C/out")" > "$C/dangtarget.errors"
+    check "parity: dangtarget: number of error lines ($(errcount "$C/out")) matches golden" "golden_match dangtarget.errors '$C/dangtarget.errors'"
+else
+    printf 'SKIP dangtarget (no dangling symlinks here)\n'; SKIP=$((SKIP + 1))
 fi
 
 # H2 (review 3): a retired name is looked up case-insensitively in ~/.cursor/rules
@@ -703,7 +754,7 @@ setup_case caseretired
 seed_caseretired
 run_script
 check "caseretired: removed under its on-disk name" "[ \"\$(rc)\" = 0 ] && [ ! -e '$H/.cursor/rules/gone.mdc' ] && grep -qxF 'DETAIL|cursor rules|removed: gone.mdc' '$C/summary' && grep -qxF 'OK|cursor rules|1 removed' '$C/summary'"
-parity caseretired seed_caseretired
+parity caseretired
 
 # H3 (audit B3): an unreadable source rule -- the reason is in the log line
 seed_unreadsrc() {
@@ -720,9 +771,8 @@ else
     run_script
     check "unreadsrc: exit 1, ERROR 1 failed, the other rule deployed" "[ \"\$(rc)\" = 1 ] && [ \"\$(row)\" = 'ERROR|cursor rules|1 failed' ] && [ -f '$H/.cursor/rules/t.mdc' ]"
     check "unreadsrc: the reason is in the log line, no raw shell error" "grep -q '\[error\] Failed: s.md: cannot read .* -- permission denied' '$C/out' && ! perl -pe 's/\e\[[0-9;]*m//g' '$C/out' | grep -v '^\[' | grep -qi 'permission denied'"
-    parity unreadsrc seed_unreadsrc
+    parity unreadsrc
     chmod 644 "$C/home/.aitools/rules/s.md"
-    if [ -f "$C/home-ps/.aitools/rules/s.md" ]; then chmod 644 "$C/home-ps/.aitools/rules/s.md"; fi
 fi
 
 # --- pty: the review menu prompts (deploy list on fd 3) and [x]abort exits 2 --
@@ -732,23 +782,27 @@ fi
 PTY="$ROOT/tests/managed-files/pty-run.py"
 HAVE_PTY=false
 if command -v python3 >/dev/null 2>&1 && [ -f "$PTY" ]; then HAVE_PTY=true; fi
+# Windows pty = pywinpty (ConPTY); python3 -c's failure means "not installed"
+if $HAVE_PTY && [ "$TEST_PLATFORM" = windows ] && ! python3 -c 'import winpty' >/dev/null 2>&1; then HAVE_PTY=false; fi
 
-# run_pty LANG INPUT: LANG sh runs the script, ps runs step4-driver.ps1, on a
-# pty under $C/home (sh) or $C/home-ps (ps); keystrokes INPUT
+# run_pty INPUT: the script of this platform's language (the whole .ps1 on
+# Windows) on a pty under $C/home; keystrokes INPUT
 run_pty() {
-    local lang="$1" input="$2" h
-    if [ "$lang" = sh ]; then h="$C/home"; else h="$C/home-ps"; fi
+    local input="$1" h="$C/home" lang="$LANG_RUN"
     : > "$C/summary-$lang"
     if [ "$lang" = sh ]; then
         env -u AITOOLS_FORCE -u AITOOLS_DRY_RUN HOME="$h" USERPROFILE="$h" AITOOLS_LOG_DIR="$C/logs-$lang" \
             AITOOLS_SUMMARY_FILE="$C/summary-$lang" PATH="$C/bin:$PATH" \
             python3 "$PTY" --input "$input" --log "$C/pty-$lang.out" -- "$TB" "$SCRIPT" > /dev/null 2>&1
     else
-        env -u AITOOLS_FORCE -u AITOOLS_DRY_RUN HOME="$h" USERPROFILE="$h" AITOOLS_LOG_DIR="$C/logs-$lang" \
-            AITOOLS_SUMMARY_FILE="$C/summary-$lang" \
-            python3 "$PTY" --input "$input" --log "$C/pty-$lang.out" -- pwsh -NoProfile -File "$DRIVER_PS1" "$SCRIPT_PS1" > /dev/null 2>&1
+        env -u AITOOLS_FORCE -u AITOOLS_DRY_RUN HOME="$(native_path "$h")" USERPROFILE="$(native_path "$h")" \
+            AITOOLS_LOG_DIR="$(native_path "$C/logs-$lang")" AITOOLS_SUMMARY_FILE="$(native_path "$C/summary-$lang")" \
+            PATH="$C/bin:$PATH" \
+            python3 "$(native_path "$PTY")" --input "$input" --log "$(native_path "$C/pty-$lang.out")" -- \
+            pwsh -NoProfile -File "$(native_path "$SCRIPT_PS1")" > /dev/null 2>&1
     fi
     echo $? > "$C/rc-$lang"
+    if [ "$lang" = ps1 ]; then strip_cr "$C/summary-$lang"; fi
 }
 seed_pty() {
     manifest "s.md|shared" "t.md|aitools"
@@ -762,19 +816,15 @@ seed_pty() {
 if $HAVE_PTY; then
     setup_case pty
     seed_pty
-    if [ "$HAVE_PWSH" = "true" ]; then saved_h="$H"; H="$C/home-ps"; mkdir -p "$H"; seed_pty; H="$saved_h"; fi
-    for lang in sh ps; do
-        if [ "$lang" = ps ] && [ "$HAVE_PWSH" != "true" ]; then continue; fi
-        if [ "$lang" = sh ]; then PR="$C/home/.cursor/rules"; else PR="$C/home-ps/.cursor/rules"; fi
-        run_pty "$lang" 's\n'
-        check "pty $lang: the review menu prompted" "grep -q '\[s\]kip' '$C/pty-$lang.out'"
-        check "pty $lang: [s]kip keeps the local edit, row WARN 1 skipped" "grep -qx 'my edit' '$PR/s.mdc' && [ \"\$(grep -F '|cursor rules|' '$C/summary-$lang' | grep -v '^DETAIL' | tail -n 1)\" = 'WARN|cursor rules|1 skipped (user review)' ]"
-        run_pty "$lang" 'x\n'
-        check "pty $lang: [x]abort exits 2, no cursor rules row, local file kept" "[ \"\$(cat '$C/rc-$lang')\" = 2 ] && ! grep -F '|cursor rules|' '$C/summary-$lang' | grep -qv '^DETAIL' && grep -qx 'my edit' '$PR/s.mdc'"
-    done
-    if [ "$HAVE_PWSH" != "true" ]; then printf 'SKIP pty ps (pwsh not on PATH)\n'; SKIP=$((SKIP + 1)); fi
+    lang="$LANG_RUN"
+    PR="$C/home/.cursor/rules"
+    run_pty 's\n'
+    check "pty $lang: the review menu prompted" "grep -q '\[s\]kip' '$C/pty-$lang.out'"
+    check "pty $lang: [s]kip keeps the local edit, row WARN 1 skipped" "grep -qx 'my edit' '$PR/s.mdc' && [ \"\$(grep -F '|cursor rules|' '$C/summary-$lang' | grep -v '^DETAIL' | tail -n 1)\" = 'WARN|cursor rules|1 skipped (user review)' ]"
+    run_pty 'x\n'
+    check "pty $lang: [x]abort exits 2, no cursor rules row, local file kept" "[ \"\$(cat '$C/rc-$lang')\" = 2 ] && ! grep -F '|cursor rules|' '$C/summary-$lang' | grep -qv '^DETAIL' && grep -qx 'my edit' '$PR/s.mdc'"
 else
-    printf 'SKIP pty review menu and abort (python3 not found)\n'; SKIP=$((SKIP + 1))
+    printf 'SKIP pty review menu and abort (python3 not found; on Windows also pywinpty)\n'; SKIP=$((SKIP + 1))
 fi
 
 printf '\n%d passed, %d failed, %d skipped\n' "$PASS" "$FAIL" "$SKIP"

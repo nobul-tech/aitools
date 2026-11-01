@@ -1,0 +1,21 @@
+# exit code
+0
+# skills tree (path md5 [x]; symlinks not listed)
+u/SKILL.md fc5cc224cc2cbbc8403458117ae1099c
+u/above-max.txt aa03bd2ab9adb9547ccf59e349263a19
+u/ff.txt 1c6dfa1d7af6fd4cddb900e537421687
+u/nonchar.txt a82ecdbfb4519c4360d92215c6d96bec
+u/overlong.txt f0866efbdabaf34bd17c4a8fa0f5894d
+u/surrogate.txt 449fa21c91cdb82f51f88ef9c34f4c3d
+u/truncated.txt 1f4ef5bb50156e354883b4f234a13a82
+u/valid.txt 5489f8fc627bb67d57b3bab93a7c9eb1
+# summary rows (ACTION and skills, sorted)
+DETAIL|claude skills|added: u/SKILL.md
+DETAIL|claude skills|added: u/above-max.txt
+DETAIL|claude skills|added: u/ff.txt
+DETAIL|claude skills|added: u/nonchar.txt
+DETAIL|claude skills|added: u/overlong.txt
+DETAIL|claude skills|added: u/surrogate.txt
+DETAIL|claude skills|added: u/truncated.txt
+DETAIL|claude skills|added: u/valid.txt
+OK|claude skills|8 added

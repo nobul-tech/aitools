@@ -1,0 +1,11 @@
+# exit code
+1
+# skills tree (path md5 [x]; symlinks not listed)
+a/SKILL.md 9ebae5e3944e6575a4f94a86bc6da9c2
+gone/sub/x.md f38d5e91722573bc0e84b95f2a9db5cd
+# summary rows (ACTION and skills, sorted)
+DETAIL|claude skills|added: a/SKILL.md
+DETAIL|claude skills|failed: gone
+ERROR|claude skills|1 failed
+# extra
+backup gone/sub mode 555

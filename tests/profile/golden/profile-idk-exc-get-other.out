@@ -1,0 +1,18 @@
+slug	go
+alias	laptop
+via	hostname
+key	0b1c2d3e-0000-1111-2222-333344445555
+owner	other
+legacy	false
+profileFile	<TMP>/idk-exc/home/repos/aitools-nobul-jose/profile.json
+found	false
+platform	
+method	
+path	
+version	
+decidedAt	
+decidedBy	
+reason	
+warn	matched by hostname only (legacy) -- run: aitools user init (registers machine.id)
+warn	profile "laptop" is registered to another machine (machine.id 0b1c2d3e-0000-1111-2222-333344445555, this machine 99999999-0000)
+warn	toolExceptions.go in profile "laptop" is not this machine's (owner other) -- ignored

@@ -1,0 +1,5 @@
+# exit code
+1
+# skills tree (path md5 [x]; symlinks not listed)
+# summary rows (ACTION and skills, sorted)
+ERROR|claude skills|cannot read harness skills

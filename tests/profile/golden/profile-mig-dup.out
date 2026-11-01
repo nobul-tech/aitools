@@ -1,0 +1,8 @@
+result	failed
+profileFile	<TMP>/mig/home/repos/aitools-nobul-jose/profile.json
+renamed	
+unclaimed	workstation
+committed	false
+pushed	false
+warn	profile "workstation" has no machine.id -- left as is (aitools user init claims it)
+error	profiles "laptop" and "nobul-mac" would both be keyed "3d4df2a5-7d91-5af9-9944-4feebaae3cf5" (one machine id on two profiles) -- nothing written

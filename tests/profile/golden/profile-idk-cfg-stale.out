@@ -1,0 +1,19 @@
+alias	nobul-mac
+via	hostname
+key	3d4df2a5-7d91-5af9-9944-4feebaae3cf5
+owner	unknown
+legacy	false
+environment	local
+machineId	
+hostname	nobul-mac
+profileFile	<TMP>/idk-cfg/home/repos/aitools-nobul-jose/profile.json
+userRepoPath	<TMP>/idk-cfg/home/repos/aitools-nobul-jose
+userRepoVia	convention
+name	Jose
+company	nobul-tech
+gitName	Jose
+gitEmail	jose@nobul.tech
+github	nobul-jose
+warn	machine id unavailable: no machine id (test value)
+warn	config.json machineId "gone-id" not in profiles -- ignored
+warn	matched by hostname only (legacy) -- run: aitools user init (registers machine.id)

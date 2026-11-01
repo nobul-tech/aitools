@@ -1,0 +1,16 @@
+alias	nobul-mac
+via	id
+key	3D4DF2A5-7D91-5AF9-9944-4FEEBAAE3CF5
+owner	this
+legacy	false
+environment	local
+machineId	3D4DF2A5-7D91-5AF9-9944-4FEEBAAE3CF5
+hostname	nobul-mac
+profileFile	<TMP>/idk-upper/home/repos/aitools-nobul-jose/profile.json
+userRepoPath	<TMP>/idk-upper/home/repos/aitools-nobul-jose
+userRepoVia	convention
+name	Jose
+company	nobul-tech
+gitName	Jose
+gitEmail	jose@nobul.tech
+github	nobul-jose

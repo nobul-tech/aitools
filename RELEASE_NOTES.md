@@ -12,6 +12,46 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.75.0 -- CI platform targeting: each script tested only where its OS guard lets it run; Windows runs the heavy suites (2026-11-01)
+
+Not tagged. PR #139, plan `plans/ci-platform-targeting.md`. Commander orders 2026-11-01: "fix it so that linux and macos DO NOT run the windows .ps1 paths under emulation", "Have windows run the heavy suite", "fix all other warnings/errors you can see in the logs", "give pty-run.py a 30 second timeout", and ".ps1 scripts only run on windows ... the override to override the OS guard should be removed. the os guard should be tested". RCA behind it: the windows job ran about 1/8 of the work (140 s against 1,126 s linux and 1,519-1,681 s macOS) because linux and macOS ran every heavy suite's `.ps1` half under pwsh through guard bypasses, while windows ran a smoke subset.
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 1 | linux and macOS run only the `.sh` halves: the PowerShell test steps and the macOS PS parse step are gone from their jobs, and no suite runs a `.ps1` there. Cross-platform scripts (hooks, Python, the bash entry points) still run on all three. macOS gains /bin/bash 3.2 steps for hookin, deploy-harness and deploy-harness-mdm |
+| 2 | windows runs the heavy suites' `.ps1` halves on native pwsh, driven from Git Bash: b8-consumers, claude-mdm, hookin, build-deploy, profile, config, lib, user-init, install, fanout-lib, rules-fanout, rules-fanout-cursor, skills-fanout, skills-legacy, deploy-harness, deploy-harness-mdm (43 steps, was 26). sh/ps1 parity is checked against 367 committed golden files written by a POSIX `.sh` run (`tests/lib/platform-lib.sh`, `AITOOLS_TEST_UPDATE_GOLDEN=1`) |
+| 3 | Every OS guard is tested: `tests/os-guards/test-os-guards.sh` classifies every script under `scripts/`, `shared/` and `packaging/`; an unguarded script must be in the cross-platform.md exemption table; on POSIX each Windows-guarded `.ps1` must refuse under pwsh (exit 1, the guard message, no writes), on Windows each POSIX-guarded `.sh` must refuse under Git Bash (macOS 35/35, Windows 33/33) |
+| 4 | The OS guard override is removed from `scripts/aitools-profile.ps1` and `scripts/setup-user-config.ps1` (`AITOOLS_PROFILE_TEST_ANY_OS`): the guard is `-not $IsWindows` only. The guard-stripped test copies (`tests/profile/user-init-harness.ps1`, `tests/rules-fanout-cursor/step4-driver.ps1`) are deleted; `tests/hookin/hookin-driver.ps1` has a Windows guard |
+| 5 | Runner and Node.js warnings: `actions/checkout@v7` (node24), `macos-15` (macos-14 retires 2026-11-02; brownouts were cancelling jobs), `ubuntu-24.04`, `actions/setup-python@v7.0.0` (Python 3.12 on windows) |
+| 6 | `tests/managed-files/pty-run.py`: default `--timeout` 30 s with a timeout message on stderr (the `--timeout 120` overrides are gone); a Windows backend on pywinpty 3.1.2 (ConPTY), hash-pinned in `tests/managed-files/requirements-windows.txt` and installed only on the CI runner (evaluated 2026-11-01: adopted with yellow flags, sole maintainer and low adoption). Interactive menu cases now run on windows (managed-files, adopt-push, user-init) |
+| 7 | `.claude/rules/cross-platform.md`: exemption rows for entry points with Windows branches (`aitools-install.sh`, `aitools`, `scripts/githooks/pre-commit`) and package launchers, and an enforcement paragraph naming `tests/os-guards` |
+| 8 | `scripts/aitools-json.ps1` header: "Platform: PowerShell 7 (any OS)" became "Platform: Windows (PowerShell 7)"; every caller is a Windows-guarded script and macOS/Linux use `aitools-json.pl` (plan open item A1, commander 2026-11-01). Open item A2 (do the `check-*.ps1` checks run on macOS/Linux?) is issue #140, not changed here |
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 9 | Medium | `check-post-push` step 23 always failed: `check-script-compliance.sh` check 12 ("write_summary valid categories") reported `setup-user-config.sh(1) setup-user-config.ps1(1)` as invalid categories. Both were comments that mention `write_summary` / `Write-Summary`; every call uses a valid category. The comment filter `grep -v '^\s*#'` ran after `grep -n`, whose `N:` prefix meant no line ever started with `#`. Check 12 now works as its `.ps1` twin does: per line, comment lines skipped first, each call judged by its category word, failures reported as `file:line(category)`. Verified with probe scripts (an invalid `BOGUS` call is still caught in both `.sh` and `.ps1` targets; comments are not) |
+
+CI times, runs 41267819083 and 41270206290 (the first all-green run): linux 348-418 s (was 1,126 s), macOS 974-1,242 s (was 1,519-1,681 s; the slower run had GitHub's macOS arm64 capacity notice), windows 1,554-1,595 s (was 140 s). No warning annotations remain on any job.
+
+Coverage gaps on windows, recorded by the suites as SKIP with a reason: symlink, chmod and read-only cases; the 64 KB diff case under ConPTY; setup-user-claude.sh cases (POSIX-only script).
+
+### Files created
+
+| File | Purpose |
+|------|---------|
+| `tests/lib/platform-lib.sh` | `TEST_PLATFORM`, `TEST_LANG`, `native_path`, `golden_match`: golden-file sh/ps1 parity |
+| `tests/os-guards/test-os-guards.sh` | Proves every OS guard refuses the wrong platform |
+| `tests/managed-files/requirements-windows.txt` | Hash-pinned pywinpty for the windows runner |
+| `tests/managed-files/winpty-probe.py` | Windows CI diagnostic: HOME isolation, Python commands, ConPTY |
+
+**Verified on:** macOS (bash 5.3 and /bin/bash 3.2). Windows and Linux: CI.
+
+---
+
 ## v0.74.1 -- Fix: harvest hooks use scratch names verbatim, re-harvest only what changed, retry archive commits; handoff discovery (2026-10-31)
 
 Not tagged. Harvest-hook gaps G1-G6 (defined in the rows below), found 2026-10-31 while writing `reference/artifact-harvesting.md` (new: merges the artifact-harvesting rule and its framework reference, with flow diagrams of the hooks), and issue #138. Follow-up 2026-11-01: 73 junk entries removed from `harvesting/` and the manifest (11 `.harvested`, 28 `.intelligence-last-check`, 34 `events.jsonl`: files the fixed classifier never harvests).

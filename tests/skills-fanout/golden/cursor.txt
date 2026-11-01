@@ -1,0 +1,17 @@
+# exit code
+0
+# skills tree (path md5 [x]; symlinks not listed)
+d1/SKILL.md 20ea191f581074e77a618c1fba739d53
+mine/SKILL.md d92bf619dc8282f474be4bfbce48183f
+mine2/SKILL.md 7015c8a5c7b65735873cd21111804a3d
+p1/SKILL.md 65c05849b6ba89799980c4317d77e0a8
+s1/SKILL.md 1c14132e8664b3845b2cb862b8207bd5
+s1/scripts/run.sh 3e2b31c72181b87149ff995e7202c0e3 x
+# summary rows (ACTION and skills, sorted)
+ACTION||Cursor still loads retired skills in ~/.cursor/skills: mine2 -- delete them unless you wrote them
+DETAIL|cursor skills|added: d1/SKILL.md
+DETAIL|cursor skills|added: p1/SKILL.md
+DETAIL|cursor skills|added: s1/SKILL.md
+DETAIL|cursor skills|added: s1/scripts/run.sh
+DETAIL|cursor skills|removed: gone
+WARN|cursor skills|4 added, 1 removed

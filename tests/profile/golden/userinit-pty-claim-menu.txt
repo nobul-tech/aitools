@@ -1,0 +1,10 @@
+Which profile is this machine?
+  [-] laptop (registered to another machine)
+  [1] nobul-mac
+  [n] new profile for this machine
+  [s] skip
+Choice:
+  [ok]  dotprofile       verified
+  [ok]  machine profile  updated (nobul-mac)
+  [ok]  aitools config   updated
+  [ok]  claude hooks     stub

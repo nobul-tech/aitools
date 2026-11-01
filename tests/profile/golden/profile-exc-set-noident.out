@@ -1,0 +1,11 @@
+result	created
+slug	go
+alias	nobul-mac
+via	id
+key	nobul-mac
+owner	this
+legacy	true
+profileFile	<TMP>/exc/home/repos/aitools-nobul-jose/profile.json
+committed	true
+pushed	true
+warn	profile "nobul-mac" is keyed by alias -- run: aitools-profile migrate (re-keys profiles by machine id)

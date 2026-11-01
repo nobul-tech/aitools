@@ -1,0 +1,6 @@
+dm-linktarget	rc=1
+dm-linkinside	rc=1
+dm-linkdir	rc=1
+ml-dangling	result=failed target=absent
+ml-dangling-dry	result=failed target=absent
+ml-live	result=updated target=new

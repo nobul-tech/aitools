@@ -1,0 +1,14 @@
+exit 1
+-- summary rows
+ERROR|aitools config|merge failed
+-- config.json
+{
+  "version": 2,
+  "reposPath": "<TMP>/home/repos",
+  "repoPath": "<TMP>/home/repos/aitools",
+  "custom": { "keep": true },
+  "googleDrives": [ { "path": "/gd", "account": "a@b.c", "label": "" } ],
+  "userRepoPath": "<TMP>/home/repos/aitools-nobul-jose",
+  "machineAlias": "new-mac",
+  "MachineId": "hand-written"
+}

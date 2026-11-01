@@ -1,0 +1,26 @@
+exit 0
+-- summary rows
+OK|aitools config|updated
+DETAIL|aitools config|googleDrives updated
+DETAIL|aitools config|githubUser updated
+DETAIL|aitools config|machineId updated
+DETAIL|aitools config|machineAlias updated
+-- config.json
+{
+  "version": 3,
+  "reposPath": "<TMP>/home/repos",
+  "repoPath": "<TMP>/home/repos/aitools",
+  "googleDrives": [],
+  "githubUser": "nobul-jose",
+  "machineId": "3d4df2a5-7d91-5af9-9944-4feebaae3cf5",
+  "machineAlias": "nobul-mac",
+  "meta": {
+    "intent": {
+      "purpose": "Per-machine pointers that let aitools find its repos and this machine profile, built from profile.json",
+      "scope": "Bootstrap pointers (reposPath, repoPath), detected googleDrives, and values derived from profile.json (githubUser, userRepoPath, machineId, and machineAlias as a display value). NOT identity or preferences (profile.json). NOT hand-edited: setup-user-config is the only writer",
+      "audience": "read_config_key/ReadConfigKey callers, resolve_user_repo_path/Resolve-UserRepoPath, ait-harvest.py, hh, check-lib; written by setup-user-config.sh/.ps1"
+    },
+    "writer": "setup-user-config",
+    "derivedFrom": "bootstrap only"
+  }
+}

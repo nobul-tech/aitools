@@ -1,0 +1,9 @@
+result	refused
+key	3d4df2a5-7d91-5af9-9944-4feebaae3cf5
+alias	SPARE
+owner	other
+ownerKey	0b1c2d3e-0000-1111-2222-333344445555
+claimed	
+machineId	3D4DF2A5-7D91-5AF9-9944-4FEEBAAE3CF5
+hostname	nobul-mac
+error	alias "SPARE" is used by another machine's profile (0b1c2d3e-0000-1111-2222-333344445555) -- choose another alias, or confirm interactively (--allow-duplicate-alias)

@@ -1,0 +1,4 @@
+ACTION||see deploy.log -- the dotprofile could not be resolved
+ERROR|claude skills|not deployed: dotprofile error
+ERROR|cursor skills|not deployed: dotprofile error
+ERROR|dotprofile|resolver failed

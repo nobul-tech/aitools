@@ -1,0 +1,5 @@
+path	<TMP>/urp-utf16/home/repos/aitools-nobul-jose
+via	scan
+expected	
+warn	<TMP>/urp-utf16/home/.aitools/config.json is UTF-16 encoded, not UTF-8 -- save it as UTF-8 -- resolving without it
+warn	githubUser unknown -- used the only dotprofile under <TMP>/urp-utf16/home/repos

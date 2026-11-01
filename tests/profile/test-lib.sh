@@ -10,8 +10,9 @@
 # must match the expectation. Also covered: a caller's own variables and
 # parameters survive sourcing the lib and calling the wrappers (PR #80 B1/M1),
 # unchanged and dry-run records do not warn (m1), one ACTION per run (m3), the
-# AITOOLS_PROFILE_SH/PS1 overrides, and the bash -> pwsh (Git Bash) branch forced
-# on this OS with AITLIB_PROFILE_VIA_PWSH=1 (m2).
+# AITOOLS_PROFILE_SH/PS1 overrides, and the bash -> pwsh branch of aitools-lib.sh
+# that Git Bash takes on Windows (m2; AITLIB_PROFILE_VIA_PWSH=1 is set too, a
+# no-op there).
 # Re-key batch 3: the id-key results (AITLIB_MACHINE_KEY/OWNER/LEGACY/HOSTNAME)
 # on id-keyed, legacy, other-machine and no-match profiles and with a resolver
 # that predates them; resolver exits 3 and 4 mapped and logged in every wrapper;
@@ -30,23 +31,101 @@
 # throw and parse error, no command -- and none for a child that wrote its own or
 # without a summary tool (A-3); the relay's temp file: mktemp failure and a
 # failed removal (A-4, stubs on PATH).
-# Platform: macOS/Linux (pwsh runs with AITOOLS_PROFILE_TEST_ANY_OS=1). Safe to re-run.
-# Usage: bash tests/profile/test-lib.sh [--bash-only]
+#
+# Platform targeting (plans/ci-platform-targeting.md): each case runs only where
+# the code it tests runs. macOS/Linux run the bash cases (aitools-lib.sh with
+# aitools-profile.sh); Windows (Git Bash) runs the PowerShell cases
+# (aitools-lib.ps1 with aitools-profile.ps1, native pwsh, Windows paths, HOME and
+# USERPROFILE both set) and the "gitbash" cases: aitools-lib.sh under Git Bash,
+# whose profile wrappers call aitools-profile.ps1 through pwsh (m2). No guard is
+# bypassed. The one sh-vs-ps1 parity comparison (relay-record: identical
+# deploy.jsonl records) is checked against the committed golden file
+# tests/profile/golden/lib-relay-record.jsonl (tests/lib/platform-lib.sh
+# golden_match; host and os replaced by <HOST> and <OS>);
+# AITOOLS_TEST_UPDATE_GOLDEN=1 on macOS/Linux rewrites it.
+# Safe to re-run: an isolated HOME under a temp dir (removed on exit).
+# Usage: bash tests/profile/test-lib.sh [--bash-only] [--help]
+#   --bash-only  accepted for compatibility: macOS/Linux always run only bash
+#   AITOOLS_TEST_BASH=/bin/bash runs the bash drivers under another bash (macOS 3.2)
 
 set -euo pipefail
 
+if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
+    perl -ne 'print if $. >= 2 && $. <= 49' "$0"
+    exit 0
+fi
+
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# shellcheck source=../lib/platform-lib.sh
+. "$REPO/tests/lib/platform-lib.sh"
 WORK="$(mktemp -d)"
 cleanup() { rm -rf "$WORK"; }
 trap cleanup EXIT
 BASH_BIN="${AITOOLS_TEST_BASH:-bash}"
-USE_PS=true
-if [ "${1:-}" = "--bash-only" ] || ! command -v pwsh >/dev/null 2>&1; then USE_PS=false; fi
+LANG_RUN="$TEST_LANG"   # sh on macOS/Linux, ps1 on Windows
+GOLDEN_DIR="$REPO/tests/profile/golden"
+GOLDEN_TMP="$WORK"
 
 PASS=0
 FAIL=0
 ok()  { PASS=$((PASS + 1)); printf '  ok   %s\n' "$1"; }
 bad() { FAIL=$((FAIL + 1)); printf '  FAIL %s\n' "$1"; }
+
+if [ "$LANG_RUN" = ps1 ] && ! command -v pwsh >/dev/null 2>&1; then
+    printf '  FAIL pwsh is not on PATH: the PowerShell cases cannot be tested on Windows\n'
+    exit 1
+fi
+
+# impl_runs IMPL -- 0 when IMPL runs on this platform: bash on macOS/Linux; ps
+# and gitbash (aitools-lib.sh under Git Bash, its pwsh branch) on Windows
+impl_runs() {
+    case "$1" in
+        bash) [ "$LANG_RUN" = sh ] ;;
+        ps|gitbash) [ "$LANG_RUN" = ps1 ] ;;
+        *) return 1 ;;
+    esac
+}
+
+# WORK_SPELLINGS -- Windows: every spelling of $WORK a native program may print,
+# one per line: cygpath's default form, its long form and its 8.3 short form.
+# The CI temp root is both C:/Users/RUNNER~1/... and C:/Users/runneradmin/...;
+# pwsh prints whichever its API returns (CI run 41265193554). Empty elsewhere.
+WORK_SPELLINGS=""
+if [ "$TEST_PLATFORM" = windows ]; then
+    for ws_opt in "" -l -s; do
+        # shellcheck disable=SC2086  # ws_opt is empty or one option
+        if ws="$(cygpath -m $ws_opt "$WORK")" && [ -n "$ws" ]; then WORK_SPELLINGS="$WORK_SPELLINGS$ws"$'\n'
+        else printf '  note: cygpath -m %s gave no spelling of %s (that spelling is not mapped back)\n' "$ws_opt" "$WORK"; fi
+    done
+fi
+
+# from_native FILE -- Windows: rewrite, in place, every spelling of $WORK that
+# native pwsh prints (each of WORK_SPELLINGS as C:/..., C:\..., JSON-escaped
+# C:\\... and /c/...) back to $WORK, with the separators after it turned into
+# slashes, and remove CRs. A no-op elsewhere.
+from_native() {
+    [ "$TEST_PLATFORM" = windows ] || return 0
+    FN_POSIX="$WORK" FN_NATIVES="$WORK_SPELLINGS" perl -pi -e '
+        BEGIN {
+            my %seen;
+            for my $n (grep { length } split /\n/, $ENV{FN_NATIVES}) {
+                (my $bs = $n) =~ s{/}{\\}g; (my $js = $bs) =~ s{\\}{\\\\}g;
+                my $us = $n; $us =~ s{^([A-Za-z]):}{"/" . lc($1)}e;
+                $seen{$_} = 1 for grep { length } ($js, $bs, $n, $us);
+            }
+            @fn_re = map { qr/\Q$_\E/i } sort { length($b) <=> length($a) } keys %seen;
+        }
+        s/\r//g;
+        for my $re (@fn_re) { s{$re([^\s"\x27|()]*)}{my $r = $1; $r =~ s{\\\\}{/}g; $r =~ tr{\\}{/}; "$ENV{FN_POSIX}$r"}ge; }
+    ' "$1"
+}
+# to_native WORDS -- WORDS with every $WORK and $REPO prefix in native form (the
+# VAR=value words and comma lists handed to native pwsh); unchanged off Windows
+to_native() {
+    if [ "$TEST_PLATFORM" != windows ]; then printf '%s' "$1"; return 0; fi
+    TN_W="$WORK" TN_WN="$(native_path "$WORK")" TN_R="$REPO" TN_RN="$(native_path "$REPO")" \
+        perl -e 'my $s = $ARGV[0]; $s =~ s/\Q$ENV{TN_W}\E/$ENV{TN_WN}/g; $s =~ s/\Q$ENV{TN_R}\E/$ENV{TN_RN}/g; print $s' "$1"
+}
 
 ID_MAC="3D4DF2A5-7D91-5AF9-9944-4FEEBAAE3CF5"
 ID_KEY="3d4df2a5-7d91-5af9-9944-4feebaae3cf5"   # ID_MAC lower-cased: the profiles key (revision 2.2)
@@ -120,9 +199,14 @@ printf '"probe-host"\nexit 0\n' > "$WORK/host.ps1"
 printf '#!/usr/bin/env bash\nprintf "error\\tbad input\\n"\nexit 2\n' > "$WORK/exit2.sh"
 printf '"error`tbad input"\nexit 2\n' > "$WORK/exit2.ps1"
 printf '"result`tok"\nforeach ($x in $args) { "arg`t$x" }\nexit 0\n' > "$WORK/args.ps1"
-# A cygpath stub: -w marks paths under /conv/ (W/conv/...), leaves the rest as is
+# A cygpath stub: -w marks paths under /conv/ (W/conv/...); every other call goes
+# to the real cygpath (Windows: the resolver path itself must be converted), or
+# prints the path as is where there is none
 mkdir -p "$WORK/fakebin"
-printf '#!/usr/bin/env bash\ncase "$2" in /conv/*) printf "W%%s\\n" "$2" ;; *) printf "%%s\\n" "$2" ;; esac\n' > "$WORK/fakebin/cygpath"
+REAL_CYGPATH=""
+if command -v cygpath >/dev/null 2>&1; then REAL_CYGPATH="$(command -v cygpath)"; fi
+printf '#!/usr/bin/env bash\ncase "$2" in /conv/*) printf "W%%s\\n" "$2" ;; *) if [ -n "%s" ]; then exec "%s" "$@"; fi; printf "%%s\\n" "$2" ;; esac\n' \
+    "$REAL_CYGPATH" "$REAL_CYGPATH" > "$WORK/fakebin/cygpath"
 chmod +x "$WORK/fakebin/cygpath"
 
 # Bash driver: source the lib, run one call, print the results
@@ -242,11 +326,12 @@ if ($env:SHOW_NOTES -eq "1") {
 DRIVE
 
 # run_case NAME CALL EXPECTED-OUTPUT EXPECTED-SUMMARY [EXTRA-ENV] [IMPLS]
-# EXTRA-ENV: space-separated VAR=value words (no spaces in values); IMPLS: "bash ps" (default) or "bash"
+# EXTRA-ENV: space-separated VAR=value words (no spaces in values); IMPLS: "bash ps"
+# (default), "bash", "ps" or "gitbash"; each runs only where impl_runs says
 run_case() {
     local name="$1" call="$2" want="$3" wsum="$4" extra="${5:-}" impls="${6:-bash ps}" impl got
     for impl in $impls; do
-        if [ "$impl" = "ps" ] && ! $USE_PS; then continue; fi
+        if ! impl_runs "$impl"; then continue; fi
         : > "$H/summary.txt"
         if [ "$impl" = "bash" ]; then
             # shellcheck disable=SC2086  # $extra is word-split on purpose
@@ -254,14 +339,32 @@ run_case() {
                 AITOOLS_PROFILE_TEST_MACHINE_ID="$ID_MAC" AITOOLS_PROFILE_TEST_HOSTNAME=nobul-mac $extra \
                 "$BASH_BIN" "$WORK/drive.sh" 2>/dev/null) || got="driver failed: $?"  # stderr: console log lines
             got=$(printf '%s\n' "$got" | grep -E '^(rc|path|alias|found|result|kept|warnings|key|notes|out|err|args)=' || true)  # only the driver's result lines (log lines also reach stdout)
-        else
+        elif [ "$impl" = "gitbash" ]; then
+            # aitools-lib.sh under Git Bash (Windows): its wrappers run aitools-profile.ps1
+            # through native pwsh, whose $HOME follows USERPROFILE
             # shellcheck disable=SC2086  # $extra is word-split on purpose
-            got=$(env HOME="$H" AITOOLS_LOG_DIR="$H/.aitools/logs" AITOOLS_SUMMARY_FILE="$H/summary.txt" REPO="$REPO" CALL="$call" \
-                AITOOLS_PROFILE_TEST_MACHINE_ID="$ID_MAC" AITOOLS_PROFILE_TEST_HOSTNAME=nobul-mac AITOOLS_PROFILE_TEST_ANY_OS=1 $extra \
-                pwsh -NoProfile -File "$WORK/drive.ps1" -UserRepoPath /caller/urp -MachineAlias caller -ProfileFile /caller/pf \
+            got=$(env HOME="$H" USERPROFILE="$(native_path "$H")" AITOOLS_LOG_DIR="$H/.aitools/logs" AITOOLS_SUMMARY_FILE="$H/summary.txt" \
+                REPO="$REPO" CALL="$call" AITOOLS_PROFILE_TEST_MACHINE_ID="$ID_MAC" AITOOLS_PROFILE_TEST_HOSTNAME=nobul-mac $extra \
+                "$BASH_BIN" "$WORK/drive.sh" 2>/dev/null) || got="driver failed: $?"  # stderr: console log lines
+            # cygpath -u may spell the temp root /c/... instead of /tmp/...: from_native maps it back
+            printf '%s\n' "$got" > "$WORK/got.txt"
+            from_native "$WORK/got.txt"
+            got=$(grep -E '^(rc|path|alias|found|result|kept|warnings|key|notes|out|err|args)=' "$WORK/got.txt" || true)  # only the driver's result lines
+        else
+            # Native pwsh (Windows): Windows paths, MSYS argument conversion off
+            # (-UserRepoPath /caller/urp must arrive as written)
+            # shellcheck disable=SC2086,SC2046  # $extra / to_native are word-split on purpose
+            got=$(env HOME="$(native_path "$H")" USERPROFILE="$(native_path "$H")" AITOOLS_LOG_DIR="$(native_path "$H/.aitools/logs")" \
+                AITOOLS_SUMMARY_FILE="$(native_path "$H/summary.txt")" REPO="$(native_path "$REPO")" CALL="$call" \
+                AITOOLS_PROFILE_TEST_MACHINE_ID="$ID_MAC" AITOOLS_PROFILE_TEST_HOSTNAME=nobul-mac $(to_native "$extra") \
+                MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' \
+                pwsh -NoProfile -NonInteractive -File "$(native_path "$WORK/drive.ps1")" -UserRepoPath /caller/urp -MachineAlias caller -ProfileFile /caller/pf \
                 2>/dev/null | perl -pe 's/\e\[[0-9;]*m//g') || got="driver failed: $?"  # Write-Host console lines dropped by the grep below
-            got=$(printf '%s\n' "$got" | grep -E '^(rc|path|alias|found|result|kept|warnings|key|notes|out|err|args)=' || true)  # only the driver's result lines
+            printf '%s\n' "$got" > "$WORK/got.txt"
+            from_native "$WORK/got.txt"
+            got=$(grep -E '^(rc|path|alias|found|result|kept|warnings|key|notes|out|err|args)=' "$WORK/got.txt" || true)  # only the driver's result lines
         fi
+        if [ "$impl" != "bash" ]; then from_native "$H/summary.txt"; fi
         if [ "$got" = "$want" ]; then ok "$name ($impl): result"
         else bad "$name ($impl): got"; printf '%s\n' "$got" | sed 's/^/         /'; printf '       want\n'; printf '%s\n' "$want" | sed 's/^/         /'; fi
         local sum; sum=$(cat "$H/summary.txt")
@@ -271,7 +374,7 @@ run_case() {
     done
 }
 
-printf 'aitools-lib profile wrapper tests (pwsh: %s)\n' "$USE_PS"
+printf 'aitools-lib profile wrapper tests (%s: %s)\n' "$TEST_PLATFORM" "$LANG_RUN"
 
 fixture with-id
 run_case urp-found urp "rc=0
@@ -553,16 +656,14 @@ run_case run-missing run "rc=1 profrc=2
 out=
 err=resolver none.sh not found ($WORK)
 warnings=0 errors=0" "" "RUN_ARGS=register $(stub none)" bash
-if $USE_PS; then
-    run_case run-missing run "rc=1 profrc=2
+run_case run-missing run "rc=1 profrc=2
 out=
 err=resolver none.ps1 not found ($WORK)
 warnings=0 errors=0" "" "RUN_ARGS=register $(stub none)" ps
-    run_case run-throw run "rc=0 profrc=2
+run_case run-throw run "rc=0 profrc=2
 out=
 err=aitools-profile register threw: boom
 warnings=0 errors=0" "" "RUN_ARGS=register AITOOLS_PROFILE_PS1=$WORK/throw.ps1" ps
-fi
 # The real resolver (this fixture: this machine's id-keyed profile)
 fixture id-key
 run_case run-real-register run "rc=0 profrc=0
@@ -579,50 +680,54 @@ out=nobul-mac
 err=
 warnings=0 errors=0" "" "RUN_ARGS=hostname"
 
-# m2: the bash -> pwsh branch (Git Bash on Windows), forced on this OS. A
+# m2: the bash -> pwsh branch of aitools-lib.sh, the one Git Bash takes on Windows
+# (AITOOLS_PLATFORM windows; AITLIB_PROFILE_VIA_PWSH=1 is a no-op there). Windows
+# only: on macOS/Linux it would run aitools-profile.ps1, whose guard refuses. A
 # non-ASCII identity value must arrive intact (UTF-8 output).
-if $USE_PS; then
-    PWSH_ENV="AITLIB_PROFILE_VIA_PWSH=1 AITOOLS_PROFILE_TEST_ANY_OS=1"
+if [ "$LANG_RUN" != ps1 ]; then
+    printf '  skip via-pwsh-* (the Git Bash -> pwsh branch runs on Windows only)\n'
+else
+    PWSH_ENV="AITLIB_PROFILE_VIA_PWSH=1"
     fixture with-id
     run_case via-pwsh-urp urp "rc=0
 path=$DP via=convention
-warnings=0 errors=0" "" "$PWSH_ENV" bash
+warnings=0 errors=0" "" "$PWSH_ENV" gitbash
 
     FIX_NAME="José"
     fixture with-id
     run_case via-pwsh-rmp-utf8 rmp "rc=0
 alias=nobul-mac via=id company=nobul-tech name=José
-warnings=0 errors=0" "" "$PWSH_ENV" bash
+warnings=0 errors=0" "" "$PWSH_ENV" gitbash
     FIX_NAME="Jose"
 
     fixture id-key
     run_case via-pwsh-rmpk-id-key rmpk "rc=0
 alias=nobul-mac via=id company=nobul-mac-co
 key=$ID_KEY owner=this legacy=false host=nobul-mac
-warnings=0 errors=0" "" "$PWSH_ENV" bash
+warnings=0 errors=0" "" "$PWSH_ENV" gitbash
 
     fixture with-id
     run_case via-pwsh-exit4-urp urp "rc=3
 path= via=none
 warnings=0 errors=1
 notes=1" "ERROR|dotprofile|resolver failed
-$A_DP" "$PWSH_ENV AITOOLS_PROFILE_PS1=$WORK/exit4.ps1 SHOW_NOTES=1" bash
+$A_DP" "$PWSH_ENV AITOOLS_PROFILE_PS1=$WORK/exit4.ps1 SHOW_NOTES=1" gitbash
 
     fixture hostname-only
     run_case via-pwsh-eset-refused eset "rc=3
 result=refused pushed=false
-warnings=1 errors=0" "ACTION||run aitools user init to remember tool choices" "$PWSH_ENV" bash
+warnings=1 errors=0" "ACTION||run aitools user init to remember tool choices" "$PWSH_ENV" gitbash
 
     fixture with-id
     run_case via-pwsh-stub urp "rc=0
 path=/stub/aitools-dp via=env
-warnings=0 errors=0" "" "$PWSH_ENV AITOOLS_PROFILE_PS1=$WORK/stub.ps1" bash
+warnings=0 errors=0" "" "$PWSH_ENV AITOOLS_PROFILE_PS1=$WORK/stub.ps1" gitbash
 
     for broken in silent0 silent1 throw parse; do
         run_case "via-pwsh-broken-$broken" urp "rc=3
 path= via=
 warnings=0 errors=1" "ERROR|dotprofile|resolver failed
-$A_DP" "$PWSH_ENV AITOOLS_PROFILE_PS1=$WORK/$broken.ps1" bash
+$A_DP" "$PWSH_ENV AITOOLS_PROFILE_PS1=$WORK/$broken.ps1" gitbash
     done
 
     # M3-FINISH item 3 through the pwsh branch: result lines, a bare hostname, a
@@ -631,37 +736,37 @@ $A_DP" "$PWSH_ENV AITOOLS_PROFILE_PS1=$WORK/$broken.ps1" bash
     run_case via-pwsh-run-register-result run "rc=0 profrc=0
 out=created
 err=
-warnings=0 errors=0" "" "$PWSH_ENV RUN_ARGS=register AITOOLS_PROFILE_PS1=$WORK/res0.ps1" bash
+warnings=0 errors=0" "" "$PWSH_ENV RUN_ARGS=register AITOOLS_PROFILE_PS1=$WORK/res0.ps1" gitbash
     run_case via-pwsh-run-exit1-result run "rc=0 profrc=1
 out=failed
 err=profile.json not found
-warnings=0 errors=0" "" "$PWSH_ENV RUN_ARGS=register AITOOLS_PROFILE_PS1=$WORK/res1.ps1" bash
+warnings=0 errors=0" "" "$PWSH_ENV RUN_ARGS=register AITOOLS_PROFILE_PS1=$WORK/res1.ps1" gitbash
     run_case via-pwsh-run-hostname run "rc=0 profrc=0
 out=probe-host
 err=
-warnings=0 errors=0" "" "$PWSH_ENV RUN_ARGS=hostname AITOOLS_PROFILE_PS1=$WORK/host.ps1" bash
+warnings=0 errors=0" "" "$PWSH_ENV RUN_ARGS=hostname AITOOLS_PROFILE_PS1=$WORK/host.ps1" gitbash
     run_case via-pwsh-run-silent0 run "rc=0 profrc=2
 out=
 err=resolver exited 0 without result lines (see deploy.log)
-warnings=0 errors=0" "" "$PWSH_ENV RUN_ARGS=migrate AITOOLS_PROFILE_PS1=$WORK/silent0.ps1" bash
+warnings=0 errors=0" "" "$PWSH_ENV RUN_ARGS=migrate AITOOLS_PROFILE_PS1=$WORK/silent0.ps1" gitbash
     run_case via-pwsh-run-throw run "rc=0 profrc=2
 out=
 err=aitools-profile register threw: boom
-warnings=0 errors=0" "" "$PWSH_ENV RUN_ARGS=register AITOOLS_PROFILE_PS1=$WORK/throw.ps1" bash
+warnings=0 errors=0" "" "$PWSH_ENV RUN_ARGS=register AITOOLS_PROFILE_PS1=$WORK/throw.ps1" gitbash
     run_case via-pwsh-run-missing run "rc=1 profrc=2
 out=
 err=resolver none.ps1 or pwsh not found ($WORK)
-warnings=0 errors=0" "" "$PWSH_ENV RUN_ARGS=register AITOOLS_PROFILE_PS1=$WORK/none.ps1" bash
+warnings=0 errors=0" "" "$PWSH_ENV RUN_ARGS=register AITOOLS_PROFILE_PS1=$WORK/none.ps1" gitbash
     run_case via-pwsh-run-path-args run "rc=0 profrc=0
 out=ok
 err=
 args=register --profile W/conv/p.json --out W/conv/o.tmp --config W/conv/c.json --path W/conv/x --slug /conv/s
-warnings=0 errors=0" "" "$PWSH_ENV FAKEBIN=$WORK/fakebin RUN_ARGS=register,--profile,/conv/p.json,--out,/conv/o.tmp,--config,/conv/c.json,--path,/conv/x,--slug,/conv/s AITOOLS_PROFILE_PS1=$WORK/args.ps1" bash
+warnings=0 errors=0" "" "$PWSH_ENV FAKEBIN=$WORK/fakebin RUN_ARGS=register,--profile,/conv/p.json,--out,/conv/o.tmp,--config,/conv/c.json,--path,/conv/x,--slug,/conv/s AITOOLS_PROFILE_PS1=$WORK/args.ps1" gitbash
     fixture id-key
     run_case via-pwsh-run-real-register run "rc=0 profrc=0
 out=updated
 err=
-warnings=0 errors=0" "" "$PWSH_ENV RUN_ARGS=register,--profile,$DP/profile.json,--out,$WORK/reg.tmp,--shell,zsh,--environment,local" bash
+warnings=0 errors=0" "" "$PWSH_ENV RUN_ARGS=register,--profile,$DP/profile.json,--out,$WORK/reg.tmp,--shell,zsh,--environment,local" gitbash
     rm -f "$WORK/reg.tmp"
 fi
 
@@ -811,12 +916,12 @@ WARN_MSG="quote \" back \\ tab"$'\t'"end"
 # relay_case NAME MODE CHILD_FAIL WANT-RESULT WANT-RECORDS [WANT-SUMMARY] [IMPLS] [EXTRA-ENV]
 # WANT-RECORDS "-": no deploy.jsonl expected (no child ran); "skip": the child
 # printed nothing (no console or deploy.jsonl check). WANT-SUMMARY: the summary
-# rows (default none). IMPLS: "bash ps" (default), "bash" or "ps". EXTRA-ENV:
-# space-separated VAR=value words.
+# rows (default none). IMPLS: "bash ps" (default), "bash" or "ps"; each runs only
+# where impl_runs says. EXTRA-ENV: space-separated VAR=value words.
 relay_case() {
     local name="$1" mode="$2" fail="$3" want="$4" wrec="$5" wsum="${6:-}" impls="${7:-bash ps}" extra="${8:-}" impl got out jl sum
     for impl in $impls; do
-        if [ "$impl" = "ps" ] && ! $USE_PS; then continue; fi
+        if ! impl_runs "$impl"; then continue; fi
         rm -rf "$H"; mkdir -p "$H/.aitools/logs"; : > "$H/summary.txt"
         jl="$H/.aitools/logs/deploy.jsonl"
         if [ "$impl" = "bash" ]; then
@@ -824,10 +929,14 @@ relay_case() {
             out=$(env HOME="$H" AITOOLS_LOG_DIR="$H/.aitools/logs" AITOOLS_SUMMARY_FILE="$H/summary.txt" REPO="$REPO" REPO_WORK="$WORK" \
                 RMODE="$mode" CHILD_FAIL="$fail" AITOOLS_RUN_ID=run-fixed $extra "$BASH_BIN" "$WORK/relay.sh" 2>/dev/null) || out="driver failed: $?"  # stderr: a crashing child's own messages
         else
-            # shellcheck disable=SC2086  # $extra is word-split on purpose
-            out=$(env HOME="$H" AITOOLS_LOG_DIR="$H/.aitools/logs" AITOOLS_SUMMARY_FILE="$H/summary.txt" REPO="$REPO" REPO_WORK="$WORK" \
-                RMODE="$mode" CHILD_FAIL="$fail" AITOOLS_RUN_ID=run-fixed $extra pwsh -NoProfile -File "$WORK/relay.ps1" 2>/dev/null \
-                | perl -pe 's/\e\[[0-9;]*m//g') || out="driver failed: $?"  # colour codes of the relayed console lines
+            # Native pwsh (Windows): Windows paths, MSYS argument conversion off
+            # shellcheck disable=SC2086,SC2046  # $extra / to_native are word-split on purpose
+            out=$(env HOME="$(native_path "$H")" USERPROFILE="$(native_path "$H")" AITOOLS_LOG_DIR="$(native_path "$H/.aitools/logs")" \
+                AITOOLS_SUMMARY_FILE="$(native_path "$H/summary.txt")" REPO="$(native_path "$REPO")" REPO_WORK="$(native_path "$WORK")" \
+                RMODE="$mode" CHILD_FAIL="$fail" AITOOLS_RUN_ID=run-fixed $(to_native "$extra") MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' \
+                pwsh -NoProfile -NonInteractive -File "$(native_path "$WORK/relay.ps1")" 2>/dev/null \
+                | perl -pe 's/\e\[[0-9;]*m//g; s/\r//g') || out="driver failed: $?"  # colour codes of the relayed console lines; CRs
+            from_native "$H/summary.txt"
         fi
         got=$(printf '%s\n' "$out" | grep -E '^(rc|cw)=' || true)  # only the driver's result lines
         if [ "$got" = "$want" ]; then ok "$name ($impl): result"
@@ -847,7 +956,7 @@ relay_case() {
         got=$(perl "$WORK/check-jsonl.pl" "$jl" "$WARN_MSG")
         if [ "$mode" = "record" ]; then
             got=$(perl "$WORK/check-jsonl.pl" "$jl" "q \" b \\ t"$'\t'"n"$'\n'"l e[0m x José ✓")
-            cp "$jl" "$WORK/record-$impl.jsonl"
+            cp "$jl" "$WORK/record.jsonl"
         fi
         if [ "$got" = "$wrec" ]; then ok "$name ($impl): deploy.jsonl"
         else bad "$name ($impl): deploy.jsonl '$got', want '$wrec'"; fi
@@ -857,9 +966,15 @@ relay_case() {
 printf 'relay helpers\n'
 relay_case relay-record record 0 "cw= ce= warnings=0 errors=0" "records=1 invalid=0
 msg-ok"
-if $USE_PS; then
-    if cmp -s "$WORK/record-bash.jsonl" "$WORK/record-ps.jsonl"; then ok "relay-record: bash and PowerShell records are identical"
-    else bad "relay-record: records differ"; cat "$WORK/record-bash.jsonl" "$WORK/record-ps.jsonl" | sed 's/^/         /'; fi
+# Parity: the bash record (macOS/Linux) and the PowerShell record (Windows) equal
+# one golden file. host and os name the machine the record was written on (they
+# were equal when both shells ran on one machine): placeholders here.
+if [ -f "$WORK/record.jsonl" ]; then
+    perl -pe 's/"host":"(?:[^"\\]|\\.)*"/"host":"<HOST>"/; s/"os":"(?:[^"\\]|\\.)*"/"os":"<OS>"/' "$WORK/record.jsonl" > "$WORK/record.norm.jsonl"
+    if golden_match lib-relay-record.jsonl "$WORK/record.norm.jsonl"; then ok "relay-record: record matches golden (bash and PowerShell share it)"
+    else bad "relay-record: record differs from golden lib-relay-record.jsonl"; fi
+else
+    bad "relay-record: no deploy.jsonl record to compare"
 fi
 relay_case relay-run-ok run 0 "rc=0 child_rc=0
 cw=2 ce=0 warnings=2 errors=0" "records=4 invalid=0
@@ -911,8 +1026,11 @@ printf '#!/usr/bin/env bash\n: > "%s/tmpro/rc.tmp"\nprintf "%%s\\n" "%s/tmpro/rc
 chmod +x "$WORK/mkfail/mktemp" "$WORK/mkro/mktemp"
 relay_case relay-run-mktemp-fail run 0 "rc=1 child_rc=1
 cw=0 ce=0 warnings=0 errors=1" "-" "ERROR|child tool|not run (mktemp failed)" bash "FAKEBIN=$WORK/mkfail"
-# Review A n3: root ignores the read-only directory (Claude Code web runs as root)
-if [ "$(id -u)" -eq 0 ]; then
+# Review A n3: root ignores the read-only directory (Claude Code web runs as root).
+# bash only (the relay's own temp file in aitools-lib.sh): macOS/Linux
+if [ "$LANG_RUN" != sh ]; then
+    printf '  skip relay-run-rm-fail (bash relay temp file: macOS/Linux)\n'
+elif [ "$(id -u)" -eq 0 ]; then
     printf '  skip relay-run-rm-fail (running as root: a read-only directory does not stop rm)\n'
 else
     relay_case relay-run-rm-fail run 7 "rc=0 child_rc=0

@@ -1,0 +1,9 @@
+result	refused
+key	
+alias	
+owner	
+ownerKey	
+claimed	
+machineId	
+hostname	nobul-mac
+error	no machine id: no machine id (test value) -- a machine profile is keyed by this machine's id

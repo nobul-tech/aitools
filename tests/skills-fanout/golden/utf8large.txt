@@ -1,0 +1,13 @@
+# exit code
+0
+# skills tree (path md5 [x]; symlinks not listed)
+w/SKILL.md f555b324c233195e194752beff37947d
+w/badtail.txt 9cf1d925115593165fd0de33ce2e4f47
+w/eacute.txt 27fc586435c013e0453dabe36f5ef842
+w/mixed.txt fae2967affae8afbae40fec9fc7f3970
+# summary rows (ACTION and skills, sorted)
+DETAIL|claude skills|added: w/SKILL.md
+DETAIL|claude skills|added: w/badtail.txt
+DETAIL|claude skills|added: w/eacute.txt
+DETAIL|claude skills|added: w/mixed.txt
+OK|claude skills|4 added

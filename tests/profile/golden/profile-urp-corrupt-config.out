@@ -1,0 +1,5 @@
+path	<TMP>/urp-corrupt-config/home/repos/aitools-nobul-jose
+via	scan
+expected	
+warn	<TMP>/urp-corrupt-config/home/.aitools/config.json is invalid JSON
+warn	githubUser unknown -- used the only dotprofile under <TMP>/urp-corrupt-config/home/repos

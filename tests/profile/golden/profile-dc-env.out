@@ -1,0 +1,16 @@
+derived.githubUser	nobul-jose
+derived.userRepoPath	
+derived.machineId	
+derived.machineAlias	
+userRepoVia	env
+via	hostname
+key	nobul-mac
+owner	unregistered
+legacy	true
+company	nobul-tech
+machineId	3D4DF2A5-7D91-5AF9-9944-4FEEBAAE3CF5
+hostname	nobul-mac
+aliases	laptop, nobul-mac, workstation
+warn	dotprofile from AITOOLS_USER_REPO_PATH -- not saved to config.json
+warn	matched by hostname only (legacy) -- run: aitools user init (registers machine.id)
+warn	machine alias "nobul-mac" matched by hostname only -- not saved to config.json

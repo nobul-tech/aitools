@@ -1,0 +1,7 @@
+result	failed
+profileFile	<TMP>/idk-mismatch/home/repos/aitools-nobul-jose/profile.json
+renamed	
+unclaimed	
+committed	false
+pushed	false
+error	profile key "3d4df2a5-7d91-5af9-9944-4feebaae3cf5" disagrees with its machine.id "0B1C2D3E-0000-1111-2222-333344445555" -- fix profile.json by hand; nothing written
