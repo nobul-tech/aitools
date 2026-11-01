@@ -7,8 +7,9 @@
 #
 # Platform targeting (plans/ci-platform-targeting.md): each writer runs only where
 # its OS guard allows. macOS/Linux run setup-user-config.sh; Windows (Git Bash)
-# runs setup-user-config.ps1 with native pwsh (paths handed to it are native,
-# HOME and USERPROFILE both set). Parity between the two writers is checked against
+# runs setup-user-config.ps1 with native pwsh (paths handed to it are native, in
+# their long form, not 8.3; HOME and USERPROFILE both set). No NAME.windows golden
+# is needed: both writers give the same results once paths are normalized. Parity between the two writers is checked against
 # committed golden results, one per case: exit code, summary rows and config.json
 # (temp root as <TMP>, path separators as /), tests/profile/golden/config-*.txt
 # (tests/lib/platform-lib.sh golden_match). AITOOLS_TEST_UPDATE_GOLDEN=1 on
@@ -58,10 +59,23 @@ KEY_MAC="3d4df2a5-7d91-5af9-9944-4feebaae3cf5"       # the profiles key (lower-c
 H="$WORK/home"
 DP="$H/repos/aitools-nobul-jose"
 CFG="$H/.aitools/config.json"
-# NH / NDP: H and DP as the writer under test reads them (native on Windows, else
-# unchanged). Every path written into a fixture or passed as an argument uses them.
-NH="$(native_path "$H")"
-NDP="$(native_path "$DP")"
+# NWORK: the temp root as the writer under test reads it. On Windows its long form
+# (cygpath -m -l): the runner's TEMP is the 8.3 short C:\Users\RUNNER~1\..., which
+# cygpath -m keeps, while pwsh spells some paths long (Get-Location in Step 3; the
+# resolver's dotprofile scan, Get-ChildItem .FullName in aitools-profile.ps1), so one
+# directory appeared under two names (PR #139 run 41265193554, 9 FAILs). Unchanged
+# off Windows.
+NWORK="$WORK"
+if [ "$TEST_PLATFORM" = windows ]; then
+    if ! NWORK="$(cygpath -m -l "$WORK")" || [ -z "$NWORK" ]; then
+        printf '  FAIL cannot get the long Windows form of %s (cygpath -m -l)\n' "$WORK"
+        exit 1
+    fi
+fi
+# NH / NDP: H and DP as the writer under test reads them. Every path written into a
+# fixture or passed as an argument uses them.
+NH="$NWORK/home"
+NDP="$NH/repos/aitools-nobul-jose"
 CASE_ENV=""
 
 # write_profile MAC_KEY MAC_ALIAS_LINE MAC_ID MAC_HOST -- profile.json, revision 2.2
@@ -153,9 +167,13 @@ run_writer() {
 }
 
 # norm_json FILE -- config.json as compared: CR removed, JSON-escaped backslashes
-# (Windows path separators, "C:\\Users\\...") turned into slashes. platform-lib's
-# golden normalization handles single backslashes only.
-norm_json() { perl -pe 's/\r//g; s{\\\\}{/}g' "$1"; }
+# (Windows path separators, "C:\\Users\\...") turned into slashes, and NWORK (the
+# long Windows form, which platform-lib's golden normalization does not know;
+# letter case ignored) replaced by <TMP>. platform-lib handles single backslashes
+# and the cygpath -m form of GOLDEN_TMP only.
+norm_json() {
+    NW="$NWORK" perl -pe 's/\r//g; s{\\\\}{/}g; s/\Q$ENV{NW}\E/<TMP>/gi' "$1"
+}
 
 # case_run NAME RC SETUP ARGS... -- SETUP builds the fixture; one writer run.
 # RAWJ: config.json as written ("" file = none); OUTJ: normalized (norm_json);
