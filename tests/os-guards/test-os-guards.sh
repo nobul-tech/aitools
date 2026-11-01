@@ -60,8 +60,10 @@ native() {
 
 # --- Classify every product script (one perl pass) ---------------------------
 CLASSES="$WORK/classes.tsv"
-if ! git -C "$ROOT" ls-files -- 'scripts/*.ps1' 'scripts/*.sh' 'shared/*.ps1' 'shared/*.sh' \
-        'packaging/*.ps1' 'packaging/*.sh' > "$WORK/files.txt"; then
+# Every tracked file under the product dirs; the perl pass keeps .ps1, .sh and
+# extensionless files with a bash/sh shebang (scripts/aitools, git hooks,
+# package maintainer scripts), which are shell scripts too (S3-Inst finding).
+if ! git -C "$ROOT" ls-files -- scripts shared packaging > "$WORK/files.txt"; then
     printf 'FAIL: git ls-files failed in %s\n' "$ROOT"
     exit 1
 fi
@@ -89,6 +91,14 @@ if ! perl -e '
     while (my $f = <$lf>) {
         chomp $f;
         next if $f eq "";
+        my $is_shell_noext = 0;
+        if ($f !~ /\.(ps1|sh)$/) {
+            next if $f =~ m{\.[^/]+$};           # other extensions: not scripts we classify
+            open my $sb, "<", "$root/$f" or die "cannot read $f: $!\n";
+            my $first = <$sb> // ""; close $sb;
+            next unless $first =~ m{^#!.*\b(ba)?sh\b};
+            $is_shell_noext = 1;
+        }
         open my $fh, "<", "$root/$f" or die "cannot read $f: $!\n";
         local $/; my $t = <$fh>; close $fh;
         my $kind = "none";
