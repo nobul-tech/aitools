@@ -1,0 +1,387 @@
+== pbdeploy rc=0
+OK|harness files|1 added, 19 verified
+-- manifest
+# aitools skills manifest v1
+d2	dotprofile
+pb	shared
+s1	shared
+s3	shared
+-- tree
+.
+./.aitools-skills-manifest
+./b1.bak.TS
+./b1.bak.TS/SKILL.md
+./<BN>.bak.TS
+./<BN>.bak.TS/SKILL.md
+./<BN>.bak.TS
+./<BN>.bak.TS/SKILL.md
+./<BN>.bak.TS
+./<BN>.bak.TS/SKILL.md
+./<BN>.bak.TS
+./<BN>.bak.TS/SKILL.md
+./<BN>.bak.TS
+./<BN>.bak.TS/SKILL.md
+./d1.bak.TS
+./d1.bak.TS/SKILL.md
+./d1.bak.TS/ref
+./d1.bak.TS/ref/x.md
+./d2
+./d2/SKILL.md
+./nomd.bak.TS
+./nomd.bak.TS/a
+./nomd.bak.TS/a/x.md
+./pb
+./pb/SKILL.md
+./s1
+./s1/SKILL.md
+./s1/tests
+./s1/tests/t.md
+./s2.bak.TS
+./s2.bak.TS/SKILL.md
+./s3
+./s3/SKILL.md
+./zz
+== pbfail rc=1
+ERROR|harness files|retire failed: pb
+OK|harness files|19 verified
+-- manifest
+# aitools skills manifest v1
+d2	dotprofile
+pb	retired
+s1	shared
+s3	shared
+-- tree
+.
+./.aitools-skills-manifest
+./b1.bak.TS
+./b1.bak.TS/SKILL.md
+./<BN>.bak.TS
+./<BN>.bak.TS/SKILL.md
+./<BN>.bak.TS
+./<BN>.bak.TS/SKILL.md
+./<BN>.bak.TS
+./<BN>.bak.TS/SKILL.md
+./<BN>.bak.TS
+./<BN>.bak.TS/SKILL.md
+./<BN>.bak.TS
+./<BN>.bak.TS/SKILL.md
+./d1.bak.TS
+./d1.bak.TS/SKILL.md
+./d1.bak.TS/ref
+./d1.bak.TS/ref/x.md
+./d2
+./d2/SKILL.md
+./nomd.bak.TS
+./nomd.bak.TS/a
+./nomd.bak.TS/a/x.md
+./pb
+./pb/SKILL.md
+./pb/secret.md
+./s1
+./s1/SKILL.md
+./s1/tests
+./s1/tests/t.md
+./s2.bak.TS
+./s2.bak.TS/SKILL.md
+./s3
+./s3/SKILL.md
+./zz
+== pbretry rc=0
+DETAIL|harness files|retired: skills/pb
+OK|harness files|19 verified
+-- manifest
+# aitools skills manifest v1
+d2	dotprofile
+pb	retired
+s1	shared
+s3	shared
+-- tree
+.
+./.aitools-skills-manifest
+./b1.bak.TS
+./b1.bak.TS/SKILL.md
+./<BN>.bak.TS
+./<BN>.bak.TS/SKILL.md
+./<BN>.bak.TS
+./<BN>.bak.TS/SKILL.md
+./<BN>.bak.TS
+./<BN>.bak.TS/SKILL.md
+./<BN>.bak.TS
+./<BN>.bak.TS/SKILL.md
+./<BN>.bak.TS
+./<BN>.bak.TS/SKILL.md
+./d1.bak.TS
+./d1.bak.TS/SKILL.md
+./d1.bak.TS/ref
+./d1.bak.TS/ref/x.md
+./d2
+./d2/SKILL.md
+./nomd.bak.TS
+./nomd.bak.TS/a
+./nomd.bak.TS/a/x.md
+./pb.bak.TS
+./pb.bak.TS/SKILL.md
+./pb.bak.TS/secret.md
+./s1
+./s1/SKILL.md
+./s1/tests
+./s1/tests/t.md
+./s2.bak.TS
+./s2.bak.TS/SKILL.md
+./s3
+./s3/SKILL.md
+./zz
+== rsdeploy rc=0
+OK|harness files|2 added, 19 verified
+-- manifest
+# aitools skills manifest v1
+d2	dotprofile
+pb	retired
+rs	shared
+s1	shared
+s3	shared
+-- tree
+.
+./.aitools-skills-manifest
+./b1.bak.TS
+./b1.bak.TS/SKILL.md
+./<BN>.bak.TS
+./<BN>.bak.TS/SKILL.md
+./<BN>.bak.TS
+./<BN>.bak.TS/SKILL.md
+./<BN>.bak.TS
+./<BN>.bak.TS/SKILL.md
+./<BN>.bak.TS
+./<BN>.bak.TS/SKILL.md
+./<BN>.bak.TS
+./<BN>.bak.TS/SKILL.md
+./d1.bak.TS
+./d1.bak.TS/SKILL.md
+./d1.bak.TS/ref
+./d1.bak.TS/ref/x.md
+./d2
+./d2/SKILL.md
+./nomd.bak.TS
+./nomd.bak.TS/a
+./nomd.bak.TS/a/x.md
+./pb.bak.TS
+./pb.bak.TS/SKILL.md
+./pb.bak.TS/secret.md
+./rs
+./rs/SKILL.md
+./rs/ro
+./rs/ro/a.md
+./s1
+./s1/SKILL.md
+./s1/tests
+./s1/tests/t.md
+./s2.bak.TS
+./s2.bak.TS/SKILL.md
+./s3
+./s3/SKILL.md
+./zz
+== rsfail rc=1
+ERROR|harness files|retire failed: rs
+OK|harness files|19 verified
+-- manifest
+# aitools skills manifest v1
+d2	dotprofile
+pb	retired
+rs	retired
+s1	shared
+s3	shared
+-- tree
+.
+./.aitools-skills-manifest
+./b1.bak.TS
+./b1.bak.TS/SKILL.md
+./<BN>.bak.TS
+./<BN>.bak.TS/SKILL.md
+./<BN>.bak.TS
+./<BN>.bak.TS/SKILL.md
+./<BN>.bak.TS
+./<BN>.bak.TS/SKILL.md
+./<BN>.bak.TS
+./<BN>.bak.TS/SKILL.md
+./<BN>.bak.TS
+./<BN>.bak.TS/SKILL.md
+./d1.bak.TS
+./d1.bak.TS/SKILL.md
+./d1.bak.TS/ref
+./d1.bak.TS/ref/x.md
+./d2
+./d2/SKILL.md
+./nomd.bak.TS
+./nomd.bak.TS/a
+./nomd.bak.TS/a/x.md
+./pb.bak.TS
+./pb.bak.TS/SKILL.md
+./pb.bak.TS/secret.md
+./rs
+./rs/SKILL.md
+./rs/ro
+./rs/ro/a.md
+./rs/ro/secret.md
+./s1
+./s1/SKILL.md
+./s1/tests
+./s1/tests/t.md
+./s2.bak.TS
+./s2.bak.TS/SKILL.md
+./s3
+./s3/SKILL.md
+./zz
+== rsretry rc=0
+DETAIL|harness files|retired: skills/rs
+OK|harness files|19 verified
+-- manifest
+# aitools skills manifest v1
+d2	dotprofile
+pb	retired
+rs	retired
+s1	shared
+s3	shared
+-- tree
+.
+./.aitools-skills-manifest
+./b1.bak.TS
+./b1.bak.TS/SKILL.md
+./<BN>.bak.TS
+./<BN>.bak.TS/SKILL.md
+./<BN>.bak.TS
+./<BN>.bak.TS/SKILL.md
+./<BN>.bak.TS
+./<BN>.bak.TS/SKILL.md
+./<BN>.bak.TS
+./<BN>.bak.TS/SKILL.md
+./<BN>.bak.TS
+./<BN>.bak.TS/SKILL.md
+./d1.bak.TS
+./d1.bak.TS/SKILL.md
+./d1.bak.TS/ref
+./d1.bak.TS/ref/x.md
+./d2
+./d2/SKILL.md
+./nomd.bak.TS
+./nomd.bak.TS/a
+./nomd.bak.TS/a/x.md
+./pb.bak.TS
+./pb.bak.TS/SKILL.md
+./pb.bak.TS/secret.md
+./rs.bak.TS
+./rs.bak.TS/SKILL.md
+./rs.bak.TS/ro
+./rs.bak.TS/ro/a.md
+./rs.bak.TS/ro/secret.md
+./s1
+./s1/SKILL.md
+./s1/tests
+./s1/tests/t.md
+./s2.bak.TS
+./s2.bak.TS/SKILL.md
+./s3
+./s3/SKILL.md
+./zz
+== bakfail rc=1
+ERROR|harness files|retire failed: s1
+ERROR|harness files|skills manifest not written
+OK|harness files|17 verified
+-- manifest
+# aitools skills manifest v1
+d2	dotprofile
+pb	retired
+rs	retired
+s1	shared
+s3	shared
+-- tree
+.
+./.aitools-skills-manifest
+./b1.bak.TS
+./b1.bak.TS/SKILL.md
+./<BN>.bak.TS
+./<BN>.bak.TS/SKILL.md
+./<BN>.bak.TS
+./<BN>.bak.TS/SKILL.md
+./<BN>.bak.TS
+./<BN>.bak.TS/SKILL.md
+./<BN>.bak.TS
+./<BN>.bak.TS/SKILL.md
+./<BN>.bak.TS
+./<BN>.bak.TS/SKILL.md
+./d1.bak.TS
+./d1.bak.TS/SKILL.md
+./d1.bak.TS/ref
+./d1.bak.TS/ref/x.md
+./d2
+./d2/SKILL.md
+./nomd.bak.TS
+./nomd.bak.TS/a
+./nomd.bak.TS/a/x.md
+./pb.bak.TS
+./pb.bak.TS/SKILL.md
+./pb.bak.TS/secret.md
+./rs.bak.TS
+./rs.bak.TS/SKILL.md
+./rs.bak.TS/ro
+./rs.bak.TS/ro/a.md
+./rs.bak.TS/ro/secret.md
+./s1
+./s1/SKILL.md
+./s1/tests
+./s1/tests/t.md
+./s2.bak.TS
+./s2.bak.TS/SKILL.md
+./s3
+./s3/SKILL.md
+./zz
+== bakretry rc=0
+DETAIL|harness files|retired: skills/s1
+OK|harness files|17 verified
+-- manifest
+# aitools skills manifest v1
+d2	dotprofile
+pb	retired
+rs	retired
+s1	retired
+s3	shared
+-- tree
+.
+./.aitools-skills-manifest
+./b1.bak.TS
+./b1.bak.TS/SKILL.md
+./<BN>.bak.TS
+./<BN>.bak.TS/SKILL.md
+./<BN>.bak.TS
+./<BN>.bak.TS/SKILL.md
+./<BN>.bak.TS
+./<BN>.bak.TS/SKILL.md
+./<BN>.bak.TS
+./<BN>.bak.TS/SKILL.md
+./<BN>.bak.TS
+./<BN>.bak.TS/SKILL.md
+./d1.bak.TS
+./d1.bak.TS/SKILL.md
+./d1.bak.TS/ref
+./d1.bak.TS/ref/x.md
+./d2
+./d2/SKILL.md
+./nomd.bak.TS
+./nomd.bak.TS/a
+./nomd.bak.TS/a/x.md
+./pb.bak.TS
+./pb.bak.TS/SKILL.md
+./pb.bak.TS/secret.md
+./rs.bak.TS
+./rs.bak.TS/SKILL.md
+./rs.bak.TS/ro
+./rs.bak.TS/ro/a.md
+./rs.bak.TS/ro/secret.md
+./s1.bak.TS
+./s1.bak.TS/SKILL.md
+./s1.bak.TS/tests
+./s1.bak.TS/tests/t.md
+./s2.bak.TS
+./s2.bak.TS/SKILL.md
+./s3
+./s3/SKILL.md
+./zz
