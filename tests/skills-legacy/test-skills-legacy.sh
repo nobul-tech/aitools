@@ -37,7 +37,8 @@
 # ".ps1 scripts only run on windows"): every case runs ONE language, the one
 # the scripts' OS guards allow here: the .sh scripts on macOS/Linux, the .ps1
 # scripts on Windows (Git Bash driving native pwsh; paths via native_path, HOME
-# and USERPROFILE both set, .cmd twins of the stubs). No guard is bypassed:
+# and USERPROFILE both set in Windows form C:\..., .cmd twins of the stubs;
+# the build also gets USERPROFILE for its pwsh resolver). No guard is bypassed:
 # the real scripts (and the real generated MDM scripts) run. Parity: the
 # summary rows of each dev case (sorted, the resolver's own dotprofile and
 # ACTION rows left out) must equal tests/skills-legacy/golden/<case>.rows
@@ -220,13 +221,24 @@ retired_not_offered() {
         && found_log "$1" 'Not offered for adoption: Aitool-Eval (an aitools skill retired before the skills manifest existed; delete ~/.claude/skills/Aitool-Eval if you no longer use it)'
 }
 
+# win_path P: P in Windows form (C:\..., backslashes) on Windows, unchanged
+# elsewhere: HOME and USERPROFILE get the form Windows itself gives USERPROFILE
+# (with C:/... the lib's "~/" display of a home path does not match; windows CI
+# run 41265193554, tests/skills-fanout)
+win_path() {
+    if [ "$TEST_PLATFORM" = windows ] && command -v cygpath >/dev/null 2>&1; then
+        cygpath -w "$1"
+    else
+        printf '%s' "$1"
+    fi
+}
 # run_env H SUMMARY [VAR=value...]: sets E, the env command of a run under HOME H
 # (paths native on Windows, unchanged elsewhere)
 run_env() {
     local h="$1" s="$2"; shift 2
     E=(env -u AITOOLS_FORCE -u AITOOLS_DRY_RUN -u AITOOLS_USER_REPO_PATH -u AITOOLS_PROFILE_FILE
         -u AITOOLS_PROFILE_SH -u AITOOLS_PROFILE_PS1
-        HOME="$(native_path "$h")" USERPROFILE="$(native_path "$h")" AITOOLS_LOG_DIR="$(native_path "$h/logs")"
+        HOME="$(win_path "$h")" USERPROFILE="$(win_path "$h")" AITOOLS_LOG_DIR="$(native_path "$h/logs")"
         AITOOLS_SUMMARY_FILE="$(native_path "$s")" "$@")
 }
 # script_cmd PATH_WITHOUT_EXT [pty]: sets X, the command running PATH.sh
@@ -509,8 +521,12 @@ fi
 HB="$TMP_ROOT/home-build"
 write_config "$HB"
 OUT="$TMP_ROOT/build.out"
+# USERPROFILE too: under Git Bash the build's resolver runs aitools-profile.ps1
+# through pwsh, whose $HOME follows USERPROFILE; without it the resolver read the
+# runner's own home and found no dotprofile (windows CI run 41265193554). HOME
+# stays the POSIX path the bash build itself uses.
 env -u AITOOLS_USER_REPO_PATH -u AITOOLS_SUMMARY_FILE -u AITOOLS_PROFILE_SH -u AITOOLS_PROFILE_PS1 \
-    HOME="$HB" AITOOLS_LOG_DIR="$HB/logs" "$TB" "$ROOT/scripts/build-deploy.sh" > "$OUT" 2>&1
+    HOME="$HB" USERPROFILE="$(win_path "$HB")" AITOOLS_LOG_DIR="$HB/logs" "$TB" "$ROOT/scripts/build-deploy.sh" > "$OUT" 2>&1
 BUILD_RC=$?
 G="$DP/deploy"
 check "build: exit 0, setup-user-skills.sh/.ps1 generated, bash -n ($TB)" \
