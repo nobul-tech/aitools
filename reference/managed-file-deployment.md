@@ -383,8 +383,8 @@ Compare → review menu → backup → write → validate. Full state machine ab
 
 **Content source**: CLAUDE.md from dotprofile repo (primary) or
 `shared/claude-shared.md` (fallback); rules from `~/.aitools/rules/` and
-skills from `~/.aitools/skills/` (the fan-outs; first source wins there:
-`shared/`, then `.claude/`, then the dotprofile). Without `~/.aitools/skills`
+skills from `~/.aitools/skills/` (the fan-outs; deploy-harness fills them
+from aitools `shared/` only, R-8 / S-7). Without `~/.aitools/skills`
 the fallback `setup-user-skills` deploys `shared/skills/`, or the dotprofile's
 `claude/skills/` when it has the skill. Template tokens
 (`{{PLACEHOLDER}}`) interpolated from `profile.json`. See
@@ -468,19 +468,19 @@ variants needed.
 Deployed content originates from two repos. For templates and profile
 values the dotprofile repo takes priority when present and the aitools
 `shared/` directory is the fallback. Rules and skills are the exception:
-they go through `~/.aitools`, where the first source wins (`shared/`, then
-`.claude/`, then the dotprofile).
+they go through `~/.aitools`, filled from aitools `shared/rules/` and
+`shared/skills/` only (commander, 2026-11-06; `@reference/rules.md` R-8).
 
 | Content | Primary source | Fallback |
 |---------|---------------|----------|
 | CLAUDE.md template | `<userRepoPath>/claude/CLAUDE.md` | `shared/claude-shared.md` |
-| User rules | `~/.aitools/rules/*.md` (deploy-harness fills it from `shared/rules/`, `.claude/rules/` and `<userRepoPath>/claude/rules/`, first source wins); `setup-user-claude` and `setup-user-cursor` take every non-retired rule | (none — `~/.aitools/rules` absent: no rules deployed, target untouched) |
+| User rules | `~/.aitools/rules/*.md` (deploy-harness fills it from `shared/rules/` only); `setup-user-claude` and `setup-user-cursor` take every non-retired rule | (none — `~/.aitools/rules` absent: no rules deployed, target untouched) |
 | Claude settings | `<userRepoPath>/profile.json` `claude.settings` (every settings.json key except `hooks`) | none: without a dotprofile or profile.json the sync is skipped (WARN `not synced: no dotprofile` / `profile.json missing`) |
 | Cursor preferences | `<userRepoPath>/profile.json` `cursor.cli` section | defaults (vimMode: false, model: auto) |
 | Identity (git name/email) | `<userRepoPath>/profile.json` `identity` section | (required — no fallback) |
 | Machine profile | `<userRepoPath>/profile.json` `profiles[<machine id>]`, chosen by the one resolver (`aitools-profile.sh` / `.ps1`: override, environment, id, config `machineId`, 2.1 alias cache, hostname) | none: no match is an ERROR row `machine profile` `no machine match`; another machine's profile is never used (`@reference/user-repo.md` "Which machine profile") |
 | Hook scripts | `shared/hooks/*.sh` | (required — no fallback) |
-| Skills | `~/.aitools/skills/<name>/**` (deploy-harness fills it from `shared/skills/`, `.claude/skills/` and `<userRepoPath>/claude/skills/`, first source wins); `setup-user-claude` and `setup-user-cursor` take every non-retired skill | `setup-user-skills` when `~/.aitools/skills` is absent: `<userRepoPath>/claude/skills/*/SKILL.md` when present, else `shared/skills/*/SKILL.md` |
+| Skills | `~/.aitools/skills/<name>/**` (deploy-harness fills it from `shared/skills/` only); `setup-user-claude` and `setup-user-cursor` take every non-retired skill | `setup-user-skills` when `~/.aitools/skills` is absent: `<userRepoPath>/claude/skills/*/SKILL.md` when present, else `shared/skills/*/SKILL.md` |
 | MCP server configs | hardcoded in setup scripts | (required — no fallback) |
 
 The adopt target per content type is listed under each deployment type above.
@@ -499,11 +499,11 @@ and each skipped duplicate is a `log_error` plus an ERROR row.
 | `~/.aitools/reference/**` | `reference/**` |
 | `~/.aitools/registries/**` | `registries/**` |
 | `~/.aitools/hooks/` (flat) | `shared/hooks/`, `.claude/hooks/` |
-| `~/.aitools/skills/<name>/` (+ `.aitools-skills-manifest`) | `shared/skills/`, `.claude/skills/`, `<userRepoPath>/claude/skills/` |
-| `~/.aitools/rules/` (flat, `*.md`; + `.aitools-rules-manifest`) | `shared/rules/`, `.claude/rules/`, `<userRepoPath>/claude/rules/` |
+| `~/.aitools/skills/<name>/` (+ `.aitools-skills-manifest`) | `shared/skills/` only |
+| `~/.aitools/rules/` (flat, `*.md`; + `.aitools-rules-manifest`) | `shared/rules/` only |
 | `~/.aitools/bin/` | `scripts/harness-db.py`, `scripts/read-session.py`, `scripts/read-session-full.py` |
 | `~/.aitools/config.json` | generated from `profile.json` by `setup-user-config` (called by deploy-harness) |
-| `~/.aitools/rules/.aitools-rules-manifest` | written every run (sole owner): one `<file name><TAB><source>` line per rule, source `shared` \| `aitools` \| `dotprofile` \| `retired` |
+| `~/.aitools/rules/.aitools-rules-manifest` | written every run (sole owner): one `<file name><TAB><source>` line per rule, source `shared` \| `retired` (an older manifest's `aitools` and `dotprofile` lines are retired) |
 
 Rules and skills reach the tools from here: `setup-user-claude` fans them out
 to `~/.claude/rules/` and `~/.claude/skills/`, `setup-user-cursor` to
@@ -511,9 +511,9 @@ to `~/.claude/rules/` and `~/.claude/skills/`, `setup-user-cursor` to
 except the retired ones. Conflict handling and its assumptions:
 `@reference/harness.md` "Deployed harness (`~/.aitools`)".
 
-A rule or skill in the previous manifest that no listed source has any more
-is backed up and removed from `~/.aitools/rules` / `~/.aitools/skills`
-(retired). `--skip-config` (installer Step 8b, after Step 5 ran the writer)
+A rule or skill in the previous manifest that no listed source has any more,
+or whose source is a withdrawn one (`aitools`, `dotprofile`), is backed up
+and removed from `~/.aitools/rules` / `~/.aitools/skills` (retired). `--skip-config` (installer Step 8b, after Step 5 ran the writer)
 skips `setup-user-config` and writes OK `config.json`
 `n/a (written by installer)`. The MDM variant passes no adopt target.
 

@@ -12,6 +12,31 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.76.0 -- Harness rules and skills from shared/ only; project and dotprofile rules and skills retired from user scope (2026-11-06)
+
+Not tagged. Commander order 2026-11-06: "we need to roll that back so that only the skills/rules in the shared/ directory get copied over"; asked whether the dotprofile `claude/rules` stays a source, the answer was "shared/ only". Decisions R-8 (`reference/rules.md`) and S-7 (`reference/skills.md`) supersede R-1, R-3, R-4, R-6 (sources) and S-1, S-2, S-3 (sources).
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 1 | `scripts/deploy-harness.sh/.ps1`: rules come from `shared/rules/` only and skills from `shared/skills/` only. aitools `.claude/rules/`, `.claude/skills/` and the dotprofile `claude/rules/`, `claude/skills/` are no longer read; the dotprofile lookup (section 2) is gone. Hooks keep their two sources (`shared/hooks/`, then `.claude/hooks/`) |
+| 2 | Migration: a previous manifest line whose source is `aitools` or `dotprofile` (withdrawn sources) is retired on the next run when no source has the name, although neither source is listed and whether or not a dotprofile is configured. The file (rules) or directory (skills) is backed up and removed from `~/.aitools`, and the setup-user-claude and setup-user-cursor fan-outs then back up and remove their copies from `~/.claude` and `~/.cursor`. A name that moved into `shared/` is claimed by `shared` and stays |
+| 3 | `scripts/build-deploy.sh`: the MDM span markers are renamed `source setup` (were `dotprofile lookup`); the MDM snapshot no longer stages a dotprofile directory, so nothing from the dotprofile is embedded in `deploy-harness.payload` |
+| 4 | Tests: `tests/deploy-harness` (fixture rules and skills in `.claude/` and the dotprofile must never deploy; withdrawn-source retirement for rules and skills, dry run, no dotprofile configured; hooks carry the duplicate cases; skills goldens rewritten), `tests/deploy-harness-mdm` (probes are `shared/rules/scratch.md` and `tool-ops.md`; the `dup.rows` golden removed), `tests/skills-fanout` (real harness: shared skills only), `tests/hookin` (the fixture rule moved to `shared/rules`, the duplicate is a hook) |
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 5 | Rules: `managed-file-deployment`, `deploy-paths`, `documentation-standards` ("Skill placement"), `hook-rollout` and their `.cursor/rules` twins; `aitools-workspace`. References: `harness.md` (sources, "Withdrawn sources retire"), `rules.md` v1.2 (R-8) and `skills.md` v1.1 (S-7), both with their intent statements revised to name the new decisions (commander, 2026-11-07), `user-repo.md`, `managed-file-deployment.md`, `framework-governed-vocabulary.md` |
+
+**Effect on a machine at the next `aitools` run:** every rule and skill from aitools `.claude/` (for example `hook-lifecycle.md`, `script-standards.md`, `audit`, `governed-data`) and from the dotprofile (`delegation.md`, `concurrent-agents.md`) leaves `~/.aitools`, `~/.claude` and `~/.cursor` (backups kept). Inside the aitools repo the `.claude/` rules and skills still load as project scope.
+
+**Verified on:** macOS (sh): deploy-harness 106/106, deploy-harness-mdm 59/59, hookin 31/31, skills-fanout 124/124, build-deploy 24/24, skills-legacy 39/39, claude-mdm 33/33, rules-fanout 67/67, rules-fanout-cursor 160/160, fanout-lib 127/127. Windows (ps1): CI.
+
+---
+
 ## v0.75.0 -- CI platform targeting: each script tested only where its OS guard lets it run; Windows runs the heavy suites (2026-11-01)
 
 Not tagged. PR #139, plan `plans/ci-platform-targeting.md`. Commander orders 2026-11-01: "fix it so that linux and macos DO NOT run the windows .ps1 paths under emulation", "Have windows run the heavy suite", "fix all other warnings/errors you can see in the logs", "give pty-run.py a 30 second timeout", and ".ps1 scripts only run on windows ... the override to override the OS guard should be removed. the os guard should be tested". RCA behind it: the windows job ran about 1/8 of the work (140 s against 1,126 s linux and 1,519-1,681 s macOS) because linux and macOS ran every heavy suite's `.ps1` half under pwsh through guard bypasses, while windows ran a smoke subset.

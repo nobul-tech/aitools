@@ -60,8 +60,8 @@ a summary row, never silent (`@plans/build-package/design.md` section 3(d)):
 `deploy/deploy-harness.sh/.ps1` runs first: it fills `~/.aitools` (rules,
 reference, registries, hooks, skills, bin, config.json), and the fan-outs in
 `setup-user-claude` and `setup-user-cursor` read `~/.aitools/rules` and
-`~/.aitools/skills` (the only way the dotprofile's `claude/rules` reaches an
-endpoint). Run in the other order, the rules fan-outs report
+`~/.aitools/skills` (rules and skills come from aitools `shared/` only;
+commander, 2026-11-06). Run in the other order, the rules fan-outs report
 `n/a (no harness rules)` and deploy no rules; the skills fan-outs write no
 row, and `setup-user-skills` deploys skills (SKILL.md only) as the fallback
 and owns the `claude skills` / `cursor skills` rows (FD-9 of
@@ -138,7 +138,7 @@ into `deploy/`.
 
 `deploy-harness.sh/.ps1` is **extract + embed**: `build-deploy.sh` extracts its
 code between its section headings (`extract_span`, each heading must match one
-line) and replaces only section 2 (dotprofile lookup) with the embedded
+line) and replaces only section 2 (source setup) with the embedded
 snapshot; the source directories and bin CLIs are parsed from its
 `add_source` / `for cli in` lines, not listed twice. Renaming a section
 heading or rewording those lines fails the build loudly.
@@ -163,10 +163,9 @@ heading or rewording those lines fails the build loudly.
   `AITOOLS_PROFILE_PS1`); a file the resolver loads that the embed does not carry
   fails the build
 - Every `scripts/deploy-harness.*` source (`reference/`, `registries/`,
-  `shared/hooks`, `.claude/hooks`, `shared/skills`, `.claude/skills`, <!-- path-ref: ignore (a deploy-harness source that may be absent) -->
-  `<userRepoPath>/claude/skills`, `shared/rules`, `.claude/rules`,
-  `<userRepoPath>/claude/rules`, the bin CLIs) → its
-  `git ls-files` list and contents, embedded as base64 at build time
+  `shared/hooks`, `.claude/hooks`, `shared/skills`, `shared/rules`, the bin <!-- path-ref: ignore (a deploy-harness source that may be absent) -->
+  CLIs) → its `git ls-files` list and contents, embedded as base64 at build
+  time. Nothing from the dotprofile is in the harness snapshot
 
 `check-pre-push` step 7 rebuilds into a temp copy of the dotprofile and dry-runs
 the generated resolver consumers, so a deploy script that cannot find its resolver

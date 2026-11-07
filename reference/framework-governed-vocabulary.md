@@ -67,7 +67,7 @@ Base artifacts combine with scope modifiers:
 | dotprofile claude | `<userRepoPath>/claude/CLAUDE.md` |
 | user claude | `~/.claude/CLAUDE.md` (generated, don't edit directly) |
 | project rule | `.claude/rules/*.md` |
-| project skill | `.claude/skills/*/SKILL.md` (source; written for aitools sessions, deployed to user scope too) |
+| project skill | `.claude/skills/*/SKILL.md` (aitools sessions only; not deployed to user scope since 2026-11-06) |
 | user rule | `~/.claude/rules/*.md`, `~/.cursor/rules/*.mdc` (fanned out from `~/.aitools/rules/`) |
 | shared skill | `shared/skills/*/SKILL.md` (source) |
 | user skill | `~/.claude/skills/*/SKILL.md`, `~/.cursor/skills/*/SKILL.md` (fanned out from `~/.aitools/skills/`) |

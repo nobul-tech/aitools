@@ -83,31 +83,30 @@ Create a `plans/*.md` file when work:
 
 ### Skill placement
 
-Where a skill's source lives decides what it is written for, not where it
-is deployed: every skill in `shared/skills/`, `.claude/skills/` and the
-dotprofile `claude/skills/` is deployed to user scope (`~/.claude/skills/`,
-`~/.cursor/skills/`) through `~/.aitools/skills` (commander, 2026-10-26).
+Where a skill's source lives decides where it is deployed: only
+`shared/skills/` is deployed to user scope (`~/.claude/skills/`,
+`~/.cursor/skills/`) through `~/.aitools/skills` (commander, 2026-11-06,
+superseding the 2026-10-26 decision that deployed all three sources). The
+same holds for rules: only `shared/rules/` reaches `~/.claude/rules/` and
+`~/.cursor/rules/`.
 
 - **Shared** (`shared/skills/`): user level. Managed tool patterns,
   project-agnostic conventions, USO enablement, and the governance skills
   useful in a session on any repo, even read-only. Content must be factual
   (patterns, gotchas, platform behavior), not project-specific opinions,
   and must work in any repo (write aitools paths as "aitools `<path>`").
-- **Project** (`.claude/skills/` in the aitools repo; today `audit` and
-  `governed-data`): only skills meaningful solely inside the aitools
-  working tree (they edit or audit aitools source). Deployed to user scope
-  too, so they are listed in every repo; a project skill may cite aitools
-  repo-relative paths only if it says it works inside aitools only.
-- **Dotprofile** (`<userRepoPath>/claude/skills/`): the user's own skills.
-- **One name, one place**: a skill name exists in exactly one of the
-  three sources. Pre-commit step 21 fails on a collision between
-  `shared/skills/`, `.claude/skills/` and the dotprofile's
-  `claude/skills/`, and a duplicate is an ERROR on every deploy-harness
-  run (first source wins: shared, then project, then dotprofile). Inside
-  aitools the two project skills exist at both levels (the
-  `.claude/skills/` source and the deployed `~/.claude/skills/` copy), and
-  Claude Code runs the user-level copy, so a branch that edits a project
-  skill sees the old copy until the next `aitools` run.
+- **Project** (`.claude/skills/` in the aitools repo): skills meaningful
+  solely inside the aitools working tree (they edit or audit aitools
+  source). Not deployed: Claude Code loads them only in sessions inside
+  the aitools repo, from the checkout, so a branch that edits a project
+  skill runs its own copy.
+- **Dotprofile** (`<userRepoPath>/claude/skills/`): not a harness source;
+  deploy-harness does not read it.
+- **One name, one place**: a skill name exists in exactly one of
+  `shared/skills/` and `.claude/skills/`. Pre-commit step 21 fails on a
+  collision (it also checks the dotprofile's `claude/skills/`). Moving a
+  skill out of `shared/skills/` retires it from user scope on the next
+  `aitools` run; moving one in deploys it.
 - **Governed data**: user-level skills say where their repo paths
   resolve (a "Where the files live" section): the aitools clone, else
   `repoPath` in `~/.aitools/config.json`, else the read-only

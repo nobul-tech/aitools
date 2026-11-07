@@ -4,13 +4,16 @@
 rule is (governs how things are done; concise directives; points to the
 matching skill that holds the process and to the reference that holds the
 detail), the rule / skill / reference / registry layering, scope levels
-(project, shared, dotprofile, user) and their deployment (deploy-harness →
-`~/.aitools/rules` → setup-user-claude / setup-user-cursor fan-out), and the
-commander's decision that all project-scope rules and skills are deployed to
-user-scope Claude Code. **Scope**: Content inferred from what the repo
-already documents — consolidate and cite, do not invent. NOT changing code.
-NOT rewriting the source documents. **Audience**: Every agent writing or
-deploying a rule, in any repo.
+(project, shared, dotprofile, user) and their deployment (deploy-harness
+copies aitools `shared/rules` only → `~/.aitools/rules` → setup-user-claude /
+setup-user-cursor fan-out), and the commander's decisions on which rules
+reach user scope (R-8: only `shared/rules`; aitools `.claude/rules` stays
+project scope and the dotprofile `claude/rules` is not deployed), with the
+superseded decisions kept as record. **Scope**: Content inferred from what
+the repo already documents — consolidate and cite, do not invent. NOT
+changing code. NOT rewriting the source documents. NOT skills
+(`@reference/skills.md`). **Audience**: Every agent writing or deploying a
+rule, in any repo.
 
 Version 1.1, 2026-10-27. v1.0 (2026-10-26) written by S3-RulesSpec; v1.1 by
 S3-FanoutImpl-Docs (FO-7 of `@plans/skills-and-rules-fanout.md`), both for
@@ -18,6 +21,12 @@ Session Commander 10cf255a-c. A version, not a draft (D-DEL5). The intent
 above was approved by the commander on 2026-10-26 and is unchanged in v1.1;
 like every intent statement it is protected
 (`@.claude/rules/sources-of-truth.md` "Intent statements").
+
+v1.2 (2026-11-06, Session Commander f500b663-7): R-8 supersedes R-1, R-3,
+R-4 and R-6: rules deploy from `shared/rules` only; sections 5, 6.1 and 7
+updated. The intent statement above was revised to name R-8 instead of R-4
+on the commander's order of 2026-11-07 ("please fix the intent blocks on
+rules.md and skills.md").
 
 v1.1 changes: R-2 superseded by R-6 (Cursor gets every rule minus retired);
 R-7 (skills deploy like rules); sections 5, 6.1 and 7 describe the fan-out
@@ -33,15 +42,16 @@ Every claim cites the file it comes from. "Today" means `origin/main` at
 
 | ID | Decision | Date | By | Source |
 |----|----------|------|----|--------|
-| R-1 | `shared/rules` (and `.claude/rules`, and the dotprofile `claude/rules`) deploy through deploy-harness into one flat `~/.aitools/rules`; setup-user-claude and setup-user-cursor fan them out to the tools. First source wins on a name conflict (`shared/`, then `.claude/`, then dotprofile `claude/rules/`); each skipped duplicate is `log_error` + an ERROR row. A rules manifest records each rule's source | 2026-10-22 | commander | `SC-mission-packet.md` section 6; `@reference/harness.md` "Deployed harness"; PR #100 (manifest) |
+| R-1 | **Superseded by R-8** (sources). `shared/rules` (and `.claude/rules`, and the dotprofile `claude/rules`) deploy through deploy-harness into one flat `~/.aitools/rules`; setup-user-claude and setup-user-cursor fan them out to the tools. First source wins on a name conflict (`shared/`, then `.claude/`, then dotprofile `claude/rules/`); each skipped duplicate is `log_error` + an ERROR row. A rules manifest records each rule's source | 2026-10-22 | commander | `SC-mission-packet.md` section 6; `@reference/harness.md` "Deployed harness"; PR #100 (manifest) |
 | R-2 | **Superseded by R-6.** Cursor gets user-level rules only (shared + dotprofile; not the aitools `.claude/rules`) | 2026-10-22 | commander | HARNESS Q1 (`.aitools/channel/handoffs/2026-10-22_10cf255a-c.md` section G); PR #110 |
-| R-3 | "Put aitools rules in the user space of claude code": the Claude Code fan-out takes every rule in `~/.aitools/rules`, source `aitools` included, minus the ones the manifest retires | 2026-10-22 | commander | `@plans/rules-fanout-claude.md` section 2, D1 and D5 |
-| R-4 | All project-scope rules **and skills** are deployed to user-scope Claude Code. The commander removes the duplicate project-level Claude Code rules later | 2026-10-26 | commander | Mission RULES-SPEC launch prompt (Session Commander 10cf255a-c) |
+| R-3 | **Superseded by R-8.** "Put aitools rules in the user space of claude code": the Claude Code fan-out takes every rule in `~/.aitools/rules`, source `aitools` included, minus the ones the manifest retires | 2026-10-22 | commander | `@plans/rules-fanout-claude.md` section 2, D1 and D5 |
+| R-4 | **Superseded by R-8.** All project-scope rules **and skills** are deployed to user-scope Claude Code. The commander removes the duplicate project-level Claude Code rules later | 2026-10-26 | commander | Mission RULES-SPEC launch prompt (Session Commander 10cf255a-c) |
 | R-5 | Produced documents are versions, not drafts (D-DEL5); this file is v1.1 | 2026-10-26 | commander | Mission RULES-SPEC launch prompt |
-| R-6 | Cursor gets every rule in `~/.aitools/rules` minus retired (shared, aitools, dotprofile); reverses R-2's filter, keeps #110's marker and prune safety | 2026-10-26 | commander | RECONCILE Q3 ("cursor should get project level rules too in user space", `@plans/fan-plan-reconciliation.md` section 4); `@plans/skills-and-rules-fanout.md` FD-2; PR #123 (FO-5) |
+| R-6 | **Sources superseded by R-8** (the fan-out itself is unchanged). Cursor gets every rule in `~/.aitools/rules` minus retired (shared, aitools, dotprofile); reverses R-2's filter, keeps #110's marker and prune safety | 2026-10-26 | commander | RECONCILE Q3 ("cursor should get project level rules too in user space", `@plans/fan-plan-reconciliation.md` section 4); `@plans/skills-and-rules-fanout.md` FD-2; PR #123 (FO-5) |
 | R-7 | Skills deploy like rules: `~/.aitools/skills` -> fan-out; `@reference/skills.md` in this file's format | 2026-10-26 | commander | `@plans/skills-and-rules-fanout.md` FD-3, FD-4 |
+| R-8 | Roll back to `shared/` only: deploy-harness copies only `shared/rules` (and `shared/skills`, S-7) into `~/.aitools`. aitools `.claude/rules` is project scope (Claude Code loads it inside the aitools repo); the dotprofile `claude/rules` is not a harness source. Rules a previous run deployed from those sources (manifest `aitools` / `dotprofile`) are retired, and the fan-outs remove their copies | 2026-11-06 | commander | Session f500b663-7: "we need to roll that back so that only the skills/rules in the shared/ directory get copied over"; the dotprofile included ("shared/ only", answered when asked) |
 
-R-4's known cost is in section 7.
+R-4's cost (section 7) no longer applies under R-8.
 
 ## 2. What a rule is
 
@@ -166,9 +176,9 @@ Scope modifiers compose with the base artifact `rule`
 
 | Scope | Where | What belongs there | Reaches Claude Code how |
 |-------|-------|--------------------|-------------------------|
-| project rule | `.claude/rules/*.md` in a repo | Conventions for that repo ("(this repo)") | Loaded by Claude Code from the repo directly; for aitools also through the fan-out below (R-3/R-4) |
-| shared rule | aitools `shared/rules/*.md` | Harness rules for every agent in every repo (`scratch.md`, `hook-lifecycle.md`) | deploy-harness -> `~/.aitools/rules` -> setup-user-claude fan-out (section 6) |
-| dotprofile rule | `<userRepoPath>/claude/rules/*.md` | The user's personal rules (`delegation.md`, `concurrent-agents.md`) | Through `~/.aitools/rules` and the setup-user-claude fan-out |
+| project rule | `.claude/rules/*.md` in a repo | Conventions for that repo ("(this repo)") | Loaded by Claude Code from the repo directly; never deployed (R-8) |
+| shared rule | aitools `shared/rules/*.md` | Harness rules for every agent in every repo (`scratch.md`, `web-sources.md`) | deploy-harness -> `~/.aitools/rules` -> setup-user-claude fan-out (section 6) |
+| dotprofile rule | `<userRepoPath>/claude/rules/*.md` | The user's personal rules (`delegation.md`, `concurrent-agents.md`) | Not deployed by the harness (R-8); a rule meant for every repo goes in aitools `shared/rules/` |
 | user rule | `~/.claude/rules/*.md` | Deployed copy; active in every project on the machine | — (it is the target) |
 
 Cursor has its own scopes: project rules `.cursor/rules/*.mdc` (mirrors of
@@ -213,19 +223,18 @@ Where a skill goes, how skills are deployed and what they cost:
 ### 6.1 The pipeline
 
 ```
-aitools shared/rules/      ─┐
-aitools .claude/rules/     ─┼─ deploy-harness ─▶ ~/.aitools/rules/ (flat, *.md) ─┬─ setup-user-claude ─▶ ~/.claude/rules/*.md
-<dotprofile>/claude/rules/ ─┘   first source wins   + rules manifest          └─ setup-user-cursor ─▶ ~/.cursor/rules/*.mdc
+aitools shared/rules/ ─── deploy-harness ─▶ ~/.aitools/rules/ (flat, *.md) ─┬─ setup-user-claude ─▶ ~/.claude/rules/*.md
+                          (R-8: only source)  + rules manifest          └─ setup-user-cursor ─▶ ~/.cursor/rules/*.mdc
 ```
 
 | Step | Built | Where |
 |------|-------|-------|
-| deploy-harness fills `~/.aitools/rules` | `scripts/deploy-harness.sh/.ps1`: `add_source rules` for `shared/rules`, `.claude/rules`, dotprofile `claude/rules` in that order; git-tracked files only, `*.bak.*` never, flat `*.md` only, case-insensitive conflicts (`@reference/harness.md` "Deployed harness"). MDM: generated `deploy/deploy-harness.*` | #88, #93 (main) |
-| Rules manifest | `~/.aitools/rules/.aitools-rules-manifest` (`<name><TAB>shared\|aitools\|dotprofile\|retired`); retired rules backed up and removed from `~/.aitools/rules` (`@reference/harness.md` "Rules manifest and retired rules") | #100 (main, 89e2953) |
+| deploy-harness fills `~/.aitools/rules` | `scripts/deploy-harness.sh/.ps1`: `add_source rules` for `shared/rules` only (R-8; until 2026-11-06 also `.claude/rules` and the dotprofile `claude/rules`); git-tracked files only, `*.bak.*` never, flat `*.md` only, case-insensitive conflicts (`@reference/harness.md` "Deployed harness"). MDM: generated `deploy/deploy-harness.*` | #88, #93 (main) |
+| Rules manifest | `~/.aitools/rules/.aitools-rules-manifest` (`<name><TAB>shared\|retired` written; `aitools` and `dotprofile` read from an older manifest and retired, R-8); retired rules backed up and removed from `~/.aitools/rules` (`@reference/harness.md` "Rules manifest and retired rules") | #100 (main, 89e2953) |
 | Something runs deploy-harness | Installer Step 8b and first in `deploy_configs` of the `aitools` entry points, before every setup script | #106 (main) |
 | Lib helpers | tracker outcome `removed` (nothing counted: `n/a (nothing to deploy)`); `read_harness_manifest` / `Read-HarnessManifest` (with `read_rules_manifest` wrappers), `rule_name_kind`, `fanout_text_equal` (`@reference/managed-file-deployment.md` "Functions") | PR 118 (FO-1, main) |
 | Claude fan-out | setup-user-claude fans out every non-retired `~/.aitools/rules/*.md` into `~/.claude/rules/` (summary tool `claude rules`), in ordinal (byte) order in both shells (`LC_ALL=C sort`, `[string]::CompareOrdinal`), adopt target mapped from the manifest source when the script runs from a git checkout, retired copies pruned after a text match and a verified backup (tracker `removed`); no manifest: every rule, nothing removed; no `~/.aitools/rules`: `n/a (no harness rules)`, target untouched. MDM: no rules embedded; they arrive through `deploy/deploy-harness.*` | PR 121 (FO-3, main `3e00085`) = `@plans/rules-fanout-claude.md` Batches B-D |
-| Cursor fan-out | setup-user-cursor step 4 converts every non-retired `~/.aitools/rules/*.md` (all three sources, R-6) to `~/.cursor/rules/<name>.mdc` (`alwaysApply: true` without `paths:`, anchored globs otherwise), in ordinal order; adopt not offered; retired copies pruned when they carry the fan-out marker or the legacy content, after a verified same-text backup (tracker `removed`), the retired `.mdc` found case-insensitively and reported under its on-disk name; only retired names: `n/a (nothing to deploy)`; a bad manifest header, invalid manifest lines or listed-but-missing rules write one ACTION row; the dry-run row is ERROR when errors were logged; the bash review menu prompts (deploy list on fd 3) | #87, #110 (user-level only, prune); R-6, the prompt fix and the rest: PR 123 (FO-5, main `207f1a6`) |
+| Cursor fan-out | setup-user-cursor step 4 converts every non-retired `~/.aitools/rules/*.md` (R-6; `shared` only since R-8) to `~/.cursor/rules/<name>.mdc` (`alwaysApply: true` without `paths:`, anchored globs otherwise), in ordinal order; adopt not offered; retired copies pruned when they carry the fan-out marker or the legacy content, after a verified same-text backup (tracker `removed`), the retired `.mdc` found case-insensitively and reported under its on-disk name; only retired names: `n/a (nothing to deploy)`; a bad manifest header, invalid manifest lines or listed-but-missing rules write one ACTION row; the dry-run row is ERROR when errors were logged; the bash review menu prompts (deploy list on fd 3) | #87, #110 (user-level only, prune); R-6, the prompt fix and the rest: PR 123 (FO-5, main `207f1a6`) |
 | CI | every `tests/<dir>/test-*.sh` suite in CI, checked by a CI step; `tests/fanout-lib`, `tests/rules-fanout`, `tests/rules-fanout-cursor` | PR 117 (FO-0), PR 118, PR 121, PR 123 (all on main) |
 
 ### 6.2 Rules for deploying rules
@@ -250,9 +259,16 @@ aitools .claude/rules/     ─┼─ deploy-harness ─▶ ~/.aitools/rules/ (fl
   against the real `HOME` when testing (`SC-mission-packet.md` section 5;
   #86).
 
-## 7. Project rules and skills at user scope (R-3, R-4)
+## 7. Project rules and skills at user scope (R-3, R-4; superseded by R-8)
 
-The decision: every aitools project rule and skill reaches user-scope Claude
+**Superseded on 2026-11-06 (R-8).** Project rules and skills are no longer
+deployed to user scope; only `shared/rules` and `shared/skills` are. The
+first deploy-harness run after R-8 retires the `aitools` and `dotprofile`
+names from `~/.aitools`, and the Claude and Cursor fan-outs then back up and
+remove their copies, so the cost below goes away. The rest of this section
+is kept as the record of R-3/R-4.
+
+The decision (R-3, R-4): every aitools project rule and skill reaches user-scope Claude
 Code. For rules, the mechanism is the Claude fan-out (section 6.1):
 `.claude/rules` is a deploy-harness source, and the fan-out takes source
 `aitools` (`@plans/rules-fanout-claude.md` D5); under R-6 Cursor takes them

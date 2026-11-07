@@ -445,41 +445,45 @@ arch yet (PR #83 follow-up n3).
 
 ## User Rules Deployment
 
-The dotprofile's rules reach the tools in two steps. `deploy-harness` copies
-`<userRepoPath>/claude/rules/*.md`, with aitools `shared/rules/` and
-`.claude/rules/`, into `~/.aitools/rules/` (first source wins) and writes the
-rules manifest there. `setup-user-claude` and `setup-user-cursor` then fan out
-`~/.aitools/rules/` to `~/.claude/rules/` (and `~/.cursor/rules/*.mdc`); neither
-reads `<userRepoPath>/claude/rules/` itself. Below: the Claude Code fan-out
-(Cursor: `@reference/rules.md` section 6).
+**The dotprofile's `claude/rules/` is not deployed** (commander, 2026-11-06;
+`@reference/rules.md` R-8). User rules reach the tools in two steps:
+`deploy-harness` copies aitools `shared/rules/*.md` (its only rules source)
+into `~/.aitools/rules/` and writes the rules manifest there;
+`setup-user-claude` and `setup-user-cursor` then fan out `~/.aitools/rules/`
+to `~/.claude/rules/` (and `~/.cursor/rules/*.mdc`). Neither reads
+`<userRepoPath>/claude/rules/`. Rules an earlier run deployed from the
+dotprofile (manifest source `dotprofile`) are retired on the next run and
+removed by the fan-outs. A personal rule meant for every repo belongs in
+aitools `shared/rules/`. Below: the Claude Code fan-out (Cursor:
+`@reference/rules.md` section 6).
 
 **Semantics**: additive deploy — managed files are added/updated, unmanaged files in the target are preserved; the copy of a rule the manifest retires is backed up and removed.
 
 - **Source**: every `*.md` in `~/.aitools/rules/` (case-insensitive; `*.bak.*` and hidden files skipped) except the names the rules manifest retires
 - **Target**: `~/.claude/rules/<same name>`
-- **Adopt target**: the rule's source file named by the manifest (`<userRepoPath>/claude/rules/<name>` for a dotprofile rule, committed and pushed; the aitools file for a shared or aitools rule, a working-tree change), when it is on the machine; none without a manifest
+- **Adopt target**: the rule's source file named by the manifest (the aitools `shared/rules/<name>`, a working-tree change), when it is on the machine; none without a manifest
 - **Retired**: the copy is removed (backup kept) only when it matches the harness copy or a backup deploy-harness made when it retired the rule; any other file of that name is kept with a warning and an ACTION row
 - **No `~/.aitools/rules/`** (deploy-harness has not run): `claude rules` `n/a (no harness rules)`, the target is left untouched
 - **Backup**: full directory copy (`rules.bak.<TIMESTAMP>/`), max 5, auto-prune
 - **Diff logging**: unified diff of changes logged to deploy log; console shows summary
 - **Managed vs preserved**: files fanned out this run are managed; all other rule files in the target are preserved and logged
 
-**Scope guidance**: rules in the dotprofile's `claude/rules/` should be universal conventions that apply across all projects. aitools' own `.claude/rules/` and `.claude/skills/` are deployed to user scope too (commander, 2026-10-26: "ALL project-scope rules AND skills are deployed to user-scope Claude Code"), so they also load in every project on the machine; the cost is in `@reference/rules.md` section 7 and `@reference/skills.md` section 7.
+**Scope guidance**: only aitools `shared/rules/` and `shared/skills/` reach user scope (commander, 2026-11-06, superseding the 2026-10-26 decision that also deployed aitools' own `.claude/rules/`, `.claude/skills/` and the dotprofile's). aitools `.claude/` loads only in sessions inside the aitools repo.
 
 **MDM**: the generated `deploy/setup-user-claude.*` embed no rules. `deploy/deploy-harness.*`
-embeds the build-time dotprofile's `claude/rules/` and `claude/skills/` in its snapshot and fills
-`~/.aitools/`; run it before `setup-user-claude` and `setup-user-cursor`.
+embeds aitools `shared/rules/` and `shared/skills/` (nothing from the dotprofile) in its
+snapshot and fills `~/.aitools/`; run it before `setup-user-claude` and `setup-user-cursor`.
 
 ## User Skills Deployment
 
-The dotprofile's `claude/skills/<name>/` reach the tools like rules:
-`deploy-harness` copies them, after aitools `shared/skills/` and
-`.claude/skills/` (first source wins), into `~/.aitools/skills/` and writes
+The dotprofile's `claude/skills/<name>/` are not a harness source
+(commander, 2026-11-06; `@reference/skills.md` S-7): `deploy-harness`
+copies aitools `shared/skills/` only into `~/.aitools/skills/` and writes
 the skills manifest; `setup-user-claude` fans them out to `~/.claude/skills/`
-(adopt target: the dotprofile file, committed and pushed) and
-`setup-user-cursor` to `~/.cursor/skills/` (no adopt). Without
-`~/.aitools/skills`, `setup-user-skills` deploys them directly (fallback,
-SKILL.md only), and it keeps reverse discovery: a skill directory the user
+and `setup-user-cursor` to `~/.cursor/skills/` (no adopt). Skills an earlier
+run deployed from the dotprofile are retired. Without `~/.aitools/skills`,
+`setup-user-skills` (the fallback, SKILL.md only, not changed by S-7) still
+deploys the dotprofile's skills directly, and it keeps reverse discovery: a skill directory the user
 created in `~/.claude/skills/` is offered for adoption into
 `<userRepoPath>/claude/skills/`, never a name the harness has. Detail:
 `@reference/skills.md`.
