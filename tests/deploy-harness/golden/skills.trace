@@ -1,174 +1,26 @@
 == first rc=0
-OK|harness files|21 added
+OK|harness files|15 added
 -- manifest
 # aitools skills manifest v1
-d1	dotprofile
 s1	shared
 s2	shared
-s3	aitools
 -- tree
 .
 ./.aitools-skills-manifest
-./d1
-./d1/SKILL.md
-./d1/ref
-./d1/ref/x.md
 ./s1
 ./s1/SKILL.md
 ./s1/tests
 ./s1/tests/t.md
 ./s2
 ./s2/SKILL.md
-./s3
-./s3/SKILL.md
-== dup rc=1
-ERROR|harness files|S2: dup in .claude/skills
-OK|harness files|21 verified
--- manifest
-# aitools skills manifest v1
-d1	dotprofile
-s1	shared
-s2	shared
-s3	aitools
--- tree
-.
-./.aitools-skills-manifest
-./d1
-./d1/SKILL.md
-./d1/ref
-./d1/ref/x.md
-./s1
-./s1/SKILL.md
-./s1/tests
-./s1/tests/t.md
-./s2
-./s2/SKILL.md
-./s3
-./s3/SKILL.md
-== move rc=0
-OK|harness files|21 verified
--- manifest
-# aitools skills manifest v1
-d1	dotprofile
-s1	shared
-s2	shared
-s3	shared
--- tree
-.
-./.aitools-skills-manifest
-./d1
-./d1/SKILL.md
-./d1/ref
-./d1/ref/x.md
-./s1
-./s1/SKILL.md
-./s1/tests
-./s1/tests/t.md
-./s2
-./s2/SKILL.md
-./s3
-./s3/SKILL.md
-== retire rc=0
-DETAIL|harness files|retired: skills/s2
-OK|harness files|20 verified
--- manifest
-# aitools skills manifest v1
-d1	dotprofile
-s1	shared
-s2	retired
-s3	shared
--- tree
-.
-./.aitools-skills-manifest
-./d1
-./d1/SKILL.md
-./d1/ref
-./d1/ref/x.md
-./s1
-./s1/SKILL.md
-./s1/tests
-./s1/tests/t.md
-./s2.bak.TS
-./s2.bak.TS/SKILL.md
-./s3
-./s3/SKILL.md
-== rerun rc=0
-OK|harness files|20 verified
--- manifest
-# aitools skills manifest v1
-d1	dotprofile
-s1	shared
-s2	retired
-s3	shared
--- tree
-.
-./.aitools-skills-manifest
-./d1
-./d1/SKILL.md
-./d1/ref
-./d1/ref/x.md
-./s1
-./s1/SKILL.md
-./s1/tests
-./s1/tests/t.md
-./s2.bak.TS
-./s2.bak.TS/SKILL.md
-./s3
-./s3/SKILL.md
-== unlisted rc=0
-OK|harness files|17 verified
--- manifest
-# aitools skills manifest v1
-d1	dotprofile
-s1	shared
-s2	retired
-s3	shared
--- tree
-.
-./.aitools-skills-manifest
-./d1
-./d1/SKILL.md
-./d1/ref
-./d1/ref/x.md
-./s1
-./s1/SKILL.md
-./s1/tests
-./s1/tests/t.md
-./s2.bak.TS
-./s2.bak.TS/SKILL.md
-./s3
-./s3/SKILL.md
-== perkind rc=0
-OK|harness files|18 verified
--- manifest
-# aitools skills manifest v1
-d1	dotprofile
-s1	shared
-s2	retired
-s3	shared
--- tree
-.
-./.aitools-skills-manifest
-./d1
-./d1/SKILL.md
-./d1/ref
-./d1/ref/x.md
-./s1
-./s1/SKILL.md
-./s1/tests
-./s1/tests/t.md
-./s2.bak.TS
-./s2.bak.TS/SKILL.md
-./s3
-./s3/SKILL.md
 == dryrun rc=0
-OK|harness files|dry-run: 1 create, 0 update
+OK|harness files|dry-run: 0 create, 0 update
 -- manifest
 # aitools skills manifest v1
 d1	dotprofile
 s1	shared
-s2	retired
-s3	shared
+s2	shared
+s3	aitools
 -- tree
 .
 ./.aitools-skills-manifest
@@ -180,17 +32,66 @@ s3	shared
 ./s1/SKILL.md
 ./s1/tests
 ./s1/tests/t.md
-./s2.bak.TS
-./s2.bak.TS/SKILL.md
+./s2
+./s2/SKILL.md
 ./s3
 ./s3/SKILL.md
-== d1gone rc=0
+== withdrawn rc=0
 DETAIL|harness files|retired: skills/d1
-OK|harness files|1 added, 18 verified
+DETAIL|harness files|retired: skills/s3
+OK|harness files|15 verified
 -- manifest
 # aitools skills manifest v1
 d1	retired
-d2	dotprofile
+s1	shared
+s2	shared
+s3	retired
+-- tree
+.
+./.aitools-skills-manifest
+./d1.bak.TS
+./d1.bak.TS/SKILL.md
+./d1.bak.TS/ref
+./d1.bak.TS/ref/x.md
+./s1
+./s1/SKILL.md
+./s1/tests
+./s1/tests/t.md
+./s2
+./s2/SKILL.md
+./s3.bak.TS
+./s3.bak.TS/SKILL.md
+== move rc=0
+OK|harness files|1 added, 15 verified
+-- manifest
+# aitools skills manifest v1
+d1	retired
+s1	shared
+s2	shared
+s3	shared
+-- tree
+.
+./.aitools-skills-manifest
+./d1.bak.TS
+./d1.bak.TS/SKILL.md
+./d1.bak.TS/ref
+./d1.bak.TS/ref/x.md
+./s1
+./s1/SKILL.md
+./s1/tests
+./s1/tests/t.md
+./s2
+./s2/SKILL.md
+./s3
+./s3.bak.TS
+./s3.bak.TS/SKILL.md
+./s3/SKILL.md
+== retire rc=0
+DETAIL|harness files|retired: skills/s2
+OK|harness files|15 verified
+-- manifest
+# aitools skills manifest v1
+d1	retired
 s1	shared
 s2	retired
 s3	shared
@@ -201,8 +102,6 @@ s3	shared
 ./d1.bak.TS/SKILL.md
 ./d1.bak.TS/ref
 ./d1.bak.TS/ref/x.md
-./d2
-./d2/SKILL.md
 ./s1
 ./s1/SKILL.md
 ./s1/tests
@@ -210,14 +109,40 @@ s3	shared
 ./s2.bak.TS
 ./s2.bak.TS/SKILL.md
 ./s3
+./s3.bak.TS
+./s3.bak.TS/SKILL.md
+./s3/SKILL.md
+== rerun rc=0
+OK|harness files|15 verified
+-- manifest
+# aitools skills manifest v1
+d1	retired
+s1	shared
+s2	retired
+s3	shared
+-- tree
+.
+./.aitools-skills-manifest
+./d1.bak.TS
+./d1.bak.TS/SKILL.md
+./d1.bak.TS/ref
+./d1.bak.TS/ref/x.md
+./s1
+./s1/SKILL.md
+./s1/tests
+./s1/tests/t.md
+./s2.bak.TS
+./s2.bak.TS/SKILL.md
+./s3
+./s3.bak.TS
+./s3.bak.TS/SKILL.md
 ./s3/SKILL.md
 == copydeploy rc=0
-OK|harness files|2 added, 19 verified
+OK|harness files|2 added, 15 verified
 -- manifest
 # aitools skills manifest v1
 <BN>	shared
 d1	retired
-d2	dotprofile
 nomd	shared
 s1	shared
 s2	retired
@@ -231,8 +156,6 @@ s3	shared
 ./d1.bak.TS/SKILL.md
 ./d1.bak.TS/ref
 ./d1.bak.TS/ref/x.md
-./d2
-./d2/SKILL.md
 ./nomd
 ./nomd/a
 ./nomd/a/x.md
@@ -243,16 +166,17 @@ s3	shared
 ./s2.bak.TS
 ./s2.bak.TS/SKILL.md
 ./s3
+./s3.bak.TS
+./s3.bak.TS/SKILL.md
 ./s3/SKILL.md
 == copyretire rc=0
 DETAIL|harness files|retired: skills/<BN>
 DETAIL|harness files|retired: skills/nomd
-OK|harness files|19 verified
+OK|harness files|15 verified
 -- manifest
 # aitools skills manifest v1
 <BN>	retired
 d1	retired
-d2	dotprofile
 nomd	retired
 s1	shared
 s2	retired
@@ -276,8 +200,6 @@ s3	shared
 ./d1.bak.TS/SKILL.md
 ./d1.bak.TS/ref
 ./d1.bak.TS/ref/x.md
-./d2
-./d2/SKILL.md
 ./nomd.bak.TS
 ./nomd.bak.TS/a
 ./nomd.bak.TS/a/x.md
@@ -288,13 +210,14 @@ s3	shared
 ./s2.bak.TS
 ./s2.bak.TS/SKILL.md
 ./s3
+./s3.bak.TS
+./s3.bak.TS/SKILL.md
 ./s3/SKILL.md
 == invalid rc=0
 WARN|harness files|not a dir: zz
-WARN|harness files|19 verified
+WARN|harness files|15 verified
 -- manifest
 # aitools skills manifest v1
-d2	dotprofile
 s1	shared
 s3	shared
 zz	retired
@@ -317,8 +240,6 @@ zz	retired
 ./d1.bak.TS/SKILL.md
 ./d1.bak.TS/ref
 ./d1.bak.TS/ref/x.md
-./d2
-./d2/SKILL.md
 ./nomd.bak.TS
 ./nomd.bak.TS/a
 ./nomd.bak.TS/a/x.md
@@ -329,13 +250,14 @@ zz	retired
 ./s2.bak.TS
 ./s2.bak.TS/SKILL.md
 ./s3
+./s3.bak.TS
+./s3.bak.TS/SKILL.md
 ./s3/SKILL.md
 ./zz
 == header rc=0
-WARN|harness files|19 verified
+WARN|harness files|15 verified
 -- manifest
 # aitools skills manifest v1
-d2	dotprofile
 s1	shared
 s3	shared
 -- tree
@@ -357,8 +279,6 @@ s3	shared
 ./d1.bak.TS/SKILL.md
 ./d1.bak.TS/ref
 ./d1.bak.TS/ref/x.md
-./d2
-./d2/SKILL.md
 ./nomd.bak.TS
 ./nomd.bak.TS/a
 ./nomd.bak.TS/a/x.md
@@ -369,12 +289,14 @@ s3	shared
 ./s2.bak.TS
 ./s2.bak.TS/SKILL.md
 ./s3
+./s3.bak.TS
+./s3.bak.TS/SKILL.md
 ./s3/SKILL.md
 ./zz
 == mfdir rc=1
 ERROR|harness files|rules manifest not written
 ERROR|harness files|skills manifest not written
-OK|harness files|19 verified
+OK|harness files|15 verified
 -- manifest
 -- tree
 .
@@ -396,8 +318,6 @@ OK|harness files|19 verified
 ./d1.bak.TS/SKILL.md
 ./d1.bak.TS/ref
 ./d1.bak.TS/ref/x.md
-./d2
-./d2/SKILL.md
 ./nomd.bak.TS
 ./nomd.bak.TS/a
 ./nomd.bak.TS/a/x.md
@@ -408,13 +328,14 @@ OK|harness files|19 verified
 ./s2.bak.TS
 ./s2.bak.TS/SKILL.md
 ./s3
+./s3.bak.TS
+./s3.bak.TS/SKILL.md
 ./s3/SKILL.md
 ./zz
 == mfdirgone rc=0
-OK|harness files|19 verified
+OK|harness files|15 verified
 -- manifest
 # aitools skills manifest v1
-d2	dotprofile
 s1	shared
 s3	shared
 -- tree
@@ -436,8 +357,6 @@ s3	shared
 ./d1.bak.TS/SKILL.md
 ./d1.bak.TS/ref
 ./d1.bak.TS/ref/x.md
-./d2
-./d2/SKILL.md
 ./nomd.bak.TS
 ./nomd.bak.TS/a
 ./nomd.bak.TS/a/x.md
@@ -448,5 +367,7 @@ s3	shared
 ./s2.bak.TS
 ./s2.bak.TS/SKILL.md
 ./s3
+./s3.bak.TS
+./s3.bak.TS/SKILL.md
 ./s3/SKILL.md
 ./zz

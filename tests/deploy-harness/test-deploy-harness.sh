@@ -9,13 +9,16 @@
 # accept & adopt into a protected file (pty), skip (pty), abort (pty, exit 2),
 # --force on a terminal, conflicts (first source wins, ERROR rows, exit 1),
 # dry run (no writes), config writer failure (stub and real writer),
-# missing / non-git dotprofile, preserved files, bad arguments, --help, the
-# rules manifest and retired rules, the skills manifest and retired skills
-# (dotprofile skills source, shared vs .claude duplicate, the .claude -> shared
-# move, retire with a verified backup_dir backup, unlisted source, per-kind
-# listing, dry run, failed backup, invalid lines, bad header), and rule names
-# with an upper- or mixed-case .md extension (deployed, listed, no warning,
-# retired; case-only duplicate; .bak. rejected; the lib's manifest reader).
+# rules and skills from aitools shared/ only (aitools .claude/rules,
+# .claude/skills and the dotprofile claude/rules, claude/skills are fixtures
+# that must never be deployed, commander 2026-11-06), preserved files, bad
+# arguments, --help, the rules manifest and retired rules (withdrawn sources
+# "aitools" and "dotprofile" retired), the skills manifest and retired skills
+# (withdrawn sources retired, the .claude -> shared move, retire with a
+# verified backup_dir backup, dry run, failed backup, invalid lines, bad
+# header), and rule names with an upper- or mixed-case .md extension
+# (deployed, listed, no warning, retired; .bak. rejected; the lib's manifest
+# reader).
 #
 # Platform targeting (plans/ci-platform-targeting.md): each script runs only
 # where its OS guard allows. macOS/Linux run deploy-harness.sh; Windows (Git
@@ -39,7 +42,7 @@
 set -uo pipefail
 
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
-    perl -ne 'print if $. >= 2 && $. <= 37' "$0"
+    perl -ne 'print if $. >= 2 && $. <= 40' "$0"
     exit 0
 fi
 if [ "${1:-}" = "--bash-only" ]; then shift; fi
@@ -106,7 +109,11 @@ lang_scripts() {
     fi
 }
 
-# setup_case NAME: fixture aitools repo ($R), dotprofile ($D), HOME ($H) with config.json
+# setup_case NAME: fixture aitools repo ($R), dotprofile ($D), HOME ($H) with config.json.
+# Deployed: reference 3, registries 1, hooks 2, skills 3 (s1: 2 files, s2), rules 2
+# (scratch, hook-lifecycle), bin 3 = 14 files. Never deployed (not harness
+# sources): .claude/skills/s3, .claude/rules/{p1,sources-of-truth}.md,
+# the dotprofile claude/rules/user1.md.
 setup_case() {
     C="$TMP_ROOT/$1"; R="$C/repo"; D="$C/dot"; H="$C/home"
     mkdir -p "$R/scripts" "$R/reference/evaluations" "$R/registries" "$R/shared/hooks" \
@@ -246,7 +253,7 @@ run_dh "" --
 check "first run: exit 0" "[ \"\$(rc)\" = 0 ]"
 check "first run: six directories exist" \
     "[ -d '$(A)/reference' ] && [ -d '$(A)/registries' ] && [ -d '$(A)/hooks' ] && [ -d '$(A)/rules' ] && [ -d '$(A)/skills' ] && [ -d '$(A)/bin' ]"
-check "first run: one OK row, 18 added" "row 'OK|harness files|18 added'"
+check "first run: one OK row, 14 added" "row 'OK|harness files|14 added'"
 check "first run: no ERROR row" "! grep -q '^ERROR|' '$C/summary'"
 check "first run: config writer called without flags" "perl -pe 's/\r//' '$H/writer-calls' | grep -qx 'called '"
 check "first run: reference tree kept (nested path)" "cmp -s '$R/reference/evaluations/e.md' '$(A)/reference/evaluations/e.md'"
@@ -255,9 +262,13 @@ check "first run: untracked file not deployed" "[ ! -e '$(A)/reference/untracked
 check "first run: tracked *.bak.* not deployed" "[ ! -e '$(A)/hooks/h1.sh.bak.2026-01-01T000000Z' ]"
 check "first run: hooks flat" "[ -f '$(A)/hooks/h1.sh' ] && [ -f '$(A)/hooks/hooks-manifest.json' ]"
 check "first run: skills are directories (all files)" \
-    "[ -f '$(A)/skills/s1/SKILL.md' ] && [ -f '$(A)/skills/s1/tests/t.md' ] && [ -f '$(A)/skills/s3/SKILL.md' ]"
-check "first run: rules flat from three sources" \
-    "[ -f '$(A)/rules/scratch.md' ] && [ -f '$(A)/rules/p1.md' ] && [ -f '$(A)/rules/sources-of-truth.md' ] && [ -f '$(A)/rules/user1.md' ]"
+    "[ -f '$(A)/skills/s1/SKILL.md' ] && [ -f '$(A)/skills/s1/tests/t.md' ] && [ -f '$(A)/skills/s2/SKILL.md' ]"
+check "first run: rules flat from shared/rules" \
+    "[ -f '$(A)/rules/scratch.md' ] && [ -f '$(A)/rules/hook-lifecycle.md' ]"
+check "first run: .claude/skills, .claude/rules and dotprofile rules not deployed" \
+    "[ ! -e '$(A)/skills/s3' ] && [ ! -e '$(A)/rules/p1.md' ] && [ ! -e '$(A)/rules/sources-of-truth.md' ] && [ ! -e '$(A)/rules/user1.md' ]"
+check "first run: no .claude/rules, .claude/skills or dotprofile source looked at" \
+    "! grep -qE 'Source (\\.claude/(rules|skills)|dotprofile)' '$LOG' && ! grep -qi 'dotprofile' '$LOG'"
 check "first run: bin CLIs deployed" "[ -f '$(A)/bin/harness-db.py' ] && [ -f '$(A)/bin/read-session-full.py' ]"
 if is_sh; then
     # Only the .sh sets the executable bit (deploy-harness.ps1 header).
@@ -266,7 +277,7 @@ fi
 check "first run: missing .claude/hooks is info, not error" "grep -q '\[info\] Source .claude/hooks not found' '$LOG'"
 
 run_dh "" --
-check "rerun: exit 0, everything verified" "[ \"\$(rc)\" = 0 ] && row 'OK|harness files|18 verified'"
+check "rerun: exit 0, everything verified" "[ \"\$(rc)\" = 0 ] && row 'OK|harness files|14 verified'"
 check "rerun: no backups made" "[ -z \"\$(find '$(A)' -name '*.bak.*' -print)\" ]"
 
 printf 'local edit\n' > "$(A)/rules/scratch.md"
@@ -297,7 +308,7 @@ if $HAVE_PTY; then
     check "adopt: DETAIL row" "grep -q '^DETAIL|harness files|accept & adopt: ' '$C/summary'"
     run_dh "" --
     check "adopt: next run verifies; repo backup not deployed" \
-        "row 'OK|harness files|18 verified' && [ -z \"\$(find '$(A)/reference' -name '*.bak.*' -print)\" ]"
+        "row 'OK|harness files|14 verified' && [ -z \"\$(find '$(A)/reference' -name '*.bak.*' -print)\" ]"
 
     setup_case skip
     run_dh "" --
@@ -314,14 +325,14 @@ if $HAVE_PTY; then
 
     setup_case force
     run_dh "" --
-    printf 'local edit\n' > "$(A)/rules/p1.md"
+    printf 'local edit\n' > "$(A)/rules/hook-lifecycle.md"
     run_dh 'a\n' -- --force
     check "--force on a terminal: overwrite, no menu" \
-        "[ \"\$(rc)\" = 0 ] && cmp -s '$R/.claude/rules/p1.md' '$(A)/rules/p1.md' && no_menu"
-    printf 'local edit\n' > "$(A)/rules/p1.md"
+        "[ \"\$(rc)\" = 0 ] && cmp -s '$R/shared/rules/hook-lifecycle.md' '$(A)/rules/hook-lifecycle.md' && no_menu"
+    printf 'local edit\n' > "$(A)/rules/hook-lifecycle.md"
     EXTRA_ENV="AITOOLS_FORCE=1" run_dh 'a\n' --
     check "AITOOLS_FORCE=1 on a terminal: overwrite, no menu" \
-        "[ \"\$(rc)\" = 0 ] && cmp -s '$R/.claude/rules/p1.md' '$(A)/rules/p1.md' && no_menu"
+        "[ \"\$(rc)\" = 0 ] && cmp -s '$R/shared/rules/hook-lifecycle.md' '$(A)/rules/hook-lifecycle.md' && no_menu"
 else
     printf 'SKIP interactive cases (no pseudo-terminal: python3 missing, or pywinpty not installed on Windows)\n'; SKIP=$((SKIP + 1))
 fi
@@ -329,37 +340,43 @@ fi
 # ---------------------------------------------------------------------------
 # Conflicts: first source wins, one ERROR row per skipped duplicate, exit 1
 # ---------------------------------------------------------------------------
+# Hooks still have two sources (shared/hooks, then .claude/hooks). Rules and
+# skills of the same name in .claude/ or the dotprofile are not sources: no
+# duplicate, nothing deployed from them.
 setup_case conflict
+mkdir -p "$R/.claude/hooks" "$R/.claude/skills/s1"
+printf '#!/usr/bin/env bash\necho project hook\n' > "$R/.claude/hooks/h1.sh"
+printf '{"Hooks": []}\n' > "$R/.claude/hooks/Hooks-Manifest.json"
+printf 'project skill one\n' > "$R/.claude/skills/s1/SKILL.md"
+printf 'project scratch rule\n' > "$R/.claude/rules/scratch.md"
+gitc -C "$R" add -A; gitc -C "$R" commit -q -m dups
 printf 'dotprofile scratch rule\n' > "$D/claude/rules/scratch.md"
 printf 'dotprofile lifecycle\n' > "$D/claude/rules/Hook-Lifecycle.md"
 gitc -C "$D" add -A; gitc -C "$D" commit -q -m dups
-mkdir -p "$R/.claude/skills/s1"
-printf 'project skill one\n' > "$R/.claude/skills/s1/SKILL.md"
-gitc -C "$R" add .claude/skills/s1/SKILL.md; gitc -C "$R" commit -q -m dups
 run_dh "" --
 check "conflict: exit 1" "[ \"\$(rc)\" = 1 ]"
-check "conflict: ERROR row per duplicate" \
-    "row 'ERROR|harness files|scratch.md: dup in dotprofile' && row 'ERROR|harness files|s1: dup in .claude/skills' && row 'ERROR|harness files|Hook-Lifecycle.md: dup in d...'"
-check "conflict: log_error names both sources" "grep -q '\[error\] Duplicate rules name: scratch.md in dotprofile .* kept scratch.md from shared/rules' '$LOG'"
-check "conflict: first source wins (rules, skills)" \
-    "cmp -s '$R/shared/rules/scratch.md' '$(A)/rules/scratch.md' && cmp -s '$R/shared/rules/hook-lifecycle.md' '$(A)/rules/hook-lifecycle.md' && cmp -s '$R/shared/skills/s1/SKILL.md' '$(A)/skills/s1/SKILL.md'"
-check "conflict: case-insensitive duplicate not deployed" "grep -qx 'shared hook lifecycle' '$(A)/rules/hook-lifecycle.md' && ! ls '$(A)/rules' | grep -qx 'Hook-Lifecycle.md'"
-check "conflict: other files still deployed" "[ -f '$(A)/rules/user1.md' ] && [ -f '$(A)/skills/s1/tests/t.md' ]"
+check "conflict: ERROR row per duplicate (hooks), none for .claude/ or dotprofile rules and skills" \
+    "row 'ERROR|harness files|h1.sh: dup in .claude/hooks' && row 'ERROR|harness files|Hooks-Manifest.json: dup in...' && [ \"\$(grep -c '^ERROR|' '$C/summary')\" = 2 ]"
+check "conflict: log_error names both sources" "grep -q '\[error\] Duplicate hooks name: h1.sh in .claude/hooks .* kept h1.sh from shared/hooks' '$LOG'"
+check "conflict: first source wins (hooks); shared rules and skills deployed" \
+    "cmp -s '$R/shared/hooks/h1.sh' '$(A)/hooks/h1.sh' && cmp -s '$R/shared/rules/scratch.md' '$(A)/rules/scratch.md' && cmp -s '$R/shared/rules/hook-lifecycle.md' '$(A)/rules/hook-lifecycle.md' && cmp -s '$R/shared/skills/s1/SKILL.md' '$(A)/skills/s1/SKILL.md'"
+check "conflict: case-insensitive duplicate not deployed" "grep -q '\"hooks\"' '$(A)/hooks/hooks-manifest.json' && ! ls '$(A)/hooks' | grep -qx 'Hooks-Manifest.json' && ! ls '$(A)/rules' | grep -qx 'Hook-Lifecycle.md'"
+check "conflict: other files still deployed" "[ -f '$(A)/skills/s2/SKILL.md' ] && [ -f '$(A)/skills/s1/tests/t.md' ]"
 
 # ---------------------------------------------------------------------------
 # Dry run: report, write nothing
 # ---------------------------------------------------------------------------
 setup_case dryrun
 run_dh "" -- --dry-run
-check "dry run: exit 0, counts" "[ \"\$(rc)\" = 0 ] && row 'OK|harness files|dry-run: 18 create, 0 update'"
+check "dry run: exit 0, counts" "[ \"\$(rc)\" = 0 ] && row 'OK|harness files|dry-run: 14 create, 0 update'"
 check "dry run: no harness directory created" \
     "[ ! -e '$(A)/reference' ] && [ ! -e '$(A)/rules' ] && [ ! -e '$(A)/bin' ]"
 check "dry run: config writer called with --dry-run" "perl -pe 's/\r//' '$H/writer-calls' | grep -qx 'called --dry-run'"
 run_dh "" --
-printf 'local edit\n' > "$(A)/rules/user1.md"
+printf 'local edit\n' > "$(A)/rules/hook-lifecycle.md"
 EXTRA_ENV="AITOOLS_DRY_RUN=1" run_dh "" --
 check "AITOOLS_DRY_RUN=1: would update 1, file untouched" \
-    "row 'OK|harness files|dry-run: 0 create, 1 update' && grep -qx 'local edit' '$(A)/rules/user1.md'"
+    "row 'OK|harness files|dry-run: 0 create, 1 update' && grep -qx 'local edit' '$(A)/rules/hook-lifecycle.md'"
 
 # ---------------------------------------------------------------------------
 # config.json writer failures
@@ -381,19 +398,19 @@ check "real writer, no bootstrap config: exit 1, ERROR row propagated" \
     "[ \"\$(rc)\" = 1 ] && row 'ERROR|harness files|config.json not generated' && grep -q '\[setup-user-config\] \[error\]' '$LOG'"
 
 # ---------------------------------------------------------------------------
-# Dotprofile missing / not a git checkout
+# The dotprofile is not a harness source: missing or not a git checkout changes nothing
 # ---------------------------------------------------------------------------
 setup_case nodot
 write_config "$C/no-such-dotprofile"
 run_dh "" --
-check "missing dotprofile: info, exit 0, 17 added" \
-    "[ \"\$(rc)\" = 0 ] && grep -q '\[info\] Dotprofile .* not found -- dotprofile rules and skills skipped' '$LOG' && row 'OK|harness files|17 added'"
+check "missing dotprofile: exit 0, 14 added, not mentioned" \
+    "[ \"\$(rc)\" = 0 ] && row 'OK|harness files|14 added' && ! grep -qi 'dotprofile' '$LOG'"
 
 setup_case nogitdot
 rm -rf "$D/.git"
 run_dh "" --
-check "dotprofile not in git: ERROR row, exit 1" \
-    "[ \"\$(rc)\" = 1 ] && row 'ERROR|harness files|dotprofile: not a git checkout' && [ ! -e '$(A)/rules/user1.md' ]"
+check "dotprofile not in git: exit 0, no ERROR row, its rules not deployed" \
+    "[ \"\$(rc)\" = 0 ] && ! grep -q '^ERROR|' '$C/summary' && row 'OK|harness files|14 added' && [ ! -e '$(A)/rules/user1.md' ]"
 
 # ---------------------------------------------------------------------------
 # Rules manifest (~/.aitools/rules/.aitools-rules-manifest) and retired rules
@@ -406,7 +423,7 @@ mf_is() {
 }
 T="$(printf '\t')"
 fresh_log() { mkdir -p "$C/logs"; : > "$C/logs/deploy.log"; }   # the log accumulates across the runs of a case
-FIRST_MF=("hook-lifecycle.md${T}shared" "p1.md${T}aitools" "scratch.md${T}shared" "sources-of-truth.md${T}aitools" "user1.md${T}dotprofile")
+FIRST_MF=("hook-lifecycle.md${T}shared" "scratch.md${T}shared")
 
 setup_case manifest
 mkdir -p "$(A)/rules"
@@ -426,7 +443,7 @@ gitc -C "$R" rm -q shared/rules/scratch.md; gitc -C "$R" commit -q -m retire
 fresh_log
 run_dh "" --
 check "retire: exit 0, line becomes retired" \
-    "[ \"\$(rc)\" = 0 ] && mf_is 'hook-lifecycle.md${T}shared' 'p1.md${T}aitools' 'scratch.md${T}retired' 'sources-of-truth.md${T}aitools' 'user1.md${T}dotprofile'"
+    "[ \"\$(rc)\" = 0 ] && mf_is 'hook-lifecycle.md${T}shared' 'scratch.md${T}retired'"
 check "retire: file backed up and removed, logged, DETAIL row" \
     "[ ! -e '$(A)/rules/scratch.md' ] && ls '$(A)/rules/'scratch.md.bak.* >/dev/null 2>&1 && grep -q 'Retired rule: scratch.md (was shared' '$LOG' && row 'DETAIL|harness files|retired: rules/scratch.md'"
 check "retire: a file never in a manifest is still preserved" "[ -f '$(A)/rules/old.md' ]"
@@ -438,37 +455,56 @@ printf 'scratch again\n' > "$(A)/rules/scratch.md"
 run_dh "" --
 check "retired name's file found again: backed up and removed" \
     "[ ! -e '$(A)/rules/scratch.md' ] && grep -lq 'scratch again' '$(A)/rules/'scratch.md.bak.* && grep -qx 'scratch.md${T}retired' '$(M)'"
-printf 'dotprofile scratch\n' > "$D/claude/rules/scratch.md"
-gitc -C "$D" add -A; gitc -C "$D" commit -q -m back
+printf 'shared scratch again\n' > "$R/shared/rules/scratch.md"
+gitc -C "$R" add -A; gitc -C "$R" commit -q -m back
 run_dh "" --
-check "reappearing name returns to its (new) source and is deployed" \
-    "[ \"\$(rc)\" = 0 ] && grep -qx 'scratch.md${T}dotprofile' '$(M)' && grep -qx 'dotprofile scratch' '$(A)/rules/scratch.md'"
+check "reappearing name returns to its source and is deployed" \
+    "[ \"\$(rc)\" = 0 ] && grep -qx 'scratch.md${T}shared' '$(M)' && grep -qx 'shared scratch again' '$(A)/rules/scratch.md'"
 
-# One run, two sources: the dotprofile is not listed (its names keep their
-# lines), .claude/rules is listed and retires the name it no longer has.
-write_config "$C/no-such-dotprofile"
-gitc -C "$R" rm -q .claude/rules/sources-of-truth.md; gitc -C "$R" commit -q -m retire-sot
-fresh_log
-run_dh "" --
-check "source not listed (no dotprofile): its names keep their lines, files kept" \
-    "[ \"\$(rc)\" = 0 ] && grep -qx 'user1.md${T}dotprofile' '$(M)' && grep -qx 'scratch.md${T}dotprofile' '$(M)' && [ -f '$(A)/rules/user1.md' ] && grep -q 'user1.md kept as dotprofile' '$LOG'"
-check "same run: a listed source retires its removed rule" \
-    "grep -qx 'sources-of-truth.md${T}retired' '$(M)' && [ ! -e '$(A)/rules/sources-of-truth.md' ]"
-write_config "$D"
-gitc -C "$D" rm -q claude/rules/user1.md; gitc -C "$D" commit -q -m retire-user
+# Migration from the three-source harness: a previous manifest (and
+# ~/.aitools/rules) still holds rules deployed from aitools .claude/rules
+# ("aitools") and the dotprofile ("dotprofile"). Both sources are withdrawn:
+# their names are retired on the next run, although neither is listed, and
+# whether or not the dotprofile exists. The .claude/rules and dotprofile files
+# that still exist in the repos change nothing.
+seed_withdrawn_rules() {
+    printf '# aitools rules manifest v1\nhook-lifecycle.md\tshared\np1.md\taitools\nscratch.md\tshared\nsources-of-truth.md\taitools\nuser1.md\tdotprofile\n' > "$(M)"
+    printf 'project rule\n' > "$(A)/rules/p1.md"
+    printf 'protected files\n' > "$(A)/rules/sources-of-truth.md"
+    printf 'user rule\n' > "$(A)/rules/user1.md"
+}
+seed_withdrawn_rules
 fresh_log
 run_dh "" -- --dry-run
-check "dry run: retirement reported, nothing removed or written" \
-    "[ -f '$(A)/rules/user1.md' ] && grep -qx 'user1.md${T}dotprofile' '$(M)' && grep -q 'DRY RUN\] Would back up and remove .*user1.md' '$LOG'"
-run_dh "" --
-check "dotprofile listed again: its removed rule is retired" \
-    "[ ! -e '$(A)/rules/user1.md' ] && grep -qx 'user1.md${T}retired' '$(M)'"
-
-printf '# aitools rules manifest v1\nScratch.md\tdotprofile\nP1.MD\taitools\n' > "$(M)"
+check "withdrawn sources, dry run: retirement reported, nothing removed or written" \
+    "[ \"\$(rc)\" = 0 ] && [ -f '$(A)/rules/p1.md' ] && [ -f '$(A)/rules/user1.md' ] && grep -qx 'p1.md${T}aitools' '$(M)' && grep -qx 'user1.md${T}dotprofile' '$(M)' && grep -q 'DRY RUN\] Would back up and remove .*rules/user1.md' '$LOG' && grep -q 'DRY RUN\] Would back up and remove .*rules/p1.md' '$LOG'"
 fresh_log
 run_dh "" --
-check "names compared case-insensitively: a case variant is not retired" \
-    "[ \"\$(rc)\" = 0 ] && [ -f '$(A)/rules/scratch.md' ] && [ -f '$(A)/rules/p1.md' ] && ! grep -q 'Retired rule' '$LOG' && ! grep -q 'Scratch.md' '$(M)'"
+check "withdrawn sources: aitools and dotprofile names retired (backed up, removed), DETAIL rows" \
+    "[ \"\$(rc)\" = 0 ] && mf_is 'hook-lifecycle.md${T}shared' 'p1.md${T}retired' 'scratch.md${T}shared' 'sources-of-truth.md${T}retired' 'user1.md${T}retired' && [ ! -e '$(A)/rules/p1.md' ] && [ ! -e '$(A)/rules/sources-of-truth.md' ] && [ ! -e '$(A)/rules/user1.md' ] && ls '$(A)/rules/'user1.md.bak.* >/dev/null 2>&1 && ls '$(A)/rules/'p1.md.bak.* >/dev/null 2>&1 && row 'DETAIL|harness files|retired: rules/p1.md' && row 'DETAIL|harness files|retired: rules/user1.md' && grep -q 'Retired rule: user1.md (was dotprofile' '$LOG' && grep -q 'Retired rule: p1.md (was aitools' '$LOG'"
+check "withdrawn sources: shared rules untouched" \
+    "[ -f '$(A)/rules/scratch.md' ] && [ -f '$(A)/rules/hook-lifecycle.md' ] && ! ls '$(A)/rules/' | grep -q '^hook-lifecycle.md.bak'"
+seed_withdrawn_rules
+write_config "$C/no-such-dotprofile"
+fresh_log
+run_dh "" --
+check "withdrawn sources, no dotprofile configured: retired all the same" \
+    "[ \"\$(rc)\" = 0 ] && grep -qx 'user1.md${T}retired' '$(M)' && grep -qx 'p1.md${T}retired' '$(M)' && [ ! -e '$(A)/rules/user1.md' ] && ! grep -q 'kept as' '$LOG'"
+write_config "$D"
+
+# A source that is not listed this run keeps its names (shared/rules missing)
+gitc -C "$R" rm -q -r shared/rules; gitc -C "$R" commit -q -m no-shared-rules
+fresh_log
+run_dh "" --
+check "source not listed (shared/rules missing): its names keep their lines, files kept" \
+    "[ \"\$(rc)\" = 0 ] && grep -qx 'scratch.md${T}shared' '$(M)' && [ -f '$(A)/rules/scratch.md' ] && grep -q 'scratch.md kept as shared' '$LOG' && grep -q 'Source shared/rules not found' '$LOG'"
+gitc -C "$R" checkout -q HEAD~1 -- shared/rules; gitc -C "$R" commit -q -m shared-rules-back
+
+printf '# aitools rules manifest v1\nScratch.md\tshared\nHOOK-LIFECYCLE.md\taitools\n' > "$(M)"
+fresh_log
+run_dh "" --
+check "names compared case-insensitively: a case variant is not retired (withdrawn source too)" \
+    "[ \"\$(rc)\" = 0 ] && [ -f '$(A)/rules/scratch.md' ] && [ -f '$(A)/rules/hook-lifecycle.md' ] && ! grep -q 'Retired rule' '$LOG' && ! grep -q 'Scratch.md' '$(M)' && ! grep -q 'HOOK-LIFECYCLE' '$(M)'"
 printf 'not a manifest\nold.md\tshared\n' > "$(M)"
 fresh_log
 run_dh "" --
@@ -500,15 +536,15 @@ fresh_log; run_dh_plain
 check "$lang: retired name with [ ] is backed up before removal" \
     "[ ! -e '$(A)/rules/a[1].md' ] && ls '$(A)/rules' | grep -qF 'a[1].md.bak.' && grep -qxF 'a[1].md${T}retired' '$(M)'"
 if $HAVE_READONLY; then
-    gitc -C "$R" rm -q .claude/rules/p1.md; gitc -C "$R" commit -q -m p1-gone
+    gitc -C "$R" rm -q shared/rules/hook-lifecycle.md; gitc -C "$R" commit -q -m hl-gone
     chmod 555 "$(A)/rules"
     fresh_log; run_dh_plain
     chmod 755 "$(A)/rules"
     check "$lang: failed backup keeps the file (ERROR row, exit 1)" \
-        "[ \"\$(rc)\" = 1 ] && [ -f '$(A)/rules/p1.md' ] && row 'ERROR|harness files|retire failed: p1.md' && grep -q 'backup failed' '$LOG'"
+        "[ \"\$(rc)\" = 1 ] && [ -f '$(A)/rules/hook-lifecycle.md' ] && row 'ERROR|harness files|retire failed: hook-lifecyc...' && grep -q 'backup failed' '$LOG'"
     fresh_log; run_dh_plain
     check "$lang: next run retries and removes it" \
-        "[ \"\$(rc)\" = 0 ] && [ ! -e '$(A)/rules/p1.md' ] && grep -qx 'p1.md${T}retired' '$(M)'"
+        "[ \"\$(rc)\" = 0 ] && [ ! -e '$(A)/rules/hook-lifecycle.md' ] && grep -qx 'hook-lifecycle.md${T}retired' '$(M)'"
     chmod 555 "$(A)/rules"
     run_dh "" --
     chmod 755 "$(A)/rules"
@@ -565,28 +601,36 @@ printf 'backup\n' > "$R/shared/skills/old.bak.1/SKILL.md"
 gitc -C "$R" add -A; gitc -C "$R" commit -q -m hidden
 
 run_sk; trace first
-check "$lang skills: first run writes the manifest (sorted, winning sources, dotprofile)" \
-    "[ \"\$(rc)\" = 0 ] && smf_is 'd1${T}dotprofile' 's1${T}shared' 's2${T}shared' 's3${T}aitools'"
-check "$lang skills: dotprofile skill deployed as a directory (nested file)" \
-    "grep -qx 'dotprofile ref' '$(A)/skills/d1/ref/x.md'"
+check "$lang skills: first run writes the manifest (sorted, shared only)" \
+    "[ \"\$(rc)\" = 0 ] && smf_is 's1${T}shared' 's2${T}shared'"
+check "$lang skills: .claude/skills and dotprofile skills not deployed" \
+    "[ ! -e '$(A)/skills/s3' ] && [ ! -e '$(A)/skills/d1' ]"
 check "$lang skills: hidden and *.bak.* skill directories neither deployed nor listed" \
     "[ ! -e '$(A)/skills/.hidden' ] && [ ! -e '$(A)/skills/old.bak.1' ] && ! grep -q 'hidden\|old' '$(SM)'"
 check "$lang skills: manifest not reported as preserved, no .tmp left" \
     "! grep -q 'Preserved: .*aitools-skills-manifest' '$LOG' && [ ! -e '$(SM).tmp' ]"
 
-mkdir -p "$R/.claude/skills/S2"
-printf 'project S2\n' > "$R/.claude/skills/S2/SKILL.md"
-gitc -C "$R" add -A; gitc -C "$R" commit -q -m dup
-run_sk; trace dup
-check "$lang skills: same name in shared/ and .claude/ -- shared wins, ERROR row, manifest shared" \
-    "[ \"\$(rc)\" = 1 ] && row 'ERROR|harness files|S2: dup in .claude/skills' && grep -qx 's2${T}shared' '$(SM)' && ! grep -q '^S2' '$(SM)' && grep -qx 'skill two' '$(A)/skills/s2/SKILL.md'"
-gitc -C "$R" rm -q -r .claude/skills/S2; gitc -C "$R" commit -q -m undup
+# Migration from the three-source harness: the previous manifest and
+# ~/.aitools/skills still hold s3 (from .claude/skills, "aitools") and d1 (from
+# the dotprofile). Both sources are withdrawn: both skills are retired.
+printf '# aitools skills manifest v1\nd1\tdotprofile\ns1\tshared\ns2\tshared\ns3\taitools\n' > "$(SM)"
+mkdir -p "$(A)/skills/d1/ref" "$(A)/skills/s3"
+printf 'dotprofile skill\n' > "$(A)/skills/d1/SKILL.md"
+printf 'dotprofile ref\n' > "$(A)/skills/d1/ref/x.md"
+printf 'skill three\n' > "$(A)/skills/s3/SKILL.md"
+run_sk --dry-run; trace dryrun
+check "$lang skills: withdrawn sources, dry run -- retirement reported, nothing removed or written" \
+    "[ \"\$(rc)\" = 0 ] && [ -f '$(A)/skills/d1/SKILL.md' ] && [ -f '$(A)/skills/s3/SKILL.md' ] && grep -qx 'd1${T}dotprofile' '$(SM)' && grep -q '\[DRY RUN\] Retired skill: d1 (was dotprofile' '$LOG' && grep -q '\[DRY RUN\] Retired skill: s3 (was aitools' '$LOG' && [ \"\$(n_bak d1)\" = 0 ]"
+run_sk; trace withdrawn
+check "$lang skills: withdrawn sources -- d1 and s3 retired (verified backups), DETAIL rows" \
+    "[ \"\$(rc)\" = 0 ] && smf_is 'd1${T}retired' 's1${T}shared' 's2${T}shared' 's3${T}retired' && [ ! -e '$(A)/skills/d1' ] && [ ! -e '$(A)/skills/s3' ] && [ \"\$(n_bak d1)\" = 1 ] && [ \"\$(n_bak s3)\" = 1 ] && grep -rqx 'dotprofile ref' '$(A)/skills/'d1.bak.*/ref/x.md && row 'DETAIL|harness files|retired: skills/d1' && row 'DETAIL|harness files|retired: skills/s3'"
 
 # The #74/#75 layout move: a skill moves from .claude/skills to shared/skills
+# and is deployed again, from shared
 gitc -C "$R" mv .claude/skills/s3 shared/skills/s3; gitc -C "$R" commit -q -m move
 run_sk; trace move
-check "$lang skills: moved .claude -> shared: source flips, nothing retired" \
-    "[ \"\$(rc)\" = 0 ] && grep -qx 's3${T}shared' '$(SM)' && [ -f '$(A)/skills/s3/SKILL.md' ] && ! grep -q 'Retired skill' '$LOG' && [ \"\$(n_bak s3)\" = 0 ]"
+check "$lang skills: moved .claude -> shared: deployed again, source shared, nothing retired" \
+    "[ \"\$(rc)\" = 0 ] && grep -qx 's3${T}shared' '$(SM)' && [ -f '$(A)/skills/s3/SKILL.md' ] && ! grep -q 'Retired skill' '$LOG' && [ \"\$(n_bak s3)\" = 1 ]"
 
 gitc -C "$R" rm -q -r shared/skills/s2; gitc -C "$R" commit -q -m retire
 run_sk; trace retire
@@ -599,26 +643,6 @@ check "$lang skills: backup directory not reported as preserved" "! grep -q 'Pre
 run_sk; trace rerun
 check "$lang skills: retired line persists; no new backup, no row" \
     "[ \"\$(rc)\" = 0 ] && grep -qx 's2${T}retired' '$(SM)' && [ \"\$(n_bak s2)\" = 1 ] && ! has_row 'retired:'"
-
-write_config "$C/no-such-dotprofile"
-run_sk; trace unlisted
-check "$lang skills: source not listed (no dotprofile) -- kept, line kept" \
-    "[ \"\$(rc)\" = 0 ] && grep -qx 'd1${T}dotprofile' '$(SM)' && [ -f '$(A)/skills/d1/SKILL.md' ] && grep -q 'Skills manifest: d1 kept as dotprofile' '$LOG'"
-write_config "$D"
-gitc -C "$D" rm -q -r claude/skills; gitc -C "$D" commit -q -m no-skills
-run_sk; trace perkind
-check "$lang skills: dotprofile rules listed, dotprofile skills not -- skill kept (per kind)" \
-    "[ \"\$(rc)\" = 0 ] && grep -qx 'd1${T}dotprofile' '$(SM)' && [ -f '$(A)/skills/d1/SKILL.md' ] && grep -qx 'user1.md${T}dotprofile' '$(M)' && grep -q 'Source dotprofile/skills not found' '$LOG'"
-
-mkdir -p "$D/claude/skills/d2"
-printf 'second dotprofile skill\n' > "$D/claude/skills/d2/SKILL.md"
-gitc -C "$D" add -A; gitc -C "$D" commit -q -m d2
-run_sk --dry-run; trace dryrun
-check "$lang skills: dry run -- retirement reported, nothing removed or written" \
-    "[ \"\$(rc)\" = 0 ] && [ -f '$(A)/skills/d1/SKILL.md' ] && grep -qx 'd1${T}dotprofile' '$(SM)' && [ ! -e '$(A)/skills/d2' ] && grep -q 'DRY RUN\] Would back up and remove .*skills/d1' '$LOG' && grep -q '\[DRY RUN\] Retired skill: d1 (was dotprofile' '$LOG' && [ \"\$(n_bak d1)\" = 0 ]"
-run_sk; trace d1gone
-check "$lang skills: dotprofile skills listed again -- d1 retired, d2 deployed" \
-    "[ \"\$(rc)\" = 0 ] && grep -qx 'd1${T}retired' '$(SM)' && grep -qx 'd2${T}dotprofile' '$(SM)' && [ ! -e '$(A)/skills/d1' ] && [ \"\$(n_bak d1)\" = 1 ]"
 
 # A skill with no top-level *.md, one named with glob characters ($BN; old
 # backups pruned to 5 by literal name; a decoy that the glob would match is
@@ -723,24 +747,23 @@ fi
 # Rule names with an upper- or mixed-case .md extension (plan rules-fanout-claude.md
 # F2/R9; D1 "case-insensitive, *.md only, skipping *.bak.*"): deployed as named,
 # listed in the manifest, no warning on the next run, retired when the source
-# goes; a case-only duplicate is one ERROR (first source wins); .bak. names are
-# still rejected.
+# goes; a case variant in the dotprofile is not a source (no duplicate, not
+# deployed); .bak. names are still rejected.
 # ---------------------------------------------------------------------------
 # lsx NAME -- NAME is in ~/.aitools/rules with exactly this case (macOS and
 # Windows file systems are case-insensitive, so [ -f ] alone cannot tell X.MD from x.md)
 lsx() { ls "$(A)/rules" | grep -qxF "$1"; }
 no_warn_rows() { ! grep -qE '^(WARN|ACTION)\|' "$C/summary"; }
 setup_case upper
-printf 'upper rule\n' > "$D/claude/rules/X.MD"
-printf 'upper backup\n' > "$D/claude/rules/Old.BAK.1.MD"
+printf 'upper rule\n' > "$R/shared/rules/X.MD"
+printf 'upper backup\n' > "$R/shared/rules/Old.BAK.1.MD"
 printf 'mixed rule\n' > "$R/shared/rules/Mixed.Md"
-gitc -C "$D" add -A; gitc -C "$D" commit -q -m upper
 gitc -C "$R" add -A; gitc -C "$R" commit -q -m upper
 fresh_log; run_dh_plain
 check "$lang upper: X.MD and Mixed.Md deployed as named, exit 0, no WARN/ACTION row" \
     "[ \"\$(rc)\" = 0 ] && lsx X.MD && lsx Mixed.Md && grep -qx 'upper rule' '$(A)/rules/X.MD' && no_warn_rows"
-check "$lang upper: listed in the manifest with the winning source" \
-    "grep -qxF 'X.MD${T}dotprofile' '$(M)' && grep -qxF 'Mixed.Md${T}shared' '$(M)'"
+check "$lang upper: listed in the manifest with their source" \
+    "grep -qxF 'X.MD${T}shared' '$(M)' && grep -qxF 'Mixed.Md${T}shared' '$(M)'"
 check "$lang upper: .BAK. name (any case) neither deployed nor listed" \
     "! ls '$(A)/rules' | grep -qi '^old\\.bak' && ! grep -qi '^old\\.bak' '$(M)'"
 
@@ -753,8 +776,8 @@ printf 'dotprofile dup\n' > "$D/claude/rules/DUP.MD"
 gitc -C "$R" add -A; gitc -C "$R" commit -q -m dup
 gitc -C "$D" add -A; gitc -C "$D" commit -q -m dup
 fresh_log; run_dh_plain
-check "$lang upper: case-only duplicate (dup.md, DUP.MD) -- first source wins, one ERROR row, exit 1" \
-    "[ \"\$(rc)\" = 1 ] && [ \"\$(grep -c '^ERROR|' '$C/summary')\" = 1 ] && row 'ERROR|harness files|DUP.MD: dup in dotprofile' && lsx dup.md && ! lsx DUP.MD && grep -qx 'shared dup' '$(A)/rules/dup.md' && grep -qxF 'dup.md${T}shared' '$(M)' && ! grep -q '^DUP' '$(M)'"
+check "$lang upper: case variant in the dotprofile (DUP.MD) -- not a source: no ERROR row, not deployed" \
+    "[ \"\$(rc)\" = 0 ] && ! grep -q '^ERROR|' '$C/summary' && lsx dup.md && ! lsx DUP.MD && grep -qx 'shared dup' '$(A)/rules/dup.md' && grep -qxF 'dup.md${T}shared' '$(M)' && ! grep -q '^DUP' '$(M)'"
 gitc -C "$D" rm -q claude/rules/DUP.MD; gitc -C "$D" commit -q -m undup
 
 printf 'Q.MD.BAK.1\tshared\nq.MD.bak.2\tshared\n' >> "$(M)"
@@ -762,7 +785,7 @@ fresh_log; run_dh_plain
 check "$lang upper: manifest names with .bak. (any case) still ignored" \
     "[ \"\$(rc)\" = 0 ] && [ \"\$(grep -c 'line ignored' '$LOG')\" = 2 ] && grep -q 'line ignored: Q.MD.BAK.1<TAB>shared' '$LOG' && ! grep -qi '^q\\.md\\.bak' '$(M)'"
 
-gitc -C "$D" rm -q claude/rules/X.MD; gitc -C "$D" commit -q -m retire-upper
+gitc -C "$R" rm -q shared/rules/X.MD; gitc -C "$R" commit -q -m retire-upper
 gitc -C "$R" rm -q shared/rules/Mixed.Md; gitc -C "$R" commit -q -m retire-mixed
 fresh_log; run_dh_plain
 check "$lang upper: source removed -- retired (backup kept, file removed), DETAIL rows, no WARN" \

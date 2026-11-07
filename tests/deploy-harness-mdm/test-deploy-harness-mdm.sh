@@ -14,16 +14,18 @@
 # the size gate (a script over the Intune limit is a WARN with its fix hint,
 # listed again at the end, and the build passes; a forced case pads the
 # fixture dotprofile so a .sh goes over 1 MB), cursor header port and step 4
-# (MDM), no adopt target in MDM, dotprofile rules and skills embedded (skills
-# manifest same as dev), first run / rerun / edit / dry run equivalence
+# (MDM), no adopt target in MDM, shared rules embedded and dotprofile rules and
+# skills not (not harness sources, commander 2026-11-06; skills manifest same
+# as dev), first run / rerun / edit / dry run equivalence
 # (trees, exec bits, summary rows, exit codes), no git needed at run time,
 # --help, config.json: a fresh HOME (no bootstrap) skips the writer with OK
 # "config.json" "n/a (no bootstrap)" and exit 0, the dev path calls the
 # writer, --skip-config / -SkipConfig skip it (dev and MDM); a damaged payload
 # (whole-file checksum), a damaged record, a malformed record, a missing
-# payload, a truncated script (.sh), conflicts (same ERROR rows, exit 1),
-# build from a non-git dotprofile (pre-push step 7's git-archive copy) gives
-# the same output.
+# payload, a truncated script (.sh), a dotprofile rule named like a project
+# rule (not a source: no conflict, same rows as dev), build from a non-git
+# dotprofile (pre-push step 7's git-archive copy) gives the same output.
+# Probe files: this repo's shared/rules/scratch.md and tool-ops.md.
 #
 # Platform targeting (plans/ci-platform-targeting.md): build-deploy.sh is a
 # bash builder that runs on every platform (Git Bash on Windows;
@@ -49,7 +51,7 @@
 set -uo pipefail
 
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
-    perl -ne 'print if $. >= 2 && $. <= 47' "$0"
+    perl -ne 'print if $. >= 2 && $. <= 49' "$0"
     exit 0
 fi
 if [ "${1:-}" = "--bash-only" ]; then shift; fi
@@ -108,6 +110,10 @@ printf 'dotprofile skill ref\n' > "$DOT/claude/skills/dskill/ref/r.md"
 git -C "$DOT" init -q
 gitc -C "$DOT" add -A
 gitc -C "$DOT" commit -q -m fixture
+# Probe rules: deployed from this repo's shared/rules (the dotprofile rules and
+# skills above are not harness sources and must never be embedded or deployed)
+P1="$ROOT/shared/rules/scratch.md"
+P2="$ROOT/shared/rules/tool-ops.md"
 
 # write_config HOME_DIR [native|posix] -- bootstrap config.json. native (the
 # default): the paths as the script under test reads them (pwsh on Windows);
@@ -294,8 +300,10 @@ check "cursor (MDM): header ported from the source (five things, rules scope)" \
     "grep -q '^# Does five things:' '$G/setup-user-cursor.sh' && grep -q '^# Does five things:' '$G/setup-user-cursor.ps1' && grep -q 'Managed: one <name>.mdc per' '$G/setup-user-cursor.sh' && grep -q 'Managed: one <name>.mdc per' '$G/setup-user-cursor.ps1' && ! grep -q 'Does three things' '$G/setup-user-cursor.sh'"
 check "MDM: no adopt target (.sh and .ps1)" \
     "grep -qF '\"\$TOOL\" \"\$item\" \"\"  # MDM' '$G/deploy-harness.sh' && ! grep -qF '\"\$item\" \"\$src\"' '$G/deploy-harness.sh' && grep -qF -- '-AdoptPath \"\"  # MDM' '$G/deploy-harness.ps1' && ! grep -qF -- '-AdoptPath \$p.Src' '$G/deploy-harness.ps1'"
-check "MDM: dotprofile rules embedded (payload record)" \
-    "perl -ne '\$f = 1 if /^dotprofile\\/claude\\/rules\\/user1\\.md\\t0\\t\\d+\\t[0-9a-f]{64}\$/; END { exit(\$f ? 0 : 1) }' '$G/deploy-harness.payload'"
+check "MDM: shared rules embedded (payload record)" \
+    "perl -ne '\$f = 1 if /^aitools\\/shared\\/rules\\/scratch\\.md\\t0\\t\\d+\\t[0-9a-f]{64}\$/; END { exit(\$f ? 0 : 1) }' '$G/deploy-harness.payload'"
+check "MDM: no dotprofile, .claude/rules or .claude/skills record in the payload" \
+    "! grep -qE '^(dotprofile/|aitools/\\.claude/(rules|skills)/)' '$G/deploy-harness.payload'"
 check "payload: data file beside the scripts, none inline" \
     "[ -f '$G/deploy-harness.payload' ] && ! grep -q '^mdm_unpack ' '$G/deploy-harness.sh' && ! grep -q '^Expand-MdmPayload ' '$G/deploy-harness.ps1' && grep -q '^MDM_PAYLOAD_SHA256=[0-9a-f]\{64\}$' '$G/deploy-harness.sh'"
 # size_gate_warned DIR OUT -- every generated .ps1 (200000) / .sh (1000000) at or
@@ -375,9 +383,9 @@ OUT=""
 check "payload: the scripts' sha256 (.sh and .ps1) is the payload's (CRs removed)" \
     "[ -f '$G/deploy-harness.payload' ] && [ -n \"\$(perl -ne 'print \$1 if /^MDM_PAYLOAD_SHA256=(\\S+)/' '$G/deploy-harness.sh')\" ] && [ \"\$(perl -MDigest::SHA=sha256_hex -0777 -ne 's/\\r//g; print sha256_hex(\$_)' '$G/deploy-harness.payload')\" = \"\$(perl -ne 'print \$1 if /^MDM_PAYLOAD_SHA256=(\\S+)/' '$G/deploy-harness.sh')\" ] && [ \"\$(perl -ne 'print \$1 if /^MDM_PAYLOAD_SHA256=(\\S+)/' '$G/deploy-harness.sh')\" = \"\$(perl -ne 'print \$1 if /^\\\$mdmPayloadSha256 = \"([0-9a-f]+)\"/' '$G/deploy-harness.ps1')\" ]"
 check "markers: no marker line copied into the MDM scripts" \
-    "[ -f '$G/deploy-harness.sh' ] && [ -f '$G/deploy-harness.ps1' ] && ! grep -qE '^# --- (BEGIN|END) (scope|body|config bootstrap check|dotprofile lookup) ' '$G/deploy-harness.sh' && ! grep -qE '^# --- (BEGIN|END) (scope|body|config bootstrap check|dotprofile lookup) ' '$G/deploy-harness.ps1'"
+    "[ -f '$G/deploy-harness.sh' ] && [ -f '$G/deploy-harness.ps1' ] && ! grep -qE '^# --- (BEGIN|END) (scope|body|config bootstrap check|source setup) ' '$G/deploy-harness.sh' && ! grep -qE '^# --- (BEGIN|END) (scope|body|config bootstrap check|source setup) ' '$G/deploy-harness.ps1'"
 check "markers: sections 1, 3 and 5b extracted, section 2 replaced, scope in the header" \
-    "( for f in '$G/deploy-harness.sh' '$G/deploy-harness.ps1'; do grep -q '^# 1\\. config.json' \"\$f\" && grep -q '^# 3\\. The six directories' \"\$f\" && grep -q '^# 5b\\. Rules manifest' \"\$f\" && grep -q '^# 2\\. (MDM) Embedded sources' \"\$f\" && ! grep -q '^# 2\\. Dotprofile' \"\$f\" && grep -q '^# Managed (' \"\$f\" || exit 1; done )"
+    "( for f in '$G/deploy-harness.sh' '$G/deploy-harness.ps1'; do grep -q '^# 1\\. config.json' \"\$f\" && grep -q '^# 3\\. The six directories' \"\$f\" && grep -q '^# 5b\\. Rules manifest' \"\$f\" && grep -q '^# 2\\. (MDM) Embedded sources' \"\$f\" && ! grep -q '^# 2\\. Sources' \"\$f\" && grep -q '^# Managed (' \"\$f\" || exit 1; done )"
 check "markers: MDM bootstrap check replaced the dev comment" \
     "grep -qF 'SKIP_CONFIG=\"no bootstrap\"' '$G/deploy-harness.sh' && grep -qF '\$configSkip = \"no bootstrap\"' '$G/deploy-harness.ps1' && ! grep -q 'Dev path: aitools-install writes the bootstrap keys' '$G/deploy-harness.sh'"
 
@@ -392,23 +400,23 @@ check "first run: same summary rows" "same_summary eq"
 rows_golden "$TMP_ROOT/eq-mdm.summary" "$TMP_ROOT/eq-first.rows"
 check "first run parity: MDM summary rows (numbers as N) match golden (sh and ps1 share it)" "golden_match eq-first.rows '$TMP_ROOT/eq-first.rows'"
 check "first run: config.json written by the MDM writer, same as dev" "cmp -s '$TMP_ROOT/eq-dev/.aitools/config.json' '$TMP_ROOT/eq-mdm/.aitools/config.json'"
-check "first run: dotprofile rule deployed by MDM" "grep -qx 'user rule one' '$TMP_ROOT/eq-mdm/.aitools/rules/user1.md'"
-check "first run: dotprofile skill embedded and deployed by MDM (nested file)" \
-    "perl -ne '\$f = 1 if /^dotprofile\\/claude\\/skills\\/dskill\\/ref\\/r\\.md\\t0\\t\\d+\\t[0-9a-f]{64}\$/; END { exit(\$f ? 0 : 1) }' '$G/deploy-harness.payload' && grep -qx 'dotprofile skill ref' '$TMP_ROOT/eq-mdm/.aitools/skills/dskill/ref/r.md'"
-check "first run: skills manifest written by MDM, same as dev, lists the dotprofile skill" \
-    "cmp -s '$TMP_ROOT/eq-dev/.aitools/skills/.aitools-skills-manifest' '$TMP_ROOT/eq-mdm/.aitools/skills/.aitools-skills-manifest' && grep -qx \"dskill\$(printf '\\t')dotprofile\" '$TMP_ROOT/eq-mdm/.aitools/skills/.aitools-skills-manifest'"
+check "first run: shared rule deployed by MDM" "cmp -s '$P1' '$TMP_ROOT/eq-mdm/.aitools/rules/scratch.md'"
+check "first run: dotprofile rules and skills deployed by neither path" \
+    "[ ! -e '$TMP_ROOT/eq-mdm/.aitools/rules/user1.md' ] && [ ! -e '$TMP_ROOT/eq-dev/.aitools/rules/user1.md' ] && [ ! -e '$TMP_ROOT/eq-mdm/.aitools/skills/dskill' ] && [ ! -e '$TMP_ROOT/eq-dev/.aitools/skills/dskill' ]"
+check "first run: manifests written by MDM, same as dev, shared sources only" \
+    "cmp -s '$TMP_ROOT/eq-dev/.aitools/skills/.aitools-skills-manifest' '$TMP_ROOT/eq-mdm/.aitools/skills/.aitools-skills-manifest' && cmp -s '$TMP_ROOT/eq-dev/.aitools/rules/.aitools-rules-manifest' '$TMP_ROOT/eq-mdm/.aitools/rules/.aitools-rules-manifest' && perl -ne '\$bad = 1 if !/^#/ && !/\\tshared\\r?\$/; END { exit(\$bad ? 1 : 0) }' '$TMP_ROOT/eq-mdm/.aitools/skills/.aitools-skills-manifest' '$TMP_ROOT/eq-mdm/.aitools/rules/.aitools-rules-manifest'"
 check "first run: MDM needed no git" "no_fake_git"
 run dev eq
 run mdm eq
 check "rerun: everything verified, same rows" "grep -q '^OK|harness files|[0-9]* verified$' '$TMP_ROOT/eq-mdm.summary' && same_summary eq && same_rc eq"
-printf 'local edit\n' > "$TMP_ROOT/eq-dev/.aitools/rules/user2.md"
-printf 'local edit\n' > "$TMP_ROOT/eq-mdm/.aitools/rules/user2.md"
+printf 'local edit\n' > "$TMP_ROOT/eq-dev/.aitools/rules/tool-ops.md"
+printf 'local edit\n' > "$TMP_ROOT/eq-mdm/.aitools/rules/tool-ops.md"
 run dev eq
 run mdm eq
 # WARN, not OK: the non-interactive overwrite logs a warning and the library
 # raises the row to WARN; the dev path does the same (next check).
 check "edit then rerun (non-interactive): source wins in MDM, 1 updated" \
-    "grep -qx 'user rule two' '$TMP_ROOT/eq-mdm/.aitools/rules/user2.md' && grep -q '^WARN|harness files|1 updated' '$TMP_ROOT/eq-mdm.summary'"
+    "cmp -s '$P2' '$TMP_ROOT/eq-mdm/.aitools/rules/tool-ops.md' && grep -q '^WARN|harness files|1 updated' '$TMP_ROOT/eq-mdm.summary'"
 check "edit then rerun: same rows and files as dev" "same_summary eq && same_trees eq"
 if ! same_summary eq; then diff "$TMP_ROOT/eq-dev.summary" "$TMP_ROOT/eq-mdm.summary" | perl -pe 's/^/      | /'; fi
 rows_golden "$TMP_ROOT/eq-mdm.summary" "$TMP_ROOT/eq-edit.rows"
@@ -423,7 +431,7 @@ if [ "$TEST_PLATFORM" = windows ] && $HAVE_PTY && ! python3 -c 'import winpty' >
     HAVE_PTY=false
 fi
 if $HAVE_PTY; then
-    printf 'local edit\n' > "$TMP_ROOT/eq-mdm/.aitools/rules/user1.md"
+    printf 'local edit\n' > "$TMP_ROOT/eq-mdm/.aitools/rules/scratch.md"
     OUT="$TMP_ROOT/pty-mdm.out"
     : > "$TMP_ROOT/pty-mdm.summary"
     if [ "$LANG_RUN" = sh ]; then
@@ -441,7 +449,7 @@ if $HAVE_PTY; then
     perl -pi -e 's/\r//g' "$TMP_ROOT/pty-mdm.summary"
     perl -pe 's/\e\[[0-9;?]*[A-Za-z]//g; s/\r//g' "$OUT" > "$OUT.plain"
     check "terminal review (MDM): overwrite offered, adopt and merge not; skip keeps LOCAL" \
-        "[ \"\$(rc_of pty-mdm)\" = 0 ] && grep -q '\[o\]verwrite' '$OUT.plain' && ! grep -q '\[a\]ccept & adopt' '$OUT.plain' && ! grep -q '\[m\]erge & adopt' '$OUT.plain' && grep -qx 'local edit' '$TMP_ROOT/eq-mdm/.aitools/rules/user1.md' && grep -q '^WARN|harness files|1 skipped' '$TMP_ROOT/pty-mdm.summary'"
+        "[ \"\$(rc_of pty-mdm)\" = 0 ] && grep -q '\[o\]verwrite' '$OUT.plain' && ! grep -q '\[a\]ccept & adopt' '$OUT.plain' && ! grep -q '\[m\]erge & adopt' '$OUT.plain' && grep -qx 'local edit' '$TMP_ROOT/eq-mdm/.aitools/rules/scratch.md' && grep -q '^WARN|harness files|1 skipped' '$TMP_ROOT/pty-mdm.summary'"
     if $FAKE_GIT_EXE; then
         check "terminal review (MDM) without git: diff unavailable, menu still shown" \
             "grep -q 'diff unavailable' '$OUT.plain' && grep -q '\[o\]verwrite' '$OUT.plain'"
@@ -487,7 +495,7 @@ run_fresh fresh
 check "fresh HOME (MDM, no bootstrap): exit 0, OK config.json n/a row, no ERROR row" \
     "[ \"\$(rc_of fresh-mdm)\" = 0 ] && row fresh-mdm 'OK|config.json|n/a (no bootstrap)' && ! grep -q '^ERROR|' '$TMP_ROOT/fresh-mdm.summary'"
 check "fresh HOME (MDM): writer not called, harness files deployed" \
-    "[ \"\$(writer_calls)\" = 0 ] && grep -qx 'user rule one' '$TMP_ROOT/fresh-mdm/.aitools/rules/user1.md' && grep -q '^OK|harness files|[0-9]* added' '$TMP_ROOT/fresh-mdm.summary' && [ ! -e '$TMP_ROOT/fresh-mdm/.aitools/config.json' ]"
+    "[ \"\$(writer_calls)\" = 0 ] && cmp -s '$P1' '$TMP_ROOT/fresh-mdm/.aitools/rules/scratch.md' && grep -q '^OK|harness files|[0-9]* added' '$TMP_ROOT/fresh-mdm.summary' && [ ! -e '$TMP_ROOT/fresh-mdm/.aitools/config.json' ]"
 rows_golden "$TMP_ROOT/fresh-mdm.summary" "$TMP_ROOT/fresh.rows"
 check "fresh HOME parity: summary rows (numbers as N) match golden" "golden_match fresh.rows '$TMP_ROOT/fresh.rows'"
 # Only one bootstrap key: still no bootstrap
@@ -524,9 +532,9 @@ check "--help (dev): documents $SKIP_FLAG, no marker lines" \
 # ---------------------------------------------------------------------------
 mkdir -p "$TMP_ROOT/bad/deploy"
 cp -Rp "$TMP_ROOT/b1/deploy/." "$TMP_ROOT/bad/deploy/"
-# corrupt_record FILE -- replace the first base64 line of user1.md's record
+# corrupt_record FILE -- replace the first base64 line of scratch.md's record
 corrupt_record() {
-    perl -i -ne 'if ($skip) { print "QUJD\n"; $skip = 0; next } $skip = 1 if /^dotprofile\/claude\/rules\/user1\.md\t/; print' "$1"
+    perl -i -ne 'if ($skip) { print "QUJD\n"; $skip = 0; next } $skip = 1 if /^aitools\/shared\/rules\/scratch\.md\t/; print' "$1"
 }
 restore_bad() {  # the b1 payload and generated script of the language under test
     cp -p "$TMP_ROOT/b1/deploy/deploy-harness.payload" "$TMP_ROOT/bad/deploy/deploy-harness.payload"
@@ -543,7 +551,7 @@ set_payload_sha "$TMP_ROOT/bad/deploy"
 mkdir -p "$TMP_ROOT/pstmp"
 PS_TMPDIR="$TMP_ROOT/pstmp/" run mdm record
 check "damaged record: exit 1, ERROR row, that file not deployed, the others are" \
-    "[ \"\$(rc_of record-mdm)\" = 1 ] && grep -q '^ERROR|harness files|1 embedded file(s) damaged' '$TMP_ROOT/record-mdm.summary' && grep -q 'user1.md is damaged' '$TMP_ROOT/record-mdm.out' && [ ! -e '$TMP_ROOT/record-mdm/.aitools/rules/user1.md' ] && [ -f '$TMP_ROOT/record-mdm/.aitools/rules/user2.md' ]"
+    "[ \"\$(rc_of record-mdm)\" = 1 ] && grep -q '^ERROR|harness files|1 embedded file(s) damaged' '$TMP_ROOT/record-mdm.summary' && grep -q 'shared/rules/scratch.md is damaged' '$TMP_ROOT/record-mdm.out' && [ ! -e '$TMP_ROOT/record-mdm/.aitools/rules/scratch.md' ] && [ -f '$TMP_ROOT/record-mdm/.aitools/rules/tool-ops.md' ]"
 if [ "$LANG_RUN" = ps1 ]; then
     # .ps1: the stage directory is removed in a finally block, also on exit 1.
     # Where it was made: the "unpacked in" path's parent is pstmp. The same
@@ -571,7 +579,7 @@ restore_bad
 perl -pi -e 's/\n/\r\n/' "$TMP_ROOT/bad/deploy/deploy-harness.payload"
 run mdm crlf
 check "CRLF payload: verified and deployed (exit 0)" \
-    "[ \"\$(rc_of crlf-mdm)\" = 0 ] && grep -qx 'user rule one' '$TMP_ROOT/crlf-mdm/.aitools/rules/user1.md'"
+    "[ \"\$(rc_of crlf-mdm)\" = 0 ] && cmp -s '$P1' '$TMP_ROOT/crlf-mdm/.aitools/rules/scratch.md'"
 rm -f "$TMP_ROOT/bad/deploy/deploy-harness.payload"
 run mdm nopayload
 check "missing payload: exit 1, ERROR payload missing, nothing deployed" \
@@ -603,7 +611,7 @@ fi
 check "truncation guard: the first command of the generated .sh (before the library)" \
     "[ \"\$(perl -ne 'if (/^if command -v perl .*END OF GENERATED SCRIPT/) { print \$.; exit }' '$G/deploy-harness.sh')\" -lt \"\$(perl -ne 'if (/^logging_init\\b/ || /^set -euo pipefail\$/) { print \$.; exit }' '$G/deploy-harness.sh')\" ]"
 # A record line with a non-numeric size (sha updated): malformed, payload damaged
-perl -i -pe 's/^(dotprofile\/claude\/rules\/user1\.md\t0\t)\d+/${1}x/' "$TMP_ROOT/bad/deploy/deploy-harness.payload"
+perl -i -pe 's/^(aitools\/shared\/rules\/scratch\.md\t0\t)\d+/${1}x/' "$TMP_ROOT/bad/deploy/deploy-harness.payload"
 set_payload_sha "$TMP_ROOT/bad/deploy"
 run mdm malformed
 check "malformed record (size not a number): exit 1, ERROR payload damaged, nothing deployed" \
@@ -611,20 +619,20 @@ check "malformed record (size not a number): exit 1, ERROR payload damaged, noth
 BUILD=b1
 
 # ---------------------------------------------------------------------------
-# Conflicts: a dotprofile rule named like a project rule (case differs)
+# A dotprofile rule named like a shared rule (case differs): the dotprofile is
+# not a harness source, so no conflict and nothing deployed from it
 # ---------------------------------------------------------------------------
-printf 'dotprofile copy\n' > "$DOT/claude/rules/Git-Safety.md"
+printf 'dotprofile copy\n' > "$DOT/claude/rules/Scratch.md"
 gitc -C "$DOT" add -A
 gitc -C "$DOT" commit -q -m dup
 BUILD=b2
 build b2
 run dev dup
 run mdm dup
-check "conflict: both exit 1 with the same ERROR row" \
-    "[ \"\$(rc_of dup-dev)\" = 1 ] && same_rc dup && row dup-mdm 'ERROR|harness files|Git-Safety.md: dup in dotpr...' && same_summary dup"
-check "conflict: first source wins in MDM" "cmp -s '$ROOT/.claude/rules/git-safety.md' '$TMP_ROOT/dup-mdm/.aitools/rules/git-safety.md' && same_trees dup"
-rows_golden "$TMP_ROOT/dup-mdm.summary" "$TMP_ROOT/dup.rows"
-check "conflict parity: MDM summary rows (numbers as N) match golden" "golden_match dup.rows '$TMP_ROOT/dup.rows'"
+check "dotprofile rule named like a shared rule: both exit 0, no ERROR row, same rows" \
+    "[ \"\$(rc_of dup-dev)\" = 0 ] && same_rc dup && ! grep -q '^ERROR|' '$TMP_ROOT/dup-mdm.summary' && same_summary dup"
+check "dotprofile rule named like a shared rule: shared copy deployed in MDM, same trees" \
+    "cmp -s '$P1' '$TMP_ROOT/dup-mdm/.aitools/rules/scratch.md' && ! ls '$TMP_ROOT/dup-mdm/.aitools/rules' | grep -qx 'Scratch.md' && same_trees dup"
 
 # ---------------------------------------------------------------------------
 # Build from a non-git dotprofile (pre-push step 7 builds into a git-archive copy)
@@ -633,8 +641,10 @@ mv "$DOT/.git" "$TMP_ROOT/dot.git"
 BUILD=b3
 build b3
 mv "$TMP_ROOT/dot.git" "$DOT/.git"
-check "non-git dotprofile: build exit 0 with a warning" \
-    "[ \"\$(rc_of build-b3)\" = 0 ] && grep -q 'not in a git work tree -- embedding every file on disk' '$TMP_ROOT/build-b3.out'"
+# The dotprofile holds no harness source (shared/ only since 2026-11-06), so the
+# snapshot never lists it and its git state cannot change the payload.
+check "non-git dotprofile: build exit 0, no dotprofile directory snapshotted" \
+    "[ \"\$(rc_of build-b3)\" = 0 ] && ! grep -q 'not in a git work tree -- embedding every file on disk' '$TMP_ROOT/build-b3.out'"
 check "non-git dotprofile: generated deploy-harness identical to the git build" \
     "cmp -s '$TMP_ROOT/b2/deploy/deploy-harness.sh' '$TMP_ROOT/b3/deploy/deploy-harness.sh' && cmp -s '$TMP_ROOT/b2/deploy/deploy-harness.ps1' '$TMP_ROOT/b3/deploy/deploy-harness.ps1' && cmp -s '$TMP_ROOT/b2/deploy/deploy-harness.payload' '$TMP_ROOT/b3/deploy/deploy-harness.payload'"
 
@@ -647,9 +657,7 @@ check "non-git dotprofile: generated deploy-harness identical to the git build" 
 RC="$TMP_ROOT/repo-copy"
 mkdir -p "$RC/.claude"
 cp -Rp "$ROOT/scripts" "$ROOT/shared" "$ROOT/reference" "$ROOT/registries" "$RC/"
-for d in hooks skills rules; do
-    if [ -d "$ROOT/.claude/$d" ]; then cp -Rp "$ROOT/.claude/$d" "$RC/.claude/"; fi
-done
+if [ -d "$ROOT/.claude/hooks" ]; then cp -Rp "$ROOT/.claude/hooks" "$RC/.claude/"; fi
 cp -p "$DOT/deploy/deploy-harness.sh" "$TMP_ROOT/deploy-before.sh"
 # marker_build NAME PERL_EDIT FILE -- edit FILE in the copy, build, restore it
 marker_build() {
@@ -663,9 +671,9 @@ marker_build() {
     echo $? > "$TMP_ROOT/build-$1.rc"
     cp -p "$TMP_ROOT/$3.orig" "$RC/scripts/$3"
 }
-marker_build nomark 's/^# --- END dotprofile lookup .*\n//' deploy-harness.sh
+marker_build nomark 's/^# --- END source setup .*\n//' deploy-harness.sh
 check "markers: a missing END marker fails the build (.sh source)" \
-    "[ \"\$(rc_of build-nomark)\" != 0 ] && grep -q 'END dotprofile lookup.*matches 0 lines' '$TMP_ROOT/build-nomark.out'"
+    "[ \"\$(rc_of build-nomark)\" != 0 ] && grep -q 'END source setup.*matches 0 lines' '$TMP_ROOT/build-nomark.out'"
 marker_build dupmark 's/^(# --- BEGIN scope .*)$/$1\n$1/' deploy-harness.ps1
 check "markers: a duplicated BEGIN marker fails the build (.ps1 source)" \
     "[ \"\$(rc_of build-dupmark)\" != 0 ] && grep -q 'BEGIN scope.*matches 2 lines' '$TMP_ROOT/build-dupmark.out'"

@@ -19,7 +19,7 @@
 #               --skip-config (OK "config.json" "n/a (written by installer)")
 #   install no Step 5 -- the repos path is unusable, Step 5 skips the writer:
 #               Step 8b runs it (bare, once) and passes no --skip-config
-#   install exit 1 -- a duplicate rule: ERROR row, the install continues, exit 1
+#   install exit 1 -- a duplicate hook: ERROR row, the install continues, exit 1
 #   install abort  -- [x]abort at a review menu (pty): exit 2, Step 9 not reached
 #   loop     -- deploy_configs (extracted from scripts/aitools): writer runs once,
 #               deploy-harness first, the other 7 scripts run
@@ -92,7 +92,7 @@ DEPLOY_STUBS="setup-user-claude setup-user-cursor setup-user-mcp setup-user-skil
 # setup_case NAME: fixture repo ($R), HOME ($H), stub bin ($B)
 setup_case() {
     C="$TMP_ROOT/$1"; R="$C/repo"; H="$C/home"; B="$C/bin"
-    mkdir -p "$R/scripts" "$R/reference" "$R/shared/hooks" "$R/shared/rules" "$R/.claude/rules" \
+    mkdir -p "$R/scripts" "$R/reference" "$R/shared/hooks" "$R/shared/rules" \
         "$H/.aitools" "$B" "$C/repos"
     cp "$ROOT/scripts/aitools-install.sh" "$ROOT/scripts/aitools" "$ROOT/scripts/aitools-lib.sh" \
         "$ROOT/scripts/deploy-harness.sh" "$R/scripts/"
@@ -119,7 +119,8 @@ setup_case() {
     printf '# Harness\n\nsource text\n' > "$R/reference/harness.md"
     printf '#!/usr/bin/env bash\necho hook\n' > "$R/shared/hooks/h1.sh"; chmod +x "$R/shared/hooks/h1.sh"
     printf 'shared rule\n' > "$R/shared/rules/r1.md"
-    printf 'project rule\n' > "$R/.claude/rules/p1.md"
+    # rules come from shared/rules only (deploy-harness, commander 2026-11-06)
+    printf 'project rule\n' > "$R/shared/rules/p1.md"
     git -C "$R" init -q
     gitc -C "$R" add -A
     gitc -C "$R" commit -q -m fixture
@@ -130,10 +131,12 @@ setup_case() {
     chmod +x "$B/claude" "$B/node"
 }
 
-# add_duplicate_rule: the same rule name in shared/rules and .claude/rules -> deploy-harness exit 1
+# add_duplicate_rule: the same hook name in shared/hooks and .claude/hooks (hooks
+# keep two sources) -> deploy-harness exit 1
 add_duplicate_rule() {
-    printf 'dup a\n' > "$R/shared/rules/dup.md"
-    printf 'dup b\n' > "$R/.claude/rules/dup.md"
+    mkdir -p "$R/.claude/hooks"
+    printf 'dup a\n' > "$R/shared/hooks/dup.sh"
+    printf 'dup b\n' > "$R/.claude/hooks/dup.sh"
     gitc -C "$R" add -A
     gitc -C "$R" commit -q -m dup
 }
