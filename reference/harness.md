@@ -133,20 +133,31 @@ after Step 5 ran the writer, so it runs once per install; row OK
 | `reference/` | `reference/` | tree (relative paths kept) | none (one source) |
 | `registries/` | `registries/` | tree | none (one source) |
 | `hooks/` | `shared/hooks/`, `.claude/hooks/` | flat (top-level files) | file name |
-| `skills/` | `shared/skills/`, `.claude/skills/`, `<dotprofile>/claude/skills/` | one directory per skill | skill directory name |
-| `rules/` | `shared/rules/`, `.claude/rules/`, `<dotprofile>/claude/rules/` | flat (top-level `*.md`) | file name |
+| `skills/` | `shared/skills/` only | one directory per skill | skill directory name |
+| `rules/` | `shared/rules/` only | flat (top-level `*.md`) | file name |
 | `bin/` | `scripts/harness-db.py`, `read-session.py`, `read-session-full.py` | flat | none (fixed list) |
 | `rules/.aitools-rules-manifest` | written every run (sole owner) | `<file name><TAB><source>` per rule, sorted; first line `# aitools rules manifest v1` | -- |
 
-The fan-out consumers read the manifest: `setup-user-cursor` deploys
-`shared` and `dotprofile` rules only (R-2) and prunes retired ones.
+**Rules and skills come from `shared/` only** (commander, 2026-11-06,
+superseding the 2026-10-22 and 2026-10-26 decisions that also deployed
+aitools `.claude/rules/`, `.claude/skills/` and the dotprofile
+`claude/rules/`, `claude/skills/`). aitools `.claude/` is project scope:
+Claude Code loads it in sessions inside the aitools repo, and it is not
+deployed to user scope. The dotprofile's `claude/rules/` and
+`claude/skills/` are not harness sources. Names a previous run deployed
+from those sources (manifest source `aitools` or `dotprofile`) are retired
+on the next run ("Withdrawn sources" below).
+
+The fan-out consumers read the manifest and prune retired names.
 
 ### Conflict handling
 
 - **First source wins.** Sources are read in the order above. The first
   source that has a unit (a file name for rules and hooks, a directory
   name for skills) deploys it; the same unit in a later source is
-  skipped.
+  skipped. Only `hooks/` has two sources today; rules and skills have one,
+  so a rule or skill of the same name in aitools `.claude/` or the
+  dotprofile is not a duplicate (it is not read at all).
 - **Each skipped duplicate is an error**: `log_error` naming both
   sources, plus one ERROR row under `harness files`. The run continues
   and exits 1. The duplicate stays an error on every run until it is
@@ -207,9 +218,10 @@ read it to learn each rule's source and which rules to retire.
 
 - **Format v1**: UTF-8, LF, first line `# aitools rules manifest v1`, then
   one line per rule, `<file name><TAB><source>`, sorted by file name
-  (byte order). Source: `shared` (aitools `shared/rules/`), `aitools`
-  (aitools `.claude/rules/`), `dotprofile` (`<dotprofile>/claude/rules/`),
-  or `retired`. Only `*.md` names; never `*.bak.*`. The name has no
+  (byte order). Source written: `shared` (aitools `shared/rules/`) or
+  `retired`. Still read in a previous manifest: `aitools` (aitools
+  `.claude/rules/`) and `dotprofile` (`<dotprofile>/claude/rules/`), the
+  withdrawn sources. Only `*.md` names; never `*.bak.*`. The name has no
   `.md` extension, so a consumer that copies `*.md` never copies it.
 - **The winning source is recorded** (first source wins; a skipped
   duplicate is still a `log_error` + ERROR row, as above).
@@ -226,10 +238,17 @@ read it to learn each rule's source and which rules to retire.
   place (`log_error` + ERROR row).
 - **Only a listed source retires.** A name whose source was not listed
   this run (directory not found, not a git work tree, `git ls-files`
-  failed, or no dotprofile configured) keeps its previous line and its
-  file; it is not retired. A temporarily missing dotprofile therefore
-  never deletes the user rules. Listing is per kind: a listed dotprofile
-  rules source does not count for dotprofile skills.
+  failed) keeps its previous line and its file; it is not retired. A
+  temporarily missing `shared/rules/` therefore never deletes the rules.
+  Listing is per kind.
+- **Withdrawn sources retire.** A previous line whose source is `aitools`
+  or `dotprofile` (sources no longer deployed, 2026-11-06) is retired on
+  the next run when no source has the name, although neither source is
+  ever listed and whether or not a dotprofile is configured. This is the
+  one-time migration from the three-source harness: those rules leave
+  `~/.aitools/rules`, and the fan-outs then remove their copies from
+  `~/.claude/rules` and `~/.cursor/rules`. A name that moved to `shared/`
+  is claimed by `shared` and is not retired.
 - **First run** (no previous manifest): nothing is retired. A previous
   manifest whose first line is not the v1 header: a warning, nothing
   retired, and the manifest is rewritten. Invalid lines (not `*.md`, a
@@ -244,8 +263,8 @@ read it to learn each rule's source and which rules to retire.
   lists its new source. Only a file (or a symlink) is removed, never a
   directory with a rule's name.
 - **Consumers** (`setup-user-claude`, `setup-user-cursor`) take every
-  non-retired rule (all three sources; without a manifest, every rule, and
-  nothing is removed) and back up and remove their own deployed copy of
+  non-retired rule (without a manifest, every rule, and nothing is
+  removed) and back up and remove their own deployed copy of
   every `retired` name. `setup-user-claude` uses the source to find the
   adopt target; Cursor offers no adopt. A consumer recognises its own copy
   of a retired rule by content (Claude Code: the same text as
@@ -272,9 +291,10 @@ manifest; one planner and one writer serve both kinds
 
 - **Format v1**: UTF-8, LF, no BOM, first line `# aitools skills manifest
   v1`, then `<skill name><TAB><source>` sorted by name (byte order).
-  Source: `shared` (aitools `shared/skills/`), `aitools` (aitools
-  `.claude/skills/`), `dotprofile` (`<dotprofile>/claude/skills/`) or
-  `retired`. The name is the directory name as found on disk; a valid name
+  Source written: `shared` (aitools `shared/skills/`) or `retired`; the
+  withdrawn sources `aitools` (aitools `.claude/skills/`) and `dotprofile`
+  (`<dotprofile>/claude/skills/`) are still read in a previous manifest
+  and retired, as for rules. The name is the directory name as found on disk; a valid name
   has no `/` or `\`, does not start with `.` and has no `.bak.`. Invalid
   previous lines are warned and dropped.
 - **Retiring.** As for rules, per kind. deploy-harness copies the skill
@@ -291,11 +311,9 @@ manifest; one planner and one writer serve both kinds
   row. Any failure is `log_error` + an ERROR row and the directory stays
   (the next run tries again). A file or symlink with a retired name is left
   alone with a warning. Dry run: logged only.
-- **A skill that moves source** (e.g. from `.claude/skills/` to
-  `shared/skills/`) changes its manifest source and is not retired.
-- **The last dotprofile skill removed**: git drops the empty
-  `claude/skills/`, the source is "not found", so its skills are kept, not
-  retired (the same rule as dotprofile rules).
+- **A skill that moves into `shared/skills/`** (e.g. from `.claude/skills/`)
+  changes its manifest source to `shared` and is not retired; one that
+  moves out of `shared/skills/` (into `.claude/skills/`) is retired.
 - **Preserved scan** ignores both manifests, their temp files and every
   path with a `*.bak.*` component (retired-skill backups).
 - **Consumers**: the library's `fanout_harness_skills` /

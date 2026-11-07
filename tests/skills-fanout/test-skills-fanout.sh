@@ -718,8 +718,10 @@ check "cannot create skills dir, dry run: the same ERROR row as the real run" "[
 parity nocreate-dry
 
 # ---------------------------------------------------------------------------
-# The real deploy-harness (FO-2) fills ~/.aitools/skills from this checkout and
-# the fixture dotprofile; the fan-out deploys every non-retired skill it lists
+# The real deploy-harness (FO-2) fills ~/.aitools/skills from this checkout's
+# shared/skills only (not .claude/skills, not the fixture dotprofile's
+# claude/skills; commander 2026-11-06); the fan-out deploys every non-retired
+# skill it lists
 # ---------------------------------------------------------------------------
 seed_real() {
     # deploy-harness of the language under test, from this checkout, into $H
@@ -732,11 +734,11 @@ seed_real() {
 case_run real seed_real
 check "real harness: deploy-harness wrote the skills manifest" "[ \"\$(cat '$C/dh.rc')\" = 0 ] && head -n 1 '$C/$L/.aitools/skills/.aitools-skills-manifest' | grep -qx '# aitools skills manifest v1' || { tail -n 20 '$C/dh.out'; false; }"
 perl -ne 'next if $. == 1; s/\r?\n\z//; my ($n, $s) = split /\t/; print "$n\n" if $s ne "retired"' "$C/$L/.aitools/skills/.aitools-skills-manifest" > "$C/names"
-check "real harness: every listed skill fanned out with its SKILL.md" "[ -s '$C/names' ] && grep -qx d1 '$C/names' && ! while IFS= read -r n; do [ -f '$(S)/'\"\$n\"/SKILL.md ] || { echo \"missing: \$n\"; exit 0; }; done < '$C/names' | grep -q missing"
+check "real harness: every listed skill fanned out with its SKILL.md" "[ -s '$C/names' ] && ! while IFS= read -r n; do [ -f '$(S)/'\"\$n\"/SKILL.md ] || { echo \"missing: \$n\"; exit 0; }; done < '$C/names' | grep -q missing"
+check "real harness: manifest lists shared skills only" \
+    "perl -ne 'next if \$. == 1; \$bad = 1 unless /\\tshared\\r?\$/; END { exit(\$bad ? 1 : 0) }' '$C/$L/.aitools/skills/.aitools-skills-manifest'"
+check "real harness: the dotprofile skill is neither listed nor deployed" "! grep -qx d1 '$C/names' && [ ! -e '$(S)/d1' ] && [ ! -e '$C/$L/.aitools/skills/d1' ]"
 check "real harness: exit 0, OK row" "[ \"\$(rc)\" = 0 ] && nondetail | grep -qE '^OK\|claude skills\|[0-9]+ added$'"
-for lang in $L; do
-    check "real harness $lang: dotprofile skill adopt target is the dotprofile" "logged 'claude skills: d1/SKILL.md source=dotprofile adopt=$DPN/claude/skills/d1/SKILL.md' $lang"
-done
 # No golden record: the tree is this checkout's own skills (it changes with every
 # skill edit); the checks above run on every platform
 rerun
