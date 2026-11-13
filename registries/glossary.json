@@ -5,9 +5,9 @@
     "intent": {
       "purpose": "Provide the authoritative definition for every governed term in the harness",
       "scope": "Definitions, facets, and abbreviation mappings only. NOT the word list (glossary rule). NOT the composition convention (framework-governed-vocabulary.md). NOT usage guidance (/glossary skill)",
-      "audience": "/glossary skill, /audit skill, agents resolving terminology questions"
+      "audience": "/glossary skill, agents resolving terminology questions"
     },
-    "lastUpdated": "2026-11-12"
+    "lastUpdated": "2026-11-13"
   },
   "facets": {
     "scopeModifiers": {
@@ -79,7 +79,7 @@
       "source": "reference/managed-file-deployment.md"
     },
     "audit": {
-      "definition": "The third layer of three-layer governance: deep analysis on demand that catches what prevention and detection missed. Also the name of the /audit skill. Context distinguishes: 'audit layer' = governance concept, '/audit' = the skill.",
+      "definition": "The third layer of three-layer governance: deep analysis on demand that catches what prevention and detection missed. Mechanisms: post-push check scripts (scripts/check-post-push.sh), CI (.github/workflows/check.yml) and the /incident skill.",
       "source": "reference/framework-three-layer-governance.md"
     },
     "controlled distribution": {
@@ -154,7 +154,7 @@
       "source": "reference/framework-adoption.md"
     },
     "file classification": {
-      "definition": "The access tier assigned to a harness file: open (unrestricted), protected (writes require human review), or governed (access requires governing skill process).",
+      "definition": "The access tier assigned to a harness file: open (any agent reads and writes) or governed (read and written only through its governing skill). Both tiers are reviewed after the write (D-DEL5).",
       "source": "reference/framework-governed-data-access.md"
     },
     "gap": {
@@ -193,7 +193,7 @@
       "source": ".claude/rules/incident-governance.md"
     },
     "intent": {
-      "definition": "A declaration stating a file's or section's purpose, intent scope, and audience. Guides what content belongs and is the basis for intent verification. Protected activity — requires user approval to write or modify.",
+      "definition": "A declaration stating a file's or section's purpose, intent scope, and audience. Guides what content belongs and is the basis for intent verification. Changes are written as a version and reviewed after (D-DEL5).",
       "source": "shared/skills/intent-writing/SKILL.md"
     },
     "intent scope": {
@@ -293,7 +293,7 @@
       "source": "reference/framework-three-layer-governance.md"
     },
     "state audit": {
-      "definition": "DTCC step 2: searching existing harness artifacts (rules, references, incidents, code, plans) to determine whether the ambiguity is real or apparent. Distinct from /audit (deep governance review).",
+      "definition": "DTCC step 2: searching existing harness artifacts (rules, references, incidents, code, plans) to determine whether the ambiguity is real or apparent.",
       "source": "reference/framework-adoption.md"
     },
     "suggested resolution": {

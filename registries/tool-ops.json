@@ -5,9 +5,9 @@
     "intent": {
       "purpose": "Per-tool operational metadata for managed tools with deep harness integration — governance modes, deny rules, hooks, context injection, KPIs, and verification specs",
       "scope": "Operational metadata and governance modes only. NOT the ops knowledge itself. NOT install/versions. NOT incidents. NOT the framework definition",
-      "audience": "/tool-ops skill, /audit skill, tool-ops-session-audit.sh hook, setup scripts"
+      "audience": "/tool-ops skill, tool-ops-session-audit.sh hook, setup scripts"
     },
-    "lastUpdated": "2026-10-28"
+    "lastUpdated": "2026-11-13"
   },
   "tools": {
     "claude-code": {

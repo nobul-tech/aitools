@@ -5,9 +5,9 @@
     "intent": {
       "purpose": "Source of truth for all managed tools — install methods, platform versions, lifecycle status, operational knowledge, MCP servers, and overrides",
       "scope": "Tool data only. NOT lifecycle gates or onboarding checklists (.claude/rules/tool-lifecycle.md). NOT evaluation process (/tool-eval skill). NOT per-tool ops metadata (tool-ops.json)",
-      "audience": "/tool-registry skill, /tool-eval skill, /audit skill, setup scripts, check scripts, aitools-install"
+      "audience": "/tool-registry skill, /tool-eval skill, setup scripts, check scripts, aitools-install"
     },
-    "lastUpdated": "2026-10-21",
+    "lastUpdated": "2026-11-13",
     "repositories": {
       "primary": "https://github.com/nobul-tech/aitools",
       "userTemplate": "https://github.com/nobul-jose/aitools-{username}"
@@ -16,7 +16,6 @@
       "toolLifecycleRule": ".claude/rules/tool-lifecycle.md",
       "toolEvaluation": "reference/tool-evaluation-criteria.md",
       "evaluationPlaybook": "reference/tool-evaluation-playbook.md",
-      "sourcesOfTruth": ".claude/rules/sources-of-truth.md",
       "scriptStandards": "reference/script-standards-detail.md",
       "claudeCodeOps": "reference/tool-ops-claude-code.md",
       "userRepo": "reference/user-repo.md",
