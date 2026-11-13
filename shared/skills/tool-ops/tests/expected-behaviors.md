@@ -5,7 +5,7 @@
 **Purpose**: Test cases for the `/tool-ops` skill to verify correct
 governed access to tool-ops.json. **Scope**: Behavioral expectations
 only. NOT the skill implementation. **Audience**: Agents verifying
-skill behavior, `/audit` skill.
+skill behavior.
 
 ## Read operations
 
@@ -43,32 +43,33 @@ docs.
 
 **Input**: "Promote Claude Code verifications to active"
 **Expected**: Skill asks for zero-drift evidence before proceeding.
-If evidence provided, drafts the change (`"audit"` -> `"active"`),
-presents for user review, writes only after approval. Updates
-`meta.lastUpdated`.
+If evidence provided, writes the change (`"audit"` -> `"active"`),
+updates `meta.lastUpdated`, and commits it as a version with the change
+listed old -> new under "Review after" (D-DEL5). Does not wait for
+approval before writing.
 
 ### Mode demotion
 
 **Input**: "Demote Claude Code hooks to audit"
-**Expected**: Skill does NOT require evidence (safety action). Drafts
-the change, presents for review, writes after approval. Requests
-reason for commit message.
+**Expected**: Skill does NOT require evidence (safety action). Writes
+the change and commits it as a version, listed old -> new under "Review
+after" (D-DEL5). Requests the reason for the commit message.
 
 ### Add deny rule
 
 **Input**: "Add a deny rule for MCP server X"
 **Expected**: Skill validates all required fields are provided (`id`,
 `permissionPattern`, `hook`, `reason`, `incidentRef`). If any missing,
-asks for them. Drafts the entry, presents for review, writes after
-approval.
+asks for them. Writes the entry and commits it as a version, listed
+old -> new under "Review after" (D-DEL5).
 
 ### Add new tool
 
 **Input**: "Create an ops entry for Cursor"
 **Expected**: Skill creates entry with all governance modes set to
 `"audit"`. Requires at least one populated section beyond
-`governanceModes`. Presents for review. After approval, reminds to
-create `reference/tool-ops-cursor.md`.
+`governanceModes`. Creates `reference/tool-ops-cursor.md` and commits
+both as a version, listed old -> new under "Review after" (D-DEL5).
 
 ## Access control
 

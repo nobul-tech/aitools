@@ -34,7 +34,7 @@ to the aitools clone:
   write goes on a new branch in a worktree created from `origin/main`
   (`git -C <repoPath> worktree add -b <branch> <path> origin/main`) and
   ships as a PR; if that is not possible, open an issue on
-  `nobul-tech/aitools` with the drafted change.
+  `nobul-tech/aitools` with the proposed change.
 - **No clone on this machine**: read the read-only copies under
   `~/.aitools/registries/` and `~/.aitools/reference/` once deploy-harness
   installs them. Never edit those copies; propose the change as an issue on
@@ -83,9 +83,9 @@ provides the exact content to write.
    - **Check script entries** — `TOOL_CMDS` dictionary in check scripts
    - **CLAUDE.md entries** — the Managed CLI Tools row in `shared/claude-shared.md` and the dotprofile `claude/CLAUDE.md` (there is no deploy list any more; incident #65)
    - **Evaluation provenance** — `reference/evaluations/<tool>-*.md`
-3. Draft the registry entry
-4. Present for review — protected per `@.claude/rules/sources-of-truth.md`
-5. Write if approved
+3. Write the registry entry (a version) and commit it; list it old -> new
+   under "Review after" in the commit or PR body (D-DEL5, user rule
+   `delegation.md`)
 
 ## Updating version tracking
 
@@ -96,8 +96,9 @@ When a tool is verified on a platform:
 3. Update `lastVerifiedVersion` and `lastVerified`
 4. For MCP servers: update `mcpServers.<slug>.versions.lastReviewed`
 5. Update `meta.lastUpdated` to today's date
-6. Present for review (protected file)
-7. Write if approved
+6. Write the change (a version) and commit it; list it old -> new under
+   "Review after" in the commit or PR body (D-DEL5, user rule
+   `delegation.md`)
 
 ## Schema
 

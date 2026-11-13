@@ -12,8 +12,8 @@ ops references (deployed copy first, then the aitools repo). NOT the
 governance principle (`shared/rules/tool-ops.md`). NOT the framework
 documentation (`reference/framework-tool-ops.md`). NOT the content of
 per-tool ops references.
-**Audience**: Agents checking tool behavior, `/audit` skill validating
-ops coverage, setup scripts reading governance modes.
+**Audience**: Agents checking tool behavior, setup scripts reading
+governance modes.
 
 ## Where the files live
 
@@ -34,7 +34,7 @@ to the aitools clone:
   write goes on a new branch in a worktree created from `origin/main`
   (`git -C <repoPath> worktree add -b <branch> <path> origin/main`) and
   ships as a PR; if that is not possible, open an issue on
-  `nobul-tech/aitools` with the drafted change.
+  `nobul-tech/aitools` with the proposed change.
 - **No clone on this machine**: read the read-only copies under
   `~/.aitools/registries/` and `~/.aitools/reference/` once deploy-harness
   installs them. Never edit those copies; propose the change as an issue on
@@ -118,10 +118,10 @@ Mode changes follow observe-to-enforce graduation:
 1. **Evidence**: Show zero-drift telemetry (SessionEnd hook data or
    manual audit) for the category being promoted
 2. **Read** current entry via this skill
-3. **Draft** the mode change: `"audit"` -> `"active"`
-4. **Present** for user review (protected file gate)
-5. **Write** if approved
-6. Update `meta.lastUpdated`
+3. **Write** the mode change: `"audit"` -> `"active"`
+4. Update `meta.lastUpdated`
+5. **Commit** the change (a version); list it old -> new under "Review
+   after" in the commit or PR body (D-DEL5, user rule `delegation.md`)
 
 Mode demotion (`active` -> `audit`) does not require evidence — it is
 a safety action. Log the reason in the commit message.
@@ -131,10 +131,10 @@ a safety action. Log the reason in the commit message.
 For adding hooks, KPIs, or verification cases:
 
 1. Read the current tool entry
-2. Draft the new/modified entry with all required fields
-3. Present for user review
-4. Write if approved
-5. Update `meta.lastUpdated`
+2. Write the new/modified entry with all required fields
+3. Update `meta.lastUpdated`
+4. Commit the change (a version); list it old -> new under "Review after"
+   in the commit or PR body (D-DEL5, user rule `delegation.md`)
 
 Required fields per section:
 
@@ -159,12 +159,12 @@ To add a new tool:
    triggered the entry (e.g., `hooks` if a hook was the cause)
 3. Empty sections may be omitted — their absence means "no metadata
    for this category"
-4. Present for user review
-5. Write if approved
-6. Update `meta.lastUpdated`
-7. Create `reference/tool-ops-<toolname>.md` in the aitools repo for
+4. Update `meta.lastUpdated`
+5. Create `reference/tool-ops-<toolname>.md` in the aitools repo for
    the full ops reference (separate from the JSON registry); the
    deployed copy appears after the next `aitools` run
+6. Commit both (a version); list them old -> new under "Review after"
+   in the commit or PR body (D-DEL5, user rule `delegation.md`)
 
 ## Cross-references
 
@@ -172,5 +172,5 @@ To add a new tool:
 - Framework documentation: `reference/framework-tool-ops.md`
 - Per-tool ops references: `reference/tool-ops-*.md` (read order:
   deployed copy, then repo; see "Per-tool ops references" above)
-- Framework registry: `registries/framework-registry.json`
+- Framework registry: `/frameworks` skill (aitools sessions only)
 - Governed data access pattern: `.claude/rules/governed-data-access.md`
