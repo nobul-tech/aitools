@@ -286,7 +286,7 @@ pattern is present. Validate content is non-null/non-empty before writing to dis
 
 Any script that intentionally suppresses errors without a result check must:
 1. Document the exemption in its header comment with a reason
-2. Be listed in `@reference/script-standards-detail.md` exemptions table (protected -- requires user approval to modify)
+2. Be listed in `@reference/script-standards-detail.md` exemptions table (requires the commander's approval to modify)
 
 ### When analyzing code
 

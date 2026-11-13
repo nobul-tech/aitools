@@ -134,7 +134,7 @@ Template-generated files: validate content correctness, not just structural mark
 
 ### Exemptions
 
-Intentional suppression without result check requires: header comment + entry in `reference/script-standards-detail.md` exemptions table (protected file, user approval needed).
+Intentional suppression without result check requires: header comment + entry in `reference/script-standards-detail.md` exemptions table (requires the commander's approval to modify).
 
 ### When analyzing code
 

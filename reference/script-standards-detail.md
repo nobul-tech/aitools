@@ -1224,7 +1224,7 @@ fi
 
 ## Exemptions table
 
-Protected -- requires user approval to modify.
+Requires the commander's approval to modify.
 
 | Script | Function | Pattern | Reason |
 |--------|----------|---------|--------|
