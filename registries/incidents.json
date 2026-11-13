@@ -7,7 +7,7 @@
       "scope": "Incident entries only. NOT the filing process (incident-governance.md rule). NOT the framework documentation (framework-incident-governance.md). NOT incident reference files (reference/incident-*.md)",
       "audience": "/incident skill, /audit skill, check scripts, hooks, agents checking whether a deficiency has already been filed"
     },
-    "lastUpdated": "2026-10-26"
+    "lastUpdated": "2026-11-13"
   },
   "incidents": [
     {
@@ -4112,6 +4112,15 @@
       "closedIn": "PR #56 (bd42ba5)",
       "closedDate": "2026-10-21",
       "correctiveAction": "PR #56 (bd42ba5): standing-order-guard.sh lets `sed -n '<N[,M]>p' <file>` through (SED_READONLY_RE, :255-275). Side effect: the sed check was reset to MODE_SED=\"observe\", so every non-exempt sed form (sed -i included) is logged, not blocked, and .claude/rules/hook-rollout.md:79 still lists sed as literal enforce; both tracked by #144 and open PR #60."
+    },
+    {
+      "id": 172,
+      "title": "setup-user-shell.ps1 refreshed its managed block through a .NET regex replacement string, where `$_` expands to the whole input, so every re-run on Windows multiplied $PROFILE and left it unparseable",
+      "closedIn": "v0.76.1",
+      "closedDate": "2026-11-13",
+      "correctiveAction": "v0.76.1 (branch fix/setup-user-shell-replace): setup-user-shell.ps1 inserts the block with a MatchEvaluator, and parse-checks the spliced profile before writing it; a result with more parse errors than the current profile is not written (ERROR `managed block splice failed parse check`, exit 1). New tests/setup-user-shell/test-setup-user-shell.ps1 in the Windows CI job: 10/10 on the fix, 6 of 10 failing against the previous script. Commander's machine (2026-11-13): $PROFILE restored from Microsoft.PowerShell_profile.ps1.bak.2026-06-22T221110Z with its leading blank lines dropped; the corrupted copy kept as Microsoft.PowerShell_profile.ps1.bak.2026-11-13T214623Z.",
+      "rootCause": "The refresh passed the block to [regex]::Replace as the replacement string. In a .NET replacement string `$_` is the whole input, and the block holds `$__aitoolsLocalBin` four times, so each became a copy of the whole profile followed by `_aitoolsLocalBin`. Contributing: the script was written on macOS with no pwsh (its header said UNTESTED on Windows), no test ran the refresh path, and the post-write check only looked for the two markers, which a multiplied profile still has, so every run reported OK. On the commander's machine the second run (2026-06-22) broke the profile (694 to 2,664 bytes, 5 blocks) and the third (2026-11-13) grew it to 41,783 bytes, 84 blocks and 135 parse errors.",
+      "preventionLayer": "Detection (pre-write parse check in setup-user-shell.ps1; tests/setup-user-shell in the Windows CI job)"
     }
   ]
 }

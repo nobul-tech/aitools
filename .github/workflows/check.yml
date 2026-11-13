@@ -717,6 +717,11 @@ jobs:
         shell: pwsh
         run: pwsh -NoProfile -File tests/managed-files/test-adopt-push.ps1
 
+      - name: setup-user-shell PowerShell profile block tests (PowerShell, native)
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: pwsh -NoProfile -File tests/setup-user-shell/test-setup-user-shell.ps1
+
       # Heavy suites, .ps1 half: Git Bash drives native pwsh; results are
       # compared with the golden files the macOS/Linux .sh runs produce
       # (plans/ci-platform-targeting.md).

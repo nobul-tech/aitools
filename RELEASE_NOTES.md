@@ -12,6 +12,29 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.76.1 -- Re-running aitools no longer corrupts the PowerShell profile (2026-11-13)
+
+Not tagged. Resolves Incident #172.
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 1 | Critical | Re-running `aitools` on Windows corrupted `$PROFILE`: `setup-user-shell.ps1` refreshed its managed block with `[regex]::Replace` and the block as the replacement string, where `$_` means the whole input, so each of the block's four `$__aitoolsLocalBin` became a copy of the whole profile. Every run after the first multiplied the profile (5 blocks, then 84, then 21,568) and left it unparseable (`Missing closing ')' in expression`), so none of it loaded. The block is now inserted with a `MatchEvaluator` |
+| 2 | High | `setup-user-shell.ps1` reported `OK managed block refreshed` for a profile it had broken: the post-write check only looked for the two markers. The spliced profile is now parse-checked before it is written; a result with more parse errors than the profile it replaces is not written (ERROR `managed block splice failed parse check`, exit 1) |
+
+### Files created
+
+| File | Purpose |
+|------|---------|
+| `tests/setup-user-shell/test-setup-user-shell.ps1` | Block added, refresh byte-stable over three runs, user lines around a stale block kept, breaking splice refused (CI: Windows) |
+
+**Repair on an affected machine:** the fix does not repair a profile that is already broken. Restore the newest `Microsoft.PowerShell_profile.ps1.bak.<UTC>` beside `$PROFILE` that has no parse errors (the script backs the profile up before every write).
+
+**Verified on:** Windows 11 (pwsh 7.6.10): `tests/setup-user-shell` 10/10; against the previous script 6 of 10 fail. macOS/Linux: not affected (`setup-user-shell.sh` splices with Perl, which does not re-expand `$` inside the block).
+
+---
+
 ## v0.76.0 -- Harness rules and skills from shared/ only; project and dotprofile rules and skills retired from user scope (2026-11-06)
 
 Not tagged. Commander order 2026-11-06: "we need to roll that back so that only the skills/rules in the shared/ directory get copied over"; asked whether the dotprofile `claude/rules` stays a source, the answer was "shared/ only". Decisions R-8 (`reference/rules.md`) and S-7 (`reference/skills.md`) supersede R-1, R-3, R-4, R-6 (sources) and S-1, S-2, S-3 (sources).
