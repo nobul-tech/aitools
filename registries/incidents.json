@@ -7,7 +7,7 @@
       "scope": "Incident entries only. NOT the filing process (incident-governance.md rule). NOT the framework documentation (framework-incident-governance.md). NOT incident reference files (reference/incident-*.md)",
       "audience": "/incident skill, /audit skill, check scripts, hooks, agents checking whether a deficiency has already been filed"
     },
-    "lastUpdated": "2026-10-26"
+    "lastUpdated": "2026-11-13"
   },
   "incidents": [
     {
@@ -4065,6 +4065,29 @@
       "preventionLayer": "Prevention: /delegate skill writing step 12 and Conflicts block; Detection (proposed): delegation-duty-guard checks for the Conflicts block",
       "created": "2026-10-26",
       "updated": "2026-10-26"
+    },
+    {
+      "id": 173,
+      "title": "aitools-install.ps1 Step 7 rewrites the '# aitools shell integration' block on every run with no backup, leaving the blank line above it each time, and its removal loop deletes every non-blank line that follows the marker",
+      "status": "open",
+      "severity": "medium",
+      "affected": [
+        "scripts/aitools-install.ps1"
+      ],
+      "linked": "incident #172",
+      "referenceFile": null,
+      "observation": "aitools-install.ps1 Step 7 (origin/main 2faf897, the '# aitools shell integration' block after the setup-user-shell.ps1 call) takes its upgrade path whenever the marker is present, i.e. on every run after the first: it drops the marker line and every following non-blank line (`while (... $lines[$i].Trim() -ne '') { $i++ }`), joins the remaining lines with LF and writes them plus \"`n`n\" and the block with Set-Content, which appends a CRLF. The blank line above the old block stays. The commander's Windows profile, which had held only this 4-line block, had 163 blank lines above it on 2026-06-15 (backup Microsoft.PowerShell_profile.ps1.bak.2026-06-21T212708Z, 364 bytes). Step 7 calls no Backup-File, and the bash Step 7 does not rewrite an existing block ('Shell integration already in ...').",
+      "expected": "Parity with aitools-install.sh Step 7, which leaves an existing block alone; .claude/rules/config-file-safety.md 'Backup before overwrite' and 'Diff logging on overwrite' (identical: skip and log unchanged).",
+      "impact": "$PROFILE gains blank lines on every `aitools install` run and is rewritten twice per run (setup-user-shell, then Step 7). A user's own line placed directly after `function hh { ... }`, with no blank line between, is deleted on the next run; the only copy is the backup setup-user-shell.ps1 takes just before.",
+      "discoveryContext": "Cursor agent 423faec3-8, 2026-11-13, while restoring the commander's broken $PROFILE (incident #172): read the three profile backups byte by byte and Step 7 of aitools-install.ps1 and aitools-install.sh. Not reproduced in isolation: the blank-line growth is inferred from the backups and the code, the deletion from the code only. Audited #1-#172 for aitools-install Step 7 / shell integration: #170 (profile function argument binding) is the only other Step 7 entry.",
+      "discipline": null,
+      "frameworks": null,
+      "suggestedResolution": "Mirror the bash Step 7: skip when the current block is already present verbatim (log 'already in'). When it differs, replace it in place between a start and an end marker as setup-user-shell.ps1 does (MatchEvaluator, pre-write parse check), Backup-File first, and drop the blank lines the old block leaves. Add Step 7 cases to tests/setup-user-shell (run twice: byte-identical; a user line after the block kept).",
+      "rootCause": null,
+      "correctiveAction": null,
+      "preventionLayer": null,
+      "created": "2026-11-13",
+      "updated": "2026-11-13"
     }
   ],
   "closed": [
@@ -4112,6 +4135,15 @@
       "closedIn": "PR #56 (bd42ba5)",
       "closedDate": "2026-10-21",
       "correctiveAction": "PR #56 (bd42ba5): standing-order-guard.sh lets `sed -n '<N[,M]>p' <file>` through (SED_READONLY_RE, :255-275). Side effect: the sed check was reset to MODE_SED=\"observe\", so every non-exempt sed form (sed -i included) is logged, not blocked, and .claude/rules/hook-rollout.md:79 still lists sed as literal enforce; both tracked by #144 and open PR #60."
+    },
+    {
+      "id": 172,
+      "title": "setup-user-shell.ps1 refreshed its managed block through a .NET regex replacement string, where `$_` expands to the whole input, so every re-run on Windows multiplied $PROFILE and left it unparseable",
+      "closedIn": "v0.76.1",
+      "closedDate": "2026-11-13",
+      "correctiveAction": "v0.76.1 (branch fix/setup-user-shell-replace): setup-user-shell.ps1 inserts the block with a MatchEvaluator, and parse-checks the spliced profile before writing it; a result with more parse errors than the current profile is not written (ERROR `managed block splice failed parse check`, exit 1). New tests/setup-user-shell/test-setup-user-shell.ps1 in the Windows CI job: 10/10 on the fix, 6 of 10 failing against the previous script. Commander's machine (2026-11-13): $PROFILE restored from Microsoft.PowerShell_profile.ps1.bak.2026-06-22T221110Z with its leading blank lines dropped; the corrupted copy kept as Microsoft.PowerShell_profile.ps1.bak.2026-11-13T214623Z.",
+      "rootCause": "The refresh passed the block to [regex]::Replace as the replacement string. In a .NET replacement string `$_` is the whole input, and the block holds `$__aitoolsLocalBin` four times, so each became a copy of the whole profile followed by `_aitoolsLocalBin`. Contributing: the script was written on macOS with no pwsh (its header said UNTESTED on Windows), no test ran the refresh path, and the post-write check only looked for the two markers, which a multiplied profile still has, so every run reported OK. On the commander's machine the second run (2026-06-22) broke the profile (694 to 2,664 bytes, 5 blocks) and the third (2026-11-13) grew it to 41,783 bytes, 84 blocks and 135 parse errors.",
+      "preventionLayer": "Detection (pre-write parse check in setup-user-shell.ps1; tests/setup-user-shell in the Windows CI job)"
     }
   ]
 }

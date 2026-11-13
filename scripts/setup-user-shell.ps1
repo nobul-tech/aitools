@@ -1,6 +1,5 @@
 # setup-user-shell.ps1 -- Owns the aitools managed PATH block in the PowerShell profile (Windows)
 # Safe to re-run -- idempotent.
-# UNTESTED on Windows: authored on macOS; no pwsh available to parse-check. Mirror of setup-user-shell.sh.
 #
 # The harness must resolve managed tools (uv python shims, cursor-agent, aitools
 # shims) deterministically. This script writes a marked block
@@ -68,10 +67,24 @@ if (Test-Path $profilePath) {
 # --- Splice the block in (replace in place if present, else append at EOF) ---
 $pattern = [regex]::Escape($startMarker) + "(?s).*?" + [regex]::Escape($endMarker) + "(\r?\n)?"
 if ($hadBlock) {
-    $newContent = [regex]::Replace($content, $pattern, ($block + "`n"))
+    # MatchEvaluator, not a replacement string: in a replacement string "$_" is
+    # the whole input, and the block contains "$__aitoolsLocalBin".
+    $newContent = [regex]::Replace($content, $pattern,
+        [System.Text.RegularExpressions.MatchEvaluator]{ param($m) $block + "`n" })
 } else {
     if ($content.Length -gt 0 -and $content -notmatch "(\r?\n)$") { $content += "`n" }
     $newContent = $content + $block + "`n"
+}
+
+# --- Never write a profile that parses worse than the one it replaces ---
+$parseErrorsBefore = $null
+$parseErrorsAfter = $null
+$null = [System.Management.Automation.Language.Parser]::ParseInput($content, [ref]$null, [ref]$parseErrorsBefore)
+$null = [System.Management.Automation.Language.Parser]::ParseInput($newContent, [ref]$null, [ref]$parseErrorsAfter)
+if (@($parseErrorsAfter).Count -gt @($parseErrorsBefore).Count) {
+    LogError "Managed block splice would add parse errors to $profilePath -- left unchanged"
+    Write-Summary "ERROR" "shell" "managed block splice failed parse check"
+    exit 1
 }
 
 try {
