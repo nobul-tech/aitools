@@ -1168,38 +1168,6 @@ _managed_state_notice() {
     fi
 }
 
-# Adopting into a protected file is allowed: it writes only the working tree.
-# WARN, naming the file, when the adopt target is listed in the protected-files
-# table (.claude/rules/sources-of-truth.md) of the git repo that contains it.
-# Table entries are backticked paths in the first column; * matches within one
-# path segment.
-_managed_protected_note() {
-    local target="$1" dir top prefix rel table
-    dir=$(dirname "$target")
-    [ -d "$dir" ] || return 0
-    # 2>/dev/null: git fails outside a repo; that means "not protected" (empty result checked).
-    top=$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null) || top=""
-    [ -n "$top" ] || return 0
-    # 2>/dev/null: same as above; an empty prefix is valid (file at the repo root).
-    prefix=$(git -C "$dir" rev-parse --show-prefix 2>/dev/null) || prefix=""
-    table="$top/.claude/rules/sources-of-truth.md"
-    [ -f "$table" ] || return 0
-    rel="${prefix}$(basename "$target")"
-    if perl -e '
-        my ($table, $rel) = @ARGV;
-        open my $fh, "<", $table or exit 1;
-        while (my $line = <$fh>) {
-            next unless $line =~ /^\|\s*`([^`]+)`/;
-            my $pat = quotemeta($1);
-            $pat =~ s/\\\*/[^\/]*/g;
-            exit 0 if $rel =~ /^$pat$/;
-        }
-        exit 1;
-    ' "$table" "$rel"; then
-        log_warn "Adopted into protected file $(display_path "$target") -- working tree only; the review gate (.claude/rules/sources-of-truth.md) applies at commit"
-    fi
-}
-
 # ---------------------------------------------------------------------------
 # dotprofile_commit_push FILE MESSAGE -- commit FILE, and only FILE, in the
 # dotprofile and push it (N-Q2: dotprofile writes are committed and pushed
@@ -1301,14 +1269,12 @@ dotprofile_commit_push() {
     return 0
 }
 
-# After adopt or merge: WARN when the target is protected
-# (_managed_protected_note). An adopt target in the dotprofile is committed and
+# After adopt or merge: an adopt target in the dotprofile is committed and
 # pushed (dotprofile_commit_push, N-Q2). Any other adopt target (the aitools
 # repo) stays a working-tree change: say that its repo has an uncommitted
-# change to review.
+# change to review (it is reviewed at commit, D-DEL5).
 _managed_adopt_notice() {
     local target="$1" top
-    _managed_protected_note "$target"
     dotprofile_commit_push "$target" "Adopt $(basename "$target") from the deployed copy"
     if [ "$AITLIB_DOTPROFILE_PUSH" != "not-dotprofile" ]; then return 0; fi
     # 2>/dev/null: outside a git repo there is nothing to commit (empty result checked).
@@ -1843,14 +1809,12 @@ _invoke_ai_merge() {
 # leave absent). If a write, the merge or a validation fails, the files are
 # restored, the reason is logged (log_error), the result is "failed" (the
 # caller records it; deploy_tracker_summary writes an ERROR row) and the run
-# continues with the next file. An adopt target listed in its repo's
-# protected-files table (.claude/rules/sources-of-truth.md) gets a WARN that
-# names it: working tree only; the review gate applies at commit. After adopt
-# or merge, an adopt target in the dotprofile is committed (that file only) and
-# pushed (dotprofile_commit_push, N-Q2; a failed commit or push is a warning +
-# ACTION, the result stays "accept & adopt"). Any other adopt target (the
-# aitools repo) is not committed: the library logs that its repo has an
-# uncommitted change to review and ship.
+# continues with the next file. After adopt or merge, an adopt target in the
+# dotprofile is committed (that file only) and pushed (dotprofile_commit_push,
+# N-Q2; a failed commit or push is a warning + ACTION, the result stays
+# "accept & adopt"). Any other adopt target (the aitools repo) is not
+# committed: the library logs that its repo has an uncommitted change to
+# review and ship.
 # ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------

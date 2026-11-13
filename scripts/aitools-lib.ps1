@@ -1070,41 +1070,6 @@ function Write-ManagedStateNotice {
     }
 }
 
-# Adopting into a protected file is allowed: it writes only the working tree.
-# LogWarn, naming the file, when the adopt target is listed in the
-# protected-files table (.claude/rules/sources-of-truth.md) of the git repo
-# that contains it. Table entries are backticked paths in the first column;
-# * matches within one path segment. Parity: _managed_protected_note.
-function Write-ManagedProtectedNote {
-    param([string]$Target)
-    $dir = Split-Path -Parent $Target
-    if (-not $dir -or -not (Test-Path -LiteralPath $dir)) { return }
-    # 2>$null: git fails outside a repo; that means "not protected" ($LASTEXITCODE and the result are checked).
-    $top = & git -C $dir rev-parse --show-toplevel 2>$null
-    if ($LASTEXITCODE -ne 0 -or -not $top) { return }
-    $prefix = & git -C $dir rev-parse --show-prefix 2>$null
-    # 2>$null: same as above; an empty prefix is valid (file at the repo root).
-    if ($LASTEXITCODE -ne 0) { return }
-    $table = Join-Path $top ".claude/rules/sources-of-truth.md"
-    if (-not (Test-Path -LiteralPath $table)) { return }
-    $rel = "$prefix" + (Split-Path -Leaf $Target)
-    try {
-        $lines = [IO.File]::ReadAllLines($table, [Text.Encoding]::UTF8)
-    } catch {
-        LogDetail "Could not read $table for the protected-file check: $_"
-        return
-    }
-    foreach ($line in $lines) {
-        if ($line -match '^\|\s*`([^`]+)`') {
-            $pat = [regex]::Escape($Matches[1]) -replace '\\\*', '[^/]*'
-            if ($rel -match "^$pat$") {
-                LogWarn "Adopted into protected file $Target -- working tree only; the review gate (.claude/rules/sources-of-truth.md) applies at commit"
-                return
-            }
-        }
-    }
-}
-
 # ---------------------------------------------------------------------------
 # Invoke-DotprofileCommitPush -File FILE -Message MESSAGE -- commit FILE, and
 # only FILE, in the dotprofile and push it (N-Q2: dotprofile writes are
@@ -1228,14 +1193,13 @@ function Invoke-DotprofileCommitPush {
     LogOk "dotprofile: $rel committed and pushed ($Message)"
 }
 
-# After adopt or merge: WARN when the target is protected
-# (Write-ManagedProtectedNote). An adopt target in the dotprofile is committed
-# and pushed (Invoke-DotprofileCommitPush, N-Q2). Any other adopt target (the
+# After adopt or merge: an adopt target in the dotprofile is committed and
+# pushed (Invoke-DotprofileCommitPush, N-Q2). Any other adopt target (the
 # aitools repo) stays a working-tree change: say that its repo has an
-# uncommitted change to review. Parity: _managed_adopt_notice.
+# uncommitted change to review (it is reviewed at commit, D-DEL5). Parity:
+# _managed_adopt_notice.
 function Write-ManagedAdoptNotice {
     param([string]$Target)
-    Write-ManagedProtectedNote -Target $Target
     Invoke-DotprofileCommitPush -File $Target -Message "Adopt $(Split-Path -Leaf $Target) from the deployed copy"
     if ($script:AitLibDotprofilePush -ne "not-dotprofile") { return }
     $dir = Split-Path -Parent $Target
@@ -1802,13 +1766,11 @@ function Invoke-AiMerge {
 # leave absent). If a write, the merge or a validation fails, the files are
 # restored, the reason is logged (LogError), the result is "failed" (the
 # caller records it; Write-DeployTrackerSummary writes an ERROR row) and the
-# run continues with the next file. An adopt target listed in its repo's
-# protected-files table (.claude/rules/sources-of-truth.md) gets a WARN that
-# names it: working tree only; the review gate applies at commit. After adopt
-# or merge, an adopt target in the dotprofile is committed (that file only) and
-# pushed (Invoke-DotprofileCommitPush, N-Q2; a failed commit or push is a
-# warning + ACTION, the result stays "accept & adopt"). Any other adopt target
-# (the aitools repo) is not committed: the library logs that its repo has an
+# run continues with the next file. After adopt or merge, an adopt target in
+# the dotprofile is committed (that file only) and pushed
+# (Invoke-DotprofileCommitPush, N-Q2; a failed commit or push is a warning +
+# ACTION, the result stays "accept & adopt"). Any other adopt target (the
+# aitools repo) is not committed: the library logs that its repo has an
 # uncommitted change to review and ship.
 # ---------------------------------------------------------------------------
 

@@ -2210,7 +2210,7 @@ done < "$WORK/unpack.tsv"
 
 # git -C DIR rev-parse --is-inside-work-tree / git -C DIR ls-files -z for a
 # snapshot directory: answered from its .aitools-mdm-ls-files. Anything else:
-# the real git (the library uses it for protected-file checks).
+# the real git (the library's other git calls, e.g. its adopt path, run unchanged).
 git() {
     if [ "$#" -eq 4 ] && [ "$1" = "-C" ] && [ -f "$2/.aitools-mdm-ls-files" ]; then
         case "$2" in
@@ -2367,7 +2367,7 @@ function Expand-MdmPayload {
 
 # git -C DIR rev-parse --is-inside-work-tree / git -C DIR ls-files -z for a
 # snapshot directory: answered from its .aitools-mdm-ls-files. Anything else:
-# the real git (the library uses it for protected-file checks).
+# the real git (the library's other git calls, e.g. its adopt path, run unchanged).
 function git {
     if ($args.Count -eq 4 -and $args[0] -eq '-C') {
         $lsFile = Join-Path ([string]$args[1]) ".aitools-mdm-ls-files"

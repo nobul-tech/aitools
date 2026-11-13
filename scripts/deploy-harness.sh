@@ -354,7 +354,7 @@ deploy_one() {
             N_VERIFIED=$((N_VERIFIED + 1))
             if ! $DRY_RUN; then fix_exec "$src" "$dest"; fi ;;
         "accept & adopt")
-            # The library wrote the adopt target and WARNs when it is a protected file.
+            # The library wrote the adopt target (a working-tree change in this repo).
             N_ACCEPTED=$((N_ACCEPTED + 1))
             write_summary DETAIL "$TOOL" "$(short "accept & adopt: $item")" ;;
         skipped)

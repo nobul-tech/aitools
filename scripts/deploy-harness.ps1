@@ -332,7 +332,7 @@ foreach ($p in $plan) {
         "updated"  { $nUpdated++ }
         "verified" { $nVerified++ }
         "accept & adopt" {
-            # The library wrote the adopt target and WARNs when it is a protected file.
+            # The library wrote the adopt target (a working-tree change in this repo).
             $nAccepted++
             Write-Summary "DETAIL" $tool (Get-ShortDetail "accept & adopt: $($p.Item)")
         }

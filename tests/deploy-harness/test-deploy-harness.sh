@@ -6,7 +6,7 @@
 # under an isolated HOME in a temp directory, removed on exit. The real HOME,
 # the real repos and the real dotprofile are never touched.
 # Cases: first run, rerun, edit then rerun (non-interactive -> overwrite),
-# accept & adopt into a protected file (pty), skip (pty), abort (pty, exit 2),
+# accept & adopt into the aitools repo (pty), skip (pty), abort (pty, exit 2),
 # --force on a terminal, conflicts (first source wins, ERROR rows, exit 1),
 # dry run (no writes), config writer failure (stub and real writer),
 # rules and skills from aitools shared/ only (aitools .claude/rules,
@@ -112,7 +112,7 @@ lang_scripts() {
 # setup_case NAME: fixture aitools repo ($R), dotprofile ($D), HOME ($H) with config.json.
 # Deployed: reference 3, registries 1, hooks 2, skills 3 (s1: 2 files, s2), rules 2
 # (scratch, hook-lifecycle), bin 3 = 14 files. Never deployed (not harness
-# sources): .claude/skills/s3, .claude/rules/{p1,sources-of-truth}.md,
+# sources): .claude/skills/s3, .claude/rules/{p1,p2}.md,
 # the dotprofile claude/rules/user1.md.
 setup_case() {
     C="$TMP_ROOT/$1"; R="$C/repo"; D="$C/dot"; H="$C/home"
@@ -138,8 +138,7 @@ setup_case() {
     printf 'shared scratch rule\n' > "$R/shared/rules/scratch.md"
     printf 'shared hook lifecycle\n' > "$R/shared/rules/hook-lifecycle.md"
     printf 'project rule\n' > "$R/.claude/rules/p1.md"
-    # The protected-files table makes reference/harness.md a protected adopt target.
-    cp "$ROOT/.claude/rules/sources-of-truth.md" "$R/.claude/rules/sources-of-truth.md"
+    printf 'project rule two\n' > "$R/.claude/rules/p2.md"
     git -C "$R" init -q
     gitc -C "$R" add -A
     gitc -C "$R" commit -q -m fixture
@@ -266,7 +265,7 @@ check "first run: skills are directories (all files)" \
 check "first run: rules flat from shared/rules" \
     "[ -f '$(A)/rules/scratch.md' ] && [ -f '$(A)/rules/hook-lifecycle.md' ]"
 check "first run: .claude/skills, .claude/rules and dotprofile rules not deployed" \
-    "[ ! -e '$(A)/skills/s3' ] && [ ! -e '$(A)/rules/p1.md' ] && [ ! -e '$(A)/rules/sources-of-truth.md' ] && [ ! -e '$(A)/rules/user1.md' ]"
+    "[ ! -e '$(A)/skills/s3' ] && [ ! -e '$(A)/rules/p1.md' ] && [ ! -e '$(A)/rules/p2.md' ] && [ ! -e '$(A)/rules/user1.md' ]"
 check "first run: no .claude/rules, .claude/skills or dotprofile source looked at" \
     "! grep -qE 'Source (\\.claude/(rules|skills)|dotprofile)' '$LOG' && ! grep -qi 'dotprofile' '$LOG'"
 check "first run: bin CLIs deployed" "[ -f '$(A)/bin/harness-db.py' ] && [ -f '$(A)/bin/read-session-full.py' ]"
@@ -304,7 +303,8 @@ if $HAVE_PTY; then
     check "adopt: exit 0" "[ \"\$(rc)\" = 0 ]"
     check "adopt: LOCAL kept and copied to the repo source" \
         "grep -qx 'local edit' '$(A)/reference/harness.md' && grep -qx 'local edit' '$R/reference/harness.md'"
-    check "adopt: WARN names the protected file" "grep -q '\[warn\] Adopted into protected file .*reference/harness.md' '$LOG'"
+    check "adopt: aitools repo target left uncommitted and logged, no protected-file WARN" \
+        "grep -q 'Uncommitted change in .*: harness.md' '$LOG' && ! grep -q 'Adopted into protected file' '$LOG'"
     check "adopt: DETAIL row" "grep -q '^DETAIL|harness files|accept & adopt: ' '$C/summary'"
     run_dh "" --
     check "adopt: next run verifies; repo backup not deployed" \
@@ -468,9 +468,9 @@ check "reappearing name returns to its source and is deployed" \
 # whether or not the dotprofile exists. The .claude/rules and dotprofile files
 # that still exist in the repos change nothing.
 seed_withdrawn_rules() {
-    printf '# aitools rules manifest v1\nhook-lifecycle.md\tshared\np1.md\taitools\nscratch.md\tshared\nsources-of-truth.md\taitools\nuser1.md\tdotprofile\n' > "$(M)"
+    printf '# aitools rules manifest v1\nhook-lifecycle.md\tshared\np1.md\taitools\np2.md\taitools\nscratch.md\tshared\nuser1.md\tdotprofile\n' > "$(M)"
     printf 'project rule\n' > "$(A)/rules/p1.md"
-    printf 'protected files\n' > "$(A)/rules/sources-of-truth.md"
+    printf 'project rule two\n' > "$(A)/rules/p2.md"
     printf 'user rule\n' > "$(A)/rules/user1.md"
 }
 seed_withdrawn_rules
@@ -481,7 +481,7 @@ check "withdrawn sources, dry run: retirement reported, nothing removed or writt
 fresh_log
 run_dh "" --
 check "withdrawn sources: aitools and dotprofile names retired (backed up, removed), DETAIL rows" \
-    "[ \"\$(rc)\" = 0 ] && mf_is 'hook-lifecycle.md${T}shared' 'p1.md${T}retired' 'scratch.md${T}shared' 'sources-of-truth.md${T}retired' 'user1.md${T}retired' && [ ! -e '$(A)/rules/p1.md' ] && [ ! -e '$(A)/rules/sources-of-truth.md' ] && [ ! -e '$(A)/rules/user1.md' ] && ls '$(A)/rules/'user1.md.bak.* >/dev/null 2>&1 && ls '$(A)/rules/'p1.md.bak.* >/dev/null 2>&1 && row 'DETAIL|harness files|retired: rules/p1.md' && row 'DETAIL|harness files|retired: rules/user1.md' && grep -q 'Retired rule: user1.md (was dotprofile' '$LOG' && grep -q 'Retired rule: p1.md (was aitools' '$LOG'"
+    "[ \"\$(rc)\" = 0 ] && mf_is 'hook-lifecycle.md${T}shared' 'p1.md${T}retired' 'p2.md${T}retired' 'scratch.md${T}shared' 'user1.md${T}retired' && [ ! -e '$(A)/rules/p1.md' ] && [ ! -e '$(A)/rules/p2.md' ] && [ ! -e '$(A)/rules/user1.md' ] && ls '$(A)/rules/'user1.md.bak.* >/dev/null 2>&1 && ls '$(A)/rules/'p1.md.bak.* >/dev/null 2>&1 && row 'DETAIL|harness files|retired: rules/p1.md' && row 'DETAIL|harness files|retired: rules/user1.md' && grep -q 'Retired rule: user1.md (was dotprofile' '$LOG' && grep -q 'Retired rule: p1.md (was aitools' '$LOG'"
 check "withdrawn sources: shared rules untouched" \
     "[ -f '$(A)/rules/scratch.md' ] && [ -f '$(A)/rules/hook-lifecycle.md' ] && ! ls '$(A)/rules/' | grep -q '^hook-lifecycle.md.bak'"
 seed_withdrawn_rules
