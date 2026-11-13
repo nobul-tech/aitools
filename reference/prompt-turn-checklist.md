@@ -3,8 +3,9 @@
 **Intent**: **Purpose**: Define, item by item, the checklist an agent runs
 at every prompt turn. It formalizes the ad-hoc checklist the commander kept
 repeating in prompts, and it is the specification a hook will deliver to
-every agent. **Scope**: The checklist items: what each one requires, why, and
-how a skipped item shows. NOT the hook that will deliver the checklist (not
+every agent. **Scope**: The checklist items: what each one requires; for
+some, why and how a skipped item shows; and the established field an item
+is adopted from. NOT the hook that will deliver the checklist (not
 built yet; rollout practice: `@.claude/rules/hook-rollout.md`). NOT the
 seven-step process in `CLAUDE.md` "The process (every prompt)": its steps
 are merged into this checklist, and that section is left as it is. NOT
@@ -12,7 +13,7 @@ delegation prompts (`/delegate` skill). **Audience**: Every agent at every
 prompt turn; the agent that builds the prompt-turn hook; the commander,
 reviewing what the hook will enforce.
 
-v1.9 (2026-11-13)
+v1.14 (2026-11-13)
 
 A **prompt turn** is one prompt from the commander and everything the agent
 does until its reply is printed.
@@ -20,7 +21,7 @@ does until its reply is printed.
 The checklist was inferred from the commander's prompts in sessions 8236ca9c
 (2026-03-26; `.aitools/channel/8236ca9c-full-session.md`) and fbf7decb
 (2026-03-28; the dotprofile's `sessions/aitools/2026-03-28_fbf7decb.jsonl`).
-The checklist has thirteen items. This version holds items 1 to 6. The rest
+The checklist has thirteen items. This version holds items 1 to 10. The rest
 are added on the commander's order.
 
 ## 1. Re-read the whole conversation, start to now, at full fidelity
@@ -236,3 +237,85 @@ Before doing the work, look at how you are about to do it, and improve that.
   the commander as a session RFI.
 - **Scale to the work**: a yes/no question needs a moment's review; work that
   spans several turns needs a real one.
+
+## 7. Draft in thinking space
+
+Write the complete work product in full in thinking before any tool writes to
+a file. Reading files is fine.
+
+- **Draft it yourself**: draft in your own thinking, in the session that
+  holds the conversation and the sources. Never hand the drafting to a
+  delegate; if a delegate writes the file, pass it the full draft verbatim.
+- **Final form**: write every line as it will appear, with no placeholders,
+  no "…" and no "and so on".
+- **Whole, even when long**: finish the draft at full length. Do not shorten
+  it to save tokens or context.
+- **Change only what was asked**: draft edits against the current text and
+  keep everything else as it is.
+- **Scope and form**: keep the draft within the scope, form and length fixed
+  in item 2.
+- **Use the thinking time**: spend as much thinking as the draft needs. Do
+  not ration it.
+
+## 8. Review and refine the draft before writing the file
+
+Attack the draft in thinking and refine it until the attacks fail. Write the
+file only then.
+
+- **Check it against its sources**: line by line, against the conversation
+  and every source from item 3. Fix every line they do not support.
+- **Red team it**: argue against the draft as an opponent would, and find the
+  line that is wrong, missing or open to misreading.
+- **Pre-mortem it**: assume the work has already failed in use, list the
+  reasons, and fix each one in the draft.
+- **Check key assumptions**: list what the draft assumes. For each, ask what
+  breaks if it is false, then resolve it or surface it (items 4 and 5).
+- **Argue the other side**: for each choice in the draft, make the strongest
+  case for the option you rejected. Keep your choice only if it still wins.
+- **Look for overcorrection**: test each earlier correction you applied for
+  being applied more broadly than it was meant.
+- **Repeat until clean**: run passes until one finds nothing to fix.
+
+Adopted from: adversarial review — red teaming and devil's advocacy
+(military and intelligence analysis), the pre-mortem (Gary Klein, 2007) and
+the key assumptions check (structured analytic techniques, US Government
+Tradecraft Primer, 2009). Sources: `@reference/framework-adversarial-review.md`.
+
+## 9. Review the written files, one reader at a time
+
+Read each written file from disk, line by line, once for each reader, and fix
+what that reader would trip on.
+
+- **Read what was written**: re-read the file from disk, not the draft you
+  meant to write. Check that it matches the reviewed draft from item 8 and
+  the sources from item 3, with nothing dropped, compressed or added.
+- **Name the readers**: list who and what consumes the file: the commander,
+  an agent following it, a delegate with none of this session's context, and
+  any script, hook or tool that parses it.
+- **One pass per reader**: read the whole file as that reader, with only what
+  that reader will have.
+- **Ask that reader's questions**: can they act on each line? Is a term
+  undefined for them? Is a path, name or number one they cannot resolve?
+- **Fix and re-read**: fix each defect in the file, then re-read the changed
+  lines as every reader.
+- **Repeat until clean**: run rounds until a full round finds nothing to fix.
+
+Adopted from: perspective-based reading (Victor Basili and colleagues,
+software inspection, 1996): each reviewer on an inspection team reads the
+document from one stakeholder's perspective and answers questions tailored to
+that perspective. Here one agent makes one pass per reader. Sources:
+`@reference/framework-perspective-based-reading.md`.
+
+## 10. Re-read the whole work for coherence
+
+Read the finished work start to finish in one pass, as its reader will,
+against the prompt and the work's own intent. Fix what only shows at that
+scale:
+
+- **Cut the excess**: remove what goes beyond the intent.
+- **Fill the gaps**: add what is missing or was cut short.
+- **Make it one piece**: remove contradictions and repetition between parts.
+- **Check form and length**: confirm the whole is in the form and length the
+  prompt asked for.
+- **Fulfill the surfacing duty**: raise as a session RFI (item 5) anything
+  the whole-work read reveals that you cannot fix yourself.
