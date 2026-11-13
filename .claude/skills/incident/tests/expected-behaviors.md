@@ -26,7 +26,7 @@ When filing an incident:
 - Severity matches the definitions (not inflated)
 - rootCause/correctiveAction/preventionLayer null for new filings unless already known
 - created/updated both set to current date
-- Presents for user review before writing (protected file)
+- Writes the entry as a version and lists it under "Review after" in the commit or PR body (D-DEL5)
 
 ## Classification accuracy
 

@@ -6,13 +6,13 @@
 # not reword without changing meaning.
 
 # Test fixtures and examples
-.claude/skills/audit/tests/expected-behaviors.md|reference/nonexistent.md|test fixture: a broken reference the audit must detect
-.claude/skills/audit/tests/expected-behaviors.md|.claude/rules/cursor-rule-parity.md|test fixture: a rule deleted in v0.54 the audit must detect
 shared/skills/handoff/SKILL.md|plans/mission-command-briefing/handoff-2026-03-19_Z1IhGrcgGO.md|example file name in prose
 
 # History (the text records a file that existed then)
 reference/claude-code-effectiveness.md|.claude/rules/surface-silent-failures.md|history: rule added 2026-02-19, later folded into script-standards
 reference/path-targeted-hooks-analysis.md|reference/dependency-map.json|history: a 2026-03-13 proposal that was never built (the file says so)
+reference/do-what-feels-right.md|.claude/rules/relay-outbound.md|history: the original briefing, preserved verbatim; the rule was deleted 2026-11-13
+reference/artifact-harvesting.md|reference/framework-artifact-harvesting.md|history: the version line records the document merged into this one (deleted 2026-11-13)
 
 # Planned files (framework pending adoption)
 reference/framework-provenance.md|.claude/rules/provenance.md|planned artifact of the pending provenance framework

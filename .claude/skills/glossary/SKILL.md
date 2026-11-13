@@ -19,11 +19,12 @@ any agent that needs to add a new term.
 
 ## Where the files live
 
-This is a user-level skill: `aitools install` deploys it to
-`~/.claude/skills/` and `~/.cursor/skills/`, so it loads in every repo.
-Its source is `shared/skills/glossary/` in the aitools repo. Every repo path
-below (`registries/`, `reference/`, `.claude/rules/`, `scripts/`) is relative
-to the aitools clone:
+This is a project skill: its source is `.claude/skills/glossary/` in the
+aitools repo, and it is not deployed to user scope. Claude Code loads it only
+in sessions inside the aitools repo, from the checkout. Every repo path below
+(`registries/`, `reference/`, `.claude/rules/`, `scripts/`) is relative to the
+aitools clone. The cases below for other repos and for machines without a
+clone apply only if the skill is deployed to user scope again:
 
 - **Session on aitools** (the clone or one of its worktrees): the paths
   resolve from the repo root. Reads and reviewed writes happen here.
@@ -102,9 +103,9 @@ For all types:
 
 1. Draft the JSON entry with all required fields
 2. Draft the corresponding line(s) in the glossary rule
-3. Present both for review — both files are protected per
-   `@.claude/rules/sources-of-truth.md`
-4. Write both if approved
+3. Write both as a version and commit them together; list both old ->
+   new under "Review after" in the commit or PR body, and the commander
+   reviews the diff after (D-DEL5, user rule `delegation.md`)
 
 Both files must be updated in the same operation. A term in the JSON
 without a line in the rule is invisible to agents. A term in the rule
@@ -155,4 +156,3 @@ Optional:
 - Definitions: `@registries/glossary.json`
 - Framework: `@reference/framework-governed-vocabulary.md`
 - Intent audit: `/intent-audit` skill (catches undefined terms)
-- Governance audit: `/audit` skill (validates glossary health)

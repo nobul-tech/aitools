@@ -19,11 +19,12 @@ point, updating a framework's artifacts, or adding a new framework.
 
 ## Where the files live
 
-This is a user-level skill: `aitools install` deploys it to
-`~/.claude/skills/` and `~/.cursor/skills/`, so it loads in every repo.
-Its source is `shared/skills/frameworks/` in the aitools repo. Every repo path
-below (`registries/`, `reference/`, `.claude/rules/`, `scripts/`) is relative
-to the aitools clone:
+This is a project skill: its source is `.claude/skills/frameworks/` in the
+aitools repo, and it is not deployed to user scope. Claude Code loads it only
+in sessions inside the aitools repo, from the checkout. Every repo path below
+(`registries/`, `reference/`, `.claude/rules/`, `scripts/`) is relative to the
+aitools clone. The cases below for other repos and for machines without a
+clone apply only if the skill is deployed to user scope again:
 
 - **Session on aitools** (the clone or one of its worktrees): the paths
   resolve from the repo root. Reads and reviewed writes happen here.
@@ -78,17 +79,19 @@ When a framework's artifacts, concepts, or governance scope change:
    - **Governs** — scope expanded or narrowed?
 3. Check the reference file (`referenceFile`) — does it reflect the
    changes? Flag for separate update if stale.
-4. Draft updated entry with all required fields + updated
-   `lastUpdated`
-5. Present for review (protected file)
-6. Write if approved
+4. Write the updated entry with all required fields + updated
+   `lastUpdated`, as a version
+5. Commit it; list the entry old -> new under "Review after" in the
+   commit or PR body, and the commander reviews the diff after (D-DEL5,
+   user rule `delegation.md`)
 
 ### Staleness
 
 Entries without `lastUpdated` or with `lastUpdated` >90 days old
-are stale. The `/audit` skill flags these. Stale entries MUST be
-reviewed — artifacts may have been added, removed, or renamed
-without the registry being updated.
+are stale. No skill or check flags them today: check `lastUpdated`
+whenever you read an entry. Stale entries MUST be reviewed —
+artifacts may have been added, removed, or renamed without the
+registry being updated.
 
 ## Adding a framework
 
@@ -142,9 +145,8 @@ For both adds and updates:
    - At least one implementing artifact exists
    - Each artifact path in the list is valid (file or directory exists)
    - `lastUpdated` is set to today
-3. Present for review — the registry is protected per
-   `@.claude/rules/sources-of-truth.md`
-4. Write if approved
+3. Write it as a version and commit it; list it under "Review after"
+   in the commit or PR body (D-DEL5)
 
 ## Framework reference file template
 
@@ -169,5 +171,4 @@ registry entry. If artifacts diverge, update both together.
 - Governed data access: `@.claude/rules/governed-data-access.md`
 - Adoption lifecycle: `@reference/framework-adoption.md`
 - Three-layer governance: `@reference/framework-three-layer-governance.md`
-- Governance audit: `/audit` skill (validates framework health)
 - Incident filing: `/incident` skill (when coverage gap found)

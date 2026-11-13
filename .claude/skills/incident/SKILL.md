@@ -9,18 +9,19 @@ description: "File an incident in incidents.json. Use when a spec deviation, bro
 with structured fields, severity classification, and root cause
 tracking — the operational tool for the surfacing duty. **Scope**:
 Filing process, classification, and entry formatting only. NOT for
-reading/browsing incidents. NOT for deep governance review (`/audit`
-skill). NOT for investigating root causes (`/investigate` skill).
+reading/browsing incidents. NOT for deep governance review. NOT for
+investigating root causes (`/investigate` skill).
 **Audience**: Agents fulfilling surfacing duty, agents prompted by
 the incident-governance rule, agents triaging subagents' `INCIDENT:` (or legacy `AMBIGUITY:`) findings.
 
 ## Where the files live
 
-This is a user-level skill: `aitools install` deploys it to
-`~/.claude/skills/` and `~/.cursor/skills/`, so it loads in every repo.
-Its source is `shared/skills/incident/` in the aitools repo. Every repo path
-below (`registries/`, `reference/`, `.claude/rules/`, `scripts/`) is relative
-to the aitools clone:
+This is a project skill: its source is `.claude/skills/incident/` in the
+aitools repo, and it is not deployed to user scope. Claude Code loads it only
+in sessions inside the aitools repo, from the checkout. Every repo path below
+(`registries/`, `reference/`, `.claude/rules/`, `scripts/`) is relative to the
+aitools clone. The cases below for other repos and for machines without a
+clone apply only if the skill is deployed to user scope again:
 
 - **Session on aitools** (the clone or one of its worktrees): the paths
   resolve from the repo root. Reads and reviewed writes happen here.
@@ -117,17 +118,18 @@ python3 -c 'import json; d=json.load(open("registries/incidents.json")); print(m
 }
 ```
 
-### Step 4: Present for review
+### Step 4: Write the entry
 
-`registries/incidents.json` is a protected file (sources-of-truth gate).
-Present the proposed entry to the user before writing. Show:
+Add the entry to the `incidents` array. Update `meta.lastUpdated` to today.
+
+### Step 5: Commit it for review after
+
+Write the entry as a version and commit it; the commander reviews the diff
+after (D-DEL5, user rule `delegation.md`). The commit or PR body lists, under
+"Review after":
 - The severity rationale
 - The full JSON entry
 - Which spec/rule is affected
-
-### Step 5: Write if approved
-
-Add the entry to the `incidents` array. Update `meta.lastUpdated` to today.
 
 ## Closing an incident
 
@@ -137,8 +139,8 @@ When an incident is resolved:
    verified. Fill `rootCause` and `preventionLayer` too when they are known;
    operational incidents need both before closing
    (`.claude/rules/incident-governance.md`, "Field quality rules"). Update
-   `updated` to today. This is a protected write: present it for review
-   with the close.
+   `updated` to today. List the close under "Review after" in the commit
+   or PR body (D-DEL5).
 2. Move the entry from `incidents` to `closed` array
 3. Add `closedIn` (version, or PR and commit) and `closedDate` fields
 4. Remove the other detailed fields. Keep `id`, `title`, `correctiveAction`,
@@ -156,8 +158,8 @@ When a subagent reports `INCIDENT: <description>` (or the legacy `AMBIGUITY: <de
 
 ## Multiple incidents in one session
 
-File them one at a time, incrementing IDs. Present all entries as a batch
-for user review if filing multiple incidents at once.
+File them one at a time, incrementing IDs. List all entries together under
+"Review after" when filing several in one commit.
 
 ## Cross-References
 
@@ -165,4 +167,3 @@ for user review if filing multiple incidents at once.
 - Operational rule: `@.claude/rules/incident-governance.md`
 - Discovery cycle: `@reference/framework-adoption.md`
 - Incident data: `@registries/incidents.json`
-- Audit skill: `.claude/skills/audit/SKILL.md`
