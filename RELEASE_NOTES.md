@@ -12,7 +12,7 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
-## v0.76.1 -- Re-running aitools no longer corrupts the PowerShell profile (2026-11-13)
+## v0.76.1 -- Re-running aitools install no longer corrupts the PowerShell profile (2026-11-13)
 
 Not tagged. Resolves Incident #172.
 
@@ -20,7 +20,7 @@ Not tagged. Resolves Incident #172.
 
 | # | Severity | Fix |
 |---|----------|-----|
-| 1 | Critical | Re-running `aitools` on Windows corrupted `$PROFILE`: `setup-user-shell.ps1` refreshed its managed block with `[regex]::Replace` and the block as the replacement string, where `$_` means the whole input, so each of the block's four `$__aitoolsLocalBin` became a copy of the whole profile. Every run after the first multiplied the profile (5 blocks, then 84, then 21,568) and left it unparseable (`Missing closing ')' in expression`), so none of it loaded. The block is now inserted with a `MatchEvaluator` |
+| 1 | Critical | Re-running `aitools install` on Windows corrupted `$PROFILE` (installer Step 7; plain `aitools` does not run `setup-user-shell`): `setup-user-shell.ps1` refreshed its managed block with `[regex]::Replace` and the block as the replacement string, where `$_` means the whole input, so each of the block's four `$__aitoolsLocalBin` became a copy of the whole profile. Every run after the first multiplied the profile (5 blocks, then 84, then 21,568) and left it unparseable (`Missing closing ')' in expression`), so none of it loaded. The block is now inserted with a `MatchEvaluator` |
 | 2 | High | `setup-user-shell.ps1` reported `OK managed block refreshed` for a profile it had broken: the post-write check only looked for the two markers. The spliced profile is now parse-checked before it is written; a result with more parse errors than the profile it replaces is not written (ERROR `managed block splice failed parse check`, exit 1) |
 
 ### Files created
