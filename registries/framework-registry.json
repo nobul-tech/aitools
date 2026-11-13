@@ -38,15 +38,6 @@
       "lastUpdated": "2026-11-13"
     },
     {
-      "name": "Source-of-truth protection",
-      "governs": "Approval gates for critical files that propagate across machines",
-      "discipline": "Change management",
-      "concepts": ["Change advisory boards", "Approval gates", "Protected state"],
-      "referenceFile": "reference/framework-source-of-truth.md",
-      "artifacts": [],
-      "lastUpdated": "2026-11-13"
-    },
-    {
       "name": "Tool lifecycle",
       "governs": "Evaluation, approval, integration, maintenance, and health tracking of managed tools",
       "discipline": "Software asset management",

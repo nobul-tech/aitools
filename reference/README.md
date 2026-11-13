@@ -13,7 +13,7 @@ through their skills, not listed here.
 | `skills.md` | Skills: what a skill is, the layering, anatomy, scopes, deployment to user scope and its cost |
 | `framework-adoption.md` | Discovery-to-continuation cycle (DTCC) and the cross-reference convention |
 | `framework-adversarial-review.md` | Adversarial review (red teaming, devil's advocacy, pre-mortem, key assumptions check): sources for checklist item 8 |
-| `framework-artifact-harvesting.md` | Artifact harvesting: source discipline and adoption |
+| `artifact-harvesting.md` | Artifact harvesting: source discipline, criteria and what the harvest hooks do |
 | `framework-governed-data-access.md` | Skill-gated access to governed registries |
 | `framework-governed-vocabulary.md` | Governed vocabulary: composition convention, glossary maintenance |
 | `framework-hook-rollout.md` | Observe-then-enforce hook rollout |
@@ -23,7 +23,6 @@ through their skills, not listed here.
 | `framework-managed-file-deployment.md` | Configuration management behind managed file deployment |
 | `framework-perspective-based-reading.md` | Perspective-based reading (Basili et al.): sources for checklist item 9 |
 | `framework-provenance.md` | Provenance tracking: dependency chains, staleness, invalidation |
-| `framework-source-of-truth.md` | Source-of-truth review gate (change management) |
 | `framework-three-layer-governance.md` | Prevention / detection / audit layers and the registry convention |
 | `framework-tool-lifecycle.md` | Tool lifecycle: phases, gates, health flags |
 | `framework-tool-ops.md` | Tool operations: SRE-grounded per-tool ops metadata |

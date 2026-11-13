@@ -52,4 +52,3 @@ options, and track outcomes.
 
 - Framework registry: `/frameworks` skill
 - Three-layer governance: `@reference/framework-three-layer-governance.md`
-- Source-of-truth protection: `@reference/framework-source-of-truth.md`
