@@ -8,7 +8,7 @@ governing principle, when to invoke the `/scratch` skill, the delegating
 agent's duty to name a delegate's scratch directory, and the enforcement
 layers. NOT directory layout, file naming or the commit and PR patterns
 (`/scratch` skill). NOT harvest classification, promotion or pruning
-(`/harvest` skill; aitools `.claude/rules/artifact-harvesting.md`). NOT the
+(`/harvest` skill; aitools `reference/artifact-harvesting.md`). NOT the
 Bash command limits themselves (USO "Simple Bash commands only", enforced
 by the standing-order-guard hook). **Audience**: Every agent in every repo,
 and every agent that writes a delegation prompt.
@@ -25,7 +25,7 @@ A session's temporary files live in its session scratch directory,
 - every PR, issue or comment body (`gh ... --body-file`).
 
 Nothing that must carry forward lives there. Handoffs, plans, mission
-reports, decisions and drafts for review go to a tracked path and are
+reports, decisions and versions for review go to a tracked path and are
 committed. Scratch never leaves the machine, and in a git worktree it is
 deleted with the worktree.
 

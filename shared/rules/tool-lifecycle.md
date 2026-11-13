@@ -82,20 +82,24 @@ for registry writes.
 
 #### Prerequisite
 - Verify upstream install method via `/tool-eval` skill
-- Record via `/tool-registry` skill (protected)
+- Record it via `/tool-registry` skill
 
-#### Non-protected (implement directly)
+#### Implement
 - `scripts/setup-<tool>.sh` + `.ps1`
 - `@scripts/aitools-install.sh` + `.ps1` — add step
 - `@scripts/build-deploy.sh` — add copy block pair
 - If auth required: add status check in setup scripts
-
-#### Protected (present for review)
 - Registry entry via `/tool-registry` skill
 - `@shared/claude-shared.md` — Managed CLI Tools table
 - `<userRepoPath>/claude/CLAUDE.md` — same row
 - Check script entries (`TOOL_CMDS` dictionaries)
 - Deployment types table if new file type
+
+Write every item as a version in its final location and commit it;
+nothing waits for approval before it is written (D-DEL5, user rule
+`delegation.md`). The commit or PR body lists each change old -> new
+under "Review after": the registry entry, both Managed CLI Tools rows,
+the `TOOL_CMDS` entries and the deployment types table included.
 
 #### Rebuild + propagate
 1. Agents: `bash scripts/build-deploy.sh` under an isolated `HOME` with a

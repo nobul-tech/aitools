@@ -26,8 +26,8 @@ truth) and are unrelated to tool adoption (aitools
 `reference/managed-file-deployment.md`). NOT framework adoption (aitools
 `reference/framework-adoption.md`). **Audience**: Any agent, in any repo,
 that integrates a tool, migrates a setup script, or answers a
-`no method for <platform>` ERROR; the commander, who approves every
-protected change it drafts.
+`no method for <platform>` ERROR; the commander, who reviews every change
+it writes after the commit (D-DEL5).
 
 ## This skill does the work
 
@@ -37,14 +37,16 @@ tool to supported in this run. You do each of these yourself:
 - **Evaluate when needed**: when a target has no approved preferred method,
   run the `/tool-eval` skill now, with the commander, and bring its result
   back here (step 2).
-- **Write the registry entry**: draft every missing field and write it
-  through the `/tool-registry` skill once the commander approves (step 3).
+- **Write the registry entry**: write every missing field through the
+  `/tool-registry` skill as a version (step 3).
 - **Write the setup scripts**: create or migrate `scripts/setup-<tool>.sh`
   and `.ps1` (step 4), wire them into the installers and build (step 5),
   and test them (step 6).
 
-Stop only at an approval gate (the `/tool-eval` Phase 2 gate, a protected
-file) or when a step waits for M2; report what remains.
+Stop only at the `/tool-eval` Phase 2 gate or when a step waits for M2;
+report what remains. Every other change is written as a version, committed
+and listed old -> new under "Review after" in the commit or PR body
+(D-DEL5, user rule `delegation.md`).
 
 ## Where this runs
 
@@ -110,21 +112,22 @@ For each target, check that exactly one preferred method applies.
   with the commander interactively — automated research (official docs via
   the chrome-devtools skill, method catalog, provenance checks), then the
   commander's decision at the Phase 2 gate. Return here with its
-  recommendation; write it through `/tool-registry` (protected: present,
-  wait for approval).
+  recommendation; write it through `/tool-registry` as a version and list
+  it old -> new under "Review after".
 - Do not continue a target without an approved preferred method. After M2 a
   setup script for that target ends at NO-METHOD, which is the correct state
   until the evaluation lands.
 
 ### 3. Registry data
 
-Draft every registry field the entry lacks for each target platform (the
+Write every registry field the entry lacks for each target platform (the
 column that applies), including the update channel once schema 1.1 exists.
-After M2, validate the draft against the tree reference "Pre-commit
+After M2, validate the entry against the tree reference "Pre-commit
 conformance check", checks 1-6. Take the values from `/tool-eval` research
 only, never from memory.
 
-Present all drafted registry changes together via `/tool-registry`.
+Write all the registry changes together through `/tool-registry`, as one
+version, and list each old -> new under "Review after".
 
 ### 4. Setup scripts
 
@@ -151,17 +154,20 @@ Create or migrate `scripts/setup-<tool>.sh` and `.ps1` (always both):
 
 ### 5. Onboarding checklist (first support on a platform)
 
-Non-protected (implement): setup script pair; installer step in
+Implement: setup script pair; installer step in
 `scripts/aitools-install.sh/.ps1`; `scripts/build-deploy.sh` copy block; auth
-status check when the tool needs auth.
+status check when the tool needs auth; registry entry (through
+`/tool-registry`); `shared/claude-shared.md` Managed CLI Tools row and the
+same row in `<userRepoPath>/claude/CLAUDE.md` (the dotprofile template is
+read first); check script `TOOL_CMDS` entries; deployment types table for a
+new file type; `reference/evaluations/<tool>-*.md` evaluation provenance;
+tool skill in `shared/skills/<tool>/` when the tool has one. (No "CLAUDE.md
+deploy list" item: that list no longer exists — open incident #65.)
 
-Protected (present for review): registry entry (through `/tool-registry`);
-`shared/claude-shared.md` Managed CLI Tools row and the same row in
-`<userRepoPath>/claude/CLAUDE.md` (the dotprofile template is read first);
-check script `TOOL_CMDS` entries; deployment types table for a new file type;
-`reference/evaluations/<tool>-*.md` evaluation provenance; tool skill in
-`shared/skills/<tool>/` when the tool has one. (No "CLAUDE.md deploy list"
-item: that list no longer exists — open incident #65.)
+Write every item as a version and commit it; nothing waits for approval
+before it is written (D-DEL5). The commit or PR body lists each change
+old -> new under "Review after": the registry entry, both Managed CLI Tools
+rows, the `TOOL_CMDS` entries and the deployment types table included.
 
 After M2, regenerate tool specs (`scripts/gen-tool-specs.py`) and commit them
 with the registry change. Rebuild and propagate under an isolated `HOME`
@@ -187,15 +193,17 @@ commander's dotprofile): `bash scripts/build-deploy.sh` (verify the new
   `/tool-registry`; mark health flags that changed via `/tool-eval`.
 - **Rule**: if this run settled a decision the tool-lifecycle rule does not
   state (a new channel, a new menu option, a new deviation from the decision
-  tree), draft the `shared/rules/tool-lifecycle.md` edit and present it —
-  do not leave the decision only in a script or a plan.
+  tree), write the `shared/rules/tool-lifecycle.md` edit as a version and
+  list it under "Review after" — do not leave the decision only in a script
+  or a plan.
 - **Reference**: after M2, new probe kinds, install kinds, or leaves go into
-  `reference/tool-support-decision-tree.md` (protected, present for review).
+  `reference/tool-support-decision-tree.md` (a version, listed under
+  "Review after").
 
 ### 8. Report
 
 Targets and their final state on this machine, registry fields changed
-(approved or pending), scripts changed, tests run with results, open items,
+(old -> new, for "Review after"), scripts changed, tests run with results, open items,
 and `INCIDENT:` lines for deviations found.
 
 ## What this skill does NOT do

@@ -41,17 +41,15 @@ When a tool is approved (Phase 2 gate passed), complete ALL of these steps in or
 
 #### Prerequisite
 - Verify upstream install method via Chrome DevTools MCP skill (see "Install command verification gate")
-- Record verified install commands via the `/tool-registry` skill (protected -- present for review)
+- Record verified install commands via the `/tool-registry` skill
 
-#### Non-protected (implement directly)
+#### Implement
 - `scripts/setup-<tool>.sh` — install/update (macOS+Linux; OS guard exits on Windows)
 - `scripts/setup-<tool>.ps1` — install/update (Windows; OS guard exits on macOS/Linux)
 - `scripts/aitools-install.sh` — add `validate_and_run "$SCRIPT_DIR/setup-<tool>.sh"` step
 - `scripts/aitools-install.ps1` — add `Invoke-ValidatedScript $toolScript` step
 - `scripts/build-deploy.sh` — add numbered copy-as-is block pair after last tool block
 - If tool requires auth: add auth status check in both setup scripts (see script-standards "Post-install authentication check") and document auth commands via the `/tool-registry` skill (`authentication` field)
-
-#### Protected (present for review before writing)
 - Registry entry via the `/tool-registry` skill — full entry with all lifecycle fields
 - `shared/claude-shared.md` — add row to Managed CLI Tools table (shared template + MDM source)
 - `<userRepoPath>/claude/CLAUDE.md` (dotprofile repo) — same row addition; commit + push dotprofile repo separately
@@ -61,6 +59,8 @@ When a tool is approved (Phase 2 gate passed), complete ALL of these steps in or
 - `scripts/check-post-push.sh` — add entry to `TOOL_CMDS` dictionary
   (same command + version flag)
 - Check deployment types table in `@.claude/rules/managed-file-deployment.md` — add row if new file type
+
+Write every item as a version in its final location and commit it; nothing waits for approval before it is written (D-DEL5, user rule `delegation.md`). The commit or PR body lists each change old -> new under "Review after": the registry entry, both Managed CLI Tools rows, the check script entries and the deployment types table included.
 
 #### Rebuild + propagate
 1. Agents: `bash scripts/build-deploy.sh` under an isolated `HOME` with a copy of the dotprofile (`.claude/rules/deploy-paths.md`); verify the new `setup-<tool>.sh/.ps1` pair is in the generated `deploy/`. The real dotprofile rebuild is the commander's (or a mission ordered to do it).
