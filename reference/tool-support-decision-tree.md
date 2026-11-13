@@ -29,7 +29,7 @@ install-method menu, update channels, install-method detection, the
 authoritative field rules of tool registry schema 1.1, the bash/PowerShell
 helper contract, the installer and entry-point contract for exit 2, the tool
 exception contract (when written, read, matched; storage shape in
-`@reference/user-repo.md`), the conformance check, the `/audit` additions and
+`@reference/user-repo.md`), the conformance check, the audit-layer additions and
 planned hook for this domain, and the test matrix. NOT the lifecycle gates or onboarding checklist
 (`@shared/rules/tool-lifecycle.md`, `/tool-adopt`). NOT how a method is chosen
 (`/tool-eval`, `@shared/rules/tool-evaluation.md`). NOT registry data
@@ -708,9 +708,9 @@ conformance"), WARN while migration batches are open, FAIL once every
 
 The existing menu parity audit (`check-post-push` step 29) extends to
 `tool_method_menu` / `Read-ToolMethodChoice` (sequence after mission S3-Nine,
-which is editing check-post-push). The `/audit` skill gains: every
+which is editing check-post-push). Audit-layer checks to add: every
 approved/supported tool has a setup script or an inline owner; the
-`/tool-adopt` trigger directive exists in the rule.
+`/tool-adopt` trigger directive exists in the rule. <!-- TODO(incident): no owner since /audit was removed -->
 
 Planned hook (framework-adoption.md step 7; build later, observe first):
 PreToolUse (command) on Write/Edit of a tool setup script (a script named by a

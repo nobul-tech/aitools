@@ -65,7 +65,8 @@ covering:
   sequence without formal amendment. Documentation requirement —
   what was deviated and why.
 - **Plan amendment protocol**: Amend the plan first, execute second.
-  Present the amendment with rationale. The plan is a protected file.
+  Write the amendment with its rationale as a version and list it under
+  "Review after" (D-DEL5, user rule `delegation.md`).
 - **Prerequisite pull-forward**: When a later step is genuinely needed
   earlier, amend the plan with rationale before executing.
 

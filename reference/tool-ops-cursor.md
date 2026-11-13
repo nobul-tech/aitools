@@ -91,7 +91,7 @@ sources alike; `@reference/rules.md` R-6). It converts each Claude Code
 Use the chrome-devtools skill. Every docs page has a `.md` variant listed in
 https://cursor.com/llms.txt (`/docs/<page>.md`, `/help/<area>/<page>.md`).
 Fetch it in-page for verbatim text. Do not use WebFetch for content that
-feeds protected files.
+feeds source-of-truth files (registries, rules, references).
 
 ## Verification (manual canary)
 

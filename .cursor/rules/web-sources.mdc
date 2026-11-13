@@ -22,7 +22,7 @@ WebFetch misses. When accuracy matters, use the real browser.
 - Reading official tool docs to extract install commands for the `/tool-registry` skill
 - Verifying config requirements, post-install steps, or dependencies
 - Checking release notes or changelogs for lifecycle field updates
-- Any page whose content will be recorded verbatim in a protected file
+- Any page whose content will be recorded verbatim in a source-of-truth file
 
 Firecrawl is deprecated: do not use its MCP tools or skills for any web
 reading, even when they appear in the tool list (commander decision;
@@ -32,7 +32,7 @@ reading, even when they appear in the tool list (commander decision;
 
 - General web searches and research (use WebSearch for queries)
 - Blog posts, tutorials, Stack Overflow -- low-stakes reference
-- Quick fact-checks that don't feed into protected files
+- Quick fact-checks that don't feed into source-of-truth files
 - Static pages where JS rendering isn't needed (plain GitHub READMEs)
 
 ### Cross-reference
