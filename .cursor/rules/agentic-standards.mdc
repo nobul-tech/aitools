@@ -107,9 +107,10 @@ half-written file.
 **Rules.**
 - The library performs the repo write-back itself, given the adopt target's
   path. Callers pass the path; they do not copy files back themselves.
-- Adopting into a protected file (`.claude/rules/sources-of-truth.md`) is
-  allowed. It writes only the working tree and logs a WARN that names the
-  file; the review gate applies at commit and PR.
+- An adopt target in the aitools repo is a working-tree change only: the
+  library logs `Uncommitted change in <repo>`, and the change is reviewed at
+  commit and PR (D-DEL5, user rule `delegation.md`). An adopt target in the
+  dotprofile is committed and pushed (N-Q2).
 - AI merge applies to text files only and follows the prompt design,
   validation and telemetry rules above (speed `balanced`, permissions
   `none`, at most 1 retry, preview before write).

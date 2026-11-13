@@ -289,7 +289,8 @@ verified) and deleted it.
   in `@scripts/aitools-lib.ps1` (also usable by any other dotprofile
   writer). Callers do not commit or push adopt targets themselves. An
   adopt target in the aitools repo is a working-tree change only: no
-  commit, no push; the user ships it through a PR.
+  commit, no push; the user ships it through a PR, and the change is
+  reviewed at commit and PR (D-DEL5, user rule `delegation.md`).
   - *In the dotprofile* is decided by git: the file's git top level equals
     the dotprofile's. The dotprofile is the caller's resolved path
     (`AITLIB_USER_REPO_PATH` / `$script:AitLibUserRepoPath`, set by
@@ -327,14 +328,6 @@ verified) and deleted it.
   targets (`deploy_skill` / `Deploy-Skill`), so they match the adopted SOURCE
   without a second review; a failed copy is an ERROR row
   `sync failed: <skill>`.
-- **Adopting into a protected file** (any path in the
-  `.claude/rules/sources-of-truth.md` table) is allowed; the library writes
-  the working tree and logs a WARN naming the file. The library reads the
-  protected-files table (`.claude/rules/sources-of-truth.md`) of the git repo
-  that contains the adopt target at run time (`_managed_protected_note` /
-  `Write-ManagedProtectedNote`): a backticked path in the table's first column
-  matches, `*` matching within one path segment. No separate list is kept, so
-  the table cannot drift from the check.
 - **CLAUDE.md** passes an adopt filter: see "Markdown files".
 - **Exit 2** is not trapped by the caller: it ends the script.
 
@@ -399,9 +392,8 @@ file the manifest names (none without a manifest, none for Cursor, none when
 the script does not run from a git checkout). Fallback skills
 (`setup-user-skills`, no `~/.aitools/skills`): the `SKILL.md` actually read
 (the dotprofile copy, else `shared/skills/<name>/SKILL.md` in the aitools
-repo). Adopting into a protected file (`shared/claude-shared.md`, a file
-under `shared/`) is allowed: it writes the working tree only and logs a WARN
-naming the file; the review gate applies at commit and PR. Hooks:
+repo). An adopt target in the aitools repo (a file under `shared/`) is a
+working-tree change only, reviewed at commit and PR (D-DEL5). Hooks:
 `shared/hooks/<file>` (see "Shell Script Deployment Detail").
 
 **CLAUDE.md is a template** (S3-SpecRewrite Q1, approved 2026-10-21):
