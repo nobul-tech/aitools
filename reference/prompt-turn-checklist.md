@@ -12,7 +12,7 @@ delegation prompts (`/delegate` skill). **Audience**: Every agent at every
 prompt turn; the agent that builds the prompt-turn hook; the commander,
 reviewing what the hook will enforce.
 
-v1.8 (2026-11-13)
+v1.9 (2026-11-13)
 
 A **prompt turn** is one prompt from the commander and everything the agent
 does until its reply is printed.
@@ -20,7 +20,7 @@ does until its reply is printed.
 The checklist was inferred from the commander's prompts in sessions 8236ca9c
 (2026-03-26; `.aitools/channel/8236ca9c-full-session.md`) and fbf7decb
 (2026-03-28; the dotprofile's `sessions/aitools/2026-03-28_fbf7decb.jsonl`).
-The checklist has thirteen items. This version holds items 1 to 5. The rest
+The checklist has thirteen items. This version holds items 1 to 6. The rest
 are added on the commander's order.
 
 ## 1. Re-read the whole conversation, start to now, at full fidelity
@@ -184,7 +184,7 @@ A skipped item shows as:
 - a deviation from an order or the process that the reply does not mention;
 - a choice that belonged to the commander, made silently.
 
-## 5. Surface what you cannot resolve
+## 5. Surface what you cannot resolve and what you find
 
 The surfacing duty: what item 4 left open, and what you found along the way,
 goes to the commander as **session RFIs** (requests for information):
@@ -213,3 +213,26 @@ Suggest: <action> (why)
   say why.
 - **Track what must outlive the session**: also record a deficiency where the
   harness tracks it (an incident or an issue).
+
+## 6. Improve the process
+
+Before doing the work, look at how you are about to do it, and improve that.
+
+- **Review the last turn**: what worked, what the commander corrected, and
+  what you would do differently. Check for overcorrection: a correction
+  applied more broadly than it was meant.
+- **Add points of view**: name the sources, perspectives and provenance you
+  have not used yet that could change the result: the commander's way of
+  working, operational learning, related work, and whoever or whatever
+  consumes the output.
+- **Apply it now**: use the improvement in this turn's work. An improvement
+  that is only recorded has not been made.
+- **Never finished**: every process keeps improving. Deciding that a process
+  no longer needs review is itself a mistake.
+- **Report the change**: when the commander asks for the process, give what
+  changed since the last version; give the full version when asked for it.
+- **Carry it forward**: record an improvement that should outlive the session
+  as operational learning (item 13). A change to a governed artifact goes to
+  the commander as a session RFI.
+- **Scale to the work**: a yes/no question needs a moment's review; work that
+  spans several turns needs a real one.
