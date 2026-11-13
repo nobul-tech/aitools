@@ -229,10 +229,10 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 10. Protected files inventory
+# 10. Key files inventory
 # ---------------------------------------------------------------------------
 inventory_errors=0
-# Check that key protected files exist
+# Check that key source-of-truth files exist
 for pf in \
     "registries/tool-registry.json" \
     "reference/tool-evaluation-criteria.md" \
@@ -248,9 +248,9 @@ for pf in \
     fi
 done
 if [ "$inventory_errors" -eq 0 ]; then
-    step_pass "10" "Protected files inventory"
+    step_pass "10" "Key files inventory"
 else
-    step_fail "10" "Protected files inventory" "$inventory_errors file(s) missing"
+    step_fail "10" "Key files inventory" "$inventory_errors file(s) missing"
 fi
 
 # ---------------------------------------------------------------------------

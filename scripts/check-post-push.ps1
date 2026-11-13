@@ -270,10 +270,11 @@ if ($lifecycleCount -gt 0) {
 }
 
 # ---------------------------------------------------------------------------
-# 10. Protected files inventory
+# 10. Key files inventory
 # ---------------------------------------------------------------------------
 $inventoryErrors = 0
-$protectedFiles = @(
+# Check that key source-of-truth files exist
+$keyFiles = @(
     "registries/tool-registry.json",
     "reference/tool-evaluation-criteria.md",
     "reference/tool-evaluation-playbook.md",
@@ -283,7 +284,7 @@ $protectedFiles = @(
     "reference/tool-ops-claude-code.md",
     "reference/user-repo.md"
 )
-foreach ($pf in $protectedFiles) {
+foreach ($pf in $keyFiles) {
     $fullPath = Join-Path $script:RepoRoot $pf
     if (-not (Test-Path $fullPath)) {
         Write-Host "      missing: $pf"
@@ -291,9 +292,9 @@ foreach ($pf in $protectedFiles) {
     }
 }
 if ($inventoryErrors -eq 0) {
-    StepPass "10" "Protected files inventory"
+    StepPass "10" "Key files inventory"
 } else {
-    StepFail "10" "Protected files inventory" "$inventoryErrors file(s) missing"
+    StepFail "10" "Key files inventory" "$inventoryErrors file(s) missing"
 }
 
 # ---------------------------------------------------------------------------

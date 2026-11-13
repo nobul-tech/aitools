@@ -90,13 +90,13 @@ it cannot read any). The deeper checks (install command vs setup script, every
 lifecycle field, per-platform status values) are manual: run them through the
 `/tool-registry` skill.
 
-### 10. Protected files inventory
+### 10. Key files inventory
 
-The script checks that 8 key protected files exist (`registries/tool-registry.json`,
+The script checks that 8 key source-of-truth files exist (`registries/tool-registry.json`,
 `reference/tool-evaluation-criteria.md`, `reference/tool-evaluation-playbook.md`,
 `CLAUDE.md`, `shared/claude-shared.md`, `ROADMAP.md`,
-`reference/tool-ops-claude-code.md`, `reference/user-repo.md`). Table coverage of
-the globs is not checked.
+`reference/tool-ops-claude-code.md`, `reference/user-repo.md`). The list is
+hardcoded in both scripts.
 
 ### 11. Cross-platform pairing
 

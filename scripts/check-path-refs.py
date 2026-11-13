@@ -30,7 +30,7 @@ Exemptions, for intentional mentions of a path that does not exist (test
 fixtures, examples, history, planned files):
     - a line containing the marker "path-ref: ignore" is skipped;
     - scripts/check-path-refs-allow.txt lists "file|path|reason" entries
-      (protected files take an allowlist entry instead of a marker).
+      (for files that should not carry a marker, e.g. preserved history).
 
 Exit status: 0 = every cited path exists; 1 = one or more dead paths
 (each printed as file:line: path); 2 = usage or environment error.
