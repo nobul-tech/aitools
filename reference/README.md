@@ -12,6 +12,7 @@ through their skills, not listed here.
 | `rules.md` | Rules: what a rule governs, the rule / skill / reference / registry layering, scopes, deployment to user scope |
 | `skills.md` | Skills: what a skill is, the layering, anatomy, scopes, deployment to user scope and its cost |
 | `framework-adoption.md` | Discovery-to-continuation cycle (DTCC) and the cross-reference convention |
+| `framework-adversarial-review.md` | Adversarial review (red teaming, devil's advocacy, pre-mortem, key assumptions check): sources for checklist item 8 |
 | `framework-artifact-harvesting.md` | Artifact harvesting: source discipline and adoption |
 | `framework-governed-data-access.md` | Skill-gated access to governed registries |
 | `framework-governed-vocabulary.md` | Governed vocabulary: composition convention, glossary maintenance |
@@ -20,6 +21,7 @@ through their skills, not listed here.
 | `framework-incident-investigation.md` | Root-cause analysis: 5 Whys, Swiss cheese, barrier analysis |
 | `framework-intent-documentation.md` | Intent statements: purpose, scope, audience |
 | `framework-managed-file-deployment.md` | Configuration management behind managed file deployment |
+| `framework-perspective-based-reading.md` | Perspective-based reading (Basili et al.): sources for checklist item 9 |
 | `framework-provenance.md` | Provenance tracking: dependency chains, staleness, invalidation |
 | `framework-source-of-truth.md` | Source-of-truth review gate (change management) |
 | `framework-three-layer-governance.md` | Prevention / detection / audit layers and the registry convention |

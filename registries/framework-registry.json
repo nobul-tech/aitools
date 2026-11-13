@@ -7,7 +7,7 @@
       "scope": "Framework entries and pending adoptions only. NOT the adoption process (framework-adoption.md). NOT framework documentation (framework-*.md files)",
       "audience": "/frameworks skill, /audit skill"
     },
-    "lastUpdated": "2026-03-15"
+    "lastUpdated": "2026-11-13"
   },
   "frameworks": [
     {
@@ -185,6 +185,30 @@
         "shared/hooks/tool-ops-session-audit.sh"
       ],
       "lastUpdated": "2026-03-15"
+    },
+    {
+      "name": "Adversarial review",
+      "governs": "Attacking a draft in thinking before it is written to a file, until the attacks find nothing to fix (prompt-turn checklist item 8)",
+      "discipline": "Military and intelligence analysis (red teaming, structured analytic techniques)",
+      "concepts": ["Red teaming (UK MOD Red Teaming Handbook, 3rd ed., 2021)", "Devil's advocacy", "Pre-mortem (Klein, HBR 2007)", "Key assumptions check (US Government Tradecraft Primer, 2009)"],
+      "referenceFile": "reference/framework-adversarial-review.md",
+      "artifacts": [
+        "reference/prompt-turn-checklist.md (item 8)",
+        "reference/framework-adversarial-review.md"
+      ],
+      "lastUpdated": "2026-11-13"
+    },
+    {
+      "name": "Perspective-based reading",
+      "governs": "Reviewing a written file once per reader, each pass from one reader's perspective with that reader's questions (prompt-turn checklist item 9)",
+      "discipline": "Software engineering (software inspection, reading techniques)",
+      "concepts": ["Perspective-based reading (Basili et al., Empirical Software Engineering, 1996)", "Software inspection", "Perspective-specific questions (Shull, Rus, Basili, IEEE Computer, 2000)"],
+      "referenceFile": "reference/framework-perspective-based-reading.md",
+      "artifacts": [
+        "reference/prompt-turn-checklist.md (item 9)",
+        "reference/framework-perspective-based-reading.md"
+      ],
+      "lastUpdated": "2026-11-13"
     }
   ],
   "pending": [
