@@ -198,6 +198,31 @@
         "reference/framework-perspective-based-reading.md"
       ],
       "lastUpdated": "2026-11-13"
+    },
+    {
+      "name": "Mission command",
+      "governs": "Fixing the meaning of an order before acting, and resolving what you can on your own initiative within the commander's intent, reporting every deviation (prompt-turn checklist items 2 and 4)",
+      "discipline": "Military command and control (mission command; Auftragstaktik)",
+      "concepts": ["Disciplined initiative (ADP 6-0 Command and Control, 2026)", "Commander's intent", "Backbrief and confirmation brief (FM 1-02.1, 2026)", "Auftragstaktik / Führen mit Auftrag (Joint Force Quarterly 96, 2020; Handbuch Innere Führung, 2023)"],
+      "referenceFile": "reference/framework-mission-command.md",
+      "artifacts": [
+        "reference/prompt-turn-checklist.md (items 2 and 4)",
+        "reference/framework-mission-command.md"
+      ],
+      "lastUpdated": "2026-11-13"
+    },
+    {
+      "name": "Request for information",
+      "governs": "Raising what an agent cannot resolve, and what it finds, to the commander as numbered session RFIs with a suggested answer (prompt-turn checklist item 5)",
+      "discipline": "Construction contract administration; military intelligence doctrine",
+      "concepts": ["RFI numbered, logged and tracked (AIA G716-2004)", "Sender's recommended solution (AIA G716-2004)", "Ask only what research cannot answer", "DOD RFI definition (JP 2-0, via FM 1-02.1, 2026)", "Intelligence reach first (FM 2-0, 2026)"],
+      "referenceFile": "reference/framework-request-for-information.md",
+      "artifacts": [
+        "reference/prompt-turn-checklist.md (item 5)",
+        "reference/framework-request-for-information.md",
+        ".claude/rules/glossary.md (term: session RFI)"
+      ],
+      "lastUpdated": "2026-11-13"
     }
   ],
   "pending": [

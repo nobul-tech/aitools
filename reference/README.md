@@ -21,8 +21,10 @@ through their skills, not listed here.
 | `framework-incident-investigation.md` | Root-cause analysis: 5 Whys, Swiss cheese, barrier analysis |
 | `framework-intent-documentation.md` | Intent statements: purpose, scope, audience |
 | `framework-managed-file-deployment.md` | Configuration management behind managed file deployment |
+| `framework-mission-command.md` | Mission command (disciplined initiative, backbrief, confirmation brief): sources for checklist items 2 and 4 |
 | `framework-perspective-based-reading.md` | Perspective-based reading (Basili et al.): sources for checklist item 9 |
 | `framework-provenance.md` | Provenance tracking: dependency chains, staleness, invalidation |
+| `framework-request-for-information.md` | Request for information (construction and military RFIs): sources for session RFIs, checklist item 5 |
 | `framework-three-layer-governance.md` | Prevention / detection / audit layers and the registry convention |
 | `framework-tool-lifecycle.md` | Tool lifecycle: phases, gates, health flags |
 | `framework-tool-ops.md` | Tool operations: SRE-grounded per-tool ops metadata |

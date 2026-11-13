@@ -13,7 +13,7 @@ delegation prompts (`/delegate` skill). **Audience**: Every agent at every
 prompt turn; the agent that builds the prompt-turn hook; the commander,
 reviewing what the hook will enforce.
 
-v1.18 (2026-11-13)
+v1.19 (2026-11-13)
 
 A **prompt turn** is one prompt from the commander and everything the agent
 does until its reply is printed.
@@ -97,6 +97,12 @@ A skipped item shows as:
   than its scope words allowed;
 - a word read with its default meaning where the session had fixed another;
 - an assumption about an ambiguous word stated as fact.
+
+Adopted from: the backbrief and the confirmation brief of mission command (US
+Army terms, FM 1-02.1 *Operational Terms*, 2026): subordinates brief back how
+they intend to accomplish the mission, and confirm their understanding of the
+order right after it is given. Here the agent fixes the meaning of the order
+before acting. Sources: `@reference/framework-mission-command.md`.
 
 ## 3. Re-read the sources that inform the work
 
@@ -190,7 +196,8 @@ orders until the orders no longer suit the situation, then act within the
 commander's intent and report the new situation when able. Mission command
 was modeled on Auftragstaktik, the Prusso-German command philosophy (Joint
 Force Quarterly 96, 2020), which the Bundeswehr calls Führen mit Auftrag
-(Handbuch Innere Führung, 2023).
+(Handbuch Innere Führung, 2023). Sources:
+`@reference/framework-mission-command.md`.
 
 ## 5. Surface what you cannot resolve and what you find
 
@@ -228,7 +235,8 @@ tracked, raised only for information the requester cannot obtain through
 research or document review, with the sender's recommended solution beside
 the receiver's response; and the RFI in military doctrine (US DOD definition,
 JP 2-0, as given in FM 1-02.1, 2026), which Army intelligence staffs first try
-to answer themselves through intelligence reach (FM 2-0, 2026).
+to answer themselves through intelligence reach (FM 2-0, 2026). Sources:
+`@reference/framework-request-for-information.md`.
 
 ## 6. Improve the process
 
