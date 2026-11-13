@@ -20,14 +20,20 @@ fan-out PRs.
 Version 1.0, 2026-10-27. Written by S3-FanoutImpl-Docs (FO-7 of
 `@plans/skills-and-rules-fanout.md`) for Session Commander 10cf255a-c, from
 research by S3-FanoutImpl-DocsScan. A version, not a draft (D-DEL5). The
-intent above is new and protected (`@.claude/rules/sources-of-truth.md`
-"Intent statements"); it is listed for review in its PR.
+intent above is new; it is listed for review in its PR (review-after,
+D-DEL5, user rule `delegation.md`).
 
 v1.1 (2026-11-06, Session Commander f500b663-7): S-7 supersedes S-1, S-2
 and S-3: skills deploy from `shared/skills` only; sections 5.3, 6.1, 6.2 and
 7 updated. The intent statement above was revised to name S-7 instead of
 S-1 on the commander's order of 2026-11-07 ("please fix the intent blocks on
 rules.md and skills.md").
+
+v1.2 (2026-11-13, S3-Clean for Session Commander 90ea4d3e): removed the
+references to the deleted `sources-of-truth.md` rule, `/audit` skill and
+`artifact-harvesting.md` shared rule; `frameworks`, `glossary` and
+`incident` are project skills (S-8, 3cebd24); sections 1, 3, 4, 5, 7, 8,
+9 and 10 updated.
 
 Every claim cites its source. "Built" means on `origin/main` (`40777f8`,
 2026-10-29: FO-0..FO-6 merged in plan order as PRs 117, 120, 118, 119, 121,
@@ -43,8 +49,9 @@ Every claim cites its source. "Built" means on `origin/main` (`40777f8`,
 | S-3 | **Source order superseded by S-7** (one source now; the rest stands). Skill conflicts: first source wins (`shared/`, then `.claude/`, then the dotprofile); each skipped duplicate is `log_error` + an ERROR row; a skills manifest records each skill's source; a user's own skill in `~/.claude/skills` or `~/.cursor/skills` is never overwritten or pruned unless the fan-out created it | 2026-10-26 | commander | FD-4 |
 | S-4 | setup-user-skills stops deploying once `~/.aitools/skills` exists; it keeps reverse discovery and stays the fallback deployer | 2026-10-26 | S3-FanoutImpl (orchestrator), listed for the commander | FD-9, plan section 8 Q4 |
 | S-5 | Whole skill directories (every tracked file), not SKILL.md only; Cursor gets no adopt | 2026-10-26 | S3-FanoutImpl, suggested answers taken | plan section 8 Q2, Q3 |
-| S-6 | SD-8 (extended): 7 governance skills (`tool-ops`, `tool-eval`, `tool-registry`, `harvest`, `incident`, `glossary`, `frameworks`) move from `.claude/skills/` to `shared/skills/` | 2026-10-21 | commander | `SC-mission-packet.md` section 6; re-landed by MERGE-ALL as PR 128 (main `72c94c3`: the seven moved, `audit` and `governed-data` stay in `.claude/skills/`) and PR 129 (main `a63ad2d`: the `/aitool-ops` and `/aitool-eval` reference cards and their rules retired) |
+| S-6 | **Partly reversed by S-8** (`frameworks`, `glossary`, `incident` are project skills again). SD-8 (extended): 7 governance skills (`tool-ops`, `tool-eval`, `tool-registry`, `harvest`, `incident`, `glossary`, `frameworks`) move from `.claude/skills/` to `shared/skills/` | 2026-10-21 | commander | `SC-mission-packet.md` section 6; re-landed by MERGE-ALL as PR 128 (main `72c94c3`: the seven moved, `audit` and `governed-data` stay in `.claude/skills/`) and PR 129 (main `a63ad2d`: the `/aitool-ops` and `/aitool-eval` reference cards and their rules retired) |
 | S-7 | Roll back to `shared/` only: deploy-harness copies only `shared/skills` (and `shared/rules`, `@reference/rules.md` R-8) into `~/.aitools`. aitools `.claude/skills` is project scope (Claude Code loads it inside the aitools repo); the dotprofile `claude/skills` is not a harness source. Skills a previous run deployed from those sources (manifest `aitools` / `dotprofile`) are retired, and the fan-outs remove their copies | 2026-11-06 | commander | Session f500b663-7: "we need to roll that back so that only the skills/rules in the shared/ directory get copied over" |
+| S-8 | `frameworks`, `glossary` and `incident` move from `shared/skills/` to `.claude/skills/` (project scope); the next deploy-harness run retires them from user scope | 2026-11-13 | commander | commit 3cebd24 (the commander made the move; recorded in the S3-Clean mission prompt, Session Commander 90ea4d3e) |
 
 S-1's measured cost (section 7) no longer applies under S-7.
 
@@ -80,7 +87,7 @@ What a skill is not:
 | Rule | Intent, principle, directives, trigger directive "When to invoke /<skill>" | Always (or on `paths:` match) | `@reference/rules.md` section 3 |
 | Skill | Governed process, menus, checklists; the gate to governed data | Description always (unless `disable-model-invocation`), body on invocation | this file |
 | Reference | Detail, rationale | When read | `@.claude/rules/documentation-standards.md` |
-| Registry | Structured data (protected, governed) | Through its skill only | `@.claude/rules/frameworks.md` "Three-layer registry pattern" |
+| Registry | Structured data (governed) | Through its skill only | `@.claude/rules/frameworks.md` "Three-layer registry pattern" |
 
 "A rule without a trigger directive for its skill is a governance gap. A
 skill without a corresponding rule trigger is ungoverned process"
@@ -94,14 +101,17 @@ convention for registry skills: write `/<singular>`, read `/<plural>`
 
 Built from the 22 skills on `origin/main` (20 in `shared/skills/`, 2 in
 `.claude/skills/`; `git ls-tree origin/main shared/skills/ .claude/skills/`,
-`40777f8`; the skill set is the same as at `add7a09`).
+`40777f8`; the skill set is the same as at `add7a09`). Today (after
+3cebd24): 21 skills, 17 in `shared/skills/` and 4 in `.claude/skills/`
+(`frameworks`, `glossary`, `governed-data`, `incident`); `audit` was
+deleted.
 
 ### 4.1 Directory
 
 ```
 <name>/
 ├── SKILL.md                    required
-└── tests/                      optional: expected-behaviors.md (7 of 22 have it today)
+└── tests/                      optional: expected-behaviors.md (6 of 21 have it today)
 ```
 
 - The directory name is the skill name. Every harness skill today has a
@@ -138,7 +148,7 @@ description: <what it does and when to use it, key use case first>
 |-------|-------------|--------|-------------|
 | `name` | optional (directory name otherwise) | required, = folder name | always set |
 | `description` | recommended; with `when_to_use` truncated at 1,536 characters in the listing | required | always set; the cost driver (section 7) |
-| `disable-model-invocation` | `true`: description not in context, user-invoked only | same | `audit` only |
+| `disable-model-invocation` | `true`: description not in context, user-invoked only | same | none today |
 | `paths` | globs | globs ("the skill is only surfaced when the agent" works on matching files) | none today |
 | `allowed-tools`, `context`, `model`, `effort`, `hooks`, ... | Claude Code extensions | not listed | none today |
 
@@ -154,24 +164,25 @@ In the order the approved skills use (exemplars: `/glossary`,
 `/intent-writing`, `/delegate`, `/scratch`):
 
 1. `## Intent` (Purpose, Scope with NOT lines naming the neighbouring
-   skills, Audience). Protected like every intent statement
-   (`/intent-writing` "Style calibration": skills are "more conversational
+   skills, Audience). Changed as a version and reviewed after, like every
+   intent statement (D-DEL5, user rule `delegation.md`). Style:
+   `/intent-writing` "Style calibration" (skills are "more conversational
    than rules/JSON" and "must name what the skill does NOT do").
 2. When to use it (mirrors the rule's trigger directive; the rule is the
    authority).
 3. The process: numbered steps, menus, checklists, required fields.
 4. Cross-references: rules by `@path`, skills by `/name`.
 
-A skill is deployed to user scope, so it is read in any repo: write aitools
+A shared skill is deployed to user scope, so it is read in any repo: write aitools
 paths as "aitools `<path>`" or say the skill works only inside aitools
 (section 7.3; same convention as shared rules, `@reference/rules.md`
 section 4).
 
 ### 4.4 Expected-behaviour tests (`<name>/tests/`)
 
-Seven skills carry one (`audit`, `incident`, `tool-ops`, `delegate`,
-`investigate`, `optimize-plan`, `planning`). It is deployed with the skill
-(S-5). Its format and who runs it: unknown (no rule or reference governs
+Six skills carry one: `incident` (project) and `tool-ops`, `delegate`,
+`investigate`, `optimize-plan`, `planning` (shared). A shared skill's tests
+are deployed with it (S-5). Its format and who runs it: unknown (no rule or reference governs
 it; see section 10).
 
 ### 4.5 Reference-card pattern (retired)
@@ -193,8 +204,8 @@ Scope modifiers compose with the base artifact `skill` (`/glossary` skill;
 | Scope | Where | What belongs there | Reaches the tools how |
 |-------|-------|--------------------|-----------------------|
 | shared skill | aitools `shared/skills/<name>/` | Harness process for every agent in every repo | deploy-harness → `~/.aitools/skills` → fan-out (section 6) |
-| project skill | `.claude/skills/<name>/` in a repo | What is meaningful only inside that repo (aitools: `audit`, `governed-data`) | Loaded by Claude Code from the repo; for aitools also through the fan-out (S-1) |
-| dotprofile skill | `<userRepoPath>/claude/skills/<name>/` | The user's own skills | deploy-harness → fan-out (last source: a shared or project skill of the same name wins) |
+| project skill | `.claude/skills/<name>/` in a repo | What is meaningful only inside that repo (aitools: `frameworks`, `glossary`, `governed-data`, `incident`) | Loaded by Claude Code from the repo; not deployed (S-7) |
+| dotprofile skill | `<userRepoPath>/claude/skills/<name>/` | The user's own skills | Not deployed by the harness (S-7) |
 | user skill | `~/.claude/skills/<name>/`, `~/.cursor/skills/<name>/` | Deployed copies, plus the user's own and third-party skills | -- (the target) |
 
 ### 5.1 Claude Code
@@ -265,10 +276,11 @@ From cursor.com/docs/skills (read with chrome-devtools, 2026-10-27):
 
 `@.claude/rules/documentation-standards.md` "Skill placement": the source
 directory decides whether the skill is deployed (S-7: only `shared/skills`
-is). Shared: factual, project-agnostic, works in any repo, including the
-governance skills useful in any repo (PR 128). Project: only what is
-meaningful solely inside the aitools working tree; loaded only in aitools
-sessions, never deployed. Dotprofile `claude/skills`: not a harness source.
+is). Shared: factual, project-agnostic, works in any repo (`tool-eval`,
+`tool-ops`, `tool-registry` and `harvest` among them since PR 128). Project:
+only what is meaningful solely inside the aitools working tree; loaded only
+in aitools sessions, never deployed (`frameworks`, `glossary`, `incident`
+since S-8, and `governed-data`). Dotprofile `claude/skills`: not a harness source.
 Names unique across the sources (pre-commit step 21).
 
 ## 6. Deployment
@@ -370,11 +382,12 @@ edits it runs its own copy. The rest of this section is the record of S-1.
 
 ### 7.1 What changes
 
-Since PR 128 (S-6) the aitools `.claude/skills` hold two skills, `audit`
-and `governed-data`; the seven governance skills that used to be project
-skills (`frameworks`, `glossary`, `harvest`, `incident`, `tool-eval`,
-`tool-ops`, `tool-registry`) are in `shared/skills/` and reach user scope
-as shared skills. With S-1 the two project skills also reach
+From PR 128 (S-6) to 3cebd24 the aitools `.claude/skills` held two skills,
+`audit` (since deleted) and `governed-data`; the seven governance skills
+that used to be project skills (`frameworks`, `glossary`, `harvest`,
+`incident`, `tool-eval`, `tool-ops`, `tool-registry`) were in
+`shared/skills/` and reached user scope as shared skills (S-8 moved
+`frameworks`, `glossary` and `incident` back). With S-1 the two project skills also reached
 `~/.claude/skills/` and `~/.cursor/skills/` and are listed in every repo on
 the machine.
 
@@ -403,6 +416,9 @@ bytes here against 25,236 on main).
 | **added to every session in every repo by S-1** (`governed-data`) | 1 | **252 B** | **~60** | -- |
 | all harness skills | 22 | 6,571 B | ~1,640 | 224,487 B |
 
+The table is the record at `40777f8`; `audit` was deleted in 3cebd24 and
+not re-measured.
+
 Compared with rules: S-1's rules half adds about 78 KB (~19.5k tokens)
 every session (`@reference/rules.md` section 7); the skills half adds about
 250 bytes (~60 tokens), because only descriptions load and only one
@@ -419,34 +435,36 @@ A skill used outside aitools cannot open aitools `registries/`,
 `reference/`, `plans/`, `scripts/` or `.claude/rules/` paths by a relative
 path (plan risk R3). Counts of distinct such paths in each SKILL.md body
 (`skill-cost.pl` at `40777f8`; a mention in prose counts, so this is an
-upper bound of what breaks):
+upper bound of what breaks; the `audit` row is dropped since its deletion
+in 3cebd24, and the Source column is today's):
 
 | Skill | Source | Paths | Examples | Outside aitools |
 |-------|--------|-------|----------|-----------------|
-| audit | .claude | 6 | incidents registry, `.claude/rules/*.md` | does not work |
-| governed-data | .claude | 5 | `.claude/rules/governed-data-access.md`, `scripts/check-pre-commit.sh/.ps1` | does not work |
-| frameworks, glossary, incident, tool-eval, tool-ops, tool-registry | shared (PR 128) | 4-9 | the registries, `reference/framework-*.md`, `reference/tool-ops-*.md`, `reference/evaluations/` | works: "Where the files live" resolves the paths in the clone named by `repoPath` (reads from `origin/main`), else the read-only `~/.aitools/registries/` copy |
-| harvest | shared (PR 128) | 6 | `shared/rules/artifact-harvesting.md`, `scripts/check-*.sh` | partly (the harvesting folder is per repo; "Where the files live") |
+| governed-data | .claude | 5 | `.claude/rules/governed-data-access.md`, `scripts/check-pre-commit.sh/.ps1` | not loaded (project skill, S-7) |
+| frameworks, glossary, incident | .claude (S-8) | 4-9 (range for these six skills together) | the registries, `reference/framework-*.md` | not loaded (project skill, S-7); their "Where the files live" sections are kept |
+| tool-eval, tool-ops, tool-registry | shared (PR 128) | 4-9 (with the row above) | the registries, `reference/tool-ops-*.md`, `reference/evaluations/` | works: "Where the files live" resolves the paths in the clone named by `repoPath` (reads from `origin/main`), else the read-only `~/.aitools/registries/` copy |
+| harvest | shared (PR 128) | 6 | harvesting governance (`reference/artifact-harvesting.md`), `scripts/check-*.sh` | partly (the harvesting folder is per repo; "Where the files live") |
 | tool-adopt | shared | 19 | `shared/rules/tool-lifecycle.md`, `reference/evaluations/` | says "In the aitools repo: run every step": partly |
 | aitool-continue | shared | 6 | `.aitools/channel/handoffs/`, `reference/harness.md` | branches on the repo (by design) |
 | handoff | shared | 6 | `plans/*/handoff-prompt.md`, `.aitools/channel/handoffs/` | relative to the current repo (by design) |
 | intent-audit | shared | 9 | glossary and incidents registries | partly |
-| delegate | shared | 8 | `.claude/rules/sources-of-truth.md`, `scripts/check-pre-commit.sh` | mostly prose pointers |
+| delegate | shared | 8 | `.claude/rules/*.md`, `scripts/check-pre-commit.sh` | mostly prose pointers |
 | intent-writing, investigate, mission-control, optimize-plan, planning, scratch | shared | 1-4 | `reference/framework-adoption.md`, `scripts/ait-harvest.py`, `plans/*.md` | mostly prose pointers |
 | a11y-debugging, chrome-devtools | shared | 0 | -- | works |
 
 `~/.aitools/reference/` and `~/.aitools/registries/` hold copies of these
 trees (`@reference/harness.md` "Deployed harness"); since PR 128 the
-governance skills use the registries copy as their last read-only fallback
-("Where the files live"). Whether the two project skills should do the
-same: undecided (section 10).
+shared governance skills use the registries copy as their last read-only
+fallback ("Where the files live"). Project skills are not deployed (S-7),
+so they run only inside aitools and read the checkout.
 
 ## 8. Writing or changing a skill
 
 1. Check whether a skill, rule or framework already covers it (`/frameworks`
    skill; `@.claude/rules/frameworks.md` "Governing principle").
-2. Pick the source (section 5.3): shared, project (aitools), or dotprofile.
-   Every one of them is deployed to user scope.
+2. Pick the source (section 5.3): shared or project (aitools). Only shared
+   skills are deployed to user scope (S-7); the dotprofile `claude/skills`
+   is not a harness source.
 3. Pick the name: lowercase letters, digits, hyphens; equal to the
    directory; unique across the three sources, case-insensitive; not
    `synced`, not `anthropic-skills*`, no leading dot, no `.bak.`; not
@@ -454,7 +472,7 @@ same: undecided (section 10).
    writes it (D-DEL1, applies to `*.md`).
 4. Write `name` and `description` (key use case first; it is the part that
    is always in context, section 7.2). Use `disable-model-invocation: true`
-   for a skill only the user should start (`/audit`).
+   for a skill only the user should start (no harness skill does today).
 5. Write the `## Intent` (`/intent-writing`), then the process. Put
    rationale in `reference/`. If the skill cites aitools paths, say it works
    inside aitools only, or cite `~/.aitools/<path>` for read-only lookups.
@@ -463,9 +481,9 @@ same: undecided (section 10).
    governance"); a skill for a framework also needs its detection hook spec
    (`@reference/framework-adoption.md` step 7).
 7. Optional: `tests/expected-behaviors.md`. <!-- path-ref: ignore (a path inside a skill directory) -->
-8. Get review for every intent statement and every protected file the
-   change touches (`@.claude/rules/sources-of-truth.md`; a skill's SKILL.md
-   body is not in the protected table).
+8. Write the change as a version and commit it; list each changed intent
+   statement old -> new under "Review after" in the commit or PR body. The
+   commander reviews after (D-DEL5, user rule `delegation.md`).
 9. Ship: aitools skills by PR; dotprofile skills commit and push to the
    dotprofile's main (N-Q2). The deployed copies update on the next
    `aitools` run (section 6). A renamed or removed skill is retired: the
@@ -476,9 +494,10 @@ same: undecided (section 10).
 - Edit the repo source, never `~/.claude/skills/` or `~/.aitools/skills/`:
   the next run shows a review menu for the deployed copy (accept & adopt
   writes the repo source; Cursor offers no adopt).
-- Until the next `aitools` run Claude Code runs the old user-level copy of
-  a project skill you edit (section 7.1). To test the edit, run the setup
-  under an isolated `HOME`, or read the repo file directly.
+- A project skill is not deployed (S-7), so a session in the checkout runs
+  the copy you edit. Until the next `aitools` run Claude Code runs the old
+  user-level copy of a shared skill you edit. To test the edit, run the
+  setup under an isolated `HOME`, or read the repo file directly.
 - After accept & adopt in the Claude Code fan-out, `~/.aitools/skills/<name>`
   still holds the old text until deploy-harness runs again (FAN-PLAN risk
   R5 applies to skills), so the Cursor copy follows one run later
@@ -526,7 +545,7 @@ Open (`INCIDENT:` markers for the delegating agent; not filed):
   CLI: unknown.
 - Cursor duplicate resolution for one skill name seen in `~/.cursor/skills/`,
   `~/.claude/skills/` and `.claude/skills/`: unknown.
-- `tests/expected-behaviors.md` in 7 skills has no governing spec (who runs <!-- path-ref: ignore (a path inside a skill directory) -->
+- `tests/expected-behaviors.md` in 6 skills has no governing spec (who runs <!-- path-ref: ignore (a path inside a skill directory) -->
   it, when, format).
 - `backup_dir` / `Backup-Dir` skip a directory without a top-level `*.md`,
   so no directory backup is ever taken of `~/.claude/skills`,
@@ -534,9 +553,10 @@ Open (`INCIDENT:` markers for the delegating agent; not filed):
   PR 118 / PR 123 follow-ups).
 - In fallback mode `setup-user-skills` still offers a `*.bak.*` directory in
   `~/.claude/skills` for adoption (PR 125 follow-up).
-- The two project skills (`audit`, `governed-data`) cite aitools repo paths
-  only; whether they should read through `repoPath` or `~/.aitools/<path>`
-  like the governance skills (section 7.3): undecided.
+- Closed by S-7: whether the project skills should read through `repoPath`
+  or `~/.aitools/<path>` like the shared governance skills. Project skills
+  are not deployed, so they run only inside aitools and read the checkout
+  (section 7.3).
 
 ## 11. Cross-references
 

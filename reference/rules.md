@@ -18,15 +18,20 @@ rule, in any repo.
 Version 1.1, 2026-10-27. v1.0 (2026-10-26) written by S3-RulesSpec; v1.1 by
 S3-FanoutImpl-Docs (FO-7 of `@plans/skills-and-rules-fanout.md`), both for
 Session Commander 10cf255a-c. A version, not a draft (D-DEL5). The intent
-above was approved by the commander on 2026-10-26 and is unchanged in v1.1;
-like every intent statement it is protected
-(`@.claude/rules/sources-of-truth.md` "Intent statements").
+above was approved by the commander on 2026-10-26 and is unchanged in v1.1.
+A change to it is written as a version and reviewed after (D-DEL5, user
+rule `delegation.md`).
 
 v1.2 (2026-11-06, Session Commander f500b663-7): R-8 supersedes R-1, R-3,
 R-4 and R-6: rules deploy from `shared/rules` only; sections 5, 6.1 and 7
 updated. The intent statement above was revised to name R-8 instead of R-4
 on the commander's order of 2026-11-07 ("please fix the intent blocks on
 rules.md and skills.md").
+
+v1.3 (2026-11-13, S3-Clean for Session Commander 90ea4d3e): removed the
+references to the deleted `sources-of-truth.md` rule (its protected-file
+review gate is replaced by D-DEL5 review-after) and the deleted `/audit`
+skill (3cebd24); sections 3, 4, 7, 8 and 10 updated.
 
 v1.1 changes: R-2 superseded by R-6 (Cursor gets every rule minus retired);
 R-7 (skills deploy like rules); sections 5, 6.1 and 7 describe the fan-out
@@ -90,7 +95,7 @@ What a rule is not:
 | Rule | Intent, governing principle, directives, trigger directive, cross-references | Always (or when a `paths:` glob matches, section 5) | `.claude/rules/`, `shared/rules/`, dotprofile `claude/rules/`, deployed `~/.claude/rules/` | `@.claude/rules/documentation-standards.md` |
 | Skill | The governed process; the only access to governed data | On demand | `.claude/skills/`, `shared/skills/`, dotprofile `claude/skills/`, deployed `~/.claude/skills/` | `@reference/framework-governed-data-access.md` "Skill-as-capability pattern" |
 | Reference | Implementation detail, rationale, origins | When read | `reference/` | `@.claude/rules/documentation-standards.md` |
-| Registry | Structured data, source of truth (protected, governed) | Through its skill only | `registries/` | `@reference/framework-three-layer-governance.md` "Registry Convention" |
+| Registry | Structured data, source of truth (governed) | Through its skill only | `registries/` | `@reference/framework-three-layer-governance.md` "Registry Convention" |
 
 The registry pattern is three layers: rule (intent, always in context) +
 JSON (data) + skill (access). `@.claude/rules/frameworks.md` "Three-layer
@@ -99,7 +104,7 @@ registry pattern". The registries and their skills are listed by the
 
 Governance layers (`@reference/framework-three-layer-governance.md` "The
 Three Layers"): rules and skills are **prevention**, hooks are
-**detection**, `/audit` and `/incident` are **audit**. "A rule without a
+**detection**, check scripts, CI and the `/incident` skill are **audit**. "A rule without a
 trigger directive for its skill is a governance gap. A skill without a
 corresponding rule trigger is ungoverned process." When a skill is created
 as part of a framework, three artifacts are created together: the skill, the
@@ -132,8 +137,9 @@ user rule.
    in the files; no rule mandates it.
 3. **Intent block** `**Intent**: **Purpose**: ... **Scope**: ... NOT ...
    **Audience**: ...` right after the title (`/intent-writing` skill, "Style
-   calibration"). Intent statements are protected: draft, present, write
-   after approval (`@.claude/rules/sources-of-truth.md`). Not every rule has
+   calibration"). An intent change is written as a version, committed, and
+   listed old -> new under "Review after" for the commander (D-DEL5, user
+   rule `delegation.md`). Not every rule has
    one yet (e.g. `@.claude/rules/deploy-paths.md`, `@.claude/rules/git-safety.md`).
 4. **Decisions table** (`| ID | Decision | Date | By |`) when the rule
    records commander decisions (`delegation.md` D-DEL1..D-DEL4,
@@ -289,7 +295,7 @@ too. The duplicate project-level copies are removed by the commander later
   rule, the user copy is stale until the next `aitools` run.
 - The 9 scoped rules (`scripts/**`, `deploy/**`, ...) also fire in any other
   repo that has those paths.
-- Rules that say "this repo" (e.g. `@.claude/rules/sources-of-truth.md`,
+- Rules that say "this repo" (e.g. `@.claude/rules/git-safety.md`,
   `@.claude/rules/script-standards.md`) would read as governing every repo.
 - A costed variant (skip source `aitools` in the Claude fan-out, as Cursor
   did under R-2) exists in R1; the decision is to fan out.
@@ -306,9 +312,11 @@ too. The duplicate project-level copies are removed by the commander later
   rule and its condensed twin).
 
 **Skills**: deployed the same way (R-7): `@reference/skills.md`, with the
-measured cost of project skills at user scope (since PR 128 only two
-project skills are left; their descriptions add about 250 bytes, ~60
-tokens, per session, section 7 there).
+measured cost of project skills at user scope (after PR 128 only two
+project skills were left; their descriptions added about 250 bytes, ~60
+tokens, per session, section 7 there). Since 3cebd24 the
+project skills are `frameworks`, `glossary`, `governed-data` and
+`incident`, none deployed (R-8, S-7).
 
 ## 8. Writing or changing a rule
 
@@ -325,8 +333,9 @@ tokens, per session, section 7 there).
    R-3/R-4 in every repo (section 7).
 5. Write the intent (`/intent-writing`), then the directives and the trigger
    directive for its skill; put detail in `reference/`, process in the skill.
-6. Get review: every `.claude/rules/*.md` and every intent statement is
-   protected (`@.claude/rules/sources-of-truth.md`).
+6. Write the change as a version and commit it; list each changed intent
+   statement and directive old -> new under "Review after" in the commit or
+   PR body. The commander reviews after (D-DEL5, user rule `delegation.md`).
 7. Mirror to `.cursor/rules/*.mdc` where a twin exists
    (`@reference/cursor-practices.md` "Rule Correspondence").
 8. Ship: `.claude/rules` and `shared/rules` changes ship by PR in aitools;
@@ -371,7 +380,7 @@ Carried:
 - Governed data access: `@.claude/rules/governed-data-access.md`, `@reference/framework-governed-data-access.md`
 - Scope modifiers: `@reference/framework-governed-vocabulary.md`; `/glossary` skill
 - Intent: `/intent-writing` skill, `@reference/framework-intent-documentation.md`
-- Protected files: `@.claude/rules/sources-of-truth.md`
+- Review-after for changes: D-DEL5, user rule `delegation.md`
 - Deployed harness: `@reference/harness.md`; `scripts/deploy-harness.sh` / `.ps1`
 - Managed files: `@.claude/rules/managed-file-deployment.md`, `@reference/managed-file-deployment.md`
 - Deployment paths: `@.claude/rules/deploy-paths.md`
