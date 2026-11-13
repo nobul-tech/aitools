@@ -149,8 +149,8 @@ these arise in conversation:
   "what should we call X?"
 
 The skill provides the governed PROCESS (check rule, check JSON,
-determine type, draft entries, present for review). Reading the file
-directly bypasses that process.
+determine type, write both entries as a version, list them under
+"Review after"). Reading the file directly bypasses that process.
 
 Definitions: `/glossary` skill
 Composition: `@reference/framework-governed-vocabulary.md`

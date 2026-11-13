@@ -174,15 +174,13 @@ Cursor project rules mirror Claude Code rules for consistency. When changing rul
 | `.claude/rules/hook-rollout.md` | `.cursor/rules/hook-rollout.mdc` | Condensed |
 | `.claude/rules/interactive-menus.md` | `.cursor/rules/interactive-menus.mdc` | Condensed |
 | `.claude/rules/managed-file-deployment.md` | `.cursor/rules/managed-file-deployment.mdc` | Near-identical |
-| `.claude/rules/relay-outbound.md` | `.cursor/rules/relay-outbound.mdc` | Near-identical |
 | `.claude/rules/script-standards.md` | `.cursor/rules/script-standards.mdc` | Condensed; absorbed the former error-handling rule |
 | `.claude/rules/smoke-test-pattern.md` | `.cursor/rules/smoke-test-pattern.mdc` | Identical |
-| `.claude/rules/sources-of-truth.md` | `.cursor/rules/sources-of-truth.mdc` | Condensed (keep the table complete) |
 | `shared/rules/tool-lifecycle.md` | `.cursor/rules/tool-lifecycle.mdc` | Must match |
 | `shared/rules/web-sources.md` | `.cursor/rules/web-sources.mdc` | Identical |
 | (CLAUDE.md Code Conventions) | `.cursor/rules/general.mdc` | Python style folded in |
 | (none) | `.cursor/rules/cursor-rule-parity.mdc` | Cursor-only: keeps the twins in step |
-| `aitools-workspace`, `artifact-harvesting`, `frameworks`, `glossary`, `governed-data-access`, `incident-governance`, `tool-evaluation`, `tool-ops` | — | No twin today: reason not recorded (commander's call: add twins, or record "Claude Code skill triggers only") |
+| `aitools-workspace`, `frameworks`, `glossary`, `governed-data-access`, `incident-governance`, `tool-evaluation`, `tool-ops` | — | No twin today: reason not recorded (commander's call: add twins, or record "Claude Code skill triggers only") |
 
 ### Changing rules
 
