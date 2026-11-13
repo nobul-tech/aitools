@@ -114,7 +114,6 @@ verified
 
 accepting session
 assumption
-Auftrag
 blast radius
 blocker
 cross-boundary
@@ -122,15 +121,16 @@ delegating agent
 delegate
 delegation duty
 fan-out
+friction
 handoff
 harness files
-Lagebeurteilung
 lifecycle transition
-Mitdenken
-Reibung
+main effort
+mission order
 removed
 retired
-Schwerpunkt
+situation assessment
+thinking along
 trigger directive
 
 ### When to invoke /glossary
