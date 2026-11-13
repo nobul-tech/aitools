@@ -5,7 +5,7 @@
     "intent": {
       "purpose": "Source of truth for all adopted governance frameworks and their implementing artifacts",
       "scope": "Framework entries and pending adoptions only. NOT the adoption process (framework-adoption.md). NOT framework documentation (framework-*.md files)",
-      "audience": "/frameworks skill, /audit skill"
+      "audience": "/frameworks skill"
     },
     "lastUpdated": "2026-11-13"
   },
@@ -20,9 +20,10 @@
         "CLAUDE.md (design principles)",
         ".claude/rules/*.md (prevention layer)",
         "shared/hooks/*.sh (detection layer)",
-        ".claude/skills/audit/SKILL.md (audit layer)"
+        ".claude/skills/incident/SKILL.md (audit layer)",
+        "scripts/check-post-push.sh (audit layer)"
       ],
-      "lastUpdated": "2026-03-14"
+      "lastUpdated": "2026-11-13"
     },
     {
       "name": "Incident governance",
@@ -32,10 +33,9 @@
       "referenceFile": "reference/framework-incident-governance.md",
       "artifacts": [
         ".claude/rules/incident-governance.md",
-        "shared/skills/incident/SKILL.md",
-        ".claude/skills/audit/SKILL.md"
+        ".claude/skills/incident/SKILL.md"
       ],
-      "lastUpdated": "2026-03-15"
+      "lastUpdated": "2026-11-13"
     },
     {
       "name": "Source-of-truth protection",
@@ -43,10 +43,8 @@
       "discipline": "Change management",
       "concepts": ["Change advisory boards", "Approval gates", "Protected state"],
       "referenceFile": "reference/framework-source-of-truth.md",
-      "artifacts": [
-        ".claude/rules/sources-of-truth.md"
-      ],
-      "lastUpdated": "2026-03-14"
+      "artifacts": [],
+      "lastUpdated": "2026-11-13"
     },
     {
       "name": "Tool lifecycle",
@@ -55,15 +53,15 @@
       "concepts": ["Lifecycle phases", "Approval gates", "Health flags", "Provenance verification", "Evaluation provenance"],
       "referenceFile": "reference/framework-tool-lifecycle.md",
       "artifacts": [
-        ".claude/rules/tool-lifecycle.md",
-        ".claude/rules/tool-evaluation.md",
+        "shared/rules/tool-lifecycle.md",
+        "shared/rules/tool-evaluation.md",
         "reference/tool-evaluation-criteria.md",
         "reference/tool-evaluation-playbook.md",
         "reference/evaluations/",
         "shared/skills/tool-registry/SKILL.md",
         "shared/skills/tool-eval/SKILL.md"
       ],
-      "lastUpdated": "2026-03-15"
+      "lastUpdated": "2026-11-13"
     },
     {
       "name": "Managed file deployment",
@@ -122,9 +120,9 @@
       "referenceFile": "reference/framework-governed-vocabulary.md",
       "artifacts": [
         ".claude/rules/glossary.md",
-        "shared/skills/glossary/SKILL.md"
+        ".claude/skills/glossary/SKILL.md"
       ],
-      "lastUpdated": "2026-03-14"
+      "lastUpdated": "2026-11-13"
     },
     {
       "name": "Intent documentation",
@@ -134,10 +132,9 @@
       "referenceFile": "reference/framework-intent-documentation.md",
       "artifacts": [
         "shared/skills/intent-writing/SKILL.md",
-        "shared/skills/intent-audit/SKILL.md",
-        ".claude/rules/sources-of-truth.md (intent protection)"
+        "shared/skills/intent-audit/SKILL.md"
       ],
-      "lastUpdated": "2026-03-14"
+      "lastUpdated": "2026-11-13"
     },
     {
       "name": "Governed data access",
@@ -151,25 +148,26 @@
         ".claude/rules/glossary.md (trigger directive)",
         ".claude/rules/frameworks.md (trigger directive)",
         ".claude/rules/incident-governance.md (trigger directive)",
-        ".claude/rules/tool-evaluation.md (trigger directive)",
-        "shared/skills/frameworks/SKILL.md",
+        "shared/rules/tool-evaluation.md (trigger directive)",
+        ".claude/skills/frameworks/SKILL.md",
         "reference/framework-governed-data-access.md"
       ],
-      "lastUpdated": "2026-03-15"
+      "lastUpdated": "2026-11-13"
     },
     {
       "name": "Artifact harvesting",
       "governs": "Lifecycle of reusable artifacts produced during sessions — code, prompts, patterns, research",
       "discipline": "Reuse engineering (Disciplined Agile)",
       "concepts": ["Harvesting (DA)", "Staging pipeline", "Toil automation (SRE)", "Tactical-to-strategic promotion (Ousterhout)"],
-      "referenceFile": "reference/framework-artifact-harvesting.md",
+      "referenceFile": "reference/artifact-harvesting.md",
       "artifacts": [
-        ".claude/rules/artifact-harvesting.md",
         "shared/skills/harvest/SKILL.md",
         "harvesting/",
-        "shared/hooks/harvest-session.sh"
+        "shared/hooks/harvest-session.sh",
+        "shared/hooks/session-catchup.sh",
+        "scripts/ait-harvest.py"
       ],
-      "lastUpdated": "2026-03-15"
+      "lastUpdated": "2026-11-13"
     },
     {
       "name": "Tool operations",
@@ -178,13 +176,13 @@
       "concepts": ["Operational readiness", "Observe-then-enforce", "Pull systems", "Contract testing"],
       "referenceFile": "reference/framework-tool-ops.md",
       "artifacts": [
-        ".claude/rules/tool-ops.md",
+        "shared/rules/tool-ops.md",
         "shared/skills/tool-ops/SKILL.md",
         "registries/tool-ops.json",
         "reference/tool-ops-claude-code.md",
         "shared/hooks/tool-ops-session-audit.sh"
       ],
-      "lastUpdated": "2026-03-15"
+      "lastUpdated": "2026-11-13"
     },
     {
       "name": "Adversarial review",
