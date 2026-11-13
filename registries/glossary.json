@@ -482,7 +482,7 @@
     },
     "update channel": {
       "definition": "The release stream a managed tool's preferred install follows, set per tool in the tool registry (updateChannel, default latest-stable; channel list in reference/tool-support-decision-tree.md 'Update channels'). Every installer run (aitools install, or aitools sync running the installer) runs the preferred method's update command for its channel and verifies the result; it does not query upstream for the newest version number.",
-      "source": ".claude/rules/tool-lifecycle.md; reference/tool-support-decision-tree.md section 4 (after M2); decisions D-TS5, T-Q6 (plans/tool-support-and-machine-profile.md)"
+      "source": "shared/rules/tool-lifecycle.md; reference/tool-support-decision-tree.md section 4 (after M2); decisions D-TS5, T-Q6 (plans/tool-support-and-machine-profile.md)"
     },
     "machine profile": {
       "definition": "A field inside the profile (profile.json): one entry of its 'profiles' object, keyed by machine id (environment:<name> for a hosted environment without one), holding one machine's (or one hosted environment's) machine alias, per-machine overrides of identity name/company, machine id, and tool exceptions. Chosen on every run by the machine resolver (scripts/aitools-profile.sh/.ps1); never another machine's profile as a fallback. Not a separate file and not a shell profile (.zshrc, PowerShell $PROFILE).",

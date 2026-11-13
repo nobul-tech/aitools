@@ -1,10 +1,10 @@
 {
   "meta": {
-    "governance": ".claude/rules/tool-lifecycle.md",
+    "governance": "shared/rules/tool-lifecycle.md",
     "schemaVersion": "1.0",
     "intent": {
       "purpose": "Source of truth for all managed tools — install methods, platform versions, lifecycle status, operational knowledge, MCP servers, and overrides",
-      "scope": "Tool data only. NOT lifecycle gates or onboarding checklists (.claude/rules/tool-lifecycle.md). NOT evaluation process (/tool-eval skill). NOT per-tool ops metadata (tool-ops.json)",
+      "scope": "Tool data only. NOT lifecycle gates or onboarding checklists (shared/rules/tool-lifecycle.md). NOT evaluation process (/tool-eval skill). NOT per-tool ops metadata (tool-ops.json)",
       "audience": "/tool-registry skill, /tool-eval skill, setup scripts, check scripts, aitools-install"
     },
     "lastUpdated": "2026-11-13",
@@ -13,7 +13,7 @@
       "userTemplate": "https://github.com/nobul-jose/aitools-{username}"
     },
     "relatedDocs": {
-      "toolLifecycleRule": ".claude/rules/tool-lifecycle.md",
+      "toolLifecycleRule": "shared/rules/tool-lifecycle.md",
       "toolEvaluation": "reference/tool-evaluation-criteria.md",
       "evaluationPlaybook": "reference/tool-evaluation-playbook.md",
       "scriptStandards": "reference/script-standards-detail.md",
