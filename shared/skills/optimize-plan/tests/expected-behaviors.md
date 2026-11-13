@@ -11,7 +11,7 @@ Should auto-load when:
 Should NOT auto-load for:
 - Writing a new plan from scratch (that's /planning or /aitools-planning)
 - Normal coding tasks unrelated to plan review
-- Filing an incident (that's /incident)
+- Filing an incident (that's /incident, aitools sessions only)
 
 ## Detection accuracy
 

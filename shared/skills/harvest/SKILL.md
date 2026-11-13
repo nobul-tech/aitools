@@ -14,9 +14,9 @@ artifacts from ephemeral scratch to tracked harvesting, evaluating
 promotion candidates, running generalization analysis, and managing
 the harvest manifest. **Scope**: The harvesting process, manifest
 operations, promotion workflow, and generalization review. NOT the
-harvesting governance (`@shared/rules/artifact-harvesting.md`). NOT
-the ephemeral scratch pattern (`/scratch` skill). NOT the source
-discipline (`reference/framework-artifact-harvesting.md`).
+harvest, prune and promotion criteria, the source discipline or the
+hook mechanism (aitools `reference/artifact-harvesting.md`). NOT the
+ephemeral scratch pattern (`/scratch` skill).
 **Audience**: Any agent harvesting session artifacts, evaluating
 candidates, or running generalization reviews.
 
@@ -57,7 +57,7 @@ When a session produces reusable code, prompts, or patterns:
 {
   "meta": {
     "schemaVersion": "1.0",
-    "governance": "shared/rules/artifact-harvesting.md",
+    "governance": "reference/artifact-harvesting.md",
     "skill": "/harvest",
     "lastAudit": "YYYY-MM-DD"
   },
@@ -89,9 +89,9 @@ past `pruneAfter` (harvested + 30 days) whose status is not
 `promoted`/`pruned` are re-classified: referenced in git history under
 `harvesting/` → `candidate`; otherwise → `pruned`. Pruning only changes the
 manifest status; the file stays in `harvesting/` until removed by hand.
-There is no "keep" flag and no 7-day rule yet (the governance rule's
-criteria are ahead of the code). `meta.lastAudit` is updated when anything
-changes. No KPI is shipped.
+There is no "keep" flag and no 7-day rule yet (the criteria in aitools
+`reference/artifact-harvesting.md` section 3 are ahead of the code).
+`meta.lastAudit` is updated when anything changes. No KPI is shipped.
 
 ## Promoting an artifact
 
@@ -157,7 +157,7 @@ Planned, not implemented: no hook or script emits these KPIs today.
 
 ## Cross-References
 
-- Harvesting governance: `@shared/rules/artifact-harvesting.md`
+- Harvesting criteria, source discipline and hook mechanism: aitools
+  `reference/artifact-harvesting.md`
 - Ephemeral scratch: `/scratch` skill
-- Source discipline: `reference/framework-artifact-harvesting.md`
-- Governed data access: `@.claude/rules/governed-data-access.md`
+- Governed data access: aitools `.claude/rules/governed-data-access.md`

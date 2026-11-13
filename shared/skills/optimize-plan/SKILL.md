@@ -10,7 +10,7 @@ file against current state -- detecting stale sections, dependency
 shifts, leverage opportunities, scope drift, and missing content.
 **Scope**: Plan re-evaluation and optimization only. NOT plan
 creation from scratch (see `/planning`). NOT plan execution or
-code implementation. NOT governance auditing (see `/audit`).
+code implementation. NOT governance auditing.
 **Audience**: Any agent working on a multi-session plan that needs
 re-evaluation after new discoveries, scope changes, or multiple
 implementation sessions.

@@ -11,7 +11,7 @@ Should auto-load when:
 Should NOT auto-load for:
 - Normal debugging (use tool-specific skills)
 - Planned refactoring (that's /planning)
-- Filing an incident (that's /incident)
+- Filing an incident (that's /incident, aitools sessions only)
 
 ## Lifecycle coverage
 - Should walk through all 8 phases when appropriate

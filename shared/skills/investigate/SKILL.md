@@ -13,9 +13,10 @@ Ensures findings become durable improvements, not one-time fixes.
 (5 Whys, Swiss cheese model, timeline reconstruction), remediation,
 corrective action hierarchy (behavioral < structural <
 environmental), barrier analysis, verification, and follow-up. NOT
-for filing incidents into incidents.json (use `/incident` skill).
-NOT for governance health audits (use `/audit` skill). NOT for
-planning corrective action implementation (use `/planning` skill).
+for filing incidents into incidents.json (use the `/incident` skill,
+available in aitools sessions only). NOT for governance health
+audits. NOT for planning corrective action implementation (use
+`/planning` skill).
 **Audience**: Any agent responding to something that went wrong or
 almost went wrong -- rule violations, deployment failures, recurring
 bugs, or process breakdowns.
@@ -31,7 +32,6 @@ skills, rules) prevent recurrence. Behavioral coaching alone doesn't.
 How the incident was found:
 - Hook blocked a violation (standing-order-guard)
 - User reported unexpected behavior
-- `/audit` skill found an inconsistency
 - Check script flagged a failure
 - Code review caught an issue
 - Near-miss: something almost went wrong but was caught
@@ -44,7 +44,7 @@ Assess severity and blast radius:
 - **Medium**: documentation drift, minor behavioral inconsistency
 - **Low**: cleanup, style, future-proofing
 
-(Same scale as `.claude/rules/incident-governance.md` "Severity".)
+(Same scale as aitools `.claude/rules/incident-governance.md` "Severity".)
 
 Does this need immediate mitigation? If so, fix first, investigate after.
 
@@ -101,7 +101,7 @@ T+5m:  User reported broken behavior
 | **Scope creep** | Plan expanded mid-session, new code untested | Session budget, batch discipline |
 | **Assumption** | "Probably X" without verification | File as incident, ask the user |
 | **Tool gap** | No skill for the tool being used | Build the skill |
-| **Stale spec** | Rule references deleted file or old behavior | `/audit` detects, file as incident |
+| **Stale spec** | Rule references deleted file or old behavior | File as incident (`/incident`, aitools sessions only) <!-- TODO(incident): no owner since /audit was removed --> |
 
 #### RCA output format
 
@@ -154,13 +154,14 @@ Record the incident so others (and future sessions) learn from it:
   RCA, remediation, corrective action)
 - **Coaching item**: If behavioral, add to CLAUDE.md coaching section (only on first occurrence; any recurrence escalates to a structural fix)
 - **Incident filing**: If a spec deviation, file via `/incident`
+  (aitools sessions only)
 - **Rule/hook update**: If structural, commit the change
 
 ### 8. Follow-up
 
 Check that the corrective action holds:
 - In the next 3 sessions: did the same incident type recur?
-- `/audit` skill checks: are coaching items with 3+ recurrences flagged?
+- Are coaching items with 3+ recurrences flagged? <!-- TODO(incident): no owner since /audit was removed -->
 - If the corrective action didn't hold: escalate (behavioral → structural)
 
 ## Incident Entry Format
@@ -206,8 +207,8 @@ When analyzing a failure, check all three governance layers:
   agent have it in context? Was the directive clear and imperative?
 - **Detection**: Was there a hook that should have caught the bypass?
   Did it fire? If not, why not?
-- **Audit**: Would `/audit` have flagged this as a gap? If not, what
-  check is missing?
+- **Audit**: Would an audit-layer check (a check script, CI) have
+  flagged this as a gap? If not, what check is missing?
 
 A failure that passes through all three layers reveals a systemic gap.
 A failure caught by detection but not prevention reveals a rule gap.
@@ -228,10 +229,10 @@ Things that almost went wrong but were caught:
 - User noticed something odd and asked about it
 
 Near-misses are valuable signals. They don't need the full lifecycle,
-but logging them in the session helps `/audit` identify trends.
+but logging them in the session helps identify trends. <!-- TODO(incident): no owner since /audit was removed -->
 
 ## Cross-References
 
-- Framework: `@reference/framework-incident-investigation.md`
-- Three-layer governance: `@reference/framework-three-layer-governance.md`
-- Incident filing: `shared/skills/incident/SKILL.md`
+- Framework: aitools `reference/framework-incident-investigation.md`
+- Three-layer governance: aitools `reference/framework-three-layer-governance.md`
+- Incident filing: `/incident` skill (aitools sessions only)
