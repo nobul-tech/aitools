@@ -1423,3 +1423,30 @@ agent commander, engineer:    No one session gets to claim the whole story — b
 - Why `tests/skills-fanout` "adopt ps: DETAIL rows" stalled 60 s and failed once in CI (run 41254096114, linux). It passed on a rerun of the job; flaky, not caused by this change.
 - The CI macOS job is pinned to `macos-14`, which GitHub retires on 2026-11-02. Both of today's macOS jobs were cancelled by a scheduled brownout. It needs `runs-on: macos-15` (not changed: commander's call).
 - The deployed hooks in `~/.claude/hooks` are still the old ones until the next `aitools` run. Sessions in aitools pick up the new `ait-harvest.py` from the repo at once; `scratch-init.sh` changes only after a deploy.
+
+---
+
+### 423faec3-8 (2026-11-13T21:57Z)
+
+**State**: functional (Cursor agent, Claude Opus 5.5, Windows 11, pwsh 7.6.10)
+**Context loaded**: the broken `$PROFILE` and its three backups (read byte by byte), `scripts/setup-user-shell.ps1` / `.sh`, `aitools-install.ps1` / `.sh` Step 7, `aitools-lib.ps1` (Backup-File, Initialize-Logging, Write-Summary), the `/scratch` and `/incident` skills, the incident-governance rule, check-pre-commit / check-pre-push
+**Mission**: commander: "whats going on with this profile script? can you take a look and fix please" (pwsh startup: `ParserError ... Microsoft.PowerShell_profile.ps1:507 Missing closing ')' in expression`). Profile restored on this machine; root-cause fix in PR #143 (incident #172 closed in v0.76.1, #173 filed open)
+
+#### What I learned
+
+- **In a .NET regex replacement string `$_` is the whole input.** `setup-user-shell.ps1` passed its block to `[regex]::Replace` as the replacement string, and the block holds `$__aitoolsLocalBin` four times, so every refresh inserted four copies of the whole profile (5 blocks, then 84, then 21,568). The same applies to `-replace` and to `$&`, `$1`, `` $` ``, `$'`. Use a `MatchEvaluator`, as `setup-user-claude.ps1` already does. The `.sh` twin is safe: Perl does not re-expand an interpolated variable.
+- **The first run of a setup script proves nothing about the second.** The append path was clean; only the refresh was broken, and no one had run the script twice on Windows (its header said "UNTESTED on Windows"). Run setup scripts at least twice in a test and require byte-identical output from run 2.
+- **Marker presence is not validation.** A profile with 84 copies of the block still has both markers, so all runs reported OK and the profile stayed broken from 2026-06-22 to today. A parse check of the result is what proves a PowerShell profile loads; the script now refuses to write a profile that parses worse than before.
+- **Here-strings keep the script file's line endings** (CRLF for a `.ps1` checked out with `eol=crlf`). `aitools-install.ps1` Step 7 then rewrites the whole profile with LF, so each `aitools` run rewrites `$PROFILE` twice with different line endings.
+- **Cursor cannot use `.scratch/` or `.claude/worktrees/` in this repo**: `.cursorignore` lists both, and Cursor's Read/Write tools are denied there. I used `%TEMP%\aitools-session-423faec3-8\` for scratch and `~\.cursor\worktrees\aitools\` for the worktree. The scratch rule and `.cursorignore` conflict for Cursor agents; that needs a decision from the commander.
+
+#### CC defaults I caught
+
+- I first picked "the written profile contains the block verbatim" as the new post-write check. It would have passed on the corrupted profile, because the embedded copies of the old profile contain the block verbatim. A parse check catches it; proved by re-inserting the old splice into a temp copy (exit 1, profile unchanged).
+- I read four CRs in the corrupted profile as "here-strings drop CR". The smoke test showed CRLF in the block; the four CRs came from the installer's rewrite. A test settled what my inference got wrong.
+
+#### What I still don't know
+
+- Which other Windows machines of the commander have a broken profile. Every one that ran `aitools` twice since v0.70.0 does; the fix does not repair it (restore the newest `.bak.<UTC>` that parses).
+- Whether the same authoring gap hides bugs in the other scripts still marked "UNTESTED on Windows": `setup-user-settings.ps1`, `setup-user-hooks.ps1`, `harness_python` in `aitools-lib.ps1`.
+- `CLAUDE.md:100` still names `.claude/rules/relay-outbound.md`, which is gone from main (check-pre-commit step 20 FAIL). The dotprofile `deploy/` is stale for 47 generated files (check-pre-push step 7 FAIL). Neither touched.
