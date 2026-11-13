@@ -54,13 +54,13 @@ Every file in the harness has an access tier:
 
 | Tier | Read | Write | Enforcement | Examples |
 |------|------|-------|-------------|---------|
-| **Open** | Any agent | Any agent | None | Code, scripts, scratch files |
-| **Protected** | Any agent | Human review required | Source-of-truth rule | CLAUDE.md, rules, plans, reference files |
+| **Open** | Any agent | Any agent | None | Code, scripts, scratch files, CLAUDE.md, rules, plans, reference files |
 | **Governed** | Through governing skill | Through governing skill | Skill = capability | JSON registries accessed via their skills |
 
-Protected and governed are not mutually exclusive. Governed files are
-also protected (they appear in the protected files list). Governed
-adds skill-gated process enforcement on top of human review.
+Both tiers are reviewed after the write: a change is written as a
+version in its final location and committed, and the commander
+reviews the diff after (D-DEL5, user rule `delegation.md`). Governed
+adds skill-gated process enforcement on top of that review.
 
 ### Skill-as-capability pattern
 

@@ -5,7 +5,7 @@ scope, and audience in every file and major section. **Scope**: What
 knowledge management and ISO documentation principles we adopted and
 why. NOT the process for writing intents (see `/intent-writing` skill).
 NOT the process for auditing intents (see `/intent-audit` skill). NOT
-the protection rule (see `@.claude/rules/sources-of-truth.md`).
+the review of intent changes (D-DEL5, user rule `delegation.md`).
 **Audience**: Agents encountering intent statements, framework
 adoption work.
 
@@ -27,10 +27,11 @@ Knowledge management — specifically:
 - **Three-component intent** → purpose, scope, audience. Adapted
   from ISO document structure to work across markdown files, code
   files, JSON files, and section-level declarations.
-- **Protected activity** → intent statements require user approval
-  before writing or modifying, same gate as sources-of-truth.
-  Intent shapes interpretation — getting it wrong has downstream
-  effects across sessions.
+- **Review after** → an intent change is written in its final
+  location and committed; the commit or PR body lists it old -> new
+  under "Review after", and the commander reviews it after (D-DEL5,
+  user rule `delegation.md`). Intent shapes interpretation — getting
+  it wrong has downstream effects across sessions.
 - **Intent verification** → `/intent-audit` skill checks each
   section against the stated intent, classifies drift, and surfaces
   findings for the DTCC.
@@ -41,8 +42,9 @@ Knowledge management — specifically:
 
 - `/intent-writing` skill teaches the drafting process
 - `/intent-audit` skill checks alignment on demand
-- Intent protection in `@.claude/rules/sources-of-truth.md` gates
-  all writes
+- Intent changes are reviewed after the write: old -> new under
+  "Review after" in the commit or PR body (D-DEL5, user rule
+  `delegation.md`)
 - PreToolUse hook (planned, governance plan step 8) provides
   real-time detection
 - Existing files are backfilled incrementally — new files must
@@ -52,8 +54,6 @@ Knowledge management — specifically:
 
 - `@shared/skills/intent-writing/SKILL.md` (drafting process)
 - `@shared/skills/intent-audit/SKILL.md` (verification process)
-- `@.claude/rules/sources-of-truth.md` (protection gate)
-- `@.claude/rules/sources-of-truth.md` "Intent statements" (the protection) and `/intent-writing` (the convention)
 
 ## Cross-References
 

@@ -13,7 +13,7 @@ not contain (rules, skills, references and registries:
 frameworks (`@reference/framework-adoption.md`). NOT operational
 guides for any specific component (see implementing artifacts).
 **Audience**: Any agent working within the harness, framework
-adoption work, `/audit` skill.
+adoption work.
 
 ## Components
 
@@ -36,10 +36,10 @@ settings we set. Exists at two deployment scopes:
   user claude, user settings) — preferences and governance that
   follow the developer across all projects
 
-aitools' own project rules and skills are also deployed at user scope
-(commander, 2026-10-26: `@reference/rules.md` R-4, `@reference/skills.md`
-S-1), so they load in every repo on the machine; inside aitools they exist
-at both scopes until the project copies are removed.
+aitools' own project rules and skills (`.claude/rules/`, `.claude/skills/`)
+are not deployed to user scope: Claude Code loads them only in sessions
+inside the aitools repo. Only aitools `shared/rules/` and `shared/skills/`
+reach user scope (commander, 2026-11-06; "Deployed harness" below).
 
 **Orchestration** — aitools manages the full lifecycle of harness
 content: authoring, building, deploying, and maintaining configuration
@@ -203,9 +203,7 @@ The fan-out consumers read the manifest and prune retired names.
   the library). Anything that copies out of `~/.aitools` skips `*.bak.*`.
 - **Trailing newlines are normalized**: a deployed copy ends with exactly
   one newline.
-- **Adopt** writes the winning source file only. Adopting into a file in
-  its repo's protected-files table (`@.claude/rules/sources-of-truth.md`)
-  logs a WARN naming the file. The library commits and pushes an adopt
+- **Adopt** writes the winning source file only. The library commits and pushes an adopt
   target only when it is in the dotprofile (`dotprofile_commit_push`, N-Q2);
   an aitools-repo target stays a working-tree change.
 
@@ -337,4 +335,5 @@ manifest; one planner and one writer serve both kinds
   managed-file model: `@reference/managed-file-deployment.md`
 - Rules, their scopes and the rules fan-out: `@reference/rules.md`
 - Skills, their scopes and the skills fan-out: `@reference/skills.md`
-- Skills: `/frameworks`, `/glossary`, `/audit`, `/intent-audit`, `/incident`
+- Skills: `/frameworks`, `/glossary`, `/incident` (project scope: aitools
+  sessions only), `/intent-audit` (shared)
