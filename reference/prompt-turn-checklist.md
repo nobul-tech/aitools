@@ -13,7 +13,7 @@ delegation prompts (`/delegate` skill). **Audience**: Every agent at every
 prompt turn; the agent that builds the prompt-turn hook; the commander,
 reviewing what the hook will enforce.
 
-v1.14 (2026-11-13)
+v1.17 (2026-11-13)
 
 A **prompt turn** is one prompt from the commander and everything the agent
 does until its reply is printed.
@@ -21,8 +21,7 @@ does until its reply is printed.
 The checklist was inferred from the commander's prompts in sessions 8236ca9c
 (2026-03-26; `.aitools/channel/8236ca9c-full-session.md`) and fbf7decb
 (2026-03-28; the dotprofile's `sessions/aitools/2026-03-28_fbf7decb.jsonl`).
-The checklist has thirteen items. This version holds items 1 to 10. The rest
-are added on the commander's order.
+The checklist has twelve items.
 
 ## 1. Re-read the whole conversation, start to now, at full fidelity
 
@@ -162,7 +161,7 @@ Ways to resolve, nearest first:
   the delegation duty (`/delegate` skill).
 
 Each unresolved point ends in one of three states: **verified**,
-**invalidated** or **open**. Know which, and on what evidence.
+**falsified** or **open**. Know which, and on what evidence.
 
 - **Evidence or it is open**: a resolution points to text, a file or a test
   result. "Probably" is not resolved; it goes to item 5.
@@ -233,7 +232,7 @@ Before doing the work, look at how you are about to do it, and improve that.
 - **Report the change**: when the commander asks for the process, give what
   changed since the last version; give the full version when asked for it.
 - **Carry it forward**: record an improvement that should outlive the session
-  as operational learning (item 13). A change to a governed artifact goes to
+  as operational learning (item 12). A change to a governed artifact goes to
   the commander as a session RFI.
 - **Scale to the work**: a yes/no question needs a moment's review; work that
   spans several turns needs a real one.
@@ -287,8 +286,7 @@ Read each written file from disk, line by line, once for each reader, and fix
 what that reader would trip on.
 
 - **Read what was written**: re-read the file from disk, not the draft you
-  meant to write. Check that it matches the reviewed draft from item 8 and
-  the sources from item 3, with nothing dropped, compressed or added.
+  meant to write.
 - **Name the readers**: list who and what consumes the file: the commander,
   an agent following it, a delegate with none of this session's context, and
   any script, hook or tool that parses it.
@@ -319,3 +317,61 @@ scale:
   prompt asked for.
 - **Fulfill the surfacing duty**: raise as a session RFI (item 5) anything
   the whole-work read reveals that you cannot fix yourself.
+
+## 11. Verify before sending
+
+Before the reply goes out, check it and every file you wrote against the
+active orders, the governed vocabulary and the record.
+
+- **Lossless**: compare each file with its reviewed draft from item 8 and the
+  sources from item 3. Restore anything summarized, compressed or dropped,
+  and remove anything added.
+- **No invented words**: every quote, and every claim about what the
+  commander said, matches the conversation word for word.
+- **Orders**: fix any order the output breaks.
+- **Vocabulary**: use each governed term with its governed meaning.
+
+## 12. Deliver
+
+Give the output in exactly the form, length and scope the prompt asked for,
+and finish it rather than stopping short.
+
+- **Outcomes as they are**: say what was done, where, what was verified and
+  what was not.
+- **No bare question at the end**: end with session RFIs or a suggested next
+  step.
+- **Next steps**: suggest the next steps, each with its reason.
+- **Operational learning**: print the operational learning this turn
+  produced, in full, and record what must outlive the session where the
+  harness keeps it.
+- **Open session RFIs**: reprint every open one in full at the end.
+
+### How to respond
+
+Every reply gives the answer first, then a turn record with one or two
+sentences per item, the operational learning in full, and every open session
+RFI in full:
+
+```
+<the answer, in exactly the form the prompt asked for>
+
+--- Turn record ---
+1  Re-read:  <done | what was compacted away>
+2  Parse:    <high-impact words; any unresolved>
+3  Sources:  <what was read or re-read>
+4  Resolve:  <points verified / falsified / open, with evidence>
+5  Surface:  <RFIs raised, closed | none>
+6  Process:  <improvement applied | none>
+7  Draft:    <drafted in thinking | n/a>
+8  Review:   <passes run; what changed>
+9  Files:    <files read back, readers | n/a>
+10 Whole:    <cut / filled | nothing>
+11 Verify:   <orders, vocabulary, lossless: result>
+12 Deliver:  <outcomes; next steps>
+OL: <operational learning from this turn, in full | none>
+Open RFIs: <each open session RFI, in full>
+```
+
+The commander's direct order on the prompt turn supersedes every other order,
+this template included. When the prompt asks for a yes/no answer or any other
+form, give exactly that form and leave the turn record out.
