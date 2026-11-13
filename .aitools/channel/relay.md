@@ -1437,7 +1437,7 @@ agent commander, engineer:    No one session gets to claim the whole story — b
 - **In a .NET regex replacement string `$_` is the whole input.** `setup-user-shell.ps1` passed its block to `[regex]::Replace` as the replacement string, and the block holds `$__aitoolsLocalBin` four times, so every refresh inserted four copies of the whole profile (5 blocks, then 84, then 21,568). The same applies to `-replace` and to `$&`, `$1`, `` $` ``, `$'`. Use a `MatchEvaluator`, as `setup-user-claude.ps1` already does. The `.sh` twin is safe: Perl does not re-expand an interpolated variable.
 - **The first run of a setup script proves nothing about the second.** The append path was clean; only the refresh was broken, and no one had run the script twice on Windows (its header said "UNTESTED on Windows"). Run setup scripts at least twice in a test and require byte-identical output from run 2.
 - **Marker presence is not validation.** A profile with 84 copies of the block still has both markers, so all runs reported OK and the profile stayed broken from 2026-06-22 to today. A parse check of the result is what proves a PowerShell profile loads; the script now refuses to write a profile that parses worse than before.
-- **Here-strings keep the script file's line endings** (CRLF for a `.ps1` checked out with `eol=crlf`). `aitools-install.ps1` Step 7 then rewrites the whole profile with LF, so each `aitools` run rewrites `$PROFILE` twice with different line endings.
+- **Here-strings keep the script file's line endings** (CRLF for a `.ps1` checked out with `eol=crlf`). `aitools-install.ps1` Step 7 then rewrites the whole profile with LF, so each `aitools install` run rewrites `$PROFILE` twice with different line endings. Only `aitools install` runs Step 7; plain `aitools` and `hh` do not touch the profile.
 - **Cursor cannot use `.scratch/` or `.claude/worktrees/` in this repo**: `.cursorignore` lists both, and Cursor's Read/Write tools are denied there. I used `%TEMP%\aitools-session-423faec3-8\` for scratch and `~\.cursor\worktrees\aitools\` for the worktree. The scratch rule and `.cursorignore` conflict for Cursor agents; that needs a decision from the commander.
 
 #### CC defaults I caught
@@ -1447,6 +1447,6 @@ agent commander, engineer:    No one session gets to claim the whole story — b
 
 #### What I still don't know
 
-- Which other Windows machines of the commander have a broken profile. Every one that ran `aitools` twice since v0.70.0 does; the fix does not repair it (restore the newest `.bak.<UTC>` that parses).
+- Which other Windows machines of the commander have a broken profile. Every one that ran `aitools install` twice since v0.70.0 does; the fix does not repair it (restore the newest `.bak.<UTC>` that parses).
 - Whether the same authoring gap hides bugs in the other scripts still marked "UNTESTED on Windows": `setup-user-settings.ps1`, `setup-user-hooks.ps1`, `harness_python` in `aitools-lib.ps1`.
 - `CLAUDE.md:100` still names `.claude/rules/relay-outbound.md`, which is gone from main (check-pre-commit step 20 FAIL). The dotprofile `deploy/` is stale for 47 generated files (check-pre-push step 7 FAIL). Neither touched.
