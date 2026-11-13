@@ -13,7 +13,7 @@ delegation prompts (`/delegate` skill). **Audience**: Every agent at every
 prompt turn; the agent that builds the prompt-turn hook; the commander,
 reviewing what the hook will enforce.
 
-v1.17 (2026-11-13)
+v1.18 (2026-11-13)
 
 A **prompt turn** is one prompt from the commander and everything the agent
 does until its reply is printed.
@@ -184,6 +184,14 @@ A skipped item shows as:
 - a deviation from an order or the process that the reply does not mention;
 - a choice that belonged to the commander, made silently.
 
+Adopted from: disciplined initiative, a principle of mission command (US Army
+doctrine, ADP 6-0 *Command and Control*, 2026): subordinates follow their
+orders until the orders no longer suit the situation, then act within the
+commander's intent and report the new situation when able. Mission command
+was modeled on Auftragstaktik, the Prusso-German command philosophy (Joint
+Force Quarterly 96, 2020), which the Bundeswehr calls Führen mit Auftrag
+(Handbuch Innere Führung, 2023).
+
 ## 5. Surface what you cannot resolve and what you find
 
 The surfacing duty: what item 4 left open, and what you found along the way,
@@ -213,6 +221,14 @@ Suggest: <action> (why)
   say why.
 - **Track what must outlive the session**: also record a deficiency where the
   harness tracks it (an incident or an issue).
+
+Adopted from: the request for information (RFI) in construction contract
+administration (AIA G716–2004, Request for Information): numbered, logged and
+tracked, raised only for information the requester cannot obtain through
+research or document review, with the sender's recommended solution beside
+the receiver's response; and the RFI in military doctrine (US DOD definition,
+JP 2-0, as given in FM 1-02.1, 2026), which Army intelligence staffs first try
+to answer themselves through intelligence reach (FM 2-0, 2026).
 
 ## 6. Improve the process
 
