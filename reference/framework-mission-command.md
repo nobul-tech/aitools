@@ -138,4 +138,5 @@ mapped to a checklist item.
 - Reviews in items 8 and 9: `@reference/framework-adversarial-review.md`,
   `@reference/framework-perspective-based-reading.md`
 - Adoption lifecycle: `@reference/framework-adoption.md`
-- Governed terms: `/glossary` skill (thinking along, mission order)
+- Governed terms: `/glossary` skill (disciplined initiative, thinking along,
+  mission order)

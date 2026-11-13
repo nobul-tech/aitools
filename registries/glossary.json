@@ -309,6 +309,11 @@
       "source": "reference/prompt-turn-checklist.md item 5; commander, 2026-11-13 (session 90ea4d3e)",
       "sourceDiscipline": "Construction project management and military doctrine: RFI (request for information)"
     },
+    "disciplined initiative": {
+      "definition": "Deliberate deviation from the process or an order, made to accomplish the mission within the commander's intent, and reported to the commander. Not appearing to know what you do not know: a guess presented as a resolution is not disciplined initiative. Choices of intent, priority, preference and hard-to-reverse actions stay with the commander.",
+      "source": "reference/prompt-turn-checklist.md item 4; CLAUDE.md 'The process (every prompt)'; reference/framework-mission-command.md; commander, 2026-11-13 (session 90ea4d3e)",
+      "sourceDiscipline": "Military command and control: disciplined initiative, a principle of mission command (US Army ADP 6-0 Command and Control, 2026)"
+    },
     "The Commander": {
       "definition": "Jose. The human who is part of the harness. Safety mechanism #7 — the immune system. Reshapes agents' System 1 through corrections. The gate for failure mode exit. The bullshit detector. The scarcest resource is The Commander's time. The harness without The Commander is infrastructure waiting for a teacher. Agents are commanders of their delegates — but The Commander is Jose.",
       "source": "session ddfe01cb (2026-03-30), consolidated OL Part 1, commander profile"
