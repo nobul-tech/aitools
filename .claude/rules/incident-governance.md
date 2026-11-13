@@ -98,8 +98,8 @@ produces these fields.
 - **discoveryContext**: Must include what you audited. "Found during
   code review" — rejected. "Found while executing governance plan
   step 4. Audited: `@.claude/rules/incident-governance.md`,
-  `@scripts/setup-user-hooks.sh`:L45-60,
-  `@.claude/rules/sources-of-truth.md`. Session: 2026-03-14" —
+  `@scripts/setup-user-hooks.sh`:L45-60, the D-DEL5 review-after
+  practice (user rule `delegation.md`). Session: 2026-03-14" —
   accepted.
 - **discipline/frameworks**: Only populated when the incident maps to an
   established field. Most code-deviation incidents leave these null.
