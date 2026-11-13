@@ -301,8 +301,13 @@
       "source": ".claude/rules/incident-governance.md"
     },
     "surfacing duty": {
-      "definition": "The continuous obligation for every session to actively look for ambiguities. Not periodic — happens while reading rules, following cross-references, and making decisions.",
-      "source": ".claude/rules/incident-governance.md"
+      "definition": "The continuous obligation of every agent to raise to the commander, as session RFIs, what it cannot resolve and what it finds along the way: open questions, unverified assumptions the work rests on, problems (defects, stale or contradictory files, conflicting rules), its own mistakes, observations about its own processing, and its delegates' reports verbatim. Not periodic — happens at every prompt turn, while reading, deciding and working.",
+      "source": "reference/prompt-turn-checklist.md item 5; .claude/rules/incident-governance.md; commander, 2026-11-13 (session 90ea4d3e)"
+    },
+    "session RFI": {
+      "definition": "A request for information an agent raises to the commander to fulfil its surfacing duty: a question it cannot resolve itself. Numbered <last 4 hex digits of the session id>-<n>, where n rises through the session and is never reused (e.g. a386-7). Carries a title, the question with its context (observations, evidence, problems found, the agent's own mistakes, a delegate's report verbatim) and a suggested action with its reason. Always asks the commander for something. Stays open until the commander answers it or the agent withdraws it and says why; every open session RFI is reprinted in full at the end of every turn. Plural: session RFIs.",
+      "source": "reference/prompt-turn-checklist.md item 5; commander, 2026-11-13 (session 90ea4d3e)",
+      "sourceDiscipline": "Construction project management and military doctrine: RFI (request for information)"
     },
     "The Commander": {
       "definition": "Jose. The human who is part of the harness. Safety mechanism #7 — the immune system. Reshapes agents' System 1 through corrections. The gate for failure mode exit. The bullshit detector. The scarcest resource is The Commander's time. The harness without The Commander is infrastructure waiting for a teacher. Agents are commanders of their delegates — but The Commander is Jose.",
