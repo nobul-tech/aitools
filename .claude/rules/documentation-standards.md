@@ -92,14 +92,16 @@ same holds for rules: only `shared/rules/` reaches `~/.claude/rules/` and
 
 - **Shared** (`shared/skills/`): user level. Managed tool patterns,
   project-agnostic conventions, USO enablement, and the governance skills
-  useful in a session on any repo, even read-only. Content must be factual
+  useful in a session on any repo, even read-only (`tool-eval`,
+  `tool-ops`, `tool-registry`, `harvest`). Content must be factual
   (patterns, gotchas, platform behavior), not project-specific opinions,
   and must work in any repo (write aitools paths as "aitools `<path>`").
 - **Project** (`.claude/skills/` in the aitools repo): skills meaningful
   solely inside the aitools working tree (they edit or audit aitools
   source). Not deployed: Claude Code loads them only in sessions inside
   the aitools repo, from the checkout, so a branch that edits a project
-  skill runs its own copy.
+  skill runs its own copy. The `frameworks`, `glossary` and `incident`
+  skills are project skills since 2026-11-13 (S-8 in `@reference/skills.md`).
 - **Dotprofile** (`<userRepoPath>/claude/skills/`): not a harness source;
   deploy-harness does not read it.
 - **One name, one place**: a skill name exists in exactly one of

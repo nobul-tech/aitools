@@ -40,7 +40,7 @@ Spans multiple sessions, has phased gates, or needs detailed design beyond a roa
 
 ### Skill placement
 
-Folder decides level: `shared/skills/` = user level (deployed to `~/.claude/skills/` and `~/.cursor/skills/`, every repo); `.claude/skills/` = project level (aitools sessions only, never deployed); dotprofile `claude/skills/` = not a harness source, not deployed (commander, 2026-11-06). User level if useful in a session on any repo; project level only if meaningful solely inside the aitools tree. One name, one place (pre-commit step 21). No `aitool-`/`aitools-` level prefixes in new names.
+Folder decides level: `shared/skills/` = user level (deployed to `~/.claude/skills/` and `~/.cursor/skills/`, every repo); `.claude/skills/` = project level (aitools sessions only, never deployed); dotprofile `claude/skills/` = not a harness source, not deployed (commander, 2026-11-06). User level if useful in a session on any repo; project level only if meaningful solely inside the aitools tree. Shared governance skills: `tool-eval`, `tool-ops`, `tool-registry`, `harvest`; `frameworks`, `glossary` and `incident` are project skills since 2026-11-13 (S-8 in `reference/skills.md`). One name, one place (pre-commit step 21). No `aitool-`/`aitools-` level prefixes in new names.
 
 ### `@` link convention
 
