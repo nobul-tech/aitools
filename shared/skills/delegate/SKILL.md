@@ -32,6 +32,9 @@ delegate's output.
 
 Version 2.0, 2026-10-26 (commander: "the mission packet content should be the
 body of the /delegate skill").
+v2.1 (2026-11-13, S3-Clean): the protected-file list and the pointer to the
+deleted aitools sources-of-truth rule removed; "Review after" covers every
+change (D-DEL5).
 
 ## When to use
 
@@ -153,13 +156,13 @@ conflict and its resolution (`CONFLICT: <A> vs <B> -- resolved by <tier>:
 ### Versions, not drafts (D-DEL5, commander decision 2026-10-26)
 
 Delegates write their documents and changes as versions (v1.0, v1.1, ...)
-in their final location, never as "drafts". A protected file (a repo's
-source-of-truth list, e.g. aitools `.claude/rules/sources-of-truth.md`) is
-written as a version and committed; the PR body (or the commit body, for a
-direct commit) lists each protected edit old -> new under "Review after",
-and the commander reviews the diff after. Outward-facing or destructive
-actions (merging, tagging, deleting, publishing) still need the commander's
-explicit order in the prompt.
+in their final location, never as "drafts". Every change, rules, skills,
+CLAUDE.md files and intent statements included, is written as a version and
+committed; the PR body (or the commit body, for a direct commit) lists each
+change old -> new under "Review after", and the commander reviews the diff
+after. Nothing waits for approval before it is written. Outward-facing or
+destructive actions (merging, tagging, deleting, publishing) still need the
+commander's explicit order in the prompt.
 
 ## Standing orders every delegate gets (restate the ones that apply)
 
@@ -210,8 +213,8 @@ A delegate whose mission produces a code change ships it itself:
    blockers.
 4. `git push -u origin <branch>`, then `gh pr create --base main --head
    <branch> --body-file <scratch>/pr-body.md`. Body sections: Summary; Why;
-   Changes; Verification; Not run; Review after (protected edits old ->
-   new); Follow-ups.
+   Changes; Verification; Not run; Review after (each change old -> new,
+   D-DEL5); Follow-ups.
 5. Commit and push after every batch: usage limits stop missions mid-work.
 6. Return the PR URL.
 
@@ -367,7 +370,7 @@ Repo <repo>, branch `<branch>` off origin/main in your own worktree, PR base
 `main`. Run <pre-commit/pre-push checks>, push, `gh pr create`, return the
 PR URL. Never push to main, force-push, merge, approve your own PR, or tag
 <unless: quoted commander order>. Documents are versions (D-DEL5); list
-protected edits under "Review after". A denied push or PR is WRITE_BLOCKED.
+each change old -> new under "Review after". A denied push or PR is WRITE_BLOCKED.
 
 ## Deliverable
 <PREFIX>-<name>.md in <dir>, and your final response: 5-line summary, then
@@ -431,8 +434,10 @@ section travels with the skill).
   decisions plus chat overrides), the latest handoff in
   `.aitools/channel/handoffs/`, and plans under `plans/` (each with a
   commander-answers table where one exists). Quote the ones the task needs.
-- **Protected files** are listed in `.claude/rules/sources-of-truth.md`;
-  under D-DEL5 they are written as versions and reviewed after.
+- **Review after** (D-DEL5): aitools has no protected-file list (removed
+  2026-11-13). Rules, skills, registries, CLAUDE.md and intent statements
+  are written as versions, committed, and listed old -> new under "Review
+  after".
 - **Direct to main** (CLAUDE.md "Channel exception"): plans/, handoffs,
   relay.md, CLAUDE.md. Everything else: worktree + PR.
 - **Never run** `aitools`, `aitools install`, `setup-user-*`, `deploy-harness`

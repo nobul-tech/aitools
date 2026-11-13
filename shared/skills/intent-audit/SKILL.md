@@ -18,7 +18,8 @@ finding is a potential trigger for the discovery-to-continuation
 cycle (`@reference/framework-adoption.md`).
 
 NOT for writing intent statements (see `/intent-writing`). NOT for
-filing gaps discovered during the audit (use `/incident` after). NOT for
+filing gaps discovered during the audit (use `/incident` after; aitools
+sessions only). NOT for
 deciding where displaced content should live (that requires design
 decisions informed by `@reference/framework-adoption.md`).
 
@@ -26,7 +27,6 @@ decisions informed by `@reference/framework-adoption.md`).
 
 - After significant additions to a file
 - When a file feels "too big" or covers too many topics
-- During `/audit` governance reviews
 - When moving content between files
 - Periodically on high-traffic files (CLAUDE.md, rules, reference
   files)
@@ -53,7 +53,7 @@ Apply the quality criteria from `/intent-writing`:
 |-------|------|------|
 | Purpose names specific deliverable | "Track harness deficiencies and drive corrective actions" | "Track things" |
 | Scope has negative boundaries | "NOT the filing process. NOT the framework doc" | No exclusions |
-| Audience names consumers | "/incident skill, /audit skill, check scripts, hooks" | "Agents" |
+| Audience names consumers | "/incident skill, check scripts, hooks" | "Agents" |
 | Active verbs in purpose | "Govern", "Equip", "Define", "Track" | "Is about", "Contains" |
 | No restated title | Adds information beyond filename | Repeats filename in different words |
 | Conciseness matches exemplars | Comparable length to recently approved intents | 2x-3x longer |
@@ -116,7 +116,7 @@ Each misalignment is one of:
 | **State in process** | Mutable data in a process/convention document | Move to registry JSON or state file |
 | **Process in state** | How-to guidance in a data file | Move to rule or reference |
 | **Missing home** | Content has no correct destination yet | File a gap — the harness is missing a home for this content |
-| **Intent too narrow** | Content is correct here but intent doesn't cover it | Propose intent amendment (protected activity) |
+| **Intent too narrow** | Content is correct here but intent doesn't cover it | Amend the intent as a version, listed under "Review after" (D-DEL5) |
 | **Intent too broad** | Intent promises more than the file delivers | Propose intent amendment or split file |
 | **Intent quality gap** | Intent exists but fails quality criteria from `/intent-writing` | Revise intent per quality checklist |
 | **Intent ambiguity** | Intent contains undefined or multi-meaning terms | Ambiguity purge per `/intent-writing` multi-pass process |
@@ -152,13 +152,14 @@ diverges.
 For each finding, propose a specific action:
 - **Move**: name the destination file (create if needed)
 - **Split**: propose new file with its own intent
-- **Amend intent**: draft the revised intent (protected — needs
-  user approval)
+- **Amend intent**: write the revised intent per `/intent-writing`
 - **File gap**: when no destination exists, file via `/incident`
+  (aitools sessions only)
 
-Present all findings and proposed resolutions to the user before
-making changes. Moving content between files and amending intents
-are both protected activities.
+Report all findings and resolutions. When you make the changes,
+write them as versions and commit them; list each move and each
+intent amendment old → new under "Review after", and the commander
+reviews the diff after (D-DEL5, user rule `delegation.md`).
 
 ## Output format
 
@@ -204,5 +205,5 @@ step 8 but not built; no hook checks intent today.
 
 - Intent writing: `/intent-writing` skill
 - Framework: `@reference/framework-adoption.md`
-- Protection rule: `@.claude/rules/sources-of-truth.md`
-- Gap filing: `/incident` skill
+- Review after: D-DEL5, user rule `delegation.md`
+- Gap filing: `/incident` skill (aitools sessions only)

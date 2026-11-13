@@ -15,8 +15,9 @@ verification (`/intent-audit`).
 NOT for auditing existing intents against content (see `/intent-audit`).
 NOT for deciding file placement (that's a design decision informed by
 `@reference/framework-adoption.md`). Consumed by: any agent creating
-new files, any agent modifying intent statements, any agent prompted
-by the intent protection gate in `@.claude/rules/sources-of-truth.md`.
+new files, any agent modifying intent statements (an intent change is
+written as a version and listed old → new under "Review after": D-DEL5,
+user rule `delegation.md`).
 
 ## What an intent statement must answer
 
@@ -90,8 +91,9 @@ Example (bash):
 # Safe to re-run. macOS/Linux only (see .ps1 for Windows).
 ```
 
-Code intents follow the same protection rule as markdown intents:
-draft, present for user review, write only after approval.
+Code intents follow the same review rule as markdown intents: write
+them as a version and list them old → new under "Review after"
+(D-DEL5, user rule `delegation.md`).
 
 ## Common failure modes
 
@@ -119,7 +121,8 @@ Before drafting, perform these checks:
 ### Governed term audit
 
 Scan draft content for terms. For each term:
-1. Is it in the `/glossary` skill's governed vocabulary?
+1. Is it in the `/glossary` skill's governed vocabulary? (The skill
+   is available only in aitools sessions.)
 2. If not, is it widely understood without definition?
 3. If neither — the term is ambiguous. Replace with a governed
    term, define it, or remove it.
@@ -144,7 +147,7 @@ one clause per field. Rule intents use negative scope boundaries
 ## Multi-pass ambiguity removal
 
 After drafting the intent, perform at least 2 self-audit passes
-before presenting to the user:
+before writing it:
 
 **Pass 1 — Undefined terms**: Read every word. Is each term either
 (a) in the governed vocabulary, (b) a common English word, or
@@ -168,23 +171,26 @@ something the previous missed.
 1. Draft the intent statement addressing purpose, scope, and audience
 2. Run pre-write audit (governed terms + exemplar calibration)
 3. Run multi-pass ambiguity removal (2-3 passes)
-4. Present to user for review (protected activity)
-5. Iterate — intent often takes 2-3 rounds to get right
-6. Write only after user approval
-7. If modifying an existing intent, show old → new
+4. Write it in the file as a version and commit it (D-DEL5, user
+   rule `delegation.md`)
+5. List it under "Review after" in the commit or PR body; if you
+   modified an existing intent, show old → new
+6. Iterate when the commander's review asks for changes — intent
+   often takes 2-3 rounds to get right
 
-## Consolidated presentation
+## Consolidated review
 
-When multiple files in one task need intents, present ALL drafts
-in a single message for single-round approval:
+When multiple files in one task need intents, write them all and
+list ALL of them in one "Review after" block, so the commander
+reviews the batch in a single round:
 
-1. Draft all intents in the batch
-2. Present them together with a tracking table:
+1. Write all intents in the batch
+2. List them together with a tracking table:
    | File | Intent status |
    |------|---------------|
-   | `file-a.md` | Draft below |
-   | `file-b.json` | Draft below |
-3. User reviews and approves the batch, or requests specific
+   | `file-a.md` | New, text below |
+   | `file-b.json` | Changed, old → new below |
+3. The commander reviews the batch after, or asks for specific
    revisions
 
 In the tool-ops execution session (eaacf9da), batch 1 presented
@@ -192,14 +198,14 @@ intents one at a time — 3 rounds, 15 minutes. By batch 5, 4 intents
 in one block — 1 round, "beautiful", ~42 seconds. Consolidation
 reduced approval friction by 10-15x.
 
-Sub-agents cannot receive user feedback during execution. Every
-intent that requires user approval MUST be pre-approved before
-delegation. The sub-agent receives verbatim intent text, not
-instructions to draft intent.
+Sub-agents cannot receive user feedback during execution. Under
+D-DEL5 a delegate writes intents as versions, like any other
+change, and reports each one old → new; its delegating agent lists
+them under "Review after" in the commit or PR body.
 
 ## Quality criteria
 
-Apply this checklist to every intent before presenting for approval:
+Apply this checklist to every intent before writing it:
 
 | Criterion | Check | Failure mode |
 |-----------|-------|--------------|
@@ -244,5 +250,5 @@ The approved intent style has converged through iteration:
 
 - Intent audit: `/intent-audit` skill
 - Framework: `@reference/framework-adoption.md`
-- Protection rule: `@.claude/rules/sources-of-truth.md`
+- Review after: D-DEL5, user rule `delegation.md`
 - Intent documentation framework: `reference/framework-intent-documentation.md`
