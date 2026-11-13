@@ -6,7 +6,7 @@ defense. **Scope**: What the layers are, why three, how they interact,
 and how new governance capabilities are assigned to layers. NOT the
 operational details of any specific layer (those live in the
 implementing artifacts). **Audience**: Agents designing new governance
-features, the `/audit` skill, framework adoption work.
+features, framework adoption work.
 
 ## Source Discipline
 
@@ -20,7 +20,7 @@ complete.
 |-------|------|-----------|---------|
 | Prevention | Every session, before issues are created | Rules in context, skills loaded on demand | Stops issues by showing the right way |
 | Detection | During tool calls and session events | Hooks firing in real-time | Issues as they happen, blocking or warning |
-| Audit | On demand | `/audit` skill, `/incident` skill | What slipped through both layers |
+| Audit | After push, in CI, and on demand | `scripts/check-post-push.sh`, CI (`.github/workflows/check.yml`), `/incident` skill | What slipped through both layers |
 
 **Rule-skill governance**: Rules govern and enforce process; skills
 implement it. Rules are always in context and contain trigger directives
@@ -51,7 +51,7 @@ Most capabilities start as prevention (rule), graduate to detection
 - New rules/skills/hooks are assigned to layers at creation time
 - `@.claude/rules/hook-rollout.md` governs how detection hooks
   graduate from observe to enforce
-- `/audit` skill verifies all three layers are functioning
+- Verify that all three layers are functioning <!-- TODO(incident): no owner since /audit was removed -->
 - `@plans/governance-and-compliance-framework.md` tracks the
   implementation roadmap
 
@@ -65,14 +65,14 @@ pattern that mirrors the governance layers:
 |-----------------|---------------|-------------------|
 | Prevention (rules in context) | Rule (intent, always in context) | Yes |
 | Audit (on demand) | Skill (access layer, on demand) | On demand |
-| — | JSON (source of truth, protected) | On read |
+| — | JSON (source of truth) | On read |
 
 **Rule** (`.claude/rules/<name>.md`) — always in context, states
 intent: what the registry is, why it matters, when to check it.
 References the JSON and skill. Contains no data that can drift.
 
 **Structured data** (`registries/<name>.json`) — single source of
-truth. Protected file. Machine-readable for `/audit` validation.
+truth. Machine-readable, so it can be validated. <!-- TODO(incident): no owner since /audit was removed -->
 Schema documented in the rule. Must include `meta.intent` with
 purpose, scope, and audience fields.
 
@@ -102,16 +102,18 @@ get a reference file.
 - Every JSON registry has a `meta` object with: `governance` (rule
   path), `intent` (purpose/scope/audience), `lastUpdated`
 - Entry schemas are registry-specific, documented in the rule
-- Schema changes are protected file amendments
-- `/audit` validates: required fields, valid enums, sequential IDs
-  where applicable
+- Schema changes are written as a version and committed; the commit
+  or PR body lists each old -> new under "Review after", and the
+  commander reviews after (D-DEL5, user rule `delegation.md`)
+- Validate required fields, valid enums, and sequential IDs where
+  applicable <!-- TODO(incident): no owner since /audit was removed -->
 
 ### Maintenance
 
 - `lastUpdated` in meta updated on every change
 - Rule references the skill for access and the JSON for data
 - Skill reads the JSON at invocation time (no stale cache)
-- `/audit` validates schema compliance and cross-reference integrity
+- Validate schema compliance and cross-reference integrity <!-- TODO(incident): no owner since /audit was removed -->
 - Write skills validate before writing
 
 ### Current registries
@@ -132,7 +134,7 @@ governed.
 |-------|-----------|-------------|
 | Prevention | Trigger directive in rule | States WHEN to invoke the skill. Always in context. |
 | Detection | PreToolUse hook on skill's data files | Fires when agent reads governed data directly, bypassing the skill process. |
-| Audit | `/audit` check | Verifies all rules with skills have trigger directives, and all skills with data files have detection hooks. |
+| Audit | None (no owner) <!-- TODO(incident): no owner since /audit was removed --> | Verifies all rules with skills have trigger directives, and all skills with data files have detection hooks. |
 
 A skill without a trigger directive in its governing rule is ungoverned
 process — it exists but nothing enforces its use. A rule without a
@@ -158,7 +160,7 @@ When adopting or reviewing a framework, verify three-layer coverage:
 |----------|-------|
 | Does the rule contain trigger directives for its skills? | Prevention gap |
 | Is there a hook that detects when governed process is bypassed? | Detection gap |
-| Does `/audit` verify this framework's completeness? | Audit gap |
+| Does an audit-layer check (a check script, a CI step) verify this framework's completeness? | Audit gap |
 
 ## Implementing Artifacts
 

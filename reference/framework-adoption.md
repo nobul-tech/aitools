@@ -144,8 +144,11 @@ plans, commits, and pull requests — not the incident entry. The
 incident's `linked` field points to the tracking item.
 
 Follow existing conventions:
-- Protected files require review (`@.claude/rules/sources-of-truth.md`)
-- Intent statements require user approval
+- Write changes as versions in their final location and commit them;
+  the commit or PR body lists each old -> new under "Review after",
+  and the commander reviews after (D-DEL5, user rule `delegation.md`)
+- Intent statement changes follow the same rule: show each one
+  old -> new under "Review after"
 - New framework files follow the cross-reference convention (above)
 - New registry entries follow the registry convention
   (`@reference/framework-three-layer-governance.md`)
@@ -166,7 +169,8 @@ unbuilt hooks via `/incident` skill.
 Wire the new artifacts into the three-layer governance:
 - **Prevention**: add rules, update skills, update project claude
 - **Detection**: add or update hooks
-- **Audit**: update `/audit` skill scope, add to check scripts
+- **Audit**: add to check scripts; on-demand audit scope for the new
+  artifacts <!-- TODO(incident): no owner since /audit was removed -->
 
 Update the framework registry if a new framework was created.
 

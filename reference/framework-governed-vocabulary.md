@@ -77,17 +77,18 @@ Base artifacts combine with scope modifiers:
 
 ## Glossary Maintenance
 
-- New terms are added via `/glossary` skill which reads the current
-  JSON, formats the new entry with all required fields, presents for
-  review (protected file per `@.claude/rules/sources-of-truth.md`),
-  and writes if approved
+- New terms are added via the `/glossary` skill, which reads the
+  current JSON, formats the new entry with all required fields, and
+  writes it
 - The glossary rule must be updated in the same operation — a term
   in the JSON without a corresponding line in the rule is invisible
   to agents
-- Both files are protected — changes require user approval
-- `/audit` skill scope includes: terms used without glossary
-  definition, definitions that contradict the glossary, composed
-  terms using undefined modifiers or artifacts
+- Changes to both files are written as a version and committed; the
+  commit or PR body lists each old -> new under "Review after", and
+  the commander reviews after (D-DEL5, user rule `delegation.md`)
+- Find terms used without a glossary definition, definitions that
+  contradict the glossary, and composed terms using undefined
+  modifiers or artifacts <!-- TODO(incident): no owner since /audit was removed -->
 - When a term is ambiguous (like "scope" was), split into specific
   governed terms and remove the ambiguous standalone
 
