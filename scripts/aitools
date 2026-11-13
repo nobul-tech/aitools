@@ -596,8 +596,6 @@ ui_identity() {
 # asked on a terminal) and this machine's profile under its id (alias: --alias,
 # else asked on a terminal, else the short hostname); COMMIT=true commits and
 # pushes it. Returns ui_register's code.
-# TODO(PR #96): profile.json meta.intent is protected text pending approval -- the
-# scaffold writes no meta.intent until it is approved (S3-M3Lead, 2026-10-22).
 ui_scaffold() {
     local dir="$1" commit="$2" alias="$user_alias"
     log "machine profile: no profile.json in $(display_path "$dir") -- creating it (identity + this machine's profile)"

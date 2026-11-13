@@ -55,13 +55,14 @@ approval before writing.
 the change and commits it as a version, listed old -> new under "Review
 after" (D-DEL5). Requests the reason for the commit message.
 
-### Add deny rule
+### Deny rule request (retired section)
 
 **Input**: "Add a deny rule for MCP server X"
-**Expected**: Skill validates all required fields are provided (`id`,
-`permissionPattern`, `hook`, `reason`, `incidentRef`). If any missing,
-asks for them. Writes the entry and commits it as a version, listed
-old -> new under "Review after" (D-DEL5).
+**Expected**: Skill reports that deny rules are not in tool-ops.json
+(`denyRules` retired in 15eb5e3) and that permission rules
+(allow/ask/deny) are profile-sourced: dotprofile `profile.json`
+`claude.settings.permissions`, synced to `~/.claude/settings.json` by
+`setup-user-settings`. Writes nothing to tool-ops.json.
 
 ### Add new tool
 

@@ -9,7 +9,7 @@ Should auto-load when:
 - Starting a new session on a multi-session plan
 
 Should NOT auto-load for:
-- Writing a new plan from scratch (that's /planning or /aitools-planning)
+- Writing a new plan from scratch (that's /planning)
 - Normal coding tasks unrelated to plan review
 - Filing an incident (that's /incident, aitools sessions only)
 
@@ -34,7 +34,8 @@ Should NOT auto-load for:
 
 ### Missing content
 - Should detect undocumented decisions (gaps in foundational decisions)
-- Should cross-check incidents.json Open Questions
+- Should cross-check open incidents (through the `/incident` skill) against
+  the plan's Open Questions
 
 ## Context awareness
 - In 1M context: should load referenced rules and reference files

@@ -178,6 +178,8 @@ Cursor project rules mirror Claude Code rules for consistency. When changing rul
 | `.claude/rules/smoke-test-pattern.md` | `.cursor/rules/smoke-test-pattern.mdc` | Identical |
 | `shared/rules/tool-lifecycle.md` | `.cursor/rules/tool-lifecycle.mdc` | Must match |
 | `shared/rules/web-sources.md` | `.cursor/rules/web-sources.mdc` | Identical |
+| `.claude/rules/hook-lifecycle.md` | — | No `.mdc` twin; project rule scoped by `paths:` to the hook sources and their deploy scripts |
+| `shared/rules/scratch.md` | — | No project `.mdc` twin; Cursor gets it at user scope as `~/.cursor/rules/scratch.mdc` through the setup-user-cursor rules fan-out (`reference/rules.md` section 6.1) |
 | (CLAUDE.md Code Conventions) | `.cursor/rules/general.mdc` | Python style folded in |
 | (none) | `.cursor/rules/cursor-rule-parity.mdc` | Cursor-only: keeps the twins in step |
 | `aitools-workspace`, `frameworks`, `glossary`, `governed-data-access`, `incident-governance`, `tool-evaluation`, `tool-ops` | — | No twin today: reason not recorded (commander's call: add twins, or record "Claude Code skill triggers only") |

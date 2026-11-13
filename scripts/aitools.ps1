@@ -1261,8 +1261,6 @@ function Read-UiIdentity([string]$Dir) {
 
 # Invoke-UiScaffold DIR COMMIT -- decision 6: DIR has no profile.json (parity:
 # ui_scaffold). Returns Invoke-UiRegister's code.
-# TODO(PR #96): profile.json meta.intent is protected text pending approval -- the
-# scaffold writes no meta.intent until it is approved (S3-M3Lead, 2026-10-22).
 function Invoke-UiScaffold([string]$Dir, [bool]$Commit) {
     Log "machine profile: no profile.json in $Dir -- creating it (identity + this machine's profile)"
     Read-UiIdentity $Dir

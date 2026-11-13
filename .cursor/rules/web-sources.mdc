@@ -1,14 +1,16 @@
 ---
-description: Prefer Chrome DevTools MCP over WebFetch for reading web content that feeds into source-of-truth files
+description: Read every web page through the Chrome DevTools MCP, not WebFetch; WebFetch only as a disclosed fallback
 globs: "scripts/**,deploy/**,shared/**,reference/**,plans/**,rfcs/**,.claude/rules/**,.cursor/rules/**,CLAUDE.md,RELEASE_NOTES.md,ROADMAP.md,README.md"
 alwaysApply: false
 ---
 
 ## Web Source Reading (this repo)
 
-When reading web content that will feed into source-of-truth files
-(install commands, config steps, lifecycle fields, setup procedures),
-use the Chrome DevTools MCP skill (`chrome-devtools`) instead of WebFetch.
+When reading any web page (official docs, release notes, READMEs, issues,
+blog posts, tutorials, Stack Overflow, anything), use the Chrome DevTools
+MCP skill (`chrome-devtools`) instead of WebFetch. There is no "low-stakes"
+exemption (user rule `web-sources.md`, source aitools
+`shared/rules/web-sources.md`).
 
 ### Why
 
@@ -28,12 +30,13 @@ Firecrawl is deprecated: do not use its MCP tools or skills for any web
 reading, even when they appear in the tool list (commander decision;
 `/delegate` skill standing orders).
 
-### When WebFetch is fine
+### Fallback (only when the browser cannot be used)
 
-- General web searches and research (use WebSearch for queries)
-- Blog posts, tutorials, Stack Overflow -- low-stakes reference
-- Quick fact-checks that don't feed into source-of-truth files
-- Static pages where JS rendering isn't needed (plain GitHub READMEs)
+Finding pages is web search (WebSearch), not page reading. Use WebFetch
+only when the Chrome DevTools MCP is not available in the session, or
+fails on the page after a retry. Then say so (which URL, why), treat the
+result as a lead, not a fact, and re-read it in the browser before
+recording it in a source-of-truth file.
 
 ### Cross-reference
 

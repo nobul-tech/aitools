@@ -69,7 +69,7 @@ Create a `plans/*.md` file when work:
 - **Rules** (`.claude/rules/`) = concise behavioral directives, target ~40-100
   lines; a rule over 150 lines should move its detail to `reference/` (today:
   script-standards, incident-governance, cross-platform, deploy-paths,
-  config-file-safety, agentic-standards)
+  config-file-safety, glossary, agentic-standards)
   (what a rule is, its anatomy, scopes and deployment: `@reference/rules.md`)
 - **Skills** (`.claude/skills/`, `shared/skills/`) = the governed process,
   loaded on demand (what a skill is, its anatomy, scopes and deployment:
