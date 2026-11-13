@@ -176,8 +176,8 @@ Cursor project rules mirror Claude Code rules for consistency. When changing rul
 | `.claude/rules/managed-file-deployment.md` | `.cursor/rules/managed-file-deployment.mdc` | Near-identical |
 | `.claude/rules/script-standards.md` | `.cursor/rules/script-standards.mdc` | Condensed; absorbed the former error-handling rule |
 | `.claude/rules/smoke-test-pattern.md` | `.cursor/rules/smoke-test-pattern.mdc` | Identical |
-| `shared/rules/tool-lifecycle.md` | `.cursor/rules/tool-lifecycle.mdc` | Must match |
-| `shared/rules/web-sources.md` | `.cursor/rules/web-sources.mdc` | Identical |
+| `shared/rules/tool-lifecycle.md` | — | No project `.mdc` twin (retired 2026-11-13); Cursor gets it at user scope as `~/.cursor/rules/tool-lifecycle.mdc` through the setup-user-cursor rules fan-out |
+| `shared/rules/web-sources.md` | — | No project `.mdc` twin (retired 2026-11-13); Cursor gets it at user scope as `~/.cursor/rules/web-sources.mdc` through the setup-user-cursor rules fan-out |
 | `.claude/rules/hook-lifecycle.md` | — | No `.mdc` twin; project rule scoped by `paths:` to the hook sources and their deploy scripts |
 | `shared/rules/scratch.md` | — | No project `.mdc` twin; Cursor gets it at user scope as `~/.cursor/rules/scratch.mdc` through the setup-user-cursor rules fan-out (`reference/rules.md` section 6.1) |
 | (CLAUDE.md Code Conventions) | `.cursor/rules/general.mdc` | Python style folded in |

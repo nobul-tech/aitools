@@ -12,10 +12,13 @@ skill behavior.
 ### Look up existing tool
 
 **Input**: "What deny rules does Claude Code have?"
-**Expected**: Skill reads `registries/tool-ops.json`, reports Claude Code has
-no `permissions.deny` rules. The built-in `claude-code-guide` subagent is
-blocked by the `block-claude-code-guide.sh` hook (see `tools.claude-code.hooks`),
-not a deny rule — CC does not reliably honor deny for built-in subagents.
+**Expected**: Skill reports that permission rules (allow/ask/deny) are not in
+`registries/tool-ops.json` (`denyRules` retired in 15eb5e3): they are
+profile-sourced, in dotprofile `profile.json` `claude.settings.permissions`
+(synced by `setup-user-settings`). It notes that the built-in
+`claude-code-guide` subagent is blocked by the `block-claude-code-guide.sh`
+hook (see `tools.claude-code.hooks`), not by a deny rule — CC does not
+reliably honor deny for built-in subagents.
 
 ### Look up nonexistent tool
 
