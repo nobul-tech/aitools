@@ -663,6 +663,20 @@ if (Test-Path $pythonScript) {
 }
 
 # ============================================================
+# 15b. pywinpty (Windows test library; macOS/Linux report n/a -- requires Step 15)
+# ============================================================
+# Parity with aitools-install.sh: the .sh reports "n/a (<platform>)". The pin is
+# scripts/requirements-pywinpty.txt, next to the script.
+Log "Step 15b: pywinpty"
+
+$pywinptyScript = Join-Path $PSScriptRoot "setup-pywinpty.ps1"
+if (Test-Path $pywinptyScript) {
+    Invoke-ValidatedScript $pywinptyScript
+} else {
+    LogWarn "setup-pywinpty.ps1 not found -- skipping (MDM deploy)"
+}
+
+# ============================================================
 # 16. Modal CLI
 # ============================================================
 Log "Step 16: Modal CLI"

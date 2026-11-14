@@ -774,6 +774,20 @@ else
 fi
 
 # ============================================================
+# 15b. pywinpty (Windows test library; macOS/Linux report n/a -- requires Step 15)
+# ============================================================
+# Parity with aitools-install.ps1, which installs it: here the script reports
+# "n/a (<platform>)" and changes nothing.
+log "Step 15b: pywinpty"
+
+pywinpty_script="$SCRIPT_DIR/setup-pywinpty.sh"
+if [ -f "$pywinpty_script" ]; then
+    validate_and_run "$pywinpty_script"
+else
+    log_warn "setup-pywinpty.sh not found -- skipping (MDM deploy)"
+fi
+
+# ============================================================
 # 16. Modal CLI
 # ============================================================
 log "Step 16: Modal CLI"

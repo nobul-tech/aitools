@@ -52,12 +52,15 @@ Every resolver-consuming deploy script (`setup-user-claude`, `-settings`, `-curs
 
 `deploy-harness.sh/.ps1` is **extract + embed**: `build-deploy.sh` extracts its code between its section headings (`extract_span`, each heading must match one line) and replaces only section 2 (source setup) with the embedded snapshot; the source directories and bin CLIs are parsed from its `add_source` / `for cli in` lines, not listed twice. Renaming a section heading or rewording those lines fails the build loudly. `setup-user-config`, `aitools-profile` and `aitools-json` are copied as-is (library inlined) so `deploy-harness` reaches its config.json writer.
 
+`setup-pywinpty.ps1` is **copy + embed**: copied with the library inlined, plus only its pin data after the library (`$AitoolsEmbeddedPywinptyPin`); no setup logic is duplicated, and a missing or malformed pin fails the build.
+
 **What IS auto-embedded** (safe — single source of truth):
 - `shared/hooks/*.sh` → read via `cat` at build time
 - `shared/skills/*/SKILL.md` → read at build time into `deploy/setup-user-skills.*`, the fallback deployer that runs only when `~/.aitools/skills` does not exist (FD-9); on an endpoint the skills normally arrive through `deploy/deploy-harness.*` (which embeds each skill's whole directory) and the fan-outs
 - `<userRepoPath>/claude/CLAUDE.md` (else `shared/claude-shared.md`) → read at build time, tokens left in place (the fallback template; resolved at runtime)
 - `<userRepoPath>/profile.json` → its snapshot (`aitools-json.pl snapshot`: version, identity, cursor, profiles), the fallback when the machine has no dotprofile
 - `scripts/aitools-profile.sh/.ps1`, `scripts/aitools-lib.sh/.ps1`, `scripts/aitools-json.pl/.ps1` → copied at build time into the resolver-consuming deploy scripts and written to a temp dir at runtime (`AITOOLS_PROFILE_SH` / `AITOOLS_PROFILE_PS1`); a file the resolver loads that the embed does not carry fails the build
+- `scripts/requirements-pywinpty.txt` → the pin, embedded in `deploy/setup-pywinpty.ps1` (used only when no pin file sits beside the script)
 - Every `scripts/deploy-harness.*` source (`reference/`, `registries/`, `shared/hooks`, `.claude/hooks`, `shared/skills`, `shared/rules`, the bin CLIs) → its `git ls-files` list and contents, embedded as base64 at build time. Nothing from the dotprofile is in the harness snapshot <!-- path-ref: ignore (a deploy-harness source that may be absent) -->
 
 `check-pre-push` step 7 rebuilds into a temp copy of the dotprofile and dry-runs the generated resolver consumers, so a deploy script that cannot find its resolver fails the push, not an endpoint.
