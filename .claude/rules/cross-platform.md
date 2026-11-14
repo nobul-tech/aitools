@@ -147,10 +147,10 @@ the table below); a `.sh` suite is never run past its guard, and `uname`,
 | Init libraries | `init-logging.sh/.ps1` | Sourced for initialization |
 | Hooks | `shared/hooks/*.sh` | CC hooks run bash on all platforms |
 | Shell alias modules | `shared/shell/aliases.sh/.ps1` | Sourced into shell profiles |
-| Build scripts | `build-deploy.sh`, `build-package.sh` (P-1, pending approval) | Bash-only builders, run in Git Bash on Windows; see cross-language exceptions |
+| Build scripts | `build-deploy.sh`, `build-package.sh` (approved, commander 2026-11-14) | Bash-only builders, run in Git Bash on Windows; see cross-language exceptions |
 | Scratch/test files | `.scratch/*.sh` | Temporary, not deployed |
 | Entry points sourced or run on any platform (rationale unrecorded, pending approval) | `bootstrap.sh/.ps1`, `hh.sh/.ps1`, `relay-outbound-prompt.sh/.ps1`, `init-hh-hooks.sh` | Bootstrap/shell helpers; each `.sh` also runs in Git Bash |
-| Helper modules (rationale unrecorded, pending approval) | `aitools-json.ps1`, `_validate-ps1.ps1` | Dot-sourced / called by other scripts, never a setup entry point |
+| Helper modules (commander, 2026-11-14) | `aitools-json.ps1`, `_validate-ps1.ps1` | Dot-sourced / called by other scripts, never a setup entry point |
 | Analysis tools (rationale unrecorded, pending approval) | `analyze-session.sh` | Read-only session analysis |
 | Entry points with Windows branches (2026-11-01, review-after) | `aitools-install.sh`, `aitools`, `scripts/githooks/pre-commit` | Run on every platform: on Windows (Git Bash) `aitools-install.sh` forwards to `aitools-install.ps1`, `aitools` (the extensionless bash entry point) dispatches the `.ps1` setup scripts, the git hook runs in Git Bash |
 | Package launchers (2026-11-01, review-after) | `packaging/macos/*`, `packaging/linux/*`, `packaging/windows/*.ps1` | Run by the package installer on its one platform (design: `@plans/build-package/design.md`) |
