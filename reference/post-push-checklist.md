@@ -224,9 +224,22 @@ Always SKIP: managed files keep no deploy state.
 
 ### 29. Deployment menu parity audit
 
-Collects every `[letter]` printed by a menu in `scripts/aitools-lib.ps1` and
-`scripts/aitools-lib.sh` and compares the two sorted sets. Order is not
-compared.
+Runs `scripts/check-menu-parity.pl` (perl; SKIP when perl is missing) on
+`scripts/aitools-lib.sh` and `scripts/aitools-lib.ps1`, two comparisons:
+
+- **Menu lines**: the `[letter]` printed by each `printf` (bash) and
+  `[Console]::Write` / `WriteLine` (PowerShell) menu line, as one sorted set
+  per file.
+- **Prompts** (since v0.77.2): the prompt passed to each `read_menu_choice`
+  (its PROMPT argument) and `Read-MenuChoice` (`-Prompt`) call, such as the
+  AI-merge preview's `[y]es / [r]efine / [n]o`. Its `[x]` letters and
+  `[a/b/c]` lists make one set per call; the two files' lists of sets must
+  match. A prompt in a variable takes the literal assigned to it earlier in
+  the file; a prompt built at run time counts as `?`.
+
+Order is not compared. FAIL prints what differs (e.g. `prompts only in bash:
+[q,r,y]`). The script header lists the blind spots; tests:
+`tests/check-post-push/test-menu-parity.sh`.
 
 ### 30. Return value coverage audit
 

@@ -577,6 +577,11 @@ jobs:
         if: ${{ !cancelled() }}
         run: bash tests/check-post-push/test-post-push-step7.sh
 
+      # check-post-push step 29: menu lines and read_menu_choice / Read-MenuChoice prompts
+      - name: check-post-push step 29 menu parity tests (check-menu-parity.pl, both twins)
+        if: ${{ !cancelled() }}
+        run: bash tests/check-post-push/test-menu-parity.sh
+
       - name: setup-user-shell login profile + rc tests
         if: ${{ !cancelled() }}
         run: bash tests/setup-user-shell/test-setup-user-shell.sh
@@ -832,6 +837,11 @@ jobs:
         if: ${{ !cancelled() }}
         shell: bash
         run: bash tests/check-post-push/test-post-push-step7.sh
+
+      - name: check-post-push step 29 menu parity tests (both twins, native pwsh, via Git Bash)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: bash tests/check-post-push/test-menu-parity.sh
 
       - name: Profile resolver tests (.ps1, native pwsh)
         if: ${{ !cancelled() }}

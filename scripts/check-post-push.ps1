@@ -881,15 +881,25 @@ StepSkip "28" "Deploy state integrity" "retired: managed files keep no deploy st
 if ($Extensive) {
     $ps1Lib = Join-Path $script:RepoRoot "scripts\aitools-lib.ps1"
     $shLib = Join-Path $script:RepoRoot "scripts\aitools-lib.sh"
-    # Extract [letter] patterns from menu lines
-    $ps1Choices = (Select-String -Path $ps1Lib -Pattern 'Console.*Write.*\[(\w)\]' -AllMatches |
-        ForEach-Object { $_.Matches } | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique) -join ','
-    $shChoices = (Select-String -Path $shLib -Pattern 'printf.*\[(\w)\]' -AllMatches |
-        ForEach-Object { $_.Matches } | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique) -join ','
-    if ($ps1Choices -eq $shChoices) {
-        StepPass "29" "Deployment menu parity audit" "PS1 and bash menus match: $ps1Choices"
+    # The menu letters printed by printf / [Console]::Write lines and the
+    # prompts passed to read_menu_choice / Read-MenuChoice, compared in
+    # scripts/check-menu-parity.pl (same script as the bash step 29; its header
+    # lists the blind spots). Exit 0 match, 1 mismatch, 2 usage or read error;
+    # the last output line is the summary.
+    $mpScript = Join-Path (Join-Path $script:RepoRoot "scripts") "check-menu-parity.pl"
+    if (-not (Get-Command perl -ErrorAction SilentlyContinue)) {
+        # Command-existence check with an explicit fallback (the SKIP)
+        StepSkip "29" "Deployment menu parity audit" "perl not available"
     } else {
-        StepFail "29" "Deployment menu parity audit" "PS1: $ps1Choices vs bash: $shChoices"
+        $mpOut = @(& perl $mpScript $shLib $ps1Lib 2>&1 | ForEach-Object { "$_" })
+        $mpRc = $LASTEXITCODE
+        $mpLast = if ($mpOut.Count -gt 0) { $mpOut[-1] } else { "(no output)" }
+        if ($mpRc -eq 0) {
+            StepPass "29" "Deployment menu parity audit" "PS1 and bash menus match: $mpLast"
+        } else {
+            foreach ($mpLine in $mpOut) { Write-Host "      $mpLine" }
+            StepFail "29" "Deployment menu parity audit" "$mpLast (exit $mpRc)"
+        }
     }
 }
 

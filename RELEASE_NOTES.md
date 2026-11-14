@@ -23,12 +23,20 @@ Not tagged. Mission M5-Fixes (items 9 and 4, batch M5-C1).
 | 1 | Medium | `check-pre-commit.ps1`, `check-pre-push.ps1` and `check-post-push.ps1` ran their bash steps with the first `bash` on PATH (`Get-Command bash`, a bare `bash -n`, or a PATH fallback after the Git for Windows locations). In a native pwsh that is the WSL launcher (`%LOCALAPPDATA%\Microsoft\WindowsApps\bash.exe` on the commander's workstation), not Git Bash. They now use one helper, `ResolveGitBash` in `scripts/check-lib.ps1`: the Git for Windows locations only (the list `setup-bash.ps1` probes), no PATH fallback, and any candidate under `%SystemRoot%` or the WindowsApps alias directory refused. No Git Bash: pre-commit step 2 is WARN (new: it had no not-found branch), step 3 `-Fix` FAIL, pre-push step 7 WARN and post-push steps 2, 6, 7 SKIP, as before |
 | 2 | High | `check-post-push` step 7 ("deploy/ drift audit", both twins) ran `build-deploy.sh` with the caller's HOME, which replaces the real dotprofile `deploy/` (incident #86 class), and then diffed the frozen aitools `deploy/`, which build-deploy no longer writes, so it always passed. Step 7 is retired: always SKIP `retired: check-pre-push step 7 rebuilds into a temp dotprofile copy` (pre-push step 7 runs on every push, commander 2026-10-26); the step number stays. The `.ps1` "bash not found" SKIP texts of steps 2 and 6 now say "Git Bash not found". `shared/rules/tool-lifecycle.md` "Rebuild + propagate" and `reference/post-push-checklist.md` step 7 follow |
 
+### Improvements
+
+| # | Change |
+|---|--------|
+| 3 | `check-post-push` step 29 (menu parity audit) also compares the prompts passed to the menu-read helper: the PROMPT argument of `read_menu_choice` (bash) and `-Prompt` of `Read-MenuChoice` (PowerShell), one letter set per call (`[x]` letters and `[a/b/c]` lists; a prompt in a variable takes the literal assigned earlier; a prompt built at run time counts as `?`). It only read `printf` / `[Console]::Write` lines, so a mismatch in a prompt such as the AI-merge preview's `[y]es / [r]efine / [n]o` went unseen. The logic moved to `scripts/check-menu-parity.pl` (one script for both twins, as step 32 does with `check-hook-parity.py`; `--help` lists the blind spots); SKIP when perl is missing |
+
 ### Files created
 
 | File | Purpose |
 |------|---------|
 | `tests/check-lib/test-resolve-git-bash.ps1` | Probe order, no fallback, the WSL launchers refused, the default probe on the machine, no check-*.ps1 resolving bash through PATH (CI windows job) |
 | `tests/check-post-push/test-post-push-step7.sh` | Runs the step 7 section of each twin with a fake `build-deploy.sh` under a temp HOME: never run, one SKIP 7; no line of either twin runs build-deploy (CI linux and windows jobs) |
+| `scripts/check-menu-parity.pl` | The step 29 comparison (menu lines and menu-read prompts), called by both twins |
+| `tests/check-post-push/test-menu-parity.sh` | The current libs match; planted mismatches in a `read_menu_choice` prompt, a `Read-MenuChoice -Prompt`, a choice list and a menu line fail (the old extraction misses the prompt ones); variable prompts; comments; errors; step 29 of both twins (CI linux and windows jobs) |
 
 **Verified on:** Windows 11 (Git for Windows 2.56.0, bash 5.3.15, pwsh 7): the new suite 17/17; against the pre-fix check scripts it fails 4 cases. check-pre-commit.ps1 and check-pre-push.ps1 run from the branch; check-post-push.ps1 not run (its step 7 rebuilds deploy/ against the real HOME).
 
