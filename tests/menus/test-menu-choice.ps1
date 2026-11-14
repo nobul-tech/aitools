@@ -37,8 +37,10 @@
 # is the real code. One case also runs on a pseudo-terminal
 # (tests/managed-files/pty-run.py, pywinpty/ConPTY on Windows; SKIP without it).
 # The JSON cases need node (SKIP without it).
-# Platform: Windows (pwsh 7; aitools-lib.ps1 is a Windows library, so CI runs
-# this suite on the windows job only, plans/ci-platform-targeting.md).
+# Platform: Windows only (pwsh 7; OS guard below; commander, 2026-11-14: "sh scripts
+# and tests should only run on linux/mac and ps1 on windows"; aitools-lib.ps1 is a
+# Windows library, so CI runs this suite on the windows job only,
+# plans/ci-platform-targeting.md).
 # Spec: .claude/rules/interactive-menus.md; reference/managed-file-deployment.md
 # "Menus"; commander 2026-11-13: "no default or other characters should re-ask".
 # Exit 1 if any case fails.
@@ -46,7 +48,11 @@
 # Usage: pwsh -NoProfile -File tests/menus/test-menu-choice.ps1 [-Help]
 
 param([switch]$Help)
-if ($Help) { Get-Content $PSCommandPath -TotalCount 46 | Select-Object -Skip 1; exit 0 }
+if ($Help) { Get-Content $PSCommandPath -TotalCount 48 | Select-Object -Skip 1; exit 0 }
+if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
+    [Console]::Error.WriteLine("This script is for Windows. On macOS/Linux, run tests/menus/test-menu-choice.sh with bash.")
+    exit 1
+}
 
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
@@ -59,7 +65,7 @@ $pty = Join-Path $root "tests/managed-files/pty-run.py"
 $script:pass = 0; $script:fail = 0; $script:skip = 0
 $havePty = [bool](Get-Command python3 -ErrorAction SilentlyContinue)
 # Get-Command exempt: command-existence check; $havePty is the fallback branch
-if ($havePty -and $IsWindows) {
+if ($havePty) {
     # Windows pty = pywinpty (ConPTY); a failing import means "not installed".
     & python3 -c "import winpty" 2>$null
     $havePty = ($LASTEXITCODE -eq 0)
@@ -220,22 +226,14 @@ function W([string]$Rel, [string]$Text) { [IO.File]::WriteAllText((Join-Path $sc
 # (no case here makes more than 2 calls).
 function Stub-Claude {
     $text = "# Title`nmerged line"
-    if ($IsWindows) {
-        # Native Windows runs a .cmd: append the prompt from stdin to calls.txt,
-        # stop after 4 calls, then print the canned answer line by line. find.exe
-        # by full path: on a Git Bash PATH a bare "find" is the Unix find, which
-        # walks /c (the whole drive) instead of counting lines
-        $lines = ($text -split "`n" | ForEach-Object { "echo $_" }) -join "`r`n"
-        $rec = 'more >> "%~dp0calls.txt"' + "`r`n" + 'echo ==CALL==>> "%~dp0calls.txt"' + "`r`n" +
-            'for /f %%n in (''%SystemRoot%\System32\find.exe /c "==CALL==" ^< "%~dp0calls.txt"'') do if %%n GEQ 5 exit /b 1'
-        [IO.File]::WriteAllText((Join-Path $script:C "bin/claude.cmd"), "@echo off`r`n$rec`r`n$lines`r`n")
-        return
-    }
-    $path = Join-Path $script:C "bin/claude"
-    $rec = 'cat >> "$(dirname "$0")/calls.txt"' + "`n" + 'printf "\n==CALL==\n" >> "$(dirname "$0")/calls.txt"' + "`n" +
-        '[ "$(grep -c "==CALL==" "$(dirname "$0")/calls.txt")" -lt 5 ] || exit 1'
-    [IO.File]::WriteAllText($path, "#!/usr/bin/env bash`n$rec`nprintf '%s\n' '# Title' 'merged line'`n")
-    & chmod +x $path
+    # Native Windows runs a .cmd: append the prompt from stdin to calls.txt,
+    # stop after 4 calls, then print the canned answer line by line. find.exe
+    # by full path: on a Git Bash PATH a bare "find" is the Unix find, which
+    # walks /c (the whole drive) instead of counting lines
+    $lines = ($text -split "`n" | ForEach-Object { "echo $_" }) -join "`r`n"
+    $rec = 'more >> "%~dp0calls.txt"' + "`r`n" + 'echo ==CALL==>> "%~dp0calls.txt"' + "`r`n" +
+        'for /f %%n in (''%SystemRoot%\System32\find.exe /c "==CALL==" ^< "%~dp0calls.txt"'') do if %%n GEQ 5 exit /b 1'
+    [IO.File]::WriteAllText((Join-Path $script:C "bin/claude.cmd"), "@echo off`r`n$rec`r`n$lines`r`n")
 }
 
 # Run-Dmf <src> <dest> <adopt> [-InputText] [-Mode console|plain|pty] [-ForceRun] [-Child]:
@@ -582,11 +580,8 @@ try {
 
     # --- Windows PowerShell 5.1 (aitools.ps1 may load the prompt there; hh.ps1 is
     # pwsh 7 only, so these cases take the path where the prompt loads the lib) ---
-    $ps51 = $null
-    if ($IsWindows) {
-        # Get-Command exempt: command-existence check; the cases SKIP without it
-        $ps51 = Get-Command powershell.exe -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty Source
-    }
+    # Get-Command exempt: command-existence check; the cases SKIP without it
+    $ps51 = Get-Command powershell.exe -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty Source
     if ($ps51) {
         $parse51 = Join-Path $tmpRoot "parse51.ps1"
         [IO.File]::WriteAllText($parse51, '$e = $null; $null = [System.Management.Automation.Language.Parser]::ParseFile($args[0], [ref]$null, [ref]$e); "errors=$(@($e).Count)"')
@@ -602,7 +597,7 @@ try {
     }
 
     # --- On a real console (pty): the read runs in cooked mode, the raw mode is put back ---
-    if ($havePty -and $IsWindows) {
+    if ($havePty) {
         $script:C = Join-Path $tmpRoot "relay-pty"
         $C = $script:C
         foreach ($d in @("home", "logs", "repo/.aitools/channel")) { New-Item -ItemType Directory -Path (Join-Path $C $d) -Force | Out-Null }
