@@ -12,6 +12,26 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.77.1 -- Library fixes: the bash AI-merge spinner always stops, a failed log write never breaks a run (2026-11-14)
+
+Not tagged. Mission M5-Fixes (batch M5-L1), from the findings of mission M3b.
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 1 | Medium | The bash AI-merge spinner (`_start_spinner` / `_stop_spinner` in `scripts/aitools-lib.sh`) kept drawing on the terminal after Ctrl+C ended the script (seen in Git Bash): it is a background subshell, and a background job of a non-interactive shell ignores SIGINT. It now watches the shell that started it (`BASHPID`, `$$` on bash 3.2) and ends, clearing its line, within 200 ms after that shell is gone, SIGKILL included; and `_invoke_ai_merge` wraps `invoke_ai` in INT, TERM and EXIT traps (`_spinner_traps_set` / `_spinner_traps_restore`) that stop it at once and then hand over to the caller's own traps, saved and restored unchanged. Without a terminal the spinner draws nothing (no shell error); `_stop_spinner` no longer fails under `set -e` when the spinner ended on its own or there is no terminal. The PowerShell spinner (`Start-AiSpinner`) did not have the defect: unchanged. Tests: spinner cases in `tests/menus/test-menu-choice.sh` (CI: linux, macOS bash 5 and /bin/bash 3.2, Windows Git Bash) |
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 2 | `reference/cross-platform-detail.md` "Windows console: input mode, jobs, spinner": why the bash spinner could outlive its script, and its two guards |
+
+**Verified on:** Windows 11 (Git Bash 5, pwsh 7). macOS and Linux run in CI only.
+
+---
+
 ## v0.77.0 -- pywinpty is a managed Windows library on all three deployment paths (2026-11-14)
 
 Not tagged. Commander order 2026-11-14: "/tool-adopt pywinpty.  we will need setup-pywinpty.ps1.  document its source of truth in registry via /tool-registry.  mark windows/linux as N/A." and "we should support pywinpty through all 3 methods of deployment/install". Platform status: Windows supported, macOS and Linux n/a (the stdlib `pty` module is used there).

@@ -271,6 +271,19 @@ runs setup scripts in-process inside `try { & $scriptPath } catch`, so a
 spinner left running after Ctrl+C or an error would keep drawing over the next
 script, or over the pwsh prompt.
 
+**The bash spinner is a separate process.** `_start_spinner` forks a
+background subshell, and a background job of a non-interactive shell ignores
+SIGINT, so Ctrl+C ended the script but not the spinner, which kept drawing on
+`/dev/tty` (seen in Git Bash, mission M3b). Two guards (v0.77.1): the subshell
+watches the shell that started it (`BASHPID`, `$$` on bash 3.2) and ends,
+clearing its line, at the first 200 ms tick after that shell is gone, SIGKILL
+included; and `_invoke_ai_merge` wraps `invoke_ai` in
+`_spinner_traps_set` / `_spinner_traps_restore`, INT, TERM and EXIT traps that
+stop the spinner, then hand over to the caller's own traps (saved and put back
+unchanged). The PowerShell spinner needs neither: its runspace thread cannot
+outlive its process, and Ctrl+C reaches the `finally` above. Tests: the spinner
+cases of `tests/menus/test-menu-choice.sh`.
+
 **Nothing else writes the console while the spinner runs.** Any other console
 line lands in the spinner's row. `Invoke-AI` telemetry is therefore file-only:
 `Write-AiLog`, the twin of bash `_ai_log` (same line format, same log file, no

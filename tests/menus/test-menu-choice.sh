@@ -12,6 +12,10 @@
 # re-ask on an empty line, a word or a letter not offered, then apply the
 # offered answer; EOF at the review menu still overwrites; --force on a
 # terminal and a non-interactive run show no menu and log no answer.
+# The AI-merge spinner always stops (no pty needed): it ends within 1 s when its
+# shell is killed (KILL, TERM); the INT, TERM and EXIT traps set around the AI
+# call stop it at once, run the caller's EXIT trap and end the script; on the
+# normal path the caller's traps are restored unchanged.
 #
 # Safe to re-run: every case runs in its own temp HOME and log dir, removed on
 # exit. The real read_menu_choice and read_tty_choice run on a pseudo-terminal
@@ -31,7 +35,7 @@
 set -uo pipefail
 
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
-    perl -ne 'print if $. >= 2 && $. <= 29' "$0"
+    perl -ne 'print if $. >= 2 && $. <= 33' "$0"
     exit 0
 fi
 
@@ -360,6 +364,126 @@ fi
 if ! $HAVE_NODE; then
     printf 'SKIP JSON review cases (node not on PATH)\n'; SKIP=$((SKIP + 1))
 fi
+
+# ===========================================================================
+# The AI-merge spinner always stops (_start_spinner / _stop_spinner and the
+# traps _invoke_ai_merge sets around invoke_ai). No terminal needed: without
+# one the spinner draws nothing but runs, so its process can be watched.
+# ===========================================================================
+# alive <pid>: the process exists
+alive() { kill -0 "$1" 2>/dev/null; }
+# gone_within <tenths> <pid>: the process is gone within that many 0.1 s ticks
+gone_within() {
+    local n=0
+    while alive "$2"; do
+        n=$((n + 1))
+        if [ "$n" -gt "$1" ]; then return 1; fi
+        sleep 0.1
+    done
+    return 0
+}
+# wait_file <file>: wait up to 10 s for the file to be non-empty
+wait_file() {
+    local n=0
+    while [ ! -s "$1" ]; do
+        n=$((n + 1))
+        if [ "$n" -gt 100 ]; then return 1; fi
+        sleep 0.1
+    done
+    return 0
+}
+# spin_snip <snippet>: $C/snippet.sh sources the lib under set -euo pipefail and
+# runs the snippet
+spin_snip() {
+    printf '%s\n' "set -euo pipefail" "source '$LIB'" "logging_init t" "$1" > "$C/snippet.sh"
+}
+# Killed owner: the spinner's shell (exec'd into sleep, same PID) is killed in the
+# background; the spinner sees its owner gone and ends. SIGKILL runs no trap.
+for sig in KILL TERM; do
+    setup_case "spin-owner-$sig"
+    spin_snip "_start_spinner 'merging x...'; printf '%s' \"\$_AI_SPINNER_PID\" > '$C/spid'; exec sleep 30"
+    env HOME="$C/home" AITOOLS_LOG_DIR="$C/logs" "$BASH_BIN" "$C/snippet.sh" < /dev/null > "$C/out" 2>&1 &
+    cpid=$!
+    if wait_file "$C/spid"; then
+        spid="$(cat "$C/spid")"
+        check "spinner ($sig of its shell): running before the kill" alive "$spid"
+        kill -s "$sig" "$cpid"
+        wait "$cpid" 2>/dev/null
+        check "spinner ($sig of its shell): gone within 1 s" gone_within 10 "$spid"
+        if alive "$spid"; then kill "$spid"; fi  # a failed case leaves no spinner behind
+    else
+        kill -s KILL "$cpid" 2>/dev/null
+        check "spinner ($sig of its shell): started (PID written)" false
+    fi
+done
+
+# Trap path: INT and TERM during the AI call stop the spinner at once, put the
+# caller's traps back and end the script with that signal; the caller's EXIT
+# trap still runs. The snippet runs in the foreground: a background job of this
+# non-interactive shell would ignore SIGINT and could not trap it.
+for sig in INT TERM; do
+    setup_case "spin-trap-$sig"
+    spin_snip "trap -p $sig > '$C/entry-trap'
+if [ -s '$C/entry-trap' ]; then printf ignored > '$C/ignored'; exit 0; fi
+trap 'printf exit-ran > \"$C/exit-marker\"' EXIT
+_spinner_traps_set
+_start_spinner 'merging x...'
+printf '%s' \"\$_AI_SPINNER_PID\" > '$C/spid'
+kill -s $sig \"\${BASHPID:-\$\$}\"
+sleep 1
+printf reached > '$C/reached'"
+    env HOME="$C/home" AITOOLS_LOG_DIR="$C/logs" "$BASH_BIN" "$C/snippet.sh" < /dev/null > "$C/out" 2>&1
+    echo $? > "$C/rc"
+    [ -f "$LOG" ] || : > "$LOG"
+    if [ -f "$C/ignored" ]; then
+        printf 'SKIP spinner %s trap cases (%s is ignored in this shell)\n' "$sig" "$sig"; SKIP=$((SKIP + 1))
+        continue
+    fi
+    spid="$(cat "$C/spid" 2>/dev/null)"
+    check "spinner ($sig trap): spinner gone when the script ends" \
+        eval '[ -n "$spid" ] && ! alive "$spid"'
+    check "spinner ($sig trap): stopped by the trap (logged)" has "[detail] AI spinner stopped by $sig" "$LOG"
+    check "spinner ($sig trap): the script ended at the signal" \
+        eval '[ ! -e "$C/reached" ] && [ "$(cat "$C/rc")" != 0 ]'
+    check "spinner ($sig trap): the caller's EXIT trap ran" has exit-ran "$C/exit-marker"
+done
+
+# EXIT during the AI call: the spinner stops, then the caller's EXIT command runs
+setup_case spin-trap-exit
+spin_snip "trap 'printf exit-ran > \"$C/exit-marker\"' EXIT
+_spinner_traps_set
+_start_spinner 'merging x...'
+printf '%s' \"\$_AI_SPINNER_PID\" > '$C/spid'
+exit 3"
+env HOME="$C/home" AITOOLS_LOG_DIR="$C/logs" "$BASH_BIN" "$C/snippet.sh" < /dev/null > "$C/out" 2>&1
+echo $? > "$C/rc"
+[ -f "$LOG" ] || : > "$LOG"
+spid="$(cat "$C/spid" 2>/dev/null)"
+check "spinner (exit): gone, stopped by the EXIT trap, exit status kept" \
+    eval '[ -n "$spid" ] && ! alive "$spid" && has "[detail] AI spinner stopped at exit" "$LOG" && [ "$(cat "$C/rc")" = 3 ]'
+check "spinner (exit): the caller's EXIT command ran" has exit-ran "$C/exit-marker"
+
+# Normal path: the caller's traps are back after the AI call, unchanged
+setup_case spin-trap-restore
+spin_snip "trap 'printf exit-ran > \"$C/exit-marker\"' EXIT
+trap 'true caller-int' INT
+trap -p INT > '$C/before'; trap -p TERM >> '$C/before'; trap -p EXIT >> '$C/before'
+_spinner_traps_set
+_start_spinner 'merging x...'
+printf '%s' \"\$_AI_SPINNER_PID\" > '$C/spid'
+_stop_spinner
+_spinner_traps_restore
+_spinner_traps_restore
+trap -p INT > '$C/after'; trap -p TERM >> '$C/after'; trap -p EXIT >> '$C/after'
+printf reached > '$C/reached'"
+env HOME="$C/home" AITOOLS_LOG_DIR="$C/logs" "$BASH_BIN" "$C/snippet.sh" < /dev/null > "$C/out" 2>&1
+echo $? > "$C/rc"
+spid="$(cat "$C/spid" 2>/dev/null)"
+check "spinner (normal): stopped, the script went on" \
+    eval '[ "$(cat "$C/rc")" = 0 ] && has reached "$C/reached" && [ -n "$spid" ] && ! alive "$spid"'
+check "spinner (normal): INT, TERM and EXIT traps restored exactly" \
+    eval '[ -s "$C/before" ] && cmp -s "$C/before" "$C/after"'
+check "spinner (normal): the caller's EXIT trap still runs" has exit-ran "$C/exit-marker"
 
 printf '\n%d passed, %d failed, %d skipped\n' "$PASS" "$FAIL" "$SKIP"
 [ "$FAIL" -eq 0 ]
