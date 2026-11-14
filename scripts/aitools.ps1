@@ -117,9 +117,8 @@ function Invoke-ProfileCheck {
         "migrate" {
             Write-Host "profile: profile.json is v1 (legacy). Migration to v2 recommended." -ForegroundColor Yellow
             if ($Mode -eq "interactive" -and (Test-UiCanAsk)) {
-                [Console]::Write("Migrate profile.json to v2 now? [y/N]: ")
-                $answer = Read-ConsoleChoice "no"
-                if ($answer -match '^[Yy]' -and $result.profilePath) {
+                $answer = Read-MenuChoice -Valid @("y", "yes", "n", "no") -Default "n" -DefaultDesc "no" -Context "profile migrate" -Prompt "Migrate profile.json to v2 now? [y/n]: "
+                if ($answer -in @("y", "yes") -and $result.profilePath) {
                     $null = Invoke-UiV1Migrate (Split-Path $result.profilePath -Parent)
                 }
             }
@@ -1124,13 +1123,17 @@ function Read-UiChoose([string]$Pf, [string]$Suggested, [string]$ThisId) {
     }
     [Console]::WriteLine("  [n] new profile for this machine")
     [Console]::WriteLine("  [s] skip")
-    [Console]::Write("Choice: ")
-    $choice = Read-ConsoleChoice "skip"
-    if (-not $choice -or $choice -match '^[sS]$') {
+    # Only the numbered entries, n and s are answers; anything else (an empty
+    # line included) is asked again by Read-MenuChoice; EOF = s (skip)
+    $valid = @()
+    for ($i = 1; $i -le $nums.Count; $i++) { $valid += "$i" }
+    $valid += @("n", "s")
+    $choice = Read-MenuChoice -Valid $valid -Default "s" -DefaultDesc "skip" -Context "which profile" -Prompt "Choice: "
+    if ($choice -eq "s") {
         LogWarn "machine profile: registration skipped -- deploys will report no machine match"
         return 2
     }
-    if ($choice -match '^[nN]$') {
+    if ($choice -eq "n") {
         [Console]::Write("New alias (e.g., laptop, workstation): ")
         $script:UiChoice = Read-ConsoleChoice "skip"
         if (-not $script:UiChoice) {
@@ -1140,12 +1143,9 @@ function Read-UiChoose([string]$Pf, [string]$Suggested, [string]$ThisId) {
         $script:UiChoiceKind = "new"
         return 0
     }
-    if ($choice -match '^[0-9]+$' -and [int]$choice -ge 1 -and [int]$choice -le $nums.Count) {
-        $script:UiChoice = $nums[[int]$choice - 1]; $script:UiChoiceKind = "claim"
-        return 0
-    }
-    LogWarn "machine profile: invalid choice '$choice' -- registration skipped"
-    return 2
+    # a listed number (Read-MenuChoice accepts nothing else)
+    $script:UiChoice = $nums[[int]$choice - 1]; $script:UiChoiceKind = "claim"
+    return 0
 }
 
 # Read-UiNameCompany ALIAS -- on a console, a new profile's display name and
@@ -1194,9 +1194,8 @@ function Invoke-UiRegister([string]$Dir, [string]$Mode, [string]$Value, [bool]$C
             Write-UiAction "Run: aitools user init --alias <another name> (or confirm on a terminal)"
             return 1
         }
-        [Console]::Write("Alias `"$Value`" is used by another machine's profile ($okey). Use it for this machine too? [y/N]: ")
-        $ans = Read-ConsoleChoice "no"
-        if ($ans -match '^[yY]') {
+        $ans = Read-MenuChoice -Valid @("y", "yes", "n", "no") -Default "n" -DefaultDesc "no" -Context "alias $Value" -Prompt "Alias `"$Value`" is used by another machine's profile ($okey). Use it for this machine too? [y/n]: "
+        if ($ans -in @("y", "yes")) {
             Log "machine profile: alias `"$Value`" shared with profile $okey (confirmed at the prompt)"
             $extra += @("--allow-duplicate-alias")
             continue
@@ -1549,11 +1548,9 @@ function Invoke-UiCreateDotprofile([string]$Dir) {
     }
     $ans = "y"
     if (Test-UiCanAsk) {
-        [Console]::Write("Create the private GitHub repo '$($script:UiRepoName)' and push? [Y/n]: ")
-        $ans = Read-ConsoleChoice "yes"
-        if (-not $ans) { $ans = "y" }
+        $ans = Read-MenuChoice -Valid @("y", "yes", "n", "no") -Default "y" -DefaultDesc "yes" -Context "create dotprofile $($script:UiRepoName)" -Prompt "Create the private GitHub repo '$($script:UiRepoName)' and push? [y/n]: "
     }
-    if ($ans -notmatch '^[yY]') {
+    if ($ans -notin @("y", "yes")) {
         LogWarn "user init: GitHub repo not created -- the dotprofile stays local; create it and push: gh repo create $($script:UiRepoName) --private --source $Dir --push"
         Write-Summary "WARN" "dotprofile" "created, not pushed"
         Write-UiAction $create

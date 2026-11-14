@@ -43,6 +43,33 @@ Adding a new return value requires updating:
 
 Check scripts validate caller completeness (`check-post-push` step 30).
 
+### Answers: only an offered answer counts
+
+Every choice menu (a fixed set of answers: the review menus, the AI merge
+preview, the user-init menus and confirms, reverse discovery) reads its
+answer with `read_menu_choice` / `Read-MenuChoice` in
+`@scripts/aitools-lib.sh` / `@scripts/aitools-lib.ps1` (commander,
+2026-11-13: "no default or other characters should re-ask"):
+
+- Only an offered answer is accepted, in any case, surrounding whitespace
+  ignored. Each menu lists its answers (usually the bracketed letters; a
+  `[y/n]` confirm also takes `yes` / `no`).
+- An empty line (bare Enter), a word, or a letter the menu does not offer
+  asks again: the menu prints `  please type one of <a/b/c>` and the prompt
+  line again. Nothing is applied until an offered answer arrives.
+- EOF (input ended) takes the menu's documented default with a warning:
+  input that has ended cannot be asked again.
+- Every answer is logged to deploy.log at `detail`
+  (`menu answer (<context>): "<typed>" -> <answer>`, `-> not one of ...,
+  asked again`, or `EOF -> <default>`).
+- A `[y/n]` prompt has no Enter default, so its text has no capital letter.
+
+Prompts that cannot load the library (the relay-outbound prompt,
+`shared/shell/aliases.*`) re-ask the same way with a local loop; they do not
+log. Free-text prompts, where an empty answer is itself a value (an alias,
+a name, `Enter = hostname`, the repos path), are not choice menus and keep
+their defaults.
+
 ### Non-interactive fallback
 
 Every menu function (`prompt_diff_review`, `review_json_fields`,
@@ -51,7 +78,9 @@ Every menu function (`prompt_diff_review`, `review_json_fields`,
 - Non-terminal stdin: auto-select `overwrite`
 - EOF at the prompt (interactive, input ended): log a warning, auto-select `overwrite`
 
-No AI merge runs in a non-interactive run.
+An empty or unrecognised answer at an interactive prompt is not a
+non-interactive case: it re-asks (see "Answers" above). No AI merge runs in
+a non-interactive run.
 
 ### Abort
 
@@ -79,6 +108,9 @@ terminal and not forced = prompt; otherwise use the default.
   (adds prompts) or `Write-Host` (can't redirect)
 - Bash: `read -r < /dev/tty` / `printf ... > /dev/tty` -- NOT bare `read`
   (conflicts with piped input)
+- Choice menus read through `read_menu_choice` / `Read-MenuChoice`, which
+  read through `read_tty_choice` / `Read-ConsoleChoice`; free-text prompts
+  call `read_tty_choice` / `Read-ConsoleChoice` directly
 
 ### Encoding
 

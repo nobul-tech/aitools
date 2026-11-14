@@ -92,6 +92,12 @@ merge.
 | merge & adopt (text only; AI merge) | merge written | merge copied to the repo immediately |
 | skip | unchanged | unchanged; reviewed again next run |
 | abort | unchanged | unchanged; the script logs an error and exits 2 |
+| anything else (bare Enter, a word, a letter not offered) | unchanged | unchanged; the menu asks again |
+
+Only an offered letter is a choice (commander, 2026-11-13: "no default or
+other characters should re-ask"); EOF is not a choice and takes overwrite,
+as above. Every answer is logged at `detail` (`read_menu_choice` /
+`Read-MenuChoice`, `@.claude/rules/interactive-menus.md` "Answers").
 
 **Failure handling.** Before any write, back up every file the step will
 write: LOCAL, and the repo file for an adopt or merge. After writing,

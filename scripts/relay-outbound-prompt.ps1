@@ -34,40 +34,72 @@ function Invoke-RelayOutboundPrompt {
 
     if (-not $dirty -and $ahead -le 0) { return 0 }
 
+    # [char]27, not `e: hh.ps1 may load this into Windows PowerShell 5.1
+    $esc = [char]27
+    $tag = "$esc[33m[RELAY]$esc[0m"
     if ($env:CI -and -not $env:RELAY_PROMPT_FORCE) {
-        Write-Host "[RELAY] $relayRel — uncommitted relay and/or unpushed commits (see git status)" -ForegroundColor Yellow
+        [Console]::WriteLine("$tag $relayRel — uncommitted relay and/or unpushed commits (see git status)")
         return 0
     }
 
-    if (-not [Environment]::UserInteractive) {
-        Write-Host "[RELAY] $relayRel — run: git -C `"$RepoPath`" status -sb" -ForegroundColor Yellow
+    # Redirected stdin is not a terminal: hint only (interactive-menus.md Console I/O)
+    if (-not [Environment]::UserInteractive -or [Console]::IsInputRedirected) {
+        [Console]::WriteLine("$tag $relayRel — run: git -C `"$RepoPath`" status -sb")
         return 0
     }
 
-    Write-Host ""
-    Write-Host "[RELAY] Outbound relay / git — other machines need your commits." -ForegroundColor Yellow
+    [Console]::WriteLine("")
+    [Console]::WriteLine("$tag Outbound relay / git — other machines need your commits.")
     if ($dirty) {
-        Write-Host "  ${relayRel}: local changes (not committed)"
+        [Console]::WriteLine("  ${relayRel}: local changes (not committed)")
     }
     if ($ahead -gt 0) {
-        Write-Host "  ${branchName}: $ahead commit(s) ahead of origin/main (not pushed)"
+        [Console]::WriteLine("  ${branchName}: $ahead commit(s) ahead of origin/main (not pushed)")
     }
     if ($behind -gt 0) {
-        Write-Host "  ${branchName}: also $behind behind origin/main — pull before push if others committed"
+        [Console]::WriteLine("  ${branchName}: also $behind behind origin/main — pull before push if others committed")
     }
-    Write-Host ""
-    Write-Host "  Suggested commands:"
-    Write-Host "    git add $relayRel"
-    Write-Host '    git commit -m "channel: update relay — …"'
-    Write-Host "    git push"
-    Write-Host ""
-    Write-Host "  [c]ontinue  [q]uit (exit 2)  [s]how git status"
-    $choice = Read-Host "  choice [c/q/s] (default c)"
-    $c = if ($null -eq $choice) { '' } else { "$choice".Trim().ToLowerInvariant() }
-    if ($c -match '^q') { return 2 }
-    if ($c -match '^s') {
-        git -C $RepoPath status -sb
-        Write-Host ""
+    [Console]::WriteLine("")
+    [Console]::WriteLine("  Suggested commands:")
+    [Console]::WriteLine("    git add $relayRel")
+    [Console]::WriteLine('    git commit -m "channel: update relay — …"')
+    [Console]::WriteLine("    git push")
+    [Console]::WriteLine("")
+    [Console]::WriteLine("  [c]ontinue  [q]uit (exit 2)  [s]how git status")
+    $choice = Read-RelayOutboundChoice
+    if ($choice -eq 'quit') { return 2 }
+    if ($choice -eq 'show') {
+        # Out-Host: keep git's lines out of this function's return value
+        git -C $RepoPath status -sb | Out-Host
+        [Console]::WriteLine("")
     }
     return 0
+}
+
+# Read the [RELAY] choice from the console. An empty or unrecognised answer
+# asks again. Returns 'continue', 'quit' or 'show'. End of input, or 50
+# unrecognised answers in a row, continues (the prompt's EOF default) and says so.
+# hh.ps1 does not load aitools-lib, so this mirrors the library's
+# Read-MenuChoice locally: same hint text, no answer logging.
+function Read-RelayOutboundChoice {
+    $tries = 0
+    while ($true) {
+        [Console]::Write("  choice [c/q/s]: ")
+        $line = [Console]::ReadLine()
+        if ($null -eq $line) {
+            [Console]::WriteLine("")
+            [Console]::WriteLine("  (no input -- continuing)")
+            return 'continue'
+        }
+        $c = $line.Trim().ToLowerInvariant()
+        if ($c -in @('c', 'continue')) { return 'continue' }
+        if ($c -in @('q', 'quit')) { return 'quit' }
+        if ($c -in @('s', 'show')) { return 'show' }
+        $tries++
+        if ($tries -ge 50) {
+            [Console]::WriteLine("  (no input -- continuing)")
+            return 'continue'
+        }
+        [Console]::WriteLine("  please type one of c/continue/q/quit/s/show")
+    }
 }
