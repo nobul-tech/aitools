@@ -122,17 +122,10 @@ StepWarn "6" "Roadmap reflects reality" "check if push completes or starts a roa
 # entry-point input) and no AITOOLS_PROFILE_FILE / AITOOLS_MACHINE_ALIAS from this
 # session (review H5): an inherited value would otherwise point the build, which
 # deletes and rebuilds <dotprofile>/deploy, at the real dotprofile.
-# build-deploy.sh runs under Git Bash (approved cross-language exception); same lookup
-# order as check-pre-commit step 3 after the known Git for Windows locations.
-$d7Bash = @(
-    "$env:ProgramFiles\Git\bin\bash.exe",
-    "${env:ProgramFiles(x86)}\Git\bin\bash.exe",
-    "$env:LOCALAPPDATA\Programs\Git\bin\bash.exe"
-) | Where-Object { Test-Path $_ } | Select-Object -First 1
-if (-not $d7Bash) {
-    $d7BashCmd = Get-Command bash -ErrorAction SilentlyContinue
-    if ($d7BashCmd) { $d7Bash = $d7BashCmd.Source }
-}
+# build-deploy.sh runs under Git Bash (approved cross-language exception), found by
+# check-lib ResolveGitBash: the Git for Windows locations only, no PATH fallback (in a
+# native pwsh the first bash on PATH is the WSL launcher).
+$d7Bash = ResolveGitBash
 if (-not $script:UserRepoPath -or -not (Test-Path (Join-Path $script:UserRepoPath ".git"))) {
     StepSkip "7" "deploy/ matches source" "userRepoPath not configured -- dotprofile deploy/ not verified"
 } elseif (-not $d7Bash) {

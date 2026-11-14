@@ -12,6 +12,26 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.77.2 -- Check tooling: Git Bash for the PowerShell checks, CI covers .ps1 suites (2026-11-14)
+
+Not tagged. Mission M5-Fixes (items 9 and 4, batch M5-C1).
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 1 | Medium | `check-pre-commit.ps1`, `check-pre-push.ps1` and `check-post-push.ps1` ran their bash steps with the first `bash` on PATH (`Get-Command bash`, a bare `bash -n`, or a PATH fallback after the Git for Windows locations). In a native pwsh that is the WSL launcher (`%LOCALAPPDATA%\Microsoft\WindowsApps\bash.exe` on the commander's workstation), not Git Bash. They now use one helper, `ResolveGitBash` in `scripts/check-lib.ps1`: the Git for Windows locations only (the list `setup-bash.ps1` probes), no PATH fallback, and any candidate under `%SystemRoot%` or the WindowsApps alias directory refused. No Git Bash: pre-commit step 2 is WARN (new: it had no not-found branch), step 3 `-Fix` FAIL, pre-push step 7 WARN and post-push steps 2, 6, 7 SKIP, as before |
+
+### Files created
+
+| File | Purpose |
+|------|---------|
+| `tests/check-lib/test-resolve-git-bash.ps1` | Probe order, no fallback, the WSL launchers refused, the default probe on the machine, no check-*.ps1 resolving bash through PATH (CI windows job) |
+
+**Verified on:** Windows 11 (Git for Windows 2.56.0, bash 5.3.15, pwsh 7): the new suite 17/17; against the pre-fix check scripts it fails 4 cases. check-pre-commit.ps1 and check-pre-push.ps1 run from the branch; check-post-push.ps1 not run (its step 7 rebuilds deploy/ against the real HOME).
+
+---
+
 ## v0.77.0 -- pywinpty is a managed Windows library on all three deployment paths (2026-11-14)
 
 Not tagged. Commander order 2026-11-14: "/tool-adopt pywinpty.  we will need setup-pywinpty.ps1.  document its source of truth in registry via /tool-registry.  mark windows/linux as N/A." and "we should support pywinpty through all 3 methods of deployment/install". Platform status: Windows supported, macOS and Linux n/a (the stdlib `pty` module is used there).

@@ -47,7 +47,9 @@ if ($localHead -eq $remoteHead) {
 # 2. Smoke-test deploy scripts
 # ---------------------------------------------------------------------------
 $deployErrors = 0
-$bashExe = (Get-Command bash -ErrorAction SilentlyContinue).Source
+# The managed Git Bash for every bash step (2, 4, 6, 7): never the WSL launcher a
+# bare `bash` resolves to in a native pwsh (check-lib ResolveGitBash)
+$bashExe = ResolveGitBash
 if ($bashExe) {
     $deployFiles = Get-ChildItem (Join-Path $script:RepoRoot "deploy") -Filter "*.sh" -ErrorAction SilentlyContinue
     if (-not $deployFiles) {

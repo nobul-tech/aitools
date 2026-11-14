@@ -805,6 +805,13 @@ jobs:
         shell: pwsh
         run: pwsh -NoProfile -File tests/setup-user-shell/test-setup-user-shell.ps1
 
+      # check-lib ResolveGitBash: the check-*.ps1 scripts run .sh steps with Git
+      # Bash, never the WSL launcher a bare `bash` resolves to in a native pwsh
+      - name: check-lib ResolveGitBash tests (PowerShell, native)
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: pwsh -NoProfile -File tests/check-lib/test-resolve-git-bash.ps1
+
       # Heavy suites, .ps1 half: Git Bash drives native pwsh; results are
       # compared with the golden files the macOS/Linux .sh runs produce
       # (plans/ci-platform-targeting.md).
