@@ -581,7 +581,7 @@ try {
     Check "relay (no lib): EOF -> continue, '(no input -- continuing)'" ((Txt "result") -ceq "continue" -and (Has "(no input -- continuing)" (Console)))
 
     # --- Windows PowerShell 5.1 (aitools.ps1 may load the prompt there; hh.ps1 is
-    # pwsh 7 only, so "hh path" below names the path where the prompt loads the lib) ---
+    # pwsh 7 only, so these cases take the path where the prompt loads the lib) ---
     $ps51 = $null
     if ($IsWindows) {
         # Get-Command exempt: command-existence check; the cases SKIP without it
@@ -595,8 +595,8 @@ try {
         $ascii = -not ([IO.File]::ReadAllText($relayScript) -match '[^\x00-\x7F]')
         Check "relay (PS 5.1): relay-outbound-prompt.ps1 is ASCII (5.1 reads a file without a BOM as ANSI)" $ascii
         Run-Relay "relay-ps51" "x`ns`n" -Exe $ps51
-        Check "relay (PS 5.1, hh path): 'x' re-asks, then s -> show (one value)" ((Rc) -eq "0" -and (Txt "count") -eq "1" -and (Txt "result") -ceq "show" -and (Occ $relayHint (Console)) -eq 1)
-        Check "relay (PS 5.1, hh path): answers logged" (Has '[relay-outbound] [detail] menu answer (relay outbound): "s" -> s' (Log))
+        Check "relay (PS 5.1, prompt loads the lib): 'x' re-asks, then s -> show (one value)" ((Rc) -eq "0" -and (Txt "count") -eq "1" -and (Txt "result") -ceq "show" -and (Occ $relayHint (Console)) -eq 1)
+        Check "relay (PS 5.1, prompt loads the lib): answers logged" (Has '[relay-outbound] [detail] menu answer (relay outbound): "s" -> s' (Log))
     } else {
         Write-Output "SKIP relay PS 5.1 cases (Windows PowerShell not available)"; $script:skip++
     }
