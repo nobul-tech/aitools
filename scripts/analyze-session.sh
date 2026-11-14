@@ -9,8 +9,23 @@
 #   Batch size: Many consecutive write/edit operations without verification steps
 #
 # Requires: node (for JSON parsing of JSONL)
+# Platform: macOS/Linux (OS guard below); there is no Windows version yet.
 
 set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/aitools-lib.sh
+source "$SCRIPT_DIR/aitools-lib.sh"
+# shellcheck source=scripts/init-logging.sh
+source "$SCRIPT_DIR/init-logging.sh"
+
+# OS guard (.claude/rules/cross-platform.md "OS guard patterns"; commander,
+# 2026-11-14, on the entry points that never run on Windows: "add an OS guard
+# to all of them")
+case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*)
+        log_error "This script is for macOS/Linux. It has no Windows version yet."
+        exit 1 ;;
+esac
 
 if [ $# -lt 1 ]; then
     echo "Usage: $0 <transcript.jsonl> [--verbose]"

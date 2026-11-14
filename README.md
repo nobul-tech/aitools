@@ -119,7 +119,7 @@ On an endpoint where `aitools-install` never ran, `deploy-harness` deploys the h
 
 - **`[RELAY]` prompt:** After **`aitools`** (or **`hh -n`**), if `.aitools/channel/relay.md` is uncommitted or **`main`** is ahead of **`origin/main`**, the harness may prompt (`scripts/relay-outbound-prompt.sh` / `.ps1`). Set **`AITOOLS_SKIP_RELAY_PROMPT=1`** to skip. Inbound pull is automatic; outbound commit/push is not.
 - **Install:** `aitools install` copies `hh` to `~/.local/bin` (macOS/Linux) and `hh.ps1` + a `hh` function in PowerShell (Windows). Requires `~/.local/bin` on `PATH` (installer usually wires this).
-- **Optional pre-commit** (`scripts/githooks/pre-commit`; enable with `bash scripts/init-hh-hooks.sh` or `git config core.hooksPath scripts/githooks`): when `shared/` or `scripts/build-deploy.sh` is staged, it runs `build-deploy.sh`, which rebuilds your **dotprofile** `deploy/` (backup + swap). Commit that change in the dotprofile repo. Do not enable it in agent worktrees: it runs against the real `HOME`.
+- **Optional pre-commit** (`scripts/githooks/pre-commit`; enable with `bash scripts/init-hh-hooks.sh` on macOS/Linux, or `git config core.hooksPath scripts/githooks` on any platform): when `shared/` or `scripts/build-deploy.sh` is staged, it runs `build-deploy.sh`, which rebuilds your **dotprofile** `deploy/` (backup + swap). Commit that change in the dotprofile repo. Do not enable it in agent worktrees: it runs against the real `HOME`.
 
 ### Develop / maintain configs
 
