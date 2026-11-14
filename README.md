@@ -148,17 +148,17 @@ macOS/Linux:
 ```bash
 bash scripts/check-pre-commit.sh         # 21 steps (3 and 10 retired); --fix repairs line endings and exec bits
 bash scripts/check-pre-push.sh           # 10 steps, read-only (step 7 rebuilds into a temp copy of the dotprofile)
-bash scripts/check-post-push.sh          # all post-push steps (1-32; 15 and 28 are retired SKIPs)
+bash scripts/check-post-push.sh          # all post-push steps (1-32; 2, 7, 15 and 28 always SKIP)
 ```
 
 Windows (PowerShell):
 ```powershell
 .\scripts\check-pre-commit.ps1           # 21 steps (3 and 10 retired); -Fix repairs line endings and exec bits
 .\scripts\check-pre-push.ps1             # 10 steps, read-only
-.\scripts\check-post-push.ps1            # all post-push steps (1-32; 15 and 28 are retired SKIPs)
+.\scripts\check-post-push.ps1            # all post-push steps (1-32; 2, 7, 15 and 28 always SKIP)
 ```
 
-`--fix` / `-Fix` never runs `build-deploy.sh` (incident #136): it only repairs line endings and exec bits of staged and tracked `.sh` files. The dotprofile `deploy/` is checked by `check-pre-push` step 7, which rebuilds into a temporary copy.
+`--fix` / `-Fix` never runs `build-deploy.sh` (incident #136): it only repairs line endings and exec bits of staged and tracked `.sh` files. The dotprofile `deploy/` is checked by `check-pre-push` step 7, which rebuilds into a temporary copy. No step of the `check-*` scripts reads the frozen aitools `deploy/` (incidents #136, #176).
 
 See `reference/` for deeper setup notes and practices.
 

@@ -94,7 +94,7 @@ has not run, the harness files still deploy but the run reports
    it replaces `<dotprofile>/deploy/`. It first copies the old tree to
    `<dotprofile>/deploy.bak.<UTC>/` (at most 5 kept), builds in a temp dir and swaps
    the new tree in only on success, so a failed build leaves the old `deploy/` (incident #86))
-3. Verify the dotprofile `deploy/` includes the change. Pre-commit steps 3 and 10 still inspect the frozen `aitools/deploy/` and prove nothing about the dotprofile build (step 3 `--fix` also runs `build-deploy.sh` against the real `HOME`: never pass it from an agent); `check-pre-push` step 7 is the real check
+3. Verify the dotprofile `deploy/` includes the change: `check-pre-push` step 7 rebuilds it into a temporary copy of the dotprofile under a temporary `HOME` on every push and dry-runs the result. No step of the `check-*` scripts reads the frozen `aitools/deploy/` or runs `build-deploy.sh` against the real `HOME`: pre-commit steps 3 and 10 (incident #136) and post-push step 2 (incident #176) are retired SKIPs, and post-push steps 6 and 14 audit the source scripts only
 4. If the script runs on the package path (every script `scripts/aitools-install.*`
    runs), run `bash scripts/build-package.sh stage` and verify the staged payload
    contains the change (from batch B2 of `@plans/build-package/implementation-plan.md`;

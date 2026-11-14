@@ -40,8 +40,8 @@ Setup and utility scripts for configuring AI tooling across machines.
 | `check-pre-commit.ps1` | Windows | The same steps except 17-19; `-Fix` repairs line endings and exec bits, never builds |
 | `check-pre-push.sh` | macOS/Linux | 10 pre-push steps, read-only |
 | `check-pre-push.ps1` | Windows | 10 pre-push steps, read-only |
-| `check-post-push.sh` | macOS/Linux | 26 steps |
-| `check-post-push.ps1` | Windows | 26 steps |
+| `check-post-push.sh` | macOS/Linux | Post-push steps 1-32 (2, 7, 15 and 28 always SKIP); never reads the frozen aitools `deploy/` |
+| `check-post-push.ps1` | Windows | The same steps except 17b |
 
 ## Build Pipeline
 
