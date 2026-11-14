@@ -12,6 +12,12 @@
 # empty line, a word or a letter not offered, then apply the offered answer;
 # EOF at the review menu still overwrites; -Force on a console and a
 # non-interactive run show no menu and log no answer.
+# EOF at each prompt of issue #29 takes its documented default: a JSON field
+# (Deploy-ManagedFile's JSON review) -> o; a JSON field only in LOCAL -> s; a
+# field in the settings sync (Sync-ManagedJson) -> o; the AI merge preview ->
+# n, back to the review menu (EOF there -> o, the merge written nowhere); the
+# [r]efine feedback read -> empty feedback, the merge refined (the stub claude
+# records each prompt in bin/calls.txt).
 # The [RELAY] prompt (Read-RelayOutboundChoice in scripts/relay-outbound-prompt.ps1)
 # reads through Read-MenuChoice: with the library loaded by the caller
 # (aitools.ps1), loaded by the prompt itself (hh.ps1; nothing left behind), and
@@ -40,7 +46,7 @@
 # Usage: pwsh -NoProfile -File tests/menus/test-menu-choice.ps1 [-Help]
 
 param([switch]$Help)
-if ($Help) { Get-Content $PSCommandPath -TotalCount 40 | Select-Object -Skip 1; exit 0 }
+if ($Help) { Get-Content $PSCommandPath -TotalCount 46 | Select-Object -Skip 1; exit 0 }
 
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
@@ -174,6 +180,29 @@ try {
 [IO.File]::WriteAllText((Join-Path $C "result"), ($r -join "|"))
 '@
 
+# The settings-sync child (Run-Dmf -Child $syncChild): Sync-ManagedJson of the
+# live file DMF_DEST against the profile DMF_SRC (mirror "claude.settings"),
+# Test-InteractiveConsole replaced with $true, input.txt fed through
+# [Console]::SetIn, the console captured to console.txt; the result
+# ($script:SyncManagedJsonResult) is written to "result".
+$syncChild = @'
+. $env:MC_LIB
+Initialize-Logging "t"
+$C = $env:MC_C
+function Test-InteractiveConsole { return $true }
+[Console]::SetIn([IO.StringReader]::new([IO.File]::ReadAllText((Join-Path $C "input.txt"))))
+$orig = [Console]::Out
+$sw = [IO.StringWriter]::new()
+[Console]::SetOut($sw)
+try {
+    $null = Sync-ManagedJson -LiveFile $env:DMF_DEST -ProfileFile $env:DMF_SRC -SubPath "claude.settings"
+} finally {
+    [Console]::SetOut($orig)
+    [IO.File]::WriteAllText((Join-Path $C "console.txt"), $sw.ToString())
+}
+[IO.File]::WriteAllText((Join-Path $C "result"), [string]$script:SyncManagedJsonResult)
+'@
+
 # Setup-Dmf <name>: a case directory with home, logs, dest, repo (a git repo:
 # the adopt target) and bin (first on PATH: the stub claude)
 function Setup-Dmf([string]$Name) {
@@ -184,29 +213,33 @@ function Setup-Dmf([string]$Name) {
 }
 # W <relative path> <text>: write a case file (text + newline)
 function W([string]$Rel, [string]$Text) { [IO.File]::WriteAllText((Join-Path $script:C $Rel), "$Text`n") }
-# Stub-Claude: a fake AI CLI that prints a fixed valid merge
+# Stub-Claude: a fake AI CLI that prints a fixed valid merge. Each prompt it
+# gets is appended to bin/calls.txt, followed by a line "==CALL==".
 function Stub-Claude {
     $text = "# Title`nmerged line"
     if ($IsWindows) {
-        # Native Windows runs a .cmd: read the prompt from stdin (discarded),
-        # print the canned answer line by line
+        # Native Windows runs a .cmd: append the prompt from stdin to calls.txt,
+        # then print the canned answer line by line
         $lines = ($text -split "`n" | ForEach-Object { "echo $_" }) -join "`r`n"
-        [IO.File]::WriteAllText((Join-Path $script:C "bin/claude.cmd"), "@echo off`r`nmore > nul`r`n$lines`r`n")
+        $rec = 'more >> "%~dp0calls.txt"' + "`r`n" + 'echo ==CALL==>> "%~dp0calls.txt"'
+        [IO.File]::WriteAllText((Join-Path $script:C "bin/claude.cmd"), "@echo off`r`n$rec`r`n$lines`r`n")
         return
     }
     $path = Join-Path $script:C "bin/claude"
-    [IO.File]::WriteAllText($path, "#!/usr/bin/env bash`ncat > /dev/null`nprintf '%s\n' '# Title' 'merged line'`n")
+    $rec = 'cat >> "$(dirname "$0")/calls.txt"' + "`n" + 'printf "\n==CALL==\n" >> "$(dirname "$0")/calls.txt"'
+    [IO.File]::WriteAllText($path, "#!/usr/bin/env bash`n$rec`nprintf '%s\n' '# Title' 'merged line'`n")
     & chmod +x $path
 }
 
-# Run-Dmf <src> <dest> <adopt> [-InputText] [-Mode console|plain|pty] [-ForceRun]:
+# Run-Dmf <src> <dest> <adopt> [-InputText] [-Mode console|plain|pty] [-ForceRun] [-Child]:
 # one Deploy-ManagedFile in a child pwsh (paths relative to the case directory;
-# adopt "" = no adopt target). -ForceRun sets AITOOLS_FORCE=1.
-function Run-Dmf([string]$Src, [string]$Dest, [string]$Adopt, [string]$InputText = "", [string]$Mode = "console", [switch]$ForceRun) {
+# adopt "" = no adopt target). -ForceRun sets AITOOLS_FORCE=1. -Child: the child
+# script (default $dmfChild; $syncChild runs the settings sync instead).
+function Run-Dmf([string]$Src, [string]$Dest, [string]$Adopt, [string]$InputText = "", [string]$Mode = "console", [switch]$ForceRun, [string]$Child = $dmfChild) {
     $C = $script:C
     [IO.File]::WriteAllText((Join-Path $C "input.txt"), $InputText)
     $snip = Join-Path $C "snippet.ps1"
-    [IO.File]::WriteAllText($snip, $dmfChild)
+    [IO.File]::WriteAllText($snip, $Child)
     $vars = @{
         HOME = (Join-Path $C "home"); USERPROFILE = (Join-Path $C "home")
         AITOOLS_LOG_DIR = (Join-Path $C "logs"); AITOOLS_SUMMARY_FILE = (Join-Path $C "summary")
@@ -441,6 +474,52 @@ try {
     } else {
         Write-Output "SKIP JSON review cases (node not on PATH)"; $script:skip++
     }
+
+    # ======================================================================
+    # EOF at each prompt (issue #29): the JSON field review, the settings
+    # sync, the AI merge preview and the [r]efine feedback read take their
+    # documented default (reference/managed-file-deployment.md "Menus",
+    # "AI-Assisted Merge Detail"). Once the [Console]::SetIn reader is
+    # exhausted, every further read is EOF.
+    # ======================================================================
+    if ($haveNode) {
+        # A differing field: EOF -> o (overwrite from source)
+        Setup-Dmf "eof-json"; W "repo/c.json" '{"a":1,"b":2}'; W "dest/c.json" '{"a":9,"b":2}'
+        Run-Dmf "repo/c.json" "dest/c.json" "repo/c.json" -InputText ""
+        Check "EOF at a JSON field: overwrite (o), the repo unchanged" ((DmfIs "updated") -and (JsonIs "dest/c.json" '{"a":1,"b":2}') -and (JsonIs "repo/c.json" '{"a":1,"b":2}'))
+        Check "EOF at a JSON field: warning and 'EOF -> o' logged, no hint" ((Has "[warn] No input at prompt (EOF) -- defaulting to overwriting from source" (Log)) -and (Has "[detail] menu answer (json item: a): EOF -> o" (Log)) -and (Occ "please type one of" (Console)) -eq 0)
+
+        # A field only in LOCAL ([a/s/x], no overwrite): EOF -> s (skip)
+        Setup-Dmf "eof-json-local"; W "repo/c.json" '{"a":1}'; W "dest/c.json" '{"a":1,"z":0}'
+        Run-Dmf "repo/c.json" "dest/c.json" "repo/c.json" -InputText ""
+        Check "EOF at a JSON field only in LOCAL: skip (s), LOCAL and the repo unchanged" ((DmfIs "skipped") -and (JsonIs "dest/c.json" '{"a":1,"z":0}') -and (JsonIs "repo/c.json" '{"a":1}'))
+        Check "EOF at a JSON field only in LOCAL: [a/s/x] asked, warning and 'EOF -> s' logged" (((Occ "  choice [a/s/x]: " (Console)) -eq 1) -and (Has "[warn] No input at prompt (EOF) -- defaulting to skipping (only in local)" (Log)) -and (Has "[detail] menu answer (json item: z): EOF -> s" (Log)))
+
+        # The settings sync (settings.json <-> profile.json): EOF -> o
+        Setup-Dmf "eof-sync"
+        New-Item -ItemType Directory -Path (Join-Path $C "home/.claude") -Force | Out-Null
+        W "home/.claude/settings.json" '{"theme":"dark","keep":1}'; W "profile.json" '{"claude":{"settings":{"theme":"light","keep":1}}}'
+        Run-Dmf "profile.json" "home/.claude/settings.json" "" -InputText "" -Child $syncChild
+        Check "EOF at the settings sync: overwrite (o) from profile.json, profile.json unchanged" ((DmfIs "updated") -and (JsonIs "home/.claude/settings.json" '{"theme":"light","keep":1}') -and (JsonIs "profile.json" '{"claude":{"settings":{"theme":"light","keep":1}}}'))
+        Check "EOF at the settings sync: warning and 'EOF -> o' logged, no hint" ((Has "[warn] No input at prompt (EOF) -- defaulting to overwriting from profile.json" (Log)) -and (Has "[detail] menu answer (json theme): EOF -> o" (Log)) -and (Occ "please type one of" (Console)) -eq 0)
+    }
+    # (without node these cases are covered by the "SKIP JSON review cases" line above)
+
+    # The AI merge preview: EOF -> n (reject), back to the review menu; EOF
+    # there -> o (overwrite). The merge is written nowhere.
+    Setup-Dmf "eof-merge-preview"; Stub-Claude; W "repo/a.md" "# Title`nsource line"; W "dest/a.md" "# Title`nlocal line"
+    Run-Dmf "repo/a.md" "dest/a.md" "repo/a.md" -InputText "m`n"
+    Check "EOF at the merge preview: rejected (n), back to the review menu" ((Has "[warn] No input at prompt (EOF) -- defaulting to reject the merge (back to the review menu)" (Log)) -and (Has "[detail] menu answer (merge preview a.md): EOF -> n" (Log)) -and (Has "merge rejected -- back to the review menu" (Console)) -and ((Occ "[detail] menu answer (review a.md): " (Log)) -eq 2))
+    Check "EOF at the merge preview, then at the review menu: overwrite, the merge not written" ((DmfIs "updated") -and (Has "[detail] menu answer (review a.md): EOF -> o" (Log)) -and (FileIs "dest/a.md" "# Title`nsource line") -and -not (Has "merged line" (Txt "dest/a.md")) -and -not (Has "merged line" (Txt "repo/a.md")))
+
+    # The [r]efine feedback read: EOF -> empty feedback, the merge is refined
+    # (a second AI call); then EOF at the preview rejects it and EOF at the
+    # review menu overwrites.
+    Setup-Dmf "eof-refine"; Stub-Claude; W "repo/a.md" "# Title`nsource line"; W "dest/a.md" "# Title`nlocal line"
+    Run-Dmf "repo/a.md" "dest/a.md" "repo/a.md" -InputText "m`nr`n"
+    $aiCalls = Txt "bin/calls.txt"
+    Check "EOF at the refine feedback: warning logged, the refine prompt has empty feedback" ((Has "[warn] No input at prompt (EOF) -- defaulting to no feedback" (Log)) -and ((Occ "You are refining" $aiCalls) -eq 1) -and ($aiCalls -match '## User Feedback\s*## Rules'))
+    Check "EOF at the refine feedback: the merge refined (AI called twice), then EOF rejects it and EOF overwrites" (((Occ "==CALL==" $aiCalls) -eq 2) -and (Has '[detail] menu answer (merge preview a.md): "r" -> r' (Log)) -and (Has "[detail] menu answer (merge preview a.md): EOF -> n" (Log)) -and (Has "[detail] menu answer (review a.md): EOF -> o" (Log)) -and (DmfIs "updated") -and (FileIs "dest/a.md" "# Title`nsource line") -and -not (Has "merged line" (Txt "repo/a.md")))
 
     # --- On a real console (pty): an empty answer re-asks, then s ---
     if ($havePty) {
