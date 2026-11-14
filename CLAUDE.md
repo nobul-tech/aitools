@@ -38,7 +38,9 @@ When you're uncertain, ask — and suggest an answer with the question.
 
 ## How the harness is organized
 
-- `.claude/rules/` — behavioral rules, always in context. Check them before assuming.
+- `.claude/rules/` — behavioral rules: those without `paths:` frontmatter are in
+  context from session start, those with `paths:` load once a matching file is
+  read. Check them before assuming.
 - `shared/` — source for user-level configs (skills, hooks, rules, claude-shared) that
   `aitools install` deploys to `~/.aitools/` (deploy-harness). setup-user-claude and
   setup-user-cursor then fan rules and skills out from `~/.aitools/` into `~/.claude/`
