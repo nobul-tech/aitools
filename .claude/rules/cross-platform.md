@@ -148,6 +148,7 @@ ask the user, get approval, document the exception.
 | Script | Why | Approved | Invocation |
 |--------|-----|----------|------------|
 | `build-deploy.sh` | Platform-independent output, result committed | 2026-02-17 | `& $bashExe "$path/build-deploy.sh"` |
+| Shared check helpers called from `check-*.ps1`: python `scripts/check-path-refs.py`, `check-skill-levels.py`, `check-hook-parity.py`; perl `scripts/check-menu-parity.pl` and the perl one-liners of the check steps | One implementation per check for both twins (no regex or sort-order drift between bash and PowerShell); perl and python are managed tools on every platform. A check step whose interpreter is missing reports SKIP or FAIL, never PASS | 2026-11-14 (commander, RFI fa81-16) | `& $python <script> ...` / `& perl <script> ...` |
 
 #### Unrecorded (in the code, approval pending)
 
