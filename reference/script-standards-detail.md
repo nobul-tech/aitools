@@ -121,7 +121,10 @@ run before it) and use its logging unchanged; warnings found before it loads are
 and logged right after. `aitools-install` sources the lib first and overrides the log
 functions only to add a `deploy.jsonl` record per line, through the lib's
 `jsonl_record` / `Write-JsonlRecord` (escaped; one `AITOOLS_RUN_ID` for the installer
-and its relayed children; an unwritable file is one warning, audit A-16):
+and its relayed children; an unwritable file is one warning, audit A-16). The
+override writes its `deploy.log` line through the lib's fail-safe append,
+`_aitlib_log_append` / `Add-AitLibLogText` (`@reference/logging.md` section 5,
+incident #174), as the `aitools-profile` override below does:
 
 Bash (`scripts/aitools-install.sh`):
 ```bash
@@ -131,7 +134,9 @@ logging_init "aitools-install"
 log() {
     local level="${2:-info}"
     local ts; ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-    printf '[%s] [%s] [%s] %s\n' "$ts" "$SCRIPT_NAME" "$level" "$1" | tee -a "$LOG_FILE"
+    local line="[$ts] [$SCRIPT_NAME] [$level] $1"
+    _aitlib_log_append "$line" "$LOG_FILE"
+    printf '%s\n' "$line"
     jsonl_record "$ts" "$SCRIPT_NAME" "$level" "$1"
 }
 log_ok()    { log "$1" "ok"; }
@@ -146,7 +151,7 @@ function Log($msg, $level = "info") {
     $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
     $line = "[$ts] [$scriptName] [$level] $msg"
     Write-Host $line
-    Add-Content -Path $logFile -Value $line
+    Add-AitLibLogText $line
     Write-JsonlRecord $ts $scriptName $level $msg
 }
 function LogOk($msg)    { Log $msg "ok" }
