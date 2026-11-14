@@ -58,6 +58,10 @@ desktop.ini
 .aitools/.current-session
 .aitools/.dashboard-pid
 
+# Harvest manifest: machine-local, rewritten by every session's harvester
+# (commander, 2026-11-13). The harvested files in harvesting/ stay tracked.
+harvesting/harvest-manifest.json
+
 # SQLite runtime (rebuilt from JSON exports at session start)
 .aitools/sessions/
 .aitools/harness.db

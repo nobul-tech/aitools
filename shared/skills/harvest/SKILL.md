@@ -27,7 +27,8 @@ This is a user-level skill: `aitools install` deploys it to
 Its source is `shared/skills/harvest/` in the aitools repo.
 
 - `.scratch/`, `harvesting/` and `harvesting/harvest-manifest.json` belong
-  to the **current** repo (harvesting runs in every project).
+  to the **current** repo (harvesting runs in every project). In aitools the
+  manifest is gitignored: each machine keeps its own (commander, 2026-11-13).
 - The governance and inventory paths (`.claude/rules/`, `reference/`,
   `scripts/`, `shared/skills/`) are in the aitools clone: on aitools they
   resolve from the repo root; elsewhere use the clone named by `repoPath` in
@@ -49,7 +50,8 @@ When a session produces reusable code, prompts, or patterns:
    days); correct `description`, `type` (code | prompt | research |
    pattern) and `language` (python | bash | powershell | markdown | null)
    by hand when you promote.
-4. Commit the artifact + manifest update
+4. Commit the artifact (and the manifest update, in a repo that tracks the
+   manifest; aitools does not)
 
 ## Manifest schema
 

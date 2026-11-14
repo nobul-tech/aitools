@@ -1733,6 +1733,8 @@ function Invoke-AiMerge {
 #   LOCAL missing                       -> SOURCE written, "created"
 #   LOCAL == SOURCE                     -> nothing written, "verified"
 #   no console, EOF, or AITOOLS_FORCE   -> SOURCE written (backup), "updated"
+#   a read-only copy (-NoReview)        -> SOURCE written (backup), "updated";
+#                                          JSON too (whole file, no field review)
 #
 # Text files (DestPath not ending in .json), one review per file:
 #   [o]verwrite      -> SOURCE written to LOCAL (backup kept); "updated"
@@ -2040,6 +2042,10 @@ function Prompt-DiffReview {
 #   -AdoptFilter  optional, text files only: scriptblock that takes LOCAL
 #                 content and returns the content the adopt target gets
 #                 (e.g. CLAUDE.md strips its machine footer). $null = copy.
+#   -NoReview     LOCAL is a read-only copy (never edited there, e.g.
+#                 deploy-harness reference\ and registries\): when it differs,
+#                 SOURCE is written (backup kept) with no menu and no adopt;
+#                 JSON is written whole, not reviewed field by field.
 #
 # Returns "created", "updated", "verified", "accept & adopt", "skipped" or
 # "failed". On "failed" nothing is left half-written (snapshots restored) and
@@ -2054,7 +2060,8 @@ function Deploy-ManagedFile {
         [string]$ToolName,
         [string]$ItemName,
         [string]$AdoptPath = "",
-        [scriptblock]$AdoptFilter = $null
+        [scriptblock]$AdoptFilter = $null,
+        [switch]$NoReview
     )
 
     Write-ManagedStateNotice
@@ -2108,8 +2115,8 @@ function Deploy-ManagedFile {
         return "verified"
     }
 
-    # JSON: field-by-field review
-    if ($DestPath -like '*.json') {
+    # JSON: field-by-field review (a read-only copy is written whole, below)
+    if ($DestPath -like '*.json' -and -not $NoReview) {
         $srcTmp = $null
         try {
             $srcTmp = [IO.Path]::GetTempFileName()
@@ -2122,7 +2129,7 @@ function Deploy-ManagedFile {
             }
             return "failed"
         }
-        $jsonResult = Review-JsonFields -SourceFile $srcTmp -DestPath $DestPath -AdoptPath $AdoptPath
+        $jsonResult = Review-JsonFields -SourceFile $srcTmp -DestPath $DestPath -AdoptPath $AdoptPath -ItemName $ItemName
         Remove-Item -LiteralPath $srcTmp -Force -ErrorAction SilentlyContinue
         # ErrorAction exempt: temp file cleanup; nothing depends on it
         return $jsonResult
@@ -2147,6 +2154,16 @@ function Deploy-ManagedFile {
     $existing = "$existing" -replace '[\r\n]+$', ''
     if ($existing -ceq $Content) {
         return "verified"
+    }
+
+    # A read-only copy: SOURCE wins, no menu, no adopt (backup kept by Write-ManagedFiles)
+    if ($NoReview) {
+        if (Write-ManagedFiles -LocalPath $DestPath -LocalContent $Content) {
+            LogOk "Updated: $ItemName -> $DestPath (read-only copy: source wins, backup kept)"
+            return "updated"
+        }
+        LogError "Failed: ${ItemName}: $($script:ManagedWriteError) (files restored)"
+        return "failed"
     }
 
     # LOCAL differs from SOURCE: review (non-interactive / EOF / -Force -> overwrite)
@@ -2226,8 +2243,9 @@ $script:ReviewJsonNode = @'
 // review_json_fields / Review-JsonFields: SOURCE against LOCAL, field by field.
 // The same text is embedded in aitools-lib.sh and aitools-lib.ps1: keep them identical.
 //   plan  SRC LOCAL OUT_PLAN
-//     OUT_PLAN: one line per differing field: idx<TAB>kind<TAB>key<TAB>local<TAB>source
-//     kind: differ | source-only | local-only. A whole array is one field.
+//     OUT_PLAN: one line per differing field: idx<TAB>kind<TAB>key<TAB>local<TAB>source<TAB>detail
+//     kind: differ | source-only | local-only. A whole array is one field; its
+//     detail lists the elements that differ (arrayDetail), "" for other fields.
 //   apply SRC LOCAL ADOPT CHOICES OUT_LOCAL OUT_ADOPT OUT_RESULT OUT_REQ_LOCAL OUT_REQ_ADOPT
 //     ADOPT: the adopt target, or "-" for none.
 //     CHOICES: idx<TAB>overwrite|adopt|skip|keep per field (missing = skip).
@@ -2288,8 +2306,61 @@ function disp(v) {
     if (t.length > 200) t = t.slice(0, 197) + '...';
     return t;
 }
-function clean(t) { return String(t).replace(/[\t\r\n]/g, ' '); }
+function clean(t) { return String(t).replace(/[\t\r\n\x1f]/g, ' '); }
 function clone(v) { return v === undefined ? undefined : JSON.parse(JSON.stringify(v)); }
+function short(v, n) {
+    const t = v === undefined ? '(absent)' : JSON.stringify(v);
+    return t.length > n ? t.slice(0, n - 3) + '...' : t;
+}
+// identity(v): "id=172" for an object element with an id, name, key, file or
+// slug (string or number), else undefined
+function identity(v) {
+    if (!isObj(v)) return undefined;
+    for (const k of ['id', 'name', 'key', 'file', 'slug']) {
+        if (has(v, k) && (typeof v[k] === 'string' || typeof v[k] === 'number')) return k + '=' + JSON.stringify(v[k]);
+    }
+    return undefined;
+}
+// arrayDetail(l, s): the plan's detail column for an array field ("" for
+// anything else). Lines joined by \x1f: a count line, then "- [i] value" (only
+// in LOCAL, its index there), "+ [j] value" (only in SOURCE, its index there)
+// and "~ [j] id=..: key: local -> source" (an object element with the same
+// identity in both, one line per changed key). Elements are matched by value,
+// so a reorder alone is one "~ order differs" line. At most 20 element lines.
+function arrayDetail(l, s) {
+    if (!Array.isArray(l) || !Array.isArray(s)) return '';
+    const left = new Map();
+    l.forEach((v, i) => { const c = canon(v); if (!left.has(c)) left.set(c, []); left.get(c).push(i); });
+    const added = [];
+    s.forEach((v, j) => { const q = left.get(canon(v)); if (q && q.length) q.shift(); else added.push(j); });
+    const removed = [];
+    for (const q of left.values()) removed.push(...q);
+    removed.sort((a, b) => a - b);
+    const byId = new Map();
+    for (const i of removed) { const id = identity(l[i]); if (id !== undefined && !byId.has(id)) byId.set(id, i); }
+    const paired = new Set();
+    const rows = [];
+    for (const j of added) {
+        const id = identity(s[j]);
+        if (id !== undefined && byId.has(id) && !paired.has(byId.get(id))) {
+            const i = byId.get(id), a = l[i], b = s[j];
+            paired.add(i);
+            const keys = Object.keys(a).concat(Object.keys(b).filter(k => !has(a, k)));
+            const ls = keys.filter(k => canon(a[k]) !== canon(b[k]))
+                .map(k => '~ [' + j + '] ' + id + ': ' + k + ': ' + short(a[k], 70) + ' -> ' + short(b[k], 70));
+            rows.push([j, ls]);
+        } else {
+            rows.push([j, ['+ [' + j + '] ' + short(s[j], 160)]]);
+        }
+    }
+    for (const i of removed) if (!paired.has(i)) rows.push([i, ['- [' + i + '] ' + short(l[i], 160)]]);
+    rows.sort((x, y) => x[0] - y[0]);
+    let out = [];
+    for (const r of rows) out.push(...r[1]);
+    if (out.length === 0) out.push('~ order differs (same elements)');
+    if (out.length > 20) out = out.slice(0, 20).concat(['... ' + (out.length - 20) + ' more line(s)']);
+    return [l.length + ' local, ' + s.length + ' source element(s)'].concat(out).map(clean).join('\x1f');
+}
 function setPath(obj, path, val) {
     let o = obj;
     for (let i = 0; i < path.length - 1; i++) {
@@ -2322,7 +2393,7 @@ try {
     const list = fields(src, loc);
     if (mode === 'plan') {
         const lines = list.map((f, i) => [i, f.kind, f.path.length ? clean(f.path.join('.')) : '(document)',
-            clean(disp(f.l)), clean(disp(f.s))].join('\t'));
+            clean(disp(f.l)), clean(disp(f.s)), f.kind === 'differ' ? arrayDetail(f.l, f.s) : ''].join('\t'));
         fs.writeFileSync(process.argv[5], lines.length ? lines.join('\n') + '\n' : '');
     } else if (mode === 'apply') {
         const adoptPath = (process.argv[5] && process.argv[5] !== '-') ? process.argv[5] : '';
@@ -2372,9 +2443,12 @@ function Review-JsonFields {
     param(
         [string]$SourceFile,
         [string]$DestPath,
-        [string]$AdoptPath = ""
+        [string]$AdoptPath = "",
+        [string]$ItemName = ""
     )
     $item = Split-Path -Leaf $DestPath
+    # The review header names the file (the caller's item name, else the file name)
+    $fileLabel = if ($ItemName) { $ItemName } else { $item }
 
     # Get-Command exempt: command-existence check with explicit failure branch
     if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
@@ -2412,7 +2486,7 @@ function Review-JsonFields {
         Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
         # ErrorAction exempt: work directory cleanup; nothing depends on it
         if (Write-ManagedFiles -LocalPath $DestPath -LocalContent $srcJson -LocalRequiredKeys $reqKeys) {
-            LogOk "Created: $item -> $DestPath"
+            LogOk "Created: $fileLabel -> $DestPath"
             return "created"
         }
         LogError "Failed: ${item}: $($script:ManagedWriteError)"
@@ -2441,19 +2515,20 @@ function Review-JsonFields {
     foreach ($pl in $planLines) {
         $f = $pl -split "`t"
         $idx = $f[0]; $kind = $f[1]; $key = $f[2]; $lDisp = $f[3]; $sDisp = $f[4]
+        $detail = if ($f.Count -gt 5) { $f[5] } else { "" }
         if ($kind -eq "local-only") {
             # A field only in LOCAL: [a]dopt / [s]kip / [x]abort, no overwrite.
             # Without an adopt target or a console it is kept, no prompt.
             if ($adoptOk -eq "1" -and $canPrompt) {
                 $choice = Prompt-JsonFieldReview -Leaf $key -Current $lDisp -Proposed "(not in source)" `
-                    -SourceLabel "source" -AdoptAllowed "1" -LocalLabel "local" -OverwriteAllowed "0"
+                    -SourceLabel "source" -AdoptAllowed "1" -LocalLabel "local" -OverwriteAllowed "0" -FileLabel $fileLabel
             } else {
                 LogDetail "${item}: $key only in local -- kept"
                 $choice = "keep"
             }
         } else {
             $choice = Prompt-JsonFieldReview -Leaf $key -Current $lDisp -Proposed $sDisp `
-                -SourceLabel "source" -AdoptAllowed $adoptOk -LocalLabel "local"
+                -SourceLabel "source" -AdoptAllowed $adoptOk -LocalLabel "local" -FileLabel $fileLabel -Detail $detail
         }
         $choices.Add("$idx`t$choice")
     }
@@ -2511,14 +2586,14 @@ function Review-JsonFields {
         }
     }
     if ($nOver -gt 0) {
-        LogOk "Updated: $item -> $DestPath ($nOver field(s) from source)"
+        LogOk "Updated: $fileLabel -> $DestPath ($nOver field(s) from source)"
     }
     if ($nAdopt -gt 0) {
-        LogOk "Accept & adopt: $item -> $AdoptPath ($nAdopt field(s))"
+        LogOk "Accept & adopt: $fileLabel -> $AdoptPath ($nAdopt field(s))"
         Write-ManagedAdoptNotice -Target $AdoptPath
     }
     if ($nSkip -gt 0) {
-        LogWarn "Skipped: $item ($nSkip field(s) differ from source; reviewed again next run)"
+        LogWarn "Skipped: $fileLabel ($nSkip field(s) differ from source; reviewed again next run)"
     }
     if ($nAdopt -gt 0) { return "accept & adopt" }
     if ($nSkip -gt 0) { return "skipped" }
@@ -3535,6 +3610,32 @@ function Invoke-HarnessSkillsFanout {
 }
 
 # ---------------------------------------------------------------------------
+# Write-JsonFieldDetail -What -Detail -LocalLabel -SourceLabel: the element
+# lines of an array field under its review header, one per line, colour-coded
+# when Test-ReviewColour (red "-" only in LOCAL, green "+" only in SOURCE,
+# yellow "~" changed), after a legend. Each line also goes to deploy.log
+# (detail). Parity: _json_field_detail in aitools-lib.sh.
+# ---------------------------------------------------------------------------
+function Write-JsonFieldDetail([string]$What, [string]$Detail, [string]$LocalLabel, [string]$SourceLabel) {
+    $esc = [char]27
+    $useColour = Test-ReviewColour
+    if ($useColour) {
+        [Console]::WriteLine("  $esc[31mred -$esc[0m = only in $LocalLabel   $esc[32mgreen +$esc[0m = only in $SourceLabel   $esc[33myellow ~$esc[0m = changed")
+    } else {
+        [Console]::WriteLine("  red - = only in $LocalLabel   green + = only in $SourceLabel   yellow ~ = changed")
+    }
+    foreach ($dl in ($Detail -split [char]0x1f)) {
+        LogDetail "review ${What}: $dl"
+        $code = if ($dl.StartsWith("-")) { "31" } elseif ($dl.StartsWith("+")) { "32" } elseif ($dl.StartsWith("~")) { "33" } else { "" }
+        if ($useColour -and $code) {
+            [Console]::WriteLine("  $esc[${code}m$dl$esc[0m")
+        } else {
+            [Console]::WriteLine("  $dl")
+        }
+    }
+}
+
+# ---------------------------------------------------------------------------
 # Granular per-leaf review prompt for JSON settings sync (Sync-ManagedJson)
 # and the JSON field review (Review-JsonFields). Mirror of
 # prompt_json_field_review in aitools-lib.sh. One prompt per divergent
@@ -3542,6 +3643,10 @@ function Invoke-HarnessSkillsFanout {
 # -LocalLabel names the local file's side (default "settings.json").
 # -OverwriteAllowed "0" (a field only in the local file): no [o]verwrite, and
 # the default answer is skip.
+# -FileLabel names the file in the header ("" = the leaf alone).
+# -Detail: element lines for an array field, joined by U+001F (the plan's
+# detail column, Review-JsonFields); shown colour-coded instead of the two
+# value lines ("" = show the two value lines).
 # Returns "overwrite", "adopt", or "skip".
 # -Force / AITOOLS_FORCE / non-interactive -> "overwrite" (source wins), or
 # "skip" when overwrite is not allowed.
@@ -3554,7 +3659,9 @@ function Prompt-JsonFieldReview {
         [string]$SourceLabel = "profile.json",
         [string]$AdoptAllowed = "1",
         [string]$LocalLabel = "settings.json",
-        [string]$OverwriteAllowed = "1"
+        [string]$OverwriteAllowed = "1",
+        [string]$FileLabel = "",
+        [string]$Detail = ""
     )
 
     $defaultChoice = "overwrite"
@@ -3563,20 +3670,25 @@ function Prompt-JsonFieldReview {
         $defaultChoice = "skip"
         $defaultDesc = "skipping (only in $LocalLabel)"
     }
+    $what = if ($FileLabel) { "${FileLabel}: $Leaf" } else { $Leaf }
 
     if ($env:AITOOLS_FORCE -eq "1" -or $Force) {
-        Log "Divergence in $Leaf -- $defaultDesc (--force)"
+        Log "Divergence in $what -- $defaultDesc (--force)"
         return $defaultChoice
     }
     if (-not (Test-InteractiveConsole)) {
-        Log "Divergence in $Leaf -- $defaultDesc (non-interactive)"
+        Log "Divergence in $what -- $defaultDesc (non-interactive)"
         return $defaultChoice
     }
 
     [Console]::WriteLine("")
-    [Console]::WriteLine("[REVIEW] $Leaf differs from $SourceLabel.")
-    [Console]::WriteLine("  ${LocalLabel} : $Current")
-    [Console]::WriteLine("  ${SourceLabel} : $Proposed")
+    [Console]::WriteLine("[REVIEW] $what differs from $SourceLabel.")
+    if ($Detail) {
+        Write-JsonFieldDetail -What $what -Detail $Detail -LocalLabel $LocalLabel -SourceLabel $SourceLabel
+    } else {
+        [Console]::WriteLine("  ${LocalLabel} : $Current")
+        [Console]::WriteLine("  ${SourceLabel} : $Proposed")
+    }
     [Console]::WriteLine("")
     if ($OverwriteAllowed -eq "1") {
         [Console]::WriteLine("  [o]verwrite : $SourceLabel value -> $LocalLabel")

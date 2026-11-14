@@ -161,8 +161,12 @@ if (-not $script:UserRepoPath -or -not (Test-Path (Join-Path $script:UserRepoPat
         New-Item -ItemType Directory -Path $d7Dot, $d7Committed, $d7CfgDir -Force | Out-Null
         $d7Log += & git -C $script:UserRepoPath archive -o $d7Tar HEAD 2>&1 | Out-String
         $d7Rc = $LASTEXITCODE
-        if ($d7Rc -eq 0) { $d7Log += & tar -xf $d7Tar -C $d7Dot 2>&1 | Out-String; $d7Rc = $LASTEXITCODE }
-        if ($d7Rc -eq 0) { $d7Log += & tar -xf $d7Tar -C $d7Committed 2>&1 | Out-String; $d7Rc = $LASTEXITCODE }
+        # Windows' own tar (bsdtar): a GNU tar first on PATH (Git Bash's, when this runs
+        # from Git Bash) reads "C:\..." as a remote host ("Cannot connect to C:").
+        $d7TarExe = Join-Path $env:SystemRoot "System32\tar.exe"
+        if (-not (Test-Path $d7TarExe)) { $d7TarExe = "tar" }
+        if ($d7Rc -eq 0) { $d7Log += & $d7TarExe -xf $d7Tar -C $d7Dot 2>&1 | Out-String; $d7Rc = $LASTEXITCODE }
+        if ($d7Rc -eq 0) { $d7Log += & $d7TarExe -xf $d7Tar -C $d7Committed 2>&1 | Out-String; $d7Rc = $LASTEXITCODE }
         if ($d7Rc -eq 0) {
             $d7Cfg = [pscustomobject]@{}
             if (Test-Path $script:ConfigFile) {
@@ -251,11 +255,20 @@ if (-not $script:UserRepoPath -or -not (Test-Path (Join-Path $script:UserRepoPat
         $d7Stale = @()
         $d7BuiltDir = Join-Path $d7Dot "deploy"
         $d7Ref = Join-Path $d7Committed "deploy"
-        $d7Names = @(Get-ChildItem $d7BuiltDir -File | ForEach-Object Name) + @(Get-ChildItem $d7Ref -File | ForEach-Object Name) | Sort-Object -Unique
-        foreach ($n in $d7Names) {
-            $a = Join-Path $d7Ref $n
-            $b = Join-Path $d7BuiltDir $n
-            if (-not (Test-Path $a) -or -not (Test-Path $b) -or (Get-FileHash $a).Hash -ne (Get-FileHash $b).Hash) { $d7Stale += $n }
+        $d7Compared = "dotprofile deploy/ matches a fresh build"
+        if (-not (Test-Path $d7Ref)) {
+            # The dotprofile does not track deploy/ (gitignored since 2026-11-13,
+            # commander): there is no committed copy to be stale. The build and the
+            # smoke runs above still verify the generated scripts.
+            $d7Compared = "fresh build OK (dotprofile deploy/ untracked, not compared)"
+            LogDetail "pre-push 7: the dotprofile does not track deploy/ -- staleness not compared"
+        } else {
+            $d7Names = @(Get-ChildItem $d7BuiltDir -File | ForEach-Object Name) + @(Get-ChildItem $d7Ref -File | ForEach-Object Name) | Sort-Object -Unique
+            foreach ($n in $d7Names) {
+                $a = Join-Path $d7Ref $n
+                $b = Join-Path $d7BuiltDir $n
+                if (-not (Test-Path $a) -or -not (Test-Path $b) -or (Get-FileHash $a).Hash -ne (Get-FileHash $b).Hash) { $d7Stale += $n }
+            }
         }
         if ($d7Stale.Count -gt 0) {
             $d7Problems += "dotprofile deploy/ is stale ($($d7Stale -join ' ')) -- run build-deploy.sh and commit in $($script:UserRepoPath)"
@@ -264,7 +277,7 @@ if (-not $script:UserRepoPath -or -not (Test-Path (Join-Path $script:UserRepoPat
             $d7Problems += "generated deploy scripts failed a dry run: $($d7Smoke -join ' ') -- see deploy.log"
         }
         if ($d7Problems.Count -eq 0) {
-            StepPass "7" "deploy/ matches source" "dotprofile deploy/ matches a fresh build; resolver consumers dry-run clean"
+            StepPass "7" "deploy/ matches source" "$d7Compared; resolver consumers dry-run clean"
         } else {
             StepFail "7" "deploy/ matches source" ($d7Problems -join "; ")
         }

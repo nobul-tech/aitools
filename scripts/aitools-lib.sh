@@ -1776,6 +1776,9 @@ _invoke_ai_merge() {
 #   LOCAL missing                       -> SOURCE written, "created"
 #   LOCAL == SOURCE                     -> nothing written, "verified"
 #   no terminal, EOF, or AITOOLS_FORCE  -> SOURCE written (backup), "updated"
+#   a read-only copy (MANAGED_NO_REVIEW=true) -> SOURCE written (backup),
+#                                          "updated"; JSON too (whole file,
+#                                          no field review)
 #
 # Text files (DEST not ending in .json), one review per file:
 #   [o]verwrite      -> SOURCE written to LOCAL (backup kept); "updated"
@@ -2052,6 +2055,11 @@ prompt_diff_review() {
 #                      reads LOCAL content on stdin and prints the content the
 #                      adopt target gets (CLAUDE.md strips its machine footer
 #                      and restores profile tokens). "" = plain copy.
+# MANAGED_NO_REVIEW=true (set for the one call: MANAGED_NO_REVIEW=true
+#   deploy_managed_file ...): LOCAL is a read-only copy (never edited there,
+#   e.g. deploy-harness reference/ and registries/): when it differs, SOURCE is
+#   written (backup kept) with no menu and no adopt; JSON is written whole, not
+#   reviewed field by field. Parity: -NoReview in aitools-lib.ps1.
 #
 # Sets MANAGED_FILE_RESULT to "created", "updated", "verified",
 # "accept & adopt", "skipped" or "failed". On "failed" nothing is left
@@ -2067,6 +2075,7 @@ deploy_managed_file() {
     local item_name="$4"
     local adopt_path="${5:-}"
     local adopt_filter="${6:-}"
+    local no_review="${MANAGED_NO_REVIEW:-false}"
 
     MANAGED_FILE_RESULT="verified"
     _managed_state_notice
@@ -2102,24 +2111,26 @@ deploy_managed_file() {
         return 0
     fi
 
-    # JSON: field-by-field review
+    # JSON: field-by-field review (a read-only copy is written whole, below)
     case "$dest" in
         *.json)
-            local _src_tmp
-            if ! _src_tmp=$(mktemp); then
-                log_error "Failed: $item_name: could not create a temp file for the JSON review"
-                MANAGED_FILE_RESULT="failed"
-                return 0
-            fi
-            if ! printf '%s\n' "$src_content" > "$_src_tmp"; then
+            if [ "$no_review" != "true" ]; then
+                local _src_tmp
+                if ! _src_tmp=$(mktemp); then
+                    log_error "Failed: $item_name: could not create a temp file for the JSON review"
+                    MANAGED_FILE_RESULT="failed"
+                    return 0
+                fi
+                if ! printf '%s\n' "$src_content" > "$_src_tmp"; then
+                    rm -f "$_src_tmp"
+                    log_error "Failed: $item_name: could not write a temp file for the JSON review"
+                    MANAGED_FILE_RESULT="failed"
+                    return 0
+                fi
+                review_json_fields "$_src_tmp" "$dest" "$adopt_path" "$item_name"
                 rm -f "$_src_tmp"
-                log_error "Failed: $item_name: could not write a temp file for the JSON review"
-                MANAGED_FILE_RESULT="failed"
                 return 0
-            fi
-            review_json_fields "$_src_tmp" "$dest" "$adopt_path"
-            rm -f "$_src_tmp"
-            return 0 ;;
+            fi ;;
     esac
 
     # New file: create
@@ -2143,6 +2154,18 @@ deploy_managed_file() {
     existing=$(printf '%s' "$existing" | perl -0777 -pe 's/[\r\n]+$/\n/')
     if [ "$existing" = "$src_content" ]; then
         MANAGED_FILE_RESULT="verified"
+        return 0
+    fi
+
+    # A read-only copy: SOURCE wins, no menu, no adopt (backup kept by _managed_write)
+    if [ "$no_review" = "true" ]; then
+        if _managed_write "$dest" "$src_content" "" ""; then
+            log_ok "Updated: $item_name -> $(display_path "$dest") (read-only copy: source wins, backup kept)"
+            MANAGED_FILE_RESULT="updated"
+        else
+            log_error "Failed: $item_name: $MANAGED_WRITE_ERROR (files restored)"
+            MANAGED_FILE_RESULT="failed"
+        fi
         return 0
     fi
 
@@ -2206,6 +2229,8 @@ deploy_managed_file() {
 #   $1 = SRC_FILE    file holding the SOURCE JSON
 #   $2 = DEST        deployed JSON file (LOCAL)
 #   $3 = ADOPT_PATH  repo JSON file that is the source of truth; "" = no adopt
+#   $4 = ITEM_NAME   the file as the review header names it (default: DEST's
+#                    file name)
 #
 # Sets MANAGED_FILE_RESULT, one per file by precedence failed > accept & adopt
 # > skipped > updated > verified: "created" (LOCAL was missing), "failed"
@@ -2215,9 +2240,11 @@ deploy_managed_file() {
 # "verified" (nothing written). Requires node. Exits 2 on [x]abort.
 # ---------------------------------------------------------------------------
 review_json_fields() {
-    local src_file="$1" dest="$2" adopt_path="${3:-}"
+    local src_file="$1" dest="$2" adopt_path="${3:-}" file_label="${4:-}"
     local item
     item=$(basename "$dest")
+    # The review header names the file (the caller's item name, else the file name)
+    if [ -z "$file_label" ]; then file_label="$item"; fi
     MANAGED_FILE_RESULT="verified"
 
     if ! command -v node >/dev/null 2>&1; then
@@ -2236,8 +2263,9 @@ review_json_fields() {
 // review_json_fields / Review-JsonFields: SOURCE against LOCAL, field by field.
 // The same text is embedded in aitools-lib.sh and aitools-lib.ps1: keep them identical.
 //   plan  SRC LOCAL OUT_PLAN
-//     OUT_PLAN: one line per differing field: idx<TAB>kind<TAB>key<TAB>local<TAB>source
-//     kind: differ | source-only | local-only. A whole array is one field.
+//     OUT_PLAN: one line per differing field: idx<TAB>kind<TAB>key<TAB>local<TAB>source<TAB>detail
+//     kind: differ | source-only | local-only. A whole array is one field; its
+//     detail lists the elements that differ (arrayDetail), "" for other fields.
 //   apply SRC LOCAL ADOPT CHOICES OUT_LOCAL OUT_ADOPT OUT_RESULT OUT_REQ_LOCAL OUT_REQ_ADOPT
 //     ADOPT: the adopt target, or "-" for none.
 //     CHOICES: idx<TAB>overwrite|adopt|skip|keep per field (missing = skip).
@@ -2298,8 +2326,61 @@ function disp(v) {
     if (t.length > 200) t = t.slice(0, 197) + '...';
     return t;
 }
-function clean(t) { return String(t).replace(/[\t\r\n]/g, ' '); }
+function clean(t) { return String(t).replace(/[\t\r\n\x1f]/g, ' '); }
 function clone(v) { return v === undefined ? undefined : JSON.parse(JSON.stringify(v)); }
+function short(v, n) {
+    const t = v === undefined ? '(absent)' : JSON.stringify(v);
+    return t.length > n ? t.slice(0, n - 3) + '...' : t;
+}
+// identity(v): "id=172" for an object element with an id, name, key, file or
+// slug (string or number), else undefined
+function identity(v) {
+    if (!isObj(v)) return undefined;
+    for (const k of ['id', 'name', 'key', 'file', 'slug']) {
+        if (has(v, k) && (typeof v[k] === 'string' || typeof v[k] === 'number')) return k + '=' + JSON.stringify(v[k]);
+    }
+    return undefined;
+}
+// arrayDetail(l, s): the plan's detail column for an array field ("" for
+// anything else). Lines joined by \x1f: a count line, then "- [i] value" (only
+// in LOCAL, its index there), "+ [j] value" (only in SOURCE, its index there)
+// and "~ [j] id=..: key: local -> source" (an object element with the same
+// identity in both, one line per changed key). Elements are matched by value,
+// so a reorder alone is one "~ order differs" line. At most 20 element lines.
+function arrayDetail(l, s) {
+    if (!Array.isArray(l) || !Array.isArray(s)) return '';
+    const left = new Map();
+    l.forEach((v, i) => { const c = canon(v); if (!left.has(c)) left.set(c, []); left.get(c).push(i); });
+    const added = [];
+    s.forEach((v, j) => { const q = left.get(canon(v)); if (q && q.length) q.shift(); else added.push(j); });
+    const removed = [];
+    for (const q of left.values()) removed.push(...q);
+    removed.sort((a, b) => a - b);
+    const byId = new Map();
+    for (const i of removed) { const id = identity(l[i]); if (id !== undefined && !byId.has(id)) byId.set(id, i); }
+    const paired = new Set();
+    const rows = [];
+    for (const j of added) {
+        const id = identity(s[j]);
+        if (id !== undefined && byId.has(id) && !paired.has(byId.get(id))) {
+            const i = byId.get(id), a = l[i], b = s[j];
+            paired.add(i);
+            const keys = Object.keys(a).concat(Object.keys(b).filter(k => !has(a, k)));
+            const ls = keys.filter(k => canon(a[k]) !== canon(b[k]))
+                .map(k => '~ [' + j + '] ' + id + ': ' + k + ': ' + short(a[k], 70) + ' -> ' + short(b[k], 70));
+            rows.push([j, ls]);
+        } else {
+            rows.push([j, ['+ [' + j + '] ' + short(s[j], 160)]]);
+        }
+    }
+    for (const i of removed) if (!paired.has(i)) rows.push([i, ['- [' + i + '] ' + short(l[i], 160)]]);
+    rows.sort((x, y) => x[0] - y[0]);
+    let out = [];
+    for (const r of rows) out.push(...r[1]);
+    if (out.length === 0) out.push('~ order differs (same elements)');
+    if (out.length > 20) out = out.slice(0, 20).concat(['... ' + (out.length - 20) + ' more line(s)']);
+    return [l.length + ' local, ' + s.length + ' source element(s)'].concat(out).map(clean).join('\x1f');
+}
 function setPath(obj, path, val) {
     let o = obj;
     for (let i = 0; i < path.length - 1; i++) {
@@ -2332,7 +2413,7 @@ try {
     const list = fields(src, loc);
     if (mode === 'plan') {
         const lines = list.map((f, i) => [i, f.kind, f.path.length ? clean(f.path.join('.')) : '(document)',
-            clean(disp(f.l)), clean(disp(f.s))].join('\t'));
+            clean(disp(f.l)), clean(disp(f.s)), f.kind === 'differ' ? arrayDetail(f.l, f.s) : ''].join('\t'));
         fs.writeFileSync(process.argv[5], lines.length ? lines.join('\n') + '\n' : '');
     } else if (mode === 'apply') {
         const adoptPath = (process.argv[5] && process.argv[5] !== '-') ? process.argv[5] : '';
@@ -2392,7 +2473,7 @@ REVIEW_JSON_NODE_EOF
         MANAGED_WRITE_REQUIRED_1=$(cat "$work/keys.json")
         rm -rf "$work"
         if _managed_write "$dest" "$src_json" "" ""; then
-            log_ok "Created: $item -> $(display_path "$dest")"
+            log_ok "Created: $file_label -> $(display_path "$dest")"
             MANAGED_FILE_RESULT="created"
         else
             log_error "Failed: $item: $MANAGED_WRITE_ERROR"
@@ -2420,21 +2501,21 @@ REVIEW_JSON_NODE_EOF
     if [ -n "$adopt_path" ]; then adopt_ok=1; fi
     if [ "${AITOOLS_FORCE:-}" != "1" ] && [ "${FORCE:-}" != "true" ] && tty_interactive; then can_prompt=1; fi
     : > "$work/choices.tsv"
-    local idx kind key ldisp sdisp choice
-    while IFS=$'\t' read -r idx kind key ldisp sdisp <&3; do
+    local idx kind key ldisp sdisp detail choice
+    while IFS=$'\t' read -r idx kind key ldisp sdisp detail <&3; do
         [ -n "$idx" ] || continue
         if [ "$kind" = "local-only" ]; then
             # A field only in LOCAL: [a]dopt / [s]kip / [x]abort, no overwrite.
             # Without an adopt target or a terminal it is kept, no prompt.
             if [ "$adopt_ok" = "1" ] && [ "$can_prompt" = "1" ]; then
-                prompt_json_field_review "$key" "$ldisp" "(not in source)" "source" "1" "local" "0"
+                prompt_json_field_review "$key" "$ldisp" "(not in source)" "source" "1" "local" "0" "$file_label" ""
                 choice="$JSON_FIELD_REVIEW_RESULT"
             else
                 log_detail "$item: $key only in local -- kept"
                 choice="keep"
             fi
         else
-            prompt_json_field_review "$key" "$ldisp" "$sdisp" "source" "$adopt_ok" "local"
+            prompt_json_field_review "$key" "$ldisp" "$sdisp" "source" "$adopt_ok" "local" "1" "$file_label" "$detail"
             choice="$JSON_FIELD_REVIEW_RESULT"
         fi
         printf '%s\t%s\n' "$idx" "$choice" >> "$work/choices.tsv"
@@ -2474,14 +2555,14 @@ REVIEW_JSON_NODE_EOF
         fi
     fi
     if [ "${n_over:-0}" -gt 0 ]; then
-        log_ok "Updated: $item -> $(display_path "$dest") ($n_over field(s) from source)"
+        log_ok "Updated: $file_label -> $(display_path "$dest") ($n_over field(s) from source)"
     fi
     if [ "${n_adopt:-0}" -gt 0 ]; then
-        log_ok "Accept & adopt: $item -> $(display_path "$adopt_path") ($n_adopt field(s))"
+        log_ok "Accept & adopt: $file_label -> $(display_path "$adopt_path") ($n_adopt field(s))"
         _managed_adopt_notice "$adopt_path"
     fi
     if [ "${n_skip:-0}" -gt 0 ]; then
-        log_warn "Skipped: $item ($n_skip field(s) differ from source; reviewed again next run)"
+        log_warn "Skipped: $file_label ($n_skip field(s) differ from source; reviewed again next run)"
     fi
     if [ "${n_adopt:-0}" -gt 0 ]; then
         MANAGED_FILE_RESULT="accept & adopt"
@@ -3510,6 +3591,35 @@ fanout_harness_skills() {
 }
 
 # ---------------------------------------------------------------------------
+# _json_field_detail WHAT DETAIL LOCAL_LABEL SOURCE_LABEL: the element lines of
+# an array field under its review header (DETAIL: lines joined by \x1f), one
+# per line, colour-coded when _review_colour (red "-" only in LOCAL, green "+"
+# only in SOURCE, yellow "~" changed), after a legend. Each line also goes to
+# deploy.log (detail). Parity: Write-JsonFieldDetail in aitools-lib.ps1.
+# ---------------------------------------------------------------------------
+_json_field_detail() {
+    local what="$1" rest="$2" llabel="$3" slabel="$4" dl colour=0 us=$'\x1f'
+    if _review_colour; then colour=1; fi
+    if [ "$colour" = "1" ]; then
+        printf '  \033[31mred -\033[0m = only in %s   \033[32mgreen +\033[0m = only in %s   \033[33myellow ~\033[0m = changed\n' "$llabel" "$slabel" > /dev/tty
+    else
+        printf '  red - = only in %s   green + = only in %s   yellow ~ = changed\n' "$llabel" "$slabel" > /dev/tty
+    fi
+    while :; do
+        dl="${rest%%"$us"*}"
+        log_detail "review $what: $dl"
+        case "$colour$dl" in
+            1-*) printf '  \033[31m%s\033[0m\n' "$dl" ;;
+            1+*) printf '  \033[32m%s\033[0m\n' "$dl" ;;
+            1~*) printf '  \033[33m%s\033[0m\n' "$dl" ;;
+            *)   printf '  %s\n' "$dl" ;;
+        esac > /dev/tty
+        if [ "$rest" = "$dl" ]; then break; fi
+        rest="${rest#*"$us"}"
+    done
+}
+
+# ---------------------------------------------------------------------------
 # Granular per-leaf review prompt for JSON settings sync (sync_managed_json)
 # and the JSON field review (review_json_fields).
 # One prompt per divergent setting/rule. overwrite/adopt/skip are per-leaf;
@@ -3524,6 +3634,10 @@ fanout_harness_skills() {
 #   $6 = local label (default "settings.json")
 #   $7 = overwrite-allowed flag (default "1"; "0" for a field only in the
 #        local file: no [o]verwrite, and the default answer is skip)
+#   $8 = file label: names the file in the header ("" = the leaf alone)
+#   $9 = detail: element lines for an array field, joined by \x1f (the
+#        plan's detail column, review_json_fields); shown colour-coded instead
+#        of the two value lines ("" = show the two value lines)
 #
 # Sets JSON_FIELD_REVIEW_RESULT to "overwrite", "adopt", or "skip".
 # --force / AITOOLS_FORCE / non-interactive -> "overwrite" (source wins), or
@@ -3532,28 +3646,33 @@ fanout_harness_skills() {
 JSON_FIELD_REVIEW_RESULT=""
 prompt_json_field_review() {
     local leaf="$1" current="$2" proposed="$3" source_label="${4:-profile.json}" adopt_allowed="${5:-1}"
-    local local_label="${6:-settings.json}" overwrite_allowed="${7:-1}"
-    local default_choice="overwrite" default_desc="overwriting from $source_label"
+    local local_label="${6:-settings.json}" overwrite_allowed="${7:-1}" file_label="${8:-}" detail="${9:-}"
+    local default_choice="overwrite" default_desc="overwriting from $source_label" what="$leaf"
     if [ "$overwrite_allowed" != "1" ]; then
         default_choice="skip"; default_desc="skipping (only in $local_label)"
     fi
+    if [ -n "$file_label" ]; then what="$file_label: $leaf"; fi
 
     JSON_FIELD_REVIEW_RESULT="$default_choice"
 
     # --force / AITOOLS_FORCE: source wins
     if [ "${AITOOLS_FORCE:-}" = "1" ] || [ "${FORCE:-}" = "true" ]; then
-        log "Divergence in $leaf -- $default_desc (--force)"
+        log "Divergence in $what -- $default_desc (--force)"
         return 0
     fi
     # Non-interactive: source wins
     if ! tty_interactive; then
-        log "Divergence in $leaf -- $default_desc (non-interactive)"
+        log "Divergence in $what -- $default_desc (non-interactive)"
         return 0
     fi
 
-    printf '\n\033[33m[REVIEW]\033[0m %s differs from %s.\n' "$leaf" "$source_label" > /dev/tty
-    printf '  %s : %s\n' "$local_label" "$current" > /dev/tty
-    printf '  %s : %s\n' "$source_label" "$proposed" > /dev/tty
+    printf '\n\033[33m[REVIEW]\033[0m %s differs from %s.\n' "$what" "$source_label" > /dev/tty
+    if [ -n "$detail" ]; then
+        _json_field_detail "$what" "$detail" "$local_label" "$source_label"
+    else
+        printf '  %s : %s\n' "$local_label" "$current" > /dev/tty
+        printf '  %s : %s\n' "$source_label" "$proposed" > /dev/tty
+    fi
     printf '\n' > /dev/tty
     if [ "$overwrite_allowed" = "1" ]; then
         printf '  [o]verwrite : %s value -> %s\n' "$source_label" "$local_label" > /dev/tty
