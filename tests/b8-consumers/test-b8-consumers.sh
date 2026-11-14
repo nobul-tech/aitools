@@ -8,24 +8,38 @@
 # dotprofile error"), A-24 (a check run with a resolver error reports a WARN
 # step), A-26 cursor part (the cli-config dry run writes a summary row).
 #
-# Platform targeting (plans/ci-platform-targeting.md): each script runs only
-# where its OS guard allows. macOS/Linux run the .sh scripts; Windows (Git
-# Bash) runs the .ps1 scripts with native pwsh. Parity between the two is
-# checked against the committed golden summary rows in tests/b8-consumers/golden/
-# (tests/lib/platform-lib.sh golden_match). AITOOLS_TEST_UPDATE_GOLDEN=1 on
-# macOS/Linux rewrites them.
+# Platform targeting (plans/ci-platform-targeting.md; commander 2026-11-14:
+# "sh scripts and tests should only run on linux/mac and ps1 on windows"):
+# this harness runs the .sh scripts on macOS/Linux and refuses Windows; the
+# .ps1 scripts are tested on Windows by tests/b8-consumers/test-b8-consumers.ps1.
+# Parity between the two is checked against the committed golden summary rows
+# in tests/b8-consumers/golden/ (tests/lib/platform-lib.sh golden_match).
+# AITOOLS_TEST_UPDATE_GOLDEN=1 on macOS/Linux rewrites them.
 #
 # Safe to re-run: every case runs under its own temp HOME (removed on exit) with
 # stub rg/agent on PATH; the real HOME is never read or written. AITOOLS_TEST_BASH
 # picks the bash that runs the .sh scripts (default: bash). Exit 1 on failure.
 #
 # Usage: bash tests/b8-consumers/test-b8-consumers.sh [--bash-only] [--help]
-#   --bash-only  accepted for compatibility: macOS/Linux always run only .sh
+#   --bash-only  accepted for compatibility: the harness always runs only .sh
 
 set -uo pipefail
 
+# OS guard: macOS/Linux only. $OSTYPE is set by bash itself, so a uname shim on
+# PATH does not hide Git Bash.
+case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*)
+        printf 'This script is for macOS/Linux. On Windows, run tests/b8-consumers/test-b8-consumers.ps1 with pwsh.\n' >&2
+        exit 1 ;;
+esac
+case "${OSTYPE:-}" in
+    msys*|cygwin*)
+        printf 'This script is for macOS/Linux. On Windows, run tests/b8-consumers/test-b8-consumers.ps1 with pwsh.\n' >&2
+        exit 1 ;;
+esac
+
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
-    perl -ne 'print if $. >= 2 && $. <= 23' "$0"
+    perl -ne 'print if $. >= 2 && $. <= 24' "$0"
     exit 0
 fi
 
@@ -37,7 +51,6 @@ TMP_ROOT="$(mktemp -d)"
 trap 'rm -rf "$TMP_ROOT"' EXIT
 GOLDEN_DIR="$ROOT/tests/b8-consumers/golden"
 GOLDEN_TMP="$TMP_ROOT"
-LANG_RUN="$TEST_LANG"   # sh on macOS/Linux, ps1 on Windows
 
 PASS=0
 FAIL=0
@@ -54,57 +67,35 @@ check() {  # name, condition (eval'd)
     fi
 }
 
-if [ "$LANG_RUN" = ps1 ] && ! command -v pwsh >/dev/null 2>&1; then
-    printf 'FAIL pwsh is not on PATH: the .ps1 scripts cannot be tested on Windows\n'
-    exit 1
-fi
-
 # setup_case <name>: fresh HOME, logs, summary and stub bin (rg, agent: version only).
-# The stubs come in two forms: a bash script for the .sh runs and a .cmd file
-# for native pwsh on Windows, which cannot run an extensionless bash script.
 setup_case() {
     C="$TMP_ROOT/$1"
     H="$C/home"
     mkdir -p "$H" "$C/bin" "$C/logs"
     printf '#!/usr/bin/env bash\necho "ripgrep 14.1.0"\n' > "$C/bin/rg"
     printf '#!/usr/bin/env bash\necho "2026.05.21-stub"\n' > "$C/bin/agent"
-    printf '@echo ripgrep 14.1.0\r\n' > "$C/bin/rg.cmd"
-    printf '@echo 2026.05.21-stub\r\n' > "$C/bin/agent.cmd"
     chmod +x "$C/bin/rg" "$C/bin/agent"
     : > "$C/summary"
     CASE_ENV=""
 }
 
-# run_script <base name> [args...]: the .sh (macOS/Linux) or .ps1 (Windows) of
-# scripts/<base>, non-interactive, case HOME. CASE_ENV (space-separated
-# VAR=value words) is added to the environment. Paths handed to native pwsh
-# are native (cygpath -m).
+# run_script <base name> [args...]: scripts/<base>.sh, non-interactive, case
+# HOME. CASE_ENV (space-separated VAR=value words) is added to the environment.
 run_script() {
     local base="$1"; shift
-    if [ "$LANG_RUN" = sh ]; then
-        # shellcheck disable=SC2086  # CASE_ENV is a list of VAR=value words
-        env HOME="$H" AITOOLS_LOG_DIR="$C/logs" AITOOLS_SUMMARY_FILE="$C/summary" \
-            PATH="$C/bin:$PATH" $CASE_ENV "$TB" "$ROOT/scripts/$base.sh" "$@" < /dev/null > "$C/out" 2>&1
-    else
-        # shellcheck disable=SC2086
-        env HOME="$(native_path "$H")" USERPROFILE="$(native_path "$H")" \
-            AITOOLS_LOG_DIR="$(native_path "$C/logs")" AITOOLS_SUMMARY_FILE="$(native_path "$C/summary")" \
-            PATH="$C/bin:$PATH" $CASE_ENV \
-            pwsh -NoProfile -NonInteractive -File "$(native_path "$ROOT/scripts/$base.ps1")" "$@" < /dev/null > "$C/out" 2>&1
-    fi
+    # shellcheck disable=SC2086  # CASE_ENV is a list of VAR=value words
+    env HOME="$H" AITOOLS_LOG_DIR="$C/logs" AITOOLS_SUMMARY_FILE="$C/summary" \
+        PATH="$C/bin:$PATH" $CASE_ENV "$TB" "$ROOT/scripts/$base.sh" "$@" < /dev/null > "$C/out" 2>&1
     echo $? > "$C/rc"
 }
-
-# dry_flag: the dry-run flag of the language under test
-dry_flag() { if [ "$LANG_RUN" = sh ]; then printf -- '--dry-run'; else printf -- '-DryRun'; fi; }
 
 rc() { cat "$C/rc"; }
 rows() { grep -v '^DETAIL' "$C/summary" | perl -pe 's/\r//' | LC_ALL=C sort; }  # summary rows, order-free
 has_row() { perl -pe 's/\r//' "$C/summary" | grep -qxF "$1"; }
 in_log() { perl -pe 's/\e\[[0-9;]*m//g; s/\r//' "$C/out" "$C/logs/deploy.log" 2>/dev/null | grep -qF -- "$1"; }
-nowhere() { printf 'AITOOLS_USER_REPO_PATH=%s/nowhere' "$(native_path "$C")"; }
+nowhere() { printf 'AITOOLS_USER_REPO_PATH=%s/nowhere' "$C"; }
 
-lang="$LANG_RUN"
+lang=sh
 
 # --- A-22: setup-user-skills on a resolver error (rc 3) ------------------------
 setup_case "skills-rc3-$lang"
@@ -125,7 +116,7 @@ check "skills rc3 parity: summary rows match golden (sh and ps1 share it)" "gold
 # The dry run keeps steps 1-2 to version checks; the rc 3 branch comes first.
 setup_case "cursor-rc3-$lang"
 CASE_ENV="$(nowhere)"
-run_script setup-user-cursor "$(dry_flag)"
+run_script setup-user-cursor --dry-run
 check "cursor $lang rc3: exit 1" "[ \"\$(rc)\" = 1 ]"
 check "cursor $lang rc3: ERROR row not merged" "has_row 'ERROR|cursor cli|not merged: dotprofile error'"
 check "cursor $lang rc3: no 'skipped' detail" "! grep -qi 'skipped' '$C/summary'"
@@ -138,11 +129,11 @@ check "cursor rc3 parity: summary rows match golden" "golden_match cursor-rc3.ro
 # --- A-26 (cursor part): cli-config dry run writes a row ------------------------
 # No dotprofile (rc 1, defaults). First a dry run on a missing cli-config (would
 # update), then a real run (created), then a dry run on the written file (verified).
-if [ "$lang" = sh ] && ! command -v node >/dev/null 2>&1; then
+if ! command -v node >/dev/null 2>&1; then
     printf 'SKIP cursor dry-run sh (node not on PATH)\n'; SKIP=$((SKIP + 1))
 else
     setup_case "cursor-dry-$lang"
-    run_script setup-user-cursor "$(dry_flag)"
+    run_script setup-user-cursor --dry-run
     check "cursor $lang dry (missing config): exit 0" "[ \"\$(rc)\" = 0 ]"
     check "cursor $lang dry (missing config): OK row dry-run: would update" "has_row 'OK|cursor cli|dry-run: would update'"
     check "cursor $lang dry (missing config): nothing written" "[ ! -e '$H/.cursor/cli-config.json' ]"
@@ -152,7 +143,7 @@ else
     run_script setup-user-cursor
     check "cursor $lang real run: OK row created" "has_row 'OK|cursor cli|created'"
     : > "$C/summary"
-    run_script setup-user-cursor "$(dry_flag)"
+    run_script setup-user-cursor --dry-run
     check "cursor $lang dry (up to date): exit 0" "[ \"\$(rc)\" = 0 ]"
     check "cursor $lang dry (up to date): OK row verified" "has_row 'OK|cursor cli|verified'"
     rows > "$TMP_ROOT/cursor-dry2.rows"
@@ -162,28 +153,15 @@ fi
 # --- A-24: check-lib reports a resolver error as a WARN step --------------------
 # A minimal check script in the check-script block order (check-lib, init-logging,
 # resolve_config, check_log_init), one PASS step, summary.
-if [ "$lang" = sh ]; then
-    CL="$TMP_ROOT/mini-check.sh"
-    printf '%s\n' 'set -euo pipefail' \
-        "source '$ROOT/scripts/check-lib.sh'" "source '$ROOT/scripts/init-logging.sh'" \
-        'resolve_config' 'check_log_init "mini"' 'step_pass "1" "Something"' 'print_summary' > "$CL"
-else
-    CL="$TMP_ROOT/mini-check.ps1"
-    printf '%s\n' "\$ErrorActionPreference = 'Stop'" \
-        ". '$(native_path "$ROOT/scripts/check-lib.ps1")'" ". '$(native_path "$ROOT/scripts/init-logging.ps1")'" \
-        'ResolveConfig' 'CheckLogInit "mini"' 'StepPass "1" "Something"' 'PrintSummary' > "$CL"
-fi
+CL="$TMP_ROOT/mini-check.sh"
+printf '%s\n' 'set -euo pipefail' \
+    "source '$ROOT/scripts/check-lib.sh'" "source '$ROOT/scripts/init-logging.sh'" \
+    'resolve_config' 'check_log_init "mini"' 'step_pass "1" "Something"' 'print_summary' > "$CL"
 for mode in rc3 rc1; do
     setup_case "checklib-$mode-$lang"
     [ "$mode" = rc3 ] && CASE_ENV="$(nowhere)"
-    if [ "$lang" = sh ]; then
-        # shellcheck disable=SC2086
-        env HOME="$H" AITOOLS_LOG_DIR="$C/logs" $CASE_ENV "$TB" "$CL" < /dev/null > "$C/out" 2>&1
-    else
-        # shellcheck disable=SC2086
-        env HOME="$(native_path "$H")" USERPROFILE="$(native_path "$H")" AITOOLS_LOG_DIR="$(native_path "$C/logs")" $CASE_ENV \
-            pwsh -NoProfile -NonInteractive -File "$(native_path "$CL")" < /dev/null > "$C/out" 2>&1
-    fi
+    # shellcheck disable=SC2086
+    env HOME="$H" AITOOLS_LOG_DIR="$C/logs" $CASE_ENV "$TB" "$CL" < /dev/null > "$C/out" 2>&1
     echo $? > "$C/rc"
     check "check-lib $lang $mode: exit 0" "[ \"\$(rc)\" = 0 ]"
     if [ "$mode" = rc3 ]; then
