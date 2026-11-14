@@ -1,6 +1,6 @@
 # 38dc-09 report: check-post-push steps 2, 6 and 14 no longer read the frozen aitools deploy/ (post-push half of item c)
 
-Version 1.0 (2026-11-14). Author: 38dc-09-postpush-deploy-checks, delegated by
+Version 1.1 (2026-11-14; v1.0 -> v1.1: the suite's HOME check excludes pwsh's macOS/Linux state, after the first CI run). Author: 38dc-09-postpush-deploy-checks, delegated by
 M6-Polish (agent 38dc, level 2), under Session Commander 87795dc3-e. Branch
 `fix/m6-checks` (worktree `.claude/worktrees/m6-checks`), continuing after M6-B.
 Code commit 1536e6b; PR https://github.com/nobul-tech/aitools/pull/154.
@@ -57,7 +57,7 @@ Before (both twins): `  2. Smoke-test deploy scripts  [PASS]` (or FAIL `N file(s
 - sources (per twin): the same problems in `scripts/` and `shared/hooks/`, clean `deploy/`: `SKIP 2`, `FAIL 6 (.sh) 1 file(s) failed`, `FAIL 6 (.ps1) 1 file(s) failed`, `FAIL 14 1 file(s) with CRLF`.
 - twins: `.sh` and `.ps1` results identical (all four lines where the `.sh` twin's pwsh part runs, i.e. macOS/Linux with pwsh).
 - static (per twin): no non-comment line names the aitools `deploy/`.
-- home: the temporary HOME byte-identical (cksum of every file; pwsh's own startup cache excluded).
+- home: the temporary HOME byte-identical (cksum of every file; pwsh's own state excluded: `AppData/Local/Microsoft/PowerShell` on Windows, `.cache/powershell` and `.local/share/powershell` on macOS/Linux). v1.1: the first CI run (43628370255) failed only this case on linux and macos (pwsh wrote `.cache/powershell/StartupProfileData-NonInteractive` and `telemetry.uuid`); every other case passed there, including the `.sh` twin's real pwsh parse and CRLF cases on bash 5 and /bin/bash 3.2. A mutant whose step 2 writes `$HOME/leak` and `$HOME/.cache/other/leak` still fails the check (`mutation-home.sh`).
 - Limits (in the header): on Windows the `.sh` twin's `.ps1` audit is stubbed to SKIP (pwsh cannot open a POSIX path) and its CRLF case is not checked (Git for Windows grep strips CR); macOS and Linux CI run both.
 
 Mutation (`.scratch/session-38dc-09/mutation.sh`, log `mutation.log`):
@@ -140,3 +140,4 @@ Files created:
 - With `MSYS_NO_PATHCONV=1`, a `/c/Users/...` argument reaches the native `git.exe` unconverted and fails ("cannot change to '/c/Users/...'"); use the `C:/Users/...` form in scratch scripts that need `origin/main:<path>`. A failed `git show` there left empty files, and a static scan of an empty file passes: pair static checks with a "section found" check (the suite does).
 - A pwsh `ParseFile('<POSIX path>')` from Git Bash on Windows cannot open the file; a `.sh` twin's pwsh step can only be exercised on macOS/Linux.
 - The isolated run's `ls | sort | tail -1` picked the `..` entry, not the newest file; compare content checksums instead (done here).
+- pwsh started with HOME at a temp dir on macOS and Linux writes `$HOME/.cache/powershell/StartupProfileData-NonInteractive` and `telemetry.uuid` at every start (the Unix twin of the Windows `AppData/Local/Microsoft/PowerShell` cache): a HOME snapshot in any suite that runs pwsh must exclude it.

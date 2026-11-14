@@ -88,11 +88,14 @@ section() {
     perl -ne 's/\r$//; $p = 1 if /^# (2|6|14)\. /; $p = 0 if /^# (3|7|15)\. /; print if $p' "$1" > "$2"
 }
 
-# snapshot <dir> <out>: every file under <dir> with its checksum, except
-# AppData/Local/Microsoft/PowerShell/ (pwsh writes its startup profile cache
-# under USERPROFILE at every start)
+# snapshot <dir> <out>: every file under <dir> with its checksum, except pwsh's
+# own state, which it writes at every start: AppData/Local/Microsoft/PowerShell/
+# under USERPROFILE (Windows), .cache/powershell/ (StartupProfileData,
+# telemetry.uuid; seen in the Linux CI job) and .local/share/powershell/ under
+# HOME (macOS, Linux)
 snapshot() {
-    ( cd "$1" && find . -path ./AppData/Local/Microsoft/PowerShell -prune -o -type f -print \
+    ( cd "$1" && find . \( -path ./AppData/Local/Microsoft/PowerShell -o -path ./.cache/powershell \
+        -o -path ./.local/share/powershell \) -prune -o -type f -print \
         | LC_ALL=C sort | while IFS= read -r f; do cksum "$f"; done ) > "$2"
 }
 
