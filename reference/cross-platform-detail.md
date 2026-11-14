@@ -190,8 +190,12 @@ Bash forwarder in `aitools-install.sh` runs), refreshes PATH additively like
 `pwsh` is still missing. Then it runs `aitools-install.ps1` and, when
 interactive, `%USERPROFILE%\.local\bin\aitools.ps1 user init` and `aitools.ps1`
 with `pwsh -NoProfile -ExecutionPolicy Bypass -File`. Until 2026-11-14 it ran the
-installer with `powershell` (5.1), against the PS 7 baseline. Tests:
-`tests/bootstrap/test-bootstrap.ps1` (bootstrap under 5.1 with stubs).
+installer with `powershell` (5.1), against the PS 7 baseline. `irm | iex` runs the
+text in the caller's own session, so the body is one script block (`& { }`: its
+`$ErrorActionPreference = 'Stop'`, variables and functions stay out of that
+session) and it stops with `throw`, never `exit` (which would close the window).
+Tests: `tests/bootstrap/test-bootstrap.ps1` (bootstrap under 5.1 with stubs, run
+with `-File` and through `Invoke-Expression`).
 
 ## Git Bash PATH shadowing (Windows)
 

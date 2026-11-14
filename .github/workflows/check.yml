@@ -470,15 +470,6 @@ jobs:
             scripts/setup-user-hooks.ps1 \
             scripts/build-deploy.sh
 
-      # Script standards compliance, the .sh twin (check-post-push step 23 runs it,
-      # but only after a push): fails the PR on a FAIL check (an
-      # unchecked -ErrorAction SilentlyContinue, an exit 1 without write_summary,
-      # a missing OS guard ...). The .ps1 twin runs in the windows job. Static, so
-      # one POSIX copy is enough (not repeated in the macos job).
-      - name: Script standards compliance (check-script-compliance.sh)
-        if: ${{ !cancelled() }}
-        run: bash scripts/check-script-compliance.sh
-
       - name: OS guard tests (Windows-guarded .ps1 refuse Linux)
         run: bash tests/os-guards/test-os-guards.sh
 
@@ -628,6 +619,16 @@ jobs:
             exit 1
           fi
 
+      # Script standards compliance, the .sh twin (check-post-push step 23 runs it,
+      # but only after a push): fails the job on a FAIL check (an unchecked
+      # -ErrorAction SilentlyContinue, an exit 1 without write_summary, a missing
+      # OS guard ...). The .ps1 twin runs in the windows job. Static, so one POSIX
+      # copy is enough (not repeated in the macos job). Last step of the job on
+      # purpose: a failed step skips every later step without an if: condition.
+      - name: Script standards compliance (check-script-compliance.sh)
+        if: ${{ !cancelled() }}
+        run: bash scripts/check-script-compliance.sh
+
   # =====================================================================
   # Windows -- validates PS1 scripts natively + bash scripts via Git Bash
   # =====================================================================
@@ -734,13 +735,6 @@ jobs:
               exit 1
           }
           Write-Host "All .ps1 files passed syntax validation"
-
-      # Script standards compliance, the .ps1 twin (check-post-push step 23 on
-      # Windows): fails the PR on a FAIL check. The .sh twin runs in the linux job.
-      - name: Script standards compliance (check-script-compliance.ps1, native)
-        if: ${{ !cancelled() }}
-        shell: pwsh
-        run: pwsh -NoProfile -File scripts/check-script-compliance.ps1
 
       # bootstrap.ps1 under Windows PowerShell 5.1 with stubbed git, winget,
       # installer and aitools.ps1: the installer and aitools.ps1 run under pwsh 7
@@ -1025,3 +1019,12 @@ jobs:
             # Windows Git Bash build may produce minor line-ending diffs
             echo "::warning::deploy/ has non-profile drift on Windows (may be line-ending)"
           fi
+
+      # Script standards compliance, the .ps1 twin (check-post-push step 23 on
+      # Windows): fails the job on a FAIL check. The .sh twin runs in the linux
+      # job. Last step of the job on purpose: a failed step skips every later
+      # step without an if: condition.
+      - name: Script standards compliance (check-script-compliance.ps1, native)
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: pwsh -NoProfile -File scripts/check-script-compliance.ps1

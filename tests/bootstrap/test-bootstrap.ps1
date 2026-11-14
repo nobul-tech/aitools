@@ -15,8 +15,8 @@
 #
 # Cases:
 #   static   ASCII only; parses under pwsh and under Windows PowerShell 5.1; no
-#            installer launch through `powershell`; the pwsh install command is
-#            the registry's preferred Windows method (tools.pwsh)
+#            installer launch through `powershell`; no `exit` statement; the pwsh
+#            install command is the registry's preferred Windows method (tools.pwsh)
 #   present  pwsh on PATH: the installer runs under pwsh 7; when the session is
 #            interactive, `aitools user init` and `aitools` run under pwsh 7
 #   failrc   installer exit 3: reported, and the run goes on (bootstrap.sh parity)
@@ -25,6 +25,10 @@
 #            pwsh is found on the registry PATH (Update-SessionPath) and runs the
 #            installer. Needs a pwsh.exe on the Machine or User PATH, else SKIP
 #   nowinget pwsh and winget missing: a clear error, exit 1, installer not run
+#   iex      the `irm | iex` form (Invoke-Expression in the caller's scope), with
+#            pwsh present and with pwsh and winget missing: the caller's session
+#            stays alive, gets the error as an exception, and keeps its
+#            $ErrorActionPreference and no bootstrap functions
 # Not covered: pwsh still missing after a winget install (the registry PATH of
 # this machine has pwsh; covering it would need a registry edit).
 #
@@ -35,7 +39,7 @@
 param([string]$Bootstrap = "", [switch]$Help)
 
 if ($Help) {
-    Get-Content $PSCommandPath | Select-Object -Skip 1 -First 33
+    Get-Content $PSCommandPath | Select-Object -Skip 1 -First 37
     exit 0
 }
 
@@ -59,7 +63,7 @@ if (-not $Bootstrap) { $Bootstrap = Join-Path $root "scripts" "bootstrap.ps1" }
 $Bootstrap = (Resolve-Path $Bootstrap).Path
 
 if (-not $IsWindows) {
-    foreach ($c in @("static", "present", "failrc", "initrc", "install", "nowinget")) {
+    foreach ($c in @("static", "present", "failrc", "initrc", "install", "nowinget", "iex")) {
         Skip $c "bootstrap.ps1 is Windows-only"
     }
     Finish
@@ -103,6 +107,7 @@ exit 0
     $text = [IO.File]::ReadAllText($Bootstrap)
     $code = ($text -split "`r?`n" | Where-Object { $_ -notmatch '^\s*#' }) -join "`n"
     Check "static: no script launched through powershell (5.1)" ($code -notmatch '(?im)(^|[&|;(]\s*|\s)powershell(\.exe)?\s+-') "a 'powershell ... -' launch is still in bootstrap.ps1"
+    Check "static: no exit statement (under irm | iex it would close the caller's window)" ($code -notmatch '(?im)(^|[;{}]\s*)exit\b') "an exit statement is in bootstrap.ps1"
 
     $reg = Get-Content -Raw (Join-Path $root "registries" "tool-registry.json") | ConvertFrom-Json
     $regCmd = @($reg.tools.pwsh.install.windows | Where-Object { $_.preferred })[0].command
@@ -112,7 +117,7 @@ exit 0
     }
 
     if (-not (Test-Path $winPs)) {
-        foreach ($c in @("present", "failrc", "initrc", "install", "nowinget")) { Skip $c "$winPs not found" }
+        foreach ($c in @("present", "failrc", "initrc", "install", "nowinget", "iex")) { Skip $c "$winPs not found" }
         Finish
     }
 
@@ -148,7 +153,7 @@ exit 0
 
     # Invoke-Bootstrap DIR PATHDIRS [EXTRAENV]: run bootstrap.ps1 under 5.1; returns exit code,
     # output text and the recorded files
-    function Invoke-Bootstrap([string]$Dir, [string[]]$PathDirs, [hashtable]$Extra = @{}) {
+    function Invoke-Bootstrap([string]$Dir, [string[]]$PathDirs, [hashtable]$Extra = @{}, [switch]$Iex) {
         $names = @("Path", "AITOOLS_DIR", "USERPROFILE", "HOME", "BOOT_OUT", "PSModulePath",
                    "BOOT_INSTALLER_RC", "BOOT_INIT_RC")
         $saved = @{}
@@ -166,7 +171,11 @@ exit 0
             $env:BOOT_INIT_RC = $null
             foreach ($k in $Extra.Keys) { [Environment]::SetEnvironmentVariable($k, $Extra[$k]) }
             $log = Join-Path $Dir "bootstrap.log"
-            & $winPs -NoProfile -ExecutionPolicy Bypass -File $Bootstrap *> $log
+            if ($Iex) {
+                & $winPs -NoProfile -ExecutionPolicy Bypass -File $iexRunner $Bootstrap *> $log
+            } else {
+                & $winPs -NoProfile -ExecutionPolicy Bypass -File $Bootstrap *> $log
+            }
             $rc = $LASTEXITCODE
         } finally {
             foreach ($n in $names) { [Environment]::SetEnvironmentVariable($n, $saved[$n]) }
@@ -181,6 +190,20 @@ exit 0
             Git = @(& $read "git.txt")
         }
     }
+
+    # The irm | iex form: Invoke-Expression runs bootstrap.ps1's text in the runner's
+    # own scope, as at the user's prompt; the runner then reports whether it is still
+    # alive (an `exit` in bootstrap.ps1 would end it) and what leaked into its scope
+    $iexRunner = Join-Path $tmpRoot "iex-runner.ps1"
+    [IO.File]::WriteAllText($iexRunner, @'
+param([string]$Path)
+$ErrorActionPreference = 'Continue'
+try { Invoke-Expression ([IO.File]::ReadAllText($Path)) } catch { "CAUGHT: $($_.Exception.Message)" }
+"SURVIVED"
+"EAP=$ErrorActionPreference"
+"SAY=$([bool](Get-Command Say -ErrorAction SilentlyContinue))"
+exit 0
+'@, $utf8)
 
     $sys = @((Join-Path $env:SystemRoot "System32"), $env:SystemRoot,
              (Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0"))
@@ -232,6 +255,18 @@ exit 0
     Check "nowinget: names pwsh and winget as missing" ($r.Out -match 'PowerShell 7 \(pwsh\) not found and winget not found') $r.Out
     Check "nowinget: stops before calling winget" ($r.Out -notmatch "winget' is not recognized|CommandNotFoundException") $r.Out
     Check "nowinget: installer not run" ($r.Installer.Count -eq 0) ($r.Installer -join '; ')
+
+    # --- iex: the irm | iex form leaves the caller's session alive and clean ---
+    $d = New-Case "iex-present" $false
+    $r = Invoke-Bootstrap $d (@((Join-Path $d "stub"), $pwshDir) + $sys) -Iex
+    Check "iex present: installer ran under pwsh 7" ($r.Installer.Count -eq 1 -and $r.Installer[0] -match '^(\d+)\|Core$' -and [int]$Matches[1] -ge 7) "recorded: $($r.Installer -join '; ')"
+    Check "iex present: no error, session alive" ($r.Out -notmatch 'CAUGHT:' -and $r.Out -match 'SURVIVED') $r.Out
+    Check "iex present: no ErrorActionPreference or function leaks into the session" ($r.Out -match 'EAP=Continue' -and $r.Out -match 'SAY=False') $r.Out
+
+    $d = New-Case "iex-nowinget" $false
+    $r = Invoke-Bootstrap $d (@((Join-Path $d "stub")) + $sys) -Iex
+    Check "iex nowinget: the error reaches the session as an exception, the session stays alive" ($r.Out -match 'CAUGHT: PowerShell 7 \(pwsh\) not found and winget not found' -and $r.Out -match 'SURVIVED') $r.Out
+    Check "iex nowinget: no ErrorActionPreference leak after the error" ($r.Out -match 'EAP=Continue') $r.Out
 } catch {
     # Inside try every error is terminating: count it, never end with a false pass
     Check "suite: no unexpected error" $false "$_ (line $($_.InvocationInfo.ScriptLineNumber))"
