@@ -253,6 +253,10 @@ jobs:
         if: ${{ !cancelled() }}
         run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/build-deploy/test-build-deploy-backup.sh
 
+      - name: check-pre-push step 7 tests
+        if: ${{ !cancelled() }}
+        run: bash tests/check-pre-push/test-pre-push-step7.sh
+
       # Hook output-channel tests: one step per suite (not run-hook-tests.sh),
       # so the "Every test suite is in CI" step sees each test-*.sh.
       - name: Hook output-channel tests, sh-file-fixup (bash 5)
@@ -557,6 +561,10 @@ jobs:
         if: ${{ !cancelled() }}
         run: bash tests/build-deploy/test-build-deploy-backup.sh
 
+      - name: check-pre-push step 7 tests
+        if: ${{ !cancelled() }}
+        run: bash tests/check-pre-push/test-pre-push-step7.sh
+
       # Hook output-channel tests: one step per suite (see the macos job).
       - name: Hook output-channel tests, sh-file-fixup
         if: ${{ !cancelled() }}
@@ -744,6 +752,11 @@ jobs:
         if: ${{ !cancelled() }}
         shell: bash
         run: bash tests/build-deploy/test-build-deploy-backup.sh
+
+      - name: check-pre-push step 7 tests (runs check-pre-push.ps1, via Git Bash)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: bash tests/check-pre-push/test-pre-push-step7.sh
 
       - name: Profile resolver tests (.ps1, native pwsh)
         if: ${{ !cancelled() }}

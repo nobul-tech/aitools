@@ -161,8 +161,12 @@ if (-not $script:UserRepoPath -or -not (Test-Path (Join-Path $script:UserRepoPat
         New-Item -ItemType Directory -Path $d7Dot, $d7Committed, $d7CfgDir -Force | Out-Null
         $d7Log += & git -C $script:UserRepoPath archive -o $d7Tar HEAD 2>&1 | Out-String
         $d7Rc = $LASTEXITCODE
-        if ($d7Rc -eq 0) { $d7Log += & tar -xf $d7Tar -C $d7Dot 2>&1 | Out-String; $d7Rc = $LASTEXITCODE }
-        if ($d7Rc -eq 0) { $d7Log += & tar -xf $d7Tar -C $d7Committed 2>&1 | Out-String; $d7Rc = $LASTEXITCODE }
+        # Windows' own tar (bsdtar): a GNU tar first on PATH (Git Bash's, when this runs
+        # from Git Bash) reads "C:\..." as a remote host ("Cannot connect to C:").
+        $d7TarExe = Join-Path $env:SystemRoot "System32\tar.exe"
+        if (-not (Test-Path $d7TarExe)) { $d7TarExe = "tar" }
+        if ($d7Rc -eq 0) { $d7Log += & $d7TarExe -xf $d7Tar -C $d7Dot 2>&1 | Out-String; $d7Rc = $LASTEXITCODE }
+        if ($d7Rc -eq 0) { $d7Log += & $d7TarExe -xf $d7Tar -C $d7Committed 2>&1 | Out-String; $d7Rc = $LASTEXITCODE }
         if ($d7Rc -eq 0) {
             $d7Cfg = [pscustomobject]@{}
             if (Test-Path $script:ConfigFile) {
