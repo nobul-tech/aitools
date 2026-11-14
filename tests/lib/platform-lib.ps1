@@ -17,6 +17,8 @@
 #   New-TestTempRoot PREFIX     a new empty temp directory, long path form, under
 #                               RUNNER_TEMP when set (CI), else the user temp dir
 #   Remove-TestTempRoot PATH    removes it; a failure is printed, not thrown
+#   Get-TestLongPath PATH       PATH with 8.3 short components (RUNNER~1)
+#                               expanded (the twin of cygpath -l)
 #   Test-GoldenMatch NAME FILE  $true when FILE, normalized, equals
 #                               $GoldenDir/NAME.windows if that exists, else
 #                               $GoldenDir/NAME; otherwise prints the difference

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# test-user-init.sh -- `aitools user init` (scripts/aitools and scripts/aitools.ps1), end to end.
+# test-user-init.sh -- `aitools user init` (scripts/aitools), end to end.
 #
 # Each case builds an isolated HOME with config.json, a throwaway aitools copy
 # (scripts/ + shared/, git-initialised; setup-user-hooks replaced by a stub that
@@ -11,28 +11,42 @@
 # M3-FINISH item 2: an unregistered machine runs the writer with --no-machine /
 # -NoMachine and gets one machine-profile ERROR (user init's), none of the
 # writer's; a registered machine (also one whose id cannot be detected) does not.
-# Interactive cases run on a pseudo-terminal (tests/managed-files/pty-run.py:
-# POSIX pty, or pywinpty/ConPTY on Windows; SKIP when unavailable).
+# Interactive cases run on a pseudo-terminal (tests/managed-files/pty-run.py,
+# POSIX pty; SKIP when python3 is unavailable).
 #
-# Platform targeting (plans/ci-platform-targeting.md): each entry point runs only
-# where its OS guard allows, and runs whole. macOS/Linux run the bash entry point
-# scripts/aitools; Windows (Git Bash) runs scripts/aitools.ps1 with native pwsh
-# (paths handed to it are native, HOME and USERPROFILE both set, the gh stub also
-# comes as gh.cmd). Parity between the two is checked against committed golden
-# results, one per case: exit code, summary rows, profile.json (this machine's
-# machine.os / machine.arch as <OS> / <ARCH>) and the commit subjects on both
-# remotes (fixture directory as <D>, path separators as /), plus the pty-claim
-# menu: tests/profile/golden/userinit-*.txt (tests/lib/platform-lib.sh
-# golden_match). AITOOLS_TEST_UPDATE_GOLDEN=1 on macOS/Linux rewrites them from
-# the bash run.
+# Platform targeting (plans/ci-platform-targeting.md; commander 2026-11-14:
+# "sh scripts and tests should only run on linux/mac and ps1 on windows"):
+# this harness runs the bash entry point scripts/aitools on macOS/Linux and
+# refuses Windows; scripts/aitools.ps1 is tested on Windows by
+# tests/profile/test-user-init.ps1. Parity between the two is checked against
+# committed golden results, one per case: exit code, summary rows, profile.json
+# (this machine's machine.os / machine.arch as <OS> / <ARCH>) and the commit
+# subjects on both remotes (fixture directory as <D>, path separators as /), plus
+# the pty-claim menu: tests/profile/golden/userinit-*.txt
+# (tests/lib/platform-lib.sh golden_match). AITOOLS_TEST_UPDATE_GOLDEN=1 on
+# macOS/Linux rewrites them from the bash run.
 #
 # Safe to re-run: everything lives in a temp directory (removed on exit). Exit 1
 # on failure.
 # Usage: bash tests/profile/test-user-init.sh [--bash-only] [--help]
-#   --bash-only  accepted for compatibility: macOS/Linux always run only the bash entry point
+#   --bash-only  accepted for compatibility: the harness always runs only the bash entry point
 #   AITOOLS_TEST_BASH=/bin/bash runs the bash entry point under another bash (macOS 3.2)
 
 set -euo pipefail
+
+# OS guard: macOS/Linux only. BASH_VERSINFO[5] is bash's compiled-in machine
+# type (read-only, never taken from the environment), so neither a uname shim
+# on PATH nor an exported OSTYPE hides Git Bash.
+case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*)
+        printf 'This script is for macOS/Linux. On Windows, run tests/profile/test-user-init.ps1 with pwsh.\n' >&2
+        exit 1 ;;
+esac
+case "${BASH_VERSINFO[5]:-}" in
+    *-msys*|*-cygwin*|*-mingw*)
+        printf 'This script is for macOS/Linux. On Windows, run tests/profile/test-user-init.ps1 with pwsh.\n' >&2
+        exit 1 ;;
+esac
 
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
     perl -ne 'last unless /^#/; print if $. > 1' "$0"
@@ -49,7 +63,7 @@ trap cleanup EXIT
 BASH_BIN="${AITOOLS_TEST_BASH:-bash}"
 GOLDEN_DIR="$REPO/tests/profile/golden"
 GOLDEN_TMP="$WORK"
-LANG_RUN="$TEST_LANG"   # sh on macOS/Linux, ps1 on Windows
+LANG_RUN="$TEST_LANG"   # sh: the bash entry point (macOS/Linux)
 
 PASS=0
 FAIL=0
@@ -57,27 +71,14 @@ SKIP=0
 ok()  { PASS=$((PASS + 1)); printf '  ok   %s\n' "$1"; }
 bad() { FAIL=$((FAIL + 1)); printf '  FAIL %s\n' "$1"; }
 
-if [ "$LANG_RUN" = ps1 ] && ! command -v pwsh >/dev/null 2>&1; then
-    printf '  FAIL pwsh is not on PATH: aitools.ps1 user init cannot be tested on Windows\n'
-    exit 1
-fi
 USE_PTY=true
 command -v python3 >/dev/null 2>&1 || USE_PTY=false   # no python3: the pty cases SKIP (reported below)
-if [ "$TEST_PLATFORM" = windows ] && $USE_PTY; then
-    # Windows pty = pywinpty (ConPTY); python3 -c's failure means "not installed".
-    if ! python3 -c 'import winpty' >/dev/null 2>&1; then USE_PTY=false; fi
-fi
-
-# win_path P -- P with backslashes as Windows programs print it (cygpath -w); unchanged off Windows
-win_path() {
-    if [ "$TEST_PLATFORM" = windows ]; then cygpath -w "$1"; else printf '%s' "$1"; fi
-}
 
 THIS_ID="AAAAAAAA-1111-2222-3333-444444444444"   # as macOS reports it (upper case)
 THIS_KEY="aaaaaaaa-1111-2222-3333-444444444444"  # the profiles key (lower-cased)
 OTHER_ID="bbbbbbbb-1111-2222-3333-444444444444"
 GH_USER="nobul-jose"
-case "$TEST_PLATFORM" in macos) THIS_OS=darwin ;; linux) THIS_OS=linux ;; *) THIS_OS=win32 ;; esac
+case "$TEST_PLATFORM" in macos) THIS_OS=darwin ;; *) THIS_OS=linux ;; esac
 
 # The throwaway aitools copy (one per run; each case gets its own copy of it)
 SRC="$WORK/src"
@@ -118,11 +119,6 @@ esac
 exit 1
 STUB
 chmod +x "$WORK/bin/gh"
-if [ "$LANG_RUN" = ps1 ]; then
-    # Native pwsh cannot run an extensionless bash script: gh.cmd runs the stub with
-    # this Git Bash (absolute path: a bare "bash" can resolve to WSL's shim)
-    printf '@"%s" "%s" %%*\r\n@exit /b %%ERRORLEVEL%%\r\n' "$(cygpath -w "$BASH")" "$(native_path "$WORK/bin/gh")" > "$WORK/bin/gh.cmd"
-fi
 
 PJ_TWO='{
   "version": 2,
@@ -144,7 +140,6 @@ PJ_LEGACY='{
 
 # fixture CASE PROFILE_JSON [CONFIG_EXTRA] -- HOME, aitools copy, dotprofile with a bare remote.
 # PROFILE_JSON "" = a dotprofile without profile.json; "-" = no dotprofile at all.
-# config.json holds the paths as the entry point under test reads them (native on Windows).
 fixture() {
     local c="$1" pj="$2" extra="${3:-}"
     D="$WORK/$c"; rm -rf "$D"
@@ -153,7 +148,7 @@ fixture() {
     cp -R "$SRC" "$R"
     git -C "$R" init -q
     printf '[user]\n\tname = Tester\n\temail = tester@example.com\n[init]\n\tdefaultBranch = main\n' > "$H/.gitconfig"
-    printf '{\n  "version": 3,\n  "reposPath": "%s",\n  "repoPath": "%s"%s\n}\n' "$(native_path "$H/repos")" "$(native_path "$R")" "$extra" > "$H/.aitools/config.json"
+    printf '{\n  "version": 3,\n  "reposPath": "%s",\n  "repoPath": "%s"%s\n}\n' "$H/repos" "$R" "$extra" > "$H/.aitools/config.json"
     if [ "$pj" = "-" ]; then return 0; fi
     git init -q --bare -b main "$BARE"
     mkdir -p "$DP"
@@ -170,56 +165,37 @@ fixture() {
     git -C "$DP" push -q -u origin main
 }
 
-# norm_run FILE... -- in place: terminal control sequences (SGR colours; on ConPTY
-# also cursor moves, cursor-forward as spaces, mode and title sequences) and CR
-# removed; the fixture directory (POSIX, native and backslash forms) replaced by
-# <D>, with backslashes in the rest of that path turned into slashes.
+# norm_run FILE... -- in place: terminal control sequences (SGR colours, cursor
+# moves, cursor-forward as spaces, mode and title sequences) and CR removed; the
+# fixture directory replaced by <D>, with backslashes in the rest of that path
+# turned into slashes.
 norm_run() {
-    D_P="$D" D_M="$(native_path "$D")" D_W="$(win_path "$D")" perl -pi -e '
+    D_P="$D" perl -pi -e '
         s/\e\[(\d*)C/" " x ($1 || 1)/ge;
         s/\e\[[0-9;?]*[ -\/]*[@-~]//g;
         s/\e\][^\a\e]*(?:\a|\e\\)//g;
         s/\r//g;
-        for my $t (grep { length } @ENV{qw(D_W D_M D_P)}) {
+        for my $t (grep { length } @ENV{qw(D_P)}) {
             s/\Q$t\E([^\s|"]*)/my $r = $1; $r =~ tr{\\}{\/}; "<D>$r"/ge;
         }' "$@"
 }
 
-# run ARGS... -- user init of the language under test in the fixture (bash-style
-# options; mapped for aitools.ps1); RC, OUT (console), SUM (summary rows), both normalized
+# run ARGS... -- user init of the bash entry point in the fixture; RC, OUT
+# (console), SUM (summary rows), both normalized
 run() {
     RC=0
     local here="$PWD"
     cd "$D"
     local e
-    if [ "$LANG_RUN" = sh ]; then
-        e=(env -u AITOOLS_SUMMARY_FILE -u AITOOLS_MACHINE_ALIAS -u AITOOLS_USER_REPO_PATH -u AITOOLS_PROFILE_FILE -u AITOOLS_FORCE
-            HOME="$H" PATH="$WORK/bin:$PATH" AITOOLS_LOG_DIR="$H/.aitools/logs" AITOOLS_PRESERVE_SUMMARY=1
-            SHELL=/test/bin/pwsh
-            GIT_CONFIG_GLOBAL="$H/.gitconfig" GIT_CONFIG_NOSYSTEM=1 GH_USER="$GH_USER" GH_REMOTE="$D/gh-remote.git" GH_CLONE_SRC="$D/remote.git"
-            AITOOLS_PROFILE_TEST_MACHINE_ID="$THIS_ID" AITOOLS_PROFILE_TEST_HOSTNAME=probe-host ${CASE_ENV[@]+"${CASE_ENV[@]}"})
-        if [ -n "${PTY_INPUT:-}" ]; then
-            "${e[@]}" python3 "$PTY" --input "$PTY_INPUT" --log "$D/out.txt" -- "$BASH_BIN" "$R/scripts/aitools" user init "$@" > /dev/null 2>&1 || RC=$?
-        else
-            "${e[@]}" "$BASH_BIN" "$R/scripts/aitools" user init "$@" < /dev/null > "$D/out.txt" 2>&1 || RC=$?
-        fi
+    e=(env -u AITOOLS_SUMMARY_FILE -u AITOOLS_MACHINE_ALIAS -u AITOOLS_USER_REPO_PATH -u AITOOLS_PROFILE_FILE -u AITOOLS_FORCE
+        HOME="$H" PATH="$WORK/bin:$PATH" AITOOLS_LOG_DIR="$H/.aitools/logs" AITOOLS_PRESERVE_SUMMARY=1
+        SHELL=/test/bin/pwsh
+        GIT_CONFIG_GLOBAL="$H/.gitconfig" GIT_CONFIG_NOSYSTEM=1 GH_USER="$GH_USER" GH_REMOTE="$D/gh-remote.git" GH_CLONE_SRC="$D/remote.git"
+        AITOOLS_PROFILE_TEST_MACHINE_ID="$THIS_ID" AITOOLS_PROFILE_TEST_HOSTNAME=probe-host ${CASE_ENV[@]+"${CASE_ENV[@]}"})
+    if [ -n "${PTY_INPUT:-}" ]; then
+        "${e[@]}" python3 "$PTY" --input "$PTY_INPUT" --log "$D/out.txt" -- "$BASH_BIN" "$R/scripts/aitools" user init "$@" > /dev/null 2>&1 || RC=$?
     else
-        e=(env -u AITOOLS_SUMMARY_FILE -u AITOOLS_MACHINE_ALIAS -u AITOOLS_USER_REPO_PATH -u AITOOLS_PROFILE_FILE -u AITOOLS_FORCE
-            HOME="$(native_path "$H")" USERPROFILE="$(native_path "$H")" PATH="$WORK/bin:$PATH"
-            AITOOLS_LOG_DIR="$(native_path "$H/.aitools/logs")" AITOOLS_PRESERVE_SUMMARY=1
-            GIT_CONFIG_GLOBAL="$(native_path "$H/.gitconfig")" GIT_CONFIG_NOSYSTEM=1 GH_USER="$GH_USER"
-            GH_REMOTE="$(native_path "$D/gh-remote.git")" GH_CLONE_SRC="$(native_path "$D/remote.git")"
-            AITOOLS_PROFILE_TEST_MACHINE_ID="$THIS_ID" AITOOLS_PROFILE_TEST_HOSTNAME=probe-host ${CASE_ENV[@]+"${CASE_ENV[@]}"})
-        local pa=()
-        while [ $# -gt 0 ]; do
-            case "$1" in --alias) pa+=(-Alias "$2"); shift 2 ;; --force) pa+=(-Force); shift ;; *) pa+=("$1"); shift ;; esac
-        done
-        local ps=(pwsh -NoProfile -File "$(native_path "$R/scripts/aitools.ps1")" user init ${pa[@]+"${pa[@]}"})
-        if [ -n "${PTY_INPUT:-}" ]; then
-            "${e[@]}" python3 "$(native_path "$PTY")" --input "$PTY_INPUT" --log "$(native_path "$D/out.txt")" -- "${ps[@]}" > /dev/null 2>&1 || RC=$?
-        else
-            "${e[@]}" "${ps[@]}" < /dev/null > "$D/out.txt" 2>&1 || RC=$?
-        fi
+        "${e[@]}" "$BASH_BIN" "$R/scripts/aitools" user init "$@" < /dev/null > "$D/out.txt" 2>&1 || RC=$?
     fi
     cd "$here"
     OUT="$D/out.txt"
@@ -279,12 +255,11 @@ case_run() {
 has_row() { if grep -qxF "$1" "$SUM"; then ok "$CASE: row $1"; else bad "$CASE: no row '$1'"; perl -pe 's/^/       /' "$SUM"; fi; }
 no_row_like() { if grep -q -- "$1" "$SUM"; then bad "$CASE: unexpected row /$1/"; perl -pe 's/^/       /' "$SUM"; else ok "$CASE: no row /$1/"; fi; }
 out_has() { if grep -qF -- "$1" "$OUT"; then ok "$CASE: output has '$1'"; else bad "$CASE: output lacks '$1'"; perl -pe 's/^/       /' "$OUT"; fi; }
-# out_count STRING N -- the console output has STRING exactly N times (on Windows at
-# least N: ConPTY re-renders the screen and may repeat a line it already sent)
+# out_count STRING N -- the console output has STRING exactly N times
 out_count() {
     local n
     n=$(perl -0777 -ne 'BEGIN { $s = shift @ARGV } $n++ while /\Q$s\E/g; END { print $n + 0 }' "$1" "$OUT")
-    if [ "$n" -eq "$2" ] || { [ "$TEST_PLATFORM" = windows ] && [ "$n" -ge "$2" ]; }; then ok "$CASE: output has '$1' $2 time(s)"
+    if [ "$n" -eq "$2" ]; then ok "$CASE: output has '$1' $2 time(s)"
     else bad "$CASE: output has '$1' $n time(s), want $2"; perl -pe 's/^/       /' "$OUT"; fi
 }
 # log_has STRING -- the case HOME's deploy.log has STRING (fixed string)
@@ -371,11 +346,12 @@ pj_has "\"id\": \"$THIS_KEY\""
 has_row "OK|machine profile|created (spare)"
 remote_has "$BARE" "Register machine profile: spare"
 cfg_id "$THIS_KEY"
-# the summary panel: box rule (bash), dashed rule (aitools-lib.ps1 Show-Summary)
-if [ "$LANG_RUN" = sh ]; then out_has "────"; else out_has "------------------------------------------------------------"; fi
+# the summary panel: box rule (bash; aitools-lib.ps1 Show-Summary draws a dashed
+# rule, checked by test-user-init.ps1)
+out_has "────"
 no_machine_flag no
 # machine.shell (Review3 #82 minor 6): bash records the login shell ($SHELL, here
-# /test/bin/pwsh so both shells write the same bytes), aitools.ps1 records pwsh
+# /test/bin/pwsh so both entry points write the same bytes), aitools.ps1 records pwsh
 if [ "$(pj_get profiles "$THIS_KEY" machine shell)" = "pwsh" ]; then ok "$CASE: machine.shell from \$SHELL"
 else bad "$CASE: machine.shell '$(pj_get profiles "$THIS_KEY" machine shell)'"; fi
 # machine.os / machine.arch: this platform's facts (the golden holds <OS> / <ARCH>)
@@ -534,18 +510,14 @@ CASE_ENV=()
 
 echo "== FIX-2 (A-15): --alias without a value is an error through the lib (bash; pwsh binds it itself)"
 CASE="alias-novalue"
-if [ "$LANG_RUN" = sh ]; then
-    fx_two
-    run --alias
-    if [ "$RC" -eq 1 ]; then ok "$CASE: sh exit 1"; else bad "$CASE: sh exit $RC, want 1"; perl -pe 's/^/       /' "$OUT"; fi
-    out_has "[aitools] [error] --alias needs a value (aitools user init --alias <name>)"
-    if grep -qF -- "--alias needs a value" "$H/.aitools/logs/deploy.log"; then ok "$CASE: in deploy.log"; else bad "$CASE: not in deploy.log"; fi
-    run --alias --force
-    if [ "$RC" -eq 1 ]; then ok "$CASE: '--alias --force' exit 1"; else bad "$CASE: '--alias --force' exit $RC, want 1"; fi
-    out_has "--alias needs a value"
-else
-    printf '  skip %s: bash entry point only (pwsh binds -Alias itself)\n' "$CASE"; SKIP=$((SKIP + 1))
-fi
+fx_two
+run --alias
+if [ "$RC" -eq 1 ]; then ok "$CASE: sh exit 1"; else bad "$CASE: sh exit $RC, want 1"; perl -pe 's/^/       /' "$OUT"; fi
+out_has "[aitools] [error] --alias needs a value (aitools user init --alias <name>)"
+if grep -qF -- "--alias needs a value" "$H/.aitools/logs/deploy.log"; then ok "$CASE: in deploy.log"; else bad "$CASE: not in deploy.log"; fi
+run --alias --force
+if [ "$RC" -eq 1 ]; then ok "$CASE: '--alias --force' exit 1"; else bad "$CASE: '--alias --force' exit $RC, want 1"; fi
+out_has "--alias needs a value"
 
 echo "== review M1: a relative reposPath is refused (nothing created under the current directory)"
 fx_relative() { fixture "$CASE" "$PJ_TWO"; perl -pi -e 's/"reposPath": "[^"]*"/"reposPath": "repos"/' "$H/.aitools/config.json"; }
@@ -611,18 +583,18 @@ echo "== profile-check.js reads machineId (id keys; legacy machineAlias kept)"
 # profile-check.js is a node script for every platform (aitools.ps1 and scripts/aitools call it)
 CASE="profile-check"
 fixture "$CASE" "$PJ_TWO" ',
-  "userRepoPath": "'"$(native_path "$WORK/profile-check/home/repos/aitools-nobul-jose")"'",
+  "userRepoPath": "'"$WORK/profile-check/home/repos/aitools-nobul-jose"'",
   "machineId": "deadbeef-0000-0000-0000-000000000000"'
-PC_CFG="$(native_path "$H/.aitools/config.json")"
-pc=$(node "$(native_path "$REPO/scripts/profile-check.js")" --config "$PC_CFG") || pc=""
+PC_CFG="$H/.aitools/config.json"
+pc=$(node "$REPO/scripts/profile-check.js" --config "$PC_CFG") || pc=""
 if grep -q '"code":"MACHINE_ID_UNKNOWN"' <<< "$pc"; then ok "$CASE: unknown machineId reported"; else bad "$CASE: $pc"; fi
 if grep -q '"machineId":"deadbeef-0000-0000-0000-000000000000"' <<< "$pc"; then ok "$CASE: machineId in the result"; else bad "$CASE: $pc"; fi
 perl -pi -e 's/deadbeef-0000-0000-0000-000000000000/'"$OTHER_ID"'/' "$H/.aitools/config.json"
-pc=$(node "$(native_path "$REPO/scripts/profile-check.js")" --config "$PC_CFG") || pc=""
+pc=$(node "$REPO/scripts/profile-check.js" --config "$PC_CFG") || pc=""
 if grep -q 'MACHINE_ID_UNKNOWN' <<< "$pc"; then bad "$CASE: id-keyed machineId reported: $pc"; else ok "$CASE: id-keyed machineId found"; fi
 perl -pi -e 's/'"$OTHER_ID"'/'"$THIS_ID"'/' "$H/.aitools/config.json"
 perl -pi -e 's/"old-host"/"old-host", "id": "'"$THIS_ID"'"/' "$DP/profile.json"
-pc=$(node "$(native_path "$REPO/scripts/profile-check.js")" --config "$PC_CFG") || pc=""
+pc=$(node "$REPO/scripts/profile-check.js" --config "$PC_CFG") || pc=""
 if grep -q 'MACHINE_ID_UNKNOWN' <<< "$pc"; then bad "$CASE: legacy (alias-keyed) profile not read: $pc"; else ok "$CASE: legacy alias-keyed profile found by machine.id"; fi
 
 if $USE_PTY; then
