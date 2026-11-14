@@ -633,7 +633,7 @@ if $USE_PTY; then
     case_run pty-dup-confirm 0 fx_two --alias laptop
     pj_alias "$THIS_KEY" laptop
     pj_other_intact
-    out_has "is used by another machine's profile ($OTHER_ID). Use it for this machine too? [y/N]"
+    out_has "is used by another machine's profile ($OTHER_ID). Use it for this machine too? [y/n]"
 
     echo "== interactive (pty): ... declined -> skipped (WARN row; not registered = exit 1)"
     PTY_INPUT=$'\n\nn\n'
