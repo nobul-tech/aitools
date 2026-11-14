@@ -94,7 +94,7 @@ Check scripts source `check-lib.sh`/`.ps1` which in turn sources `aitools-lib.sh
 | Dir backup | `backup_dir()` | `Backup-Dir` | Directory backup for managed files |
 | JSON hashtable | n/a | `ConvertPSObjectToHashtable` | PSCustomObject to Hashtable (recursive, array-aware) |
 | DETAIL emitter | `emit_merge_details()` | `Emit-MergeDetails` | Parse CHANGED: lines / emit DETAIL summary entries |
-| AI invocation | `invoke_ai()`, `_ai_log()` | `Invoke-AI` | Generalized AI CLI wrapper with speed/permission tiers |
+| AI invocation | `invoke_ai()`, `_ai_log()` | `Invoke-AI`, `Write-AiLog` | Generalized AI CLI wrapper with speed/permission tiers |
 | JSON normalization | `SORT_KEYS_JS`, `normalize_json()` | `Normalize-JsonForComparison`, `ConvertTo-CanonicalObject` | Sorted-key JSON for deterministic comparison |
 | Check logging init | `check_log_init()` | `CheckLogInit` | Sets check log paths + bridges aitools-lib logging vars |
 | Check step functions | `step_pass`/`step_fail`/`step_warn`/`step_skip` | `StepPass`/`StepFail`/`StepWarn`/`StepSkip` | `[PASS]`/`[FAIL]`/`[WARN]`/`[SKIP]` with console colors |
@@ -171,10 +171,12 @@ output, verbose debugging). Not included in override tables -- entry points that
 `log`/`Log` do not need to override `log_detail`/`LogDetail` because it always writes
 directly to `$LOG_FILE`/`$logFile` regardless of console routing.
 
-**`_ai_log` (bash only)**: File-only telemetry for `invoke_ai`. Uses the same format
-as `log` but writes only to `$LOG_FILE` (no console). This prevents stdout pollution
-when `invoke_ai` output is captured via `$()`. Entry point overrides of `log` do NOT
-affect `_ai_log` -- it always writes directly to the log file.
+**`_ai_log` / `Write-AiLog`**: File-only telemetry for `invoke_ai` / `Invoke-AI`. Uses
+the same format as `log` / `Log` but writes only to `$LOG_FILE` / `$logFile` (no console)
+and counts no error or warning. In bash this prevents stdout pollution when `invoke_ai`
+output is captured via `$()`; in both it keeps telemetry out of the AI-merge spinner row.
+Entry point overrides of `log` do NOT affect them -- they always write directly to the
+log file.
 
 ### Library-style tools
 
@@ -1168,9 +1170,10 @@ Bash (`invoke_ai` uses `_ai_log` for file-only telemetry):
 _ai_log "AI invocation: speed=$speed backend=$cli_cmd attempt=$attempt result=accepted"
 ```
 
-PowerShell (`Invoke-AI` uses standard `Log` -- `Write-Host` doesn't pollute output stream):
+PowerShell (`Invoke-AI` uses `Write-AiLog` for file-only telemetry, so nothing prints into
+the AI-merge spinner row):
 ```powershell
-Log "AI invocation: speed=$Speed backend=$cliCmd attempt=$attempt result=accepted"
+Write-AiLog "AI invocation: speed=$Speed backend=$cliCmd attempt=$attempt result=accepted"
 ```
 
 ### Example deploy.log output
