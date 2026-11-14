@@ -188,6 +188,24 @@ resolve_repos_dir() {
     esac
     return 0
 }
+
+# prompt_repos_path -- Step 3, interactive run: ask where new repos live. The
+# prompt goes to the terminal (/dev/tty), never stdout, like every other prompt
+# (interactive-menus.md "Console I/O"); the answer is read with read_tty_choice
+# (EOF-safe: it logs a warning and returns empty). Sets REPOS_PATH to the answer
+# with a leading ~ expanded, or to $HOME/repos for an empty answer or EOF.
+# Parity: the Step 3 prompt in aitools-install.ps1 ([Console]::Write +
+# Read-ConsoleChoice).
+prompt_repos_path() {
+    local user_path=""
+    printf 'Where should new repos live? [~/repos]: ' > /dev/tty
+    read_tty_choice user_path "~/repos"
+    if [ -n "$user_path" ]; then
+        REPOS_PATH="${user_path/#\~/$HOME}"
+    else
+        REPOS_PATH="$HOME/repos"
+    fi
+}
 # --- END install log helpers ---
 
 # --- BEGIN install log override (tests/profile/test-install.sh extracts this block) ---
@@ -459,14 +477,8 @@ elif REPOS_PATH=$(read_config_key "$CONFIG_FILE" "reposPath"); then
 fi
 if [ -z "$REPOS_PATH" ]; then
     if $INSTALL_INTERACTIVE; then
-        # Interactive — prompt (EOF-safe: read_tty_choice logs and returns empty)
-        printf 'Where should new repos live? [~/repos]: '
-        read_tty_choice user_path "~/repos"
-        if [ -n "$user_path" ]; then
-            REPOS_PATH="${user_path/#\~/$HOME}"
-        else
-            REPOS_PATH="$HOME/repos"
-        fi
+        # Interactive -- prompt on the terminal (EOF-safe; see prompt_repos_path)
+        prompt_repos_path
     else
         # Non-interactive — use default
         REPOS_PATH="$HOME/repos"

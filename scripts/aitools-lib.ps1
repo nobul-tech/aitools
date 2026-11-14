@@ -640,7 +640,10 @@ function Initialize-Logging {
     }
     $script:logFile = Join-Path $script:logDir "deploy.log"
     if (-not (Test-Path $script:logDir)) {
-        New-Item -ItemType Directory -Path $script:logDir -Force | Out-Null
+        # Fail-safe (logging.md section 5): a log directory that cannot be
+        # created leaves every log write failing, and each failed write is
+        # swallowed (Add-AitLibLogText); the run goes on with its console output
+        try { New-Item -ItemType Directory -Path $script:logDir -Force -ErrorAction Stop | Out-Null } catch { $null = $_ }
     }
     Rotate-Log $script:logFile
     $script:errors = 0
@@ -660,11 +663,26 @@ function Write-AitoolsEnvironmentLog {
 # ---------------------------------------------------------------------------
 # Standard logging (console + log file, with [level] tag)
 # ---------------------------------------------------------------------------
+# Add-AitLibLogText TEXT -- append TEXT and a newline to the log file ($logFile).
+# Fail-safe (reference/logging.md section 5: "A failed log write is swallowed
+# (the only sanctioned silent-suppression in the harness), because a broken log
+# must not break the operation it records"): a log another process holds locked,
+# an unwritable or missing one, or no log file set never throws -- not even under
+# $ErrorActionPreference = "Stop" or inside a caller's try -- and the caller's
+# console line is still printed. Parity: _aitlib_log_append.
+function Add-AitLibLogText([string]$Text) {
+    try {
+        $resolvedLog = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($logFile)
+        [IO.File]::AppendAllText($resolvedLog, "$Text`n", [System.Text.UTF8Encoding]::new($false))
+    } catch {
+        $null = $_  # swallowed by design (logging.md section 5)
+    }
+}
+
 function Log($msg, $level = "info") {
     $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
     $line = "[$ts] [$scriptName] [$level] $msg"
-    $resolvedLog = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($logFile)
-    [IO.File]::AppendAllText($resolvedLog, "$line`n", [System.Text.UTF8Encoding]::new($false))
+    Add-AitLibLogText $line
     switch ($level) {
         "error" { Write-Host $line -ForegroundColor Red }
         "warn"  { Write-Host $line -ForegroundColor Yellow }
@@ -676,8 +694,7 @@ function LogError($msg) { Log $msg "error"; $script:errors++ }
 function LogWarn($msg)  { Log $msg "warn"; $script:warnings++ }
 function LogDetail($msg) {
     $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
-    $resolvedLog = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($logFile)
-    [IO.File]::AppendAllText($resolvedLog, "[$ts] [$scriptName] [detail] $msg`n", [System.Text.UTF8Encoding]::new($false))
+    Add-AitLibLogText "[$ts] [$scriptName] [detail] $msg"
 }
 
 # ---------------------------------------------------------------------------
@@ -701,8 +718,7 @@ function LogDetail($msg) {
 # callers decide whether an Invoke-AI failure counts.
 function Write-AiLog([string]$Msg, [string]$Level = "info") {
     $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
-    $resolvedLog = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($logFile)
-    [IO.File]::AppendAllText($resolvedLog, "[$ts] [$scriptName] [$Level] $Msg`n", [System.Text.UTF8Encoding]::new($false))
+    Add-AitLibLogText "[$ts] [$scriptName] [$Level] $Msg"
 }
 
 $script:AIRejectReason = ""
