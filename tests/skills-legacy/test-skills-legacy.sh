@@ -33,37 +33,48 @@
 #   MDM          the generated setup-user-skills.sh/.ps1 deploy without
 #                ~/.aitools/skills and write only the n/a row when it exists
 #
-# Platform targeting (plans/ci-platform-targeting.md; commander 2026-11-01:
-# ".ps1 scripts only run on windows"): every case runs ONE language, the one
-# the scripts' OS guards allow here: the .sh scripts on macOS/Linux, the .ps1
-# scripts on Windows (Git Bash driving native pwsh; paths via native_path, HOME
-# and USERPROFILE both set in Windows form C:\..., .cmd twins of the stubs;
-# the build also gets USERPROFILE for its pwsh resolver). No guard is bypassed:
-# the real scripts (and the real generated MDM scripts) run. Parity: the
-# summary rows of each dev case (sorted, the resolver's own dotprofile and
-# ACTION rows left out) must equal tests/skills-legacy/golden/<case>.rows
-# (tests/lib/platform-lib.sh golden_match), written from the macOS/Linux .sh
-# run with AITOOLS_TEST_UPDATE_GOLDEN=1; the Windows .ps1 run must produce the
-# same file. build-deploy.sh (an all-platform bash script) runs everywhere; the
-# generated .ps1 is parsed and run on Windows only. chmod 000 cases need POSIX
-# permissions (SKIP under Git Bash and for root).
-# A missing perl, git, node or python3 (pywinpty on Windows) skips its cases
-# locally; under CI=true it is a failure. pwsh is required on Windows.
+# Platform targeting (plans/ci-platform-targeting.md; commander 2026-11-14:
+# "sh scripts and tests should only run on linux/mac and ps1 on windows"):
+# this harness runs the .sh scripts on macOS/Linux and refuses Windows; the
+# .ps1 scripts (and the generated MDM .ps1) are tested on Windows by
+# tests/skills-legacy/test-skills-legacy.ps1. No guard is bypassed: the real
+# scripts (and the real generated MDM scripts) run. Parity: the summary rows of
+# each dev case (sorted, the resolver's own dotprofile and ACTION rows left
+# out) must equal tests/skills-legacy/golden/<case>.rows (tests/lib/
+# platform-lib.sh golden_match), written from this run with
+# AITOOLS_TEST_UPDATE_GOLDEN=1; the Windows .ps1 run must produce the same
+# file. chmod 000 cases need POSIX permissions (SKIP for root).
+# A missing perl, git, node or python3 skips its cases locally; under CI=true
+# it is a failure.
 #
 # Safe to re-run: every case runs under its own temp HOME (never the real HOME
 # or a real dotprofile), removed on exit. The scripts run from a fixture copy of
 # the repo (scripts/ copied unchanged from this checkout, shared/skills a
 # fixture), so the skills are known. The build runs build-deploy.sh with an
 # isolated HOME whose config.json points at a fixture dotprofile (a git repo in
-# the temp dir). The resolver error is a stub (AITOOLS_PROFILE_SH /
-# AITOOLS_PROFILE_PS1, the lib's lookup override).
-# Platform: macOS, Linux, Windows Git Bash. Exit 1 if any case fails.
+# the temp dir). The resolver error is a stub (AITOOLS_PROFILE_SH,
+# the lib's lookup override).
+# Platform: macOS, Linux. Exit 1 if any case fails.
 #
 # Usage: bash tests/skills-legacy/test-skills-legacy.sh [--bash-only] [--help]
-#   --bash-only  accepted for compatibility (no-op): macOS/Linux always run only .sh
+#   --bash-only  accepted for compatibility (no-op): the harness always runs only .sh
 #   AITOOLS_TEST_BASH=/bin/bash  the bash that runs the scripts under test
 
 set -uo pipefail
+
+# OS guard: macOS/Linux only. BASH_VERSINFO[5] is bash's compiled-in machine
+# type (read-only, never taken from the environment), so neither a uname shim
+# on PATH nor an exported OSTYPE hides Git Bash.
+case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*)
+        printf 'This script is for macOS/Linux. On Windows, run tests/skills-legacy/test-skills-legacy.ps1 with pwsh.\n' >&2
+        exit 1 ;;
+esac
+case "${BASH_VERSINFO[5]:-}" in
+    *-msys*|*-cygwin*|*-mingw*)
+        printf 'This script is for macOS/Linux. On Windows, run tests/skills-legacy/test-skills-legacy.ps1 with pwsh.\n' >&2
+        exit 1 ;;
+esac
 
 for arg in "$@"; do
     case "$arg" in
@@ -83,9 +94,7 @@ W="$TMP_ROOT/work"
 mkdir -p "$W"
 GOLDEN_DIR="$ROOT/tests/skills-legacy/golden"
 GOLDEN_TMP="$TMP_ROOT"
-LANG_RUN="$TEST_LANG"   # sh on macOS/Linux, ps1 on Windows
 L=sh                    # tag of the language under test in case names
-if [ "$LANG_RUN" = ps1 ]; then L=ps; fi
 
 PASS=0
 FAIL=0
@@ -104,7 +113,7 @@ check() {  # name, condition (eval'd)
 }
 skip() { printf 'SKIP %s\n' "$1"; SKIP=$((SKIP + 1)); }
 # need_skip MSG: cases skipped because a tool is missing. Under CI (CI=true) that
-# is a failure: a green CI run must not hide the .ps1, parity, pty or MDM cases.
+# is a failure: a green CI run must not hide the parity, pty or MDM cases.
 need_skip() {
     if [ "${CI:-}" = "true" ]; then
         printf 'FAIL %s (a required tool is missing under CI=true)\n' "$1"; FAIL=$((FAIL + 1))
@@ -123,22 +132,13 @@ for t in perl git; do
         exit 0
     fi
 done
-if [ "$L" = ps ] && ! command -v pwsh >/dev/null 2>&1; then
-    printf 'FAIL pwsh is not on PATH: the .ps1 scripts cannot be tested on Windows\n'
-    exit 1
-fi
 HAVE_NODE=false
 if command -v node >/dev/null 2>&1; then HAVE_NODE=true; fi
 PTY="$ROOT/tests/managed-files/pty-run.py"
 HAVE_PTY=false
 NO_PTY_WHY="python3 pty not available"
 if command -v python3 >/dev/null 2>&1 && [ -f "$PTY" ]; then HAVE_PTY=true; fi
-# Windows pty = pywinpty (ConPTY); the import failing means it is not installed
-if $HAVE_PTY && [ "$L" = ps ] && ! python3 -c 'import winpty' >/dev/null 2>&1; then
-    HAVE_PTY=false; NO_PTY_WHY="pywinpty not installed (scripts/setup-pywinpty.ps1)"
-fi
-CAN_CHMOD_READ=true   # chmod 000 blocks reads (not for root, not under Git Bash)
-case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) CAN_CHMOD_READ=false ;; esac
+CAN_CHMOD_READ=true   # chmod 000 blocks reads (not for root)
 if [ "$(id -u)" = 0 ]; then CAN_CHMOD_READ=false; fi
 
 # The bash that runs the scripts under test (CI also runs macOS /bin/bash 3.2)
@@ -169,16 +169,15 @@ cp -R "$ROOT/scripts" "$FR/scripts"
 skill "$FR/shared/skills" alpha "shared alpha"
 skill "$FR/shared/skills" beta "shared beta"
 
-# Resolver error stubs: resolve_user_repo_path / Resolve-UserRepoPath return 3
+# Resolver error stub: resolve_user_repo_path returns 3
 printf '#!/usr/bin/env bash\nprintf "via\\tnone\\nerror\\tstub resolver failure\\n"\nexit 2\n' > "$W/fail.sh"
-printf '"via`tnone"\n"error`tstub resolver failure"\nexit 2\n' > "$W/fail.ps1"
 
-write_config() {  # write_config HOME_DIR [nodp | DOTPROFILE_DIR] (native path: pwsh reads it on Windows)
+write_config() {  # write_config HOME_DIR [nodp | DOTPROFILE_DIR]
     mkdir -p "$1/.aitools"
     if [ "${2:-}" = nodp ]; then
         printf '{"machineAlias":"m1"}\n' > "$1/.aitools/config.json"
     else
-        printf '{"userRepoPath":"%s","machineAlias":"m1"}\n' "$(native_path "${2:-$DP}")" > "$1/.aitools/config.json"
+        printf '{"userRepoPath":"%s","machineAlias":"m1"}\n' "${2:-$DP}" > "$1/.aitools/config.json"
     fi
 }
 # own_dotprofile CASE: a copy of the fixture dotprofile for CASE (adopt writes it)
@@ -221,48 +220,19 @@ retired_not_offered() {
         && found_log "$1" 'Not offered for adoption: Aitool-Eval (an aitools skill retired before the skills manifest existed; delete ~/.claude/skills/Aitool-Eval if you no longer use it)'
 }
 
-# win_path P: P in Windows form (C:\..., backslashes) on Windows, unchanged
-# elsewhere: HOME and USERPROFILE get the form Windows itself gives USERPROFILE
-# (with C:/... the lib's "~/" display of a home path does not match; windows CI
-# run 41265193554, tests/skills-fanout)
-win_path() {
-    if [ "$TEST_PLATFORM" = windows ] && command -v cygpath >/dev/null 2>&1; then
-        cygpath -w "$1"
-    else
-        printf '%s' "$1"
-    fi
-}
 # run_env H SUMMARY [VAR=value...]: sets E, the env command of a run under HOME H
-# (paths native on Windows, unchanged elsewhere)
 run_env() {
     local h="$1" s="$2"; shift 2
     E=(env -u AITOOLS_FORCE -u AITOOLS_DRY_RUN -u AITOOLS_USER_REPO_PATH -u AITOOLS_PROFILE_FILE
         -u AITOOLS_PROFILE_SH -u AITOOLS_PROFILE_PS1
-        HOME="$(win_path "$h")" USERPROFILE="$(win_path "$h")" AITOOLS_LOG_DIR="$(native_path "$h/logs")"
-        AITOOLS_SUMMARY_FILE="$(native_path "$s")" "$@")
+        HOME="$h" AITOOLS_LOG_DIR="$h/logs" AITOOLS_SUMMARY_FILE="$s" "$@")
 }
-# script_cmd PATH_WITHOUT_EXT [pty]: sets X, the command running PATH.sh
-# (macOS/Linux, under $TB) or PATH.ps1 (Windows, native pwsh; -NonInteractive
-# unless on a pty)
+# script_cmd PATH_WITHOUT_EXT: sets X, the command running PATH.sh under $TB
 script_cmd() {
-    if [ "$L" = sh ]; then
-        X=("$TB" "$1.sh")
-    elif [ "${2:-}" = pty ]; then
-        X=(pwsh -NoProfile -File "$(native_path "$1.ps1")")
-    else
-        X=(pwsh -NoProfile -NonInteractive -File "$(native_path "$1.ps1")")
-    fi
-}
-# strip_cr FILE...: pwsh on Windows writes CRLF; the checks compare LF text
-strip_cr() {
-    local f
-    [ "$L" = ps ] || return 0
-    for f in "$@"; do
-        if [ -f "$f" ]; then perl -pi -e 's/\r//g' "$f" || printf 'warn: could not strip CR in %s\n' "$f"; fi
-    done
+    X=("$TB" "$1.sh")
 }
 
-# run_skills LANG CASE [stub] [args...] -- LANG sh|ps (the language under test);
+# run_skills LANG CASE [stub] [args...] -- LANG sh (the language under test);
 # HOME = $TMP_ROOT/CASE; stub = live|fail
 run_skills() {
     local name="$2" stub="$3" h; shift 3
@@ -271,14 +241,13 @@ run_skills() {
     OUT="$TMP_ROOT/$name.out"
     : > "$TMP_ROOT/$name.summary"
     if [ "$stub" = fail ]; then
-        run_env "$h" "$TMP_ROOT/$name.summary" AITOOLS_PROFILE_SH="$W/fail.sh" AITOOLS_PROFILE_PS1="$(native_path "$W/fail.ps1")"
+        run_env "$h" "$TMP_ROOT/$name.summary" AITOOLS_PROFILE_SH="$W/fail.sh"
     else
         run_env "$h" "$TMP_ROOT/$name.summary"
     fi
     script_cmd "$FR/scripts/setup-user-skills"
     "${E[@]}" "${X[@]}" "$@" < /dev/null > "$OUT" 2>&1
     echo $? > "$TMP_ROOT/$name.rc"
-    strip_cr "$OUT" "$TMP_ROOT/$name.summary"
 }
 # run_skills_pty LANG CASE INPUT -- as run_skills (live resolver), on a pty
 # (tests/managed-files/pty-run.py) with INPUT typed at the prompts
@@ -289,10 +258,9 @@ run_skills_pty() {
     OUT="$TMP_ROOT/$name.out"
     : > "$TMP_ROOT/$name.summary"
     run_env "$h" "$TMP_ROOT/$name.summary"
-    script_cmd "$FR/scripts/setup-user-skills" pty
-    "${E[@]}" python3 "$(native_path "$PTY")" --input "$input" --log "$(native_path "$OUT")" -- "${X[@]}" > /dev/null 2>&1
+    script_cmd "$FR/scripts/setup-user-skills"
+    "${E[@]}" python3 "$PTY" --input "$input" --log "$OUT" -- "${X[@]}" > /dev/null 2>&1
     echo $? > "$TMP_ROOT/$name.rc"
-    strip_cr "$OUT" "$TMP_ROOT/$name.summary"
 }
 rc_of() { cat "$TMP_ROOT/$1.rc"; }
 row() { grep -qxF "$2" "$TMP_ROOT/$1.summary"; }
@@ -321,7 +289,7 @@ found_log() { grep -qF -- "$2" "$TMP_ROOT/$1/logs/deploy.log"; }
 # Dev path
 # ---------------------------------------------------------------------------
 for lang in $L; do
-    DRY="--dry-run"; if [ "$lang" = ps ]; then DRY="-DryRun"; fi
+    DRY="--dry-run"
 
     # fallback: no ~/.aitools/skills
     c="$lang-fallback"
@@ -466,14 +434,11 @@ done
 # from setup-user-skills; fanned out: both from the fan-out plus "skills" n/a
 # ---------------------------------------------------------------------------
 # Stub rg and agent first on PATH: setup-user-cursor finds them installed, so no
-# installer runs (as tests/rules-fanout-cursor does). Native pwsh cannot run an
-# extensionless bash script, so each stub has a .cmd twin for Windows.
+# installer runs (as tests/rules-fanout-cursor does).
 SB="$W/stub-bin"
 mkdir -p "$SB"
 printf '#!/usr/bin/env bash\necho "ripgrep 14.1.0"\n' > "$SB/rg"
 printf '#!/usr/bin/env bash\necho "2026.05.21-stub"\n' > "$SB/agent"
-printf '@echo ripgrep 14.1.0\r\n' > "$SB/rg.cmd"
-printf '@echo 2026.05.21-stub\r\n' > "$SB/agent.cmd"
 chmod +x "$SB/rg" "$SB/agent"
 # run_dev_order LANG CASE -- the three scripts (the real ones, guards on), one
 # HOME, one summary file
@@ -489,7 +454,6 @@ run_dev_order() {
         "${E[@]}" "${X[@]}" < /dev/null >> "$OUT" 2>&1 || rc=1
     done
     echo "$rc" > "$TMP_ROOT/$name.rc"
-    strip_cr "$OUT" "$TMP_ROOT/$name.summary"
     OUT="$TMP_ROOT/$name.summary"   # a failed check shows the rows
 }
 # count_rows CASE TOOL: the status rows (OK / WARN / ERROR, not DETAIL) for TOOL
@@ -509,11 +473,12 @@ for lang in $L; do
 done
 
 # ---------------------------------------------------------------------------
-# MDM: the generated setup-user-skills.sh/.ps1
+# MDM: the generated setup-user-skills.sh (the build also writes the .ps1, which
+# the Windows harness parses and runs)
 # ---------------------------------------------------------------------------
 if ! $HAVE_NODE; then
     need_skip "MDM cases (node not found; build-deploy needs it)"
-    printf '\n%d passed, %d failed, %d skipped (%s: %s scripts)\n' "$PASS" "$FAIL" "$SKIP" "$TEST_PLATFORM" "$LANG_RUN"
+    printf '\n%d passed, %d failed, %d skipped (%s: sh scripts)\n' "$PASS" "$FAIL" "$SKIP" "$TEST_PLATFORM"
     [ "$FAIL" -eq 0 ]
     exit
 fi
@@ -521,12 +486,8 @@ fi
 HB="$TMP_ROOT/home-build"
 write_config "$HB"
 OUT="$TMP_ROOT/build.out"
-# USERPROFILE too: under Git Bash the build's resolver runs aitools-profile.ps1
-# through pwsh, whose $HOME follows USERPROFILE; without it the resolver read the
-# runner's own home and found no dotprofile (windows CI run 41265193554). HOME
-# stays the POSIX path the bash build itself uses.
 env -u AITOOLS_USER_REPO_PATH -u AITOOLS_SUMMARY_FILE -u AITOOLS_PROFILE_SH -u AITOOLS_PROFILE_PS1 \
-    HOME="$HB" USERPROFILE="$(win_path "$HB")" AITOOLS_LOG_DIR="$HB/logs" "$TB" "$ROOT/scripts/build-deploy.sh" > "$OUT" 2>&1
+    HOME="$HB" AITOOLS_LOG_DIR="$HB/logs" "$TB" "$ROOT/scripts/build-deploy.sh" > "$OUT" 2>&1
 BUILD_RC=$?
 G="$DP/deploy"
 check "build: exit 0, setup-user-skills.sh/.ps1 generated, bash -n ($TB)" \
@@ -548,17 +509,7 @@ run_mdm() {  # run_mdm LANG CASE -- the generated script (as built, guard on); H
     script_cmd "$G/setup-user-skills"
     "${E[@]}" "${X[@]}" < /dev/null > "$OUT" 2>&1
     echo $? > "$TMP_ROOT/$name.rc"
-    strip_cr "$OUT" "$TMP_ROOT/$name.summary"
 }
-
-# The generated .ps1 is parsed where it runs (Windows); macOS/Linux never start pwsh
-if [ "$L" = ps ]; then
-    printf '%s\n' '$e = $null' \
-        '$null = [System.Management.Automation.Language.Parser]::ParseFile($args[0], [ref]$null, [ref]$e)' \
-        'if ($e.Count -gt 0) { $e | ForEach-Object { [Console]::WriteLine($_.Message) }; exit 1 }' > "$W/parse.ps1"
-    check "build: pwsh parser accepts the generated setup-user-skills.ps1" \
-        "pwsh -NoProfile -NonInteractive -File '$(native_path "$W/parse.ps1")' '$(native_path "$G/setup-user-skills.ps1")' > /dev/null"
-fi
 
 for lang in $L; do
     c="mdm-$lang-fb"
@@ -572,5 +523,5 @@ for lang in $L; do
         "[ \"\$(rc_of $c)\" = 0 ] && [ \"\$(rows_of $c)\" = '$FANOUT_ROW' ] && [ ! -e '$TMP_ROOT/$c/.claude/skills' ] && [ ! -e '$TMP_ROOT/$c/.cursor/skills' ]"
 done
 
-printf '\n%d passed, %d failed, %d skipped (%s: %s scripts)\n' "$PASS" "$FAIL" "$SKIP" "$TEST_PLATFORM" "$LANG_RUN"
+printf '\n%d passed, %d failed, %d skipped (%s: sh scripts)\n' "$PASS" "$FAIL" "$SKIP" "$TEST_PLATFORM"
 [ "$FAIL" -eq 0 ]
