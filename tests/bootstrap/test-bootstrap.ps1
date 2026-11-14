@@ -107,7 +107,10 @@ exit 0
     $text = [IO.File]::ReadAllText($Bootstrap)
     $code = ($text -split "`r?`n" | Where-Object { $_ -notmatch '^\s*#' }) -join "`n"
     Check "static: no script launched through powershell (5.1)" ($code -notmatch '(?im)(^|[&|;(]\s*|\s)powershell(\.exe)?\s+-') "a 'powershell ... -' launch is still in bootstrap.ps1"
-    Check "static: no exit statement (under irm | iex it would close the caller's window)" ($code -notmatch '(?im)(^|[;{}]\s*)exit\b') "an exit statement is in bootstrap.ps1"
+    # Parser, not a regex: an exit in any position or branch is an ExitStatementAst
+    $bootAst = [System.Management.Automation.Language.Parser]::ParseFile($Bootstrap, [ref]$null, [ref]$null)
+    $exits = @($bootAst.FindAll({ param($n) $n -is [System.Management.Automation.Language.ExitStatementAst] }, $true))
+    Check "static: no exit statement (under irm | iex it would close the caller's window)" ($exits.Count -eq 0) "exit at line(s) $(($exits | ForEach-Object { $_.Extent.StartLineNumber }) -join ', ')"
 
     $reg = Get-Content -Raw (Join-Path $root "registries" "tool-registry.json") | ConvertFrom-Json
     $regCmd = @($reg.tools.pwsh.install.windows | Where-Object { $_.preferred })[0].command

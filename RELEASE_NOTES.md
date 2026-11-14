@@ -43,7 +43,7 @@ Not tagged. Branch `fix/38dc-11-compliance-ci-bootstrap`, mission 38dc-11 (M6-Po
 | `shared/rules/delegation.md` | The delegation rule, deployed to every machine (copy of the dotprofile rule) |
 | `tests/bootstrap/test-bootstrap.ps1` | bootstrap.ps1 under Windows PowerShell 5.1 (run with `-File` and through `Invoke-Expression`) with stubbed git, winget, installer and aitools.ps1 (Windows CI job) |
 
-**Verified on:** Windows 11 (pwsh 7.6.10, Windows PowerShell 5.1): `tests/bootstrap/test-bootstrap.ps1` 26 passed (including the `irm | iex` form); against origin/main's bootstrap.ps1 15 checks fail; 7 of 7 one-line mutants killed. `check-script-compliance.ps1` on origin/main: exit 1 (`setup-pywinpty.ps1:151`, #177, fixed by PR #157); on a scratch copy with #157's file: exit 0; with a planted unchecked `SilentlyContinue`: exit 1. `check-ci-suites.pl` finds the new suite, and fails when its step is removed. macOS/Linux: the `.sh` twin of the compliance check runs in the linux CI job only (not run locally on Windows).
+**Verified on:** Windows 11 (pwsh 7.6.10, Windows PowerShell 5.1): `tests/bootstrap/test-bootstrap.ps1` 26 passed (including the `irm | iex` form); against origin/main's bootstrap.ps1 15 checks fail; 8 of 8 one-line mutants killed. `check-script-compliance.ps1` on origin/main: exit 1 (`setup-pywinpty.ps1:151`, #177, fixed by PR #157); on a scratch copy with #157's file: exit 0; with a planted unchecked `SilentlyContinue`: exit 1. `check-ci-suites.pl` finds the new suite, and fails when its step is removed. macOS/Linux: the `.sh` twin of the compliance check runs in the linux CI job only (not run locally on Windows).
 
 ---
 
