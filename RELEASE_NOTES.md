@@ -29,6 +29,12 @@ Not tagged. Mission M5-Fixes (items 9 and 4, batch M5-C1).
 |---|--------|
 | 3 | `check-post-push` step 29 (menu parity audit) also compares the prompts passed to the menu-read helper: the PROMPT argument of `read_menu_choice` (bash) and `-Prompt` of `Read-MenuChoice` (PowerShell), one letter set per call (`[x]` letters and `[a/b/c]` lists; a prompt in a variable takes the literal assigned earlier; a prompt built at run time counts as `?`). It only read `printf` / `[Console]::Write` lines, so a mismatch in a prompt such as the AI-merge preview's `[y]es / [r]efine / [n]o` went unseen. The logic moved to `scripts/check-menu-parity.pl` (one script for both twins, as step 32 does with `check-hook-parity.py`; `--help` lists the blind spots); SKIP when perl is missing |
 
+### Documentation
+
+| # | Change |
+|---|--------|
+| 4 | `shared/rules/tool-lifecycle.md` "Lifecycle field completeness": an unverified platform version is `null`, not `pending`, and a platform the tool does not support (status `n/a`) keeps a `null` version and date. The registry has never used `pending`: of 57 tool-platform versions, 26 are `null` (the 4 `n/a` platforms among them) and 31 are version strings |
+
 ### Files created
 
 | File | Purpose |

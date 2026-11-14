@@ -138,8 +138,9 @@ review ("Review after").
 Every tool in the registry (`/tool-registry` skill, including Under
 Evaluation entries) carries its lifecycle fields (platform status,
 concurrency, post-install config, dependencies, invocation) and a last
-verified version per platform (`pending` when unverified). Verify them
-before committing.
+verified version and date per platform: `null` until verified on that
+platform, and `null` on a platform the tool does not support (platform
+status `n/a`). Verify them before committing.
 
 ### Install command verification gate
 
