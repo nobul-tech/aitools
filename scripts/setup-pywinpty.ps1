@@ -143,14 +143,23 @@ function Get-TargetRefusal {
 
 # After a --target install: remove pywinpty-*.dist-info directories of other versions
 # (pip --target --upgrade replaces same-named items only, so an older version's metadata
-# would stay and could shadow the version check). Returns $false when one cannot be removed.
+# would stay and could shadow the version check). Returns $false when one cannot be removed,
+# or when the existing target cannot be listed.
 function Remove-StaleDistInfo {
     param([string]$Target, [string]$Version)
     $ok = $true
     $keep = "pywinpty-$Version.dist-info"
-    $stale = @(Get-ChildItem -LiteralPath $Target -Directory -Filter 'pywinpty-*.dist-info' -ErrorAction SilentlyContinue |
-        Where-Object { $_.Name -ne $keep })
     # SilentlyContinue: a missing target lists nothing; the import verify below decides.
+    # Any other listing error is checked right below (a dist-info that cannot be listed
+    # cannot be removed). No -Filter: with -Filter, Get-ChildItem returns nothing and
+    # reports no error for a directory it may not list (pwsh 7.6, verified 2026-11-14).
+    $listErr = $null
+    $stale = @(Get-ChildItem -LiteralPath $Target -Directory -ErrorAction SilentlyContinue -ErrorVariable listErr |
+        Where-Object { $_.Name -like 'pywinpty-*.dist-info' -and $_.Name -ne $keep })
+    if ($listErr -and (Test-Path -LiteralPath $Target)) {
+        LogError "Could not list $Target for stale pywinpty dist-info: $($listErr[0])"
+        return $false
+    }
     foreach ($d in $stale) {
         try {
             Remove-Item -LiteralPath $d.FullName -Recurse -Force -ErrorAction Stop
