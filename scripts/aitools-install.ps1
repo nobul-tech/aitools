@@ -126,9 +126,11 @@ function Resolve-ReposDir([string]$Path) {
 # Invoke-RelaySync EXE ARGS -- Step 22: run the relay -> Cursor AGENTS.md sync (EXE
 # ARGS = the python command, the sync script and its options) and put its output in
 # deploy.log through the lib's Add-AitLibLogText, so a deploy.log that cannot be
-# written is swallowed (reference/logging.md section 5; incident #174) instead of an
-# Add-Content error, which ends the run under $ErrorActionPreference = "Stop".
-# Returns the sync's exit code. Parity: run_relay_sync in aitools-install.sh.
+# written is swallowed (reference/logging.md section 5; incident #174). The old
+# `$out | Add-Content` printed an error record and the run went on: the installer
+# sets no $ErrorActionPreference, and neither do its callers (aitools.ps1 runs it
+# in-process; bootstrap.ps1 sets "Stop" but starts it in a new process). Returns the
+# sync's exit code. Parity: run_relay_sync in aitools-install.sh.
 function Invoke-RelaySync([string]$Exe, [string[]]$SyncArgs) {
     $out = & $Exe @SyncArgs 2>&1
     $rc = $LASTEXITCODE

@@ -440,6 +440,10 @@ Write-Summary "DETAIL" "claude settings" "effortLevel: medium -> high"
 
 ### Canonical patterns by file type
 
+Diff lines go to deploy.log fail-safe (`@reference/logging.md` section 5): bash with
+`>> "$LOG_FILE" 2>&1 || true`, PowerShell through the lib's `Add-AitLibLogText`
+(never a bare `Add-Content -Path $logFile`).
+
 **Text files (.md, .mdc, SKILL.md):**
 
 Bash:
@@ -472,9 +476,9 @@ if (-not (Test-Path $dest)) {
         $srcLines = Get-Content $src -ErrorAction Stop
         $dstLines = Get-Content $dest -ErrorAction Stop
         $diffOutput = Compare-Object $dstLines $srcLines -PassThru | Out-String
-        Add-Content -Path $logFile -Value "--- deployed/$(Split-Path $dest -Leaf)"
-        Add-Content -Path $logFile -Value "+++ source/$(Split-Path $src -Leaf)"
-        Add-Content -Path $logFile -Value $diffOutput
+        Add-AitLibLogText "--- deployed/$(Split-Path $dest -Leaf)"
+        Add-AitLibLogText "+++ source/$(Split-Path $src -Leaf)"
+        Add-AitLibLogText $diffOutput
         Copy-Item -Path $src -Destination $dest -Force
         LogOk "Updated: $dest"
     }
@@ -559,9 +563,9 @@ if ($srcContent -eq $dstContent) {
         $srcLines = Get-Content $src -ErrorAction Stop
         $dstLines = Get-Content $dst -ErrorAction Stop
         $diffOutput = Compare-Object $dstLines $srcLines -PassThru | Out-String
-        Add-Content -Path $logFile -Value "--- deployed/$hookName"
-        Add-Content -Path $logFile -Value "+++ source/$hookName"
-        Add-Content -Path $logFile -Value $diffOutput
+        Add-AitLibLogText "--- deployed/$hookName"
+        Add-AitLibLogText "+++ source/$hookName"
+        Add-AitLibLogText $diffOutput
     }
     Copy-Item -Path $src -Destination $dst -Force
     LogOk "Updated: $hookName"
