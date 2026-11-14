@@ -21,6 +21,15 @@
 #                  resolved, is one error and one ERROR row "aitools config"
 #   step3-prompt-* (bash, on a pseudo-terminal) the Step 3 prompt
 #                  (prompt_repos_path) is on the terminal and not on stdout
+#   log-*          the log override's deploy.log write is fail-safe
+#                  (reference/logging.md section 5; incident #174): with deploy.log
+#                  a directory, (bash) a file with mode 000, or (PowerShell) held
+#                  open with no sharing, under $ErrorActionPreference = "Stop" and
+#                  inside a try, the run goes on, the console lines print and the
+#                  counters count; a writable deploy.log still gets the lines
+#   relaysync-*    Step 22's run_relay_sync / Invoke-RelaySync: the sync runs and
+#                  its exit code is returned whether or not deploy.log can be
+#                  written; its output (stdout and stderr) reaches a writable one
 #
 # Platform targeting (plans/ci-platform-targeting.md): each half runs only where
 # its installer runs. macOS/Linux run the bash blocks (aitools-install.sh with
@@ -37,7 +46,7 @@
 set -euo pipefail
 
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
-    perl -ne 'print if $. >= 2 && $. <= 35' "$0"
+    perl -ne 'print if $. >= 2 && $. <= 44' "$0"
     exit 0
 fi
 
@@ -167,8 +176,26 @@ switch ($env:WRITER_MODE) {
 exit 0
 WRITER
 
-# Harnesses: the two installer blocks, then MODE (step5 / step3 PATH), then a last
-# log line and the counters (reaching "END" = the installer went on)
+# Stub relay syncs (Step 22): one stdout and one stderr line, a marker file (it
+# ran), exit SYNC_RC (default 0)
+cat > "$WORK/sync.sh" <<'SYNC'
+printf 'sync-out-line\n'
+printf 'sync-err-line\n' >&2
+: > "$SYNC_MARK"
+exit "${SYNC_RC:-0}"
+SYNC
+cat > "$WORK/sync.ps1" <<'SYNC'
+Write-Output "sync-out-line"
+[Console]::Error.WriteLine("sync-err-line")
+[IO.File]::WriteAllText($env:SYNC_MARK, "ran")
+$c = 0
+if ($env:SYNC_RC) { $c = [int]$env:SYNC_RC }
+exit $c
+SYNC
+
+# Harnesses: the two installer blocks, then MODE (step5 / step3 PATH / logprobe /
+# relaysync), then a last log line and the counters (reaching "END" = the
+# installer went on)
 cat > "$WORK/harness.sh" <<'HARNESS'
 set -euo pipefail
 repo="$1"; mode="$2"; shift 2
@@ -182,6 +209,8 @@ case "$mode" in
     step5) run_config_writer "$WRITER" --repos-path /x/repos --repo-path /x/repos/aitools ;;
     step3) if resolve_repos_dir "$1"; then printf 'REPOS=%s\n' "$REPOS_PATH"; else printf 'REPOS_FAILED\n'; fi ;;
     step3prompt) prompt_repos_path; printf 'REPOS=%s\n' "$REPOS_PATH" ;;
+    logprobe) log_warn "probe-warn"; log_error "probe-error"; printf 'PROBE-DONE\n' ;;
+    relaysync) sync_rc=0; run_relay_sync "$BASH" "$SYNC" || sync_rc=$?; printf 'SYNC-RC=%s\n' "$sync_rc" ;;
 esac
 log "harness end"
 printf 'END errors=%s warnings=%s\n' "$ERRORS" "$WARNINGS"
@@ -198,6 +227,21 @@ Log "harness start"
 switch ($Mode) {
     "step5" { Invoke-ConfigWriter $env:WRITER @{ ReposPath = "/x/repos"; RepoPath = "/x/repos/aitools" } }
     "step3" { $p = Resolve-ReposDir $ReposPath; if ($p) { Write-Output "REPOS=$p" } else { Write-Output "REPOS_FAILED" } }
+    "logprobe" {
+        # LOCK_LOG=1: this process holds deploy.log open with no sharing while the
+        # probe logs (Windows enforces the share mode per handle, so the installer's
+        # write fails as it would against another process's lock)
+        $hold = $null
+        if ($env:LOCK_LOG -eq "1") { $hold = [IO.File]::Open($logFile, 'OpenOrCreate', 'ReadWrite', 'None') }
+        $ErrorActionPreference = "Stop"
+        try { LogWarn "probe-warn"; LogError "probe-error"; Write-Output "PROBE-DONE" }
+        catch { Write-Output "CAUGHT: $($_.Exception.Message)" }
+        finally { $ErrorActionPreference = "Continue"; if ($hold) { $hold.Dispose() } }
+    }
+    "relaysync" {
+        $rc = Invoke-RelaySync "pwsh" @("-NoProfile", "-NonInteractive", "-File", $env:SYNC)
+        Write-Output "SYNC-RC=$rc"
+    }
 }
 Log "harness end"
 Write-Output "END errors=$($script:errors) warnings=$($script:warnings)"
@@ -227,6 +271,7 @@ run_h() {
     if [ "$impl" = "bash" ]; then
         (cd "$H" && env HOME="$H" AITOOLS_LOG_DIR="$H/.aitools/logs" AITOOLS_SUMMARY_FILE="$H/summary.txt" \
             WRITER="$WORK/writer.sh" WRITER_MODE="${WRITER_MODE:-quiet}" \
+            SYNC="$WORK/sync.sh" SYNC_MARK="$H/sync.mark" SYNC_RC="${SYNC_RC:-0}" LOCK_LOG="${LOCK_LOG:-0}" \
             "$BASH_BIN" "$WORK/harness.sh" "$REPO" "$mode" ${path:+"$path"}) > "$WORK/out.txt" 2>&1 || RC=$?
     else
         # Native pwsh (Windows): Windows paths; MSYS argument conversion off, so
@@ -234,6 +279,7 @@ run_h() {
         (cd "$H" && env HOME="$(native_path "$H")" USERPROFILE="$(native_path "$H")" \
             AITOOLS_LOG_DIR="$(native_path "$H/.aitools/logs")" AITOOLS_SUMMARY_FILE="$(native_path "$H/summary.txt")" \
             WRITER="$(native_path "$WORK/writer.ps1")" WRITER_MODE="${WRITER_MODE:-quiet}" \
+            SYNC="$(native_path "$WORK/sync.ps1")" SYNC_MARK="$(native_path "$H/sync.mark")" SYNC_RC="${SYNC_RC:-0}" LOCK_LOG="${LOCK_LOG:-0}" \
             MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' \
             pwsh -NoProfile -NonInteractive -File "$(native_path "$WORK/harness.ps1")" -Repo "$(native_path "$REPO")" \
             -Mode "$mode" -ReposPath "$(np "$path")") > "$WORK/out.txt" 2>&1 || RC=$?
@@ -264,6 +310,31 @@ count_out() {  # count_out NAME TEXT N
     n=$(perl -ne 'BEGIN { $t = shift @ARGV } $n++ if index($_, $t) >= 0; END { print $n + 0 }' "$2" "$OUT")
     if [ "$n" -eq "$3" ]; then ok "$1: '$2' $3 time(s)"
     else bad "$1: '$2' $n time(s), want $3"; perl -pe 's/^/       /' "$OUT"; fi
+}
+want_no_out() {  # want_no_out NAME PERL-REGEX -- no console line matches
+    if perl -ne 'BEGIN { $r = shift @ARGV } $f = 1 if /$r/; END { exit($f ? 0 : 1) }' "$2" "$OUT"; then
+        bad "$1: console matches /$2/"; perl -pe 's/^/       /' "$OUT"
+    else ok "$1: console has no /$2/"; fi
+}
+log_has() {  # log_has NAME TEXT -- deploy.log (a file) contains TEXT
+    if [ -f "$H/.aitools/logs/deploy.log" ] && grep -qF -- "$2" "$H/.aitools/logs/deploy.log"; then ok "$1: deploy.log has '$2'"
+    else bad "$1: deploy.log lacks '$2'"; fi
+}
+# Fail-safe log probe (incident #174): the run went on, both console lines printed,
+# both counters counted, no catch and no write error on the console
+want_probe() {  # want_probe NAME
+    want_end "$1" "errors=1 warnings=1"
+    want_out "$1" "PROBE-DONE"
+    want_out "$1" "[aitools-install] [warn] probe-warn"
+    want_out "$1" "[aitools-install] [error] probe-error"
+    want_no_out "$1" 'CAUGHT|Exception|Add-Content|tee:|Is a directory|Permission denied|cannot access|being used by another process'
+}
+# The sync ran (marker), returned WANT_RC, and the installer went on
+want_sync() {  # want_sync NAME WANT_RC
+    want_end "$1" "errors=0 warnings=0"
+    want_out "$1" "SYNC-RC=$2"
+    if [ -f "$H/sync.mark" ]; then ok "$1: the sync ran"; else bad "$1: the sync did not run"; fi
+    want_no_out "$1" 'Exception|Add-Content|Is a directory|Permission denied|cannot access'
 }
 
 IMPLS="bash"
@@ -327,7 +398,57 @@ for impl in $IMPLS; do
     want_out "step3-uncreatable ($impl)" "REPOS_FAILED"
     want_end "step3-uncreatable ($impl)" "errors=1 warnings=0"
     want_sum "step3-uncreatable ($impl)" "ERROR|aitools config|repos dir not created"
+
+    # Incident #174: the log override's deploy.log write is fail-safe. A writable
+    # deploy.log still gets the lines ...
+    fresh; run_h "$impl" logprobe
+    want_probe "log-written ($impl)"
+    log_has "log-written ($impl)" "[aitools-install] [warn] probe-warn"
+    log_has "log-written ($impl)" "[aitools-install] [error] probe-error"
+    # ... and one that cannot be written (a directory in its place) ends nothing
+    fresh; mkdir -p "$H/.aitools/logs/deploy.log"
+    run_h "$impl" logprobe
+    want_probe "log-blocked ($impl)"
+
+    # Step 22 relay sync: its output (stdout and stderr) reaches deploy.log ...
+    fresh; run_h "$impl" relaysync
+    want_sync "relaysync-ok ($impl)" 0
+    log_has "relaysync-ok ($impl)" "sync-out-line"
+    log_has "relaysync-ok ($impl)" "sync-err-line"
+    # ... its exit code comes back ...
+    fresh; SYNC_RC=3 run_h "$impl" relaysync
+    want_sync "relaysync-rc ($impl)" 3
+    # ... and a deploy.log that cannot be written neither skips it nor ends the run
+    fresh; mkdir -p "$H/.aitools/logs/deploy.log"
+    run_h "$impl" relaysync
+    want_sync "relaysync-blocked ($impl)" 0
 done
+
+# Incident #174, bash: deploy.log without write permission (mode 000). Root ignores
+# the mode (the write then succeeds), so the case is skipped as root. bash only:
+# macOS/Linux.
+if [ "$LANG_RUN" != sh ]; then
+    printf '  skip log-unwritable (bash installer only: macOS/Linux)\n'
+elif [ "$(id -u)" -eq 0 ]; then
+    printf '  skip log-unwritable (running as root: mode 000 does not block the write)\n'
+else
+    fresh; : > "$H/.aitools/logs/deploy.log"; chmod 000 "$H/.aitools/logs/deploy.log"
+    run_h bash logprobe
+    chmod 644 "$H/.aitools/logs/deploy.log"
+    want_probe "log-unwritable (bash)"
+fi
+
+# Incident #174, PowerShell: deploy.log held open with no sharing (a lock) while
+# the probe logs under $ErrorActionPreference = "Stop" inside a try. Windows only:
+# this suite runs the PowerShell installer blocks on Windows.
+if [ "$LANG_RUN" != ps1 ]; then
+    printf '  skip log-locked (PowerShell installer only: Windows)\n'
+else
+    fresh; LOCK_LOG=1 run_h ps logprobe
+    want_probe "log-locked (ps)"
+    if grep -qF -- "probe-warn" "$H/.aitools/logs/deploy.log"; then bad "log-locked (ps): the lock did not hold (probe line in deploy.log)"
+    else ok "log-locked (ps): nothing written while the lock held"; fi
+fi
 
 # A-17, bash: a relative path that exists but cannot be entered is not resolved.
 # (PowerShell resolves it with GetFullPath, which does not enter the directory.)
