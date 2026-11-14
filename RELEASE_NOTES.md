@@ -51,23 +51,26 @@ Not tagged. Mission M5-Fixes (items 9 and 4, batch M5-C1).
 | # | Change |
 |---|--------|
 | 3 | `check-post-push` step 29 (menu parity audit) also compares the prompts passed to the menu-read helper: the PROMPT argument of `read_menu_choice` (bash) and `-Prompt` of `Read-MenuChoice` (PowerShell), one letter set per call (`[x]` letters and `[a/b/c]` lists; a prompt in a variable takes the literal assigned earlier; a prompt built at run time counts as `?`). It only read `printf` / `[Console]::Write` lines, so a mismatch in a prompt such as the AI-merge preview's `[y]es / [r]efine / [n]o` went unseen. The logic moved to `scripts/check-menu-parity.pl` (one script for both twins, as step 32 does with `check-hook-parity.py`; `--help` lists the blind spots); SKIP when perl is missing |
+| 4 | CI "Every test suite is in CI" (linux job) covers `tests/*/test-*.ps1` too: a tracked `.ps1` suite fails the step unless a single-line `run:` runs it with `pwsh` (`-File` optional, `/` or `\` in the path). It was `.sh`-only, so a new `.ps1` suite could go untested. The inline perl moved to `scripts/check-ci-suites.pl` (same `%exempt` table and blind spots, `--help`), which the step calls and a new suite tests. All 8 tracked `.ps1` suites already had a step. (Added after the merge: the auto-mode classifier blocked M5-C1's edit; the commander allowed release-notes edits, 2026-11-14) |
 
 ### Documentation
 
 | # | Change |
 |---|--------|
-| 4 | `shared/rules/tool-lifecycle.md` "Lifecycle field completeness": an unverified platform version is `null`, not `pending`, and a platform the tool does not support (status `n/a`) keeps a `null` version and date. The registry has never used `pending`: of 57 tool-platform versions, 26 are `null` (the 4 `n/a` platforms among them) and 31 are version strings |
+| 5 | `shared/rules/tool-lifecycle.md` "Lifecycle field completeness": an unverified platform version is `null`, not `pending`, and a platform the tool does not support (status `n/a`) keeps a `null` version and date. The registry has never used `pending`: of 57 tool-platform versions, 26 are `null` (the 4 `n/a` platforms among them) and 31 are version strings |
 
 ### Files created
 
 | File | Purpose |
 |------|---------|
 | `tests/check-lib/test-resolve-git-bash.ps1` | Probe order, no fallback, the WSL launchers refused, the default probe on the machine, no check-*.ps1 resolving bash through PATH (CI windows job) |
+| `scripts/check-ci-suites.pl` | The "Every test suite is in CI" logic (was inline perl in `check.yml`) |
+| `tests/ci-suites/test-check-ci-suites.sh` | The current tree passes; planted `.sh` / `.ps1` suites and removed steps fail; the `.ps1` forms that count and those that do not (CI linux job) |
 | `tests/check-post-push/test-post-push-step7.sh` | Runs the step 7 section of each twin with a fake `build-deploy.sh` under a temp HOME: never run, one SKIP 7; no line of either twin runs build-deploy (CI linux and windows jobs) |
 | `scripts/check-menu-parity.pl` | The step 29 comparison (menu lines and menu-read prompts), called by both twins |
 | `tests/check-post-push/test-menu-parity.sh` | The current libs match; planted mismatches in a `read_menu_choice` prompt, a `Read-MenuChoice -Prompt`, a choice list and a menu line fail (the old extraction misses the prompt ones); variable prompts; comments; errors; step 29 of both twins (CI linux and windows jobs) |
 
-**Verified on:** Windows 11 (Git for Windows 2.56.0, bash 5.3.15, pwsh 7): the new suite 17/17; against the pre-fix check scripts it fails 4 cases. check-pre-commit.ps1 and check-pre-push.ps1 run from the branch. Items 2-4 (M5-C2): `test-post-push-step7.sh` 10/10 (6 cases fail against the pre-fix twins), `test-menu-parity.sh` 24/24, both with bash and pwsh 7.6; check-post-push.ps1 run once after the step 7 fix under an isolated HOME/USERPROFILE/APPDATA/LOCALAPPDATA and log dir with a scratch clone of the dotprofile: step 7 SKIP, step 29 PASS, the real dotprofile `deploy/` and `~/.aitools/logs` unchanged. The .sh twins and the new suites on macOS and Linux run first in CI.
+**Verified on:** Windows 11 (Git for Windows 2.56.0, bash 5.3.15, pwsh 7): items 1 and 4 (M5-C1): `test-resolve-git-bash.ps1` 17/17 (against the pre-fix check scripts it fails 4 cases), `test-check-ci-suites.sh` 21/21; check-pre-commit.ps1 and check-pre-push.ps1 run from the branch; the linux CI job is the first run of `check-ci-suites.pl` on Linux. Items 2, 3 and 5 (M5-C2): `test-post-push-step7.sh` 10/10 (6 cases fail against the pre-fix twins), `test-menu-parity.sh` 24/24, both with bash and pwsh 7.6; check-post-push.ps1 run once after the step 7 fix under an isolated HOME/USERPROFILE/APPDATA/LOCALAPPDATA and log dir with a scratch clone of the dotprofile: step 7 SKIP, step 29 PASS, the real dotprofile `deploy/` and `~/.aitools/logs` unchanged. The .sh twins and the new suites on macOS and Linux run first in CI.
 
 ---
 
