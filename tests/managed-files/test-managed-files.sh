@@ -312,6 +312,128 @@ printf '{"a":1}\n' > "$C/src.json"; printf 'not json\n' > "$C/dest/c.json"
 run_lib "C='$C' SRCF='$C/src.json' DEST='$C/dest/c.json' ADOPT=''; $DMF"
 check "json: invalid LOCAL -> failed, untouched" "[ \"\$(result)\" = failed ] && grep -qx 'not json' '$C/dest/c.json'"
 
+# The JSON review names the file by the caller's item name (deploy-harness: registries/x.json)
+DMF_LABEL='deploy_managed_file "$(cat "$SRCF")" "$DEST" tool registries/c.json "$ADOPT"; printf "%s" "$MANAGED_FILE_RESULT" > "$C/result"'
+setup_case json-label
+printf '{"a":1,"b":[1]}\n' > "$C/repo/c.json"
+run_lib "C='$C' SRCF='$C/repo/c.json' DEST='$C/dest/c.json' ADOPT='$C/repo/c.json'; $DMF_LABEL"
+check "json label: Created names the item" "[ \"\$(result)\" = created ] && grep -qF 'Created: registries/c.json -> ' '$LOG'"
+printf '{"a":2,"b":[2]}\n' > "$C/dest/c.json"
+run_lib "C='$C' SRCF='$C/repo/c.json' DEST='$C/dest/c.json' ADOPT='$C/repo/c.json'; $DMF_LABEL"
+check "json label: Divergence and Updated name the item" \
+    "[ \"\$(result)\" = updated ] && grep -qF 'Divergence in registries/c.json: a -- overwriting from source (non-interactive)' '$LOG' && grep -qF 'Updated: registries/c.json -> ' '$LOG'"
+
+# ---------------------------------------------------------------------------
+# The JSON review's node script (plan mode): the twins embed the same text, and
+# the detail column (arrayDetail) for array fields. Runs on every platform: no
+# pseudo-terminal needed.
+# ---------------------------------------------------------------------------
+NODE_SH="$TMP_ROOT/review-sh.js"; NODE_PS1="$TMP_ROOT/review-ps1.js"
+perl -0777 -ne 's/\r//g; print $1 if /<<\x27REVIEW_JSON_NODE_EOF\x27\n(.*?\n)REVIEW_JSON_NODE_EOF\n/s' "$LIB" > "$NODE_SH"
+perl -0777 -ne 's/\r//g; print $1 if /\$script:ReviewJsonNode = \@\x27\n(.*?\n)\x27\@\n/s' "$ROOT/scripts/aitools-lib.ps1" > "$NODE_PS1"
+check "json review node script: found in both libs, identical" "[ -s '$NODE_SH' ] && [ -s '$NODE_PS1' ] && cmp -s '$NODE_SH' '$NODE_PS1'"
+
+# plan_detail <source json> <local json>: run plan mode; $C/detail gets the first
+# field's detail column, one element line per line (empty file: no detail);
+# $C/plan.tsv keeps the raw plan.
+plan_detail() {
+    printf '%s\n' "$1" > "$C/s.json"; printf '%s\n' "$2" > "$C/l.json"
+    : > "$C/plan.tsv"
+    node "$NODE_SH" plan "$C/s.json" "$C/l.json" "$C/plan.tsv" 2> "$C/err" || printf 'node failed: %s\n' "$(cat "$C/err")"
+    perl -ne 'chomp; my @f = split /\t/, $_, -1; if ($. == 1 && length($f[5] // "")) { print map { "$_\n" } split /\x1f/, $f[5] }' "$C/plan.tsv" > "$C/detail"
+}
+# detail_is <line>...: $C/detail is exactly these lines
+detail_is() { [ "$(cat "$C/detail")" = "$(printf '%s\n' "$@")" ]; }
+
+if command -v node >/dev/null 2>&1; then
+    setup_case array-detail
+    plan_detail '{"t":[1,3,4]}' '{"t":[1,2,3]}'
+    check "array detail: scalars, removed and added by index" "detail_is '3 local, 3 source element(s)' '- [1] 2' '+ [2] 4'"
+    plan_detail '{"t":[1,1]}' '{"t":[1]}'
+    check "array detail: a duplicate element counts" "detail_is '1 local, 2 source element(s)' '+ [1] 1'"
+    plan_detail '{"t":["1",1,{"a":2}]}' '{"t":[1,"1",null,{"a":1}]}'
+    check "array detail: mixed types (1 and \"1\" differ), objects without identity" \
+        "detail_is '4 local, 3 source element(s)' '+ [2] {\"a\":2}' '- [2] null' '- [3] {\"a\":1}'"
+    plan_detail '{"t":[]}' '{"t":[1]}'
+    check "array detail: empty SOURCE array" "detail_is '1 local, 0 source element(s)' '- [0] 1'"
+    plan_detail '{"t":[1]}' '{"t":[]}'
+    check "array detail: empty LOCAL array" "detail_is '0 local, 1 source element(s)' '+ [0] 1'"
+    plan_detail '{"t":[[1,2],[3,4]]}' '{"t":[[1,2],[3]]}'
+    check "array detail: nested arrays compared whole" "detail_is '2 local, 2 source element(s)' '+ [1] [3,4]' '- [1] [3]'"
+    plan_detail '{"t":[{"id":5,"v":"b"}]}' '{"t":[{"id":5,"v":"a","x":1}]}'
+    check "array detail: same identity, one line per changed key, absent key" \
+        "detail_is '1 local, 1 source element(s)' '~ [0] id=5: v: \"a\" -> \"b\"' '~ [0] id=5: x: 1 -> (absent)'"
+    plan_detail '{"t":[{"name":"n","k":{"b":1,"a":2}}]}' '{"t":[{"k":{"a":2,"b":1},"name":"n"}]}'
+    check "array detail: key order inside an element is no difference" "[ ! -s '$C/plan.tsv' ]"
+    plan_detail '{"t":["x","y"]}' '{"t":["y","x"]}'
+    check "array detail: a reorder alone is one line" "detail_is '2 local, 2 source element(s)' '~ order differs (same elements)'"
+    # 0,1,...,24 (perl, not seq: BSD seq -s leaves a trailing separator on macOS)
+    plan_detail "{\"t\":[$(perl -e 'print join(",", 0 .. 24)')]}" '{"t":[]}'
+    check "array detail: at most 20 element lines, then a count of the rest" \
+        "[ \"\$(wc -l < '$C/detail')\" -eq 22 ] && [ \"\$(sed -n 2p '$C/detail')\" = '+ [0] 0' ] && [ \"\$(sed -n 21p '$C/detail')\" = '+ [19] 19' ] && [ \"\$(tail -n 1 '$C/detail')\" = '... 5 more line(s)' ]"
+    plan_detail '{"t":["a\tb\u001fc"]}' '{"t":[]}'
+    check "array detail: tab and unit separator inside a value stay escaped" \
+        "detail_is '0 local, 1 source element(s)' '+ [0] \"a\\tb\\u001fc\"' && [ \"\$(perl -ne 'chomp; @f = split /\\t/, \$_, -1; print scalar @f' '$C/plan.tsv')\" = 6 ]"
+    plan_detail '{"a":1}' '{"a":2}'
+    check "array detail: a scalar field has an empty detail column (6 columns)" \
+        "[ ! -s '$C/detail' ] && [ \"\$(perl -ne 'chomp; @f = split /\\t/, \$_, -1; print scalar @f' '$C/plan.tsv')\" = 6 ]"
+    plan_detail '{"t":[1]}' '{"t":"x"}'
+    check "array detail: array against a non-array, no detail" "[ ! -s '$C/detail' ] && [ -s '$C/plan.tsv' ]"
+    plan_detail '{"t":[1]}' '{}'
+    check "array detail: a field only in SOURCE, no detail" "[ ! -s '$C/detail' ] && grep -q 'source-only' '$C/plan.tsv'"
+else
+    printf 'SKIP json review node script cases: node not installed\n'; SKIP=$((SKIP + 1))
+fi
+
+# Read-only copies: a new file is created; a dry run writes nothing
+setup_case readonly-copy-json-new
+printf '{"a":1}\n' > "$C/repo/c.json"
+run_lib "export MANAGED_NO_REVIEW=true; C='$C' SRCF='$C/repo/c.json' DEST='$C/dest/c.json' ADOPT='$C/repo/c.json'; $DMF"
+check "read-only copy (JSON), LOCAL missing: created from SOURCE" "[ \"\$(result)\" = created ] && cmp -s '$C/repo/c.json' '$C/dest/c.json'"
+setup_case readonly-copy-dryrun
+printf 'new\n' > "$C/src.md"; printf 'old\n' > "$C/dest/a.md"
+run_lib "export MANAGED_NO_REVIEW=true DRY_RUN=true; C='$C' SRCF='$C/src.md' DEST='$C/dest/a.md' ADOPT='$C/repo/a.md'; $DMF"
+check "read-only copy in a dry run: reported, nothing written" \
+    "[ \"\$(result)\" = verified ] && grep -qx old '$C/dest/a.md' && grep -qF '[DRY RUN] Would update: item' '$LOG' && ! ls '$C/dest/'a.md.bak.* >/dev/null 2>&1"
+
+# Read-only copies (MANAGED_NO_REVIEW=true): SOURCE wins, backup kept, no warning
+setup_case readonly-copy-text
+printf 'new\n' > "$C/src.md"; printf 'old\n' > "$C/dest/a.md"
+run_lib "export MANAGED_NO_REVIEW=true; C='$C' SRCF='$C/src.md' DEST='$C/dest/a.md' ADOPT='$C/repo/a.md'; $DMF"
+check "read-only copy (text): SOURCE written, backup kept, adopt target untouched" \
+    "[ \"\$(result)\" = updated ] && grep -qx new '$C/dest/a.md' && ls '$C/dest/'a.md.bak.* >/dev/null 2>&1 && [ ! -e '$C/repo/a.md' ]"
+check "read-only copy (text): logged as such, no warning" \
+    "grep -q 'read-only copy: source wins, backup kept' '$LOG' && ! grep -q '\[warn\]' '$LOG'"
+
+setup_case readonly-copy-json
+printf '{"a":1,"b":[1,2]}\n' > "$C/repo/c.json"; printf '{"z":0,"b":[2]}\n' > "$C/dest/c.json"
+run_lib "export MANAGED_NO_REVIEW=true; C='$C' SRCF='$C/repo/c.json' DEST='$C/dest/c.json' ADOPT='$C/repo/c.json'; $DMF"
+check "read-only copy (JSON): written whole (LOCAL-only field gone), backup kept" \
+    "[ \"\$(result)\" = updated ] && cmp -s '$C/repo/c.json' '$C/dest/c.json' && ls '$C/dest/'c.json.bak.* >/dev/null 2>&1"
+
+if $HAVE_PTY; then
+    setup_case readonly-copy-pty
+    printf 'new\n' > "$C/src.md"; printf 'old\n' > "$C/dest/a.md"
+    run_lib "export MANAGED_NO_REVIEW=true; C='$C' SRCF='$C/src.md' DEST='$C/dest/a.md' ADOPT='$C/repo/a.md'; $DMF" "a\n"
+    check "read-only copy on a terminal: no menu, SOURCE written, nothing adopted" \
+        "[ \"\$(result)\" = updated ] && grep -qx new '$C/dest/a.md' && ! grep -q 'choice \[' '$C/out' && [ ! -e '$C/repo/a.md' ]"
+
+    setup_case json-array-display
+    printf '{"list":[{"id":1,"v":"a"},{"id":2,"v":"b"}],"tags":["x","y"]}\n' > "$C/repo/c.json"
+    printf '{"list":[{"id":1,"v":"a"},{"id":2,"v":"OLD"},{"id":3,"v":"c"}],"tags":["y","x"]}\n' > "$C/dest/c.json"
+    run_lib "C='$C' SRCF='$C/repo/c.json' DEST='$C/dest/c.json' ADOPT='$C/repo/c.json'; $DMF" "o\no\n"
+    perl -pe 's/\e\[[0-9;]*m//g; s/\r//g' "$C/out" > "$C/out.plain"
+    check "json array: the header names the file" "has_line '$C/out.plain' '[REVIEW] item: list differs from source.'"
+    check "json array: counts, the changed and the removed element shown" \
+        "has_line '$C/out.plain' '  3 local, 2 source element(s)' && has_line '$C/out.plain' '  ~ [1] id=2: v: \"OLD\" -> \"b\"' && has_line '$C/out.plain' '  - [2] {\"id\":3,\"v\":\"c\"}'"
+    check "json array: a reorder alone is one line" "has_line '$C/out.plain' '  ~ order differs (same elements)'"
+    check "json array: legend, colour-coded lines" \
+        "has_line '$C/out.plain' '  red - = only in local   green + = only in source   yellow ~ = changed' && grep -qF \"\${ESC}[33m~ [1] id=2\" '$C/out' && grep -qF \"\${ESC}[31m- [2]\" '$C/out'"
+    check "json array: element lines in the log" "grep -qF 'review item: list: ~ [1] id=2: v: \"OLD\" -> \"b\"' '$LOG'"
+    check "json array: overwrite applied" \
+        "[ \"\$(result)\" = updated ] && [ \"\$(node -e 'console.log(JSON.stringify(JSON.parse(require(\"fs\").readFileSync(process.argv[1]))))' '$C/dest/c.json')\" = '{\"list\":[{\"id\":1,\"v\":\"a\"},{\"id\":2,\"v\":\"b\"}],\"tags\":[\"x\",\"y\"]}' ]"
+fi
+
 if $HAVE_PTY; then
     setup_case json-fields
     printf '{"a":1,"b":2,"c":3}\n' > "$C/repo/c.json"; printf '{"a":9,"b":8,"c":7,"z":0}\n' > "$C/dest/c.json"
@@ -320,6 +442,14 @@ if $HAVE_PTY; then
         "[ \"\$(node -e 'console.log(JSON.stringify(JSON.parse(require(\"fs\").readFileSync(process.argv[1]))))' '$C/dest/c.json')\" = '{\"a\":1,\"b\":8,\"c\":7,\"z\":0}' ] && [ \"\$(node -e 'console.log(JSON.stringify(JSON.parse(require(\"fs\").readFileSync(process.argv[1]))))' '$C/repo/c.json')\" = '{\"a\":1,\"b\":8,\"c\":3,\"z\":0}' ]"
     check "json per-field: precedence -> accept & adopt" "[ \"\$(result)\" = 'accept & adopt' ]"
     check "json LOCAL-only: no [o]verwrite offered" "grep -q 'choice \[a/s/x\]' '$C/out'"
+
+    setup_case json-label-pty
+    printf '{"a":1,"b":2}\n' > "$C/repo/c.json"; printf '{"a":9,"b":8,"z":0}\n' > "$C/dest/c.json"
+    run_lib "C='$C' SRCF='$C/repo/c.json' DEST='$C/dest/c.json' ADOPT='$C/repo/c.json'; $DMF_LABEL" "a\ns\ns\n"
+    check "json label: every review header names the file, the LOCAL-only field too" \
+        "has_line '$C/plain' '[REVIEW] registries/c.json: a differs from source.' && has_line '$C/plain' '[REVIEW] registries/c.json: z differs from source.'"
+    check "json label: Accept & adopt and Skipped name the item" \
+        "[ \"\$(result)\" = 'accept & adopt' ] && grep -qF 'Accept & adopt: registries/c.json -> ' '$LOG' && grep -qF 'Skipped: registries/c.json (' '$LOG'"
 
     setup_case json-skip
     printf '{"a":1}\n' > "$C/repo/c.json"; printf '{"a":2}\n' > "$C/dest/c.json"

@@ -212,6 +212,14 @@ Then no menu is shown and `overwrite` is selected: SOURCE is written to LOCAL
 logged to deploy.log. For JSON, each differing field takes the SOURCE value;
 a field only in LOCAL stays in LOCAL.
 
+**Read-only copies.** A caller marks LOCAL as a read-only copy (never edited
+there) with `MANAGED_NO_REVIEW=true` on the `deploy_managed_file` call /
+`-NoReview` on `Deploy-ManagedFile`. When it differs from SOURCE, SOURCE is
+written (backup kept) with no menu, in every run; adopt and merge are not
+offered, and JSON is written whole (no field review). The result is
+`updated`. Today's caller: deploy-harness, for `~/.aitools/reference/` and
+`~/.aitools/registries/`.
+
 `DRY_RUN=true` (`AITOOLS_DRY_RUN`) logs what would happen, writes nothing,
 and reports the file as `verified`.
 

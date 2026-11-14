@@ -253,6 +253,10 @@ jobs:
         if: ${{ !cancelled() }}
         run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/build-deploy/test-build-deploy-backup.sh
 
+      - name: check-pre-push step 7 tests
+        if: ${{ !cancelled() }}
+        run: bash tests/check-pre-push/test-pre-push-step7.sh
+
       - name: setup-user-shell login profile + rc tests (bash 5)
         if: ${{ !cancelled() }}
         run: bash tests/setup-user-shell/test-setup-user-shell.sh
@@ -565,6 +569,10 @@ jobs:
         if: ${{ !cancelled() }}
         run: bash tests/build-deploy/test-build-deploy-backup.sh
 
+      - name: check-pre-push step 7 tests
+        if: ${{ !cancelled() }}
+        run: bash tests/check-pre-push/test-pre-push-step7.sh
+
       - name: setup-user-shell login profile + rc tests
         if: ${{ !cancelled() }}
         run: bash tests/setup-user-shell/test-setup-user-shell.sh
@@ -761,6 +769,11 @@ jobs:
         if: ${{ !cancelled() }}
         shell: bash
         run: bash tests/build-deploy/test-build-deploy-backup.sh
+
+      - name: check-pre-push step 7 tests (runs check-pre-push.ps1, via Git Bash)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: bash tests/check-pre-push/test-pre-push-step7.sh
 
       - name: Profile resolver tests (.ps1, native pwsh)
         if: ${{ !cancelled() }}

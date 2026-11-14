@@ -130,14 +130,14 @@ macOS/Linux:
 vim shared/claude-shared.md
 bash scripts/build-deploy.sh        # rebuilds the dotprofile deploy/ (backs up to deploy.bak.<UTC>/, swaps in only on success)
 git add shared/ && git commit -m "Update shared config"
-# then commit the regenerated deploy/ in your dotprofile repo (aitools-<user>/)
+# the dotprofile deploy/ is build output: gitignored, not committed
 ```
 
 Windows (PowerShell):
 ```powershell
 # Edit shared source files in your editor, then rebuild deploy scripts:
 bash scripts/build-deploy.sh             # bash-only build step (uses Git Bash on Windows); rebuilds the dotprofile deploy/ (backup + swap)
-git add shared/; git commit -m "Update shared config"   # commit deploy/ in your dotprofile repo
+git add shared/; git commit -m "Update shared config"   # the dotprofile deploy/ is gitignored build output
 ```
 
 ### Verification checklists
