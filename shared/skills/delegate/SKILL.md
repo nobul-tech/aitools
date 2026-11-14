@@ -37,7 +37,7 @@ deleted aitools sources-of-truth rule removed; "Review after" covers every
 change (D-DEL5).
 v2.2 (2026-11-14, 38dc-08): "Environment limits" gains delegate identity and
 control (description as the name-to-agentId link, transcript path, TaskStop,
-one hand-back, background tasks); "Verifying what comes back" points to the
+repeat hand-backs, background tasks); "Verifying what comes back" points to the
 delegate's transcript.
 
 ## When to use
@@ -416,8 +416,9 @@ Verify these before relying on them; versions move. Source of record:
   `grep`/`find` in pipelines or scratch scripts when those tools are absent.
 - **Follow-up messages.** `SendMessage` to a running delegate's id is
   delivered at its next tool round; a message to a finished one resumes it.
-  A delegate delivers one `SubagentHandback` report; after a resume it
-  answers by `SendMessage` (a second hand-back is refused).
+  A resumed delegate's second `SubagentHandback` is usually delivered but
+  was refused once (2.1.325); if it is refused, the delegate sends the
+  content by `SendMessage`.
 - **Identity and control** (2.1.325; `/tool-ops`, "Delegate Identity,
   Transcripts and Control"). Start every Agent `description` with the
   delegate's name: `meta.json` copies it, and it is the only link from the

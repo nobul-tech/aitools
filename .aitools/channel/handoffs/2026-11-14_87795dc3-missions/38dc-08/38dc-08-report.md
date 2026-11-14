@@ -12,10 +12,11 @@ delegate's agent id: ab61a67f59bce2b10 (found by its `description` in
    agent ids and transcript files, in a new section of
    `reference/tool-ops-claude-code.md` ("Delegate Identity, Transcripts and
    Control", v1.0) plus Version Dependencies items #31 and #32.
-2. Verified all eleven starting OL items; corrected two (output_file is not a
-   transcript copy until the delegate is resumed; a delegate's background
-   work outlives its hand-back and can bring it back to report again, and a
-   second SubagentHandback is now refused) and added about fifteen new facts.
+2. Verified all eleven starting OL items; corrected two (output_file is
+   created empty and only some later become a hard link to the transcript;
+   a delegate's background work outlives its hand-back and can bring it back
+   to report again, and a repeat SubagentHandback is usually delivered but
+   was refused once) and added about fifteen new facts.
 3. Tested with two throwaway level-3 probes (2b10-01 id/env/tools/TaskStop/
    background shell/resume; 2b10-02 TaskStop on a running delegate).
 4. Also updated the `/delegate` skill (v2.2) and the `/tool-ops` skill lookup
@@ -30,10 +31,10 @@ delegate's agent id: ab61a67f59bce2b10 (found by its `description` in
 | 1 | Transcript at `subagents/agent-<id>.jsonl` with `.meta.json`; `description` is the only link; nested delegates flat | Confirmed, including level 3 | probe 2b10-01 meta: `"parentAgentId":"ab61a67f59bce2b10","spawnDepth":3`; 42 meta files in one directory |
 | 2 | `~/.claude/sessions/` holds PID-keyed `.json` and `.key` files | Confirmed; the JSON maps pid -> sessionId, cwd, version, name, status | `sessions/10576.json` |
 | 3 | Background launch returns at once with agentId and output_file, no session id | Confirmed; launch result quoted verbatim in the reference | probe launch result |
-| 3a | output_file "is the full subagent JSONL transcript" | **Corrected**: empty until the delegate is resumed, then a hard link | 2b10-01: 0 bytes before SendMessage, 877,743 bytes and nlink 2 after; 2b10-02 (never resumed) stayed 0 bytes; 14 of 42 linked |
+| 3a | output_file "is the full subagent JSONL transcript" | **Corrected**: created empty; for some delegates later a hard link to the transcript; trigger unknown | 2b10-01: 0 bytes before SendMessage, 877,743 bytes and nlink 2 after; but M5-Fixes, M6-G, M6-B, M2-Reask-D2 are linked though never resumed (reviewer 2b10-03, B1); 2b10-02 stayed 0 bytes; 14 of 42 linked at 18:44Z |
 | 4 | A delegate does not see its own id; TaskStop error reveals it; TaskStop cannot stop another agent's task | Confirmed; also: no env var holds it, the meta search finds it, an orchestrator cannot stop its own running delegate, and an unknown id lists the running agents | 38dc-08 -> 2b10-02 TaskStop refused, probe unaffected |
 | 5 | SendMessage to a finished agent resumes it with a pin | Confirmed; to a running agent it is queued to the next tool round; `to: "main"` works | 2b10-01 resume; M6-Polish 18:38:44Z |
-| 6 | A delegate with a background watcher hands back again on each resume | Refined: background work outlives the hand-back and its completion reaches the delegate again; a second SubagentHandback is now refused ("one report per result"), so the delegate re-reports by SendMessage | 2b10-01 refusal text and its b2pmsszp4 shell |
+| 6 | A delegate with a background watcher hands back again on each resume | Refined: background work outlives the hand-back and its completion reaches the delegate again; repeat SubagentHandback calls were usually delivered (M1-Ship 6, M3-Fixes 4, M6-A 6, M6-DE 3, M4-Winpty and M6-R4 after SendMessage resumes) and refused once (2b10-01, "one report per result"); condition unknown | 2b10-01 refusal text and its b2pmsszp4 shell; reviewer 2b10-03 counts (B2) |
 | 7 | Foreground Bash moved to background after about 180 s | Confirmed from M6-Polish's transcript (17:41:54Z, verbatim text in the reference); a 150 s foreground wait was not moved (2b10-02) | |
 | 8 | Hand-backs arrive as `agent-message from=<agentId>` | Confirmed; frame text and the harness tag-neutralizing preface documented | probe hand-backs |
 | 9 | Sizes | Parent 17.2 MB, orchestrator about 4.4 MB at 18:44Z; a probe transcript is about 0.5 MB before its first turn | `ls`, count-links.py |
@@ -93,10 +94,12 @@ worktree (gitignored).
 
 - macOS, Linux, Claude Code web, Cursor.
 - Whether the main session can TaskStop a delegate.
-- Why M6-A could hand back five times while 2b10-01's second hand-back was
-  refused.
-- The meaning of `revivedAt` and of the `<tools-used-before-summary>`
-  reminder.
+- Why repeat hand-backs were usually delivered (M6-A six times) while
+  2b10-01's second hand-back was refused.
+- What makes an `output_file` become a hard link.
+- The meaning of the `<tools-used-before-summary>` reminder. (`revivedAt`:
+  rewritten each time the user messages that delegate directly, per the
+  reviewer's three matching timestamps.)
 - What a delegate's TaskStop on itself does (not attempted: it could stop the
   caller).
 
@@ -108,8 +111,9 @@ worktree (gitignored).
   skills). Other files cite these numbers, so a renumber needs a sweep. New
   items here use #31 and #32 to avoid adding to it.
 - INCIDENT (candidate, not filed): the Agent launch result calls
-  `output_file` "the full subagent JSONL transcript", but it is empty until
-  the delegate is resumed (Claude Code behaviour, upstream; documented here).
+  `output_file` "the full subagent JSONL transcript", but it is created
+  empty and only some later become a hard link (Claude Code behaviour,
+  upstream; documented here).
 - CONFLICT: the launch prompt was truncated at "Operational learning to start
   from"; the rest arrived by SendMessage from M6-Polish. Resolved by tier 2:
   the message was treated as part of the prompt, as it asked.

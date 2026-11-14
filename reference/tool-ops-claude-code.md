@@ -63,8 +63,8 @@ Post-push checklist #20 triggers this review automatically.
 | 28 | Auto mode: an explicit user-scope allow rule (`Bash(gh pr merge:*)`) resolves a matching command before the classifier, so `gh pr merge` no longer gets the "[Merge Without Review]" denial; applies to sub-agents; picked up mid-session | 2.1.309 | 2.1.309 (2026-10-28) | "Auto Mode and Allow Rules for PR Merges" section below, dotprofile `profile.json` `claude.settings.permissions.allow`, merge-mission prompts | -- (documented: permission-modes, permissions, settings) |
 | 29 | Hook output channel: stderr of a hook that exits 0 never reaches Claude; observe-mode hooks reach Claude through stdout JSON `hookSpecificOutput.additionalContext`. Hooks docs (https://code.claude.com/docs/en/hooks, read 2026-10-28): "Claude never sees stderr from a hook that exits 0."; PreToolUse decision control, `additionalContext`: "String added to Claude’s context alongside the tool result."; "A hook’s additionalContext, systemMessage, and initialUserMessage strings, and its plain stdout, are capped at 10,000 characters" | 2.1.309 | 2.1.309 (2026-10-28) | `shared/hooks/delegation-duty-guard.sh`, `shared/hooks/workflow-delegation-guard.sh` (`finish()`: 4,000-character cap), `.claude/rules/hook-rollout.md` | -- |
 | 30 | Workflow event shape: Claude Code fires ONE PreToolUse(Workflow) per Workflow tool call, whose `tool_input` carries the whole `script` (the 5 real payloads of session 10cf255a-c carry only `script`); no hook event fires per `agent()` call (a workflow-runtime function, not a tool call); tool calls made inside workflow agents fire the configured hooks with `agent_id`. Hooks docs (read 2026-10-28): PreToolUse "Matches on any tool name except EndConversation: built-in tools such as Bash, PowerShell, Edit, Write, Read, Glob, Grep, Agent, Workflow, WebFetch, WebSearch, AskUserQuestion, and ExitPlanMode, and any MCP tool names."; "When a subagent calls a tool, tool events such as PreToolUse and PostToolUse fire the same configured hooks as in the main conversation, and the input carries the agent_id and agent_type common input fields that identify the subagent." Live record: workflow wf_11a87d20-2c7's agent transcripts hold 34 `PreToolUse:Bash`, 1 `PreToolUse:Read` and 68 `PostToolUse:Write` hook records. Not seen by the workflow guard: a saved workflow launched by `tool_input.name` (no `script` / `scriptPath`: reported "not checked"), and child workflows a script starts with `workflow(...)` (their `agent()` prompts reach no hook). Parser limits (hook header LIMITS): a `/` after `)` is read as division; in `const A = '...', B = '...'` only `A` is captured; a method named `agent(p) { }` counts as an unresolved call site | 2.1.309 | 2.1.309 (2026-10-28) | `shared/hooks/workflow-delegation-guard.sh` (parses the script at that one event), `shared/hooks/hooks-manifest.json`, `.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-Hook2/S3-Hook2-spec.md` section 1 | -- |
-| 31 | Delegate identity and files: every delegate's transcript is `~/.claude/projects/<project-dir>/<main-session-id>/subagents/agent-<agentId>.jsonl` (flat for all depths) with `agent-<agentId>.meta.json`, whose `description` (the Agent call's `description`) is the only link from a mission name to an agentId; the Agent tool returns the agentId and an `output_file` but no session id; the `output_file` is an empty file until the delegate is resumed (then a hard link to the transcript); no environment variable holds a delegate's own id (`CLAUDE_CODE_SESSION_ID` is the main session's) | 2.1.325 | 2.1.325 (2026-11-14, Windows) | "Delegate Identity, Transcripts and Control" section below, `shared/skills/delegate/SKILL.md` ("Environment limits"), delegation prompts | -- (not in the official docs as observed) |
-| 32 | Delegate control: TaskStop cannot stop a delegate it does not own (an orchestrator cannot stop its own delegate; the error names the caller's id) and with an unknown id lists the session's running background agents; SendMessage queues to a running delegate and resumes a finished one; SubagentHandback delivers one report per result (a second call is refused); a delegate's background tasks outlive its hand-back and their completion can bring it back to report again | 2.1.325 | 2.1.325 (2026-11-14, Windows) | "Delegate Identity, Transcripts and Control" section below, `shared/skills/delegate/SKILL.md`, delegation prompts | -- |
+| 31 | Delegate identity and files: every delegate's transcript is `~/.claude/projects/<project-dir>/<main-session-id>/subagents/agent-<agentId>.jsonl` (flat for all depths) with `agent-<agentId>.meta.json`, whose `description` (the Agent call's `description`) is the only link from a mission name to an agentId; the Agent tool returns the agentId and an `output_file` but no session id; the `output_file` is created empty and only for some delegates later becomes a hard link to the transcript (trigger unknown); no environment variable holds a delegate's own id (`CLAUDE_CODE_SESSION_ID` is the main session's) | 2.1.325 | 2.1.325 (2026-11-14, Windows) | "Delegate Identity, Transcripts and Control" section below, `shared/skills/delegate/SKILL.md` ("Environment limits"), delegation prompts | -- (not in the official docs as observed) |
+| 32 | Delegate control: TaskStop cannot stop a delegate it does not own (an orchestrator cannot stop its own delegate; the error names the caller's id) and with an unknown id lists the session's running background agents; SendMessage queues to a running delegate and resumes a finished one; a resumed delegate's second SubagentHandback is usually delivered but was refused once ("one report per result"; condition unknown); a delegate's background tasks outlive its hand-back and their completion can bring it back to report again | 2.1.325 | 2.1.325 (2026-11-14, Windows) | "Delegate Identity, Transcripts and Control" section below, `shared/skills/delegate/SKILL.md`, delegation prompts | -- |
 
 ### MEDIUM -- Affects developer experience or specific features
 
@@ -105,8 +105,9 @@ Notable changes in CC releases that may affect this registry.
 - **SendMessage works for delegates** (item #25 closed): queued to a running
   delegate, resumes a finished one, `to: "main"` reaches the main
   conversation. See items #31 and #32.
-- **SubagentHandback** delivers one report per result; a delegate's
-  background tasks outlive its hand-back. See item #32.
+- **SubagentHandback**: a resumed delegate's second report is usually
+  delivered and was refused once; a delegate's background tasks outlive its
+  hand-back. See item #32.
 - Changelog not read for this entry; the behaviour above was observed, not
   read from release notes.
 
@@ -430,17 +431,17 @@ are unknown.
 |------|------|-------|
 | Main session transcript | `~/.claude/projects/<project-dir>/<session-id>.jsonl` | `<project-dir>` is the session's cwd with `:` and `\` replaced by `-`: `C:\Users\jdpal\repos\aitools` -> `C--Users-jdpal-repos-aitools` (see #4 for `/` on macOS) |
 | Every delegate's transcript, at any depth | `~/.claude/projects/<project-dir>/<session-id>/subagents/agent-<agentId>.jsonl` | `<session-id>` is the MAIN session's id. Levels 1, 2 and 3 sit flat in one directory; no per-level or per-parent folders |
-| Delegate metadata | `.../subagents/agent-<agentId>.meta.json` | Written at launch, before the transcript (probe 2b10-01: meta 10:39:51.79, transcript 10:39:52.01 local time) |
-| Large tool output | `.../<session-id>/tool-results/<toolId>.txt` | A Bash result over the inline limit is replaced by `Output too large (58.9KB). Full output saved to: <...>\tool-results\b1ebmx7sq.txt` (a delegate's call, saved under the main session) |
+| Delegate metadata | `.../subagents/agent-<agentId>.meta.json` | Written at launch, before the transcript (probe 2b10-01: meta 18:39:51.79Z, transcript 18:39:52.01Z) |
+| Large tool output | `.../<session-id>/tool-results/<id>.txt` | A result over the inline limit is replaced by `Output too large (58.9KB). Full output saved to: <...>\tool-results\b1ebmx7sq.txt` (a delegate's Bash call, saved under the main session). Named by the shell id for Bash, by the tool-use id for other tools (`toolu_01U8XBMKcQhqJV3kgH1tGNMS.txt`, a Grep) |
 | Agent `output_file` | `%LOCALAPPDATA%\Temp\claude\<hash>\<session-id>\tasks\<agentId>.output` | Not a reliable copy of the transcript; see "output_file" below |
 | Background shell output | same `tasks\` directory, `<shellId>.output` | Shell ids are 9 characters starting with `b` (`b2pmsszp4`). A delegate's shells write to the main session's `tasks\` directory |
-| Running-process records | `~/.claude/sessions/<pid>.json` and `<pid>.<hash>.key` | No transcripts. The JSON holds `pid`, `sessionId`, `cwd`, `startedAt`, `version`, `kind`, `name`, `status`, `messagingSocketPath` (example: `{"pid":10576,"sessionId":"87795dc3-...","cwd":"C:\\Users\\jdpal\\repos\\aitools",...,"version":"2.1.325",...,"kind":"interactive",...,"name":"aitools-82",...,"status":"busy",...}`) |
+| Running-process records | `~/.claude/sessions/<pid>.json` and `<pid>.<hash>.key` (a `.key` file can exist with no matching `.json`) | No transcripts. The JSON's fields include `pid`, `sessionId`, `cwd`, `startedAt`, `version`, `kind`, `name`, `status`, `messagingSocketPath` (example: `{"pid":10576,"sessionId":"87795dc3-...","cwd":"C:\\Users\\jdpal\\repos\\aitools",...,"version":"2.1.325",...,"kind":"interactive",...,"name":"aitools-82",...,"status":"busy",...}`) |
 
 The `tasks\` path on macOS and Linux: unknown.
 
 #### `meta.json` fields
 
-Example (probe 2b10-01, verbatim):
+Example (probe 2b10-01, verbatim, as written at launch):
 
 ```
 {"agentType":"general-purpose","isBuiltIn":true,"launchedWithDefaults":true,"description":"2b10-01-idprobe throwaway test","toolUseId":"toolu_016xS2ZaJDcPz1JxqYEzeUKf","parentAgentId":"ab61a67f59bce2b10","spawnDepth":3,"requestShape":"background","requestNonInteractive":true,"pickedEffortModel":"claude-opus-5-5"}
@@ -454,33 +455,50 @@ Example (probe 2b10-01, verbatim):
 | `spawnDepth` | 1 (launched by the main session), 2 or 3 |
 | `requestShape`, `requestNonInteractive` | `"background"` and `true` on all 42 files, including the 38dc-08 launch, whose Agent call had no `run_in_background` argument |
 | `agentType`, `isBuiltIn`, `launchedWithDefaults`, `pickedEffortModel` | Agent type and model choice (`general-purpose`, `true`, `true`, `claude-opus-5-5` on every file here) |
-| `finished` | Added as `true` when the delegate's run ends. Not a liveness test: M6-Polish's file said `"finished": true` while TaskStop listed it among the running background agents (10:39 local time) |
-| `revivedAt` | Epoch milliseconds, seen on one file only: M6-Polish, `1794681366871` = 2026-11-14T18:36:06.871Z, when a commander message reached it after its forced hand-back. Not written for delegates resumed with SendMessage (M6-A, M6-R4, 2b10-01). Otherwise unknown |
+| `finished` | Added as `true` when the delegate's run ends; removed when it is revived (the file is rewritten and its key order changes). Not a liveness test: M6-Polish's file said `"finished": true` while TaskStop listed it among the running background agents (18:39Z) |
+| `revivedAt` | Epoch milliseconds, seen on one file only: M6-Polish. It is rewritten each time the user messages that delegate directly: three values seen (18:36:06.871Z, 18:40:39.762Z, 18:49:44.394Z), each matching a "The user sent a new message while you were working" entry in its transcript (reviewer 2b10-03). Not written for delegates resumed with SendMessage (M6-A, M6-R4, 2b10-01) |
 
-Every transcript line carries `agentId`, `sessionId` (the main session's
-id), `isSidechain: true`, `version` (`2.1.325`), `cwd`, `gitBranch`,
-`entrypoint`, `userType`, `uuid`, `parentUuid` and `timestamp`. The launching
+Every `user`, `assistant` and `attachment` line of a delegate transcript
+carries `agentId`, `sessionId` (the main session's id), `isSidechain: true`,
+`version` (`2.1.325`), `cwd`, `gitBranch`, `entrypoint`, `userType`, `uuid`,
+`parentUuid` and `timestamp`. The `api-request`, `api-request-shape` and
+`api-request-blob` lines (26 of 83 in 2b10-01) lack `isSidechain`, `cwd`,
+`gitBranch`, `entrypoint`, `userType`, `uuid` and `parentUuid`, and the
+`api-request-blob` lines also lack `version` and `timestamp` (reviewer
+2b10-03). The launching
 agent's transcript keeps the full launch record: the Agent `tool_use` input,
 and a `toolUseResult` with `isAsync`, `status: "async_launched"`, `agentId`,
 `description`, `resolvedModel` and the full `prompt` as sent.
 
 #### Mapping a mission name to an agent id
 
-The `description` is the only link from a mission name to an agentId. The
-Agent tool in 2.1.325 has no `name` parameter (the parameters offered to
-38dc-08: `description`, `prompt`, `subagent_type`, `model`, `isolation`,
-`effort`), and neither the prompt nor the mission name reaches `meta.json`
-any other way. So:
+The `description` is the only link from a mission name to an agentId seen
+in `meta.json`: neither the prompt nor any other field carries the mission
+name. The Agent tool offered to the level-2 delegate 38dc-08 has no `name`
+parameter (its parameters: `description`, `prompt`, `subagent_type`,
+`model`, `isolation`, `effort`, and no `run_in_background`, which 37 of the
+session's 47 Agent calls passed from other levels). The main session's
+Agent schema was not checked. So:
 
 1. Start every Agent `description` with the mission name and keep names
    unique (`38dc-08-subagent-transcripts docs`). A reused description makes
    the lookup ambiguous.
 2. Record the agentId from the launch result in your notes and report.
-3. To recover it later, search the descriptions:
-   `grep -o '"description":"[^"]*"' -r <...>/subagents --include=*.meta.json`
-   (the search M6-Polish ran at 18:07:50Z) or the Grep tool on `subagents\`
-   with the mission name. The
-   file name is the agentId; `parentAgentId` gives the chain upward.
+3. To recover it later, search the descriptions (or use the Grep tool on
+   `subagents\` with the mission name). The file name is the agentId;
+   `parentAgentId` gives the chain upward.
+
+   macOS / Linux / Git Bash (the search M6-Polish ran at 18:07:50Z):
+
+   ```bash
+   grep -o '"description":"[^"]*"' -r ~/.claude/projects/<project-dir>/<session-id>/subagents --include=*.meta.json
+   ```
+
+   Windows PowerShell (run 2026-11-14, pwsh 7):
+
+   ```powershell
+   Select-String -Path "$env:USERPROFILE\.claude\projects\<project-dir>\<session-id>\subagents\*.meta.json" -Pattern '"description":"[^"]*"' | ForEach-Object { "$($_.Filename): $($_.Matches[0].Value)" }
+   ```
 4. The main session is not in `subagents/`: its transcript is
    `<project-dir>/<session-id>.jsonl`.
 
@@ -507,17 +525,20 @@ id in its own notes and reports when the commander asks for it.
 
 The launch result calls `output_file` "the full subagent JSONL transcript".
 Observed instead: it is created as an empty file at launch (0 bytes, link
-count 1). After 2b10-01 had finished and was resumed by SendMessage, the file
-became a hard link to `subagents/agent-ad2eb0549286e5589.jsonl` (877,743
-bytes, link count 2, `os.path.samefile` true); before the resume it was still
-empty, although the delegate had finished. Across the session (18:44Z), 14
-of 42 `output` files were hard links to the transcript and 28 were empty;
-the linked ones include every delegate known to have been resumed (M6-Polish,
-M6-A, M6-R4 and 2b10-01 by a message). M6-DE, which handed back with a CI
-Monitor armed, was also linked; whether and how it was resumed is unknown.
-Delegates not known to have been resumed (M6-R1,
-M6-F, and the probe 2b10-02, which finished and was never resumed) had empty
-files. **Read a delegate's transcript at
+count 1), and for some delegates it later becomes a hard link to
+`subagents/agent-<agentId>.jsonl`. What triggers the link: unknown.
+
+- 2b10-01: still empty after it had finished; right after a SendMessage
+  resumed it, a hard link (877,743 bytes, link count 2, `os.path.samefile`
+  true). M6-R1 was linked at 18:48:58Z, after a resume at 18:46:58Z (found
+  by the reviewer 2b10-03).
+- Linked although never resumed (each transcript ends at its one
+  SubagentHandback; no SendMessage in the session targets them): M5-Fixes,
+  M6-G, M6-B, M2-Reask-D2.
+- Empty although finished: M6-F, M4-B and the probe 2b10-02 (never resumed).
+- Count at 18:44Z: 14 of 42 `output` files linked, 28 empty.
+
+**Read a delegate's transcript at
 `subagents/agent-<agentId>.jsonl`**, through the harness readers
 (`read-session-full.py --help`, `read-session.py --help` in
 `~/.aitools/bin/`), never whole: a delegate transcript is commonly 2-5 MB, and
@@ -582,7 +603,8 @@ its background tasks and finish, then wait for its notification.
 #### SendMessage
 
 - **Who has it**: delegates at levels 1-3, as a deferred tool (load it with
-  ToolSearch `select:SendMessage`). `ListAgents`, which its description
+  ToolSearch `select:SendMessage`; observed at level 1 in M6-Polish's
+  transcript at 18:14:29Z, at levels 2 and 3 by 38dc-08 and 2b10-01). `ListAgents`, which its description
   mentions, is not available to delegates at levels 2 and 3 (ToolSearch
   `select:ListAgents`: "No matching deferred tools found").
 - **To a running delegate**: queued, delivered at its next tool round:
@@ -624,17 +646,22 @@ its background tasks and finish, then wait for its notification.
     time this agent stops with no live background children of its own. The
     user can send it another message and resume it, so the same task-id may
     notify more than once.`
-- **One report per result.** A resumed 2b10-01 called SubagentHandback
-  again and was refused: `Nothing was sent: an earlier report of yours was
-  already delivered (SubagentHandback delivers one report), so this one did
-  not reach your caller. Use SendMessage to send anything further, then
-  stop.` Its caller's notification added: `This agent called
-  SubagentHandback again after that report and was refused (one report per
-  result), so anything new in that call has not reached you through it. If
-  it has not messaged you since, send it a message (SendMessage) to ask for
-  it.` Earlier the same day M6-A's report arrived as a full hand-back five
-  times (17:57-18:14Z) while its CI Monitor ran; which condition lets a
-  repeat through: unknown.
+- **A second hand-back is usually delivered, and was refused once.** When
+  a resumed delegate's turn ends, repeat SubagentHandback calls reached the
+  caller in most cases: after a SendMessage resume (M4-Winpty, M6-R4, M6-DE)
+  and after background-task resumes (M1-Ship 6 calls, M3-Fixes 4, M6-A 6,
+  M6-DE 3; counts by the reviewer 2b10-03 from the transcripts). Once, a
+  resumed 2b10-01 was refused (18:40:47Z): `Nothing was sent: an earlier
+  report of yours was already delivered (SubagentHandback delivers one
+  report), so this one did not reach your caller. Use SendMessage to send
+  anything further, then stop.` Its caller's notification added: `This agent
+  called SubagentHandback again after that report and was refused (one
+  report per result), so anything new in that call has not reached you
+  through it. If it has not messaged you since, send it a message
+  (SendMessage) to ask for it.` Which condition decides: unknown (2b10-01
+  still had a background shell running when its first report went out).
+  Practice: when told to hand back, call SubagentHandback; if it is refused,
+  send the content by SendMessage.
 - **A delegate's background work outlives its hand-back.** 2b10-01 handed
   back with a 90 s background shell running (`b2pmsszp4`). The shell kept
   running and finished normally (`start`, `done`, `[exited with code 0]`);
@@ -646,8 +673,12 @@ its background tasks and finish, then wait for its notification.
   back** (or say in the report that one still runs).
 - **Forced hand-back**: the harness may tell a delegate `[handback-send-enforce]
   Your report has not been delivered. Call SubagentHandback({message: <your
-  full report>}) now; the call ends your run.` (M6-Polish, 18:34:08Z, after
-  a run of safety-classifier stops). Write the report file before arming long
+  full report>}) now; the call ends your run.` Seen when a delegate ended a
+  turn with plain text instead of a tool call: M6-Polish at 18:34:08Z, one
+  second after a plain-text answer and amid safety-classifier stops; most
+  of the repeat hand-backs above followed it (reviewer 2b10-03). A delegate
+  that answers a resume with plain text can be pushed into a second
+  hand-back this way. Write the report file before arming long
   watches so a forced hand-back loses nothing (M6-A, M6-Polish).
 
 #### Interruptions that change what a delegate receives
@@ -678,7 +709,7 @@ its background tasks and finish, then wait for its notification.
 5. Tell every delegate to stop its own background tasks before handing back,
    and to write its report file first.
 6. After a delegate's hand-back, follow up by SendMessage (it resumes the
-   delegate); expect any further answer as a message, not a second hand-back.
+   delegate); its answer may come as a second hand-back or as a message.
 7. Give a delegate the main session id (`CLAUDE_CODE_SESSION_ID`) and the
    project directory, so it can find its own and its siblings' transcripts.
 
