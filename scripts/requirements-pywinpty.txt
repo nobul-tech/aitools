@@ -1,5 +1,10 @@
-# requirements-windows.txt -- test-only Python dependencies of the windows CI job.
-# Install: python -m pip install --require-hashes -r tests/managed-files/requirements-windows.txt
+# requirements-pywinpty.txt -- the pywinpty pin: single source of truth for the
+# version and wheel hashes (tool registry entry "pywinpty", /tool-registry skill).
+# Install (Windows): scripts/setup-pywinpty.ps1 (aitools install Step 15b; CI windows job),
+# which runs: python -m pip install --user --only-binary=:all: --require-hashes -r scripts/requirements-pywinpty.txt
+# Lives in scripts/ so it ships on all three deployment paths: dev (aitools install),
+# package (build-package.sh payload) and MDM (build-deploy.sh embeds it in
+# deploy/setup-pywinpty.ps1). Moved from tests/managed-files/requirements-windows.txt (M4-Winpty, 2026-11-14).
 #
 # pywinpty: ConPTY backend for tests/managed-files/pty-run.py on Windows (the
 # stdlib pty module is POSIX-only). /tool-eval S2-Winpty 2026-11-01: no hard
@@ -9,8 +14,14 @@
 # fixes EOF detection on ConPTY and spawning a path with spaces. No
 # dependencies. Hashes from https://pypi.org/pypi/pywinpty/3.1.2/json: every
 # win_amd64 wheel (cp310-cp315, incl. free-threaded), so the same file installs
-# on CI (3.12) and on a developer workstation (e.g. 3.14; add --user there).
-# Local evaluation: reference/evaluations/pywinpty-windows-2026-11-13.md.
+# on CI (3.12) and on a developer workstation (e.g. 3.14, with --user). Hash ->
+# file mapping re-read from the PyPI JSON API 2026-11-13 (M4-Winpty). win_arm64
+# wheels are not pinned.
+# Evaluation: reference/evaluations/pywinpty-windows-2026-11-13.md.
+#
+# The line below is read by setup-pywinpty.ps1: the interpreter tags this pin covers
+# (cp<major><minor>[t]-<platform>). Keep it in step with the hashes.
+# wheel-tags: cp310-win_amd64 cp311-win_amd64 cp312-win_amd64 cp313-win_amd64 cp314-win_amd64 cp314t-win_amd64 cp315-win_amd64 cp315t-win_amd64
 pywinpty==3.1.2 \
     --hash=sha256:197cb43a5a1c6ed5836907fdcb3f008883386bcdaa05ae0cfdf4848b3624e237 \
     --hash=sha256:a58997fa8519694725dca4a297aa7bebada3675263742cfb12fbc5eb09d466e7 \

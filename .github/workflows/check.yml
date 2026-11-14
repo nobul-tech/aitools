@@ -633,7 +633,7 @@ jobs:
       - name: Install Windows test dependencies (pywinpty, hash-pinned)
         if: ${{ !cancelled() }}
         shell: pwsh
-        run: python -m pip install --require-hashes -r tests/managed-files/requirements-windows.txt
+        run: python -m pip install --require-hashes -r scripts/requirements-pywinpty.txt
 
       - name: Windows runner probe (HOME isolation, Python, ConPTY)
         shell: bash
