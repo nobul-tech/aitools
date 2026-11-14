@@ -206,6 +206,20 @@ prompt_repos_path() {
         REPOS_PATH="$HOME/repos"
     fi
 }
+
+# run_relay_sync CMD ARGS... -- Step 22: run the relay -> Cursor AGENTS.md sync
+# (CMD ARGS = the python command, the sync script and its options) and put its
+# output in deploy.log. The output is captured and appended through the lib's
+# _aitlib_log_append, so a deploy.log that cannot be written is swallowed
+# (reference/logging.md section 5; incident #174) instead of skipping the sync,
+# as a failed `>>"$LOG_FILE"` redirection did. Returns the sync's exit code.
+# Parity: Invoke-RelaySync in aitools-install.ps1.
+run_relay_sync() {
+    local out="" rc=0
+    out=$("$@" 2>&1) || rc=$?
+    if [ -n "$out" ]; then _aitlib_log_append "$out" "$LOG_FILE"; fi
+    return "$rc"
+}
 # --- END install log helpers ---
 
 # --- BEGIN install log override (tests/profile/test-install.sh extracts this block) ---
@@ -225,11 +239,16 @@ fi
 # Override: JSONL dual-format (human-readable + structured JSON). The record goes
 # through the lib's jsonl_record: escaped, one run_id for the installer's own
 # lines and its relayed children's, and an unwritable deploy.jsonl is one warning,
-# not the end of the installer under set -e (A-16).
+# not the end of the installer under set -e (A-16). The deploy.log line goes
+# through the lib's _aitlib_log_append: a failed write is swallowed
+# (reference/logging.md section 5; incident #174), the console line still prints
+# and log_error / log_warn still count.
 log() {
     local level="${2:-info}"
     local ts; ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-    printf '[%s] [%s] [%s] %s\n' "$ts" "$SCRIPT_NAME" "$level" "$1" | tee -a "$LOG_FILE"
+    local line="[$ts] [$SCRIPT_NAME] [$level] $1"
+    _aitlib_log_append "$line" "$LOG_FILE"
+    printf '%s\n' "$line"
     jsonl_record "$ts" "$SCRIPT_NAME" "$level" "$1"
 }
 log_ok()    { log "$1" "ok"; }
@@ -901,13 +920,13 @@ if [ -f "$sync_py" ]; then
     if $DRY_RUN; then sync_args+=(--dry-run); fi
     if ! $DRY_RUN; then export AITOOLS_SYNC_DEPLOY_LOG=1; fi
     if command -v python3 >/dev/null 2>&1; then
-        if python3 "$sync_py" ${sync_args[@]+"${sync_args[@]}"} >>"$LOG_FILE" 2>&1; then
+        if run_relay_sync python3 "$sync_py" ${sync_args[@]+"${sync_args[@]}"}; then
             if $DRY_RUN; then log_ok "relay→AGENTS sync (dry-run)"; fi
         else
             log_warn "sync-relay-to-cursor-agents.py failed (non-fatal)"
         fi
     elif command -v py >/dev/null 2>&1; then
-        if py -3 "$sync_py" ${sync_args[@]+"${sync_args[@]}"} >>"$LOG_FILE" 2>&1; then
+        if run_relay_sync py -3 "$sync_py" ${sync_args[@]+"${sync_args[@]}"}; then
             if $DRY_RUN; then log_ok "relay→AGENTS sync (dry-run)"; fi
         else
             log_warn "sync-relay-to-cursor-agents.py failed (non-fatal)"
