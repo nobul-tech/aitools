@@ -36,8 +36,8 @@ Setup and utility scripts for configuring AI tooling across machines.
 |--------|----------|---------|
 | `check-lib.sh` | macOS/Linux | Shared library: colors, counters, step formatters (sourced) |
 | `check-lib.ps1` | Windows | Shared library (dot-sourced) |
-| `check-pre-commit.sh` | macOS/Linux | 12 pre-commit steps; `--fix` auto-repairs line endings, exec bits, build |
-| `check-pre-commit.ps1` | Windows | 12 pre-commit steps; `-Fix` switch |
+| `check-pre-commit.sh` | macOS/Linux | 21 pre-commit steps (3 and 10 retired); `--fix` repairs line endings and exec bits, never builds |
+| `check-pre-commit.ps1` | Windows | The same steps except 17-19; `-Fix` repairs line endings and exec bits, never builds |
 | `check-pre-push.sh` | macOS/Linux | 10 pre-push steps, read-only |
 | `check-pre-push.ps1` | Windows | 10 pre-push steps, read-only |
 | `check-post-push.sh` | macOS/Linux | 26 steps |

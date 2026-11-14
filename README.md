@@ -146,19 +146,19 @@ Run before commit, push, and after push -- replaces ad-hoc commands:
 
 macOS/Linux:
 ```bash
-bash scripts/check-pre-commit.sh         # 21 steps; --fix auto-repairs line endings, exec bits, build freshness
+bash scripts/check-pre-commit.sh         # 21 steps (3 and 10 retired); --fix repairs line endings and exec bits
 bash scripts/check-pre-push.sh           # 10 steps, read-only (step 7 rebuilds into a temp copy of the dotprofile)
 bash scripts/check-post-push.sh          # all post-push steps (1-32; 15 and 28 are retired SKIPs)
 ```
 
 Windows (PowerShell):
 ```powershell
-.\scripts\check-pre-commit.ps1           # 21 steps; -Fix auto-repairs
+.\scripts\check-pre-commit.ps1           # 21 steps (3 and 10 retired); -Fix repairs line endings and exec bits
 .\scripts\check-pre-push.ps1             # 10 steps, read-only
 .\scripts\check-post-push.ps1            # all post-push steps (1-32; 15 and 28 are retired SKIPs)
 ```
 
-`--fix` / `-Fix` runs `build-deploy.sh` against the real `HOME` (it rebuilds the dotprofile `deploy/`): agents never pass it.
+`--fix` / `-Fix` never runs `build-deploy.sh` (incident #136): it only repairs line endings and exec bits of staged and tracked `.sh` files. The dotprofile `deploy/` is checked by `check-pre-push` step 7, which rebuilds into a temporary copy.
 
 See `reference/` for deeper setup notes and practices.
 

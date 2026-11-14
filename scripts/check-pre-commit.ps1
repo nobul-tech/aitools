@@ -1,6 +1,8 @@
 # check-pre-commit.ps1 -- automated pre-commit checklist for aitools
 # Usage: .\scripts\check-pre-commit.ps1 [-Fix]
-# -Fix: auto-fix line endings, exec bits, and build freshness
+# -Fix: auto-fix line endings (step 4) and exec bits (step 6). Nothing in this
+#       script runs build-deploy.sh: steps 3 and 10 are retired; check-pre-push
+#       step 7 rebuilds into a temporary copy of the dotprofile (incident #136).
 # Platform: Windows (PS 5.1 compatible)
 param([switch]$Fix)
 
@@ -23,8 +25,8 @@ CheckLogInit "pre-commit"
 
 Set-Location $script:RepoRoot
 
-# The managed Git Bash for the .sh steps (2: bash -n, 3: build-deploy.sh): never
-# the WSL launcher a bare `bash` resolves to in a native pwsh (check-lib ResolveGitBash)
+# The managed Git Bash for step 2 (bash -n on staged .sh files): never the WSL
+# launcher a bare `bash` resolves to in a native pwsh (check-lib ResolveGitBash)
 $gitBash = ResolveGitBash
 if ($gitBash) { LogDetail "Git Bash: $gitBash" } else { LogDetail "Git Bash: not found (Git for Windows locations)" }
 
@@ -107,26 +109,16 @@ if ($stagedSh.Count -eq 0 -and $stagedPs1.Count -eq 0) {
 # ---------------------------------------------------------------------------
 # 3. Build freshness
 # ---------------------------------------------------------------------------
-$buildNeeded = $false
-foreach ($f in $stagedFiles) {
-    if ($f -match '^(scripts/|shared/)' -and $f -notmatch 'README\.md$') { $buildNeeded = $true; break }
-}
-
-if ($buildNeeded) {
-    if ($Fix) {
-        if ($gitBash) {
-            & $gitBash "$script:RepoRoot/scripts/build-deploy.sh" 2>$null | Out-Null
-            InvokeGit add deploy/
-            StepPass "3" "Build freshness" "(rebuilt + staged)"
-        } else {
-            StepFail "3" "Build freshness" "Git Bash not found for build-deploy.sh"
-        }
-    } else {
-        StepWarn "3" "Build freshness" "scripts/ or shared/ modified -- run with -Fix"
-    }
-} else {
-    StepSkip "3" "Build freshness" "no scripts/ or shared/ changes"
-}
+# Retired (incident #136). build-deploy.sh writes the dotprofile deploy/ it
+# resolves from $HOME/.aitools/config.json; the aitools deploy/ is frozen
+# (.claude/rules/git-safety.md, deploy-paths.md). With -Fix this step ran
+# build-deploy.sh under the caller's HOME (rebuilding the real dotprofile
+# deploy/, output and exit code discarded), staged the frozen aitools deploy/
+# and reported PASS; without it, it advised -Fix. check-pre-push step 7
+# rebuilds into a temporary copy of the dotprofile under a temporary HOME on
+# every push, checks the exit code and dry-runs the result. Step number kept;
+# same SKIP text as check-post-push step 7 and the .sh twin.
+StepSkip "3" "Build freshness" "retired: check-pre-push step 7 rebuilds into a temp dotprofile copy"
 
 # ---------------------------------------------------------------------------
 # 4. Line endings
@@ -227,16 +219,10 @@ if ($nonDocs.Count -eq 0) {
 # ---------------------------------------------------------------------------
 # 10. Deploy drift check
 # ---------------------------------------------------------------------------
-if ($buildNeeded) {
-    $deployDiff = InvokeGit diff deploy/
-    if (-not $deployDiff) {
-        StepPass "10" "Deploy drift"
-    } else {
-        StepFail "10" "Deploy drift" "unstaged deploy/ changes remain"
-    }
-} else {
-    StepSkip "10" "Deploy drift" "no build needed"
-}
+# Retired with step 3 (incident #136): `git diff deploy/` read the frozen
+# aitools deploy/, which nothing regenerates, so it proved nothing about the
+# dotprofile build. check-pre-push step 7 is the check. Step number kept.
+StepSkip "10" "Deploy drift" "retired: check-pre-push step 7 rebuilds into a temp dotprofile copy"
 
 # ---------------------------------------------------------------------------
 # 11. User repo changes

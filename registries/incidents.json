@@ -3164,30 +3164,6 @@
       "updated": "2026-10-21"
     },
     {
-      "id": 136,
-      "title": "check-pre-commit step 3 --fix runs build-deploy.sh under the real HOME with its output and exit code discarded, then stages the frozen aitools deploy/ and reports PASS",
-      "status": "open",
-      "severity": "high",
-      "affected": [
-        "scripts/check-pre-commit.sh",
-        "scripts/check-pre-commit.ps1"
-      ],
-      "linked": null,
-      "referenceFile": null,
-      "observation": "scripts/check-pre-commit.sh:111-115 (origin/main db4b3c5): with --fix and staged scripts/ or shared/ changes it runs `bash \"$SCRIPT_DIR/build-deploy.sh\" >/dev/null 2>&1`, then `git add deploy/ 2>/dev/null`, then step_pass '3' 'Build freshness' '(rebuilt + staged)' with no result check. scripts/check-pre-commit.ps1:112-114 runs `& $bashExe \".../build-deploy.sh\" 2>$null | Out-Null` and StepPass the same way. build-deploy.sh reads $HOME/.aitools/config.json and rebuilds <userRepoPath>/deploy after `rm -rf \"$DEPLOY_DIR\"` (build-deploy.sh:156-193, :254-256), so the check rebuilds the real dotprofile deploy/; the aitools deploy/ it stages is frozen (.claude/rules/deploy-paths.md 'MDM path').",
-      "expected": ".claude/rules/script-standards.md 'Error handling requirements' (2>/dev/null needs a comment and a result check); mission packet section 5 and incident #86 (never run build-deploy.sh against the real HOME; a failed build leaves the dotprofile deploy/ half-built); .claude/rules/deploy-paths.md (aitools/deploy/ is frozen).",
-      "impact": "Any `check-pre-commit.sh --fix` with script changes silently regenerates (and, on a build failure, half-destroys, #86) the commander's real dotprofile deploy/ with uncommitted output, reports PASS even when the build failed, and stages nothing useful in aitools. The --fix flag is the documented remedy the step's own WARN recommends ('run with --fix').",
-      "discoveryContext": "Found by S3-Path32 (S3-Path32-verification.md 'Observations' 2, PR #55); issue #32 named it 'may also be affected'. Listed by Session Commander 10cf255a-c for this batch (2026-10-21). Verified by S3-Incidents on origin/main db4b3c5: read scripts/check-pre-commit.sh:103-121, scripts/check-pre-commit.ps1:101-122, scripts/build-deploy.sh:156-256. Not executed (it would touch the real dotprofile). Ties to #86.",
-      "discipline": null,
-      "frameworks": null,
-      "suggestedResolution": "Replace the --fix rebuild with the step 7 approach from check-pre-push (build into a temp copy of the dotprofile under a temp HOME and report which files are stale), or drop the auto-rebuild and tell the user to run build-deploy.sh themselves. Never `git add deploy/` in aitools. Capture and check the build's exit code and log its output. Bash and PS1 together; land with or after the #86 atomic-build fix.",
-      "rootCause": null,
-      "correctiveAction": null,
-      "preventionLayer": null,
-      "created": "2026-10-21",
-      "updated": "2026-10-21"
-    },
-    {
       "id": 137,
       "title": "check-pre-push step 7 compares deploy/ recursively in bash (diff -rq) but only top-level files in PS1 (Get-ChildItem -File)",
       "status": "open",
@@ -4140,6 +4116,16 @@
       "closedIn": "PR #56 (bd42ba5)",
       "closedDate": "2026-10-21",
       "correctiveAction": "PR #56 (bd42ba5): standing-order-guard.sh lets `sed -n '<N[,M]>p' <file>` through (SED_READONLY_RE, :255-275). Side effect: the sed check was reset to MODE_SED=\"observe\", so every non-exempt sed form (sed -i included) is logged, not blocked, and .claude/rules/hook-rollout.md:79 still lists sed as literal enforce; both tracked by #144 and open PR #60."
+    },
+    {
+      "id": 136,
+      "title": "check-pre-commit step 3 --fix runs build-deploy.sh under the real HOME with its output and exit code discarded, then stages the frozen aitools deploy/ and reports PASS",
+      "closedIn": "PR pending (branch fix/m6-checks, mission M6-B)",
+      "closedDate": "2026-11-14",
+      "correctiveAction": "Branch fix/m6-checks (mission M6-B, 2026-11-14): scripts/check-pre-commit.sh and .ps1 retire step 3 ('Build freshness') and step 10 ('Deploy drift') to an unconditional SKIP `retired: check-pre-push step 7 rebuilds into a temp dotprofile copy` (the check-post-push step 7 text); the build_needed / $buildNeeded test, the build-deploy.sh call, `git add deploy/` / `InvokeGit add deploy/`, the PASS '(rebuilt + staged)', the FAIL 'Git Bash not found for build-deploy.sh' and the WARN 'run with --fix' / '-Fix' are gone, so no code path of either twin runs build-deploy.sh. Step numbers kept. --fix / -Fix now repairs only line endings (step 4) and exec bits (step 6); the .sh step 4 repair uses `perl -pi -e 's/\\r$//'` instead of `sed -i ''`, which GNU sed reads as an empty script and exits 2, ending the run under set -e on Linux. Docs: both script headers, reference/pre-commit-checklist.md steps 3 and 10, README.md, scripts/README.md. Verified: new tests/check-pre-commit/test-pre-commit-steps3-10.sh (section, static and whole-script cases; the whole .ps1 runs with -Fix from a clone whose build-deploy.sh is a fake that writes a marker into HOME, under a temporary HOME/USERPROFILE/APPDATA/LOCALAPPDATA with a fixture dotprofile) 38 passed, 0 failed on Windows 11 (pwsh 7, Git Bash); against the origin/main 846ab24 twins 22 of the 38 cases fail (the fake build ran and wrote HOME, deploy/ was staged, PASS/WARN instead of SKIP, static hits). CI: macOS (bash 5 and /bin/bash 3.2, whole .sh with --fix), Linux (whole .sh with --fix) and Windows (whole .ps1 with -Fix) jobs.",
+      "rootCause": "Steps 3 and 10 were written on 2026-02-26 (d5d1ddd) when build-deploy.sh generated the aitools deploy/ that step 3 staged and step 10 diffed. On 2026-06-14 (2c0fd32) build-deploy.sh moved its output to the dotprofile it resolves from $HOME/.aitools/config.json, and the aitools deploy/ froze, but the two steps were not retargeted: --fix kept calling build-deploy.sh with the caller's HOME, which rebuilt the real dotprofile deploy/, with output and exit code discarded (`>/dev/null 2>&1`, `2>$null | Out-Null`; script-standards 'Error handling requirements'), and step 10 kept diffing a tree nothing regenerates. No test covered either step; the hazard was recorded as advice ('never pass it from an agent' in deploy-paths.md, README.md, pre-commit-checklist.md) instead of being removed, and the step's own WARN kept recommending the flag.",
+      "preventionLayer": "Prevention: no code path left (steps 3 and 10 are unconditional SKIPs; check-pre-push step 7 is the one isolated rebuild). Detection: tests/check-pre-commit/test-pre-commit-steps3-10.sh in the macOS (bash 5 and /bin/bash 3.2), Linux and Windows CI jobs: a fake build-deploy.sh must never run, the temporary HOME must stay byte-identical, nothing may be staged under deploy/, and no line of either twin may run build-deploy, stage deploy/ or advise the fix flag for a build.",
+      "updated": "2026-11-14"
     },
     {
       "id": 172,
