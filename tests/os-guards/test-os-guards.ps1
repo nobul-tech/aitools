@@ -20,7 +20,7 @@
 # Usage: pwsh -NoProfile -File tests/os-guards/test-os-guards.ps1 [-Help]
 
 param([switch]$Help)
-if ($Help) { Get-Content $PSCommandPath -TotalCount 20 | Select-Object -Skip 1 | ForEach-Object { $_ -replace '^# ?', '' }; exit 0 }
+if ($Help) { Get-Content $PSCommandPath -TotalCount 20 | ForEach-Object { $_ -replace '^# ?', '' }; exit 0 }
 
 if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
     [Console]::Error.WriteLine("This script is for Windows. On macOS/Linux, run tests/os-guards/test-os-guards.sh with bash.")

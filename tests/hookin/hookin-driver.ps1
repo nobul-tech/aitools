@@ -1,4 +1,4 @@
-# hookin-driver.ps1 -- run one PowerShell deploy-harness hook-in for test-hookin.sh
+# hookin-driver.ps1 -- run one PowerShell deploy-harness hook-in for test-hookin.ps1
 #
 # Loads the lib from SCRIPTS_DIR (a fixture copy) and the function under test from
 # the real entry point, parsed with the PowerShell AST (only the function
@@ -10,7 +10,7 @@
 #            -SkipConfig is given, as Step 8b passes it); prints "STEP rc=<n>"
 # The caller sets USERPROFILE/HOME, AITOOLS_LOG_DIR and AITOOLS_SUMMARY_FILE to an
 # isolated test directory. Platform: Windows (pwsh 7), like the entry points it
-# loads from; test-hookin.sh runs it only on Windows, and the fixture
+# loads from; test-hookin.ps1 (the Windows harness) runs it, and the fixture
 # deploy-harness.ps1 is the real script with its Windows guard intact
 # (plans/ci-platform-targeting.md). Test helper only: not deployed.
 #

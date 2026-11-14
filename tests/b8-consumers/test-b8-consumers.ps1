@@ -23,7 +23,7 @@
 # Usage: pwsh -NoProfile -File tests/b8-consumers/test-b8-consumers.ps1 [-Help]
 
 param([switch]$Help)
-if ($Help) { Get-Content $PSCommandPath -TotalCount 23 | Select-Object -Skip 1 | ForEach-Object { $_ -replace '^# ?', '' }; exit 0 }
+if ($Help) { Get-Content $PSCommandPath -TotalCount 23 | ForEach-Object { $_ -replace '^# ?', '' }; exit 0 }
 
 if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
     [Console]::Error.WriteLine("This script is for Windows. On macOS/Linux, run tests/b8-consumers/test-b8-consumers.sh with bash.")
