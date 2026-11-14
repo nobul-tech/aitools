@@ -40,7 +40,7 @@ Two directories keep throwaway work apart from work that may be reusable:
 | Directory | Tracked | Role |
 |---|---|---|
 | `.scratch/session-<name>/` | gitignored | Ephemeral working files of one session (or delegate) on one machine |
-| `harvesting/` | tracked | Staging area: harvested artifacts plus the harvest manifest, waiting to be promoted or pruned |
+| `harvesting/` | tracked, except the manifest | Staging area: harvested artifacts waiting to be promoted or pruned, plus the harvest manifest. In aitools the manifest (`harvest-manifest.json`) is gitignored and machine-local (commander, 2026-11-13): each machine's harvester keeps its own, and a machine that has none starts an empty one |
 
 Harvesting is automated: the hooks copy reusable scratch files at session end
 and recover what an abrupt exit missed at the next session start, so no one
@@ -366,7 +366,8 @@ Status lifecycle:
 
 The hooks never commit the project repo. Harvested files and manifest
 updates stay as working-tree changes in `harvesting/` until someone commits
-them (`/harvest` skill, "Commit the artifact + manifest update"). Because
+the files (`/harvest` skill, "Commit the artifact"; in aitools the manifest
+is gitignored, so only the harvested files are committed). Because
 "referenced in git" means "committed under `harvesting/`", committing
 `harvesting/` is what turns entries into candidates at their next audit.
 

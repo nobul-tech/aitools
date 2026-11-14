@@ -111,7 +111,9 @@ step_warn "6" "Roadmap reflects reality" "check if push completes or starts a ro
 # is frozen). On every push (commander decision 2026-10-26: step 7 always runs; it used
 # to run only when a deploy-relevant source changed, which missed reference/,
 # registries/, .claude/* and deploy-harness inputs), rebuild from this branch into a
-# temporary copy of the dotprofile's committed tree and compare its deploy/. Then smoke-run the generated resolver consumers
+# temporary copy of the dotprofile's committed tree and compare its deploy/ (only when
+# the dotprofile tracks deploy/; the commander's gitignores it since 2026-11-13, so the
+# build itself is what is checked). Then smoke-run the generated resolver consumers
 # (--dry-run, isolated HOME): a deploy script that cannot find its resolver fails here,
 # not on an endpoint (B8a INCIDENT). The smoke run lives here, not in build-deploy, so
 # build-deploy stays a pure generator that never executes what it generates.
@@ -157,15 +159,24 @@ fs.writeFileSync(process.argv[2], JSON.stringify(c, null, 2) + "\n");
         step_fail "7" "deploy/ matches source" "build-deploy built nothing into the dotprofile copy -- see deploy.log"
     else
         d7_problems=""
-        # diff -rq exit codes: 0 identical, 1 differences (listed), 2 trouble.
-        d7_diff_rc=0
-        d7_diff=$(diff -rq "$d7_tmp/committed/deploy" "$d7_tmp/dot/deploy" 2>&1) || d7_diff_rc=$?
-        if [ "$d7_diff_rc" -eq 1 ]; then
-            d7_files=$(printf '%s\n' "$d7_diff" | perl -ne 'print "$1 " if m{/deploy/(\S+) and } || m{/deploy: (\S+)}')
-            d7_problems="dotprofile deploy/ is stale (${d7_files% }) -- run build-deploy.sh and commit in $USER_REPO_PATH"
-        elif [ "$d7_diff_rc" -ne 0 ]; then
-            log_detail "pre-push 7 diff: $d7_diff"
-            d7_problems="could not compare deploy/ (diff exit $d7_diff_rc) -- see deploy.log"
+        d7_compared="dotprofile deploy/ matches a fresh build"
+        if [ ! -d "$d7_tmp/committed/deploy" ]; then
+            # The dotprofile does not track deploy/ (gitignored since 2026-11-13,
+            # commander): there is no committed copy to be stale. The build and the
+            # smoke runs below still verify the generated scripts.
+            d7_compared="fresh build OK (dotprofile deploy/ untracked, not compared)"
+            log_detail "pre-push 7: the dotprofile does not track deploy/ -- staleness not compared"
+        else
+            # diff -rq exit codes: 0 identical, 1 differences (listed), 2 trouble.
+            d7_diff_rc=0
+            d7_diff=$(diff -rq "$d7_tmp/committed/deploy" "$d7_tmp/dot/deploy" 2>&1) || d7_diff_rc=$?
+            if [ "$d7_diff_rc" -eq 1 ]; then
+                d7_files=$(printf '%s\n' "$d7_diff" | perl -ne 'print "$1 " if m{/deploy/(\S+) and } || m{/deploy: (\S+)}')
+                d7_problems="dotprofile deploy/ is stale (${d7_files% }) -- run build-deploy.sh and commit in $USER_REPO_PATH"
+            elif [ "$d7_diff_rc" -ne 0 ]; then
+                log_detail "pre-push 7 diff: $d7_diff"
+                d7_problems="could not compare deploy/ (diff exit $d7_diff_rc) -- see deploy.log"
+            fi
         fi
         # Smoke run of the fresh build's resolver consumers. Exit 0/1 is a run (1 = a
         # counted error such as this machine having no profile); 2+ is a crash or a
@@ -216,7 +227,7 @@ fs.writeFileSync(process.argv[2], JSON.stringify(c, null, 2) + "\n");
             d7_problems="${d7_problems:+$d7_problems; }generated deploy scripts failed a dry run:$d7_smoke -- see deploy.log"
         fi
         if [ -z "$d7_problems" ]; then
-            step_pass "7" "deploy/ matches source" "dotprofile deploy/ matches a fresh build; resolver consumers dry-run clean"
+            step_pass "7" "deploy/ matches source" "$d7_compared; resolver consumers dry-run clean"
         else
             step_fail "7" "deploy/ matches source" "$d7_problems"
         fi

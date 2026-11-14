@@ -60,6 +60,9 @@ against LOCAL.
 - LOCAL equals SOURCE: verified, nothing written.
 - LOCAL differs, non-interactive run (no terminal, EOF, or `--force`):
   SOURCE written to LOCAL. No merge runs.
+- LOCAL differs, read-only copy (deploy-harness `reference/`, `registries/`;
+  `MANAGED_NO_REVIEW=true` / `-NoReview`): SOURCE written to LOCAL, no menu,
+  no adopt, in every run.
 - LOCAL differs, interactive run: the review menu.
 
 **Text files** (markdown, shell): one review per file, with the full menu,

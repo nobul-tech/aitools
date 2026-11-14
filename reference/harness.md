@@ -122,7 +122,10 @@ file goes through `deploy_managed_file()` in `@scripts/aitools-lib.sh` /
 `Deploy-ManagedFile` in `@scripts/aitools-lib.ps1`, with the summary tool
 name `harness files` and the repo file it came from as the adopt target
 (the generated MDM copy passes no adopt target: its source is the
-build-time embed). `config.json` is generated from `profile.json` by
+build-time embed). `reference/` and `registries/` are read-only copies:
+a file there that differs from its source is overwritten (backup kept)
+with no review menu and no adopt (`@reference/managed-file-deployment.md`
+"Read-only copies"). `config.json` is generated from `profile.json` by
 calling the only config writer, `scripts/setup-user-config.sh` / `.ps1`,
 unless `--skip-config` / `-SkipConfig` is given (installer Step 8b passes it
 after Step 5 ran the writer, so it runs once per install; row OK

@@ -172,6 +172,44 @@ try {
     Run-Lib "`$src='$C/src.json'; `$dest='$C/dest/c.json'; `$adopt=''; $dmf"
     Check "json: invalid LOCAL -> failed, untouched" ((Result) -eq "failed" -and (Txt "dest/c.json") -eq "not json")
 
+    # --- Read-only copies (-NoReview): SOURCE wins, backup kept, no warning ---
+    $dmfRo = $dmf -replace 'Deploy-ManagedFile ', 'Deploy-ManagedFile -NoReview '
+    Setup-Case "readonly-copy-text"; W "src.md" "new"; W "dest/a.md" "old"
+    Run-Lib "`$src='$C/src.md'; `$dest='$C/dest/a.md'; `$adopt='$C/repo/a.md'; $dmfRo"
+    Check "read-only copy (text): SOURCE written, backup kept, adopt target untouched" ((Result) -eq "updated" -and (Txt "dest/a.md") -eq "new" -and (@(Get-ChildItem "$C/dest" -Filter "a.md.bak.*").Count -ge 1) -and -not (Test-Path "$C/repo/a.md"))
+    Check "read-only copy (text): logged as such, no warning" ((Log).Contains("read-only copy: source wins, backup kept") -and -not ((Log) -match "\[warn\]"))
+
+    Setup-Case "readonly-copy-json"; W "repo/c.json" '{"a":1,"b":[1,2]}'; W "dest/c.json" '{"z":0,"b":[2]}'
+    Run-Lib "`$src='$C/repo/c.json'; `$dest='$C/dest/c.json'; `$adopt='$C/repo/c.json'; $dmfRo"
+    Check "read-only copy (JSON): written whole (LOCAL-only field gone), backup kept" ((Result) -eq "updated" -and (Txt "dest/c.json") -ceq (Txt "repo/c.json") -and (@(Get-ChildItem "$C/dest" -Filter "c.json.bak.*").Count -ge 1))
+
+    Setup-Case "readonly-copy-json-new"; W "repo/c.json" '{"a":1}'
+    Run-Lib "`$src='$C/repo/c.json'; `$dest='$C/dest/c.json'; `$adopt='$C/repo/c.json'; $dmfRo"
+    Check "read-only copy (JSON), LOCAL missing: created from SOURCE" ((Result) -eq "created" -and (JsonCompact "dest/c.json") -eq '{"a":1}')
+
+    Setup-Case "readonly-copy-dryrun"; W "src.md" "new"; W "dest/a.md" "old"
+    Run-Lib "`$DryRun = `$true; `$src='$C/src.md'; `$dest='$C/dest/a.md'; `$adopt='$C/repo/a.md'; $dmfRo"
+    Check "read-only copy in a dry run: reported, nothing written" ((Result) -eq "verified" -and (Txt "dest/a.md") -eq "old" -and (Log).Contains("[DRY RUN] Would update: item") -and @(Get-ChildItem "$C/dest" -Filter "a.md.bak.*").Count -eq 0)
+
+    # --- The JSON review names the file by the caller's item name (deploy-harness: registries/x.json) ---
+    $dmfLabel = $dmf -replace '-ItemName "item"', '-ItemName "registries/c.json"'
+    Setup-Case "json-label"; W "repo/c.json" '{"a":1,"b":[1]}'
+    Run-Lib "`$src='$C/repo/c.json'; `$dest='$C/dest/c.json'; `$adopt='$C/repo/c.json'; $dmfLabel"
+    Check "json label: Created names the item" ((Result) -eq "created" -and (Log).Contains("Created: registries/c.json -> "))
+    W "dest/c.json" '{"a":2,"b":[2]}'
+    Run-Lib "`$src='$C/repo/c.json'; `$dest='$C/dest/c.json'; `$adopt='$C/repo/c.json'; $dmfLabel"
+    Check "json label: Divergence and Updated name the item" ((Result) -eq "updated" -and (Log).Contains("Divergence in registries/c.json: a -- overwriting from source (non-interactive)") -and (Log).Contains("Updated: registries/c.json -> "))
+
+    # --- Write-JsonFieldDetail: the element lines of an array field ---
+    $detailCall = "Write-JsonFieldDetail -What 'registries/c.json: t' -Detail ('2 local, 1 source element(s)' + [char]0x1f + '- [1] 2' + [char]0x1f + '+ [0] 3' + [char]0x1f + '~ order differs (same elements)') -LocalLabel local -SourceLabel source"
+    Setup-Case "json-detail-plain"
+    Run-Lib $detailCall -Term "dumb"
+    Check "json detail, no colour: legend and one line per element" ((HasLine "  red - = only in local   green + = only in source   yellow ~ = changed") -and (HasLine "  2 local, 1 source element(s)") -and (HasLine "  - [1] 2") -and (HasLine "  + [0] 3") -and (HasLine "  ~ order differs (same elements)") -and -not (Out).Contains("$esc["))
+    Check "json detail: every element line logged" ((Log).Contains("review registries/c.json: t: 2 local, 1 source element(s)") -and (Log).Contains("review registries/c.json: t: - [1] 2") -and (Log).Contains("review registries/c.json: t: ~ order differs (same elements)"))
+    Setup-Case "json-detail-colour"
+    Run-Lib $detailCall
+    Check "json detail, colour: red -, green +, yellow ~, count line plain" ((Out).Contains("$esc[31m- [1] 2$esc[0m") -and (Out).Contains("$esc[32m+ [0] 3$esc[0m") -and (Out).Contains("$esc[33m~ order differs") -and (HasLine "  2 local, 1 source element(s)") -and -not (Out).Contains("m2 local"))
+
     # --- EOF at a prompt ---
     # Not sent as Ctrl-D on the pty: EOF there is terminal-driver behavior (Ctrl-D on
     # Unix, Ctrl-Z Enter on Windows) and pwsh on Linux does not end ReadLine on \x04.
@@ -231,6 +269,26 @@ try {
         Setup-Case "json-fields"; W "repo/c.json" '{"a":1,"b":2,"c":3}'; W "dest/c.json" '{"a":9,"b":8,"c":7,"z":0}'
         Run-Lib "`$src='$C/repo/c.json'; `$dest='$C/dest/c.json'; `$adopt='$C/repo/c.json'; $dmf" "o\na\ns\na\n"
         Check "json per-field: overwrite/adopt/skip + LOCAL-only adopt" ((JsonCompact "dest/c.json") -eq '{"a":1,"b":8,"c":7,"z":0}' -and (JsonCompact "repo/c.json") -eq '{"a":1,"b":8,"c":3,"z":0}' -and (Result) -eq "accept & adopt")
+
+        Setup-Case "readonly-copy-pty"; W "src.md" "new"; W "dest/a.md" "old"
+        Run-Lib "`$src='$C/src.md'; `$dest='$C/dest/a.md'; `$adopt='$C/repo/a.md'; $dmfRo" "a\n"
+        Check "read-only copy on a terminal: no menu, SOURCE written, nothing adopted" ((Result) -eq "updated" -and (Txt "dest/a.md") -eq "new" -and -not (Out).Contains("choice [") -and -not (Test-Path "$C/repo/a.md"))
+
+        Setup-Case "json-array-display"
+        W "repo/c.json" '{"list":[{"id":1,"v":"a"},{"id":2,"v":"b"}],"tags":["x","y"]}'
+        W "dest/c.json" '{"list":[{"id":1,"v":"a"},{"id":2,"v":"OLD"},{"id":3,"v":"c"}],"tags":["y","x"]}'
+        Run-Lib "`$src='$C/repo/c.json'; `$dest='$C/dest/c.json'; `$adopt='$C/repo/c.json'; $dmf" "o\no\n"
+        Check "json array: the header names the file" (HasLine "[REVIEW] item: list differs from source.")
+        Check "json array: counts, the changed and the removed element shown" ((HasLine "  3 local, 2 source element(s)") -and (HasLine '  ~ [1] id=2: v: "OLD" -> "b"') -and (HasLine '  - [2] {"id":3,"v":"c"}'))
+        Check "json array: a reorder alone is one line" (HasLine "  ~ order differs (same elements)")
+        Check "json array: legend, colour-coded lines" ((HasLine "  red - = only in local   green + = only in source   yellow ~ = changed") -and (Out).Contains("$esc[33m~ [1] id=2") -and (Out).Contains("$esc[31m- [2]"))
+        Check "json array: element lines in the log" ((Log).Contains('review item: list: ~ [1] id=2: v: "OLD" -> "b"'))
+        Check "json array: overwrite applied" ((Result) -eq "updated" -and (JsonCompact "dest/c.json") -eq '{"list":[{"id":1,"v":"a"},{"id":2,"v":"b"}],"tags":["x","y"]}')
+
+        Setup-Case "json-label-pty"; W "repo/c.json" '{"a":1,"b":2}'; W "dest/c.json" '{"a":9,"b":8,"z":0}'
+        Run-Lib "`$src='$C/repo/c.json'; `$dest='$C/dest/c.json'; `$adopt='$C/repo/c.json'; $dmfLabel" "a\ns\ns\n"
+        Check "json label: every review header names the file, the LOCAL-only field too" ((HasLine "[REVIEW] registries/c.json: a differs from source.") -and (HasLine "[REVIEW] registries/c.json: z differs from source."))
+        Check "json label: Accept & adopt and Skipped name the item" ((Result) -eq "accept & adopt" -and (Log).Contains("Accept & adopt: registries/c.json -> ") -and (Log).Contains("Skipped: registries/c.json ("))
 
         # --- Review display: LOCAL -> SOURCE, labelled, coloured (mission DIFF-UX) ---
         Setup-Case "display"; W "repo/a.md" "# Title`nline one`nrepo line`nend"; W "dest/a.md" "# Title`nline one`nmy local line`nend"

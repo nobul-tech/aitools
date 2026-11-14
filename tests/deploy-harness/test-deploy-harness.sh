@@ -290,6 +290,19 @@ printf 'mine\n' > "$(A)/rules/mine.md"
 run_dh "" --
 check "preserved: file with no source kept and logged" "[ -f '$(A)/rules/mine.md' ] && grep -q 'Preserved: .*rules/mine.md' '$LOG'"
 
+# reference/ and registries/ are read-only copies: source wins, backup kept, no warning
+setup_case readonly
+run_dh "" --
+printf '# Harness\n\nlocal edit\n' > "$(A)/reference/harness.md"
+printf '{"a": 9}\n' > "$(A)/registries/r.json"
+run_dh "" --
+check "read-only copies: reference and registries overwritten from source" \
+    "[ \"\$(rc)\" = 0 ] && cmp -s '$R/reference/harness.md' '$(A)/reference/harness.md' && cmp -s '$R/registries/r.json' '$(A)/registries/r.json'"
+check "read-only copies: backups kept" \
+    "ls '$(A)/reference/'harness.md.bak.* >/dev/null 2>&1 && ls '$(A)/registries/'r.json.bak.* >/dev/null 2>&1"
+check "read-only copies: OK row (no warning), logged as read-only" \
+    "row 'OK|harness files|2 updated, 12 verified' && [ \"\$(grep -c 'read-only copy: source wins, backup kept' '$LOG')\" = 2 ] && ! grep -q '\[warn\]' '$LOG'"
+
 # ---------------------------------------------------------------------------
 # Interactive (pty): adopt, skip, abort, --force
 # ---------------------------------------------------------------------------
@@ -298,17 +311,25 @@ no_menu() { ! perl -pe 's/\e\[[0-9;?]*[A-Za-z]//g' "$C/out" | grep -q 'choice \[
 if $HAVE_PTY; then
     setup_case adopt
     run_dh "" --
-    printf '# Harness\n\nlocal edit\n' > "$(A)/reference/harness.md"
+    printf 'local edit\n' > "$(A)/rules/scratch.md"
     run_dh 'a\n' --
     check "adopt: exit 0" "[ \"\$(rc)\" = 0 ]"
     check "adopt: LOCAL kept and copied to the repo source" \
-        "grep -qx 'local edit' '$(A)/reference/harness.md' && grep -qx 'local edit' '$R/reference/harness.md'"
+        "grep -qx 'local edit' '$(A)/rules/scratch.md' && grep -qx 'local edit' '$R/shared/rules/scratch.md'"
     check "adopt: aitools repo target left uncommitted and logged, no protected-file WARN" \
-        "grep -q 'Uncommitted change in .*: harness.md' '$LOG' && ! grep -q 'Adopted into protected file' '$LOG'"
+        "grep -q 'Uncommitted change in .*: scratch.md' '$LOG' && ! grep -q 'Adopted into protected file' '$LOG'"
     check "adopt: DETAIL row" "grep -q '^DETAIL|harness files|accept & adopt: ' '$C/summary'"
     run_dh "" --
     check "adopt: next run verifies; repo backup not deployed" \
-        "row 'OK|harness files|14 verified' && [ -z \"\$(find '$(A)/reference' -name '*.bak.*' -print)\" ]"
+        "row 'OK|harness files|14 verified' && [ -z \"\$(find '$(A)/rules' -name '*.bak.*' -print)\" ]"
+
+    setup_case readonly-pty
+    run_dh "" --
+    printf '# Harness\n\nlocal edit\n' > "$(A)/reference/harness.md"
+    printf '{"a": 9}\n' > "$(A)/registries/r.json"
+    run_dh 'a\na\n' --
+    check "read-only copies on a terminal: no menu, source wins, nothing adopted" \
+        "[ \"\$(rc)\" = 0 ] && no_menu && cmp -s '$R/reference/harness.md' '$(A)/reference/harness.md' && cmp -s '$R/registries/r.json' '$(A)/registries/r.json' && ! grep -q 'local edit' '$R/reference/harness.md'"
 
     setup_case skip
     run_dh "" --

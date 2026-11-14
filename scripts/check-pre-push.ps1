@@ -251,11 +251,20 @@ if (-not $script:UserRepoPath -or -not (Test-Path (Join-Path $script:UserRepoPat
         $d7Stale = @()
         $d7BuiltDir = Join-Path $d7Dot "deploy"
         $d7Ref = Join-Path $d7Committed "deploy"
-        $d7Names = @(Get-ChildItem $d7BuiltDir -File | ForEach-Object Name) + @(Get-ChildItem $d7Ref -File | ForEach-Object Name) | Sort-Object -Unique
-        foreach ($n in $d7Names) {
-            $a = Join-Path $d7Ref $n
-            $b = Join-Path $d7BuiltDir $n
-            if (-not (Test-Path $a) -or -not (Test-Path $b) -or (Get-FileHash $a).Hash -ne (Get-FileHash $b).Hash) { $d7Stale += $n }
+        $d7Compared = "dotprofile deploy/ matches a fresh build"
+        if (-not (Test-Path $d7Ref)) {
+            # The dotprofile does not track deploy/ (gitignored since 2026-11-13,
+            # commander): there is no committed copy to be stale. The build and the
+            # smoke runs above still verify the generated scripts.
+            $d7Compared = "fresh build OK (dotprofile deploy/ untracked, not compared)"
+            LogDetail "pre-push 7: the dotprofile does not track deploy/ -- staleness not compared"
+        } else {
+            $d7Names = @(Get-ChildItem $d7BuiltDir -File | ForEach-Object Name) + @(Get-ChildItem $d7Ref -File | ForEach-Object Name) | Sort-Object -Unique
+            foreach ($n in $d7Names) {
+                $a = Join-Path $d7Ref $n
+                $b = Join-Path $d7BuiltDir $n
+                if (-not (Test-Path $a) -or -not (Test-Path $b) -or (Get-FileHash $a).Hash -ne (Get-FileHash $b).Hash) { $d7Stale += $n }
+            }
         }
         if ($d7Stale.Count -gt 0) {
             $d7Problems += "dotprofile deploy/ is stale ($($d7Stale -join ' ')) -- run build-deploy.sh and commit in $($script:UserRepoPath)"
@@ -264,7 +273,7 @@ if (-not $script:UserRepoPath -or -not (Test-Path (Join-Path $script:UserRepoPat
             $d7Problems += "generated deploy scripts failed a dry run: $($d7Smoke -join ' ') -- see deploy.log"
         }
         if ($d7Problems.Count -eq 0) {
-            StepPass "7" "deploy/ matches source" "dotprofile deploy/ matches a fresh build; resolver consumers dry-run clean"
+            StepPass "7" "deploy/ matches source" "$d7Compared; resolver consumers dry-run clean"
         } else {
             StepFail "7" "deploy/ matches source" ($d7Problems -join "; ")
         }

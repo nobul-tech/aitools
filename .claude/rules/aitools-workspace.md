@@ -40,7 +40,7 @@ Project-scoped (`<repo>/.aitools/`, plus two directories at the repo root):
 | `channel/session-*/` | gitignored | Session-ephemeral messages (SITREPs, FINDINGs) |
 | `channel/running-estimate.json` | tracked | Carry-forward state between sessions and machines |
 | `channel/handoffs/` | tracked | Handoff prompts from completed sessions (see `/handoff` skill) |
-| `<repo>/harvesting/` (repo root) | tracked | Artifact lifecycle — candidates for harness promotion; manifest `harvest-manifest.json` (`ait-harvest.py`) |
+| `<repo>/harvesting/` (repo root) | tracked, except the manifest | Artifact lifecycle — candidates for harness promotion; manifest `harvest-manifest.json` (`ait-harvest.py`) is gitignored, machine-local (commander, 2026-11-13) |
 
 User-scoped (`~/.aitools/`):
 

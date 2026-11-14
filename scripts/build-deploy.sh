@@ -28,8 +28,10 @@
 #
 # CROSS-PLATFORM NOTE: This script is intentionally bash-only (no .ps1 variant).
 # It's a build step that produces platform-independent output (both .sh and .ps1
-# deploy scripts). The result is committed to git, so both platforms get identical
-# deploy/ contents. A parallel PS1 would double maintenance for no output difference.
+# deploy scripts) from one build, so both platforms get identical deploy/ contents.
+# The result is machine-local build output: the dotprofile gitignores deploy/
+# (commander, 2026-11-13). A parallel PS1 would double maintenance for no output
+# difference.
 # On Windows, aitools.ps1 invokes this via Git Bash (a prerequisite for Claude Code).
 # See .claude/rules/cross-platform.md "Approved exceptions" for the exception record.
 
@@ -244,7 +246,8 @@ blog "Build target: $DEPLOY_DIR (dotprofile repo)"
 # setup-user-claude fans out ~/.aitools/rules (rules fan-out, 2026-10-22).
 
 # --- Embedded dotprofile content: fallbacks, resolved per machine at RUNTIME ---
-# deploy/ is committed once and used by every machine of this user, so no machine's
+# deploy/ may be built on one machine and used by every machine of this user (it
+# is no longer committed: the dotprofile gitignores it), so no machine's
 # values are interpolated here (M3 B5: the cross-machine defect, decision 4). The
 # generated setup-user-claude.* resolve this machine's profile when they run: from
 # the live dotprofile on that machine when it has one (what scripts/ reads), else
@@ -715,7 +718,7 @@ fi
 
 # Build into a staging dir; it replaces <dotprofile>/deploy only at the very end, so
 # a build that fails anywhere (inputs, extraction, PS1 validation) leaves the
-# committed deploy/ in place (review m1).
+# previous deploy/ in place (review m1).
 DEPLOY_DIR_FINAL="$DEPLOY_DIR"
 DEPLOY_DIR="$BUILD_TMP/deploy"
 mkdir -p "$DEPLOY_DIR"
