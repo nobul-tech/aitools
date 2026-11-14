@@ -42,6 +42,20 @@ Not tagged. Branch `fix/38dc-19-aitools-win-forwarder` (PR #162), mission 38dc-1
 
 ---
 
+## v0.77.10 -- The 64 KB review-diff test no longer times out a slow macOS runner (2026-11-14)
+
+Not tagged. Branch `fix/38dc-17-mf-pty-timeout`, mission M6-Polish (session 87795dc3), a fix-forward for main CI run 43632383993.
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 1 | Medium | `tests/managed-files` case "display, diff over 64 KB" built a 3000-line fixture (~330 KB diff). On macOS it took 25 s of pty-run's 30 s timeout (main run 43629540142) and timed out on a slower runner (main run 43632383993, merge commit of #155, which did not touch the suite), failing main's macos job. The fixture is now 1500 lines a side (~170 KB, still past the 64 KB pipe buffer the case exists for) in both twins; the expected counts follow (2973 lines not shown, 3003 diff lines logged). pty-run's 30 s default (commander, 2026-11-01) is unchanged |
+
+**Verified on:** Windows 11 (pwsh 7): `tests/managed-files/test-managed-files.ps1` 56/0, the case passes with the new counts; `bash -n` on the `.sh` twin. macOS and Linux: CI.
+
+---
+
 ## v0.77.5 -- Fail-safe log writers in the installers, the profile resolver and check-lib; setup-pywinpty checks its listing; hh.ps1 is PowerShell 7 only (2026-11-14)
 
 Not tagged. Branch `fix/m6-logging` (PR #157), mission M6-Polish (session 87795dc3), items f, d and e (delegates M6-F and M6-DE).
