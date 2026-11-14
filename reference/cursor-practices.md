@@ -180,6 +180,7 @@ Cursor project rules mirror Claude Code rules for consistency. When changing rul
 | `shared/rules/web-sources.md` | — | No project `.mdc` twin (retired 2026-11-13); Cursor gets it at user scope as `~/.cursor/rules/web-sources.mdc` through the setup-user-cursor rules fan-out |
 | `.claude/rules/hook-lifecycle.md` | — | No `.mdc` twin; project rule scoped by `paths:` to the hook sources and their deploy scripts |
 | `shared/rules/scratch.md` | — | No project `.mdc` twin; Cursor gets it at user scope as `~/.cursor/rules/scratch.mdc` through the setup-user-cursor rules fan-out (`reference/rules.md` section 6.1) |
+| `shared/rules/delegation.md` | — | No project `.mdc` twin (new 2026-11-14, a copy of the dotprofile rule); Cursor gets it at user scope as `~/.cursor/rules/delegation.mdc` through the setup-user-cursor rules fan-out |
 | (CLAUDE.md Code Conventions) | `.cursor/rules/general.mdc` | Python style folded in |
 | (none) | `.cursor/rules/cursor-rule-parity.mdc` | Cursor-only: keeps the twins in step |
 | `aitools-workspace`, `frameworks`, `glossary`, `governed-data-access`, `incident-governance`, `tool-evaluation`, `tool-ops` | — | No twin today: reason not recorded (commander's call: add twins, or record "Claude Code skill triggers only") |
