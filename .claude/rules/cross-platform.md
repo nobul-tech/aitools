@@ -103,6 +103,42 @@ esac
 
 Guards MUST use structured logging. Source `init-logging` before the guard.
 
+**Test suites** (commander, 2026-11-14: "sh scripts and tests should only run
+on linux/mac and ps1 on windows"). Every `tests/<dir>/test-*.sh` carries the
+POSIX guard, every `tests/<dir>/test-*.ps1` the Windows guard, unless the suite
+is listed in the exemptions table below as cross-platform. A suite that tests a
+`.sh`/`.ps1` pair has two harnesses with the same cases and golden files: the
+`.sh` runs the `.sh` scripts on macOS and Linux, the `.ps1` runs the `.ps1`
+scripts on Windows with native pwsh (helpers: `@tests/lib/platform-lib.ps1`).
+Test harnesses have no logging library: the guard prints to stderr, first
+thing after `set` / `param`. The bash guard adds a second case on
+`BASH_VERSINFO[5]`, bash's compiled-in machine type, which neither a `uname`
+shim on PATH nor an exported `OSTYPE` can change:
+
+```bash
+case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*)
+        printf 'This script is for macOS/Linux. On Windows, run tests/<dir>/test-<name>.ps1 with pwsh.\n' >&2
+        exit 1 ;;
+esac
+case "${BASH_VERSINFO[5]:-}" in
+    *-msys*|*-cygwin*|*-mingw*)
+        printf 'This script is for macOS/Linux. On Windows, run tests/<dir>/test-<name>.ps1 with pwsh.\n' >&2
+        exit 1 ;;
+esac
+```
+
+```powershell
+if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
+    [Console]::Error.WriteLine("This script is for Windows. On macOS/Linux, run tests/<dir>/test-<name>.sh with bash.")
+    exit 1
+}
+```
+
+On Windows, agents run only `.ps1` suites (and the cross-platform suites in
+the table below); a `.sh` suite is never run past its guard, and `uname`,
+`OSTYPE` or `BASH_VERSINFO` are never spoofed.
+
 ### OS guard exemptions
 
 | Category | Scripts | Rationale |
@@ -118,12 +154,20 @@ Guards MUST use structured logging. Source `init-logging` before the guard.
 | Analysis tools (rationale unrecorded, pending approval) | `analyze-session.sh` | Read-only session analysis |
 | Entry points with Windows branches (2026-11-01, review-after) | `aitools-install.sh`, `aitools`, `scripts/githooks/pre-commit` | Run on every platform: on Windows (Git Bash) `aitools-install.sh` forwards to `aitools-install.ps1`, `aitools` (the extensionless bash entry point) dispatches the `.ps1` setup scripts, the git hook runs in Git Bash |
 | Package launchers (2026-11-01, review-after) | `packaging/macos/*`, `packaging/linux/*`, `packaging/windows/*.ps1` | Run by the package installer on its one platform (design: `@plans/build-package/design.md`) |
+| Cross-platform test suites (2026-11-14, review-after) | `tests/hooks/test-*.sh`, `test-build-deploy-backup.sh`, `tests/build-package/test-cli.sh`, `tests/pywinpty/test-setup-pywinpty.sh` | They test bash code that runs in Git Bash on Windows, so they run in all three CI jobs: the hooks (Claude Code runs hooks in bash on every platform), `build-deploy.sh` (approved cross-language exception) and `build-package.sh`; the pywinpty suite's Windows cases test `build-deploy.sh`'s pin embed |
 
-`tests/os-guards/test-os-guards.sh` enforces this table: on macOS and Linux
-every Windows-guarded `.ps1` must refuse to run (exit 1, guard message, only
-logs written), on Windows every POSIX-guarded `.sh` must refuse, and a script
-with no guard that this table does not list fails the suite. There is no
-guard override: a test runs a script only on the platforms its guard allows.
+`tests/os-guards/test-os-guards.sh` (macOS, Linux) and
+`tests/os-guards/test-os-guards.ps1` (Windows) enforce this table, with one
+classifier (`tests/os-guards/classify-guards.pl`) over every product script
+and every test suite: on macOS and Linux every Windows-guarded `.ps1` must
+refuse to run (exit 1, guard message, only logs written), on Windows every
+POSIX-guarded `.sh` must refuse, a test suite's POSIX guard must have the
+`BASH_VERSINFO[5]` case, and a script or suite with no guard that this table
+does not list fails the suite. There is no guard override: a test runs a
+script only on the platforms its guard allows. `scripts/check-ci-suites.pl`
+(CI step "Every test suite is in CI") checks the other side: a `.ps1` suite
+runs in the windows job only, a POSIX-guarded `.sh` suite in the macos and
+linux jobs only, an unguarded (cross-platform) `.sh` suite in all three.
 
 ### Dead code from platform guards
 

@@ -25,15 +25,16 @@
 
 set -uo pipefail
 
-# OS guard: macOS/Linux only. $OSTYPE is set by bash itself, so a uname shim on
-# PATH does not hide Git Bash.
+# OS guard: macOS/Linux only. BASH_VERSINFO[5] is bash's compiled-in machine
+# type (read-only, never taken from the environment), so neither a uname shim
+# on PATH nor an exported OSTYPE hides Git Bash.
 case "$(uname -s)" in
     MINGW*|MSYS*|CYGWIN*)
         printf 'This script is for macOS/Linux. On Windows, run tests/b8-consumers/test-b8-consumers.ps1 with pwsh.\n' >&2
         exit 1 ;;
 esac
-case "${OSTYPE:-}" in
-    msys*|cygwin*)
+case "${BASH_VERSINFO[5]:-}" in
+    *-msys*|*-cygwin*|*-mingw*)
         printf 'This script is for macOS/Linux. On Windows, run tests/b8-consumers/test-b8-consumers.ps1 with pwsh.\n' >&2
         exit 1 ;;
 esac

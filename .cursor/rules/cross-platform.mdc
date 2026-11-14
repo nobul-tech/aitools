@@ -48,8 +48,18 @@ use `-not $IsWindows` (catches macOS AND Linux), never `$IsMacOS` alone.
 Exemptions: libraries (aitools-lib, check-lib, init-logging), hooks, build
 scripts (build-deploy, build-package), scratch files, and (pending approval)
 bootstrap/hh/relay-outbound-prompt/init-hh-hooks entry points, helper modules
-(aitools-json.ps1, _validate-ps1.ps1) and analyze-session.sh. Full table in
-`.claude/rules/cross-platform.md`.
+(aitools-json.ps1, _validate-ps1.ps1) and analyze-session.sh; cross-platform
+test suites (hooks, build-deploy backup, build-package CLI, pywinpty). Full
+table in `.claude/rules/cross-platform.md`.
+
+**Test suites** (commander, 2026-11-14: "sh scripts and tests should only run
+on linux/mac and ps1 on windows"): every `tests/<dir>/test-*.sh` has the POSIX
+guard (plus a `${BASH_VERSINFO[5]:-}` case that a `uname` shim or an exported
+`OSTYPE` cannot fool), every `test-*.ps1` the Windows guard, both printing to
+stderr. A suite for a `.sh`/`.ps1` pair has a `.ps1` twin harness with the same
+cases and golden files. On Windows run only `.ps1` suites (and the listed
+cross-platform ones); never run a `.sh` suite past its guard or spoof
+`uname`/`OSTYPE`. Patterns: `.claude/rules/cross-platform.md` "OS guard patterns".
 
 Dead code rule: Do not write platform branches for the rejected platform
 below an OS guard. Branch on capability, not identity (`IS_MACOS`,
