@@ -2,9 +2,10 @@
 #
 # Dot-source then: Invoke-RelayOutboundPrompt -RepoPath $repo
 # Used by scripts/aitools.ps1 and hh.ps1
-# ASCII only: hh.ps1 may load this into Windows PowerShell 5.1, which reads a
-# file without a BOM as ANSI, where the UTF-8 bytes of an em dash include a
-# quote character. Non-ASCII output text is built with [char] codes.
+# ASCII only: aitools.ps1 (no version requirement) may load this into Windows
+# PowerShell 5.1 (hh.ps1 is PowerShell 7 only), which reads a file without a BOM
+# as ANSI, where the UTF-8 bytes of an em dash include a quote character.
+# Non-ASCII output text is built with [char] codes.
 
 function Invoke-RelayOutboundPrompt {
     param(
@@ -37,7 +38,7 @@ function Invoke-RelayOutboundPrompt {
 
     if (-not $dirty -and $ahead -le 0) { return 0 }
 
-    # [char] codes, not `e or literal UTF-8: hh.ps1 may load this into Windows PowerShell 5.1
+    # [char] codes, not `e or literal UTF-8: this file may be loaded into Windows PowerShell 5.1
     $esc = [char]27
     $dash = [char]0x2014   # em dash
     $ell = [char]0x2026    # horizontal ellipsis
