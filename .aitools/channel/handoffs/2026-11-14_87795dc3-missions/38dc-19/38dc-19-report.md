@@ -1,4 +1,4 @@
-# 38dc-19-report -- mission 38dc-19-aitools-win-forwarder (v1.1)
+# 38dc-19-report -- mission 38dc-19-aitools-win-forwarder (v1.2)
 
 **Intent**: **Purpose**: record what mission 38dc-19 changed, why, how it was
 verified and what is left, for the orchestrator M6-Polish and the commander.
@@ -20,7 +20,14 @@ Reviewer 38dc-19-01-pr162-review (fresh delegate, did not see this report):
 3, 5, 8, 10: dashboard `--dry-run` / `--force` stay dashboard arguments; `aitools.ps1` rejects unknown arguments, as bash does. M6-Polish's condition (a), every caller and what it passes, is checked and listed in the PR body; condition (b), an explicit re-check by the reviewer, is requested. Also: `[Environment]::ProcessPath` with a null check; a "Files created" section in the release notes.
 4, 6: follow-ups (`--project-root` never binds `-ProjectRoot`; dead Windows branches). 7: the merge order is M6-Polish's. 9 (pwsh fallback path): not done, because the prompt says to call pwsh by name after `command -v`.
 
-Re-verification: `test-win-forwarder.ps1` 40/0; 17/17 mutations killed (5 new: USERPROFILE not set, unknown arguments accepted, no command after a leading flag, `--dry-run` taken from dashboard arguments, compat `--addmcp` names left in `$Remaining`); `test-logging.ps1` 45/0; `test-console-mode-guard.ps1` 76/0, 7 skipped.
+v1.2, the re-check at f62296e (https://github.com/nobul-tech/aitools/pull/162#issuecomment-6885199447): APPROVE-EQUIVALENT, no blocking findings, CI green on all three jobs. The reviewer rebuilt the caller list itself: no caller passes an argument the new check rejects. Non-blocking items:
+1. Two leading flags in a native call were rejected: fixed, aitools.ps1 now reads leading flags in a loop.
+2. With the export, deploys go to a HOME that is not the Windows profile, and the PR body was wrong about the old behaviour (the `.ps1` setup scripts deployed to USERPROFILE): the sentence is corrected, and a stderr note is printed when they differ.
+3. `--alias` in a native call does not bind `-Alias`: older than this PR, a follow-up.
+
+After those fixes: `test-win-forwarder.ps1` 45/0; 21/21 mutations killed. One mutation, M18, first survived because the case put `--dry-run` where compat consumes it; the case now uses `--force --dry-run` and kills it.
+
+Re-verification at v1.1: `test-win-forwarder.ps1` 40/0; 17/17 mutations killed (5 new: USERPROFILE not set, unknown arguments accepted, no command after a leading flag, `--dry-run` taken from dashboard arguments, compat `--addmcp` names left in `$Remaining`); `test-logging.ps1` 45/0; `test-console-mode-guard.ps1` 76/0, 7 skipped.
 
 ## Summary
 

@@ -239,6 +239,10 @@ try {
     $prof = @(@($stubLines) | Where-Object { $_ -like "PROFILE=*" } | ForEach-Object { $_ -replace '^PROFILE=', '' })
     Check "profile: HOME and USERPROFILE differ -> aitools.ps1 gets USERPROFILE = this HOME (Windows form)" (
         ($r.Rc -eq 0) -and ($prof.Count -eq 1) -and ($prof[0].TrimEnd('\') -ieq $c.Home.TrimEnd('\'))) "rc=$($r.Rc) profile=[$($prof -join ',')] home=$($c.Home) err=$($r.Err.Trim())"
+    Check "profile: ... and a note on stderr says HOME is not USERPROFILE" ($r.Err -match 'note: HOME \(.*\) is not USERPROFILE') "err=$($r.Err.Trim())"
+    $c = New-Case "profile-same" $repoA
+    $r = Invoke-Entry $c @("mcp")
+    Check "profile: HOME and USERPROFILE the same directory -> no note" (($r.Rc -eq 0) -and -not ($r.Err -match 'note: HOME')) "err=$($r.Err.Trim())"
 
     $c = New-Case "stdin" $repoA
     $r = Invoke-Entry $c @("user", "init") @{ STUB_READ_STDIN = "1" } "o`n"
@@ -316,6 +320,21 @@ try {
     $r = Invoke-Native $c $realPs1 "--force dashboard --status"
     Check "native: aitools --force dashboard --status -> the command after a leading flag is still the command" (
         Same (Read-Stub $c) @("Status=True")) "got=[$(@(Read-Stub $c) -join ', ')] rc=$($r.Rc) out=$(($r.Out + $r.Err).Trim())"
+    $c = New-Case "native-two-flags" $repoB
+    $r = Invoke-Native $c $realPs1 "--force --dry-run dashboard --status"
+    Check "native: aitools --force --dry-run dashboard --status -> two leading flags, then the command" (
+        Same (Read-Stub $c) @("Status=True")) "got=[$(@(Read-Stub $c) -join ', ')] rc=$($r.Rc) out=$(($r.Out + $r.Err).Trim())"
+    $c = New-Case "native-flag-addmcp" $repoB
+    $r = Invoke-Native $c $realPs1 "--force --addmcp vercel bogus"
+    $all = $r.Out + $r.Err
+    Check "native: aitools --force --addmcp vercel bogus -> the names after a leading flag are the --addmcp list" (
+        ($r.Rc -eq 1) -and ($all -match "unknown MCP server 'bogus'") -and -not ($all -match 'unknown argument')) "rc=$($r.Rc) out=$($all.Trim())"
+    $c = New-Case "native-addmcp-empty" $repoB
+    $r = Invoke-Native $c $realPs1 "--force --addmcp"
+    $all = $r.Out + $r.Err
+    Check "native: aitools --force --addmcp -> 'requires at least one server name', exit 1 (no sync)" (
+        ($r.Rc -eq 1) -and ($all -match '--addmcp requires at least one server name')) "rc=$($r.Rc) out=$($all.Trim())"
+
     $c = New-Case "native-addmcp" $repoB
     $r = Invoke-Native $c $realPs1 "--addmcp vercel bogus"
     $all = $r.Out + $r.Err

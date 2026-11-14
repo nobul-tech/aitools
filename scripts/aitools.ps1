@@ -31,6 +31,7 @@ if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
 # --- PS 5.1 compat: --flag arrives as positional $Command since PS 5.1 doesn't support -- prefix ---
 if ($Command -eq "--addmcp" -or $Command -eq "-addmcp") {
     $AddMcp = $Remaining
+    $script:AddMcpGiven = $true
     $Remaining = @()
     $Command = ""
 }
@@ -51,10 +52,20 @@ if ($Command -eq "--force" -or $Command -eq "-force") {
     $Command = ""
 }
 # A flag given first in a native call (`aitools --force install`) took the place of
-# the command above: the next argument, when it is a command, is the command
-if (-not $Command -and $Remaining -and @($Remaining).Count -gt 0 -and
-    $Remaining[0] -in @("install", "gitpull", "mcp", "user", "sessions", "dashboard")) {
-    $Command = $Remaining[0]
+# the command above. Read on: more leading --dry-run / --force, an --addmcp list,
+# or the command
+while (-not $Command -and -not $AddMcp -and $Remaining -and @($Remaining).Count -gt 0) {
+    $first = @($Remaining)[0]
+    if ($first -eq "--dry-run" -or $first -eq "-dry-run") { $DryRun = [switch]::Present }
+    elseif ($first -eq "--force" -or $first -eq "-force") { $Force = [switch]::Present }
+    elseif ($first -eq "--addmcp" -or $first -eq "-addmcp") {
+        $AddMcp = @($Remaining | Select-Object -Skip 1)
+        $script:AddMcpGiven = $true
+        $Remaining = @()
+        break
+    } elseif ($first -in @("install", "gitpull", "mcp", "user", "sessions", "dashboard")) {
+        $Command = $first
+    } else { break }
     $Remaining = @($Remaining | Select-Object -Skip 1)
 }
 # Also check Remaining for --dry-run / --force (may come after a command); not for
@@ -594,7 +605,7 @@ if ($unknownArg) {
 }
 
 # Reject --addmcp with no server names
-if ($PSBoundParameters.ContainsKey('AddMcp') -and $AddMcp.Count -eq 0) {
+if (($PSBoundParameters.ContainsKey('AddMcp') -or $script:AddMcpGiven) -and @($AddMcp | Where-Object { $_ }).Count -eq 0) {
     LogError "--addmcp requires at least one server name (vercel, webflow)"
     exit 1
 }

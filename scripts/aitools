@@ -150,9 +150,18 @@ aitools_win_forward() {
     fi
     aitools_ps1_args "$@"
     # aitools.ps1 works under $env:USERPROFILE; this entry point under $HOME. Hand
-    # it the same profile (they differ when HOME is set, e.g. an isolated test HOME)
-    local up=""
+    # it the same profile (they differ when HOME is set elsewhere, e.g. an isolated
+    # test HOME): everything then goes to the HOME the caller chose, never to a
+    # profile it did not name. In a normal Git Bash session they are the same
+    # directory (db_home: env windows). When they differ, say so on stderr: Claude
+    # Code reads ~/.claude under the Windows profile.
+    local up="" up_lc="" orig="${USERPROFILE:-}" orig_lc=""
     if up=$(cygpath -w "$HOME"); then
+        up_lc=$(printf '%s' "${up%\\}" | tr 'A-Z' 'a-z')
+        orig_lc=$(printf '%s' "${orig%\\}" | tr 'A-Z' 'a-z')
+        if [ -n "$orig" ] && [ "$up_lc" != "$orig_lc" ]; then
+            printf 'note: HOME (%s) is not USERPROFILE (%s) -- aitools.ps1 runs with USERPROFILE=%s\n' "$HOME" "$orig" "$up" >&2
+        fi
         export USERPROFILE="$up"
     else
         printf 'error: cygpath -w failed for HOME=%s -- aitools.ps1 would use USERPROFILE=%s instead\n' "$HOME" "${USERPROFILE:-}" >&2
