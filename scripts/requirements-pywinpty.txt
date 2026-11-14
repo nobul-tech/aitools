@@ -1,0 +1,34 @@
+# requirements-pywinpty.txt -- the pywinpty pin: single source of truth for the
+# version and wheel hashes (tool registry entry "pywinpty", /tool-registry skill).
+# Install (Windows): scripts/setup-pywinpty.ps1 (aitools install Step 15b; CI windows job),
+# which runs: python -m pip install --user --only-binary=:all: --require-hashes -r scripts/requirements-pywinpty.txt
+# (for an EXTERNALLY-MANAGED interpreter, PEP 668: --target <its user site> --upgrade instead of --user).
+# Lives in scripts/ so it ships on all three deployment paths: dev (aitools install),
+# package (build-package.sh payload) and MDM (build-deploy.sh embeds it in
+# deploy/setup-pywinpty.ps1). Moved from tests/managed-files/requirements-windows.txt (M4-Winpty, 2026-11-14).
+#
+# pywinpty: ConPTY backend for tests/managed-files/pty-run.py on Windows (the
+# stdlib pty module is POSIX-only). /tool-eval S2-Winpty 2026-11-01: no hard
+# block; yellow flags (sole maintainer on a personal account, 164 stars;
+# ~1.9M downloads/month, a dependency of jupyter_server and terminado on
+# Windows). Commander, 2026-11-01: "Adopt, spike first". 3.1.2 or later:
+# fixes EOF detection on ConPTY and spawning a path with spaces. No
+# dependencies. Hashes from https://pypi.org/pypi/pywinpty/3.1.2/json: every
+# win_amd64 wheel (cp310-cp315, incl. free-threaded), so the same file installs
+# on CI (3.12) and on a developer workstation (e.g. 3.14, with --user). Hash ->
+# file mapping re-read from the PyPI JSON API 2026-11-13 (M4-Winpty). win_arm64
+# wheels are not pinned.
+# Evaluation: reference/evaluations/pywinpty-windows-2026-11-13.md.
+#
+# The line below is read by setup-pywinpty.ps1: the interpreter tags this pin covers
+# (cp<major><minor>[t]-<platform>). Keep it in step with the hashes.
+# wheel-tags: cp310-win_amd64 cp311-win_amd64 cp312-win_amd64 cp313-win_amd64 cp314-win_amd64 cp314t-win_amd64 cp315-win_amd64 cp315t-win_amd64
+pywinpty==3.1.2 \
+    --hash=sha256:197cb43a5a1c6ed5836907fdcb3f008883386bcdaa05ae0cfdf4848b3624e237 \
+    --hash=sha256:a58997fa8519694725dca4a297aa7bebada3675263742cfb12fbc5eb09d466e7 \
+    --hash=sha256:220e30a8cccd7f0be3356d4e3e56fdcda2ae45edc1de526b440c4031fe9308da \
+    --hash=sha256:d968dc4300b497f048318387781ed9931dc0038815f25b4f642a1749448769cb \
+    --hash=sha256:980af688956fe78c87882682732e6eea45aa0b8d10a9628812e95878264d5204 \
+    --hash=sha256:fe0abcffd095642c78ba7c6abf4cc8129dce9568e97a1c9194eea23383d0de29 \
+    --hash=sha256:b8c47556fbf19595898dd75f45763072ff1160b080eefabeae8cc43c5acbd720 \
+    --hash=sha256:ed5c5ca288001590fbf1d5a52c6389f0f6ae7e4751bdc8b2f8f9c7249f266f9b

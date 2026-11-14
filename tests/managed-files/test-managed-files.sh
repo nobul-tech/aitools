@@ -8,7 +8,7 @@
 # python3). The AI merge uses a stub `claude` on PATH; no real AI is called.
 # Platform: macOS, Linux, Windows Git Bash (aitools-lib.sh also runs there: the
 # bash entry point sources it). On Windows the pty cases run through pywinpty
-# (ConPTY, tests/managed-files/requirements-windows.txt) and are skipped, with
+# (ConPTY, scripts/setup-pywinpty.ps1) and are skipped, with
 # the reason, when it is not installed. Exit 1 if any case fails.
 # Spec: .claude/rules/agentic-standards.md "Managed-file review choices and
 # merge"; reference/managed-file-deployment.md; .claude/rules/interactive-menus.md.

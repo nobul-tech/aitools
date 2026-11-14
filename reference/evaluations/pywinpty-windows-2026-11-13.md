@@ -1,25 +1,57 @@
 # Evaluation: pywinpty as a local Windows test dependency — Windows 11 workstation — 2026-11-13
 
-Version 1.1 (2026-11-13). Author: M3-Fixes-D (delegate of M3-Fixes, Session Commander
-87795dc3-e). Phase 2 gate: **not installed**; the install, test and rollback commands
-below wait for the commander's approval.
+Version 1.3 (2026-11-14). Authors: v1.0 M3-Fixes-D (delegate of M3-Fixes, Session
+Commander 87795dc3-e); v1.1 M3-Fixes; v1.2 M4-Winpty (written by its delegate
+M4-F-Registry); v1.3 M4-Winpty. Phase 2 gate: **approved** by the commander on 2026-11-14 (RFI fa81-7:
+"yes, i stated i approved it"); pywinpty 3.1.2 installed on this workstation the same day
+(section 6, "Phase 2 result").
+
+v1.3 (M4-Winpty, 2026-11-14): the PEP 668 question (section 4 "Finding", section 8
+unknown 4) is decided -- commander, RFI fa81-9: "fix pep, add it to same branch commit,
+watch ci/cd, fix any errors, merge when ready" (option (b)). For an EXTERNALLY-MANAGED
+interpreter `setup-pywinpty.ps1` now runs `pip install --target <that interpreter's user
+site> --upgrade --only-binary=:all: --require-hashes -r scripts/requirements-pywinpty.txt`
+(pip skips its PEP 668 check for `--target`: `pip/_internal/commands/install.py`,
+`check_externally_managed()` runs only when `target_dir`, `prefix_path` and `root_path` are
+None), removes stale `pywinpty-*.dist-info` of other versions, and verifies by import; it
+still never passes `--break-system-packages` and never writes into the interpreter's
+install tree (WARN + ACTION when the user site is disabled or inside that tree). Verified
+against uv CPython 3.14.10 in an isolated APPDATA: install "(installed, --target)",
+verified re-run, a seeded `pywinpty-3.1.1.dist-info` replaced, `PYTHONNOUSERSITE=1` ->
+WARN; uv's `Lib\site-packages` unchanged.
+
+v1.2 (M4-Winpty, 2026-11-14): the commander approved Phase 2 and ordered adoption:
+"/tool-adopt pywinpty.  we will need setup-pywinpty.ps1.  document its source of truth in
+registry via /tool-registry.  mark windows/linux as N/A." (RFI fa81-5 answered "yes":
+macOS and Linux n/a, Windows supported) and "we should support pywinpty through all 3
+methods of deployment/install" (RFI fa81-8). Changes: the install ran and passed (section
+6, "Phase 2 result"); the pin moved from `tests/managed-files/requirements-windows.txt` to
+`scripts/requirements-pywinpty.txt` (commit 6feada2), the single source of truth for the
+version and the wheel hashes; `scripts/setup-pywinpty.ps1` / `.sh` install it on the three
+deployment paths (section 6, "Integration"); a new finding on the aitools-managed Python
+(section 4, "Finding: the aitools-managed python3 refuses the install"); section 7 is
+superseded by the commander's order (a registry entry now exists); the unknowns in section
+8 are updated. Sections 1 to 4 keep their 2026-11-13 facts; statements about that state
+say "then".
 
 v1.1 (M3-Fixes): the follow-up in section 6 is done in the same PR --
-`tests/managed-files/requirements-windows.txt` now pins every 3.1.2 win_amd64 wheel
-(cp310-cp315, incl. free-threaded; hashes re-read from the PyPI JSON API by M3-Fixes), so
-the proposed command uses that file instead of a temporary one-line file. Sections 1 and
-4 describe the file as it was before this PR.
+`tests/managed-files/requirements-windows.txt` (then; `scripts/requirements-pywinpty.txt`
+since v1.2) pins every 3.1.2 win_amd64 wheel (cp310-cp315, incl. free-threaded; hashes
+re-read from the PyPI JSON API by M3-Fixes), so the proposed command uses that file
+instead of a temporary one-line file. Sections 1 and 4 describe the file as it was before
+that PR.
 
-**Intent**: **Purpose**: Preserve the evaluation of pywinpty for running the interactive
-pty test cases locally on the commander's Windows workstation, and the proposed install,
-test and rollback commands for the Phase 2 decision. **Scope**: provenance, official
-source, maintenance, licence, how CI's windows job gets it, this workstation's Python
-facts, local install options, hard blocks and yellow flags, recommendation. NOT the CI
-adoption itself (S2-Winpty, 2026-11-01, recorded in
-`tests/managed-files/requirements-windows.txt` and `plans/ci-platform-targeting.md`). NOT
-integration code (setup scripts, installer steps, `build-deploy.sh`). NOT registry data
-(`/tool-registry` skill). **Audience**: the orchestrator M3-Fixes, the commander at the
-Phase 2 gate, and agents re-evaluating pywinpty.
+**Intent**: **Purpose**: Preserve the evaluation of pywinpty as a managed Windows test
+library -- the evidence behind its install method and health flags, and the record of the
+Phase 2 decision and its result. **Scope**: provenance, official source, maintenance,
+licence, how CI's windows job got it, this workstation's Python facts, install options,
+hard blocks and yellow flags, recommendation, the Phase 2 result. NOT the CI adoption
+itself (S2-Winpty, 2026-11-01, `plans/ci-platform-targeting.md`). NOT the pin (version and
+hashes: `scripts/requirements-pywinpty.txt`). NOT integration code
+(`scripts/setup-pywinpty.ps1` / `.sh`, installer Step 15b, `build-deploy.sh`). NOT
+registry data (`/tool-registry` skill, entry `pywinpty`). **Audience**: the orchestrator
+M4-Winpty, the commander reviewing the adoption, and agents re-evaluating pywinpty or
+reviewing its yellow flags.
 
 Method: web sources read with the chrome-devtools MCP (PyPI JSON API, PyPI project page,
 pypistats, the upstream CHANGELOG), GitHub facts with `gh api`, local facts with read-only
@@ -31,8 +63,8 @@ Nothing was installed or downloaded.
 
 1. **No hard block.** Same verdict as the CI evaluation of 2026-11-01 (S2-Winpty). The CI
    pin, 3.1.2, is still the latest release (2026-10-28); both CI hashes match PyPI.
-2. **The CI requirements file does not install on this workstation.** It pins only the
-   cp312 and cp313 win_amd64 wheels; this workstation's `python3` is CPython 3.14.6, which
+2. **The CI requirements file did not install on this workstation (then; fixed in v1.1).**
+   It pinned only the cp312 and cp313 win_amd64 wheels; this workstation's `python3` is CPython 3.14.6, which
    needs the cp314 wheel, whose hash is not in the file. Under `--require-hashes` pip
    rejects the cp314 wheel (expected; not run, installs are forbidden before the gate).
 3. **The test suites call `python3` from PATH** (Git Bash and pwsh alike). On this machine
@@ -42,12 +74,17 @@ Nothing was installed or downloaded.
    hash-pinned.** Both 3.14 interpreters on this machine (PyManager 3.14.6 and uv 3.14.10)
    share the user site `%APPDATA%\Python\Python314\site-packages`, so it survives a PATH
    order change and a 3.14 patch upgrade. Follow-up: add the cp314 hashes to
-   `requirements-windows.txt` so CI and local share one pinned file.
+   `requirements-windows.txt` so CI and local share one pinned file (done in v1.1; the
+   file is `scripts/requirements-pywinpty.txt` since v1.2). Installed 2026-11-14 (v1.2).
 5. **Yellow flags** (unchanged in kind from 2026-11-01): sole maintainer on a personal
    account; 164 stars; plus, new here: upstream recommends conda first; no PyPI
    provenance attestations; no SECURITY.md.
 
-## 1. What CI does today
+## 1. What CI did on 2026-11-13
+
+Since v1.2 the windows job installs pywinpty through `scripts/setup-pywinpty.ps1` with the
+pin `scripts/requirements-pywinpty.txt` (M4-Winpty brief, 2026-11-14). The table records
+the state when this evaluation was written.
 
 | Item | Value | Source |
 |---|---|---|
@@ -166,7 +203,8 @@ Every pty suite decides on the interpreter named `python3` on PATH:
   the import fails.
 
 So pywinpty must be importable by whatever `python3` resolves to in the shell that runs
-the suite. Today that is PyManager's 3.14.6.
+the suite. On this workstation on 2026-11-13 that was PyManager's 3.14.6; on a machine
+where aitools Step 15 owns `python3` it is the uv-managed CPython (section 4, "Finding").
 
 ## 4. Local install options
 
@@ -188,10 +226,37 @@ Windows-only by design (POSIX uses stdlib `pty`); 6) automation: one pip command
 pin as CI; 7) maintenance: active (3 releases in October 2026), sole maintainer; 8) build
 time: none (binary wheel only).
 
+### Finding: the aitools-managed python3 refuses the install (v1.2)
+
+Verified read-only by M4-Winpty on 2026-11-14 (source: M4-Winpty message to
+M4-F-Registry). It corrects the assumption of sections 3 and 4 that this workstation's
+`python3` (PyManager 3.14.6, first on PATH) is the relevant interpreter on every machine:
+
+- aitools Step 15 (`setup-python.ps1`, `uv python install --default`) makes `python` /
+  `python3` the uv-managed CPython: shim `%USERPROFILE%\.local\bin\python3.exe` ->
+  `%APPDATA%\uv\python\cpython-3.14-windows-x86_64-none\python.exe`, 3.14.10.
+- That interpreter carries `EXTERNALLY-MANAGED`.
+  `python3 -m pip install --dry-run --user --only-binary=:all: --require-hashes -r scripts/requirements-pywinpty.txt`
+  exits 1 with "error: externally-managed-environment ... This Python installation is
+  managed by uv and should not be modified." (PEP 668). Option C above fails for the same
+  reason.
+- Its user site (`%APPDATA%\Python\Python314\site-packages`, `ENABLE_USER_SITE` True) is
+  shared with any non-managed CPython 3.14, so a `--user` install made by a
+  python.org/PyManager interpreter is importable by the uv `python3` (option A still
+  serves the suites).
+- v1.2 (then): `setup-pywinpty.ps1` reported WARN "python externally managed" + ACTION
+  and never passed `--break-system-packages`; the endpoint case was open.
+- v1.3 (decided, commander RFI fa81-9, 2026-11-14): for such an interpreter the script
+  installs with `pip install --target <its user site> --upgrade ...` (see the v1.3
+  changelog at the top); WARN "managed python, no user site" + ACTION remains only when
+  the user site is disabled or inside the install tree. Still never
+  `--break-system-packages`.
+
 Version skew to disclose: CI runs the cp312 wheel on Python 3.12; the workstation would run
 the cp314 wheel on 3.14.6. Same release, different build; the CI probe results
 (`pty-run.py` docstring: Git Bash sees a terminal and `/dev/tty`, pwsh needs CR) were
-measured on 3.12 only.
+measured on 3.12 only (v1.2: the probe on 3.14.6 confirmed them; section 6, "Phase 2
+result").
 
 ## 5. Hard blocks and yellow flags (`reference/tool-evaluation-criteria.md`)
 
@@ -226,18 +291,28 @@ direction 1 (an input seam so menus read scripted keystrokes without a terminal)
 Install pywinpty 3.1.2 into the Python 3.14 user site, wheel only, hash-pinned with the
 cp314 win_amd64 hash read from PyPI on 2026-11-13. Then add the 3.1.2 hashes for
 cp314 (and the other win_amd64/arm64 wheels) to `tests/managed-files/requirements-windows.txt`
-so the canonical command in `pty-run.py`'s error message works on every supported
-interpreter; after that change the local command becomes
+(then; `scripts/requirements-pywinpty.txt` since v1.2) so the canonical command in
+`pty-run.py`'s error message works on every supported interpreter; after that change the
+local command becomes
 `python -m pip install --user --require-hashes -r tests/managed-files/requirements-windows.txt`.
+(v1.1 added the win_amd64 hashes only; win_arm64 is still not pinned.)
 
-### Proposed install command (pwsh, from the aitools checkout root; awaiting approval; not run)
+### Install command (pwsh, from the aitools checkout root; approved and run 2026-11-14)
+
+As approved and run (the pin was then at its old path):
 
 ```powershell
 python -m pip install --user --only-binary=:all: --require-hashes -r tests/managed-files/requirements-windows.txt
 ```
 
-(v1.0 proposed a temporary one-line requirements file with the cp314 hash; v1.1 uses the
-repo file, which now carries that hash.)
+Current form (the pin's path since v1.2; run by `scripts/setup-pywinpty.ps1`):
+
+```powershell
+python -m pip install --user --only-binary=:all: --require-hashes -r scripts/requirements-pywinpty.txt
+```
+
+(v1.0 proposed a temporary one-line requirements file with the cp314 hash; v1.1 used the
+repo file, which carries that hash.)
 
 Expected: `Successfully installed pywinpty-3.1.2` into
 `C:\Users\jdpal\AppData\Roaming\Python\Python314\site-packages`.
@@ -258,6 +333,51 @@ the probe's section 3 shows `[git-bash CR]` with `T0=yes`, `DEVTTY=yes`, `GOT[ab
 `SKIP display, diff over 64 KB` line, issue #564). Each suite runs every case in its own
 temp HOME.
 
+### Phase 2 result (2026-11-14, verified by M4-Winpty)
+
+Approved by the commander (RFI fa81-7: "yes, i stated i approved it"). Run from
+`C:\Users\jdpal\repos\aitools` on main:
+
+- Install: "Downloading pywinpty-3.1.2-cp314-cp314-win_amd64.whl (2.1 MB) ...
+  Successfully installed pywinpty-3.1.2", exit 0.
+- Import: `python3 -c "import winpty..."` ->
+  `C:\Users\jdpal\AppData\Roaming\Python\Python314\site-packages\winpty\__init__.py`,
+  interpreter `C:\Users\jdpal\AppData\Local\Python\pythoncore-3.14-64\python.exe`
+  (PyManager `python3.exe`), version 3.1.2.
+- `winpty-probe.py` section 3: `[git-bash CR] exit=0 out=['T0=yes', 'DEVTTY=yes', 'abc', 'GOT[abc]']`,
+  `[git-bash LF] exit=0 ... 'GOT[abc]'`,
+  `[pwsh CR] exit=0 out=['REDIRECTED=False', 'USERINTERACTIVE=True', 'abc', 'GOT[abc]']`;
+  probe exit 0.
+- `tests/managed-files/test-managed-files.sh`: 79 passed, 0 failed, 3 skipped (chmod;
+  "display, diff over 64 KB", #564; "claude.md adopt round trip: setup-user-claude.sh does
+  not run on Windows"); no pywinpty SKIP. `test-managed-files.ps1`: 56 passed, 0 failed,
+  0 skipped.
+- Pin re-check: the hash -> file mapping re-read from
+  https://pypi.org/pypi/pywinpty/3.1.2/json (raw JSON via python urllib, 2026-11-14): the
+  8 pinned hashes are exactly the win_amd64 wheels cp310, cp311, cp312, cp313, cp314,
+  cp314t, cp315, cp315t; the 8 win_arm64 wheels and the sdist are not pinned; latest
+  version 3.1.2.
+
+The pass criteria above hold for the import, the probe and the SKIP lines; the suites'
+exit codes are not in the M4-Winpty brief (0 failed in both).
+
+### Integration (v1.2, M4-Winpty)
+
+- Pin: `scripts/requirements-pywinpty.txt`, the single source of truth for the version and
+  the wheel hashes, with a machine-readable `# wheel-tags:` line read by
+  `setup-pywinpty.ps1`.
+- `scripts/setup-pywinpty.ps1` (Windows): resolves `python3`, then `python`; WARN on no
+  Python, an interpreter tag the pin does not cover, or an `EXTERNALLY-MANAGED` or venv
+  interpreter; never `--break-system-packages`; runs the install command above; verifies
+  by import. `scripts/setup-pywinpty.sh` (macOS/Linux): OK row `n/a (<platform>)`, stdlib
+  `pty`.
+- Three deployment paths (commander, RFI fa81-8): dev, `aitools install` "Step 15b:
+  pywinpty" right after Step 15 Python; MDM, a `build-deploy.sh` copy block pair with the
+  pin embedded in the generated `setup-pywinpty.ps1` (`$AitoolsEmbeddedPywinptyPin`);
+  package, the `build-package.sh` payload `scripts/` -> `aitools-install.ps1` -> Step 15b.
+  CI's windows job installs through `setup-pywinpty.ps1`.
+- Tests: `tests/pywinpty/`.
+
 ### Rollback
 
 ```powershell
@@ -274,7 +394,15 @@ is installed.
 
 ## 7. Registry
 
-No tool-registry entry recommended. The registry tracks managed tools that
+**Superseded (v1.2).** The commander's order of 2026-11-14 ("/tool-adopt pywinpty. ...
+document its source of truth in registry via /tool-registry. mark windows/linux as N/A.")
+overrides the recommendation below: pywinpty now has a registry entry, written through the
+`/tool-registry` skill (Windows supported, macOS and Linux n/a, the pin file named as the
+source of truth for the version and hashes). As a library it gets no Managed CLI Tools row
+(session-commander decision, `shared/rules/tool-lifecycle.md` "Managed libraries"). The
+v1.1 text is kept below as the record.
+
+v1.1: No tool-registry entry recommended. The registry tracks managed tools that
 `aitools install` delivers to users (setup scripts, installer steps, Managed CLI Tools
 rows); pywinpty is a test-only Python library on CI and developer machines, never deployed
 to an endpoint, with its pin and provenance in `requirements-windows.txt` and this file.
@@ -284,13 +412,21 @@ check that fails without it).
 
 ## 8. Unknowns
 
-- pip's exact error for option A0 on 3.14 (expected a hash mismatch or "no matching
-  distribution" under `--require-hashes`; not run, installs forbidden before the gate).
-- Whether the ConPTY probe results measured on CI (3.12, windows-2022) hold on this
-  workstation (3.14.6, Windows 11 Pro for Workstations 10.0.26300); the test commands
-  answer it.
-- Whether the latest CI run on main shows the interactive cases running (no SKIP line) on
-  windows; not checked here. Issue #72's "Done when" depends on it.
+Updated in v1.2.
+
+1. pip's exact error for option A0 on 3.14 (expected a hash mismatch or "no matching
+   distribution" under `--require-hashes`). **Still unknown**: A0 was never run, and v1.1
+   removed its cause (the pin covers cp314), so the error was never observed.
+2. Whether the ConPTY probe results measured on CI (3.12, windows-2022) hold on this
+   workstation (3.14.6, Windows 11 Pro for Workstations 10.0.26300). **Answered: yes**
+   (section 6, "Phase 2 result": `GOT[abc]` for git-bash CR, git-bash LF and pwsh CR).
+3. Whether the latest CI run on main shows the interactive cases running (no SKIP line) on
+   windows. **Answered: yes** for the last green main run, job 132196438940: it showed
+   `GOT[abc]` and no pty SKIP (source: M4-Winpty brief, 2026-11-14). Issue #72's "Done
+   when" depends on it.
+4. New (v1.2): how an endpoint whose only CPython is the aitools/uv-managed one gets
+   pywinpty (section 4, "Finding"). Answered in v1.3: `pip --target <its user site>`
+   (commander, RFI fa81-9, 2026-11-14).
 
 ## Sources
 
@@ -301,4 +437,5 @@ check that fails without it).
 - https://raw.githubusercontent.com/andfoy/pywinpty/main/CHANGELOG.md (browser, 2026-11-13)
 - `gh api repos/andfoy/pywinpty` (+ `/releases`, `/commits`, `/contributors`, `/license`, `/security-advisories`, `/contents/SECURITY.md`, `/issues/564`); `gh api advisories?ecosystem=pip&affects=pywinpty`
 - `gh issue view 72 --repo nobul-tech/aitools`; `gh pr view 139 --repo nobul-tech/aitools`
-- Repo: `tests/managed-files/requirements-windows.txt`, `pty-run.py`, `winpty-probe.py`, `test-managed-files.sh`, `test-managed-files.ps1`; `.github/workflows/check.yml` (windows job); `plans/ci-platform-targeting.md`; `RELEASE_NOTES.md`
+- v1.2: https://pypi.org/pypi/pywinpty/3.1.2/json (raw JSON via python urllib, 2026-11-14, M4-Winpty); M4-Winpty brief and message to M4-F-Registry (install, probe, suite and CI results; the uv-managed python3 finding), 2026-11-14; `scripts/requirements-pywinpty.txt`
+- Repo (v1.1): `tests/managed-files/requirements-windows.txt` (then), `pty-run.py`, `winpty-probe.py`, `test-managed-files.sh`, `test-managed-files.ps1`; `.github/workflows/check.yml` (windows job); `plans/ci-platform-targeting.md`; `RELEASE_NOTES.md`

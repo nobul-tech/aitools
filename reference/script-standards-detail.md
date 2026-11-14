@@ -267,6 +267,7 @@ These are the canonical tool names for field 2. Always use these exact strings.
 | `skills` | setup-user-skills (fanned-out mode: `n/a (fanned out)`, reverse-discovery errors) |
 | `cursor ide mcp` | setup-cursor-ide-mcp |
 | `python` | setup-python |
+| `pywinpty` | setup-pywinpty (Windows install; macOS/Linux `n/a (<platform>)`) |
 | `uv` | setup-uv |
 | `go` | setup-go |
 | `datadog cli` | setup-datadog |

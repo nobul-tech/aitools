@@ -90,7 +90,7 @@ for registry writes.
 - `@scripts/build-deploy.sh` — add copy block pair
 - If auth required: add status check in setup scripts
 - Registry entry via `/tool-registry` skill
-- `@shared/claude-shared.md` — Managed CLI Tools table
+- `@shared/claude-shared.md` — Managed CLI Tools table (not for a managed library)
 - `<userRepoPath>/claude/CLAUDE.md` — same row
 - Check script entries (`TOOL_CMDS` dictionaries)
 - Deployment types table if new file type
@@ -100,6 +100,17 @@ nothing waits for approval before it is written (D-DEL5, user rule
 `delegation.md`). The commit or PR body lists each change old -> new
 under "Review after": the registry entry, both Managed CLI Tools rows,
 the `TOOL_CMDS` entries and the deployment types table included.
+
+#### Managed libraries
+A managed library is a package other code imports, not a command on PATH
+(first case pywinpty; commander, 2026-11-14: "/tool-adopt pywinpty"). It
+gets the full onboarding above except the Managed CLI Tools rows in
+`@shared/claude-shared.md` and the dotprofile `claude/CLAUDE.md`. Its
+`TOOL_CMDS` version check is an import or package-metadata command, not a
+`--version` flag. When it has a pin file (version and hashes), the pin is
+the source of truth: its `/tool-registry` entry names the pin and does not
+copy it. Session-commander decision (2026-11-14), pending the commander's
+review ("Review after").
 
 #### Rebuild + propagate
 1. Agents: `bash scripts/build-deploy.sh` under an isolated `HOME` with a

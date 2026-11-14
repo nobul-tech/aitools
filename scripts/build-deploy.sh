@@ -1147,6 +1147,69 @@ blog "Copying deploy/setup-python.ps1"
 GENERATED=$((GENERATED + 1))
 
 # ============================================================
+# deploy/setup-pywinpty.sh (copy as-is) and .ps1 (copy + embedded pin)
+# ============================================================
+# The .sh reports n/a on macOS/Linux. The .ps1 reads its pin from
+# requirements-pywinpty.txt beside it (dev and package paths); deploy/ has no such
+# file, so the pin (scripts/requirements-pywinpty.txt, the single source) is appended
+# after the inlined lib as the here-string $AitoolsEmbeddedPywinptyPin, which
+# setup-pywinpty.ps1 reads when no pin file sits beside it. Only the pin data is
+# embedded; the setup logic is copied. A pin that is missing or empty, has no
+# pywinpty== line, has a line starting with '@ (it would end the here-string), has
+# no "# wheel-tags:" line or no --hash=sha256: entry fails the build
+# (tests/pywinpty/test-setup-pywinpty.sh).
+blog "Copying deploy/setup-pywinpty.sh"
+{
+    echo '#!/usr/bin/env bash'
+    echo "$HEADER_COMMENT_BASH"
+    tail -n +2 "$SCRIPTS_DIR/setup-pywinpty.sh" | inline_lib_bash
+} > "$DEPLOY_DIR/setup-pywinpty.sh"
+chmod +x "$DEPLOY_DIR/setup-pywinpty.sh"
+GENERATED=$((GENERATED + 1))
+
+PYWINPTY_PIN="$SCRIPTS_DIR/requirements-pywinpty.txt"
+PYWINPTY_PIN_BLK="$BUILD_TMP/pywinpty-pin.ps1.blk"
+# The block: a source comment, "$AitoolsEmbeddedPywinptyPin = @'", the pin text
+# (line endings normalized to LF, one final newline; the post-build step makes every
+# deploy/*.ps1 CRLF), and "'@" at column 0. Prints "pywinpty <version>, <n> hash(es)".
+_pin_rc=0
+_pin_msg=$(perl -e '
+    my ($src, $out) = @ARGV;
+    my $q = chr(39);
+    open my $in, "<", $src or die "$src: cannot read ($!)\n";
+    my $t = do { local $/; <$in> };
+    close $in;
+    $t = "" unless defined $t;
+    $t =~ s/\r\n?/\n/g;
+    die "$src is empty\n" unless $t =~ /\S/;
+    my ($ver) = $t =~ /^\s*pywinpty==([0-9][0-9A-Za-z.]*)/m
+        or die "$src has no pywinpty== line\n";
+    die "$src has a line starting with ${q}\@ (it would end the here-string)\n"
+        if $t =~ /^\s*\x27\x40/m;
+    die "$src has no # wheel-tags: line\n" unless $t =~ /^\s*#\s*wheel-tags:/m;
+    $t .= "\n" unless $t =~ /\n\z/;
+    my $n = () = $t =~ /--hash=sha256:/g;
+    die "$src has no --hash=sha256: entries\n" unless $n;
+    open my $o, ">", $out or die "$out: cannot write ($!)\n";
+    print $o "# Embedded by scripts/build-deploy.sh from scripts/requirements-pywinpty.txt -- the pin setup-pywinpty.ps1 uses when no requirements-pywinpty.txt sits beside it\n";
+    print $o "\$AitoolsEmbeddedPywinptyPin = \@$q\n", $t, "$q\@\n";
+    close $o or die "$out: write failed ($!)\n";
+    print "pywinpty $ver, $n hash(es)";
+' "$PYWINPTY_PIN" "$PYWINPTY_PIN_BLK" 2>&1) || _pin_rc=$?
+if [ "$_pin_rc" -ne 0 ]; then
+    blog_error "Cannot embed the pywinpty pin: ${_pin_msg:-perl exit $_pin_rc} -- deploy/setup-pywinpty.ps1 not generated"
+    exit 1
+fi
+blog "Embedding the pywinpty pin ($_pin_msg) from scripts/requirements-pywinpty.txt"
+
+blog "Copying deploy/setup-pywinpty.ps1"
+{
+    echo "$HEADER_COMMENT_PS1"
+    cat "$SCRIPTS_DIR/setup-pywinpty.ps1" | inline_lib_ps1 "$PYWINPTY_PIN_BLK"
+} > "$DEPLOY_DIR/setup-pywinpty.ps1"
+GENERATED=$((GENERATED + 1))
+
+# ============================================================
 # 19-20. deploy/setup-uv.sh and .ps1 (copy as-is)
 # ============================================================
 blog "Copying deploy/setup-uv.sh"

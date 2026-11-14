@@ -135,7 +135,7 @@ NO_PTY_WHY="python3 pty not available"
 if command -v python3 >/dev/null 2>&1 && [ -f "$PTY" ]; then HAVE_PTY=true; fi
 # Windows pty = pywinpty (ConPTY); the import failing means it is not installed
 if $HAVE_PTY && [ "$L" = ps ] && ! python3 -c 'import winpty' >/dev/null 2>&1; then
-    HAVE_PTY=false; NO_PTY_WHY="pywinpty not installed (tests/managed-files/requirements-windows.txt)"
+    HAVE_PTY=false; NO_PTY_WHY="pywinpty not installed (scripts/setup-pywinpty.ps1)"
 fi
 CAN_CHMOD_READ=true   # chmod 000 blocks reads (not for root, not under Git Bash)
 case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) CAN_CHMOD_READ=false ;; esac

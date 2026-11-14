@@ -12,6 +12,49 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.77.0 -- pywinpty is a managed Windows library on all three deployment paths (2026-11-14)
+
+Not tagged. Commander order 2026-11-14: "/tool-adopt pywinpty.  we will need setup-pywinpty.ps1.  document its source of truth in registry via /tool-registry.  mark windows/linux as N/A." and "we should support pywinpty through all 3 methods of deployment/install". Platform status: Windows supported, macOS and Linux n/a (the stdlib `pty` module is used there).
+
+### New features
+
+| # | Change |
+|---|--------|
+| 1 | `scripts/setup-pywinpty.ps1`: installs pywinpty (the ConPTY backend of `tests/managed-files/pty-run.py`) into the Python user site with `python -m pip install --user --only-binary=:all: --require-hashes -r <pin>`, for the interpreter the pty suites use (`python3`, then `python`; `AITOOLS_PYWINPTY_PYTHON` overrides). Verifies an existing install by import and changes nothing then. For an EXTERNALLY-MANAGED interpreter (PEP 668; the uv CPython that Step 15 makes `python3`) it installs with `pip install --target <that interpreter's user site> --upgrade` instead of `--user`, removes stale `pywinpty-*.dist-info` of other versions and verifies by import (commander, RFI fa81-9: "fix pep"); never `--break-system-packages`, never a write into the interpreter's install tree. WARN + ACTION for no Python, an interpreter tag the pin does not cover, a venv, or a managed interpreter whose user site is disabled |
+| 2 | `scripts/setup-pywinpty.sh`: OK `pywinpty` `n/a (<platform>)` on macOS and Linux |
+| 3 | Dev path: installer Step 15b (`aitools-install.ps1` / `.sh`), right after Step 15 Python. MDM path: `build-deploy.sh` generates `deploy/setup-pywinpty.sh/.ps1`; the `.ps1` carries the pin as `$AitoolsEmbeddedPywinptyPin` and the build fails on a missing or malformed pin. Package path: `scripts/` is in the `build-package.sh` payload and the package runs `aitools-install.ps1`, so Step 15b runs there unchanged |
+| 4 | Tool registry entry `pywinpty` (`/tool-registry` skill): names the pin as the source of truth for version and hashes; health Windows yellow; verified 3.1.2 on 2026-11-14 |
+| 5 | CI windows job installs pywinpty through `scripts/setup-pywinpty.ps1` (was a raw `pip install`), and fails when the import does not work afterwards |
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 6 | The pin moved from `tests/managed-files/requirements-windows.txt` to `scripts/requirements-pywinpty.txt` (tests/ is not in the package payload); new machine-readable `# wheel-tags:` line; the 8 hashes are unchanged, their wheel mapping re-read from the PyPI JSON API |
+| 7 | `check-post-push` step 21 checks the pywinpty version with a package-metadata command (`TOOL_CMDS`) |
+| 8 | `shared/rules/tool-lifecycle.md` "Managed libraries": a managed library gets no Managed CLI Tools row; its version check is an import/metadata command; its pin is the source of truth the registry names (session-commander decision, for the commander's review) |
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 9 | `reference/evaluations/pywinpty-windows-2026-11-13.md` v1.2: Phase 2 approval and results, integration, and the finding that the aitools-managed (uv) `python3` is EXTERNALLY-MANAGED |
+| 10 | `.claude/rules/deploy-paths.md`: setup-pywinpty is copy + embed; `reference/script-standards-detail.md`: tool name `pywinpty` |
+
+### Files created
+
+| File | Purpose |
+|------|---------|
+| `scripts/setup-pywinpty.ps1` / `.sh` | Windows install / macOS-Linux n/a |
+| `scripts/requirements-pywinpty.txt` | The pin (moved from `tests/managed-files/requirements-windows.txt`) |
+| `tests/pywinpty/test-setup-pywinpty.sh` / `.ps1` | n/a row, MDM build embed (positive and negative), Windows install cases in isolated APPDATA |
+
+**PEP 668:** aitools Step 15 makes `python3` the uv-managed CPython, which carries EXTERNALLY-MANAGED, so pip refuses `--user` there. Commander, 2026-11-14: "fix pep, add it to same branch commit, watch ci/cd, fix any errors, merge when ready". The script installs into that interpreter's user site with `--target` (pip skips its PEP 668 check for `--target` by design; uv's install tree is not touched). Verified against uv CPython 3.14.10 in an isolated APPDATA.
+
+**Verified on:** Windows 11 (pwsh 7, Git Bash 5.3.15, PyManager CPython 3.14.6): pywinpty 3.1.2 installed into the user site; `winpty-probe.py` GOT[abc] for git-bash and pwsh; managed-files suites 79/0/3 (bash) and 56/0/0 (pwsh), no pywinpty SKIP; `setup-pywinpty.ps1` real run "verified". macOS/Linux: CI.
+
+---
+
 ## v0.76.1 -- Re-running aitools install no longer corrupts the PowerShell profile (2026-11-13)
 
 Not tagged. Resolves Incident #172.

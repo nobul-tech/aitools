@@ -7,7 +7,7 @@
       "scope": "Tool data only. NOT lifecycle gates or onboarding checklists (shared/rules/tool-lifecycle.md). NOT evaluation process (/tool-eval skill). NOT per-tool ops metadata (tool-ops.json)",
       "audience": "/tool-registry skill, /tool-eval skill, setup scripts, check scripts, aitools-install"
     },
-    "lastUpdated": "2026-11-13",
+    "lastUpdated": "2026-11-14",
     "repositories": {
       "primary": "https://github.com/nobul-tech/aitools",
       "userTemplate": "https://github.com/nobul-jose/aitools-{username}"
@@ -1029,6 +1029,86 @@
       "nonPreferredMethods": null,
       "pathIssues": null,
       "platformGotchas": null
+    },
+    "pywinpty": {
+      "displayName": "pywinpty",
+      "source": "https://github.com/andfoy/pywinpty",
+      "purpose": "Python library (imported, not a command on PATH): the Windows ConPTY backend of tests/managed-files/pty-run.py, so the interactive menu cases of the pty test suites run on Windows (the stdlib pty module is POSIX-only). Test-only library used by the pty suites through python3. Managed per the commander's order of 2026-11-14 (\"/tool-adopt pywinpty\").",
+      "install": {
+        "macos": [],
+        "windows": [
+          { "method": "pip", "command": "python -m pip install --user --only-binary=:all: --require-hashes -r scripts/requirements-pywinpty.txt", "preferred": true, "autoUpdates": false, "ccCompatible": true, "notes": "Binary wheel only, hash-pinned, into the user site (%APPDATA%\\Python\\Python3XY\\site-packages, read by every CPython 3.XY of the user). Run by scripts/setup-pywinpty.ps1. For an EXTERNALLY-MANAGED interpreter (PEP 668; the uv CPython of aitools Step 15) the script uses 'python -m pip install --target <that interpreter's user site> --upgrade --only-binary=:all: --require-hashes -r scripts/requirements-pywinpty.txt' instead (commander, 2026-11-14, RFI fa81-9: \"fix pep\"); pip skips its PEP 668 check for --target by design, nothing is written into the interpreter's install tree, never --break-system-packages. The pin file is the single source of truth for the version and the wheel hashes. Package: https://pypi.org/project/pywinpty/. Upstream lists conda as 'Recommended' and pip as the documented second method; conda is rejected (aitools manages no conda)." }
+        ],
+        "linux": []
+      },
+      "update": {
+        "pip": "Edit scripts/requirements-pywinpty.txt: the new version, its wheel hashes from the PyPI JSON API (https://pypi.org/pypi/pywinpty/<version>/json) and the '# wheel-tags:' line; then re-run scripts/setup-pywinpty.ps1"
+      },
+      "versionCheck": "python3 -c \"import importlib.metadata as m; print(m.version('pywinpty'))\"",
+      "systemRequirements": "Windows only (ConPTY); minimum Windows build: unknown (not stated in the evaluation). CPython >= 3.10 (PyPI requires_python). Pinned wheels: win_amd64 for cp310, cp311, cp312, cp313, cp314, cp314t, cp315, cp315t; win_arm64 not pinned.",
+      "notes": "Test-only library used by the pty suites; no Managed CLI Tools row (library; shared/rules/tool-lifecycle.md 'Managed libraries'). The registry names the pin file and does not duplicate its hashes. MIT licence; no dependencies (PyPI requires_dist null). macOS and Linux use the stdlib pty module. PEP 668: aitools Step 15 makes python/python3 the uv-managed CPython, which carries EXTERNALLY-MANAGED, so pip refuses --user there; setup-pywinpty.ps1 installs with --target <its user site> --upgrade instead (commander, 2026-11-14, RFI fa81-9), and reports WARN 'managed python, no user site' + ACTION only when that interpreter's user site is disabled or inside its install tree. Verified against uv CPython 3.14.10 in an isolated APPDATA by M4-Winpty 2026-11-14 (install, verified re-run, stale dist-info replaced, PYTHONNOUSERSITE=1 -> WARN; uv's tree untouched).",
+      "delivery": {
+        "windows": { "packageMaintainer": "Edgar Margffoy (GitHub/PyPI andfoy; PyPI shows 1 maintainer)", "upstreamSource": "PyPI https://pypi.org/project/pywinpty/ (repository https://github.com/andfoy/pywinpty, PyPI project_urls)", "officialEndorsement": "PyPI project description: 'Using conda (Recommended): conda install pywinpty Using pip: pip install pywinpty'; pip is a documented method, conda the recommended one", "provenanceVerified": "2026-11-14 (sha256 of the 8 pinned win_amd64 wheels equal the PyPI JSON API digests; no PyPI provenance attestations exist)" }
+      },
+      "health": {
+        "windows": { "flag": "yellow", "reasons": ["Sole maintainer on a personal GitHub account (andfoy)", "Low GitHub adoption: 164 stars (against 2.45M PyPI downloads/month; a Windows dependency of terminado)", "Upstream recommends conda first; pip is the documented second method", "No PyPI provenance attestations; no SECURITY.md", "Open ConPTY throughput issue andfoy/pywinpty#564, worked around by one SKIP in tests/managed-files/test-managed-files.sh"] }
+      },
+      "evaluation": {
+        "status": "current",
+        "provenance": "reference/evaluations/pywinpty-windows-2026-11-13.md",
+        "pendingChanges": "PEP 668 decided (commander, 2026-11-14, RFI fa81-9: --target <user site> for an EXTERNALLY-MANAGED interpreter; implemented). win_arm64 wheel hashes are not pinned. Yellow flags due for review by 2027-02-12 (90 days, shared/rules/tool-evaluation.md Gates)."
+      },
+      "setupScript": {
+        "scripts": "scripts/setup-pywinpty.ps1 + .sh (installer Step 15b, after Step 15 Python)",
+        "sourceOfTruth": "scripts/requirements-pywinpty.txt: the version, the wheel hashes and the '# wheel-tags:' line that setup-pywinpty.ps1 reads; the registry does not duplicate the hashes",
+        "platforms": { "windows": "Resolves python3, then python ($env:AITOOLS_PYWINPTY_PYTHON overrides); WARN on no Python, an interpreter tag the pin does not cover, or a venv interpreter; unmanaged interpreter: pip --user; EXTERNALLY-MANAGED interpreter: pip --target <its user site> --upgrade, then removes stale pywinpty-*.dist-info of other versions (WARN 'managed python, no user site' + ACTION when the user site is disabled or inside the install tree; never --break-system-packages); verifies by import", "macos": "OK row n/a (<platform>); stdlib pty", "linux": "OK row n/a (<platform>); stdlib pty" },
+        "deployment": "dev: aitools install Step 15b; MDM: build-deploy.sh copy block pair, the pin embedded in deploy/setup-pywinpty.ps1 as $AitoolsEmbeddedPywinptyPin; package: build-package.sh payload scripts/ -> aitools-install.ps1 -> Step 15b; CI: the windows job installs through setup-pywinpty.ps1"
+      },
+      "lifecycle": {
+        "platformStatus": { "macos": "n/a", "windows": "supported", "linux": "n/a" },
+        "concurrency": "Yes — library, no daemon or shared state",
+        "postInstallConfig": null,
+        "dependencies": ["CPython >= 3.10 on PATH as python3 (Step 15 Python)", "pip"],
+        "invocation": { "command": "python3 -c \"import winpty\" (library; no command on PATH)", "antiPatterns": ["--break-system-packages", "writing into a uv-managed (EXTERNALLY-MANAGED) interpreter's install tree (--target goes to its user site only)", "an unpinned pip install pywinpty", "a venv (the suites call python3, which a Windows venv lacks)"] }
+      },
+      "versions": {
+        "macos": { "lastVerifiedVersion": null, "lastVerified": null },
+        "windows": { "lastVerifiedVersion": "3.1.2", "lastVerified": "2026-11-14" },
+        "linux": { "lastVerifiedVersion": null, "lastVerified": null },
+        "minVersion": "3.1.2",
+        "blocked": [],
+        "notes": "minVersion: 3.1.2 requires winpty-rs 1.0.8, which makes EOF detection work and fixes spawning an executable whose path contains a space (upstream CHANGELOG, Version 3.1.2). Windows verified on CPython 3.14.6 (PyManager pythoncore-3.14-64), cp314 wheel, user site: winpty-probe.py section 3 GOT[abc] for git-bash CR, git-bash LF and pwsh CR; test-managed-files.sh 79 passed, 0 failed, 3 skipped; test-managed-files.ps1 56 passed, 0 failed, 0 skipped."
+      },
+      "maintenance": {
+        "harness": "scripts/setup-pywinpty.ps1 + .sh (aitools install Step 15b; CI windows job); pin scripts/requirements-pywinpty.txt",
+        "lastRun": {
+          "macos": null,
+          "windows": "2026-11-14 (Phase 2 install approved by the commander, run by M4-Winpty with the pip command above against the pin then at tests/managed-files/requirements-windows.txt; then scripts/setup-pywinpty.ps1 run on the same workstation: 'pywinpty 3.1.2 verified', python3 = PyManager CPython 3.14.6, exit 0)",
+          "linux": null
+        },
+        "workarounds": [
+          { "item": "andfoy/pywinpty#564", "summary": "ConPTY throughput on large output: test-managed-files.sh skips its 'display, diff over 64 KB' case on Windows", "platforms": ["windows"], "severity": "low", "lastVerified": "3.1.2 (2026-11-14)" }
+        ],
+        "upstreamRisks": [
+          "Sole maintainer on a personal account",
+          "The output truncation half of #565 is not fixed (cpython#86210; upstream CHANGELOG, Version 3.1.2)",
+          "When python3 moves to a new CPython minor (e.g. 3.15), the user site changes and the pty suites SKIP until setup-pywinpty.ps1 runs again"
+        ]
+      },
+      "authentication": null,
+      "buildPrereqs": null,
+      "knownPaths": {
+        "windows": [
+          { "tool": "pywinpty", "installMethod": "pip --user", "standardPath": "%APPDATA%\\Python\\Python3XY\\site-packages\\winpty", "verified": "2026-11-14 (v3.1.2)", "notes": "Observed: C:\\Users\\jdpal\\AppData\\Roaming\\Python\\Python314\\site-packages\\winpty\\__init__.py (python3 = PyManager pythoncore-3.14-64, 3.14.6)" }
+        ]
+      },
+      "nonPreferredMethods": [
+        { "method": "conda", "detection": "conda list pywinpty", "reason": "Upstream's 'Recommended' method; rejected: aitools manages no conda" },
+        { "method": "uv pip install --system into a uv-managed interpreter", "detection": "EXTERNALLY-MANAGED marker of the interpreter (setup-pywinpty.ps1 WARNs)", "reason": "uv's CPython carries EXTERNALLY-MANAGED (PEP 668: 'managed by uv and should not be modified'); setup-pywinpty.ps1 installs into that interpreter's user site with pip --target instead, which leaves uv's tree untouched" },
+        { "method": "sdist (Rust build)", "detection": "n/a (prevented by --only-binary=:all: and the wheel hashes)", "reason": "Needs a Rust toolchain (x86_64-pc-windows-msvc) and maturin" }
+      ],
+      "pathIssues": null,
+      "platformGotchas": "aitools Step 15 (setup-python.ps1, uv python install --default) makes python/python3 the uv-managed CPython (shim %USERPROFILE%\\.local\\bin\\python3.exe -> %APPDATA%\\uv\\python\\cpython-3.14-windows-x86_64-none\\python.exe, 3.14.10), which carries EXTERNALLY-MANAGED: 'python3 -m pip install --dry-run --user --only-binary=:all: --require-hashes -r scripts/requirements-pywinpty.txt' exits 1 with 'error: externally-managed-environment ... This Python installation is managed by uv and should not be modified.' Its user site (%APPDATA%\\Python\\Python314\\site-packages, ENABLE_USER_SITE True) is shared with any non-managed CPython 3.14, so a --user install made by a python.org/PyManager interpreter is importable by the uv python3 (M4-Winpty, read-only, 2026-11-14). Resolution (commander, 2026-11-14, RFI fa81-9): for such an interpreter setup-pywinpty.ps1 runs pip --target <its user site> --upgrade; pip skips the PEP 668 check for --target (pip/_internal/commands/install.py: check_externally_managed() runs only when target_dir, prefix_path and root_path are None). A Windows venv has python.exe but no python3.exe, so a venv install is invisible to the suites (they call python3)."
     }
   },
   "mcpServers": {

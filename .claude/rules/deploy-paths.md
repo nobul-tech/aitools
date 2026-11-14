@@ -147,6 +147,10 @@ heading or rewording those lines fails the build loudly.
 `setup-user-config`, `aitools-profile` and `aitools-json` are copied as-is
 (library inlined) so `deploy-harness` reaches its config.json writer.
 
+`setup-pywinpty.ps1` is **copy + embed**: copied with the library inlined, plus only
+its pin data after the library (`$AitoolsEmbeddedPywinptyPin`); no setup logic is
+duplicated, and a missing or malformed pin fails the build.
+
 **What IS auto-embedded** (safe — single source of truth):
 - `shared/hooks/*.sh` → read via `cat` at build time
 - `shared/skills/*/SKILL.md` → read at build time into `deploy/setup-user-skills.*`,
@@ -164,6 +168,8 @@ heading or rewording those lines fails the build loudly.
   deploy scripts and written to a temp dir at runtime (`AITOOLS_PROFILE_SH` /
   `AITOOLS_PROFILE_PS1`); a file the resolver loads that the embed does not carry
   fails the build
+- `scripts/requirements-pywinpty.txt` → the pin, embedded in `deploy/setup-pywinpty.ps1`
+  (used only when no pin file sits beside the script)
 - Every `scripts/deploy-harness.*` source (`reference/`, `registries/`,
   `shared/hooks`, `.claude/hooks`, `shared/skills`, `shared/rules`, the bin <!-- path-ref: ignore (a deploy-harness source that may be absent) -->
   CLIs) → its `git ls-files` list and contents, embedded as base64 at build
