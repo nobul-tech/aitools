@@ -112,7 +112,8 @@ fi
 # deploy/, output and exit code discarded), staged the frozen aitools deploy/
 # and reported PASS; without it, it advised --fix. check-pre-push step 7
 # rebuilds into a temporary copy of the dotprofile under a temporary HOME on
-# every push, checks the exit code and dry-runs the result. Step number kept;
+# every push when a dotprofile is configured, checks the exit code and
+# dry-runs the result. Step number kept;
 # same SKIP text as check-post-push step 7 and the .ps1 twin.
 step_skip "3" "Build freshness" "retired: check-pre-push step 7 rebuilds into a temp dotprofile copy"
 
@@ -157,7 +158,10 @@ fi
 # ---------------------------------------------------------------------------
 # 6. Executable bit on .sh files
 # ---------------------------------------------------------------------------
-non_exec=$(git ls-files -s '*.sh' 2>/dev/null | grep -v '^100755' || true)
+# The frozen aitools deploy/ is excluded (':!deploy/'): nothing regenerates it,
+# --fix must never stage a change under it, and no check audits it (incidents
+# #136, #176; .claude/rules/git-safety.md). Same pathspec as the .ps1 twin.
+non_exec=$(git ls-files -s -- '*.sh' ':!deploy/' 2>/dev/null | grep -v '^100755' || true)
 if [ -z "$non_exec" ]; then
     step_pass "6" "Executable bit (.sh)"
 else

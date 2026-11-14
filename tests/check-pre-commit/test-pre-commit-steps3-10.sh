@@ -15,9 +15,17 @@
 #            staged under deploy/, exactly two results, SKIP 3 and SKIP 10, both
 #            naming check-pre-push step 7. Fix mode off: the same two results,
 #            no WARN, no --fix / -Fix advice.
-#   static   no non-comment line runs build-deploy or stages deploy/; no step
-#            result text advises --fix / -Fix; the usage line of the fix flag
-#            does not say it builds.
+#   step 6   step 6 (cut between "# 6." and "# 7.") run with the same stubs on
+#            a fake repo with deploy/x.sh and scripts/y.sh both committed at
+#            100644. Fix mode on: deploy/x.sh stays 100644 and nothing is
+#            staged under deploy/, scripts/y.sh becomes 100755, the one result
+#            is PASS 6 (fixed). Fix mode off: nothing changes, the one result is
+#            FAIL 6 "1 file(s) missing +x" (scripts/y.sh only). The frozen
+#            aitools deploy/ is neither repaired nor reported (PR #154 review B1).
+#   static   no non-comment line runs build-deploy or stages deploy/; every
+#            line that lists tracked *.sh files (step 6) excludes deploy/
+#            (':!deploy/'); no step result text advises --fix / -Fix; the usage
+#            line of the fix flag does not say it builds.
 #   run      the whole script with the fix flag, from a clone of this repo
 #            whose build-deploy.sh is the fake: .sh on macOS and Linux, .ps1 on
 #            Windows (each refuses the other platform). A scripts/ .sh is staged
@@ -42,7 +50,7 @@
 set -uo pipefail
 
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
-    perl -ne 'print if $. >= 2 && $. <= 40' "$0"
+    perl -ne 'print if $. >= 2 && $. <= 48' "$0"
     exit 0
 fi
 
@@ -130,6 +138,46 @@ mk_repo() {
     cp "$FAKE_BUILD" "$1/scripts/build-deploy.sh"
 }
 
+# section6 <script> <out>: step 6 (the "# 6." to "# 7." heading span), CRLF removed
+section6() {
+    perl -ne 's/\r$//; $p = 1 if /^# 6\. /; $p = 0 if /^# 7\. /; print if $p' "$1" > "$2"
+}
+
+# mk_repo6 <dir>: a git repo with deploy/x.sh and scripts/y.sh committed at
+# mode 100644 (git add --chmod=-x, so the mode is the same on every platform)
+mk_repo6() {
+    mkdir -p "$1/deploy" "$1/scripts"
+    printf 'echo frozen\n' > "$1/deploy/x.sh"
+    printf 'echo source\n' > "$1/scripts/y.sh"
+    git -C "$1" init -q
+    git -C "$1" -c core.autocrlf=false add --chmod=-x -- deploy/x.sh scripts/y.sh
+    git -C "$1" $GIT_ID commit -q -m fixture6
+}
+
+# rec_is <rec> <line>: the record file holds exactly that one line
+rec_is() {
+    [ -f "$1" ] &&
+    [ "$(perl -ne 'END { print $. + 0 }' "$1")" = 1 ] &&
+    grep -qxF "$2" "$1"
+}
+
+# mode_is <repo> <path> <mode>: the index mode of <path>
+mode_is() { git -C "$1" ls-files -s -- "$2" | grep -q "^$3 "; }
+
+# step6_checks <label> <repo> <fix true|false> <rec>: the step 6 assertions
+step6_checks() {
+    check "$1: deploy/x.sh still 100644 in the index" "mode_is '$2' deploy/x.sh 100644"
+    check "$1: nothing staged under deploy/" \
+        "[ -z \"\$(git -C '$2' diff --cached --name-only -- deploy)\" ]"
+    if [ "$3" = true ]; then
+        check "$1: scripts/y.sh repaired to 100755" "mode_is '$2' scripts/y.sh 100755"
+        check "$1: exactly PASS 6 (fixed)" "rec_is '$4' 'PASS 6 (fixed)'"
+    else
+        check "$1: scripts/y.sh unchanged (100644)" "mode_is '$2' scripts/y.sh 100644"
+        check "$1: exactly FAIL 6, scripts/y.sh only (1 file)" "rec_is '$4' 'FAIL 6 1 file(s) missing +x'"
+    fi
+}
+
 # --- section cases: .sh twin ---------------------------------------------------
 if [ ! -f "$SH_SCRIPT" ]; then
     check "sh: $SH_SCRIPT exists" "false"
@@ -170,6 +218,22 @@ EOF
             "records_ok '$TMP_ROOT/rec-sh-$mode'"
         check "$label: no result advises --fix" \
             "[ -f '$TMP_ROOT/rec-sh-$mode' ] && ! grep -qi -- '--fix' '$TMP_ROOT/rec-sh-$mode'"
+    done
+
+    # Step 6: the frozen deploy/ is neither repaired nor reported (review B1)
+    section6 "$SH_SCRIPT" "$TMP_ROOT/step6.sh"
+    check "sh: the step 6 section was found" "grep -q '^# 6\\. ' '$TMP_ROOT/step6.sh'"
+    for mode in true false; do
+        repo="$TMP_ROOT/repo6-sh-$mode"
+        mk_repo6 "$repo"
+        rm -f "$TMP_ROOT/rec6-sh-$mode"
+        RC=0
+        HOME="$TMP_ROOT/home-sh-$mode" STEP_REC="$TMP_ROOT/rec6-sh-$mode" \
+            STEP_REPO="$repo" STEP_FIX="$mode" STEP_SECTION="$TMP_ROOT/step6.sh" \
+            "$TB" "$TMP_ROOT/run.sh" > "$TMP_ROOT/out" 2>&1 || RC=$?
+        if [ "$mode" = true ]; then label="sh step 6 --fix"; else label="sh step 6 (no --fix)"; fi
+        check "$label: exit 0" "[ $RC -eq 0 ]"
+        step6_checks "$label" "$repo" "$mode" "$TMP_ROOT/rec6-sh-$mode"
     done
 fi
 
@@ -225,6 +289,26 @@ EOF
         check "$label: no result advises -Fix" \
             "[ -f '$TMP_ROOT/rec-ps1-$mode' ] && ! grep -qi -- '-fix' '$TMP_ROOT/rec-ps1-$mode'"
     done
+
+    # Step 6: the frozen deploy/ is neither repaired nor reported (review B1)
+    section6 "$PS1_SCRIPT" "$TMP_ROOT/step6.ps1"
+    check "ps1: the step 6 section was found" "grep -q '^# 6\\. ' '$TMP_ROOT/step6.ps1'"
+    for mode in true false; do
+        repo="$TMP_ROOT/repo6-ps1-$mode"
+        mk_repo6 "$repo"
+        rm -f "$TMP_ROOT/rec6-ps1-$mode"
+        RC=0
+        HOME="$(native "$TMP_ROOT/home-ps1-$mode")" USERPROFILE="$(native "$TMP_ROOT/home-ps1-$mode")" \
+            STEP_REC="$(native "$TMP_ROOT/rec6-ps1-$mode")" \
+            STEP_REPO="$(native "$repo")" STEP_FIX="$mode" STEP_SECTION="$(native "$TMP_ROOT/step6.ps1")" \
+            STEP_BASH="$bash_native" \
+            pwsh -NoProfile -NonInteractive -File "$(native "$TMP_ROOT/run.ps1")" > "$TMP_ROOT/out" 2>&1 || RC=$?
+        # Add-Content writes CRLF on Windows
+        if [ -f "$TMP_ROOT/rec6-ps1-$mode" ]; then perl -pi -e 's/\r$//' "$TMP_ROOT/rec6-ps1-$mode"; fi
+        if [ "$mode" = true ]; then label="ps1 step 6 -Fix"; else label="ps1 step 6 (no -Fix)"; fi
+        check "$label: exit 0" "[ $RC -eq 0 ]"
+        step6_checks "$label" "$repo" "$mode" "$TMP_ROOT/rec6-ps1-$mode"
+    done
 fi
 
 # --- static cases --------------------------------------------------------------
@@ -233,6 +317,8 @@ if [ -f "$SH_SCRIPT" ]; then
     check "sh static: no line runs build-deploy" "[ ! -s '$TMP_ROOT/out' ]"
     perl -ne 'next if /^\s*#/; print "$.: $_" if /\bgit\s+add\s+[^#]*\bdeploy\b/' "$SH_SCRIPT" > "$TMP_ROOT/out"
     check "sh static: no line stages deploy/" "[ ! -s '$TMP_ROOT/out' ]"
+    perl -ne 'next if /^\s*#/; $n++ if /\bls-files\b.*\*\.sh/; print "$.: $_" if /\bls-files\b.*\*\.sh/ && !/:!deploy\//; END { print "no ls-files *.sh line found\n" unless $n }' "$SH_SCRIPT" > "$TMP_ROOT/out"
+    check "sh static: the tracked *.sh listing (step 6) excludes deploy/" "[ ! -s '$TMP_ROOT/out' ]"
     perl -ne 'next if /^\s*#/; print "$.: $_" if /\bstep_\w+\b.*--fix/' "$SH_SCRIPT" > "$TMP_ROOT/out"
     check "sh static: no step result advises --fix" "[ ! -s '$TMP_ROOT/out' ]"
     perl -ne 'print "$.: $_" if /^#\s*--fix:/' "$SH_SCRIPT" > "$TMP_ROOT/out"
@@ -244,6 +330,8 @@ if [ -f "$PS1_SCRIPT" ]; then
     check "ps1 static: no line runs build-deploy" "[ ! -s '$TMP_ROOT/out' ]"
     perl -ne 's/\r$//; next if /^\s*#/; print "$.: $_" if /\b(?:InvokeGit|git)\s+add\s+[^#]*\bdeploy\b/i' "$PS1_SCRIPT" > "$TMP_ROOT/out"
     check "ps1 static: no line stages deploy/" "[ ! -s '$TMP_ROOT/out' ]"
+    perl -ne 's/\r$//; next if /^\s*#/; $n++ if /\bls-files\b.*\*\.sh/i; print "$.: $_" if /\bls-files\b.*\*\.sh/i && !/:!deploy\//; END { print "no ls-files *.sh line found\n" unless $n }' "$PS1_SCRIPT" > "$TMP_ROOT/out"
+    check "ps1 static: the tracked *.sh listing (step 6) excludes deploy/" "[ ! -s '$TMP_ROOT/out' ]"
     perl -ne 's/\r$//; next if /^\s*#/; print "$.: $_" if /\bStep\w+\b.*-Fix/i' "$PS1_SCRIPT" > "$TMP_ROOT/out"
     check "ps1 static: no step result advises -Fix" "[ ! -s '$TMP_ROOT/out' ]"
     perl -ne 's/\r$//; print "$.: $_" if /^#\s*-Fix:/' "$PS1_SCRIPT" > "$TMP_ROOT/out"

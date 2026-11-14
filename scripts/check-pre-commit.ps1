@@ -116,7 +116,8 @@ if ($stagedSh.Count -eq 0 -and $stagedPs1.Count -eq 0) {
 # deploy/, output and exit code discarded), staged the frozen aitools deploy/
 # and reported PASS; without it, it advised -Fix. check-pre-push step 7
 # rebuilds into a temporary copy of the dotprofile under a temporary HOME on
-# every push, checks the exit code and dry-runs the result. Step number kept;
+# every push when a dotprofile is configured, checks the exit code and
+# dry-runs the result. Step number kept;
 # same SKIP text as check-post-push step 7 and the .sh twin.
 StepSkip "3" "Build freshness" "retired: check-pre-push step 7 rebuilds into a temp dotprofile copy"
 
@@ -160,7 +161,11 @@ if ($stagedSh.Count -gt 0 -or $stagedPs1.Count -gt 0) {
 # ---------------------------------------------------------------------------
 # 6. Executable bit on .sh files
 # ---------------------------------------------------------------------------
-$nonExec = InvokeGit ls-files -s '*.sh' | Where-Object { $_ -notmatch '^100755' }
+# The frozen aitools deploy/ is excluded (':!deploy/'): nothing regenerates it,
+# -Fix must never stage a change under it, and no check audits it (incidents
+# #136, #176; .claude/rules/git-safety.md). Same pathspec as the .sh twin; '--'
+# is quoted because PowerShell drops a bare -- before it reaches InvokeGit's $args.
+$nonExec = InvokeGit ls-files -s '--' '*.sh' ':!deploy/' | Where-Object { $_ -notmatch '^100755' }
 if (-not $nonExec) {
     StepPass "6" "Executable bit (.sh)"
 } else {

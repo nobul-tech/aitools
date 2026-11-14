@@ -24,7 +24,8 @@ For every `.sh` or `.ps1` file being committed:
 Always SKIP (`retired: check-pre-push step 7 rebuilds into a temp dotprofile
 copy`). If `scripts/` or `shared/` changed, the dotprofile `deploy/` may be
 stale; pre-push step 7 rebuilds it into a temporary copy of the dotprofile
-under a temporary HOME on every push, checks the build's exit code and
+under a temporary HOME on every push when a dotprofile is configured (it
+SKIPs without one and WARNs without node or Git Bash), checks the build's exit code and
 dry-runs the result. The shared `aitools/deploy/` is frozen. Until 2026-11-14,
 `--fix` / `-Fix` ran `build-deploy.sh` here with the caller's HOME (which
 rebuilt the real dotprofile `deploy/`), discarded its output and exit code,
@@ -42,7 +43,7 @@ If `.sh` or `.ps1` files are in the commit, end the commit message with `(tested
 
 ## 6. Executable bit on .sh files
 
-`git ls-files -s '*.sh' | grep -v '^100755'` must return nothing. Fix: `git update-index --chmod=+x <file>`. Especially important for files created on Windows (Windows doesn't set Unix executable bit).
+`git ls-files -s -- '*.sh' ':!deploy/' | grep -v '^100755'` must return nothing. Fix: `git update-index --chmod=+x <file>`. Especially important for files created on Windows (Windows doesn't set Unix executable bit). The frozen aitools `deploy/` is excluded: the step neither reports nor (with `--fix` / `-Fix`) stages a mode change under it (PR #154 review; incidents #136, #176).
 
 ## 7. Install command consistency
 

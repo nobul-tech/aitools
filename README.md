@@ -158,7 +158,7 @@ Windows (PowerShell):
 .\scripts\check-post-push.ps1            # all post-push steps (1-32; 2, 7, 15 and 28 always SKIP)
 ```
 
-`--fix` / `-Fix` never runs `build-deploy.sh` (incident #136): it only repairs line endings and exec bits of staged and tracked `.sh` files. The dotprofile `deploy/` is checked by `check-pre-push` step 7, which rebuilds into a temporary copy. No step of the `check-*` scripts reads the frozen aitools `deploy/` (incidents #136, #176).
+`--fix` / `-Fix` never runs `build-deploy.sh` (incident #136): it only repairs line endings of staged `.sh` files (step 4) and exec bits of tracked `.sh` files outside the frozen aitools `deploy/` (step 6). The dotprofile `deploy/` is checked by `check-pre-push` step 7, which rebuilds into a temporary copy when a dotprofile is configured (it SKIPs without one). No step of the `check-*` scripts reads the frozen aitools `deploy/` (incidents #136, #176).
 
 See `reference/` for deeper setup notes and practices.
 

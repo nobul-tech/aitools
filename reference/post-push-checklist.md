@@ -91,7 +91,8 @@ The source scripts only: the frozen aitools `deploy/` is not read (step 2).
 Always SKIP (`retired: check-pre-push step 7 rebuilds into a temp dotprofile
 copy`). The shared `aitools/deploy/` is frozen. Drift of the dotprofile
 `deploy/` is checked by pre-push step 7 (a rebuild into a temporary copy of the
-dotprofile under a temporary HOME), which runs on every push. Do not run
+dotprofile under a temporary HOME), which runs on every push when a dotprofile
+is configured (it SKIPs without one and WARNs without node or Git Bash). Do not run
 `build-deploy.sh` here: with the real HOME it replaces the real dotprofile
 `deploy/`. Until v0.77.2 both scripts ran `build-deploy.sh` with the caller's
 HOME and then `git diff deploy/` on the frozen aitools tree, so the step always
