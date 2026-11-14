@@ -91,3 +91,13 @@ Windows and Linux: not trialled (no machine in this session).
 4. ~~Decide whether npm stays "deprecated"~~ Decided 2026-10-21 (commander): npm
    stays deprecated in the harness; no separate `claude-code@latest` cask row;
    Windows health stays yellow.
+
+**Status note, 2026-11-14 (mission 38dc-25; the evaluation above is
+unchanged):** the health text above is out of date on three points.
+tool-ops-claude-code.md "Current version" is 2.1.325 (Windows 11, 2026-11-14),
+not 2.1.81. Windows version and launcher path were verified on 2.1.325
+(`/tool-registry` skill, `claude-code` entry); Windows provenance and the
+Linux trial are still open (item 1). Of item 2, #1 was re-verified at 2.1.325
+(partly obsolete: the Bash tool is still Git Bash, a PowerShell tool is in every
+session), #25 is closed (SendMessage works) and #27's level-3 tool set
+re-verified; #2-#24 are still open.

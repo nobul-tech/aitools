@@ -15,8 +15,9 @@ Should NOT auto-load for:
 - Normal coding tasks with no delegate
 
 ## Prompt content
-- Every drafted prompt contains all seven elements: identity, rules,
-  skills, operational learning, WRITE_BLOCKED, access, name prefix
+- Every drafted prompt contains all eight elements: identity, rules and
+  CLAUDE.md files, skills (with /delegate first), operational learning,
+  conflict priority (D-DEL6), WRITE_BLOCKED, access, name prefix
 - The prefix appears verbatim and every named .md output starts with it
 - No delegate name starts with REPORT, SUMMARY, FINDINGS or ANALYSIS
 - Paths are absolute; no "find the file" instructions across repos

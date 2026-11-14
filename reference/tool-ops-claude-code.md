@@ -14,7 +14,7 @@ behavior, check scripts validating version deps.
 
 Registry of version-dependent workarounds, behaviors, and assumptions in this repo.
 
-- **Current version**: 2.1.325 (observed `claude --version`, Windows 11, 2026-11-14). Re-verified at this version: #25, #27 (level-3 tool set), #31, #32. Every other item keeps its own "Last verified" (items #1-#24 at or before 2.1.81: open item 2 of `reference/evaluations/claude-code-macos-2026-10-21.md`). Previous observation: 2.1.309, macOS, 2026-10-27.
+- **Current version**: 2.1.325 (observed `claude --version`, Windows 11, 2026-11-14). Re-verified at this version: #1 (Windows shell), #25, #27 (level-3 tool set), #31, #32 (#31 and #32 again by mission 38dc-25, the same day). Every other item keeps its own "Last verified" (items #1-#24 at or before 2.1.81: open item 2 of `reference/evaluations/claude-code-macos-2026-10-21.md`). Previous observation: 2.1.309, macOS, 2026-10-27.
 - **Baseline version**: 2.1.51 (2026-02-16) -- version when most workarounds were written
 
 ### How to use
@@ -29,13 +29,30 @@ When Claude Code is upgraded:
 
 Post-push checklist #20 triggers this review automatically.
 
+### Item numbers
+
+Each item keeps its number for life; a new item takes the next free number
+(after #34) whatever its severity, so a table is not in numeric order. Before
+adding one, check every severity table for the number.
+
+**Renumbered 2026-11-14** (mission 38dc-25): #28 and #29 had each been given
+to two items. The MEDIUM items numbered first keep them (commit 261b9d9,
+2026-10-26): #28 user-level rules, #29 skills. The HIGH items moved: auto
+mode and allow rules for PR merges #28 -> #33 (commit 7ff4e74, 2026-10-28),
+hook output channel #29 -> #34. Records written before 2026-11-14 (handoffs,
+commit messages, release notes) that cite #28 for auto mode or #29 for the
+hook output channel mean #33 and #34. Records of 2026-10-28 from the
+workflow-guard work (commit da43dc5) also number the hook output channel #28
+and the Workflow event shape #29: those are #34 and #30 (the merge f88fb7d
+moved them to #29 and #30 the same day).
+
 ---
 
 ### CRITICAL -- Would break core scripts if behavior changes
 
 | # | Item | Baseline | Last verified | Files | Upstream |
 |---|------|----------|---------------|-------|----------|
-| 1 | Windows shell hardcoded to Git Bash (CLAUDE_CODE_SHELL broken) | 2.1.51 | 2.1.74 (2026-03-13); **likely obsolete**: the changelog lists a PowerShell tool preview (2.1.84) and "Git for Windows no longer required" (2.1.120), per `reference/evaluations/claude-code-macos-2026-10-21.md`; re-verify on Windows before relying on it | "Windows Shell Limitations" section below, `.claude/rules/cross-platform.md`, `CLAUDE.md` (Windows dispatch) | [#7490](https://github.com/anthropics/claude-code/issues/7490), [#25558](https://github.com/anthropics/claude-code/issues/25558), [#5049](https://github.com/anthropics/claude-code/issues/5049), [#16225](https://github.com/anthropics/claude-code/issues/16225), [#20453](https://github.com/anthropics/claude-code/issues/20453) |
+| 1 | Windows shell hardcoded to Git Bash (CLAUDE_CODE_SHELL broken) | 2.1.51 | 2.1.325 (2026-11-14, Windows 11): **partly obsolete**. The Bash tool still runs Git Bash (its tool description: "This tool runs Git Bash (POSIX sh), not cmd.exe or PowerShell"), but every session (main and delegates) also has a PowerShell tool ("PowerShell edition: PowerShell 7+ (pwsh)"), with no shell key in `~/.claude/settings.json`, and the session environment reads "Shell: PowerShell (primary); Bash tool also available for POSIX scripts". `CLAUDE_CODE_SHELL`: not tested. Upstream history: PowerShell tool preview (2.1.84), "Git for Windows no longer required" (2.1.120), per `reference/evaluations/claude-code-macos-2026-10-21.md` | "Windows Shell Limitations" section below, `.claude/rules/cross-platform.md`, `CLAUDE.md` (Windows dispatch) | [#7490](https://github.com/anthropics/claude-code/issues/7490), [#25558](https://github.com/anthropics/claude-code/issues/25558), [#5049](https://github.com/anthropics/claude-code/issues/5049), [#16225](https://github.com/anthropics/claude-code/issues/16225), [#20453](https://github.com/anthropics/claude-code/issues/20453) |
 | 2 | SessionEnd hook API contract (session_id, cwd, transcript_path on stdin) | 2.1.51 | 2.1.74 (2026-03-13) | `shared/hooks/session-archive.sh`, `reference/user-repo.md` | -- |
 
 ### NOTE -- Not a CC dependency
@@ -49,22 +66,22 @@ Post-push checklist #20 triggers this review automatically.
 | # | Item | Baseline | Last verified | Files | Upstream |
 |---|------|----------|---------------|-------|----------|
 | 4 | Session path sanitization (CWD -> JSONL directory name uses `-` replacement) | 2.1.51 | 2.1.51 | "Session Storage Internals" section below, `shared/hooks/session-archive.sh` | -- |
-| 5 | Subagent context gap (rules/CLAUDE.md not inherited by Task subagents) | 2.1.51 | 2.1.74 (2026-03-13) | `shared/claude-shared.md` (coaching items) | [#29423](https://github.com/anthropics/claude-code/issues/29423) |
+| 5 | Subagent context gap (rules/CLAUDE.md not inherited by Task subagents) | 2.1.51 | 2.1.325 (2026-11-14, Windows): **partly superseded** for general-purpose delegates launched with the Agent tool (observed at levels 2 and 3 by 38dc-25, af14-04, af14-05): at launch they receive the user and project CLAUDE.md and every user and project rule without `paths:` frontmatter; a `paths:` rule arrives later, after the delegate reads files (38dc-25 got them on reading files in its worktree, whose paths relative to the session's directory start `.claude/worktrees/38dc-25/`; how such paths are matched: not checked); a nested CLAUDE.md (`.aitools/channel/CLAUDE.md`) arrives when it reads a file under it. Project files come from the session's working directory, not the delegate's worktree: rules and CLAUDE.md from the main checkout `C:\Users\jdpal\repos\aitools`, and the project skill `frameworks` loaded with "Base directory for this skill: C:\Users\jdpal\repos\aitools\.claude\skills\frameworks" for a delegate working in `.claude/worktrees/38dc-25`. So a delegate's rules can differ from its branch's; the delegation duty (element 2: read the worktree's files) still applies. Explore, Plan and workflow agents not re-checked | `shared/claude-shared.md` (coaching items) | [#29423](https://github.com/anthropics/claude-code/issues/29423) |
 | 6 | CLAUDE.md hierarchy & merge behavior (5 levels, more-specific wins) | 2.1.51 | 2.1.51 | "CLAUDE.md Hierarchy" section below, `scripts/setup-user-claude.sh/.ps1` | -- |
 | 7 | Session management commands (claude -c, --resume, /resume, /rename) | 2.1.51 | 2.1.51 | "Session Management Commands" section below | -- |
-| 8 | Hook execution context (hooks run in bash or HTTP, not configurable shell) | 2.1.51 | 2.1.74 (2026-03-13) | `shared/hooks/session-archive.sh`, `scripts/setup-user-hooks.sh` | -- (2.1.63 adds HTTP hooks as alternative to shell) |
+| 8 | Hook execution context (hooks run in bash or HTTP, not configurable shell) | 2.1.51 | 2.1.74 (2026-03-13); 2.1.325 (2026-11-14, Windows): the harness registers every hook command as `bash "<path>"` and those hooks run (the standing-order-guard blocked a `cat` call and the delegation-guard added context on every Agent call in session 87795dc3-e); which shell parses the command string itself: not re-tested | `shared/hooks/session-archive.sh`, `scripts/setup-user-hooks.sh` | -- (2.1.63 adds HTTP hooks as alternative to shell) |
 | 9 | Coaching items tied to CC capabilities (subagent gap, auto-memory locality) | 2.1.51 | 2.1.51 | `shared/claude-shared.md` | -- |
 | 23 | `claude update` triggers SessionEnd hooks then cancels them | 2.1.81 | 2.1.81 (2026-03-22) | `scripts/aitools-install.sh/.ps1` (runs `claude update`) | -- |
 | 24 | Subagent cross-repo file access restriction (Glob/Grep denied outside CWD repo, Read with explicit paths works) | 2.1.74 | 2.1.74 (2026-03-24) | `shared/claude-shared.md` (delegation duty), delegation prompts | -- |
 | 19 | `effortLevel` setting (`settings.json` key controlling reasoning effort) | 2.1.68 | 2.1.74 (2026-03-13) | `scripts/setup-user-settings.sh/.ps1` (`profile.json` `claude.settings.effortLevel`), `shared/claude-shared.md` | -- |
-| 25 | SendMessage for agent continuation unavailable (gated behind Agent Teams flag; old `resume` param removed in 2.1.77) | 2.1.77 | 2.1.81 (2026-03-24); **superseded**: in 2.1.309 (macOS, 2026-10-27) `SendMessage` and `ListAgents` are offered to the main session for in-process subagents; **tested end to end 2.1.325 (Windows, 2026-11-14)**: delegates at levels 1-3 have SendMessage (deferred); a message to a running delegate is queued to its next tool round, one to a finished delegate resumes it, `to: "main"` reaches the main conversation; delegates at levels 2-3 have no ListAgents. See item #32 | "Delegate Identity, Transcripts and Control" section below, "Agent Continuation Gap" (history), delegation prompts | [#35240](https://github.com/anthropics/claude-code/issues/35240), [#37051](https://github.com/anthropics/claude-code/issues/37051), [#38183](https://github.com/anthropics/claude-code/issues/38183) |
+| 25 | **Closed at 2.1.325.** SendMessage for agent continuation unavailable (gated behind Agent Teams flag; old `resume` param removed in 2.1.77) | 2.1.77 | 2.1.81 (2026-03-24); **superseded**: in 2.1.309 (macOS, 2026-10-27) `SendMessage` and `ListAgents` are offered to the main session for in-process subagents; **tested end to end 2.1.325 (Windows, 2026-11-14)**: delegates at levels 1-3 have SendMessage (deferred); a message to a running delegate is queued to its next tool round, one to a finished delegate resumes it, `to: "main"` reaches the main conversation; delegates at levels 2-3 have no ListAgents. See item #32 | "Delegate Identity, Transcripts and Control" section below, "Agent Continuation Gap" (history), delegation prompts | [#35240](https://github.com/anthropics/claude-code/issues/35240), [#37051](https://github.com/anthropics/claude-code/issues/37051), [#38183](https://github.com/anthropics/claude-code/issues/38183) |
 | 26 | Sub-agent Markdown file-name block: Write refuses a sub-agent write whose basename matches `^(REPORT\|SUMMARY\|FINDINGS\|ANALYSIS).*\.md$` (case-insensitive) | 2.1.289 | 2.1.289 (2026-10-05) | "Sub-agent Markdown File-Name Block" section below, dotprofile `claude/rules/delegation.md` (D-DEL1), `shared/skills/delegate/SKILL.md`, `shared/hooks/delegation-duty-guard.sh`, `shared/claude-shared.md` + dotprofile `claude/CLAUDE.md` (Delegation Duty) | -- (not in the official docs) |
 | 27 | `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` caps sub-agent nesting (documented default 3; the Claude Code web environment sets 1); the launch path decides whether a delegate gets the Agent tool (Workflow agents never do) | 2.1.219 | 2.1.307 (2026-10-21); level-3 tool set re-verified 2.1.325 (Windows, 2026-11-14): no Agent, no Workflow | "Sub-agent Nesting Depth" section below, `shared/skills/delegate/SKILL.md`, `shared/skills/aitool-continue/SKILL.md` | -- |
-| 28 | Auto mode: an explicit user-scope allow rule (`Bash(gh pr merge:*)`) resolves a matching command before the classifier, so `gh pr merge` no longer gets the "[Merge Without Review]" denial; applies to sub-agents; picked up mid-session | 2.1.309 | 2.1.309 (2026-10-28) | "Auto Mode and Allow Rules for PR Merges" section below, dotprofile `profile.json` `claude.settings.permissions.allow`, merge-mission prompts | -- (documented: permission-modes, permissions, settings) |
-| 29 | Hook output channel: stderr of a hook that exits 0 never reaches Claude; observe-mode hooks reach Claude through stdout JSON `hookSpecificOutput.additionalContext`. Hooks docs (https://code.claude.com/docs/en/hooks, read 2026-10-28): "Claude never sees stderr from a hook that exits 0."; PreToolUse decision control, `additionalContext`: "String added to Claude’s context alongside the tool result."; "A hook’s additionalContext, systemMessage, and initialUserMessage strings, and its plain stdout, are capped at 10,000 characters" | 2.1.309 | 2.1.309 (2026-10-28) | `shared/hooks/delegation-duty-guard.sh`, `shared/hooks/workflow-delegation-guard.sh` (`finish()`: 4,000-character cap), `.claude/rules/hook-rollout.md` | -- |
+| 33 | Auto mode (numbered #28 until 2026-11-14): an explicit user-scope allow rule (`Bash(gh pr merge:*)`) resolves a matching command before the classifier, so `gh pr merge` no longer gets the "[Merge Without Review]" denial; applies to sub-agents; picked up mid-session | 2.1.309 | 2.1.309 (2026-10-28) | "Auto Mode and Allow Rules for PR Merges" section below, dotprofile `profile.json` `claude.settings.permissions.allow`, merge-mission prompts | -- (documented: permission-modes, permissions, settings) |
+| 34 | Hook output channel (numbered #29 until 2026-11-14): stderr of a hook that exits 0 never reaches Claude; observe-mode hooks reach Claude through stdout JSON `hookSpecificOutput.additionalContext`. Hooks docs (https://code.claude.com/docs/en/hooks, read 2026-10-28): "Claude never sees stderr from a hook that exits 0."; PreToolUse decision control, `additionalContext`: "String added to Claude’s context alongside the tool result."; "A hook’s additionalContext, systemMessage, and initialUserMessage strings, and its plain stdout, are capped at 10,000 characters" | 2.1.309 | 2.1.309 (2026-10-28) | `shared/hooks/delegation-duty-guard.sh`, `shared/hooks/workflow-delegation-guard.sh` (`finish()`: 4,000-character cap), `.claude/rules/hook-rollout.md` | -- |
 | 30 | Workflow event shape: Claude Code fires ONE PreToolUse(Workflow) per Workflow tool call, whose `tool_input` carries the whole `script` (the 5 real payloads of session 10cf255a-c carry only `script`); no hook event fires per `agent()` call (a workflow-runtime function, not a tool call); tool calls made inside workflow agents fire the configured hooks with `agent_id`. Hooks docs (read 2026-10-28): PreToolUse "Matches on any tool name except EndConversation: built-in tools such as Bash, PowerShell, Edit, Write, Read, Glob, Grep, Agent, Workflow, WebFetch, WebSearch, AskUserQuestion, and ExitPlanMode, and any MCP tool names."; "When a subagent calls a tool, tool events such as PreToolUse and PostToolUse fire the same configured hooks as in the main conversation, and the input carries the agent_id and agent_type common input fields that identify the subagent." Live record: workflow wf_11a87d20-2c7's agent transcripts hold 34 `PreToolUse:Bash`, 1 `PreToolUse:Read` and 68 `PostToolUse:Write` hook records. Not seen by the workflow guard: a saved workflow launched by `tool_input.name` (no `script` / `scriptPath`: reported "not checked"), and child workflows a script starts with `workflow(...)` (their `agent()` prompts reach no hook). Parser limits (hook header LIMITS): a `/` after `)` is read as division; in `const A = '...', B = '...'` only `A` is captured; a method named `agent(p) { }` counts as an unresolved call site | 2.1.309 | 2.1.309 (2026-10-28) | `shared/hooks/workflow-delegation-guard.sh` (parses the script at that one event), `shared/hooks/hooks-manifest.json`, `.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-Hook2/S3-Hook2-spec.md` section 1 | -- |
-| 31 | Delegate identity and files: every delegate's transcript is `~/.claude/projects/<project-dir>/<main-session-id>/subagents/agent-<agentId>.jsonl` (flat for all depths) with `agent-<agentId>.meta.json`, whose `description` (the Agent call's `description`) is the only link from a mission name to an agentId; the Agent tool returns the agentId and an `output_file` but no session id; the `output_file` is created empty and only for some delegates later becomes a hard link to the transcript (trigger unknown); no environment variable holds a delegate's own id (`CLAUDE_CODE_SESSION_ID` is the main session's) | 2.1.325 | 2.1.325 (2026-11-14, Windows) | "Delegate Identity, Transcripts and Control" section below, `shared/skills/delegate/SKILL.md` ("Environment limits"), delegation prompts | -- (not in the official docs as observed) |
-| 32 | Delegate control: TaskStop cannot stop a delegate it does not own (an orchestrator cannot stop its own delegate; the error names the caller's id) and with an unknown id lists the session's running background agents; SendMessage queues to a running delegate and resumes a finished one; a resumed delegate's second SubagentHandback is usually delivered but was refused once ("one report per result"; condition unknown); a delegate's background tasks outlive its hand-back and their completion can bring it back to report again | 2.1.325 | 2.1.325 (2026-11-14, Windows) | "Delegate Identity, Transcripts and Control" section below, `shared/skills/delegate/SKILL.md`, delegation prompts | -- |
+| 31 | Delegate identity and files: every delegate's transcript is `~/.claude/projects/<project-dir>/<main-session-id>/subagents/agent-<agentId>.jsonl` (flat for all depths) with `agent-<agentId>.meta.json`, whose `description` (the Agent call's `description`) is the only link from a mission name to an agentId; the Agent tool returns the agentId and an `output_file` but no session id; the `output_file` is created empty and becomes a hard link to the transcript only when the delegate is woken again after it stopped (by a SendMessage or by its own background task; v1.1); no environment variable holds a delegate's own id (`CLAUDE_CODE_SESSION_ID` is the main session's) | 2.1.325 | 2.1.325 (2026-11-14, Windows) | "Delegate Identity, Transcripts and Control" section below, `shared/skills/delegate/SKILL.md` ("Environment limits"), delegation prompts | -- (not in the official docs as observed) |
+| 32 | Delegate control: an orchestrator cannot TaskStop its own delegate (the error names the caller's id), but the main session stopped a level-1 delegate it launched (v1.1); TaskStop with an unknown id lists the session's running background agents; SendMessage queues to a running delegate and resumes a finished one; a second SubagentHandback is delivered in a run woken by a Monitor event or started by a SendMessage to a finished delegate, and refused ("one report per result") in a run woken while a background shell from before the first report still runs, or by that shell's completion (v1.1 probes); a delegate's background tasks outlive its hand-back and their completion can bring it back | 2.1.325 | 2.1.325 (2026-11-14, Windows; v1.1 probes af14-01 to af14-07 the same day) | "Delegate Identity, Transcripts and Control" section below, `shared/skills/delegate/SKILL.md`, delegation prompts | -- |
 
 ### MEDIUM -- Affects developer experience or specific features
 
@@ -105,9 +122,14 @@ Notable changes in CC releases that may affect this registry.
 - **SendMessage works for delegates** (item #25 closed): queued to a running
   delegate, resumes a finished one, `to: "main"` reaches the main
   conversation. See items #31 and #32.
-- **SubagentHandback**: a resumed delegate's second report is usually
-  delivered and was refused once; a delegate's background tasks outlive its
+- **SubagentHandback**: a second report is delivered in a run woken by a
+  Monitor event or by a SendMessage to a finished delegate, and refused in
+  a run woken while a background shell from before the first report still
+  runs, or by its completion; a delegate's background tasks outlive its
   hand-back. See item #32.
+- **Windows shell**: a PowerShell tool in every session, PowerShell the
+  primary shell; the Bash tool is still Git Bash. See item #1.
+- **TaskStop**: the main session can stop a level-1 delegate. See item #32.
 - Changelog not read for this entry; the behaviour above was observed, not
   read from release notes.
 
@@ -211,7 +233,7 @@ All levels merge together. More specific wins on conflict.
   3. Interpolate `{{PROFILE_NAME}}`, `{{PROFILE_COMPANY}}`, `{{IDENTITY_GIT_NAME}}`, `{{IDENTITY_GIT_EMAIL}}`, `{{USER_REPO_PATH}}` (one literal pass; empty values leave the token).
   4. Append `## Machine-Specific` (`- Machine: <OS> <arch> (<hostname>; profile <alias>)`, `- Shell: <shell>`; PS1: no arch yet).
   5. Deploy through `deploy_managed_file` with the dotprofile template as adopt target and `claude_md_adopt_filter`.
-- **MDM deploy** (`<userRepoPath>/deploy/setup-user-claude.sh/.ps1`): embeds the resolver, the build-time template, rules and a `profile.json` snapshot; uses the live dotprofile when the machine has it, the embedded copies otherwise.
+- **MDM deploy** (`<userRepoPath>/deploy/setup-user-claude.sh/.ps1`): embeds the resolver, the build-time template and a `profile.json` snapshot (no rules: `.claude/rules/deploy-paths.md`); uses the live dotprofile when the machine has it, the embedded copies otherwise.
 - **Scaffolding**: `aitools user init` copies `shared/claude-shared.md` to `<userRepoPath>/claude/CLAUDE.md` if missing.
 
 ### Session Management Commands
@@ -425,6 +447,16 @@ are verbatim from tool results; `<...>` marks an elided id or path. Not
 tested on macOS, Linux, Claude Code web or Cursor: paths and behaviour there
 are unknown.
 
+Version 1.1, 2026-11-14 (mission 38dc-25, a level-2 delegate of M6-Polish,
+same session, Claude Code 2.1.325, Windows 11): the three open questions of
+v1.0 answered. What turns `output_file` into a hard link, which second
+hand-back is refused, and whether the main session can TaskStop a delegate
+(below, "output_file", "Hand-backs" and "TaskStop"). Evidence: four
+throwaway level-3 probes (af14-01 `aa4adfc1b796d71f2`, af14-02
+`a261644da4ec634ca`, af14-03 `a4a3c9e096e872b30`, af14-06
+`a2720a4f422358e45`), a poller that logged every agent `output_file`'s link
+count every 2 s (23:20:37Z onwards), and the main session transcript.
+
 #### Where a delegate's files live
 
 | What | Path (observed on Windows) | Notes |
@@ -525,18 +557,28 @@ id in its own notes and reports when the commander asks for it.
 
 The launch result calls `output_file` "the full subagent JSONL transcript".
 Observed instead: it is created as an empty file at launch (0 bytes, link
-count 1), and for some delegates it later becomes a hard link to
-`subagents/agent-<agentId>.jsonl`. What triggers the link: unknown.
+count 1), and becomes a hard link to `subagents/agent-<agentId>.jsonl` only
+when the delegate is **woken again after it stopped**: by a SendMessage, or
+by the completion of its own background task. A delegate that is never woken
+after it stops keeps an empty `output_file`.
 
-- 2b10-01: still empty after it had finished; right after a SendMessage
-  resumed it, a hard link (877,743 bytes, link count 2, `os.path.samefile`
-  true). M6-R1 was linked at 18:48:58Z, after a resume at 18:46:58Z (found
-  by the reviewer 2b10-03).
-- Linked although never resumed (each transcript ends at its one
-  SubagentHandback; no SendMessage in the session targets them): M5-Fixes,
-  M6-G, M6-B, M2-Reask-D2.
-- Empty although finished: M6-F, M4-B and the probe 2b10-02 (never resumed).
-- Count at 18:44Z: 14 of 42 `output` files linked, 28 empty.
+- af14-02 (no background work) stopped at 23:21:25Z with an empty file; the
+  SendMessage that resumed it was sent at 23:21:35.94Z, and the next poll
+  (23:21:37.28Z) saw link count 2 (734,156 bytes). af14-01 (handed back with
+  a background shell running) was linked at the same poll, right after the
+  SendMessage that woke it.
+- af14-03 handed back at 23:22:17Z with a 90 s background shell running and
+  stayed empty; it was linked at 23:23:47.42Z, the second its shell's
+  completion woke it (its own report times the wake at 23:23:47Z). No
+  message was sent to it before then.
+- v1.0 data, consistent with this: 2b10-01 was empty after it finished and
+  linked right after a SendMessage resumed it; M6-R1 was linked at
+  18:48:58Z, after a resume at 18:46:58Z (reviewer 2b10-03); M5-Fixes, M6-G,
+  M6-B and M2-Reask-D2 were linked though no SendMessage targets them (each
+  transcript records background shells, whose completion can wake them;
+  that each was woken this way was not checked one by one); M6-F, M4-B and
+  2b10-02 stayed empty. Count at 18:44Z: 14 of 42 linked; at 23:18Z
+  (38dc-25, `samefile` against each transcript): 37 of 80.
 
 **Read a delegate's transcript at
 `subagents/agent-<agentId>.jsonl`**, through the harness readers
@@ -584,7 +626,28 @@ directory above) and `CLAUDE_PID` the main process, matching
   (`start`, `done`) and it saw no stop, notice or message: the refused call
   has no effect on the target. M6-Polish got the same answer for its
   delegate M6-A after M6-A had handed back while its own CI watch still ran
-  (17:58:29Z). Whether the main session can stop a delegate: not tested.
+  (17:58:29Z).
+- **The main session can stop a delegate it launched.** Main session
+  87795dc3-e, 2026-11-14T00:49:25Z, on M1-Ship (level 1), which had just
+  handed back and was "waiting on its own background work" (a Monitor,
+  `bu0wz009l`, watching CI): `{"message":"Successfully stopped task:
+  a30774d069aaa0587 (M1-Ship: ship JSON review PR)","task_id":"a30774d069aaa0587","task_type":"local_agent","command":"M1-Ship:
+  ship JSON review PR"}`. M1-Ship never ran again, and no event of its
+  Monitor reached any transcript afterwards, although the CI it watched
+  finished before 01:17Z (the main session's own watch reported then). So
+  the stop also ended the delegate's background Monitor (observed: no
+  event; not checked: the process itself).
+- **A delegate that already failed cannot be stopped**: main session,
+  18:34:15Z, on M6-Polish after an API error ended its run: `Task
+  a0c459c8f689338dc is not running (status: failed)`. The failed delegate
+  could still be revived: M6-Polish ran again after this, each time the user
+  messaged it directly (`revivedAt` 18:36:06Z, 18:40:39Z, 18:49:44Z, see
+  "`meta.json` fields").
+- Not tested: the main session stopping a delegate that another delegate
+  launched (level 2 or 3), or one that is in the middle of a turn. The
+  refusal text "Task <id> is owned by <id>" names the target itself as the
+  owner, so ownership is not "the launching agent" in the usual sense; what
+  the main session may stop beyond its own level-1 delegates: unknown.
 - **An unknown id lists the session's running background agents**, with
   descriptions, across every branch of the tree (siblings, the parent, other
   missions), and leaves the caller out:
@@ -646,6 +709,16 @@ its background tasks and finish, then wait for its notification.
     time this agent stops with no live background children of its own. The
     user can send it another message and resume it, so the same task-id may
     notify more than once.`
+  - A third status (main session transcript, 18:34:10Z):
+    `<status>failed</status>`, summary `Agent "<description>" failed: Agent
+    terminated early due to an API error: API Error: Opus 5.5's safeguards
+    flagged this message ...`.
+  - `<tool-use-id>` is the tool call that started the run being reported:
+    the Agent call for the first run, the resuming SendMessage for a run
+    started by a message (af14-02's second notification carried the id of
+    38dc-25's SendMessage, `toolu_01DLwxSBqjArtfxYAdHAhjU3`). A run woken by
+    the delegate's own background task has no `<tool-use-id>` (af14-01,
+    af14-03, af14-06).
 - **A second hand-back is usually delivered, and was refused once.**
   Repeat SubagentHandback calls (the first hand-back not counted) were
   delivered 17 times: 13 after a background-task notification (M1-Ship 5,
@@ -660,10 +733,44 @@ its background tasks and finish, then wait for its notification.
   called SubagentHandback again after that report and was refused (one
   report per result), so anything new in that call has not reached you
   through it. If it has not messaged you since, send it a message
-  (SendMessage) to ask for it.` Which condition decides: unknown (2b10-01
-  still had a background shell running when its first report went out).
-  Practice: when told to hand back, call SubagentHandback; if it is refused,
-  send the content by SendMessage.
+  (SendMessage) to ask for it.`
+- **Which second hand-back is refused (v1.1, probes of 2026-11-14,
+  23:21-23:28Z).** It depends on what woke the delegate and on the
+  background work it left running when its first report went out. Every
+  first report (R1) was delivered.
+
+  | Probe | Live at R1 | What woke it for the next report | That call | Result |
+  |-------|------------|----------------------------------|-----------|--------|
+  | af14-02 | nothing | SendMessage, after it had finished | direct | delivered |
+  | af14-03 (R3) | nothing left (shell done, finished) | SendMessage | direct | delivered |
+  | af14-01 (R2) | Bash shell, 150 s | SendMessage while the shell ran | direct | **refused** |
+  | af14-01 (R3) | same shell | the shell's completion | direct | **refused** |
+  | af14-03 (R2) | Bash shell, 90 s | the shell's completion | direct | **refused** |
+  | af14-06 | Bash shell, 60 s | the shell's completion | plain-text turn end, no call | no `[handback-send-enforce]`; the agent finished; nothing more reached the caller |
+  | af14-07 (R2) | Monitor (3 events) | Monitor event 1 | plain-text turn end, then `[handback-send-enforce]` (23:27:00.663Z), then the call | delivered |
+  | af14-07 (R3) | same Monitor | Monitor event 2 | direct | delivered |
+  | 2b10-01 (v1.0) | Bash shell, 90 s | SendMessage while the shell ran | direct | **refused** |
+
+  So: a report from a run woken by an event of the delegate's own
+  **Monitor**, or from a run started by a SendMessage to a delegate that
+  had **finished**, is delivered. A report from a run woken while a
+  **background Bash shell** started before the first report was still
+  running (by a SendMessage), or woken by that shell's **completion**, is
+  refused. This matches the v1.0 counts: M1-Ship's six hand-backs
+  (00:31-00:49Z) were all delivered, each right after
+  `[handback-send-enforce]`; the five after the first came in runs woken by
+  events of its CI watch, which was a Monitor (`bumgnf7f4`, started with the
+  Monitor tool at 00:30:40Z, then `bu0wz009l`). Why the harness
+  draws the line there: unknown (its notification calls it "one report per
+  result"). Not tested: a shell started after the first report, and a
+  Monitor's last event or exit: af14-07's third event and its Monitor's
+  exit (`event-3`, `[exited with code 0]` in the Monitor's output file,
+  about 23:27:59Z) did not wake it (checked 23:29:38Z), and no further
+  notification reached its caller.
+
+  Practice: stop your background shells before you hand back. If a
+  SubagentHandback is refused, send the content by SendMessage (it reached
+  the caller every time: 2b10-01, af14-01, af14-03).
 - **A delegate's background work outlives its hand-back.** 2b10-01 handed
   back with a 90 s background shell running (`b2pmsszp4`). The shell kept
   running and finished normally (`start`, `done`, `[exited with code 0]`);
@@ -680,8 +787,12 @@ its background tasks and finish, then wait for its notification.
   after a plain-text answer and amid safety-classifier stops; most
   of the repeat hand-backs above followed it (reviewer 2b10-03). A delegate
   that answers a resume with plain text can be pushed into a second
-  hand-back this way. Write the report file before arming long
-  watches so a forced hand-back loses nothing (M6-A, M6-Polish).
+  hand-back this way. Probes (v1.1): it came after a plain-text turn end in
+  a run woken by a Monitor event (af14-07), and did not come after one in a
+  run woken by a background shell's completion (af14-06: the agent simply
+  finished) or after a refused hand-back and a SendMessage (af14-01,
+  af14-03). Write the report file before arming long watches so a forced
+  hand-back loses nothing (M6-A, M6-Polish).
 
 #### Interruptions that change what a delegate receives
 
@@ -707,15 +818,19 @@ its background tasks and finish, then wait for its notification.
    searching `meta.json` descriptions.
 3. Read a delegate's transcript at `subagents/agent-<agentId>.jsonl` with
    the harness readers, never the `output_file`.
-4. You cannot TaskStop your own delegate: message it to stop instead.
-5. Tell every delegate to stop its own background tasks before handing back,
-   and to write its report file first.
+4. As a delegate, you cannot TaskStop your own delegate: message it to stop
+   instead. The main session can stop a level-1 delegate it launched.
+5. Tell every delegate to stop its own background shells before handing
+   back, and to write its report file first: a hand-back made after a
+   resume while such a shell still runs, or after its completion, is
+   refused.
 6. After a delegate's hand-back, follow up by SendMessage (it resumes the
-   delegate); its answer may come as a second hand-back or as a message.
+   delegate); its answer may come as a second hand-back or, if that is
+   refused, as a message.
 7. Give a delegate the main session id (`CLAUDE_CODE_SESSION_ID`) and the
    project directory, so it can find its own and its siblings' transcripts.
 
-### Auto Mode and Allow Rules for PR Merges (#28)
+### Auto Mode and Allow Rules for PR Merges (#33)
 
 **Tested** 2026-10-28, Claude Code 2.1.309 (`claude --version`), macOS,
 local environment, session in auto mode (`permissions.defaultMode` stays
@@ -876,14 +991,20 @@ Each line is a JSON object. Fields available in most entries:
 
 ## Windows Shell Limitations
 
-> **Likely obsolete** (item #1): the Claude Code changelog lists a PowerShell tool
-> preview (2.1.84) and "Git for Windows no longer required" (2.1.120), per
-> `reference/evaluations/claude-code-macos-2026-10-21.md`. Re-verify on Windows
-> before relying on this section.
+> **Partly obsolete** (item #1, re-verified 2.1.325 on Windows 11,
+> 2026-11-14): the Bash tool still runs Git Bash, so the quoting patterns
+> below still apply inside it, but Claude Code also offers a PowerShell tool
+> (PowerShell 7+) in every session, main and delegates, and reports
+> PowerShell as the primary shell. Run PowerShell with that tool; the
+> `pwsh -NoProfile -File` dispatch below is for PowerShell run from Bash or
+> from bash scripts. Upstream history: PowerShell tool preview (2.1.84),
+> "Git for Windows no longer required" (2.1.120), per
+> `reference/evaluations/claude-code-macos-2026-10-21.md`.
+> `CLAUDE_CODE_SHELL` was not re-tested.
 
-Claude Code's Bash tool is **hardcoded to Git Bash on Windows**. The `CLAUDE_CODE_SHELL` environment variable exists but is **broken on Windows** -- it is silently ignored regardless of how it's set.
+Claude Code's Bash tool is **hardcoded to Git Bash on Windows** (still true at 2.1.325). The `CLAUDE_CODE_SHELL` environment variable exists but was **broken on Windows** at 2.1.62 -- it was silently ignored regardless of how it was set (not re-tested since).
 
-Baseline: Claude Code 2.1.51 | Last verified: 2.1.62 (2026-02-27)
+Baseline: Claude Code 2.1.51 | Last verified: 2.1.325 (2026-11-14, Windows 11; `CLAUDE_CODE_SHELL` not re-tested since 2.1.62, 2026-02-27)
 
 ### Upstream Issues
 
@@ -964,9 +1085,9 @@ Benefits:
 
 ### Impact on This Repo
 
-This repo provides both `.ps1` and `.sh` variants of all scripts. On Windows, Claude Code can run `.sh` scripts natively (Git Bash) but must use the `pwsh -File` workaround for `.ps1` scripts. PS 7 (`pwsh`) is the project baseline -- all dispatch uses `pwsh`, not `powershell.exe`.
+This repo provides both `.ps1` and `.sh` variants of all scripts. On Windows, Claude Code runs `.sh` scripts in the Bash tool (Git Bash) and `.ps1` scripts either with the PowerShell tool (2.1.325: `pwsh -NoProfile -File <script>.ps1`) or from the Bash tool with the `pwsh -File` pattern above. PS 7 (`pwsh`) is the project baseline -- all dispatch uses `pwsh`, not `powershell.exe`.
 
-Once Anthropic fixes the upstream issues, we can simplify by setting `CLAUDE_CODE_SHELL=pwsh` and running `.ps1` scripts directly.
+Before 2.1.84 there was no PowerShell tool and the `pwsh -File` pattern from Bash was the only way; that is history now (item #1).
 
 ---
 

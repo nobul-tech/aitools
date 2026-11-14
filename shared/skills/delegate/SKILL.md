@@ -39,6 +39,11 @@ v2.2 (2026-11-14, 38dc-08): "Environment limits" gains delegate identity and
 control (description as the name-to-agentId link, transcript path, TaskStop,
 repeat hand-backs, background tasks); "Verifying what comes back" points to the
 delegate's transcript.
+v2.4 (2026-11-14, 38dc-25; v2.3 is taken by PR #159): "Environment limits"
+corrected by the 2.1.325 probes (which repeat hand-back is refused, TaskStop by
+the main session, what a sub-agent receives, the level-3 tool set); "In the
+aitools repo" no longer says every aitools rule and skill is deployed at user
+level.
 
 ## When to use
 
@@ -393,8 +398,8 @@ Verify these before relying on them; versions move. Source of record:
   limit reached (depth N of M)". Plan the chain to fit the cap; give a
   delegate that cannot delegate the whole task.
 - **Launch path decides whether a delegate can delegate.** Claude Code
-  2.1.307 (macOS): delegates launched with the Agent tool have it at levels
-  1-2 and lose it at level 3. A Workflow `agent()` has no Agent, Task or
+  2.1.307 (macOS), level 3 re-verified 2.1.325 (Windows): delegates launched
+  with the Agent tool have it at levels 1-2 and lose it at level 3. A Workflow `agent()` has no Agent, Task or
   Workflow tool, with or without `agentType: 'general-purpose'` (re-verified
   2026-10-26), so it cannot delegate at all, and no delegate has Workflow.
 - **Worktree isolation blocks `HOME` overrides** and confines writes to the
@@ -407,27 +412,35 @@ Verify these before relying on them; versions move. Source of record:
   this content in your final response instead." No setting controls it. The
   D-DEL1 prefix avoids it (`S2-report.md` is allowed).
 - **What a sub-agent receives** varies: the Agent tool's general-purpose
-  agents receive the CLAUDE.md files; Explore, Plan and some built-in types
-  omit them; project rules may be attached only when the delegate reads
-  files under the repo. Element 2 exists because of this.
+  agents receive the CLAUDE.md files and the rules without `paths:`
+  frontmatter at launch, and `paths:` rules only after they read files
+  (2.1.325); Explore, Plan and some built-in types omit them. Project
+  rules, CLAUDE.md and project skills come from the session's working
+  directory (the main checkout), not the delegate's worktree, so a delegate
+  on a branch that changes a rule gets the main checkout's copy. Element 2
+  exists because of this.
 - **File access.** Sub-agents have been denied Glob/Grep outside their
   working repo while Read with an absolute path worked, and some delegates
   have no Grep/Glob at all: pass explicit paths, and tell them to use
   `grep`/`find` in pipelines or scratch scripts when those tools are absent.
 - **Follow-up messages.** `SendMessage` to a running delegate's id is
   delivered at its next tool round; a message to a finished one resumes it.
-  A resumed delegate's second `SubagentHandback` is usually delivered but
-  was refused once (2.1.325); if it is refused, the delegate sends the
-  content by `SendMessage`.
+  A second `SubagentHandback` is delivered after a resume of a finished
+  delegate or a wake by its own Monitor's event, and refused after a resume
+  while a background shell it started before its first report still runs,
+  or after that shell's completion wakes it (2.1.325 probes); if it is
+  refused, the delegate sends the content by `SendMessage`.
 - **Identity and control** (2.1.325; `/tool-ops`, "Delegate Identity,
   Transcripts and Control"). Start every Agent `description` with the
   delegate's name: `meta.json` copies it, and it is the only link from the
   name to the agentId. Record the agentId the launch returns. A delegate's
   transcript is `subagents/agent-<agentId>.jsonl` under the main session's
-  project folder, not the `output_file`. You cannot TaskStop your own
-  delegate: message it instead. Tell delegates to stop their own monitors
-  and background shells before handing back: they outlive the hand-back,
-  and their completion can bring the delegate back to report again.
+  project folder, not the `output_file` (empty until the delegate is woken
+  again). A delegate cannot TaskStop its own delegate: message it instead
+  (the main session can stop a level-1 delegate it launched). Tell delegates
+  to stop their own monitors and background shells before handing back:
+  they outlive the hand-back, and their completion can bring the delegate
+  back to report again.
 - **Background delegates** may be denied writes they would get approval for
   in the foreground; expect `WRITE_BLOCKED` and plan to write from the
   delegating agent.
@@ -436,9 +449,11 @@ Verify these before relying on them; versions move. Source of record:
 
 ## In the aitools repo
 
-Applies when the delegate works in `~/repos/aitools` (all aitools rules and
-skills are also deployed at user level, per the fan-out decisions, so this
-section travels with the skill).
+Applies when the delegate works in `~/repos/aitools`. This skill is deployed
+at user level, so this section travels with it; the aitools project rules
+(`.claude/rules/`) and project skills (`.claude/skills/`) are not (since
+2026-11-06 only `shared/rules/` and `shared/skills/` reach user scope), so
+list them by path.
 
 - **Files to list for element 2**: `<aitools>/CLAUDE.md`, every
   `<aitools>/.claude/rules/*.md`, `<aitools>/.aitools/channel/CLAUDE.md`;
