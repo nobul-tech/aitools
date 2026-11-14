@@ -16,10 +16,11 @@
 # case), which the .sh harness checks on macOS/Linux (Test-GoldenMatch in
 # tests/lib/platform-lib.ps1). The unreadable cases (.sh: chmod 000) run with an
 # ACL deny entry for the current user instead (Deny-Access; chmod changes
-# nothing on NTFS, so the old Git Bash harness skipped them). The case-only
-# duplicate (case-sensitive file system) and dangling symlink (creating a
-# symlink needs a privilege on Windows) cases stay SKIP, with the .sh harness's
-# Windows-run text.
+# nothing on NTFS, so the old Git Bash harness skipped them); a probe of each
+# deny right they use (Test-DenyBlocks) turns them into one SKIP line where the
+# deny does not block. The case-only duplicate (case-sensitive file system)
+# and dangling symlink (creating a symlink needs a privilege on Windows) cases
+# stay SKIP, with the .sh harness's Windows-run text.
 #
 # Safe to re-run: every case runs a copy of scripts/ in a temp aitools checkout,
 # in a child pwsh under its own temp HOME, with a temp git dotprofile (all
@@ -120,23 +121,49 @@ function Undo-Deny([string]$Path) {
     Set-Acl -LiteralPath $Path -AclObject $acl
     $null = $script:Denied.Remove($Path)
 }
-# $canDenyRead: a denied read really fails here (the .sh's CAN_CHMOD_READ; false
-# e.g. for a process that reads with backup privilege). The SKIP line keeps the
-# .sh's text when it is false.
-function Test-DenyBlocksRead {
-    $f = Join-Path $tmpRoot "deny-probe"
-    [IO.File]::WriteAllText($f, "x`n")
-    try {
-        Deny-Access $f ([Security.AccessControl.FileSystemRights]::ReadData)
-        try { $null = [IO.File]::ReadAllText($f); return $false } catch { return $true }
-    } catch {
-        Write-Host "      | ACL deny not available: $($_.Exception.Message)"
-        return $false
-    } finally {
-        if ($script:Denied.Contains($f)) { Undo-Deny $f }
-    }
+# Test-DenyBlocks KIND: every deny right a group of ACL cases uses is probed first
+# on a throwaway item in the temp root (the .sh's CAN_CHMOD_READ; a deny may not
+# block e.g. for a process that reads with backup privilege). $true when the deny
+# really blocks here and, once removed, the item works again:
+#   read  ReadData on a file: reading it fails (the .sh's chmod 000 on a file)
+#   list  ListDirectory on a folder: listing it fails (chmod 000 on a folder)
+# A group whose rights do not all block prints one SKIP line instead of FAIL
+# lines. The probe items are removed again.
+function Test-Succeeds([scriptblock]$Action) {
+    # the caught error is the answer: the action was blocked
+    try { & $Action; return $true } catch { return $false }
 }
-$canDenyRead = Test-DenyBlocksRead
+function Test-DenyBlocks([ValidateSet("read", "list")][string]$Kind) {
+    $dir = Join-Path $tmpRoot "acl-probe-$Kind"
+    $file = Join-Path $dir "item"
+    WriteLf $file "x`n"
+    $target = $dir
+    switch ($Kind) {
+        "read" {
+            $target = $file; $rights = [Security.AccessControl.FileSystemRights]::ReadData
+            $act = { $null = [IO.File]::ReadAllText($file) }
+        }
+        "list" {
+            $rights = [Security.AccessControl.FileSystemRights]::ListDirectory
+            $act = { $null = @(Get-ChildItem -LiteralPath $dir -Force -ErrorAction Stop) }   # as setup-user-claude.ps1 lists
+        }
+    }
+    $blocks = $false
+    try {
+        Deny-Access $target $rights
+        $blocks = -not (Test-Succeeds $act)
+    } catch {
+        Write-Host "      | ACL deny not available ($Kind): $($_.Exception.Message)"
+    } finally {
+        if ($script:Denied.Contains($target)) { Undo-Deny $target }
+    }
+    if ($blocks -and -not (Test-Succeeds $act)) {
+        Write-Host "      | deny probe ($Kind): still blocked after the deny entry was removed"
+        $blocks = $false
+    }
+    try { Remove-Item -LiteralPath $dir -Recurse -Force } catch { Write-Host "      | could not remove the deny probe ${dir}: $($_.Exception.Message)" }
+    return $blocks
+}
 
 function GitC { & git -c user.name=test -c user.email=test@example.invalid -c commit.gpgsign=false @args }
 # Fixture-Fail WHAT: a fixture step that fails ends the run (exit 1) instead of
@@ -144,6 +171,9 @@ function GitC { & git -c user.name=test -c user.email=test@example.invalid -c co
 function Fixture-Fail([string]$What) { Write-Output "FATAL fixture setup failed: $What"; exit 1 }
 
 try {
+    # The deny probes, inside the try so the finally undoes an interrupted probe
+    $denyBlocksList = Test-DenyBlocks list
+    $denyBlocksRead = Test-DenyBlocks read
     WriteLf (Join-Path $tmpRoot "cs-probe") ""
     $caseSensitiveFs = -not (Test-Path -LiteralPath (Join-Path $tmpRoot "CS-PROBE"))
 
@@ -551,8 +581,8 @@ foreach ($n in @("a.md", "A.MD", "b.Md", "x.md.bak.1", "X.MD.BAK.2026", "odd.bak
     Skip "dangling symlink (Git Bash)"
 
     # The .sh: chmod 000 on ~/.aitools/rules, then on the manifest; here a deny of
-    # ListDirectory, then of ReadData (see Deny-Access)
-    if ($canDenyRead) {
+    # ListDirectory, then of ReadData (see Deny-Access); both probed (Test-DenyBlocks)
+    if ($denyBlocksList -and $denyBlocksRead) {
         Case-Run unreadable { Harness a.md 'rule a'; Deny-Access (Join-Path $script:H ".aitools/rules") ([Security.AccessControl.FileSystemRights]::ListDirectory) }
         Undo-Deny (Join-Path $script:C "$L/.aitools/rules")
         Check "unreadable harness dir: ERROR row, exit 1" ($script:rc -eq 1 -and (Nondetail) -ceq 'ERROR|claude rules|cannot read harness rules')
@@ -564,7 +594,7 @@ foreach ($n in @("a.md", "A.MD", "b.Md", "x.md.bak.1", "X.MD.BAK.2026", "odd.bak
         Check "unreadable manifest: rules fanned out, ERROR rows, final row ERROR, exit 1" ($script:rc -eq 1 -and (IsFile (Join-Path (RulesDir) "a.md")) -and (Row 'ERROR|claude rules|cannot read rules manifest') -and (Row 'DETAIL|claude rules|failed: .aitools-rules-manifest') -and (Nondetail) -ceq 'ERROR|claude rules|1 failed')
         Parity manifest-unreadable
     } else {
-        Skip "unreadable harness dir and manifest (root or Git Bash)"
+        Skip "unreadable harness dir and manifest (a deny ACE does not block listing or reads here)"
     }
 
     # ~/.claude/rules cannot be created (a file is in the way): ERROR row, exit 1,

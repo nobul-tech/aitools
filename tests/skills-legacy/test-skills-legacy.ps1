@@ -20,9 +20,10 @@
 # (Resolve-TestGitBash), as on every platform. The unreadable (.sh: chmod 000)
 # and adopt-failure (.sh: chmod 555) cases run with an ACL deny entry for the
 # current user instead (Deny-Access): chmod changes nothing on NTFS, so the old
-# Git Bash harness skipped them; they SKIP here only if a denied read still
-# succeeds. A missing git, node, Git Bash or python3 (with pywinpty) skips its
-# cases locally; under CI=true it is a failure.
+# Git Bash harness skipped them; each group SKIPs here (one line) only if a
+# probe shows a deny right it uses does not block (Test-DenyBlocks). A missing
+# git, node, Git Bash or python3 (with pywinpty) skips its cases locally; under
+# CI=true it is a failure.
 #
 # Safe to re-run: every case runs in a child pwsh under its own temp HOME (never
 # the real HOME or a real dotprofile), removed on exit. The scripts run from a
@@ -131,23 +132,66 @@ function Undo-Deny([string]$Path) {
     Set-Acl -LiteralPath $Path -AclObject $acl
     $null = $script:Denied.Remove($Path)
 }
-# $canDenyRead: a denied read really fails here (the .sh's CAN_CHMOD_READ; false
-# e.g. for a process that reads with backup privilege). The SKIP lines keep the
-# .sh's text when it is false.
-function Test-DenyBlocksRead {
-    $f = Join-Path $W "deny-probe"
-    WriteLf $f "x`n"
-    try {
-        Deny-Access $f ([Security.AccessControl.FileSystemRights]::ReadData)
-        try { $null = [IO.File]::ReadAllText($f); return $false } catch { return $true }
-    } catch {
-        Write-Host "      | ACL deny not available: $($_.Exception.Message)"
-        return $false
-    } finally {
-        if ($script:Denied.Contains($f)) { Undo-Deny $f }
-    }
+# Test-DenyBlocks KIND: every deny right a group of ACL cases uses is probed first
+# on a throwaway item in the work dir (the .sh's CAN_CHMOD_READ; a deny may not
+# block e.g. for a process that reads with backup privilege). $true when the deny
+# really blocks here and, once removed, the item works again:
+#   read    ReadData on a file: reading it fails (the .sh's chmod 000 on a file)
+#   list    ListDirectory on a folder: listing it fails (chmod 000 on a folder)
+#   create  CreateFiles, CreateDirectories, DeleteSubdirectoriesAndFiles on a
+#           folder: creating a file and a folder in it fails, an existing file
+#           in it stays writable (chmod 555 on a folder). Not probed: deleting
+#           an existing entry, which this deny does not stop (the entry's own
+#           ACL grants DELETE); the case needs only the creates to fail
+# A group whose rights do not all block prints one SKIP line instead of FAIL
+# lines. The probe items are removed again.
+function Test-Succeeds([scriptblock]$Action) {
+    # the caught error is the answer: the action was blocked
+    try { & $Action; return $true } catch { return $false }
 }
-$canDenyRead = Test-DenyBlocksRead
+function Test-DenyBlocks([ValidateSet("read", "list", "create")][string]$Kind) {
+    $dir = Join-Path $W "acl-probe-$Kind"
+    $file = Join-Path $dir "item"
+    WriteLf $file "x`n"
+    $target = $dir
+    switch ($Kind) {
+        "read" {
+            $target = $file; $rights = [Security.AccessControl.FileSystemRights]::ReadData
+            $act = { $null = [IO.File]::ReadAllText($file) }
+        }
+        "list" {
+            $rights = [Security.AccessControl.FileSystemRights]::ListDirectory
+            $act = { $null = @(Get-ChildItem -LiteralPath $dir -Force -ErrorAction Stop) }   # as setup-user-skills.ps1 lists
+        }
+        "create" {
+            # the rights the adopt-failure case denies
+            $rights = [Security.AccessControl.FileSystemRights]'CreateFiles, CreateDirectories, DeleteSubdirectoriesAndFiles'
+            $act = { [IO.File]::WriteAllText((Join-Path $dir "new"), "x"); $null = [IO.Directory]::CreateDirectory((Join-Path $dir "sub")) }
+        }
+    }
+    $blocks = $false
+    try {
+        Deny-Access $target $rights
+        if ($Kind -eq "create") {
+            # each of the two creates fails on its own; the existing file stays writable
+            $blocks = -not (Test-Succeeds { [IO.File]::WriteAllText((Join-Path $dir "new"), "x") }) -and
+                -not (Test-Succeeds { $null = [IO.Directory]::CreateDirectory((Join-Path $dir "sub")) }) -and
+                (Test-Succeeds { [IO.File]::WriteAllText($file, "y`n") })
+        } else {
+            $blocks = -not (Test-Succeeds $act)
+        }
+    } catch {
+        Write-Host "      | ACL deny not available ($Kind): $($_.Exception.Message)"
+    } finally {
+        if ($script:Denied.Contains($target)) { Undo-Deny $target }
+    }
+    if ($blocks -and -not (Test-Succeeds $act)) {
+        Write-Host "      | deny probe ($Kind): still blocked after the deny entry was removed"
+        $blocks = $false
+    }
+    try { Remove-Item -LiteralPath $dir -Recurse -Force } catch { Write-Host "      | could not remove the deny probe ${dir}: $($_.Exception.Message)" }
+    return $blocks
+}
 
 function GitC { & git -c user.name=test -c user.email=test@example.invalid -c commit.gpgsign=false @args }
 
@@ -156,6 +200,11 @@ function Skill([string]$Dir, [string]$Name, [string]$Text) {   # DIR/NAME/SKILL.
 }
 
 try {
+    # The deny probes, inside the try so the finally undoes an interrupted probe
+    $denyBlocksRead = Test-DenyBlocks read
+    $denyBlocksList = Test-DenyBlocks list
+    $denyBlocksCreate = Test-DenyBlocks create
+
     # --- Fixture dotprofile (a git repo in the temp dir) ---
     $DP = Join-Path $tmpRoot "aitools-tess"
     WriteLf (Join-Path $DP "claude/CLAUDE.md") "# Prefs for {{PROFILE_NAME}}`n`n## Code Style`n`n- keep it simple`n"
@@ -383,8 +432,8 @@ try {
         Golden-Rows $c
 
         # unreadable manifest / harness directory (the .sh: chmod 000; here a
-        # deny of ReadData / ListDirectory, see Deny-Access)
-        if ($canDenyRead) {
+        # deny of ReadData / ListDirectory, see Deny-Access; both probed)
+        if ($denyBlocksRead -and $denyBlocksList) {
             $c = "$lang-mfu"
             $H = Join-Path $tmpRoot $c
             Seed-Harness $H
@@ -414,7 +463,7 @@ try {
                 ((RcOf $c) -eq 1 -and (Row $c $FANOUT_ROW) -and (Row $c 'ERROR|skills|no adopt: target unreadable') -and (NoRowsFor $c 'claude skills') -and -not (Found $c mine) -and (FoundLog $c 'Cannot read ~/.claude/skills -- reverse discovery not run, so no user-created skill is offered for adoption: '))
             Golden-Rows $c
         } else {
-            Skip "$lang unreadable cases (chmod does not block reads here)"
+            Skip "$lang unreadable cases (a deny ACE does not block reads or listing here)"
         }
 
         # empty harness: still fanned out (the fan-out gates on the directory too)
@@ -437,9 +486,9 @@ try {
             Check "$lang pty adopt (fanned out): exit 0, mine adopted to the dotprofile, n/a row only" `
                 ((RcOf $c) -eq 0 -and (FileHas (Join-Path $tmpRoot "dp-$c/claude/skills/mine/SKILL.md") 'user-created') -and (RowsText $c) -ceq $FANOUT_ROW)
             Golden-Rows $c
-            if ($canDenyRead) {
+            if ($denyBlocksCreate) {
                 # the .sh: chmod 555 on the dotprofile's claude/skills; here a deny
-                # of creating, and deleting, entries in it
+                # of creating entries in it (probed: Test-DenyBlocks create)
                 $c = "$lang-adoptfail"
                 Own-Dotprofile $c
                 Seed-Harness (Join-Path $tmpRoot $c)
@@ -450,7 +499,7 @@ try {
                     ((RcOf $c) -eq 1 -and (Row $c 'ERROR|skills|adopt failed: mine') -and (NoRowsFor $c 'claude skills') -and -not (Exists (Join-Path $tmpRoot "dp-$c/claude/skills/mine")))
                 Golden-Rows $c
             } else {
-                Skip "$lang pty adopt failure (chmod does not block writes here)"
+                Skip "$lang pty adopt failure (a deny ACE does not block writes here)"
             }
         } else {
             Need-Skip "$lang pty adopt cases ($noPtyWhy)"
