@@ -494,7 +494,8 @@ try {
     Run-Relay "relay-nolib-eof" "" -Relay $soloRelay
     Check "relay (no lib): EOF -> continue, '(no input -- continuing)'" ((Txt "result") -ceq "continue" -and (Has "(no input -- continuing)" (Console)))
 
-    # --- Windows PowerShell 5.1 (hh.ps1 may run there) ---
+    # --- Windows PowerShell 5.1 (aitools.ps1 may load the prompt there; hh.ps1 is
+    # pwsh 7 only, so "hh path" below names the path where the prompt loads the lib) ---
     $ps51 = $null
     if ($IsWindows) {
         # Get-Command exempt: command-existence check; the cases SKIP without it
