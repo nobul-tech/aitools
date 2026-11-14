@@ -102,6 +102,10 @@ esac
 ```
 
 Guards MUST use structured logging. Source `init-logging` before the guard.
+A script that runs with no aitools-lib beside it (`bootstrap.sh`, run from
+curl; `hh.sh`, installed alone as `~/.local/bin/hh`) cannot: its guard prints
+the structured line itself, to stderr:
+`printf '[%s] [<name>] [error] This script is for macOS/Linux. ...\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >&2`.
 
 ### OS guard exemptions
 
@@ -113,10 +117,9 @@ Guards MUST use structured logging. Source `init-logging` before the guard.
 | Shell alias modules | `shared/shell/aliases.sh/.ps1` | Sourced into shell profiles |
 | Build scripts | `build-deploy.sh`, `build-package.sh` (P-1, pending approval) | Bash-only builders, run in Git Bash on Windows; see cross-language exceptions |
 | Scratch/test files | `.scratch/*.sh` | Temporary, not deployed |
-| Entry points sourced or run on any platform (rationale unrecorded, pending approval) | `bootstrap.sh/.ps1`, `hh.sh/.ps1`, `relay-outbound-prompt.sh/.ps1`, `init-hh-hooks.sh` | Bootstrap/shell helpers; each `.sh` also runs in Git Bash |
+| Entry points sourced or run on any platform (rationale unrecorded, pending approval) | `bootstrap.ps1`, `hh.ps1`, `relay-outbound-prompt.sh/.ps1` | Bootstrap/shell helpers: `bootstrap.ps1` and `hh.ps1` are the Windows entry points (no guard yet); `relay-outbound-prompt.sh` is sourced by `scripts/aitools` and `hh.sh`, so it runs on macOS/Linux only (2026-11-14), and `.ps1` by `aitools.ps1` and `hh.ps1`. `bootstrap.sh`, `hh.sh`, `init-hh-hooks.sh` and `analyze-session.sh` carry the POSIX guard since 2026-11-14 (commander: "add an OS guard to all of them") |
 | Helper modules (rationale unrecorded, pending approval) | `aitools-json.ps1`, `_validate-ps1.ps1` | Dot-sourced / called by other scripts, never a setup entry point |
-| Analysis tools (rationale unrecorded, pending approval) | `analyze-session.sh` | Read-only session analysis |
-| Entry points with Windows branches (2026-11-01, review-after) | `aitools-install.sh`, `aitools`, `scripts/githooks/pre-commit` | Run on every platform: on Windows (Git Bash) `aitools-install.sh` forwards to `aitools-install.ps1`, `aitools` (the extensionless bash entry point) dispatches the `.ps1` setup scripts, the git hook runs in Git Bash |
+| Entry points with Windows branches (2026-11-01, review-after; `aitools` reason 2026-11-14) | `aitools-install.sh`, `aitools`, `scripts/githooks/pre-commit` | Run on every platform: on Windows (Git Bash) `aitools-install.sh` forwards to `aitools-install.ps1`, `aitools` (the extensionless bash entry point) forwards to `aitools.ps1` (`pwsh -File`) before its library loads, so no bash library code runs on Windows (commander, 2026-11-14, RFI 38dc-3), the git hook runs in Git Bash |
 | Package launchers (2026-11-01, review-after) | `packaging/macos/*`, `packaging/linux/*`, `packaging/windows/*.ps1` | Run by the package installer on its one platform (design: `@plans/build-package/design.md`) |
 
 `tests/os-guards/test-os-guards.sh` enforces this table: on macOS and Linux

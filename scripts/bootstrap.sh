@@ -18,6 +18,16 @@
 
 set -euo pipefail
 
+# OS guard (.claude/rules/cross-platform.md "OS guard patterns"; commander,
+# 2026-11-14, on the entry points that never run on Windows: "add an OS guard
+# to all of them"). This script runs from curl with no repo on disk, so it
+# cannot source aitools-lib: it writes the structured log line itself.
+case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*)
+        printf '[%s] [bootstrap] [error] This script is for macOS/Linux. On Windows, use bootstrap.ps1 (irm ... | iex).\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >&2
+        exit 1 ;;
+esac
+
 REPO_URL="https://github.com/nobul-tech/aitools.git"
 AITOOLS_DIR="${AITOOLS_DIR:-$HOME/repos/aitools}"
 

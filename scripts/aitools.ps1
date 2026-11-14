@@ -58,6 +58,12 @@ if ($Remaining -and $Remaining -contains "--force") {
     $Force = [switch]::Present
     $Remaining = @($Remaining | Where-Object { $_ -ne "--force" })
 }
+# Under pwsh -File a list arrives as one string: the bash entry point forwards
+# `--addmcp a b` on Windows as -AddMcp "a,b" (scripts/aitools, aitools_ps1_args).
+# Split on commas and drop empty names (an empty list is reported below).
+if ($null -ne $AddMcp) {
+    $AddMcp = @($AddMcp | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+}
 
 # ---------------------------------------------------------------------------
 # Bootstrap helper -- needed to find aitools-lib.ps1 (repoPath in config.json).
@@ -692,10 +698,15 @@ if ($doDashboard) {
         LogError "aitools-dashboard.ps1 not found at $dashboardScript"
         exit 1
     }
-    # Forward all remaining args to the dashboard script
+    # Forward all remaining args to the dashboard script with pwsh -File, which binds
+    # --background to -Background, --status to -Status, and so on (the bash entry
+    # point's dispatch; the dashboard-serve hook passes --background). An in-process
+    # call with an array splat binds every string by position (to -Port first) and
+    # fails: "Cannot convert value "--background" to type "System.Int32"".
     $dashArgs = @()
     if ($Remaining) { $dashArgs = $Remaining }
-    & $dashboardScript @dashArgs
+    $pwshExe = (Get-Process -Id $PID).Path
+    & $pwshExe -NoProfile -ExecutionPolicy Bypass -File $dashboardScript @dashArgs
     exit $LASTEXITCODE
 }
 

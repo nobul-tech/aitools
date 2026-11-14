@@ -582,7 +582,7 @@ Single-quote the `-Command` argument so bash doesn't expand `$` variables meant 
 pwsh -NoProfile -ExecutionPolicy Bypass -File "path/to/script.ps1"
 ```
 
-This is the pattern used by `aitools install` (see the `install` command in `scripts/aitools`).
+This is the pattern `scripts/aitools` uses on Windows: run in Git Bash, it hands every command to `aitools.ps1` this way before its library loads (`aitools_win_forward`).
 
 #### Multi-line PowerShell from the Bash tool
 

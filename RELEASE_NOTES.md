@@ -12,6 +12,36 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.77.11 -- On Windows the bash aitools hands off to aitools.ps1; OS guards on hh.sh, bootstrap.sh, init-hh-hooks.sh and analyze-session.sh (2026-11-14)
+
+Not tagged. Branch `fix/38dc-19-aitools-win-forwarder`, mission 38dc-19 under M6-Polish (session 87795dc3). Commander, 2026-11-14, RFI 38dc-3 ("make the bash `aitools` a forwarder on Windows"): "agreed"; RFI 38dc-5: "add an OS guard to all of them".
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 1 | High | `aitools.ps1` ran `aitools dashboard ...` with an in-process array splat, which binds every string by position: `aitools dashboard --background` and `--status` failed in PowerShell with `Cannot convert value "--background" to type "System.Int32"` and exited 0. It now runs `aitools-dashboard.ps1` with `pwsh -File`, which binds `--background` to `-Background` as the bash entry point's dispatch did. Without this fix the forward below would have broken the dashboard-serve SessionStart hook on Windows |
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 2 | The bash entry point `scripts/aitools`, run in Git Bash on Windows (the dashboard-serve hook, a Git Bash terminal, an agent's Bash tool), now runs `exec pwsh -NoProfile -ExecutionPolicy Bypass -File <aitools.ps1> <arguments>` inside `main()` before it parses arguments or sources `aitools-lib.sh`, so no bash library code runs on Windows. `aitools.ps1` is the repo copy, else the one beside the entry point (`~/.local/bin`); the exit code and stdin are `aitools.ps1`'s. The flags `pwsh -File` cannot bind are rewritten (`--dry-run`, `--skip-gh-auth`, `--skip-drive-detection`, `--repos-path P` as a Windows path, `--addmcp A B` as `-AddMcp A,B`); dashboard arguments pass unchanged. No pwsh, or no `aitools.ps1`: exit 1 with a clear message. macOS and Linux are unchanged |
+| 3 | `aitools.ps1` splits `-AddMcp` values on commas (the form the forward and `pwsh -File -AddMcp a,b` deliver) and drops empty names, so an empty list reports "--addmcp requires at least one server name" |
+| 4 | `scripts/hh.sh`, `scripts/bootstrap.sh`, `scripts/init-hh-hooks.sh` and `scripts/analyze-session.sh` carry the POSIX OS guard (none of them runs on Windows: `hh.sh` is installed only by `aitools-install.sh`, Windows gets `hh.ps1`; `bootstrap.sh` already refused anything but Darwin/Linux). `init-hh-hooks.sh` and `analyze-session.sh` source aitools-lib and init-logging before the guard; `hh.sh` (installed alone) and `bootstrap.sh` (run from curl) print the structured `[<UTC>] [<name>] [error]` line themselves |
+| 5 | New suite `tests/aitools-entry/test-win-forwarder.ps1` (Windows, CI windows job): static placement of the forward; 15 argument cases against a stub `aitools.ps1` with the real param block; exit codes 0/1/2/7; stdin; no pwsh; the `~/.local/bin` fallback; no `aitools.ps1`; the real `aitools.ps1` behind the forward with a stub dashboard (`--background`, `--status`, exit code) and `--addmcp` |
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 6 | `.claude/rules/cross-platform.md` (and `.cursor/rules/cross-platform.mdc`): "OS guard patterns" records the guard form of a script with no aitools-lib beside it; the exemptions table drops `bootstrap.sh`, `hh.sh`, `init-hh-hooks.sh` and the "Analysis tools" row (`analyze-session.sh`), and the `aitools` reason now says it forwards to `aitools.ps1`. `reference/tool-ops-claude-code.md` and `README.md` (init-hh-hooks is macOS/Linux) updated |
+| 7 | GitHub issue __ISSUE__: serve the dashboard-serve hook through a cross-platform Python entry (`aitools.py`) with a Python logging library feature-identical to aitools-lib.sh / .ps1; it answers "can the hook itself be Python?" from the Claude Code hooks docs (exec form `command` + `args`, no shell) |
+
+**Verified on:** Windows 11 (Git for Windows bash 5.3.15, pwsh 7.6): `test-win-forwarder.ps1` 32/0, and 12 of 12 mutations of the forward and of `aitools.ps1` make it fail; the four guards refuse Git Bash (exit 1, message, only logs written) and the 38dc-13 guard classifier lists them `posix`; `bash -n` on every touched shell script; the pwsh parser on `aitools.ps1`; `check-ci-suites.pl` 42 suites. macOS and Linux: CI (no `.sh` suite was run locally). Not run: the dashboard-serve hook in a live Claude Code session after an `aitools` run installs the new entry point.
+
+---
+
 ## v0.77.5 -- Fail-safe log writers in the installers, the profile resolver and check-lib; setup-pywinpty checks its listing; hh.ps1 is PowerShell 7 only (2026-11-14)
 
 Not tagged. Branch `fix/m6-logging` (PR #157), mission M6-Polish (session 87795dc3), items f, d and e (delegates M6-F and M6-DE).

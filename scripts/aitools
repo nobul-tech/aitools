@@ -56,6 +56,107 @@ to_native_path() {
     fi
 }
 
+# ---------------------------------------------------------------------------
+# Windows (Git Bash): hand off to aitools.ps1 before anything else runs
+# ---------------------------------------------------------------------------
+# One runtime per platform (commander, 2026-11-14, RFI 38dc-3): on Windows the
+# PowerShell entry point aitools.ps1 is the aitools runtime. When this bash entry
+# point runs in Git Bash (the dashboard-serve.sh SessionStart hook, a Git Bash
+# terminal, an agent's Bash tool), it runs
+#   pwsh -NoProfile -ExecutionPolicy Bypass -File <aitools.ps1> <arguments>
+# with exec, before the argument parsing below and before aitools-lib.sh is
+# sourced, so no bash library code (logging, read_menu_choice, the relay prompt,
+# deploy_configs) runs on Windows; the exit code is aitools.ps1's. aitools.ps1 is
+# the repo copy (<repoPath>/scripts/aitools.ps1, repoPath read from
+# ~/.aitools/config.json as below), else the copy beside this script
+# (~/.local/bin/aitools.ps1, installed by aitools-install.ps1; it clones a missing
+# repo itself). The Windows branches further down are not reached on Windows.
+# aitools.ps1 does its own config migration, repo clone and argument checks.
+
+# aitools_ps1_args ARGS... -- AITOOLS_PS1_ARGS: ARGS as aitools.ps1 parameters.
+# pwsh -File binds a GNU-style flag to a parameter only when its name matches
+# (--force -> -Force, --version, --help, --patch, --alias); these are rewritten:
+#   --dry-run               -> -DryRun
+#   --skip-gh-auth          -> -SkipGhAuth
+#   --skip-drive-detection  -> -SkipDriveDetection
+#   --repos-path P          -> -ReposPath <P as a Windows path>
+#   --addmcp A B ...        -> -AddMcp A,B, last (the names up to the next --flag,
+#                              every --addmcp joined into one list; aitools.ps1
+#                              splits it)
+# `--alias` and its value, and everything from `dashboard` on, are passed
+# unchanged (aitools.ps1 hands the dashboard arguments to aitools-dashboard.ps1
+# with pwsh -File, as the dispatch below does), and so is every other argument,
+# in its order.
+aitools_ps1_args() {
+    AITOOLS_PS1_ARGS=()
+    local mcp="" mcp_seen=false wp=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            dashboard)
+                AITOOLS_PS1_ARGS+=("$@")
+                break ;;
+            --alias)
+                AITOOLS_PS1_ARGS+=("$1")
+                if [ $# -gt 1 ]; then
+                    shift
+                    AITOOLS_PS1_ARGS+=("$1")
+                fi ;;
+            --addmcp)
+                mcp_seen=true
+                shift
+                while [ $# -gt 0 ]; do
+                    case "$1" in --*) break ;; esac
+                    mcp="${mcp:+$mcp,}$1"
+                    shift
+                done
+                continue ;;
+            --dry-run)              AITOOLS_PS1_ARGS+=("-DryRun") ;;
+            --skip-gh-auth)         AITOOLS_PS1_ARGS+=("-SkipGhAuth") ;;
+            --skip-drive-detection) AITOOLS_PS1_ARGS+=("-SkipDriveDetection") ;;
+            --repos-path)
+                AITOOLS_PS1_ARGS+=("-ReposPath")
+                if [ $# -gt 1 ]; then
+                    shift
+                    # cygpath prints its own error; the value then goes unchanged
+                    if wp=$(cygpath -w "$1"); then AITOOLS_PS1_ARGS+=("$wp"); else AITOOLS_PS1_ARGS+=("$1"); fi
+                fi ;;
+            *) AITOOLS_PS1_ARGS+=("$1") ;;
+        esac
+        shift
+    done
+    if $mcp_seen; then AITOOLS_PS1_ARGS+=("-AddMcp" "$mcp"); fi
+}
+
+# aitools_win_forward ARGS... -- exec aitools.ps1 with ARGS; returns 1 (and runs
+# nothing) when pwsh or aitools.ps1 cannot be found
+aitools_win_forward() {
+    if ! command -v pwsh >/dev/null 2>&1; then
+        printf 'error: pwsh (PowerShell 7) not found -- on Windows aitools runs as aitools.ps1. Install: winget install --id Microsoft.PowerShell --source winget\n' >&2
+        return 1
+    fi
+    local cfg="$HOME/.aitools/config.json" raw="" repo="" ps1=""
+    if raw=$(read_config_key "$cfg" "repoPath") || raw=$(read_config_key "$cfg" "aiToolingRepoPath"); then
+        repo=$(to_native_path "$raw")
+    fi
+    repo="${repo:-$HOME/repos/aitools}"
+    if [ -f "$repo/scripts/aitools.ps1" ]; then
+        ps1="$repo/scripts/aitools.ps1"
+    elif [ -f "$(dirname "$0")/aitools.ps1" ]; then
+        ps1="$(dirname "$0")/aitools.ps1"
+    else
+        printf 'error: aitools.ps1 not found (%s/scripts/aitools.ps1, %s/aitools.ps1) -- on Windows aitools runs as aitools.ps1; run aitools-install.ps1\n' "$repo" "$(dirname "$0")" >&2
+        return 1
+    fi
+    aitools_ps1_args "$@"
+    exec pwsh -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$ps1")" ${AITOOLS_PS1_ARGS[@]+"${AITOOLS_PS1_ARGS[@]}"}
+}
+
+case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*)
+        aitools_win_forward "$@"
+        return 1 ;;
+esac
+
 # Check profile.json for issues and optionally prompt for fixes.
 # Usage: check_profile <warn|interactive>
 # Requires: node, $repo_path, $config
