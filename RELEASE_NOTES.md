@@ -54,6 +54,41 @@ Not tagged. Branch `fix/m6-checks` (PR #154), mission M6-Polish (session 87795dc
 
 ---
 
+## v0.77.8 -- CI runs the script-compliance check; bootstrap.ps1 runs the installer under pwsh 7; the delegation rule ships as a shared rule (2026-11-14)
+
+Not tagged. Branch `fix/38dc-11-compliance-ci-bootstrap`, mission 38dc-11 (M6-Polish, session 87795dc3).
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 1 | High | `scripts/bootstrap.ps1` ran `aitools-install.ps1` with `powershell` (Windows PowerShell 5.1), against the PowerShell 7 baseline, and called `aitools` for the dotprofile step inside its own (possibly 5.1) host. It now finds `pwsh`, installs it when missing with the tool registry's preferred Windows method (`winget install --id Microsoft.PowerShell --source winget`, verified against learn.microsoft.com on 2026-11-14), refreshes PATH additively, and runs the installer and `%USERPROFILE%\.local\bin\aitools.ps1` (`user init`, then the rebuild) with `pwsh -NoProfile -ExecutionPolicy Bypass -File`; a non-zero installer exit is reported (bootstrap.sh parity). With no `pwsh` and no `winget` it stops with a message (`throw`, never `exit`). The body is one script block, so under `irm | iex` its `$ErrorActionPreference = 'Stop'`, variables and functions no longer leak into the caller's session. The file stays ASCII and parses under 5.1. Resolves Incident #179 |
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 2 | CI runs the script-standards compliance check (until now only check-post-push step 23, after a push) on every PR and push to main: `bash scripts/check-script-compliance.sh` in the linux job, `pwsh -NoProfile -File scripts/check-script-compliance.ps1` in the windows job. A FAIL check fails the job, so a #177-class line (an unchecked `-ErrorAction SilentlyContinue` in a setup script) fails CI before merge (CI is not a required check on main: a red PR can still be merged by hand). Each is the last step of its job, so a compliance failure skips no test step |
+| 3 | The delegation rule ships to user scope: `shared/rules/delegation.md`, a byte-identical copy of the dotprofile `claude/rules/delegation.md` (commander, 2026-11-14). deploy-harness copies it to `~/.aitools/rules`, setup-user-claude to `~/.claude/rules/delegation.md`, setup-user-cursor to `~/.cursor/rules/delegation.mdc` (`alwaysApply: true`), on the next `aitools` run. Until now `~/.claude/rules/delegation.md`, which CLAUDE.md and the `/delegate` skill cite, was not deployed (R-8 deploys `shared/rules` only) |
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 4 | `reference/post-push-checklist.md` step 23 (CI also runs it), `reference/cross-platform-detail.md` (new section "bootstrap.ps1: runs under 5.1, launches pwsh 7"), `reference/tool-registry.md` and the registry's `pwsh` entry (the bootstrap note; Windows install command verified 2026-11-14), `reference/rules.md` v1.4 and `reference/cursor-practices.md` (the new shared rule), the `/delegate` skill's cross-reference (rule source), README (the Windows one-liner also installs PowerShell 7) |
+| 5 | Incident registry (`/incident` skill): #179 filed and closed (bootstrap.ps1 ran the installer under 5.1; id reserved by the M6-Polish orchestrator) |
+
+### Files created
+
+| File | Purpose |
+|------|---------|
+| `shared/rules/delegation.md` | The delegation rule, deployed to every machine (copy of the dotprofile rule) |
+| `tests/bootstrap/test-bootstrap.ps1` | bootstrap.ps1 under Windows PowerShell 5.1 (run with `-File` and through `Invoke-Expression`) with stubbed git, winget, installer and aitools.ps1 (Windows CI job) |
+
+**Verified on:** Windows 11 (pwsh 7.6.10, Windows PowerShell 5.1): `tests/bootstrap/test-bootstrap.ps1` 26 passed (including the `irm | iex` form); against origin/main's bootstrap.ps1 15 checks fail; 8 of 8 one-line mutants killed. `check-script-compliance.ps1` on origin/main: exit 1 (`setup-pywinpty.ps1:151`, #177, fixed by PR #157); on a scratch copy with #157's file: exit 0; with a planted unchecked `SilentlyContinue`: exit 1. `check-ci-suites.pl` finds the new suite, and fails when its step is removed. macOS/Linux: the `.sh` twin of the compliance check runs in the linux CI job only (not run locally on Windows).
+
+---
+
 ## v0.77.5 -- Fail-safe log writers in the installers, the profile resolver and check-lib; setup-pywinpty checks its listing; hh.ps1 is PowerShell 7 only (2026-11-14)
 
 Not tagged. Branch `fix/m6-logging` (PR #157), mission M6-Polish (session 87795dc3), items f, d and e (delegates M6-F and M6-DE).

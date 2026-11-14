@@ -209,8 +209,15 @@ settings.json is missing or node is unavailable.
 
 ### 23. Script standards compliance
 
-Runs `scripts/check-script-compliance.sh`; FAIL when any of its checks fails,
-SKIP when the script is missing.
+Runs `scripts/check-script-compliance.sh` (`.ps1` on Windows); FAIL when any
+of its checks fails, SKIP when the script is missing.
+
+CI also runs it before merge, on every PR and push to main
+(`.github/workflows/check.yml`): the `.sh` twin in the linux job, the `.ps1`
+twin in the windows job ("Script standards compliance"). A FAIL check fails the
+job; WARN checks (raw echo / Write-Host, grep pipefail safety) do not. Until
+then nothing ran it before merge, so a FAIL line (an unchecked
+`-ErrorAction SilentlyContinue` in `setup-pywinpty.ps1`) reached main.
 
 ### 24. Summary panel DETAIL support
 

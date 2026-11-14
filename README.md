@@ -34,7 +34,7 @@ A third, parallel path, `scripts/build-package.sh` (v1.0 scaffolding: `--dry-run
 
 ### Install on a new machine
 
-**One-liner (recommended)** — installs prerequisites (package manager + git), clones the repo, runs the full installer, then (interactive only) `aitools user init` to load your dotprofile. Idempotent; re-run anytime.
+**One-liner (recommended)** — installs prerequisites (package manager + git; on Windows also PowerShell 7, which runs the installer even when the one-liner starts in Windows PowerShell 5.1), clones the repo, runs the full installer, then (interactive only) `aitools user init` to load your dotprofile. Idempotent; re-run anytime.
 
 macOS/Linux:
 ```bash

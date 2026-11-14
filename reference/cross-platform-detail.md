@@ -187,6 +187,25 @@ registry into the current session PATH after package manager installs. It is
 process or `Ensure-ToolOnPath`) and only adds directories found in the
 registry that are missing from the current PATH. Safe to call multiple times.
 
+## bootstrap.ps1: runs under 5.1, launches pwsh 7 (Windows)
+
+`scripts/bootstrap.ps1` (`irm ... | iex`) is the one script that may itself run
+under Windows PowerShell 5.1, the shell a fresh machine has, so it stays ASCII and
+5.1-parseable and loads no library. Everything it starts runs under PowerShell 7:
+when `pwsh` is not on PATH it installs it with the tool registry's preferred
+Windows method (`/tool-registry` skill, `pwsh`; the same winget command the Git
+Bash forwarder in `aitools-install.sh` runs), refreshes PATH additively like
+`Refresh-Path` (its own copy, `Update-SessionPath`), and stops with a message if
+`pwsh` is still missing. Then it runs `aitools-install.ps1` and, when
+interactive, `%USERPROFILE%\.local\bin\aitools.ps1 user init` and `aitools.ps1`
+with `pwsh -NoProfile -ExecutionPolicy Bypass -File`. Until 2026-11-14 it ran the
+installer with `powershell` (5.1), against the PS 7 baseline. `irm | iex` runs the
+text in the caller's own session, so the body is one script block (`& { }`: its
+`$ErrorActionPreference = 'Stop'`, variables and functions stay out of that
+session) and it stops with `throw`, never `exit` (which would close the window).
+Tests: `tests/bootstrap/test-bootstrap.ps1` (bootstrap under 5.1 with stubs, run
+with `-File` and through `Invoke-Expression`).
+
 ## Git Bash PATH shadowing (Windows)
 
 Git for Windows bundles tools in its `usr/bin/` directory (notably `perl`).
