@@ -12,6 +12,22 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.77.4 -- Delegate identity, transcripts and control documented (2026-11-14)
+
+Not tagged. Branch `docs/38dc-08-subagent-transcripts`, mission 38dc-08-subagent-transcripts (delegate of M6-Polish, session 87795dc3).
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 1 | `reference/tool-ops-claude-code.md`: new section "Delegate Identity, Transcripts and Control" (v1.0) and Version Dependencies items #31 and #32, tested on Claude Code 2.1.325 (Windows 11) with two throwaway probe delegates: where every delegate's transcript and `meta.json` live (`subagents/agent-<agentId>.*` under the main session, flat for all depths), `meta.json` fields, mapping a mission name to an agentId through the Agent call's `description`, the Agent launch result verbatim, why `output_file` is not a transcript copy (empty until the delegate is resumed, then a hard link), how a delegate finds its own id (no environment variable; search `meta.json` descriptions), TaskStop (an orchestrator cannot stop its own delegate; an unknown id lists the running agents), SendMessage (queued to a running delegate, resumes a finished one, `to: "main"`), one SubagentHandback per result, background tasks that outlive and resume a delegate, forced hand-backs and classifier interruptions, and guidance for orchestrators |
+| 2 | `reference/tool-ops-claude-code.md`: current version 2.1.325; item #25 (SendMessage gap) tested end to end and closed; item #27 level-3 tool set re-verified; "Agent Continuation Gap" marked closed (history kept); session-storage tree shows `subagents/*.meta.json` and `tool-results/`; release-notes watch entry for 2.1.325 |
+| 3 | `/delegate` skill v2.2: "Environment limits" gains delegate identity and control; "Verifying what comes back" points to the delegate's transcript. `/tool-ops` skill: lookup row for the new section |
+
+**Verified on:** Windows 11 (Claude Code 2.1.325, Git Bash, pwsh 7): each fact observed in session 87795dc3 (probe delegates 2b10-01 and 2b10-02, the session's 42 `meta.json` files, the M6-Polish transcript); `check-pre-commit.ps1` and `check-pre-push.ps1` run. macOS, Linux, Claude Code web, Cursor: not tested (documentation only).
+
+---
+
 ## v0.77.3 -- Pre-commit path-ref check fixed on Windows; release notes backfilled for PRs #144-#147 (2026-11-14)
 
 Not tagged. Branch `docs/m5-docs`, mission M5-Fixes (session 87795dc3), items 6, 7, 8 and 13.

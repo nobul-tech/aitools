@@ -102,6 +102,7 @@ these sources):
 | Version dependencies (CRITICAL to LOW) and release-notes watch | `reference/tool-ops-claude-code.md` "Version Dependencies" |
 | Sub-agent limits: cross-repo access (#24), SendMessage gap (#25), Markdown file-name block (#26), nesting depth (#27), `claude update` hook cancellation (#23) | `reference/tool-ops-claude-code.md` "Session Behavior" |
 | Session management commands, CLAUDE.md hierarchy, session storage | `reference/tool-ops-claude-code.md` "Session Behavior" |
+| Delegate identity and control: mission name -> agentId (`meta.json` `description`), transcript and `output_file` paths, a delegate's own id, TaskStop, SendMessage, hand-backs, background tasks (#31, #32) | `reference/tool-ops-claude-code.md` "Delegate Identity, Transcripts and Control" |
 | Windows shell limitations and PowerShell-from-Bash workarounds | `reference/tool-ops-claude-code.md` "Windows Shell Limitations" |
 | Every hook the harness deploys (event, matcher, script) | `shared/hooks/hooks-manifest.json` |
 | Hook portability (BSD vs GNU command divergences) | `.claude/rules/cross-platform.md` "Hook portability" |
