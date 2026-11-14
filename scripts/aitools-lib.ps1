@@ -5,7 +5,7 @@
 # $AitoolsEnvironment, Test-ClaudeCodeWeb, Test-LocalEnvironment,
 # Write-EnvironmentSkip), ReadConfigKey, Resolve-UserRepoPath,
 # Resolve-MachineProfile, Get-ToolException, Set-ToolException, Initialize-Logging,
-# Log/LogOk/LogError/LogWarn/LogDetail, Invoke-AI, Write-Summary, Show-Summary,
+# Log/LogOk/LogError/LogWarn/LogDetail, Invoke-AI (Write-AiLog), Write-Summary, Show-Summary,
 # Refresh-Path, Log-WingetOutput, Repair-UvToolEnv, Remove-OrphanedPythonDirs,
 # Normalize-JsonForComparison.
 #
@@ -692,6 +692,19 @@ function LogDetail($msg) {
 # Known limitations: Agent CLI has no --model flag; speed is hint-only via
 #   prompt prefix. Retry prepends rejection reason but may not fix structural
 #   issues (e.g., model always wrapping in code fences).
+# Telemetry ("AI invocation: ..." lines) is file-only, through Write-AiLog.
+
+# File-only AI telemetry (parity: _ai_log in aitools-lib.sh). The same line as
+# Log ("[ts] [script] [level] msg", same log file), but nothing on the console:
+# Invoke-AI's lines never print into the AI-merge spinner row (Start-AiSpinner),
+# and its caller's console output stays its own. Counts no error or warning --
+# callers decide whether an Invoke-AI failure counts.
+function Write-AiLog([string]$Msg, [string]$Level = "info") {
+    $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+    $resolvedLog = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($logFile)
+    [IO.File]::AppendAllText($resolvedLog, "[$ts] [$scriptName] [$Level] $Msg`n", [System.Text.UTF8Encoding]::new($false))
+}
+
 $script:AIRejectReason = ""
 
 function Invoke-AI {
@@ -716,7 +729,7 @@ function Invoke-AI {
 
     if (-not $cliCmd) {
         $script:AIRejectReason = "No AI CLI available (claude or agent)"
-        Log "AI invocation: no CLI available (claude or agent)" "error"
+        Write-AiLog "AI invocation: no CLI available (claude or agent)" "error"
         return $null
     }
 
@@ -767,7 +780,7 @@ function Invoke-AI {
     # Retry loop
     $currentPrompt = $Prompt
     for ($attempt = 1; $attempt -le ($MaxRetries + 1); $attempt++) {
-        Log "AI invocation: speed=$Speed backend=$cliCmd attempt=$attempt"
+        Write-AiLog "AI invocation: speed=$Speed backend=$cliCmd attempt=$attempt"
 
         $fullPrompt = "${speedPrefix}${currentPrompt}"
 
@@ -777,7 +790,7 @@ function Invoke-AI {
             if ($LASTEXITCODE -ne 0) { $output = $null }
         } catch {
             # CLI invocation failed (e.g., binary not found despite Get-Command)
-            Log "AI invocation error: $_" "warn"
+            Write-AiLog "AI invocation error: $_" "warn"
             $output = $null
         }
 
@@ -786,7 +799,7 @@ function Invoke-AI {
 
         if ([string]::IsNullOrWhiteSpace($output)) {
             $script:AIRejectReason = "Empty output from $cliCmd"
-            Log "AI invocation: speed=$Speed backend=$cliCmd attempt=$attempt result=empty" "warn"
+            Write-AiLog "AI invocation: speed=$Speed backend=$cliCmd attempt=$attempt result=empty" "warn"
             if ($attempt -le $MaxRetries) {
                 $currentPrompt = "Your previous output was empty. Try again.`n`n$Prompt"
                 continue
@@ -799,7 +812,7 @@ function Invoke-AI {
             $valid = & $ValidateFn $output
             if (-not $valid) {
                 if (-not $script:AIRejectReason) { $script:AIRejectReason = "Validation failed" }
-                Log "AI invocation: speed=$Speed backend=$cliCmd attempt=$attempt result=rejected reason=$($script:AIRejectReason)" "warn"
+                Write-AiLog "AI invocation: speed=$Speed backend=$cliCmd attempt=$attempt result=rejected reason=$($script:AIRejectReason)" "warn"
                 foreach ($rejLine in ($output -split "`n")) {
                     LogDetail "ai-rejected: $rejLine"
                 }
@@ -807,13 +820,13 @@ function Invoke-AI {
                     $currentPrompt = "Your previous output was rejected: $($script:AIRejectReason). Try again.`n`n$Prompt"
                     continue
                 }
-                Log "AI invocation: speed=$Speed backend=$cliCmd exhausted after $attempt attempts" "warn"
+                Write-AiLog "AI invocation: speed=$Speed backend=$cliCmd exhausted after $attempt attempts" "warn"
                 return $null
             }
         }
 
         # Success
-        Log "AI invocation: speed=$Speed backend=$cliCmd attempt=$attempt result=accepted"
+        Write-AiLog "AI invocation: speed=$Speed backend=$cliCmd attempt=$attempt result=accepted"
         return $output
     }
 
@@ -1558,33 +1571,72 @@ function Test-AiMergeOutput {
 }
 
 # ---------------------------------------------------------------------------
-# Spinner for AI operations (visual progress indicator)
+# Spinner for AI operations (visual progress indicator).
+# Parity: _start_spinner / _stop_spinner in aitools-lib.sh -- same frame
+# "`r  <c> <msg>", chars / - \ |, 200 ms period, and the stop clears the line
+# with "`r  `e[K". One difference: bash writes /dev/tty, so it draws even when
+# stdout is redirected; here the frames reach the console through stdout, like
+# the rest of Invoke-AiMerge, and the spinner is a no-op when stdout is
+# redirected or the session is not interactive (no frames in a pipe, a log or
+# CI output).
+# In-process: the loop runs in a second runspace on its own thread
+# ([powershell]::Create() + BeginInvoke), so [Console]::Write reaches this
+# process's console. Not Start-Job: a job is a separate pwsh process with no
+# console and a redirected stdout, so nothing it writes is ever shown.
+# Start-AiSpinner stops a running spinner first (one at a time). Stop-AiSpinner
+# is synchronous: it signals the loop, waits for it to end (2 s cap, then
+# PowerShell.Stop()), disposes the runspace, and only then clears the line, so
+# no spinner thread outlives it. With no spinner running it writes nothing
+# (bash _stop_spinner clears the line anyway).
 # ---------------------------------------------------------------------------
-$script:_aiSpinnerJob = $null
+$script:_aiSpinner = $null
 
 function Start-AiSpinner {
     param([string]$Message = "working...")
-    $script:_aiSpinnerJob = Start-Job -ScriptBlock {
-        param($msg)
-        $chars = '/-\|'
-        $i = 0
-        while ($true) {
-            $c = $chars[$i % 4]
-            [Console]::Write("`r  $c $msg")
-            $i++
-            Start-Sleep -Milliseconds 200
-        }
-    } -ArgumentList $Message
+    Stop-AiSpinner
+    if ([Console]::IsOutputRedirected -or -not [Environment]::UserInteractive) { return }
+    $stop = $null; $ps = $null
+    try {
+        $stop = [System.Threading.ManualResetEventSlim]::new($false)
+        $ps = [powershell]::Create()
+        [void]$ps.AddScript({
+            param($msg, $stop)
+            $chars = '/-\|'
+            $i = 0
+            do {
+                [Console]::Write("`r  $($chars[$i % 4]) $msg")
+                $i++
+            } while (-not $stop.Wait(200))
+        }).AddArgument($Message).AddArgument($stop)
+        $script:_aiSpinner = @{ PS = $ps; Stop = $stop; Handle = $ps.BeginInvoke() }
+    } catch {
+        # The spinner is cosmetic: the AI call goes on without it
+        LogDetail "AI spinner not started: $($_.Exception.Message)"
+        if ($ps) { $ps.Dispose() }
+        if ($stop) { $stop.Dispose() }
+        $script:_aiSpinner = $null
+    }
 }
 
 function Stop-AiSpinner {
-    if ($script:_aiSpinnerJob) {
-        Stop-Job $script:_aiSpinnerJob -ErrorAction SilentlyContinue
-        Remove-Job $script:_aiSpinnerJob -Force -ErrorAction SilentlyContinue
-        # ErrorAction exempt: spinner cleanup; job may already be stopped
-        $script:_aiSpinnerJob = $null
-        [Console]::Write("`r  `e[K")  # clear spinner line
+    $s = $script:_aiSpinner
+    if (-not $s) { return }
+    $script:_aiSpinner = $null
+    try {
+        $s.Stop.Set()
+        if (-not $s.Handle.AsyncWaitHandle.WaitOne(2000)) {
+            LogDetail "AI spinner did not stop within 2 s -- stopping its runspace"
+            $s.PS.Stop()
+        }
+        $null = $s.PS.EndInvoke($s.Handle)
+    } catch {
+        LogDetail "AI spinner stop: $($_.Exception.Message)"
+    } finally {
+        if ($s.PS.Runspace) { $s.PS.Runspace.Dispose() }
+        $s.PS.Dispose()
+        $s.Stop.Dispose()
     }
+    [Console]::Write("`r  `e[K")  # clear spinner line
 }
 
 # ---------------------------------------------------------------------------
@@ -1788,9 +1840,14 @@ function Invoke-AiMerge {
         }
 
         Start-AiSpinner "merging $displayName (attempt $iteration)..."
-        $merged = $promptText | Invoke-AI -Speed "balanced" -Permissions "none" `
-            -ValidateFn "_MergeValidateWrapper" -MaxRetries 1
-        Stop-AiSpinner
+        # finally: Ctrl+C or an error thrown inside Invoke-AI (e.g. a failed log
+        # write) must not leave the spinner drawing over what runs next
+        try {
+            $merged = $promptText | Invoke-AI -Speed "balanced" -Permissions "none" `
+                -ValidateFn "_MergeValidateWrapper" -MaxRetries 1
+        } finally {
+            Stop-AiSpinner
+        }
 
         # Defense-in-depth: strip leading/trailing code fences if AI ignored instructions
         if ($merged) {

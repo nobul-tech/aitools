@@ -13,15 +13,22 @@
 # EOF; the C# type has Get/Set/EnterCooked; Read-ConsoleChoice enters cooked mode
 # and restores the mode in a finally; aitools.ps1 has no copy of the helpers and
 # Step 2 gives build-deploy a pipe for stdin inside the save/restore.
-# The real-console behaviour (a raw mode left by a child) is evidenced by the
-# harness in the PR (sessions M3-Fixes-B, M3b-Finish-R, M3b-Finish-C1).
+# AI-merge spinner (Start-/Stop-AiSpinner): in-process (no Start-Job), stops a
+# running spinner first, no-op with redirected stdout, Stop disposes and clears
+# like bash _stop_spinner; Invoke-AiMerge stops it in a finally; Invoke-AI
+# telemetry goes to the log file only (Write-AiLog), never the console. The
+# console case (frames drawn, runspace back to baseline) needs stdin and stdout
+# to be a console and is SKIP otherwise.
+# The real-console behaviour (a raw mode left by a child; the spinner on screen)
+# is evidenced by the harness in the PR (sessions M3-Fixes-B, M3b-Finish-R,
+# M3b-Finish-C1, M3b-Finish-C2).
 #
 # Usage: pwsh -NoProfile -File tests/aitools-entry/test-console-mode-guard.ps1 [-Help]
 
 param([switch]$Help)
 
 if ($Help) {
-    Get-Content $PSCommandPath | Select-Object -Skip 1 -First 18
+    Get-Content $PSCommandPath | Select-Object -Skip 1 -First 25
     exit 0
 }
 
@@ -47,7 +54,7 @@ function Find-Function($Ast, [string]$Name) {
 
 # The child: dot-sources the lib under the case's HOME / log dir, then runs one mode.
 $childText = @'
-param([string]$Lib, [string]$Mode)
+param([string]$Lib, [string]$Mode, [string]$ResultFile = "")
 $ErrorActionPreference = "Stop"
 . $Lib
 Initialize-Logging "console-guard-test"
@@ -91,13 +98,77 @@ switch ($Mode) {
         $after = [AitConsoleInput]::Get()
         "CONSOLE before=$before prev=$prev mid=$mid lasterror=$([AitConsoleInput]::LastError) rc=$rc after=$after"
     }
+    "spinner-redirected" {
+        # Stdout is a pipe here: the spinner must create nothing and write nothing
+        Stop-AiSpinner
+        "STOP-WITHOUT-START done"
+        $before = @(Get-Runspace).Count
+        Start-AiSpinner "spinner-probe-text"
+        "SPIN registered=$([bool]$script:_aiSpinner) before=$before during=$(@(Get-Runspace).Count)"
+        Start-Sleep -Milliseconds 500
+        Stop-AiSpinner
+        "SPIN-AFTER registered=$([bool]$script:_aiSpinner) after=$(@(Get-Runspace).Count)"
+    }
+    "telemetry" {
+        # Fake AI CLI: a session function named claude (Get-Command finds it first)
+        function global:claude {
+            $null = @($input)
+            $global:LASTEXITCODE = 0
+            switch ($env:CONGUARD_FAKE_AI) {
+                "empty" { "" }
+                "throw" { throw "fake CLI failure" }
+                default { "fake merge output" }
+            }
+        }
+        function RejectAll { param($o) $script:AIRejectReason = "test reject"; return $false }
+        Log "CONTROL console line"
+        $env:CONGUARD_FAKE_AI = "ok"
+        $a = "prompt one" | Invoke-AI -Speed "balanced" -Permissions "none"
+        "AI-OK [$a]"
+        $b = "prompt two" | Invoke-AI -Speed "balanced" -Permissions "none" -ValidateFn "RejectAll" -MaxRetries 1
+        "AI-REJECT [$b] reason=$($script:AIRejectReason)"
+        $env:CONGUARD_FAKE_AI = "empty"
+        $c = "prompt three" | Invoke-AI -Speed "balanced" -Permissions "none"
+        "AI-EMPTY [$c] reason=$($script:AIRejectReason)"
+        $env:CONGUARD_FAKE_AI = "throw"
+        $d = "prompt four" | Invoke-AI -Speed "balanced" -Permissions "none"
+        "AI-THROW [$d] reason=$($script:AIRejectReason)"
+        # (Remove-Item function:global:claude leaves the function in place; this form removes it)
+        Remove-Item -Path Function:\claude
+        $emptyBin = Join-Path $HOME "empty-bin"
+        New-Item -ItemType Directory -Force -Path $emptyBin | Out-Null
+        $env:PATH = $emptyBin
+        $e = "prompt five" | Invoke-AI -Speed "balanced" -Permissions "none"
+        "AI-NOCLI [$e] reason=$($script:AIRejectReason)"
+    }
+    "spinner-console" {
+        # Stdin and stdout are this suite's console: results go to $ResultFile
+        # (not "R": that is the built-in alias of Invoke-History, and aliases win)
+        function Add-Result([string]$s) { Add-Content -LiteralPath $ResultFile -Value $s }
+        Add-Result "OUT-REDIRECTED $([Console]::IsOutputRedirected)"
+        [Console]::WriteLine("")
+        $msg = "spinner console probe"
+        $before = @(Get-Runspace).Count
+        $sw = [Diagnostics.Stopwatch]::StartNew(); Start-AiSpinner $msg; $sw.Stop(); $startMs = $sw.Elapsed.TotalMilliseconds
+        Start-Sleep -Milliseconds 450
+        $col = [Console]::CursorLeft
+        $during = @(Get-Runspace).Count
+        $sw = [Diagnostics.Stopwatch]::StartNew(); Stop-AiSpinner; $sw.Stop(); $stopMs = $sw.Elapsed.TotalMilliseconds
+        $colAfter = [Console]::CursorLeft
+        $after = @(Get-Runspace).Count
+        [Console]::WriteLine("")
+        Add-Result ("CONSPIN before={0} during={1} after={2} col={3} want={4} colafter={5} registered={6} startms={7:N1} stopms={8:N1}" -f $before, $during, $after, $col, (4 + $msg.Length), $colAfter, [bool]$script:_aiSpinner, $startMs, $stopMs)
+        Add-Result "END errors=$errors warnings=$warnings"
+    }
 }
 "END errors=$errors warnings=$warnings"
 '@
 
 # Run-Child CASE MODE [STDIN]: run the child in its own HOME / USERPROFILE / log dir.
 # STDIN: "none" = an empty pipe (EOF), "console" = inherit this suite's stdin,
-# anything else = that text piped in.
+# "tty" = inherit this suite's stdin AND stdout (Start-Process -NoNewWindow; the
+# child writes its results to a file, returned as Out), anything else = that text
+# piped in.
 function Run-Child([string]$Case, [string]$Mode, [string]$Stdin = "none") {
     $caseDir = Join-Path $tmpRoot $Case
     New-Item -ItemType Directory -Path (Join-Path $caseDir "home") -Force | Out-Null
@@ -111,6 +182,12 @@ function Run-Child([string]$Case, [string]$Mode, [string]$Stdin = "none") {
             $out = $null | & $pwshExe -NoProfile -File $child -Lib $lib -Mode $Mode 2>&1 | Out-String
         } elseif ($Stdin -eq "console") {
             $out = & $pwshExe -NoProfile -File $child -Lib $lib -Mode $Mode 2>&1 | Out-String
+        } elseif ($Stdin -eq "tty") {
+            $resFile = Join-Path $caseDir "result.txt"
+            $p = Start-Process -FilePath $pwshExe -NoNewWindow -Wait -PassThru -ArgumentList @(
+                "-NoProfile", "-File", "`"$child`"", "-Lib", "`"$lib`"", "-Mode", $Mode, "-ResultFile", "`"$resFile`"")
+            $global:LASTEXITCODE = $p.ExitCode
+            $out = if (Test-Path $resFile) { Get-Content -LiteralPath $resFile -Raw } else { "" }
         } else {
             $out = $Stdin | & $pwshExe -NoProfile -File $child -Lib $lib -Mode $Mode 2>&1 | Out-String
         }
@@ -257,6 +334,135 @@ try {
         }
         Check $consoleNames[1] $ok $r.Out.Trim()
         Check $consoleNames[2] $same $r.Out.Trim()
+    }
+
+    # -----------------------------------------------------------------------
+    # AI-merge spinner: structure (parity with bash _start_spinner / _stop_spinner)
+    # -----------------------------------------------------------------------
+    $isCmd = { param($n) $n -is [System.Management.Automation.Language.CommandAst] }
+    foreach ($name in @("Start-AiSpinner", "Stop-AiSpinner", "Write-AiLog")) {
+        $defs = @($libAst.FindAll({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq $name }, $true))
+        Check "lib: defines $name once" ($defs.Count -eq 1) "found $($defs.Count)"
+    }
+    $startFn = Find-Function $libAst "Start-AiSpinner"
+    $stopFn = Find-Function $libAst "Stop-AiSpinner"
+    $startText = if ($startFn) { $startFn.Extent.Text } else { "" }
+    $stopText = if ($stopFn) { $stopFn.Extent.Text } else { "" }
+    $spinCmds = @()
+    foreach ($fn in @($startFn, $stopFn)) { if ($fn) { $spinCmds += @($fn.FindAll($isCmd, $true) | ForEach-Object { $_.GetCommandName() }) } }
+    Check "spinner: no job cmdlets (Start-Job draws nothing: no console in a job)" (($spinCmds.Count -gt 0) -and -not ($spinCmds -match '-Job$')) ($spinCmds -join ",")
+    $createAt = $startText.IndexOf('[powershell]::Create()')
+    Check "spinner: runs in-process ([powershell]::Create() + BeginInvoke())" (($createAt -ge 0) -and $startText.Contains('.BeginInvoke()'))
+    $firstCmd = $null
+    if ($startFn) { $firstCmd = @($startFn.Body.FindAll($isCmd, $true) | Sort-Object { $_.Extent.StartOffset })[0] }
+    Check "spinner: Start-AiSpinner stops a running spinner first (one at a time)" (($null -ne $firstCmd) -and $firstCmd.GetCommandName() -eq "Stop-AiSpinner" -and
+        ($createAt -lt 0 -or ($firstCmd.Extent.StartOffset - $startFn.Extent.StartOffset) -lt $createAt)) "first command: $(if ($firstCmd) { $firstCmd.GetCommandName() })"
+    $gate = 'if ([Console]::IsOutputRedirected -or -not [Environment]::UserInteractive) { return }'
+    $gateAt = $startText.IndexOf($gate)
+    Check "spinner: Start-AiSpinner returns before creating anything when stdout is redirected or not interactive" (($gateAt -ge 0) -and ($gateAt -lt $createAt))
+    Check "spinner: frame, chars and period match bash (`"``r  <c> <msg>`", /-\|, 200 ms)" (
+        $startText.Contains('[Console]::Write("`r  $($chars[$i % 4]) $msg")') -and $startText.Contains('$chars = ''/-\|''') -and $startText.Contains('.Wait(200)'))
+    $clear = '[Console]::Write("`r  `e[K")'
+    Check "spinner: Stop-AiSpinner clears the line like bash (`"``r  ``e[K`") after EndInvoke" (
+        ($stopText.IndexOf('EndInvoke') -ge 0) -and ($stopText.IndexOf($clear) -gt $stopText.IndexOf('EndInvoke')))
+    Check "spinner: Stop-AiSpinner with no spinner returns before writing anything" (
+        ($stopText.IndexOf('if (-not $s) { return }') -ge 0) -and ($stopText.IndexOf('if (-not $s) { return }') -lt $stopText.IndexOf($clear)))
+    $stopTry = $null
+    if ($stopFn) { $stopTry = $stopFn.Find({ param($n) $n -is [System.Management.Automation.Language.TryStatementAst] -and $n.Finally }, $true) }
+    $finText = if ($stopTry) { $stopTry.Finally.Extent.Text } else { "" }
+    Check "spinner: Stop-AiSpinner waits with a 2 s cap, then disposes the runspace, the PowerShell and the event in a finally" (
+        $stopText.Contains('WaitOne(2000)') -and ($finText -match 'Runspace\.Dispose\(\)') -and ([regex]::Matches($finText, '\.Dispose\(\)').Count -ge 3)) $finText
+
+    # Invoke-AiMerge: Start-AiSpinner, then Invoke-AI in a try whose finally stops the spinner
+    $mergeFn = Find-Function $libAst "Invoke-AiMerge"
+    $mergeTry = $null; $stopCalls = @(); $startCall = $null
+    if ($mergeFn) {
+        $mergeTry = $mergeFn.Find({ param($n) $n -is [System.Management.Automation.Language.TryStatementAst] -and
+            $n.Body.Find({ param($m) (& $isCmd $m) -and $m.GetCommandName() -eq "Invoke-AI" }, $true) }, $true)
+        $stopCalls = @($mergeFn.FindAll({ param($n) (& $isCmd $n) -and $n.GetCommandName() -eq "Stop-AiSpinner" }, $true))
+        $startCall = $mergeFn.Find({ param($n) (& $isCmd $n) -and $n.GetCommandName() -eq "Start-AiSpinner" }, $true)
+    }
+    $finStop = $null
+    if ($mergeTry -and $mergeTry.Finally) { $finStop = $mergeTry.Finally.Find({ param($n) (& $isCmd $n) -and $n.GetCommandName() -eq "Stop-AiSpinner" }, $true) }
+    Check "merge: Invoke-AI runs in a try whose finally calls Stop-AiSpinner (Ctrl+C or a throw stops the spinner)" ($null -ne $finStop)
+    Check "merge: Start-AiSpinner comes before that try, and Stop-AiSpinner is called only in the finally" (
+        ($null -ne $startCall) -and ($null -ne $mergeTry) -and ($startCall.Extent.EndOffset -le $mergeTry.Extent.StartOffset) -and ($stopCalls.Count -eq 1)) "Stop-AiSpinner calls: $($stopCalls.Count)"
+
+    # Invoke-AI: telemetry through Write-AiLog only (parity: _ai_log in aitools-lib.sh)
+    $aiFn = Find-Function $libAst "Invoke-AI"
+    $aiCmds = @(); $aiStrings = @()
+    if ($aiFn) {
+        $aiCmds = @($aiFn.FindAll($isCmd, $true) | ForEach-Object { $_.GetCommandName() })
+        $aiStrings = @($aiFn.FindAll({ param($n) ($n -is [System.Management.Automation.Language.ExpandableStringExpressionAst] -or
+            $n -is [System.Management.Automation.Language.StringConstantExpressionAst]) -and $n.Value -match '^AI invocation' }, $true))
+    }
+    $consoleLog = @($aiCmds | Where-Object { $_ -in @("Log", "LogOk", "LogWarn", "LogError", "Write-Host") })
+    Check "telemetry: Invoke-AI calls no console logger (Log, LogOk, LogWarn, LogError, Write-Host)" (($aiCmds.Count -gt 0) -and $consoleLog.Count -eq 0) ($consoleLog -join ",")
+    $notAiLog = @($aiStrings | Where-Object { -not ((& $isCmd $_.Parent) -and $_.Parent.GetCommandName() -eq "Write-AiLog") })
+    Check "telemetry: every 'AI invocation' line goes through Write-AiLog" (($aiStrings.Count -ge 7) -and $notAiLog.Count -eq 0) "lines: $($aiStrings.Count), not via Write-AiLog: $($notAiLog.Count)"
+    $aiLogFn = Find-Function $libAst "Write-AiLog"
+    $aiLogText = if ($aiLogFn) { $aiLogFn.Extent.Text } else { "" }
+    Check "telemetry: Write-AiLog writes the log file only and counts nothing" (
+        $aiLogText.Contains('AppendAllText') -and $aiLogText.Contains('$logFile') -and -not ($aiLogText -match 'Write-Host|\[Console\]::|errors|warnings'))
+
+    # -----------------------------------------------------------------------
+    # Spinner with stdout redirected (CI, a pipe): nothing created, nothing written
+    # -----------------------------------------------------------------------
+    $r = Run-Child "spinner-redirected" "spinner-redirected" "none"
+    Check "spinner, redirected: child ran without error (exit 0)" ($r.Rc -eq 0) $r.Out.Trim()
+    Check "spinner, redirected: Stop-AiSpinner without Start is a no-op" ($r.Out -match 'STOP-WITHOUT-START done') $r.Out.Trim()
+    $noRs = $false
+    if ($r.Out -match 'SPIN registered=(\w+) before=(\d+) during=(\d+)') { $noRs = ($Matches[1] -eq "False") -and ($Matches[2] -eq $Matches[3]) }
+    Check "spinner, redirected: Start-AiSpinner creates no runspace" $noRs $r.Out.Trim()
+    Check "spinner, redirected: nothing is written (no frame, no clear sequence)" (-not ($r.Out -match 'spinner-probe-text') -and -not $r.Out.Contains("$([char]27)[K")) ($r.Out -replace "$([char]27)", '<ESC>').Trim()
+    Check "spinner, redirected: no warning or error counted" ($r.Out -match 'END errors=0 warnings=0') $r.Out.Trim()
+
+    # -----------------------------------------------------------------------
+    # Invoke-AI telemetry: deploy.log only, same format, nothing on the console
+    # -----------------------------------------------------------------------
+    $r = Run-Child "telemetry" "telemetry" "none"
+    Check "telemetry: child ran without error (exit 0)" ($r.Rc -eq 0) $r.Out.Trim()
+    Check "telemetry: the console is captured (a Log control line is on it)" ($r.Out -match 'CONTROL console line') $r.Out.Trim()
+    Check "telemetry: no 'AI invocation' line on the console" (-not ($r.Out -match 'AI invocation')) $r.Out.Trim()
+    Check "telemetry: Invoke-AI results unchanged (output; rejected; empty; CLI error; no CLI)" (
+        ($r.Out -match 'AI-OK \[fake merge output\]') -and ($r.Out -match 'AI-REJECT \[\] reason=test reject') -and
+        ($r.Out -match 'AI-EMPTY \[\] reason=Empty output from claude') -and ($r.Out -match 'AI-THROW \[\] reason=Empty output from claude') -and
+        ($r.Out -match 'AI-NOCLI \[\] reason=No AI CLI available \(claude or agent\)')) $r.Out.Trim()
+    $ts = '\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z\] \[console-guard-test\]'
+    $want = @(
+        "$ts \[info\] AI invocation: speed=balanced backend=claude attempt=1\r?$",
+        "$ts \[info\] AI invocation: speed=balanced backend=claude attempt=1 result=accepted\r?$",
+        "$ts \[warn\] AI invocation: speed=balanced backend=claude attempt=1 result=rejected reason=test reject\r?$",
+        "$ts \[detail\] ai-rejected: fake merge output\r?$",
+        "$ts \[warn\] AI invocation: speed=balanced backend=claude exhausted after 2 attempts\r?$",
+        "$ts \[warn\] AI invocation: speed=balanced backend=claude attempt=1 result=empty\r?$",
+        "$ts \[warn\] AI invocation error: fake CLI failure\r?$",
+        "$ts \[error\] AI invocation: no CLI available \(claude or agent\)\r?$")
+    $missing = @($want | Where-Object { -not ([regex]::IsMatch($r.Log, "(?m)^$_")) })
+    Check "telemetry: deploy.log has every line in the [ts] [script] [level] format (accepted, rejected, exhausted, empty, error, no CLI)" ($missing.Count -eq 0) ("missing: " + ($missing -join " ; "))
+    Check "telemetry: Write-AiLog counts no warning or error (as before)" ($r.Out -match 'END errors=0 warnings=0') $r.Out.Trim()
+
+    # -----------------------------------------------------------------------
+    # Spinner on a real console: frames drawn, line cleared, runspace back to baseline
+    # -----------------------------------------------------------------------
+    $spinNames = @("console spinner: frames are drawn on the console (cursor after `"  <c> <msg>`")",
+                   "console spinner: Stop-AiSpinner clears the line (cursor at column 2) and unregisters it",
+                   "console spinner: runspace count back to baseline after Stop-AiSpinner",
+                   "console spinner: Start and Stop return quickly (Stop under the 2 s cap)")
+    if ([Console]::IsInputRedirected -or [Console]::IsOutputRedirected) {
+        foreach ($n in $spinNames) { Skip $n "this suite's stdin or stdout is not a console" }
+    } else {
+        $r = Run-Child "spinner-console" "spinner-console" "tty"
+        $m = [regex]::Match($r.Out, 'CONSPIN before=(\d+) during=(\d+) after=(\d+) col=(\d+) want=(\d+) colafter=(\d+) registered=(\w+) startms=([\d.,]+) stopms=([\d.,]+)')
+        if ($m.Success -and $r.Out -match 'OUT-REDIRECTED False') {
+            $g = $m.Groups
+            Check $spinNames[0] (($g[4].Value -eq $g[5].Value) -and ([int]$g[2].Value -eq [int]$g[1].Value + 1)) $m.Value
+            Check $spinNames[1] (($g[6].Value -eq "2") -and ($g[7].Value -eq "False")) $m.Value
+            Check $spinNames[2] ($g[3].Value -eq $g[1].Value) $m.Value
+            Check $spinNames[3] (([double]($g[8].Value -replace ',', '') -lt 1000) -and ([double]($g[9].Value -replace ',', '') -lt 1000)) $m.Value
+        } else {
+            foreach ($n in $spinNames) { Check $n $false "child result: $($r.Out.Trim())" }
+        }
     }
 
     # -----------------------------------------------------------------------
