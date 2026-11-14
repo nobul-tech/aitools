@@ -47,6 +47,48 @@ Not tagged. Branch `fix/38dc-11-compliance-ci-bootstrap`, mission 38dc-11 (M6-Po
 
 ---
 
+## v0.77.5 -- Fail-safe log writers in the installers, the profile resolver and check-lib; setup-pywinpty checks its listing; hh.ps1 is PowerShell 7 only (2026-11-14)
+
+Not tagged. Branch `fix/m6-logging` (PR #157), mission M6-Polish (session 87795dc3), items f, d and e (delegates M6-F and M6-DE).
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 1 | High | The six log writers outside aitools-lib named in incident #174 are fail-safe (`reference/logging.md` section 5): the installers' log override (with their Step 22 relay sync, `run_relay_sync` / `Invoke-RelaySync`), the profile resolver's log override and check-lib's checks.log / checks.jsonl writers now append through `_aitlib_log_append` / `Add-AitLibLogText` (check-lib.ps1 through `Write-CheckLogText`). A locked, unwritable or missing log no longer ends the bash installer, the resolver or a check script (`set -e`), throws from check-lib under the check scripts' `$ErrorActionPreference = "Stop"`, prints an error record for every log line of the PowerShell installer, turns `aitools-profile.ps1` into exit 2, or skips the bash installer's relay sync. On Windows, deploy.log, checks.log and checks.jsonl lines written by these writers now end in LF instead of CRLF. Not yet fail-safe: the `aitools` entry points' own appends and two hooks (open incident #178). Resolves Incident #174 |
+| 2 | High | `setup-pywinpty.ps1` checks the result of its stale dist-info listing: when the `--target` user site exists but cannot be listed, the run reports ERROR `stale dist-info not removed` instead of silently skipping the removal. The listing no longer uses `Get-ChildItem -Filter`, which hides "access denied" on the listed directory even under `-ErrorAction Stop`. Post-push step 23 passes again (it failed on `setup-pywinpty.ps1` since PR #148). Resolves Incident #177 |
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 3 | `scripts/hh.ps1` is PowerShell 7 (pwsh) only (commander, 2026-11-14: "its is pwsh 7 only"): its header says so and `#Requires -Version 7.0` makes Windows PowerShell 5.1 print one version message instead of six parse errors, with `-File` and through the profile's `hh` function. `scripts/relay-outbound-prompt.ps1` stays ASCII because `aitools.ps1`, which 5.1 can load, loads it; its note now names `aitools.ps1` |
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 4 | `reference/logging.md` section 5 names the writers outside the library that are fail-safe and the helper each uses, and the ones that are not yet (#178); `reference/script-standards-detail.md` shows the new installer override, and its PowerShell text-file and hook-script diff examples append through `Add-AitLibLogText` instead of `Add-Content -Path $logFile`; `reference/cross-platform-detail.md` "PowerShell 7 baseline" records that `hh.ps1` is pwsh 7 only |
+| 5 | Incident registry (`/incident` skill): #174 closed; #177 (high, setup-pywinpty unchecked `SilentlyContinue`) filed and closed; #178 (high, the `aitools` entry points' and two hooks' unguarded log appends) filed, open |
+
+**Verified on:** Windows 11 (Git Bash, pwsh 7.6): the new failure-mode cases fail against origin/main's scripts (test-logging .sh 12, .ps1 11, test-install PowerShell 17, bash 20, test-profile PowerShell 4, bash 8) and pass on the branch (test-logging .sh 54/0, .ps1 45/0; test-install PowerShell 51/0); `tests/pywinpty` .ps1 54/0 (new case 4c fails against the old script); post-push step 23's script 12 PASS / 0 FAIL (was 1 FAIL); `check-pre-commit.ps1` and `check-pre-push.ps1` 0 FAIL, pre-push step 7's isolated build OK. The bash halves ran on Windows with `uname` spoofed to Linux; macOS and Linux: CI. Not run: any Windows PowerShell 5.1 run of `bootstrap.ps1` or the installer.
+
+---
+
+## v0.77.4 -- EOF regression cases for every prompt of issue #29 (2026-11-14)
+
+Not tagged. Branch `test/m6-eof` (PR #155), mission M6-Polish (session 87795dc3), item a.
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 1 | Issue #29 fix 3 completed: ten EOF regression cases, the same names in `tests/menus/test-menu-choice.sh` and `.ps1`, for the JSON field prompt (`deploy_managed_file` / `Deploy-ManagedFile` JSON review: `o`; a field only in LOCAL: `s`), the settings sync (`sync_managed_json` / `Sync-ManagedJson`: `o`), the AI-merge preview (`n`, back to the review menu; EOF there then overwrites and the merge is written nowhere) and the `[r]efine` feedback read (empty feedback, the merge refined). The stub AI CLI records each prompt it gets, so the cases count AI calls and read the refine prompt. Tests only; the library is unchanged |
+
+**Verified on:** Windows 11 (Git Bash 5.3 with pywinpty ConPTY, pwsh 7): menus `.sh` 88/0 (was 78), `.ps1` 97/0 (was 87); 10 library mutants (5 per language, one EOF default broken per call site) each fail at least one new case, every new case fails under at least one mutant, no older case fails under any; managed-files, adopt-push, os-guards, logging and menu-parity suites green; `check-pre-commit.ps1` and `check-pre-push.ps1` 0 FAIL. macOS (bash 5 and /bin/bash 3.2) and Linux: CI.
+
+---
+
 ## v0.77.3 -- Pre-commit path-ref check fixed on Windows; release notes backfilled for PRs #144-#147 (2026-11-14)
 
 Not tagged. Branch `docs/m5-docs`, mission M5-Fixes (session 87795dc3), items 6, 7, 8 and 13.
