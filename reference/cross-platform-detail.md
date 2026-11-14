@@ -401,7 +401,7 @@ Each was seen in aitools on Windows. The ones marked "probe" were re-checked on
    System32 one (probe). A `.cmd` stub in `tests/menus/test-menu-choice.ps1` that
    counted lines with a bare `find`, run from a Git Bash script, got the Unix
    `find`, which walked the whole C: drive and hung the suite (mission
-   M6-Polish; PR #155 changes the stub to call `%SystemRoot%\System32\find.exe`).
+   M6-Polish; since PR #155 the stub calls `%SystemRoot%\System32\find.exe`).
    `perl`, `bash` and `sort.exe` are shadowed the same way ("Git Bash PATH
    shadowing" above; in pwsh itself a bare `sort` is still the `Sort-Object`
    alias, so the `sort` case hits `.cmd` stubs and `.exe` lookups). In test
