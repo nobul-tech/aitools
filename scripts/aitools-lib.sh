@@ -763,7 +763,10 @@ logging_init() {
     SCRIPT_NAME="${1:?logging_init requires a script name}"
     LOG_DIR="$AITOOLS_LOG_DIR"
     LOG_FILE="$LOG_DIR/deploy.log"
-    mkdir -p "$LOG_DIR"
+    # Fail-safe (logging.md section 5): a log directory that cannot be created
+    # leaves every log write failing, and each failed write is swallowed; the run
+    # goes on with its console output
+    mkdir -p "$LOG_DIR" 2>/dev/null || true
     _rotate_log "$LOG_FILE"
     ERRORS=0
     WARNINGS=0
@@ -783,11 +786,21 @@ _log_aitools_environment() {
 # ---------------------------------------------------------------------------
 # Standard logging (Pattern A: console + log file, with [level] tag)
 # ---------------------------------------------------------------------------
+# _aitlib_log_append LINE FILE -- append LINE to the log FILE. Fail-safe
+# (reference/logging.md section 5: "A failed log write is swallowed (the only
+# sanctioned silent-suppression in the harness), because a broken log must not
+# break the operation it records"): an unwritable, locked or missing log, or one
+# that is a directory, returns 0 with no message, so set -e never ends the run
+# and the console line is still printed. Parity: Add-AitLibLogText.
+_aitlib_log_append() {
+    { printf '%s\n' "$1" >> "$2"; } 2>/dev/null || true
+}
+
 log() {
     local level="${2:-info}"
     local ts; ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     local line="[$ts] [$SCRIPT_NAME] [$level] $1"
-    printf '%s\n' "$line" >> "$LOG_FILE"
+    _aitlib_log_append "$line" "$LOG_FILE"
     case "$level" in
         error) printf '\033[31m%s\033[0m\n' "$line" ;;
         warn)  printf '\033[33m%s\033[0m\n' "$line" ;;
@@ -799,7 +812,7 @@ log_error() { log "$1" "error"; ERRORS=$((ERRORS + 1)); }
 log_warn()  { log "$1" "warn"; WARNINGS=$((WARNINGS + 1)); }
 log_detail() {
     local ts; ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-    printf '[%s] [%s] [detail] %s\n' "$ts" "$SCRIPT_NAME" "$1" >> "$LOG_FILE"
+    _aitlib_log_append "[$ts] [$SCRIPT_NAME] [detail] $1" "$LOG_FILE"
 }
 
 # ---------------------------------------------------------------------------
@@ -822,7 +835,7 @@ log_detail() {
 # callers decide whether to count invoke_ai failures.
 _ai_log() {
     local ts; ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-    printf '[%s] [%s] [%s] %s\n' "$ts" "$SCRIPT_NAME" "${2:-info}" "$1" >> "${LOG_FILE:-/dev/null}"
+    _aitlib_log_append "[$ts] [$SCRIPT_NAME] [${2:-info}] $1" "${LOG_FILE:-/dev/null}"
 }
 
 AI_REJECT_REASON=""
