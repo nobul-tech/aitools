@@ -12,6 +12,22 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.77.6 -- How tests run on Windows: the .ps1 suites, not Git Bash (2026-11-14)
+
+Not tagged. Branch `docs/38dc-12-windows-test-practice`, mission 38dc-12 (M6-Polish, session 87795dc3).
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 1 | `reference/cross-platform-detail.md` "Running tests on Windows" (new): the commander's rule (2026-11-14), quoted: `.sh` scripts and tests run only on macOS and Linux, `.ps1` only on Windows, unless a script is explicitly marked cross-platform (the "OS guard exemptions" table); on Windows an agent runs the eight `.ps1` suites with `pwsh -NoProfile -File` and leaves suites with no `.ps1` form to the Windows CI job. Eight known Git Bash issues, each with its source, five re-checked by a probe on the commander's workstation: Git's `usr/bin` first on PATH (a bare `find` in a `.cmd` stub walked C: and hung a suite), `bash` resolving to Git's or to the WSL launcher, `chmod 000` on a directory not enforced, `grep` not matching CR, MSYS argument rewriting, GNU tools not BSD, slow pseudo-terminal runs, a faked `uname`. What the Windows CI job runs today (42 suite steps: 8 `.ps1`, 2 Python, 32 `.sh` in Git Bash, in three groups) and that the bash AI merge has no Windows runtime path; follow-up mission 38dc-13 is changing that layout |
+| 2 | `CLAUDE.md` tests line: on Windows, run the `.ps1` suites, not `.sh` suites in Git Bash, with a pointer to the new section |
+| 3 | `/delegate` skill v2.2 ("In the aitools repo", "Checks"): on Windows the `.ps1` check twins (the `.sh` checks refuse Windows), and the pointer to the Windows test practice |
+
+**Verified on:** Windows 11 (Git Bash 5.3.15, pwsh 7): the Git Bash probes cited in item 1; the CI step counts by a parse of `.github/workflows/check.yml`. Documentation only: no script or test changed.
+
+---
+
 ## v0.77.3 -- Pre-commit path-ref check fixed on Windows; release notes backfilled for PRs #144-#147 (2026-11-14)
 
 Not tagged. Branch `docs/m5-docs`, mission M5-Fixes (session 87795dc3), items 6, 7, 8 and 13.
