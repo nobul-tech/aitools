@@ -594,38 +594,15 @@ fi
 # ============================================================
 log "Step 7: Shell integration"
 
-# Login-profile PATH ownership (managed marked block) -- must run so the harness
-# resolves managed tools (uv python, cursor-agent, brew bash) deterministically.
+# setup-user-shell.sh is the single owner of the shell files (incident #173 parity):
+# the PATH block in the login profile -- must run so the harness resolves managed
+# tools (uv python, cursor-agent, brew bash) deterministically -- and the aliases
+# source line in ~/.bashrc / ~/.zshrc.
 shell_script="$SCRIPT_DIR/setup-user-shell.sh"
 if [ -f "$shell_script" ]; then
     validate_and_run "$shell_script"
 else
-    log_warn "setup-user-shell.sh not found — skipping login-profile PATH block (MDM deploy)"
-fi
-
-ALIASES_PATH="$SCRIPT_DIR/../shared/shell/aliases.sh"
-if [ -f "$ALIASES_PATH" ]; then
-    ALIASES_ABS=$(cd "$(dirname "$ALIASES_PATH")" && pwd)/$(basename "$ALIASES_PATH")
-    OLD_MARKER="# ai-tooling shell integration"
-    MARKER="# aitools shell integration"
-    for rcfile in "$HOME/.bashrc" "$HOME/.zshrc"; do
-        # Only add to files that exist OR create .bashrc as fallback
-        if [ "$rcfile" = "$HOME/.bashrc" ] || [ -f "$rcfile" ]; then
-            # Remove old marker block if present
-            if grep -qF "$OLD_MARKER" "$rcfile" 2>/dev/null; then
-                perl -i -0777 -pe 's/\n?# ai-tooling shell integration\nsource "[^\n]*"\n?//g' "$rcfile"
-                log "Removed old shell integration marker from $(display_path "$rcfile")"
-            fi
-            if ! grep -qF "$MARKER" "$rcfile" 2>/dev/null; then
-                printf '\n%s\nsource "%s"\n' "$MARKER" "$ALIASES_ABS" >> "$rcfile"
-                log_ok "Added shell integration to $(display_path "$rcfile")"
-            else
-                log_ok "Shell integration already in $(display_path "$rcfile")"
-            fi
-        fi
-    done
-else
-    log_warn "aliases.sh not found — skipping shell integration (MDM deploy)"
+    log_warn "setup-user-shell.sh not found — skipping the login-profile PATH block and shell integration (MDM deploy)"
 fi
 
 # ============================================================
