@@ -1,11 +1,14 @@
 # Cursor indexing / Agent context — keep harness signal, drop bulk copies & runtime noise.
 # Edit if you need to @-mention an ignored path intentionally.
+# A path listed here is also blocked for the agent's file tools (Read, Write,
+# Grep): do not add a path an agent must read or write, such as the session
+# scratch directory (.scratch/) or its *.log and *.tmp files.
+# Detail: reference/tool-ops-cursor.md "Ignore files and agent file tools".
 
 # Harvested exports (very large; RFC copies and session dumps)
 harvesting/
 
-# Local scratch and Claude worktree duplicates
-.scratch/
+# Claude worktree duplicates
 .claude/worktrees/
 
 # Runtime harness data (regenerated; not source of truth in git)
@@ -25,7 +28,5 @@ harvesting/
 **/venv/
 **/ENV/
 
-# Logs and temp
-*.log
-*.tmp
+# Stray file named nul
 nul

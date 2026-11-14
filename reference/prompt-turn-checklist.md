@@ -2,10 +2,13 @@
 
 **Intent**: **Purpose**: Define, item by item, the checklist an agent runs
 at every prompt turn. It formalizes the ad-hoc checklist the commander kept
-repeating in prompts, and it is the specification a hook will deliver to
-every agent. **Scope**: The checklist items: what each one requires; for
+repeating in prompts; it is the full specification that the shared rule
+`@shared/rules/prompt-turn.md` condenses for every agent, and that a hook
+will deliver. **Scope**: The checklist items: what each one requires; for
 some, why and how a skipped item shows; and the established field an item
-is adopted from. NOT the hook that will deliver the checklist (not
+is adopted from. A change to an item goes to this file and to the rule. NOT
+the condensed form agents load (`@shared/rules/prompt-turn.md`). NOT the
+hook that will deliver the checklist (not
 built yet; rollout practice: `@.claude/rules/hook-rollout.md`). NOT the
 seven-step process in `CLAUDE.md` "The process (every prompt)": its steps
 are merged into this checklist, and that section is left as it is. NOT
@@ -13,7 +16,7 @@ delegation prompts (`/delegate` skill). **Audience**: Every agent at every
 prompt turn; the agent that builds the prompt-turn hook; the commander,
 reviewing what the hook will enforce.
 
-v1.19 (2026-11-13)
+v1.20 (2026-11-14)
 
 A **prompt turn** is one prompt from the commander and everything the agent
 does until its reply is printed.
@@ -35,7 +38,10 @@ the current prompt. Read every turn on both sides, in order, word for word.
   what it reads; the raw text is still in context, so go back to it.
 - **In context**: the conversation is already in context, so the re-read
   happens in thinking and needs no tool call. If part of it was compacted
-  away, say so. Do not reconstruct it.
+  away, say so, then re-read that part from the session transcript, which is
+  stored verbatim (commander, 2026-11-14; how to read it: `/delegate` skill,
+  "Reading the commander's sessions"). Do not reconstruct it from memory or
+  a summary.
 - **Every turn, including the easy ones**: the checklist tends to be dropped
   on prompts that feel easy. A three-word prompt gets the same re-read.
 - **Reverse order helps, it does not replace**: a second pass from the newest
@@ -153,9 +159,14 @@ fixed, sources that disagree, and the assumptions the work would rest on.
 Resolve what you can without the commander.
 
 **Disciplined initiative** is deliberate deviation from the process or an
-order, made to accomplish the mission and reported. It is not appearing to
-know what you do not know. A guess presented as a resolution is the failure
-this item exists to prevent.
+order, made to accomplish the mission within the commander's intent, and
+reported. It is not appearing to know what you do not know. A guess
+presented as a resolution is the failure this item exists to prevent.
+
+**Permissions** are allowed by default unless the commander or a rule
+directs otherwise. Use disciplined initiative to expand the scope of your
+actions, or to stop and fulfill the surfacing duty (item 5) (commander,
+2026-11-14).
 
 Ways to resolve, nearest first:
 
@@ -175,8 +186,8 @@ Each unresolved point ends in one of three states: **verified**,
   resource. A question that the conversation, a file or one command could
   answer spends it for nothing.
 - **Some choices are not yours**: intent, priority, preference, and any
-  action that is hard to reverse or reaches outside the session belong to
-  the commander. Carry them to item 5 even when you could pick.
+  action that is hard to reverse belong to the commander. Carry them to
+  item 5 even when you could pick.
 - **Depth follows impact**: verify every assumption that changes what you
   deliver. Note the ones that do not, and move on.
 - **Report every deviation**: when you deviate from the process or an order
@@ -374,13 +385,14 @@ and finish it rather than stopping short.
 
 Every reply gives the answer first, then a turn record with one or two
 sentences per item, the operational learning in full, and every open session
-RFI in full:
+RFI in full. Each turn-record line is its item's REPORT line in
+`@shared/rules/prompt-turn.md`:
 
 ```
 <the answer, in exactly the form the prompt asked for>
 
 --- Turn record ---
-1  Re-read:  <done | what was compacted away>
+1  Re-read:  turns 1-<n>, both sides | compacted: <none | span, restored from transcript>
 2  Parse:    <high-impact words; any unresolved>
 3  Sources:  <what was read or re-read>
 4  Resolve:  <points verified / falsified / open, with evidence>

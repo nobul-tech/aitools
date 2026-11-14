@@ -2,12 +2,14 @@
 
 **Intent**: **Purpose**: Hold operational knowledge about Cursor (desktop IDE
 and the `agent` CLI) that the harness depends on: where Cursor reads
-user-level rules, in what format, and how to verify it. **Scope**: Rules
-location, format and loading behaviour, doc access, and verification. NOT
-install methods (`/tool-registry` skill). NOT the ops metadata registry
-(`/tool-ops` skill). NOT project rule parity (`reference/cursor-practices.md`).
-**Audience**: Agents that change `setup-user-cursor`, the harness rules
-fan-out, or anything Cursor loads from `~/.cursor/`.
+user-level rules, in what format, which files its agent's tools can reach,
+and how to verify it. **Scope**: Rules location, format and loading
+behaviour; ignore files and the agent's file access; agent modes; doc
+access; verification. NOT install methods (`/tool-registry` skill). NOT the
+ops metadata registry (`/tool-ops` skill). NOT project rule parity
+(`reference/cursor-practices.md`). **Audience**: Agents that change
+`setup-user-cursor`, the harness rules fan-out, anything Cursor loads from
+`~/.cursor/`, or the aitools `.cursorignore`; every agent working in Cursor.
 
 ## User-level rules
 
@@ -79,12 +81,73 @@ sources alike; `@reference/rules.md` R-6). It converts each Claude Code
 - A converted file that Cursor would misparse (a `---` inside a frontmatter
   value) is reported as a warning.
 
+## Ignore files and agent file tools
+
+Verified 2026-11-14 on Cursor IDE 3.30.14 (Windows 11, x64) in the aitools
+workspace: each file tool was run on `.scratch/` before and after `.scratch/`,
+`*.log` and `*.tmp` were removed from aitools `.cursorignore` (commander,
+2026-11-14), and a delegate re-ran the after-test independently the same day.
+`.gitignore` listed all three throughout.
+
+| Behaviour | Observed | Source |
+|-----------|----------|--------|
+| `.cursorignore` blocks the agent's file tools, not only indexing | Write: `Read permission denied: <path>`. Read: `Error: Permission denied`. Grep: `Error running tool: Path '<path>' is filtered out by .cursorignore`. Glob: no error; the ignored files are left out of the result | test; ignore-file.md |
+| `.gitignore` and Cursor's default ignore list do not block Read, Write or StrReplace | After the removal, all three work on `.scratch/` files ending `.md`, `.log`, `.tmp`, `.txt` and `.py`, although `.gitignore` lists `.scratch/`, `*.log` and `*.tmp` and the default list has `*.tmp` | test |
+| Search honours `.gitignore` | Glob and Grep from the workspace root find nothing under a git-ignored directory. Pointed at that directory, they return its files except those matching a `.gitignore` file pattern (`*.log`, `*.tmp` here). In the workspace, Grep given a single file's path searches it, ignored or not | test; ignore-file.md |
+| Outside the workspace (a git worktree under `~/.cursor/worktrees/`), only Grep applies that repo's `.cursorignore`, and it keeps the version it first saw | Read and Write worked in the worktree's `.scratch/` while the worktree's `.cursorignore` listed `.scratch/`. After that file was changed to drop `.scratch/`, Grep still refused `.scratch/` files there (`filtered out by .cursorignore`), while a file ignored only by `.gitignore` was searchable | test |
+| The terminal and MCP tools are outside these controls | The Shell tool listed and read `.scratch/` while every file tool was blocked | test; ignore-file.md |
+| Agents cannot change `.cursorignore` with the file tools | `Write permission denied: <path>: Blocked by permissions configuration`, for the workspace's file and for the copy in a git worktree outside the workspace, with an empty `permissions` block in `~/.cursor/cli-config.json` | test; security.md |
+
+Verbatim, cursor.com/docs/reference/ignore-file.md (read 2026-11-14):
+"Cursor blocks access to files listed in `.cursorignore` from: Code
+accessible by Agent and Tab; Code accessible via @ mention references". "The
+terminal and MCP server tools used by Agent cannot block access to code
+governed by `.cursorignore`". "Cursor automatically ignores files in
+`.gitignore` and the default ignore list below. Override with `!` prefix in
+`.cursorignore`." (The `!` override is documented; not tested here.)
+
+Verbatim, cursor.com/docs/agent/security.md (read 2026-11-14): "Agents can
+modify workspace files without approval, except for configuration files."
+"Configuration files (like workspace settings) need your approval first."
+
+What the harness does with this:
+
+- Do not add to `.cursorignore` a path an agent must read or write. The
+  session scratch directory (`/scratch` skill) and its `*.log` and `*.tmp`
+  files were removed from it for this reason (commander, 2026-11-14); the
+  paths it still lists that agents need are under "Known gaps".
+- Read and write scratch files by absolute path. To list a scratch directory,
+  use the shell: from the workspace root, Glob and Grep skip git-ignored
+  directories, and inside one they skip files that match another
+  `.gitignore` pattern.
+- A change to `.cursorignore` needs the user's approval. With the
+  commander's order in the prompt, the agent makes the change with the shell
+  and reports that it did.
+
+## Agent modes
+
+- **Ask mode** runs shell commands under a read-only sandbox. On a Windows
+  machine without a sandbox backend, every Shell call fails with: `Terminal
+  unavailable: this machine cannot enforce the 'workspace_readonly' sandbox
+  policy this command requires, because no working sandbox backend is
+  available (Windows sandbox helper only provides network proxy, not
+  filesystem isolation).` (2026-11-13). Read-only commands such as `git log`
+  fail too; switch to Agent mode for anything that needs a shell.
+
 ## Known gaps
 
 - `~/.cursor/AGENTS.md` (the relay mirror written by `aitools` / install step
   22) is not read by the rules loader in either bundle. The loader reads
   `<ancestor>/AGENTS.md`, that is, `~/AGENTS.md`.
 - Live canary not yet run (needs `agent login`).
+- aitools `.cursorignore` still lists `harvesting/`, `.claude/worktrees/` and
+  `.aitools/channel/*-full-session.md`. So a Cursor agent cannot read
+  harvested artifacts (`/harvest` skill) or the full session transcripts that
+  `.aitools/channel/CLAUDE.md` tells agents to load, and cannot edit files in
+  a worktree under `.claude/worktrees/`, with the file tools. A worktree
+  outside the workspace (for example under `~/.cursor/worktrees/`) is
+  reachable by Read and Write; Grep there follows the worktree's own
+  `.cursorignore` (see the table above). Open (2026-11-14).
 
 ## Doc access
 
