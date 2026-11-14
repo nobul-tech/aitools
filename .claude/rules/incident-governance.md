@@ -221,9 +221,10 @@ Implemented:
 
 Designed, not implemented (no script, not in the manifest):
 - **SubagentStart** context injector (pre-built skill cache + governance
-  duty + scratch namespace). Until it exists, subagents get the rules Claude
-  Code loads for every agent (those without `paths:`, from the session's
-  working directory: `@reference/tool-ops-claude-code.md` item #5) and the
+  duty + scratch namespace). Until it exists, general-purpose subagents get
+  the rules Claude Code loads at launch (those without `paths:`, from the
+  session's working directory; Explore and Plan skip CLAUDE.md:
+  `@reference/tool-ops-claude-code.md` item #5) and the
   rest only through the delegation prompt (`/delegate` skill); they are sensors, not
   filers — they report `INCIDENT:` findings and the delegating agent files them.
 - **PreToolUse on incidents.json** (agent): field, enum and sequential-ID validation.

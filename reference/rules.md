@@ -79,8 +79,9 @@ architecture" (rules are "concise behavioral directives, ~40-100 lines";
 references are "implementation detail, unlimited length"; "one authoritative
 location per fact"); `@reference/framework-three-layer-governance.md`
 "Rule-skill governance" ("Rules govern and enforce process; skills implement
-it. Rules are always in context and contain trigger directives stating WHEN
-to invoke their corresponding skill.").
+it. Rules are always in context (governance rules carry no `paths:`
+frontmatter ...) and contain trigger directives stating WHEN to invoke their
+corresponding skill.").
 
 What a rule is not:
 

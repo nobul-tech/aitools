@@ -23,7 +23,9 @@ complete.
 | Audit | After push, in CI, and on demand | `scripts/check-post-push.sh`, CI (`.github/workflows/check.yml`), `/incident` skill | What slipped through both layers |
 
 **Rule-skill governance**: Rules govern and enforce process; skills
-implement it. Rules are always in context and contain trigger directives
+implement it. Rules are always in context (governance rules carry no
+`paths:` frontmatter; a rule with `paths:` loads only once a matching file
+is read, `@reference/tool-ops-claude-code.md` item #28) and contain trigger directives
 stating WHEN to invoke their corresponding skill. The skill provides
 the governed process (loaded on demand). This is the primary enforcement
 mechanism in the prevention layer. Hook messages reference skills to close

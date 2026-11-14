@@ -39,7 +39,8 @@ v2.2 (2026-11-14, 38dc-08): "Environment limits" gains delegate identity and
 control (description as the name-to-agentId link, transcript path, TaskStop,
 repeat hand-backs, background tasks); "Verifying what comes back" points to the
 delegate's transcript.
-v2.4 (2026-11-14, 38dc-25; v2.3 is taken by PR #159): "Environment limits"
+v2.4 (2026-11-14, 38dc-25; v2.3 reserved for PR #159, whose branch still
+calls it v2.2): "Environment limits"
 corrected by the 2.1.325 probes (which repeat hand-back is refused, TaskStop by
 the main session, what a sub-agent receives, the level-3 tool set); "In the
 aitools repo" no longer says every aitools rule and skill is deployed at user
@@ -416,8 +417,9 @@ Verify these before relying on them; versions move. Source of record:
   frontmatter at launch, and `paths:` rules only after they read files
   (2.1.325); Explore, Plan and some built-in types omit them. Project
   rules, CLAUDE.md and project skills come from the session's working
-  directory (the main checkout), not the delegate's worktree, so a delegate
-  on a branch that changes a rule gets the main checkout's copy. Element 2
+  directory (observed: the main checkout, for a session started there), not
+  the delegate's worktree, so a delegate on a branch that changes a rule
+  gets the session directory's copy. Element 2
   exists because of this.
 - **File access.** Sub-agents have been denied Glob/Grep outside their
   working repo while Read with an absolute path worked, and some delegates

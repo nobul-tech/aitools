@@ -31,8 +31,9 @@ Branch `docs/38dc-25-tool-ops-registry`; PR, review and merge: see "Shipping"
 3. Tool registry `claude-code` updated through `/tool-registry` (Windows
    version 2.1.325, launcher path, health text, workarounds, auth check,
    risks). The tool-ops registry needed no change (no conflicting fact).
-4. 48 findings in the conflict table (two sweeps, the docs read and mine);
-   42 resolved by an edit, four by evidence with no edit needed, and two
+4. 52 findings in the conflict table (two sweeps, the docs read, the
+   independent review and mine); 46 resolved by an edit, four by evidence
+   with no edit needed, and two
    left open because they need the commander or another channel (rows 45
    and 48, RFIs 38dc-25-1 and -3); one question stays untested (RFI 38dc-25-2).
 5. CLAUDE.md fixed directly on main (d21994b) under the "Channel
@@ -102,7 +103,7 @@ column names what settled it.
 | 11 | reference #5 (subagent context gap) | "not inherited" | 38dc-25/af14-04/af14-05 context; `frameworks` base dir = main checkout; sub-agents docs | partly superseded; detail + docs quote |
 | 12 | reference "MDM deploy" line | embeds "rules" | `.claude/rules/deploy-paths.md` "no rules are embedded" | "rules" dropped |
 | 13 | reference release watch 2.1.59 | "New `effortLevel` setting", dated 2026-03-01 | changelog (af14-08): 2.1.59 is 2026-02-26, no effort line | corrected |
-| 14 | reference 2.1.68 entry, items #20, #21, #22 | InstructionsLoaded/agent_id/includeGitInstructions at 2.1.68 | changelog: #20/#21 in 2.1.69; #22 not in 2.1.68 | baselines corrected (#22 unknown) |
+| 14 | reference 2.1.68 entry, items #20, #21, #22 | InstructionsLoaded/agent_id/includeGitInstructions at 2.1.68 | changelog: all three in 2.1.69 (#22 found by the reviewer af14-09, re-read by 38dc-25 in the browser: the line sits between the 2.1.69 and 2.1.68 headings) | baselines -> 2.1.69 |
 | 15 | reference #19 | baseline 2.1.68 | changelog: no entry announces the key | baseline "unknown" with history |
 | 16 | reference 2.1.69 and 2.1.74 entries | "Patch release. No new features" | changelog lines quoted | corrected |
 | 17 | reference CLAUDE.md Hierarchy, #6 | "More specific wins on conflict" | memory docs: concatenated, either may win | corrected |
@@ -136,6 +137,10 @@ column names what settled it.
 | 45 | shared/claude-shared.md:4, :86, :104 and the dotprofile `claude/CLAUDE.md` (deployed :4, :121, :137-138, :144, :157, :197) | Windows "always uses Git Bash (not configurable)"; "CC 2.1.68+ defaults to medium for Opus 4.6"; "Imported via `@`"; deployed `reference/claude-code-version-deps.md`; deployed sub-agent note | #9, #13-15, docs | **open: RFI 38dc-25-1** (dotprofile is out of this mission's access; template sync needs both) |
 | 46 | `.claude/rules/cross-platform.md:195-196` | hooks run in bash on all platforms, Git Bash on Windows | hooks docs | no change (correct with Git Bash installed, which the harness requires) |
 | 47 | shared/rules/delegation.md:42-44, delegate SKILL.md:45-46 | "foreground or background" Agent calls | the main session's Agent has `run_in_background`; delegates' does not | no change (a trigger list, not a capability claim) |
+| 49 | tool registry workaround item 5 | "Sub-agents do not inherit rules/CLAUDE.md" (2.1.74) | #11 evidence; reviewer B2 | summary and lastVerified 2.1.325 |
+| 50 | shared/skills/planning/SKILL.md:96, :102-106 | "subagents don't inherit rules"; "project rules may attach only when ..." | #11 evidence; reviewer note 2 | rewritten |
+| 51 | reference/framework-three-layer-governance.md:26, reference/rules.md:82 (a quote of it) | "Rules are always in context" | `paths:` rules; d21994b | qualifier added (true for governance rules, which have no `paths:`) |
+| 52 | reference #31, "output_file" subsection; /delegate and item #5 "(the main checkout)"; documentation-standards worktree-session claim; incident-governance "every agent"; Hand-backs docs quote | overclaims and a truncated quote (reviewer notes 4, 7, 8, 9) | probe scope; sub-agents docs | worded as observed; quote completed ("once its stopped run has exited") |
 | 48 | deployed copies (`~/.claude/skills/delegate` v2.1, tool-ops row, no `~/.claude/rules/delegation.md`, retired `aitool-ops` still present) | lag the repo | af14-05 `ls`/`diff` | **open: RFI 38dc-25-3** (an `aitools` run) |
 
 Not a Claude Code fact, recorded as follow-ups (not changed):
@@ -159,8 +164,10 @@ Not a Claude Code fact, recorded as follow-ups (not changed):
 - `evaluation.pendingChanges`: Windows trial and #1-#25 -> Linux trial,
   Windows provenance and install method, #2-#24.
 - `maintenance.workarounds`: #27 lastVerified + "level-3 re-verified
-  2.1.325"; #1 summary and lastVerified (partly obsolete); #25 summary
-  "Closed ..." and lastVerified 2.1.325; new #32 entry (delegate control).
+  2.1.325"; #1 summary and lastVerified (partly obsolete); #5 summary ("Sub-agents
+  do not inherit rules/CLAUDE.md ..." -> what a sub-agent receives) and
+  lastVerified 2.1.74 -> 2.1.325 partly superseded; #25 summary "Closed ..."
+  and lastVerified 2.1.325; new #32 entry (delegate control).
 - `maintenance.upstreamRisks[2..3]`: "may be wrong" -> "is wrong for 2.1.325
   (observed)"; undocumented behaviour list gains #31, #32.
 - `authentication.checkNotes`: + Windows 2.1.325 (exit 0 logged in; keys).
@@ -179,6 +186,17 @@ Not a Claude Code fact, recorded as follow-ups (not changed):
 | af14-04-cc-facts-sweep-reference | ae18b15541986b3c5 | `af14-04-sweep.md` | each flagged line re-read before editing (rules.md, three-layer, decision tree, skills.md, logging, managed-file-deployment, cross-platform-detail, evaluation); its "clean" #28/#29 citations re-checked |
 | af14-05-cc-facts-sweep-rules-skills | aeeea700a36e96223 | `af14-05-sweep.md` | flagged lines re-read; `paths:` list checked with git grep; its claim about the deployed rule set matches 38dc-25's own context |
 | af14-08-cc-docs-read | a530101909bd30b90 | `af14-08-docs.md` | three hooks.md quotes re-read in 38dc-25's own browser page (all three verbatim) |
+
+## Independent review
+
+af14-09-review-pr165 (`a27c8fd8e17023bfa`, level 3, fresh context, read this
+report last): **BLOCKING (2)** at 51cb0fd,
+https://github.com/nobul-tech/aitools/pull/165#issuecomment-6886180908.
+B1 (#22 is 2.1.69) and B2 (registry workaround #5) fixed, and notes 1-4 and
+7-10 applied (rows 49-52; RFI 38dc-25-1 now names `:118`). Note 5 needs no
+change (the mechanism is recorded as unknown); note 6: the delegate-side
+refusal text is already quoted verbatim in the hand-back section (v1.0
+bullet). Re-check: see "Shipping" in the hand-back.
 
 ## CONFLICT / WRITE_BLOCKED
 
@@ -206,7 +224,10 @@ is broken on Windows" and "CC 2.1.68+ defaults to medium for Opus 4.6". At
 shell (docs and this session), and 2.1.68 changed the default for Max and
 Team only (changelog). The deployed copy also cites the missing
 `reference/claude-code-version-deps.md` (should be
-`reference/tool-ops-claude-code.md`).
+`reference/tool-ops-claude-code.md`), and `shared/claude-shared.md:118`
+("project rules may not attach") is out of date against item #5. Until this
+lands, the harness contradicts itself: the tool registry now calls the
+Git Bash line wrong.
 Suggest: a small mission with dotprofile write access edits both files the
 same way, e.g. "- **Note**: on Windows Claude Code has a Bash tool (Git Bash)
 and a PowerShell tool; with Git Bash installed the PowerShell tool is on by
