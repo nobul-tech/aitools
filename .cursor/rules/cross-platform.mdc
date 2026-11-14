@@ -56,8 +56,7 @@ aitools.ps1 before its library loads) and the git pre-commit hook, and
 bootstrap.sh, hh.sh, init-hh-hooks.sh and analyze-session.sh carry the POSIX
 guard (2026-11-14). Cross-platform test suites (hooks, build-deploy backup,
 build-package CLI, pywinpty); all Perl and Python scripts and their tests
-(commander, 2026-11-14); the logging and menus `.sh` suites until RFI 38dc-3
-is decided. Full table in
+(commander, 2026-11-14). Full table in
 `.claude/rules/cross-platform.md`.
 
 **Test suites** (commander, 2026-11-14: "sh scripts and tests should only run
