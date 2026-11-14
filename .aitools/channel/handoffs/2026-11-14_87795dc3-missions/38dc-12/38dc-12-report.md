@@ -8,8 +8,8 @@ operational learning. NOT the section's text itself (it is in
 `reference/cross-platform-detail.md` "Running tests on Windows"). **Audience**:
 M6-Polish, the independent reviewer, the commander.
 
-Version 1.1, 2026-11-14 (v1.0 the same day; v1.1 applies the independent
-review, "Review" below). PR: https://github.com/nobul-tech/aitools/pull/159
+Version 1.2, 2026-11-14 (v1.0 the same day; v1.1 applies the independent
+review, "Review" below; v1.2 its re-check's non-blocking notes A-E). PR: https://github.com/nobul-tech/aitools/pull/159
 (branch `docs/38dc-12-windows-test-practice`). Merge SHA and main CI run: in the
 hand-back (they come after this file is committed).
 
@@ -79,16 +79,17 @@ hand-back (they come after this file is committed).
      (append refused: probe; M5-L1 report line 220). On a directory, `cd` and
      file creation both succeed (probe; M6-F report line 97).
    - `grep` and CR: **refined.** Probe: `grep -c $'\r'` counted 2 lines on a file
-     whose only CR ends line 1. The review's probes explain it: Git for Windows
-     grep drops the CR at the end of each input line, so a CR-only pattern acts
-     as an empty pattern (`grep 'a$'` matches `a<CR>`). M6-B's "never fires"
+     whose only CR ends line 1. The review's probes show two behaviours: Git for
+     Windows grep drops the CR at the end of each input line (`grep 'a$'`
+     matches `a<CR>`), and a CR-only pattern acts as an empty pattern. M6-B's "never fires"
      (report line 89) is not what the probes show; the section cites the probes.
      Perl works.
    - MSYS: **verified, with a condition.** Probe: `/c/Users/x` -> `C:/Users/x`,
      `--opt=/tmp/x` -> `--opt=C:/Users/jdpal/AppData/Local/Temp/x`.
      `origin/main:reference/x.md` and `HEAD:.aitools/...` pass unchanged, but
-     `origin/main:.aitools/channel/relay.md` reaches git as `origin\main` and
-     `git cat-file -e` fails; with `MSYS_NO_PATHCONV=1` it works
+     `origin/main:.aitools/channel/relay.md` reaches git as the Windows path list
+     `origin\main;.aitools\channel\relay.md` (review re-check, `git rev-parse
+     --sq-quote`) and `git cat-file -e` fails; with `MSYS_NO_PATHCONV=1` it works
      (`.scratch/session-38dc-12/probe-msys-ref.sh`; found by the review). So the
      orchestrator's item holds for a ref with `/` and a dot-directory path. With
      `MSYS_NO_PATHCONV=1`, `/c/Users/x` arrives unconverted and `git.exe` then
@@ -170,6 +171,15 @@ All six fixed, and non-blocking 7-11:
    Q2 stated, labelled as M6-Polish's wording. 10: notes below. 11: the inline
    pwsh test step mentioned.
 
+Re-check on f075513: APPROVE-equivalent, no blocking findings
+(https://github.com/nobul-tech/aitools/pull/159#issuecomment-6882888951).
+Its non-blocking notes applied in v1.2: A) local evidence includes the runs of
+explicitly cross-platform scripts' tests, and `tests/pywinpty/test-setup-pywinpty.sh`
+is named with the build-deploy suites; B) `sort.exe`, with the pwsh
+`Sort-Object` alias caveat; C) the MSYS path-list form quoted; D) the two grep
+behaviours joined with "and", not "so"; E) the PR title and body brought up to
+date.
+
 ## Open questions
 
 RFI 38dc-12-1 (v1.0, withdrawn: the commander's 18:58:47Z answer already
@@ -200,7 +210,7 @@ which the section names the table as the record.
 - A pwsh started from the Claude Code Bash tool inherits Git Bash's PATH (Git
   `usr/bin` first): a bare `find`, `sort` or `perl` in a test stub is the Unix
   one. The PowerShell tool's pwsh has the Windows PATH.
-- Git for Windows `grep` drops the line-end CR, so `grep $'\r'` matches every
+- Git for Windows `grep` drops the line-end CR, and `grep $'\r'` matches every
   line; test CR with perl.
 - MSYS rewrites `/c/...`, `--opt=/tmp/...` and `<ref-with-slash>:.<dir>/...`
   arguments to native programs (`git show origin/main:.aitools/...` fails);

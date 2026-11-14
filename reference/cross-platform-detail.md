@@ -196,7 +196,7 @@ is not installed, the script fails — no fallback to Git's bundled version.
 **Resolution in other contexts**: Use `Refresh-Path` (aitools-lib.ps1) or
 read the Windows system PATH from the registry directly.
 
-**Currently shadowed tools**: `perl`, `find`, `bash` and `sort` confirmed
+**Currently shadowed tools**: `perl`, `find`, `bash` and `sort.exe` confirmed
 (probes of 2026-11-14; "Running tests on Windows" issue 1).
 
 ## Strawberry Perl text mode (Windows)
@@ -338,7 +338,8 @@ So:
   scripts, plus the tests of explicitly cross-platform scripts. It does not run
   any other `.sh` suite through Git Bash, and does not fake `uname` to make a
   suite's bash half run there.
-- Local Windows evidence is the `.ps1` runs. The `.sh` halves are tested by the
+- Local Windows evidence is the `.ps1` runs and the runs of explicitly
+  cross-platform scripts' tests. The `.sh` halves are tested by the
   macOS and Linux CI jobs, and a merge relies on CI for them (answer 2 above).
 
 ### How to run the tests
@@ -376,7 +377,9 @@ From Claude Code:
   `pwsh -NoProfile -File C:/Users/<you>/repos/aitools/tests/menus/test-menu-choice.ps1 > <scratch>/menus-ps1.log 2>&1`.
   This pwsh inherits Git Bash's PATH (issue 1 below).
 - Run the `.ps1` suites your change touches. The suites of hooks and of
-  `build-deploy.sh` (`tests/hooks/`, `tests/build-deploy/`) test explicitly
+  `build-deploy.sh` (`tests/hooks/`, `tests/build-deploy/`, and
+  `tests/pywinpty/test-setup-pywinpty.sh`, which tests the MDM pin embed
+  through `build-deploy.sh`) test explicitly
   cross-platform bash scripts (the hooks: "many .sh files are meant to run on
   linux/mac AND windows, notably the hooks", commander, 2026-11-01,
   `plans/ci-platform-targeting.md`) and may run in Git Bash:
@@ -399,8 +402,10 @@ Each was seen in aitools on Windows. The ones marked "probe" were re-checked on
    counted lines with a bare `find`, run from a Git Bash script, got the Unix
    `find`, which walked the whole C: drive and hung the suite (mission
    M6-Polish; PR #155 changes the stub to call `%SystemRoot%\System32\find.exe`).
-   `perl`, `bash` and `sort` are shadowed the same way ("Git Bash PATH
-   shadowing" above). In test stubs, call Windows tools by their full path.
+   `perl`, `bash` and `sort.exe` are shadowed the same way ("Git Bash PATH
+   shadowing" above; in pwsh itself a bare `sort` is still the `Sort-Object`
+   alias, so the `sort` case hits `.cmd` stubs and `.exe` lookups). In test
+   stubs, call Windows tools by their full path.
 2. **`bash` means different programs.** In a native pwsh, `bash` is the WSL
    launcher (`%LOCALAPPDATA%\Microsoft\WindowsApps\bash.exe`); in a pwsh started
    from Git Bash, Git's `usr\bin\bash.exe` comes first (probe). The check
@@ -413,7 +418,7 @@ Each was seen in aitools on Windows. The ones marked "probe" were re-checked on
    this reason. A permission case written for macOS and Linux does not test the
    same thing in Git Bash.
 4. **`grep` and CR.** Git for Windows `grep` drops the CR at the end of each
-   input line before matching, so a pattern that is only a CR behaves like an
+   input line before matching, and a pattern that is only a CR behaves like an
    empty pattern and matches every line: on a file whose only CR ends line 1,
    `grep -c $'\r'` counted 2 lines (probe), and `grep 'a$'` matches the line
    `a<CR>` (review probe, PR #159). `grep` cannot detect CRLF there; use
@@ -422,9 +427,10 @@ Each was seen in aitools on Windows. The ones marked "probe" were re-checked on
    `git.exe`, python), it rewrites arguments that look like POSIX paths:
    `/c/Users/x` arrives as `C:/Users/x`, and `--opt=/tmp/x` as
    `--opt=C:/Users/<you>/AppData/Local/Temp/x` (probe). A git revision with a
-   `/` in the ref and a path that starts with a dot directory is rewritten too:
-   `origin/main:.aitools/channel/relay.md` reaches `git.exe` as `origin\main`
-   and the lookup fails, while `origin/main:reference/x.md` and
+   `/` in the ref and a path that starts with a dot directory is rewritten too,
+   as a Windows path list (the `:` read as its separator):
+   `origin/main:.aitools/channel/relay.md` reaches `git.exe` as
+   `origin\main;.aitools\channel\relay.md` and the lookup fails, while `origin/main:reference/x.md` and
    `HEAD:.aitools/x.md` pass unchanged (probe). `MSYS_NO_PATHCONV=1` turns the
    rewriting off (`tests/profile/test-config.sh` sets it so a `--drives-json`
    value is not rewritten), and then a `/c/Users/...` path reaches the program
