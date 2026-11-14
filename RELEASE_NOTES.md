@@ -12,9 +12,9 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
-## v0.77.1 -- Library fixes: the bash AI-merge spinner always stops, a failed log write never breaks a run (2026-11-14)
+## v0.77.1 -- Library fixes: the bash AI-merge spinner always stops, a failed log write never breaks a run, the [RELAY] prompt reads in cooked mode (2026-11-14)
 
-Not tagged. Mission M5-Fixes (batch M5-L1), from the findings of mission M3b.
+Not tagged. Mission M5-Fixes (batches M5-L1, M5-L2), from the findings of missions M3b and M2.
 
 ### Bug fixes
 
@@ -22,6 +22,7 @@ Not tagged. Mission M5-Fixes (batch M5-L1), from the findings of mission M3b.
 |---|----------|-----|
 | 1 | Medium | The bash AI-merge spinner (`_start_spinner` / `_stop_spinner` in `scripts/aitools-lib.sh`) kept drawing on the terminal after Ctrl+C ended the script (seen in Git Bash): it is a background subshell, and a background job of a non-interactive shell ignores SIGINT. It now watches the shell that started it (`BASHPID`, `$$` on bash 3.2) and ends, clearing its line, within 200 ms after that shell is gone, SIGKILL included; and `_invoke_ai_merge` wraps `invoke_ai` in INT, TERM and EXIT traps (`_spinner_traps_set` / `_spinner_traps_restore`) that stop it at once and then hand over to the caller's own traps, saved and restored unchanged. Without a terminal the spinner draws nothing (no shell error); `_stop_spinner` no longer fails under `set -e` when the spinner ended on its own or there is no terminal. The PowerShell spinner (`Start-AiSpinner`) did not have the defect: unchanged. Tests: spinner cases in `tests/menus/test-menu-choice.sh` (CI: linux, macOS bash 5 and /bin/bash 3.2, Windows Git Bash) |
 | 2 | High | A failed `deploy.log` write broke the run, contrary to `reference/logging.md` section 5 ("A failed log write is swallowed"). PowerShell: `Log`, `LogDetail` (so `LogWarn`, `LogError`, `LogOk`) and `Write-AiLog` threw when another process held `deploy.log` locked -- an error record on the console, a jump into the caller's `catch`, the end of the script under `$ErrorActionPreference = "Stop"`. bash: `log`, `log_detail` and `_ai_log` ended a `set -euo pipefail` script at the first write to an unwritable log (no permission, a directory), already inside `logging_init`; `logging_init` also ended it when the log directory could not be created. Every write now goes through one fail-safe helper (`Add-AitLibLogText` / `_aitlib_log_append`) that swallows the failure silently, as section 5 specifies; the console line still prints and the counters still count. `Initialize-Logging` / `logging_init` swallow a failed log-directory create. Tests: `tests/logging/test-logging.ps1` (locked file under `Stop` and inside `try`, log dir that cannot be created), `tests/logging/test-logging.sh` (a directory as `deploy.log`, `chmod 000`, log dir that cannot be created, all under `set -euo pipefail`) |
+| 5 | Medium | The PowerShell `[RELAY]` prompt (`Read-RelayOutboundChoice` in `scripts/relay-outbound-prompt.ps1`, shown by `aitools` and `hh -n`) read its answer with its own `[Console]::ReadLine()`, without the library's cooked-mode guard: when a child run earlier in the same console had left it raw (line input and echo off), the read echoed nothing and never returned on Enter (reproduced on a pseudo-terminal: all input sent, the prompt hung until killed). It now reads through `Read-MenuChoice` / `Read-ConsoleChoice` (cooked line mode for the read, the previous mode put back; answers logged at `detail`). Under `hh.ps1`, which does not load the library, the prompt dot-sources it inside the function (nothing outlives the call) and logs as `relay-outbound`; when the library is missing the old local loop remains the fallback. Prompt text, answers (`c`/`continue`, `q`/`quit`, `s`/`show`), re-ask, EOF default (`continue`) and the 50-try limit are unchanged; at EOF the message is now the library's warning (`No input at prompt (EOF) -- defaulting to continue`). The file is now ASCII (the em dash and ellipsis are built with `[char]` codes): Windows PowerShell 5.1 reads a file without a BOM as ANSI, and the em dash's UTF-8 bytes contain a quote character, so 5.1 could not parse the file at all. The bash twin reads `/dev/tty` in a local loop and needs no such guard (Git Bash keeps its own terminal state): unchanged. Tests: `[RELAY]` cases in `tests/menus/test-menu-choice.ps1` (library loaded by the caller, loaded by the prompt, missing; Windows PowerShell 5.1; a pseudo-terminal case that sets the console raw, runs the whole prompt and checks the cooked read and the restored raw mode) |
 
 ### Documentation
 
@@ -29,6 +30,7 @@ Not tagged. Mission M5-Fixes (batch M5-L1), from the findings of mission M3b.
 |---|--------|
 | 3 | `reference/cross-platform-detail.md` "Windows console: input mode, jobs, spinner": why the bash spinner could outlive its script, and its two guards |
 | 4 | `reference/logging.md` section 5: names the fail-safe write helpers and what they guarantee, and that `deploy.jsonl` warns once instead |
+| 6 | `.claude/rules/interactive-menus.md` "Answers", `reference/managed-file-deployment.md` "Menu answers", `reference/cross-platform-detail.md` "Windows console": the PowerShell `[RELAY]` prompt reads through `Read-MenuChoice`; only `shared/shell/aliases.*` and the bash `[RELAY]` prompt keep a local loop |
 
 **Verified on:** Windows 11 (Git Bash 5, pwsh 7). macOS and Linux run in CI only.
 

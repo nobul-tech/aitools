@@ -226,8 +226,12 @@ $c = Read-MenuChoice -Valid @(...) -Default <a> -DefaultDesc <d> -Context <c> -P
 Users: the review menus, the AI merge preview (`y r n`, EOF `n`), the
 user-init menus and confirms in `scripts/aitools` / `aitools.ps1`, and
 reverse discovery in `setup-user-hooks` / `setup-user-skills` (`a adopt s
-skip`, EOF `s`). The relay-outbound prompt and `shared/shell/aliases.*`
-cannot load the library and loop the same way locally, without logging.
+skip`, EOF `s`), and the PowerShell relay-outbound prompt
+(`Read-RelayOutboundChoice` in `scripts/relay-outbound-prompt.ps1`; under
+`hh.ps1` it dot-sources the library itself, inside the function, and logs as
+`relay-outbound`; without the library it falls back to a local loop).
+`shared/shell/aliases.*` cannot load the library and the bash relay-outbound
+prompt does not: they loop the same way locally, without logging.
 
 ### [x]abort
 

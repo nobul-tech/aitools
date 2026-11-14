@@ -247,6 +247,13 @@ next key arrives, and that key leaks into the following prompt.
   VIRTUAL_TERMINAL_INPUT off), the read, then the previous mode put back in a
   `finally`. Off Windows or with redirected stdin nothing is compiled or
   changed; EOF still returns `""` with a warning.
+- The `[RELAY]` prompt (`Read-RelayOutboundChoice` in
+  `scripts/relay-outbound-prompt.ps1`) reads through `Read-MenuChoice` too
+  (v0.77.1). Under `hh.ps1`, which does not load the library, it dot-sources
+  the library inside the function. Its own `[Console]::ReadLine()` loop is left
+  only as the fallback when the library is missing; with a raw console that
+  loop hangs (seen on a pseudo-terminal: all input sent, the read never
+  returned). The file is ASCII so Windows PowerShell 5.1 can parse it.
 - `Save-ConsoleInputMode` / `Restore-ConsoleInputMode` (same file) guard a
   child run in this console: Step 2 (build-deploy) of `scripts/aitools.ps1`.
 - One Add-Type type, `AitConsoleInput`, compiled lazily, at most once per
