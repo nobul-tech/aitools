@@ -13,37 +13,49 @@
 # (retired prune, user skill and symlink kept; the whole script runs, stub
 # rg/agent on PATH).
 #
-# Platform targeting (plans/ci-platform-targeting.md; commander 2026-11-01:
-# ".ps1 scripts only run on windows"): each case runs ONE language, the one the
-# scripts' OS guards allow here. macOS/Linux run setup-user-claude.sh,
-# setup-user-cursor.sh and deploy-harness.sh; Windows (Git Bash) runs the .ps1
-# scripts with native pwsh (paths via native_path; HOME and USERPROFILE both
-# set, in Windows form C:\... as Windows sets USERPROFILE; .cmd twins of the
-# stubs). No guard is bypassed: the real scripts run.
+# Platform targeting (plans/ci-platform-targeting.md; commander 2026-11-14:
+# "sh scripts and tests should only run on linux/mac and ps1 on windows"):
+# this harness runs setup-user-claude.sh, setup-user-cursor.sh and
+# deploy-harness.sh on macOS/Linux and refuses Windows; the .ps1 scripts are
+# tested on Windows by tests/skills-fanout/test-skills-fanout.ps1. No guard is
+# bypassed: the real scripts run.
 # Parity between the halves: each parity point writes one record (exit code;
 # the skills tree as "path md5 [x]", relative, LC_ALL=C sorted, a backup file
 # once as "path.bak.TS (backup)", symlinks left out -- they are checked
-# explicitly and Windows cases have none; the ACTION and
-# skills summary rows, sorted; HOME as "HOME", the temp root as <TMP>) that must
-# equal tests/skills-fanout/golden/<case>.txt (tests/lib/platform-lib.sh
+# explicitly; the ACTION and skills summary rows, sorted; HOME as "HOME", the
+# temp root as <TMP>) that must equal tests/skills-fanout/golden/<case>.txt,
+# which the Windows harness checks too (tests/lib/platform-lib.sh
 # golden_match). AITOOLS_TEST_UPDATE_GOLDEN=1 on macOS/Linux rewrites the files
-# from the .sh run. Cases a platform cannot build (symlinks, chmod 000 reads on
-# Windows; case-only duplicates on a case-insensitive file system) are SKIP
-# there, with the reason. The real-harness case has no golden file (its tree is
-# this checkout's own skills): its explicit checks run on every platform.
+# from the .sh run. Cases a platform cannot build (chmod 000 reads as root;
+# case-only duplicates on a case-insensitive file system) are SKIP there, with
+# the reason. The real-harness case has no golden file (its tree is this
+# checkout's own skills): its explicit checks run on every platform.
 #
 # Safe to re-run: every case runs a copy of scripts/ in a temp aitools checkout,
 # under its own temp HOME, with a temp git dotprofile (all removed on exit); the
 # real HOME, ~/.aitools and dotprofile are never touched.
-# Platform: macOS, Linux, Windows Git Bash (perl, git; pwsh on Windows; python3
-# for the pty cases, with pywinpty on Windows). Exit 1 if any case fails. Spec:
-# plans/skills-and-rules-fanout.md 3.4.
+# Platform: macOS, Linux (perl, git; python3 for the pty cases). Exit 1 if any
+# case fails. Spec: plans/skills-and-rules-fanout.md 3.4.
 #
 # Usage: bash tests/skills-fanout/test-skills-fanout.sh [--bash-only] [--help]
-#   --bash-only  accepted for compatibility (no-op): macOS/Linux always run only .sh
+#   --bash-only  accepted for compatibility (no-op): the harness always runs only .sh
 #   AITOOLS_TEST_BASH=/bin/bash runs the scripts under that bash (CI: macOS 3.2)
 
 set -uo pipefail
+
+# OS guard: macOS/Linux only. BASH_VERSINFO[5] is bash's compiled-in machine
+# type (read-only, never taken from the environment), so neither a uname shim
+# on PATH nor an exported OSTYPE hides Git Bash.
+case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*)
+        printf 'This script is for macOS/Linux. On Windows, run tests/skills-fanout/test-skills-fanout.ps1 with pwsh.\n' >&2
+        exit 1 ;;
+esac
+case "${BASH_VERSINFO[5]:-}" in
+    *-msys*|*-cygwin*|*-mingw*)
+        printf 'This script is for macOS/Linux. On Windows, run tests/skills-fanout/test-skills-fanout.ps1 with pwsh.\n' >&2
+        exit 1 ;;
+esac
 
 for arg in "$@"; do
     case "$arg" in
@@ -60,9 +72,7 @@ PTY="$ROOT/tests/managed-files/pty-run.py"
 TMP_ROOT="$(mktemp -d)"
 GOLDEN_DIR="$ROOT/tests/skills-fanout/golden"
 GOLDEN_TMP="$TMP_ROOT"
-LANG_RUN="$TEST_LANG"   # sh on macOS/Linux, ps1 on Windows
 L=sh                    # tag of the language under test: HOME $C/$L, output $C/$L.out
-if [ "$LANG_RUN" = ps1 ]; then L=ps; fi
 cleanup() {
     # chmod 000 cases: restore so rm can remove them
     chmod -R u+rwx "$TMP_ROOT" 2>/dev/null || printf 'warn: chmod restore failed under %s\n' "$TMP_ROOT"
@@ -97,22 +107,11 @@ for t in perl git; do
     fi
 done
 die() { printf 'FAIL fixture setup: %s\n' "$1"; exit 1; }
-if [ "$L" = ps ] && ! command -v pwsh >/dev/null 2>&1; then
-    printf 'FAIL pwsh is not on PATH: the .ps1 scripts cannot be tested on Windows\n'
-    exit 1
-fi
 HAVE_PTY=false
 NO_PTY_WHY="python3 not found"
 if command -v python3 >/dev/null 2>&1 && [ -f "$PTY" ]; then HAVE_PTY=true; fi
-# Windows pty = pywinpty (ConPTY); the import failing means it is not installed
-if $HAVE_PTY && [ "$L" = ps ] && ! python3 -c 'import winpty' >/dev/null 2>&1; then
-    HAVE_PTY=false; NO_PTY_WHY="pywinpty not installed (scripts/setup-pywinpty.ps1)"
-fi
-CAN_CHMOD_READ=true   # chmod 000 blocks reads (not for root, not under Git Bash)
-case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) CAN_CHMOD_READ=false ;; esac
+CAN_CHMOD_READ=true   # chmod 000 blocks reads (not for root)
 if [ "$(id -u)" = 0 ]; then CAN_CHMOD_READ=false; fi
-CAN_SYMLINK=true
-case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) CAN_SYMLINK=false ;; esac
 CASE_SENSITIVE_FS=false
 : > "$TMP_ROOT/cs-probe"
 if [ ! -e "$TMP_ROOT/CS-PROBE" ]; then CASE_SENSITIVE_FS=true; fi
@@ -168,63 +167,20 @@ manifest() {
     } > "$H/.aitools/skills/.aitools-skills-manifest"
 }
 
-# win_path P: P in Windows form (C:\..., backslashes) on Windows, unchanged
-# elsewhere. HOME and USERPROFILE get this form because Windows sets USERPROFILE
-# that way: with C:/... (native_path) the lib's "~/" display of a path under the
-# home directory never matches (windows CI run 41265193554: the ACTION rows said
-# HOME/.claude/skills instead of ~/.claude/skills).
-win_path() {
-    if [ "$TEST_PLATFORM" = windows ] && command -v cygpath >/dev/null 2>&1; then
-        cygpath -w "$1"
-    else
-        printf '%s' "$1"
-    fi
-}
-# tmp_forms: the temp root in every form a log may print it, one per line: POSIX;
-# on Windows also native (C:/...) and native with long names (C:/Users/runneradmin
-# for C:/Users/RUNNER~1)
-tmp_forms() {
-    local f
-    printf '%s\n' "$TMP_ROOT"
-    [ "$TEST_PLATFORM" = windows ] || return 0
-    for f in -m "-m -l"; do
-        # shellcheck disable=SC2086  # $f is one or two cygpath flags
-        if ! cygpath $f "$TMP_ROOT"; then printf 'warn: cygpath %s failed for %s\n' "$f" "$TMP_ROOT" >&2; fi
-        printf '\n'
-    done
-}
-TMP_FORMS="$(tmp_forms)"
+TMP_FORMS="$TMP_ROOT"   # the temp root as a log prints it (lognorm)
 
 # run_env H SUMMARY [VAR=value...]: sets E, the env command of a run under HOME H
-# (the same words for both languages; paths native on Windows, unchanged elsewhere)
 run_env() {
     local h="$1" s="$2"; shift 2
     E=(env -u AITOOLS_FORCE -u AITOOLS_DRY_RUN -u AITOOLS_USER_REPO_PATH -u AITOOLS_PROFILE_FILE
         -u AITOOLS_PROFILE_SH -u AITOOLS_PROFILE_PS1
-        HOME="$(win_path "$h")" USERPROFILE="$(win_path "$h")" AITOOLS_LOG_DIR="$(native_path "$h/logs")"
-        AITOOLS_SUMMARY_FILE="$(native_path "$s")" GIT_CONFIG_GLOBAL="$(native_path "$h/.gitconfig")"
+        HOME="$h" USERPROFILE="$h" AITOOLS_LOG_DIR="$h/logs"
+        AITOOLS_SUMMARY_FILE="$s" GIT_CONFIG_GLOBAL="$h/.gitconfig"
         GIT_CONFIG_NOSYSTEM=1 "$@")
 }
-# script_cmd DIR BASE [pty]: sets X, the command running DIR/BASE.sh (macOS/Linux,
-# under $TB) or DIR/BASE.ps1 (Windows, native pwsh; -NonInteractive unless on a pty)
+# script_cmd DIR BASE: sets X, the command running DIR/BASE.sh under $TB
 script_cmd() {
-    if [ "$L" = sh ]; then
-        X=("$TB" "$1/$2.sh")
-    elif [ "${3:-}" = pty ]; then
-        X=(pwsh -NoProfile -File "$(native_path "$1/$2.ps1")")
-    else
-        X=(pwsh -NoProfile -NonInteractive -File "$(native_path "$1/$2.ps1")")
-    fi
-}
-# lang_flag SH_FLAG PS_FLAG: the flag of the language under test
-lang_flag() { if [ "$L" = sh ]; then printf '%s' "${1:-}"; else printf '%s' "${2:-}"; fi; }
-# strip_cr FILE...: pwsh on Windows writes CRLF; the checks compare LF text
-strip_cr() {
-    local f
-    [ "$L" = ps ] || return 0
-    for f in "$@"; do
-        if [ -f "$f" ]; then perl -pi -e 's/\r//g' "$f" || printf 'warn: could not strip CR in %s\n' "$f"; fi
-    done
+    X=("$TB" "$1/$2.sh")
 }
 
 # run_one [FLAG]: run setup-user-claude non-interactively under $C/$L
@@ -235,28 +191,25 @@ run_one() {
     : > "$C/$L.summary"
     "${E[@]}" "${X[@]}" ${flag:+"$flag"} < /dev/null > "$C/$L.out" 2>&1
     echo $? > "$C/$L.rc"
-    strip_cr "$C/$L.out" "$C/$L.summary"
 }
 
 # run_pty INPUT: the same on a pty (review menu), keystrokes INPUT
 run_pty() {
     local input="$1"
     run_env "$C/$L" "$C/$L.summary"
-    script_cmd "$REPO/scripts" setup-user-claude pty
+    script_cmd "$REPO/scripts" setup-user-claude
     : > "$C/$L.summary"
-    "${E[@]}" python3 "$(native_path "$PTY")" --input "$input" --log "$(native_path "$C/$L.out")" -- "${X[@]}"
+    "${E[@]}" python3 "$PTY" --input "$input" --log "$C/$L.out" -- "${X[@]}"
     echo $? > "$C/$L.rc"
-    strip_cr "$C/$L.out" "$C/$L.summary"
 }
 
-# seed_home H: config.json -> the fixture dotprofile (native path), a git identity
+# seed_home H: config.json -> the fixture dotprofile, a git identity
 seed_home() {
     mkdir -p "$1/.aitools"
-    printf '{"userRepoPath":"%s","machineAlias":"m1"}\n' "$(native_path "$DP")" > "$1/.aitools/config.json"
+    printf '{"userRepoPath":"%s","machineAlias":"m1"}\n' "$DP" > "$1/.aitools/config.json"
     printf '[user]\n\tname = Test\n\temail = test@example.invalid\n[commit]\n\tgpgsign = false\n' > "$1/.gitconfig"
 }
-# case_run NAME SEED_FN [SH_FLAG PS_FLAG]: a fresh HOME $C/$L seeded by SEED_FN,
-# then one run of the language under test
+# case_run NAME SEED_FN [FLAG]: a fresh HOME $C/$L seeded by SEED_FN, then one run
 case_run() {
     C="$TMP_ROOT/$1"
     local seed="$2"
@@ -264,10 +217,10 @@ case_run() {
     H="$C/$L"
     seed_home "$H"
     "$seed"
-    run_one "$(lang_flag "${3:-}" "${4:-}")"
+    run_one "${3:-}"
 }
-rerun() {  # rerun [SH_FLAG PS_FLAG]: run again in the same HOME
-    run_one "$(lang_flag "${1:-}" "${2:-}")"
+rerun() {  # rerun [FLAG]: run again in the same HOME
+    run_one "${1:-}"
 }
 
 rc() { cat "$C/${1:-$L}.rc"; }
@@ -275,11 +228,8 @@ row() { grep -qxF "$1" "$C/${2:-$L}.summary"; }                  # exact summary
 nondetail() { grep -F '|claude skills|' "$C/${1:-$L}.summary" | grep -v '^DETAIL' | tail -n 1; }
 S() { printf '%s' "$C/${1:-$L}/.claude/skills"; }                 # the deployed skills dir
 # lognorm [LANG]: the run's log files, CR removed, every backslash a slash, the
-# temp root (any form, tmp_forms; case-insensitive) as <TMP>, so one expected
-# text matches the .sh log and the .ps1 log with its Windows paths. A path the
-# .ps1 builds from $PSScriptRoot or GetFullPath can come back in a form other
-# than the one the suite passed (windows CI run 41265193554: the adopt targets
-# under the aitools checkout did not normalize with the lib's two forms).
+# temp root (TMP_FORMS; case-insensitive) as <TMP>, so the expected texts are the
+# ones the Windows harness (test-skills-fanout.ps1) matches too
 lognorm() {
     local f
     for f in "$C/${1:-$L}/logs/"*.log; do
@@ -328,8 +278,8 @@ golden_record() {
         printf '# skills tree (path md5 [x]; symlinks not listed)\n'; tree_sig "$dir"
         printf '# summary rows (ACTION and skills, sorted)\n'; "$rowsfn" "$C/$L.summary"
         if [ -n "$extra" ]; then printf '# extra\n'; cat "$extra"; fi
-    } | HP="$C/$L" HN="$(native_path "$C/$L")" perl -pe '
-        for my $h (grep { length } ($ENV{HN}, $ENV{HP})) {
+    } | HP="$C/$L" perl -pe '
+        for my $h (grep { length } ($ENV{HP})) {
             (my $b = $h) =~ s{/}{\\}g;
             s/\Q$h\E/HOME/g; s/\Q$b\E/HOME/g;
         }' > "$f"
@@ -372,10 +322,8 @@ seed_fanout() {
     hskill .hidden SKILL.md 'hidden'
     printf 'not a skill\n' > "$H/.aitools/skills/notes.txt"
     dskill mine SKILL.md 'mine'
-    if $CAN_SYMLINK; then
-        mkdir -p "$H/.agents/skills/firecrawl"; printf 'fc\n' > "$H/.agents/skills/firecrawl/SKILL.md"
-        ln -s ../../.agents/skills/firecrawl "$H/.claude/skills/firecrawl"
-    fi
+    mkdir -p "$H/.agents/skills/firecrawl"; printf 'fc\n' > "$H/.agents/skills/firecrawl/SKILL.md"
+    ln -s ../../.agents/skills/firecrawl "$H/.claude/skills/firecrawl"
 }
 case_run fanout seed_fanout
 check "fanout: exit 0, row 6 added" "[ \"\$(rc)\" = 0 ] && [ \"\$(nondetail)\" = 'OK|claude skills|6 added' ]"
@@ -385,11 +333,7 @@ check "fanout: executable bit copied" "[ -x '$(S)/s1/scripts/run.sh' ] && [ ! -x
 check "fanout: *.bak.* (any case), hidden, backup dirs and top-level files skipped" "[ ! -e '$(S)/s1/SKILL.md.bak.2026-10-22T010203Z' ] && [ ! -e '$(S)/s1/tests/X.BAK.1' ] && [ ! -e '$(S)/old.bak.2026-10-25T000000Z' ] && [ ! -e '$(S)/.hidden' ] && [ ! -e '$(S)/notes.txt' ]"
 check "fanout: top-level file logged, manifest silent" "grep -q 'Ignoring non-skill file in harness skills: notes.txt' '$C/$L.out' && ! grep -q 'aitools-skills-manifest' '$C/$L.out'"
 check "fanout: third-party skill preserved" "grep -qx mine '$(S)/mine/SKILL.md' && grep -q 'Preserved unmanaged skill: mine' '$C/$L.out'"
-if $CAN_SYMLINK; then
-    check "fanout: firecrawl symlink preserved, never followed" "[ -L '$(S)/firecrawl' ] && [ \"\$(readlink '$(S)/firecrawl')\" = ../../.agents/skills/firecrawl ] && grep -qx fc '$C/$L/.agents/skills/firecrawl/SKILL.md' && [ \"\$(ls '$C/$L/.agents/skills/firecrawl')\" = SKILL.md ] && grep -q 'Preserved unmanaged skill: firecrawl' '$C/$L.out'"
-else
-    skip "fanout: firecrawl symlink preserved (no symlinks under Git Bash)"
-fi
+check "fanout: firecrawl symlink preserved, never followed" "[ -L '$(S)/firecrawl' ] && [ \"\$(readlink '$(S)/firecrawl')\" = ../../.agents/skills/firecrawl ] && grep -qx fc '$C/$L/.agents/skills/firecrawl/SKILL.md' && [ \"\$(ls '$C/$L/.agents/skills/firecrawl')\" = SKILL.md ] && grep -q 'Preserved unmanaged skill: firecrawl' '$C/$L.out'"
 check "fanout: one item per file in DETAIL rows" "row 'DETAIL|claude skills|added: s1/SKILL.md' && row 'DETAIL|claude skills|added: s1/scripts/run.sh' && row 'DETAIL|claude skills|added: s1/tests/expected-behaviors.md'"
 for lang in $L; do
     check "adopt map $lang: shared -> aitools shared/skills" "logged 'claude skills: s1/SKILL.md source=shared adopt=' $lang && logged '/shared/skills/s1/SKILL.md' $lang"
@@ -407,7 +351,7 @@ rerun
 check "fanout edited, non-interactive: overwritten, backup kept, WARN row" "[ \"\$(nondetail)\" = 'WARN|claude skills|1 updated, 5 verified' ] && grep -qx '## shared s1' '$(S)/s1/SKILL.md' && ls '$(S)/s1' | grep -q '^SKILL\.md\.bak\.'"
 parity fanout-edited
 printf '## shared s1\nlocal edit 2\n' > "$(S)/s1/SKILL.md"
-rerun --force -Force
+rerun --force
 check "fanout --force: overwritten" "[ \"\$(rc)\" = 0 ] && grep -qx '## shared s1' '$(S)/s1/SKILL.md' && [ \"\$(nondetail)\" = 'WARN|claude skills|1 updated, 5 verified' ]"
 parity fanout-force
 chmod 644 "$(S)/s1/scripts/run.sh"
@@ -415,7 +359,7 @@ rerun
 check "fanout: executable bit restored on a verified file" "[ -x '$(S)/s1/scripts/run.sh' ] && [ \"\$(nondetail)\" = 'OK|claude skills|6 verified' ]"
 parity fanout-xbit
 
-case_run fanout-dry seed_fanout --dry-run -DryRun
+case_run fanout-dry seed_fanout --dry-run
 check "fanout dry run: nothing written, row dry run" "[ \"\$(rc)\" = 0 ] && [ \"\$(nondetail)\" = 'OK|claude skills|dry run (no files written)' ] && [ ! -e '$(S)/s1' ] && grep -q 'DRY RUN\] Would create: s1/SKILL.md' '$C/$L.out'"
 parity fanout-dry
 
@@ -427,15 +371,11 @@ seed_kept() {
     ln -s ../../elsewhere/s1 "$H/.claude/skills/s1"
     printf 'a file\n' > "$H/.claude/skills/p1"
 }
-if $CAN_SYMLINK; then
-    case_run kept seed_kept
-    check "kept: exit 0, row 1 added (WARN)" "[ \"\$(rc)\" = 0 ] && [ \"\$(nondetail)\" = 'WARN|claude skills|1 added' ]"
-    check "kept: symlink and file untouched" "[ -L '$(S)/s1' ] && grep -qx theirs '$C/$L/elsewhere/s1/SKILL.md' && [ \"\$(ls '$C/$L/elsewhere/s1')\" = SKILL.md ] && grep -qx 'a file' '$(S)/p1'"
-    check "kept: ACTION row names both" "row 'ACTION||Claude Code skills in ~/.claude/skills not updated (a symlink or a file, not a directory the fan-out owns): p1, s1 -- move them aside to get the aitools copy'"
-    parity kept
-else
-    skip "kept symlink (no symlinks)"
-fi
+case_run kept seed_kept
+check "kept: exit 0, row 1 added (WARN)" "[ \"\$(rc)\" = 0 ] && [ \"\$(nondetail)\" = 'WARN|claude skills|1 added' ]"
+check "kept: symlink and file untouched" "[ -L '$(S)/s1' ] && grep -qx theirs '$C/$L/elsewhere/s1/SKILL.md' && [ \"\$(ls '$C/$L/elsewhere/s1')\" = SKILL.md ] && grep -qx 'a file' '$(S)/p1'"
+check "kept: ACTION row names both" "row 'ACTION||Claude Code skills in ~/.claude/skills not updated (a symlink or a file, not a directory the fan-out owns): p1, s1 -- move them aside to get the aitools copy'"
+parity kept
 
 # ---------------------------------------------------------------------------
 # Retired skills: pruned only when the copy holds the harness copy's files
@@ -465,7 +405,7 @@ check "retired: removals in DETAIL rows" "row 'DETAIL|claude skills|removed: gon
 check "retired: a retired skill still in ~/.aitools/skills is not fanned out" "grep -q 'Not fanned out: old (retired in the skills manifest)' '$C/$L.out' && ! row 'DETAIL|claude skills|added: old/SKILL.md'"
 check "retired: user dir with a retired name kept, ACTION row" "grep -qx 'my own' '$(S)/mine2/SKILL.md' && row 'ACTION||Claude Code still loads retired skills in ~/.claude/skills: mine2 -- delete them unless you wrote them'"
 parity retired
-case_run retired-dry seed_retired --dry-run -DryRun
+case_run retired-dry seed_retired --dry-run
 check "retired dry run: nothing removed, row dry run, removal previewed" "[ \"\$(rc)\" = 0 ] && [ \"\$(nondetail)\" = 'WARN|claude skills|dry run (no files written)' ] && [ -d '$(S)/gone' ] && [ -d '$(S)/old' ] && [ ! -e '$(S)/a' ] && [ \"\$(bakdirs)\" = 6 ] && grep -q 'DRY RUN\] Would back up and remove gone' '$C/$L.out'"
 parity retired-dry
 
@@ -524,7 +464,7 @@ if $CAN_CHMOD_READ; then
     check "unlisted DEST: ACTION row, preserved count unknown, retired copy kept" "[ \"\$(rc)\" = 0 ] && row 'ACTION||Claude Code skills in ~/.claude/skills cannot be listed: retired skills not checked and other skills not counted -- check its permissions' && grep -q 'preserved count unknown (cannot list)' '$C/$L.out' && [ -d '$(S)/gone' ]"
     parity unlisted
 else
-    skip "retired removal failure and unlisted DEST (root or Git Bash)"
+    skip "retired removal failure and unlisted DEST (root)"
 fi
 
 # ---------------------------------------------------------------------------
@@ -561,7 +501,7 @@ if $CAN_CHMOD_READ; then
     check "unreadable manifest: skills fanned out, ERROR rows, final row ERROR, exit 1" "[ \"\$(rc)\" = 1 ] && [ -f '$(S)/a/SKILL.md' ] && row 'ERROR|claude skills|cannot read skills manifest' && row 'DETAIL|claude skills|failed: .aitools-skills-manifest' && [ \"\$(nondetail)\" = 'ERROR|claude skills|1 failed' ]"
     parity manifest-unreadable
 else
-    skip "unreadable harness dir and manifest (root or Git Bash)"
+    skip "unreadable harness dir and manifest (root)"
 fi
 
 # ---------------------------------------------------------------------------
@@ -692,20 +632,16 @@ if $CASE_SENSITIVE_FS; then
     case_run dupcase seed_dupcase
     check "case-only duplicate: the first wins, the second failed" "[ \"\$(rc)\" = 1 ] && [ \"\$(nondetail)\" = 'ERROR|claude skills|1 failed' ]"
     # No golden record: only a case-sensitive file system (Linux) builds this
-    # fixture, so the Windows .ps1 never runs it and the macOS run that writes
+    # fixture, so the Windows harness never runs it and the macOS run that writes
     # the golden files cannot produce one
 else
     skip "case-only duplicate (case-insensitive file system)"
 fi
 
-if $CAN_SYMLINK; then
-    seed_broken() { hskill a SKILL.md 'skill a'; ln -s "$H/nowhere" "$H/.aitools/skills/broken"; }
-    case_run broken seed_broken
-    check "dangling symlink: failed, others deployed" "[ \"\$(rc)\" = 1 ] && [ \"\$(nondetail)\" = 'ERROR|claude skills|1 failed' ] && [ -f '$(S)/a/SKILL.md' ] && row 'DETAIL|claude skills|failed: broken'"
-    parity broken
-else
-    skip "dangling symlink (no symlinks)"
-fi
+seed_broken() { hskill a SKILL.md 'skill a'; ln -s "$H/nowhere" "$H/.aitools/skills/broken"; }
+case_run broken seed_broken
+check "dangling symlink: failed, others deployed" "[ \"\$(rc)\" = 1 ] && [ \"\$(nondetail)\" = 'ERROR|claude skills|1 failed' ] && [ -f '$(S)/a/SKILL.md' ] && row 'DETAIL|claude skills|failed: broken'"
+parity broken
 
 # ~/.claude/skills cannot be created (a file is in the way): ERROR row, exit 1,
 # the script still reaches its exit footer
@@ -713,7 +649,7 @@ seed_nocreate() { hskill a SKILL.md 'skill a'; mkdir -p "$H/.claude"; printf 'no
 case_run nocreate seed_nocreate
 check "cannot create skills dir: ERROR row, exit 1, file untouched" "[ \"\$(rc)\" = 1 ] && [ \"\$(nondetail)\" = 'ERROR|claude skills|cannot create skills dir' ] && grep -qx 'not a dir' '$C/$L/.claude/skills' && grep -q 'FAILED with' '$C/$L.out'"
 parity nocreate
-case_run nocreate-dry seed_nocreate --dry-run -DryRun
+case_run nocreate-dry seed_nocreate --dry-run
 check "cannot create skills dir, dry run: the same ERROR row as the real run" "[ \"\$(rc)\" = 1 ] && [ \"\$(nondetail)\" = 'ERROR|claude skills|cannot create skills dir' ] && grep -qx 'not a dir' '$C/$L/.claude/skills'"
 parity nocreate-dry
 
@@ -724,12 +660,11 @@ parity nocreate-dry
 # skill it lists
 # ---------------------------------------------------------------------------
 seed_real() {
-    # deploy-harness of the language under test, from this checkout, into $H
-    run_env "$H" "$C/dh.summary" AITOOLS_LOG_DIR="$(native_path "$H/logs-dh")"
+    # deploy-harness.sh from this checkout, into $H
+    run_env "$H" "$C/dh.summary" AITOOLS_LOG_DIR="$H/logs-dh"
     script_cmd "$ROOT/scripts" deploy-harness
-    "${E[@]}" "${X[@]}" "$(lang_flag --skip-config -SkipConfig)" "$(lang_flag --force -Force)" < /dev/null > "$C/dh.out" 2>&1
+    "${E[@]}" "${X[@]}" --skip-config --force < /dev/null > "$C/dh.out" 2>&1
     echo $? > "$C/dh.rc"
-    strip_cr "$C/dh.out" "$C/dh.summary" "$H/.aitools/skills/.aitools-skills-manifest"
 }
 case_run real seed_real
 check "real harness: deploy-harness wrote the skills manifest" "[ \"\$(cat '$C/dh.rc')\" = 0 ] && head -n 1 '$C/$L/.aitools/skills/.aitools-skills-manifest' | grep -qx '# aitools skills manifest v1' || { tail -n 20 '$C/dh.out'; false; }"
@@ -747,8 +682,8 @@ check "real harness rerun: verified" "nondetail | grep -qE '^OK\|claude skills\|
 # ---------------------------------------------------------------------------
 # Cursor (FO-5): setup-user-cursor step 5 runs the same fan-out into
 # ~/.cursor/skills with tool "cursor skills" and no adopt target. The whole
-# script runs (the .sh on macOS/Linux, the .ps1 on Windows), stub rg/agent on
-# PATH so steps 1-2 find them installed and no installer runs.
+# script runs, stub rg/agent on PATH so steps 1-2 find them installed and no
+# installer runs.
 # ---------------------------------------------------------------------------
 cp "$ROOT/scripts/setup-user-cursor.sh" "$A/scripts/setup-user-cursor.sh"
 cp "$ROOT/scripts/setup-user-cursor.ps1" "$A/scripts/setup-user-cursor.ps1"
@@ -756,9 +691,6 @@ CSTUB="$TMP_ROOT/cursor-stubs"
 mkdir -p "$CSTUB"
 printf '#!/usr/bin/env bash\necho "ripgrep 14.1.0"\n' > "$CSTUB/rg"
 printf '#!/usr/bin/env bash\necho "2026.05.21-stub"\n' > "$CSTUB/agent"
-# native pwsh cannot run an extensionless bash script: .cmd twins for Windows
-printf '@echo ripgrep 14.1.0\r\n' > "$CSTUB/rg.cmd"
-printf '@echo 2026.05.21-stub\r\n' > "$CSTUB/agent.cmd"
 chmod +x "$CSTUB/rg" "$CSTUB/agent"
 
 # run_cursor [FLAG]: setup-user-cursor under $C/$L, non-interactive
@@ -769,9 +701,8 @@ run_cursor() {
     : > "$C/$L.summary"
     "${E[@]}" "${X[@]}" ${flag:+"$flag"} < /dev/null > "$C/$L.out" 2>&1
     echo $? > "$C/$L.rc"
-    strip_cr "$C/$L.out" "$C/$L.summary"
 }
-# cursor_case NAME SEED_FN [SH_FLAG PS_FLAG]: as case_run, running setup-user-cursor
+# cursor_case NAME SEED_FN [FLAG]: as case_run, running setup-user-cursor
 cursor_case() {
     C="$TMP_ROOT/$1"
     local seed="$2"
@@ -779,7 +710,7 @@ cursor_case() {
     H="$C/$L"
     seed_home "$H"
     "$seed"
-    run_cursor "$(lang_flag "${3:-}" "${4:-}")"
+    run_cursor "${3:-}"
 }
 cnondetail() { grep -F '|cursor skills|' "$C/${1:-$L}.summary" | grep -v '^DETAIL' | tail -n 1; }
 CS() { printf '%s' "$C/${1:-$L}/.cursor/skills"; }
@@ -800,10 +731,8 @@ seed_cursor() {
     cskill gone SKILL.md 'gone'                      # the fan-out's copy of a retired skill
     cskill mine2 SKILL.md 'my own'                   # a user's skill at a retired name
     cskill mine SKILL.md 'mine'                      # a user's own skill
-    if $CAN_SYMLINK; then
-        mkdir -p "$H/.agents/skills/firecrawl"; printf 'fc\n' > "$H/.agents/skills/firecrawl/SKILL.md"
-        ln -s ../../.agents/skills/firecrawl "$H/.cursor/skills/firecrawl"
-    fi
+    mkdir -p "$H/.agents/skills/firecrawl"; printf 'fc\n' > "$H/.agents/skills/firecrawl/SKILL.md"
+    ln -s ../../.agents/skills/firecrawl "$H/.cursor/skills/firecrawl"
 }
 cursor_case cursor seed_cursor
 check "cursor: exit 0, row 4 added, 1 removed (WARN: a kept dir still loads)" "[ \"\$(rc)\" = 0 ] && [ \"\$(cnondetail)\" = 'WARN|cursor skills|4 added, 1 removed' ]"
@@ -815,11 +744,7 @@ done
 check "cursor: retired copy removed, backed up beside ~/.cursor/skills" "[ ! -e '$(CS)/gone' ] && b=\$(ls -d '$C/$L/.cursor/'skills.bak.* | head -n 1) && grep -qx gone \"\$b/gone/SKILL.md\" && grep -qxF 'DETAIL|cursor skills|removed: gone' '$C/$L.summary'"
 check "cursor: user skill at a retired name kept, ACTION row" "grep -qx 'my own' '$(CS)/mine2/SKILL.md' && grep -qxF 'ACTION||Cursor still loads retired skills in ~/.cursor/skills: mine2 -- delete them unless you wrote them' '$C/$L.summary'"
 check "cursor: a user's own skill kept" "grep -qx mine '$(CS)/mine/SKILL.md' && grep -q 'Preserved unmanaged skill: mine' '$C/$L.out'"
-if $CAN_SYMLINK; then
-    check "cursor: firecrawl symlink preserved, never followed" "[ -L '$(CS)/firecrawl' ] && [ \"\$(readlink '$(CS)/firecrawl')\" = ../../.agents/skills/firecrawl ] && [ \"\$(ls '$C/$L/.agents/skills/firecrawl')\" = SKILL.md ]"
-else
-    skip "cursor: firecrawl symlink preserved (no symlinks under Git Bash)"
-fi
+check "cursor: firecrawl symlink preserved, never followed" "[ -L '$(CS)/firecrawl' ] && [ \"\$(readlink '$(CS)/firecrawl')\" = ../../.agents/skills/firecrawl ] && [ \"\$(ls '$C/$L/.agents/skills/firecrawl')\" = SKILL.md ]"
 check "cursor: step 5 logged after step 4" "grep -q 'Step 5: Cursor user skills' '$C/$L.out'"
 cparity cursor
 run_cursor
@@ -844,5 +769,5 @@ cursor_case cursor-retired-only seed_cursor_retired_only
 check "cursor, only retired names: both steps write n/a (nothing to deploy)" "[ \"\$(rc)\" = 0 ] && [ \"\$(cnondetail)\" = 'OK|cursor skills|n/a (nothing to deploy)' ] && [ \"\$(grep -F '|cursor rules|' '$C/$L.summary' | grep -v '^DETAIL' | tail -n 1)\" = 'OK|cursor rules|n/a (nothing to deploy)' ]"
 cparity cursor-retired-only
 
-printf '\n%d passed, %d failed, %d skipped (%s: %s scripts)\n' "$PASS" "$FAIL" "$SKIP" "$TEST_PLATFORM" "$LANG_RUN"
+printf '\n%d passed, %d failed, %d skipped (%s: %s scripts)\n' "$PASS" "$FAIL" "$SKIP" "$TEST_PLATFORM" sh
 [ "$FAIL" -eq 0 ]
