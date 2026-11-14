@@ -72,22 +72,52 @@ relay_outbound_prompt() {
     printf '    git commit -m "channel: update relay — …"\n' > /dev/tty
     printf '    git push\n' > /dev/tty
     printf '\n  [c]ontinue  [q]uit (exit 2)  [s]how git status\n' > /dev/tty
-    printf '  choice [c/q/s] (default c): ' > /dev/tty
-    local choice
-    read -r choice < /dev/tty
-    case "$(printf '%s' "$choice" | tr '[:upper:]' '[:lower:]')" in
-        q|q*)
+    local rc=0
+    _relay_outbound_choice < /dev/tty > /dev/tty || rc=$?
+    case "$rc" in
+        2)
             return 2
             ;;
-        s|s*)
+        3)
             git -C "$repo" status -sb > /dev/tty
             printf '\n' > /dev/tty
             ;;
-        *)
-            return 0
-            ;;
     esac
     return 0
+}
+
+# Read the [RELAY] choice from stdin; the prompt and hints go to stdout (the
+# caller points both at /dev/tty). An empty or unrecognised answer asks again.
+# Returns 0 continue, 2 quit, 3 show git status. End of input, or 50
+# unrecognised answers in a row, continues (the prompt's EOF default) and says so.
+# hh.sh does not load aitools-lib, so this mirrors the library's
+# read_menu_choice locally: same hint text, no answer logging.
+_relay_outbound_choice() {
+    local choice="" rc=0 tries=0
+    while :; do
+        printf '  choice [c/q/s]: '
+        rc=0
+        IFS= read -r choice || rc=$?
+        # Trim surrounding whitespace (a CR included), then lowercase
+        choice="${choice#"${choice%%[![:space:]]*}"}"
+        choice="${choice%"${choice##*[![:space:]]}"}"
+        choice=$(printf '%s' "$choice" | tr '[:upper:]' '[:lower:]')
+        case "$choice" in
+            c|continue) return 0 ;;
+            q|quit) return 2 ;;
+            s|show) return 3 ;;
+        esac
+        if [ "$rc" -ne 0 ]; then
+            printf '\n  (no input -- continuing)\n'
+            return 0
+        fi
+        tries=$((tries + 1))
+        if [ "$tries" -ge 50 ]; then
+            printf '  (no input -- continuing)\n'
+            return 0
+        fi
+        printf '  please type one of c/continue/q/quit/s/show\n'
+    done
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then

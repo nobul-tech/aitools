@@ -110,6 +110,15 @@ jobs:
       - name: Dotprofile adopt commit+push tests (bash)
         run: bash tests/managed-files/test-adopt-push.sh
 
+      # Menu-choice wrapper read_menu_choice (re-ask on unrecognised input)
+      - name: Menu-choice wrapper tests (bash 5, pty)
+        if: ${{ !cancelled() }}
+        run: bash tests/menus/test-menu-choice.sh
+
+      - name: Menu-choice wrapper tests (macOS /bin/bash 3.2, pty)
+        if: ${{ !cancelled() }}
+        run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/menus/test-menu-choice.sh
+
       - name: Profile resolver tests (.sh, bash 5)
         run: bash tests/profile/test-profile.sh
 
@@ -506,6 +515,11 @@ jobs:
       - name: Dotprofile adopt commit+push tests (bash)
         run: bash tests/managed-files/test-adopt-push.sh
 
+      # Menu-choice wrapper read_menu_choice (re-ask on unrecognised input)
+      - name: Menu-choice wrapper tests (bash, pty)
+        if: ${{ !cancelled() }}
+        run: bash tests/menus/test-menu-choice.sh
+
       - name: Profile resolver tests (.sh, incl. claude-code-web)
         run: bash tests/profile/test-profile.sh
 
@@ -773,6 +787,18 @@ jobs:
         if: ${{ !cancelled() }}
         shell: pwsh
         run: pwsh -NoProfile -File tests/managed-files/test-adopt-push.ps1
+
+      # Menu-choice wrapper read_menu_choice / Read-MenuChoice (re-ask on
+      # unrecognised input); the bash twin's pty cases use pywinpty (installed above)
+      - name: Menu-choice wrapper tests (bash, via Git Bash, ConPTY)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: bash tests/menus/test-menu-choice.sh
+
+      - name: Menu-choice wrapper tests (PowerShell, native)
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: pwsh -NoProfile -File tests/menus/test-menu-choice.ps1
 
       - name: setup-user-shell PowerShell profile block tests (PowerShell, native)
         if: ${{ !cancelled() }}

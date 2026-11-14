@@ -329,13 +329,15 @@ if ($destSkillDirs.Count -gt 0) {
             } elseif (-not (Test-InteractiveConsole)) {
                 Log "Non-interactive: skipped adoption prompt for $skillName"
             } else {
-                # Test-InteractiveConsole + Read-ConsoleChoice (GitHub #29): EOF at
-                # the prompt logs a warning and takes the default, [s]kip.
+                # Test-InteractiveConsole + Read-MenuChoice (GitHub #29):
+                # Read-MenuChoice prints the prompt, lowercases the answer, logs
+                # it at detail, and re-asks on an empty or unrecognised answer;
+                # only EOF takes the default, [s]kip.
                 [Console]::WriteLine("")
                 [Console]::WriteLine("  User-created skill detected: $skillName")
                 [Console]::WriteLine("  [a]dopt to dotprofile  [s]kip")
-                [Console]::Write("  > ")
-                $choice = Read-ConsoleChoice "skip"
+                $choice = Read-MenuChoice -Valid @("a", "adopt", "s", "skip") -Default "s" -DefaultDesc "skip" `
+                    -Context "adopt skill $skillName" -Prompt "  > "
                 switch ($choice) {
                     { $_ -in @("a", "adopt") } {
                         $errorsBeforeAdopt = $errors
@@ -345,8 +347,13 @@ if ($destSkillDirs.Count -gt 0) {
                             Write-Summary "ERROR" $skillsRowTool "adopt failed: $skillName"
                         }
                     }
-                    default {
+                    { $_ -in @("s", "skip") } {
                         Log "Skipped adoption of $skillName"
+                    }
+                    default {
+                        # Unreachable: Read-MenuChoice returns only a VALID
+                        # answer. Skip (writes nothing) and say so.
+                        LogWarn "Unexpected answer `"$choice`" at adopt skill $skillName -- skipped adoption of $skillName"
                     }
                 }
             }
