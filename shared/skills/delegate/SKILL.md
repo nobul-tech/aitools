@@ -437,8 +437,8 @@ Verify these before relying on them; versions move. Source of record:
   delegate's name: `meta.json` copies it, and it is the only link from the
   name to the agentId. Record the agentId the launch returns. A delegate's
   transcript is `subagents/agent-<agentId>.jsonl` under the main session's
-  project folder, not the `output_file` (empty until the delegate is woken
-  again). A delegate cannot TaskStop its own delegate: message it instead
+  project folder, not the `output_file` (observed empty until the delegate
+  is woken again). A delegate cannot TaskStop its own delegate: message it instead
   (the main session can stop a level-1 delegate it launched). Tell delegates
   to stop their own monitors and background shells before handing back:
   they outlive the hand-back, and their completion can bring the delegate

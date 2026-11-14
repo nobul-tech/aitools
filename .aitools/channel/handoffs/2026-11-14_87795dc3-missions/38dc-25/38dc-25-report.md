@@ -137,12 +137,11 @@ column names what settled it.
 | 45 | shared/claude-shared.md:4, :86, :104 and the dotprofile `claude/CLAUDE.md` (deployed :4, :121, :137-138, :144, :157, :197) | Windows "always uses Git Bash (not configurable)"; "CC 2.1.68+ defaults to medium for Opus 4.6"; "Imported via `@`"; deployed `reference/claude-code-version-deps.md`; deployed sub-agent note | #9, #13-15, docs | **open: RFI 38dc-25-1** (dotprofile is out of this mission's access; template sync needs both) |
 | 46 | `.claude/rules/cross-platform.md:195-196` | hooks run in bash on all platforms, Git Bash on Windows | hooks docs | no change (correct with Git Bash installed, which the harness requires) |
 | 47 | shared/rules/delegation.md:42-44, delegate SKILL.md:45-46 | "foreground or background" Agent calls | the main session's Agent has `run_in_background`; delegates' does not | no change (a trigger list, not a capability claim) |
+| 48 | deployed copies (`~/.claude/skills/delegate` v2.1, tool-ops row, no `~/.claude/rules/delegation.md`, retired `aitool-ops` still present) | lag the repo | af14-05 `ls`/`diff` | **open: RFI 38dc-25-3** (an `aitools` run) |
 | 49 | tool registry workaround item 5 | "Sub-agents do not inherit rules/CLAUDE.md" (2.1.74) | #11 evidence; reviewer B2 | summary and lastVerified 2.1.325 |
 | 50 | shared/skills/planning/SKILL.md:96, :102-106 | "subagents don't inherit rules"; "project rules may attach only when ..." | #11 evidence; reviewer note 2 | rewritten |
 | 51 | reference/framework-three-layer-governance.md:26, reference/rules.md:82 (a quote of it) | "Rules are always in context" | `paths:` rules; d21994b | qualifier added (true for governance rules, which have no `paths:`) |
 | 52 | reference #31, "output_file" subsection; /delegate and item #5 "(the main checkout)"; documentation-standards worktree-session claim; incident-governance "every agent"; Hand-backs docs quote | overclaims and a truncated quote (reviewer notes 4, 7, 8, 9) | probe scope; sub-agents docs | worded as observed; quote completed ("once its stopped run has exited") |
-| 48 | deployed copies (`~/.claude/skills/delegate` v2.1, tool-ops row, no `~/.claude/rules/delegation.md`, retired `aitool-ops` still present) | lag the repo | af14-05 `ls`/`diff` | **open: RFI 38dc-25-3** (an `aitools` run) |
-
 Not a Claude Code fact, recorded as follow-ups (not changed):
 `reference/artifact-harvesting.md:154, :188` (scratch dir naming vs the
 `/scratch` skill) and `:309` (archives `subagents/*.jsonl` but not the
@@ -196,7 +195,11 @@ B1 (#22 is 2.1.69) and B2 (registry workaround #5) fixed, and notes 1-4 and
 7-10 applied (rows 49-52; RFI 38dc-25-1 now names `:118`). Note 5 needs no
 change (the mechanism is recorded as unknown); note 6: the delegate-side
 refusal text is already quoted verbatim in the hand-back section (v1.0
-bullet). Re-check: see "Shipping" in the hand-back.
+bullet). Re-check at 9801bdd: **PASS**,
+https://github.com/nobul-tech/aitools/pull/165#issuecomment-6886226086 (it
+withdrew note 6). Its two wording leftovers were applied afterwards: the
+table order, and "observed" wording for the `output_file` link in
+RELEASE_NOTES, `/delegate` and registry workaround #32.
 
 ## CONFLICT / WRITE_BLOCKED
 
