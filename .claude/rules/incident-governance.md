@@ -232,4 +232,7 @@ Designed, not implemented (no script, not in the manifest):
 - **PreToolUse on Bash git commands**: checklist reminder.
 - **Stop**: surfacing-duty reminder and incident-acknowledgment detection.
   NOTE: Claude Code `type: "prompt"` hooks require a static `prompt` string;
-  a dynamic Stop hook must be `type: "command"` with stderr output.
+  a dynamic Stop hook must be `type: "command"`. Its stderr reaches Claude
+  only when it exits 2, which also keeps Claude from stopping (hooks docs,
+  read 2026-11-14), never on exit 0 (`@reference/tool-ops-claude-code.md`
+  item #34).
