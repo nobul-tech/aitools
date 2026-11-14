@@ -199,16 +199,15 @@ if require_pwsh "6" "Full syntax (.ps1)"; then
 fi
 
 # ---------------------------------------------------------------------------
-# 7. deploy/ drift audit
+# 7. deploy/ drift audit (retired)
 # ---------------------------------------------------------------------------
-bash "$SCRIPT_DIR/build-deploy.sh" >/dev/null 2>&1
-drift=$(git diff deploy/ 2>/dev/null || true)
-if [ -z "$drift" ]; then
-    step_pass "7" "deploy/ drift audit"
-else
-    step_fail "7" "deploy/ drift audit" "deploy/ is stale -- rebuild needed"
-    git checkout -- deploy/ 2>/dev/null || true
-fi
+# Retired (M5-Fixes item 3): the step ran build-deploy.sh with this shell's HOME,
+# which replaces the real dotprofile deploy/ (incident #86 class), then diffed the
+# frozen aitools deploy/, which build-deploy no longer writes, so it always passed.
+# check-pre-push step 7 runs on every push (commander, 2026-10-26) and does the real
+# check: a rebuild into a temporary copy of the dotprofile under a temporary HOME.
+# This step never runs build-deploy.sh; the number stays so outputs stay stable.
+step_skip "7" "deploy/ drift audit" "retired: check-pre-push step 7 rebuilds into a temp dotprofile copy"
 
 # ---------------------------------------------------------------------------
 # 9. Source-of-truth consistency
@@ -748,13 +747,24 @@ step_skip "28" "Deploy state integrity" "retired: managed files keep no deploy s
 if $EXTENSIVE; then
     ps1_lib="$REPO_ROOT/scripts/aitools-lib.ps1"
     sh_lib="$REPO_ROOT/scripts/aitools-lib.sh"
-    # Extract [letter] patterns from auto-merge menu sections
-    ps1_auto=$(perl -ne 'print "$1\n" if /Console.*Write.*\[(\w)\]/' "$ps1_lib" | sort -u | paste -s -d , -)
-    sh_auto=$(perl -ne 'print "$1\n" if /printf.*\[(\w)\]/' "$sh_lib" | sort -u | paste -s -d , -)
-    if [ "$ps1_auto" = "$sh_auto" ]; then
-        step_pass "29" "Deployment menu parity audit" "PS1 and bash menus match: $ps1_auto"
+    # The menu letters printed by printf / [Console]::Write lines and the
+    # prompts passed to read_menu_choice / Read-MenuChoice, compared in
+    # scripts/check-menu-parity.pl (same script as the PS1 step 29; its header
+    # lists the blind spots). Exit 0 match, 1 mismatch, 2 usage or read error;
+    # the last output line is the summary. Capture the exit without a set -e abort.
+    if ! command -v perl >/dev/null 2>&1; then
+        # Command-existence check with an explicit fallback (the SKIP)
+        step_skip "29" "Deployment menu parity audit" "perl not available"
     else
-        step_fail "29" "Deployment menu parity audit" "PS1: $ps1_auto vs bash: $sh_auto"
+        mp_rc=0
+        mp_out=$(perl "$REPO_ROOT/scripts/check-menu-parity.pl" "$sh_lib" "$ps1_lib" 2>&1) || mp_rc=$?
+        mp_last=$(printf '%s\n' "$mp_out" | tail -n 1)
+        if [ "$mp_rc" -eq 0 ]; then
+            step_pass "29" "Deployment menu parity audit" "PS1 and bash menus match: $mp_last"
+        else
+            printf '%s\n' "$mp_out" | perl -pe 's/^/      /'
+            step_fail "29" "Deployment menu parity audit" "$mp_last (exit $mp_rc)"
+        fi
     fi
 fi
 

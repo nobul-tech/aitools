@@ -26,8 +26,9 @@ order, not modes.
 
 `bash -n` on the generated deploy scripts -- catches build corruption or stale
 copies. Fast (<1s). The generated scripts live in `<userRepoPath>/deploy/` (the
-dotprofile build output); the script still checks the frozen aitools `deploy/`
-(steps 2, 6 and 14 need the same change: see the incident note under step 7).
+dotprofile build output); the script still checks the frozen aitools `deploy/`,
+as do steps 6 and 14, so these steps prove nothing about the dotprofile build
+(an open gap; check-pre-push step 7 is the check of the build, see step 7).
 
 ### 2b. Functional smoke test (when requested or after significant changes)
 
@@ -76,12 +77,15 @@ full ParseFile command (pwsh is a managed tool).
 
 ### 7. deploy/ drift audit (retired)
 
-The shared `aitools/deploy/` is frozen. Drift of the dotprofile `deploy/` is
-checked by pre-push step 7 (rebuild into a temporary copy). Do not run
-`build-deploy.sh` here: it replaces the real dotprofile `deploy/`. (The script
-still runs `build-deploy.sh` and then `git diff deploy/` on the frozen aitools
-tree, so the step always passes and rebuilds the real dotprofile as a side
-effect: an open defect, recorded for the incident registry.)
+Always SKIP (`retired: check-pre-push step 7 rebuilds into a temp dotprofile
+copy`). The shared `aitools/deploy/` is frozen. Drift of the dotprofile
+`deploy/` is checked by pre-push step 7 (a rebuild into a temporary copy of the
+dotprofile under a temporary HOME), which runs on every push. Do not run
+`build-deploy.sh` here: with the real HOME it replaces the real dotprofile
+`deploy/`. Until v0.77.2 both scripts ran `build-deploy.sh` with the caller's
+HOME and then `git diff deploy/` on the frozen aitools tree, so the step always
+passed and rebuilt the real dotprofile as a side effect; the step no longer
+runs it (`tests/check-post-push/test-post-push-step7.sh`).
 
 ### 9. Source-of-truth consistency
 
@@ -220,9 +224,22 @@ Always SKIP: managed files keep no deploy state.
 
 ### 29. Deployment menu parity audit
 
-Collects every `[letter]` printed by a menu in `scripts/aitools-lib.ps1` and
-`scripts/aitools-lib.sh` and compares the two sorted sets. Order is not
-compared.
+Runs `scripts/check-menu-parity.pl` (perl; SKIP when perl is missing) on
+`scripts/aitools-lib.sh` and `scripts/aitools-lib.ps1`, two comparisons:
+
+- **Menu lines**: the `[letter]` printed by each `printf` (bash) and
+  `[Console]::Write` / `WriteLine` (PowerShell) menu line, as one sorted set
+  per file.
+- **Prompts** (since v0.77.2): the prompt passed to each `read_menu_choice`
+  (its PROMPT argument) and `Read-MenuChoice` (`-Prompt`) call, such as the
+  AI-merge preview's `[y]es / [r]efine / [n]o`. Its `[x]` letters and
+  `[a/b/c]` lists make one set per call; the two files' lists of sets must
+  match. A prompt in a variable takes the literal assigned to it earlier in
+  the file; a prompt built at run time counts as `?`.
+
+Order is not compared. FAIL prints what differs (e.g. `prompts only in bash:
+[q,r,y]`). The script header lists the blind spots; tests:
+`tests/check-post-push/test-menu-parity.sh`.
 
 ### 30. Return value coverage audit
 

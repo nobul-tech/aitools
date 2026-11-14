@@ -23,6 +23,11 @@ CheckLogInit "pre-commit"
 
 Set-Location $script:RepoRoot
 
+# The managed Git Bash for the .sh steps (2: bash -n, 3: build-deploy.sh): never
+# the WSL launcher a bare `bash` resolves to in a native pwsh (check-lib ResolveGitBash)
+$gitBash = ResolveGitBash
+if ($gitBash) { LogDetail "Git Bash: $gitBash" } else { LogDetail "Git Bash: not found (Git for Windows locations)" }
+
 Write-Host ""
 Write-Host "=== PRE-COMMIT CHECKLIST ===" -ForegroundColor White
 Write-Host ""
@@ -54,10 +59,12 @@ if ($stagedSh.Count -eq 0 -and $stagedPs1.Count -eq 0) {
     StepSkip "2" "Script syntax (.ps1)" "no scripts staged"
 } else {
     # Bash validation
-    if ($stagedSh.Count -gt 0) {
+    if ($stagedSh.Count -gt 0 -and -not $gitBash) {
+        StepWarn "2" "Script syntax (.sh)" "Git Bash not found -- $($stagedSh.Count) .sh file(s) not checked"
+    } elseif ($stagedSh.Count -gt 0) {
         $shErrors = 0
         foreach ($f in $stagedSh) {
-            $result = bash -n $f 2>&1
+            $result = & $gitBash -n $f 2>&1
             if ($LASTEXITCODE -ne 0) {
                 Write-Host "      FAIL: $f"
                 $shErrors++
@@ -107,13 +114,12 @@ foreach ($f in $stagedFiles) {
 
 if ($buildNeeded) {
     if ($Fix) {
-        $bashExe = (Get-Command bash -ErrorAction SilentlyContinue).Source
-        if ($bashExe) {
-            & $bashExe "$script:RepoRoot/scripts/build-deploy.sh" 2>$null | Out-Null
+        if ($gitBash) {
+            & $gitBash "$script:RepoRoot/scripts/build-deploy.sh" 2>$null | Out-Null
             InvokeGit add deploy/
             StepPass "3" "Build freshness" "(rebuilt + staged)"
         } else {
-            StepFail "3" "Build freshness" "bash not found for build-deploy.sh"
+            StepFail "3" "Build freshness" "Git Bash not found for build-deploy.sh"
         }
     } else {
         StepWarn "3" "Build freshness" "scripts/ or shared/ modified -- run with -Fix"

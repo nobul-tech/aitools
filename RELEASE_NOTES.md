@@ -35,6 +35,67 @@ Not tagged. Branch `docs/m5-docs`, mission M5-Fixes (session 87795dc3), items 6,
 
 ---
 
+## v0.77.2 -- Check tooling: Git Bash for the PowerShell checks, CI covers .ps1 suites (2026-11-14)
+
+Not tagged. Mission M5-Fixes (items 9 and 4, batch M5-C1).
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 1 | Medium | `check-pre-commit.ps1`, `check-pre-push.ps1` and `check-post-push.ps1` ran their bash steps with the first `bash` on PATH (`Get-Command bash`, a bare `bash -n`, or a PATH fallback after the Git for Windows locations). In a native pwsh that is the WSL launcher (`%LOCALAPPDATA%\Microsoft\WindowsApps\bash.exe` on the commander's workstation), not Git Bash. They now use one helper, `ResolveGitBash` in `scripts/check-lib.ps1`: the Git for Windows locations only (the list `setup-bash.ps1` probes), no PATH fallback, and any candidate under `%SystemRoot%` or the WindowsApps alias directory refused. No Git Bash: pre-commit step 2 is WARN (new: it had no not-found branch), step 3 `-Fix` FAIL, pre-push step 7 WARN and post-push steps 2, 6, 7 SKIP, as before |
+| 2 | High | `check-post-push` step 7 ("deploy/ drift audit", both twins) ran `build-deploy.sh` with the caller's HOME, which replaces the real dotprofile `deploy/` (incident #86 class), and then diffed the frozen aitools `deploy/`, which build-deploy no longer writes, so it always passed. Step 7 is retired: always SKIP `retired: check-pre-push step 7 rebuilds into a temp dotprofile copy` (pre-push step 7 runs on every push, commander 2026-10-26); the step number stays. The `.ps1` "bash not found" SKIP texts of steps 2 and 6 now say "Git Bash not found". `shared/rules/tool-lifecycle.md` "Rebuild + propagate" and `reference/post-push-checklist.md` step 7 follow |
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 3 | `check-post-push` step 29 (menu parity audit) also compares the prompts passed to the menu-read helper: the PROMPT argument of `read_menu_choice` (bash) and `-Prompt` of `Read-MenuChoice` (PowerShell), one letter set per call (`[x]` letters and `[a/b/c]` lists; a prompt in a variable takes the literal assigned earlier; a prompt built at run time counts as `?`). It only read `printf` / `[Console]::Write` lines, so a mismatch in a prompt such as the AI-merge preview's `[y]es / [r]efine / [n]o` went unseen. The logic moved to `scripts/check-menu-parity.pl` (one script for both twins, as step 32 does with `check-hook-parity.py`; `--help` lists the blind spots); SKIP when perl is missing |
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 4 | `shared/rules/tool-lifecycle.md` "Lifecycle field completeness": an unverified platform version is `null`, not `pending`, and a platform the tool does not support (status `n/a`) keeps a `null` version and date. The registry has never used `pending`: of 57 tool-platform versions, 26 are `null` (the 4 `n/a` platforms among them) and 31 are version strings |
+
+### Files created
+
+| File | Purpose |
+|------|---------|
+| `tests/check-lib/test-resolve-git-bash.ps1` | Probe order, no fallback, the WSL launchers refused, the default probe on the machine, no check-*.ps1 resolving bash through PATH (CI windows job) |
+| `tests/check-post-push/test-post-push-step7.sh` | Runs the step 7 section of each twin with a fake `build-deploy.sh` under a temp HOME: never run, one SKIP 7; no line of either twin runs build-deploy (CI linux and windows jobs) |
+| `scripts/check-menu-parity.pl` | The step 29 comparison (menu lines and menu-read prompts), called by both twins |
+| `tests/check-post-push/test-menu-parity.sh` | The current libs match; planted mismatches in a `read_menu_choice` prompt, a `Read-MenuChoice -Prompt`, a choice list and a menu line fail (the old extraction misses the prompt ones); variable prompts; comments; errors; step 29 of both twins (CI linux and windows jobs) |
+
+**Verified on:** Windows 11 (Git for Windows 2.56.0, bash 5.3.15, pwsh 7): the new suite 17/17; against the pre-fix check scripts it fails 4 cases. check-pre-commit.ps1 and check-pre-push.ps1 run from the branch. Items 2-4 (M5-C2): `test-post-push-step7.sh` 10/10 (6 cases fail against the pre-fix twins), `test-menu-parity.sh` 24/24, both with bash and pwsh 7.6; check-post-push.ps1 run once after the step 7 fix under an isolated HOME/USERPROFILE/APPDATA/LOCALAPPDATA and log dir with a scratch clone of the dotprofile: step 7 SKIP, step 29 PASS, the real dotprofile `deploy/` and `~/.aitools/logs` unchanged. The .sh twins and the new suites on macOS and Linux run first in CI.
+
+---
+
+## v0.77.1 -- Library fixes: the bash AI-merge spinner always stops, a failed log write never breaks a run, the [RELAY] prompt reads in cooked mode, the installer's repos prompt goes to the terminal (2026-11-14)
+
+Not tagged. Mission M5-Fixes (batches M5-L1, M5-L2), from the findings of missions M3b and M2.
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 1 | Medium | The bash AI-merge spinner (`_start_spinner` / `_stop_spinner` in `scripts/aitools-lib.sh`) kept drawing on the terminal after Ctrl+C ended the script (seen in Git Bash): it is a background subshell, and a background job of a non-interactive shell ignores SIGINT. It now watches the shell that started it (`BASHPID`, `$$` on bash 3.2) and ends, clearing its line, within 200 ms after that shell is gone, SIGKILL included; and `_invoke_ai_merge` wraps `invoke_ai` in INT, TERM and EXIT traps (`_spinner_traps_set` / `_spinner_traps_restore`) that stop it at once and then hand over to the caller's own traps, saved and restored unchanged. Without a terminal the spinner draws nothing (no shell error); `_stop_spinner` no longer fails under `set -e` when the spinner ended on its own or there is no terminal. The PowerShell spinner (`Start-AiSpinner`) did not have the defect: unchanged. Tests: spinner cases in `tests/menus/test-menu-choice.sh` (CI: linux, macOS bash 5 and /bin/bash 3.2, Windows Git Bash) |
+| 2 | High | A failed `deploy.log` write broke the run, contrary to `reference/logging.md` section 5 ("A failed log write is swallowed"). PowerShell: `Log`, `LogDetail` (so `LogWarn`, `LogError`, `LogOk`) and `Write-AiLog` threw when another process held `deploy.log` locked -- an error record on the console, a jump into the caller's `catch`, the end of the script under `$ErrorActionPreference = "Stop"`. bash: `log`, `log_detail` and `_ai_log` ended a `set -euo pipefail` script at the first write to an unwritable log (no permission, a directory), already inside `logging_init`; `logging_init` also ended it when the log directory could not be created. Every write now goes through one fail-safe helper (`Add-AitLibLogText` / `_aitlib_log_append`) that swallows the failure silently, as section 5 specifies; the console line still prints and the counters still count. `Initialize-Logging` / `logging_init` swallow a failed log-directory create. Tests: `tests/logging/test-logging.ps1` (locked file under `Stop` and inside `try`, log dir that cannot be created), `tests/logging/test-logging.sh` (a directory as `deploy.log`, `chmod 000`, log dir that cannot be created, all under `set -euo pipefail`) |
+| 5 | Medium | The PowerShell `[RELAY]` prompt (`Read-RelayOutboundChoice` in `scripts/relay-outbound-prompt.ps1`, shown by `aitools` and `hh -n`) read its answer with its own `[Console]::ReadLine()`, without the library's cooked-mode guard: when a child run earlier in the same console had left it raw (line input and echo off), the read echoed nothing and never returned on Enter (reproduced on a pseudo-terminal: all input sent, the prompt hung until killed). It now reads through `Read-MenuChoice` / `Read-ConsoleChoice` (cooked line mode for the read, the previous mode put back; answers logged at `detail`). Under `hh.ps1`, which does not load the library, the prompt dot-sources it inside the function (nothing outlives the call) and logs as `relay-outbound`; when the library is missing the old local loop remains the fallback. Prompt text, answers (`c`/`continue`, `q`/`quit`, `s`/`show`), re-ask, EOF default (`continue`) and the 50-try limit are unchanged; at EOF the message is now the library's warning (`No input at prompt (EOF) -- defaulting to continue`). The file is now ASCII (the em dash and ellipsis are built with `[char]` codes): Windows PowerShell 5.1 reads a file without a BOM as ANSI, and the em dash's UTF-8 bytes contain a quote character, so 5.1 could not parse the file at all. The bash twin reads `/dev/tty` in a local loop and needs no such guard (Git Bash keeps its own terminal state): unchanged. Tests: `[RELAY]` cases in `tests/menus/test-menu-choice.ps1` (library loaded by the caller, loaded by the prompt, missing; Windows PowerShell 5.1; a pseudo-terminal case that sets the console raw, runs the whole prompt and checks the cooked read and the restored raw mode) |
+| 7 | Low | The bash installer's Step 3 prompt (`Where should new repos live? [~/repos]: `, `scripts/aitools-install.sh`) was printed to stdout while its answer was read from `/dev/tty`: with stdout redirected or piped the prompt was invisible and landed in the output instead (`.claude/rules/interactive-menus.md` "Console I/O": prompts go to `/dev/tty`). It is now printed to `/dev/tty`, in a new helper `prompt_repos_path` in the installer's "install log helpers" block (so the tests can run it). It was the installer's only prompt: `gh auth login` talks to the terminal itself. The PowerShell twin already follows the rule (`[Console]::Write` + `Read-ConsoleChoice`): unchanged. Tests: `step3-prompt-*` cases in `tests/profile/test-install.sh` (bash on macOS/Linux, also `/bin/bash` 3.2: on a pseudo-terminal with stdout and stderr sent to a file, the prompt is on the terminal and not in the file; an answer, `~/...`, an empty answer and EOF) |
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 3 | `reference/cross-platform-detail.md` "Windows console: input mode, jobs, spinner": why the bash spinner could outlive its script, and its two guards |
+| 4 | `reference/logging.md` section 5: names the fail-safe write helpers and what they guarantee, and that `deploy.jsonl` warns once instead |
+| 6 | `.claude/rules/interactive-menus.md` "Answers", `reference/managed-file-deployment.md` "Menu answers", `reference/cross-platform-detail.md` "Windows console": the PowerShell `[RELAY]` prompt reads through `Read-MenuChoice`; only `shared/shell/aliases.*` and the bash `[RELAY]` prompt keep a local loop. `reference/logging.md` section 3: `deploy.log` also gets the `[RELAY]` prompt's answers under `hh.ps1` (`relay-outbound`) |
+
+**Verified on:** Windows 11 (Git Bash 5, pwsh 7). macOS and Linux run in CI only.
+
+---
+
 ## v0.77.0 -- pywinpty is a managed Windows library on all three deployment paths (2026-11-14)
 
 Not tagged. Commander order 2026-11-14: "/tool-adopt pywinpty.  we will need setup-pywinpty.ps1.  document its source of truth in registry via /tool-registry.  mark windows/linux as N/A." and "we should support pywinpty through all 3 methods of deployment/install". Platform status: Windows supported, macOS and Linux n/a (the stdlib `pty` module is used there).

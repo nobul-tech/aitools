@@ -6,7 +6,7 @@
 # (aitools.ps1 has a Windows OS guard) and are reported as SKIP elsewhere.
 # Exit 1 if any case fails.
 # Spec: .claude/rules/script-standards.md (log line format, levels, counters,
-# end-of-run summary), reference/logging.md, reference/script-standards-detail.md
+# end-of-run summary), reference/logging.md (incl. section 5, fail-safe writes), reference/script-standards-detail.md
 # "Logging overrides".
 #
 # Usage: pwsh -NoProfile -File tests/logging/test-logging.ps1 [-Help]
@@ -97,6 +97,45 @@ try {
     $rotated = Test-Path (Join-Path $rotDir "deploy.log.1")
     $fresh = (Test-Path (Join-Path $rotDir "deploy.log")) -and ((Get-Item (Join-Path $rotDir "deploy.log")).Length -lt 1000)
     Check "lib: Initialize-Logging rotates a 5 MB log to deploy.log.1" ($rotated -and $fresh)
+
+    # Fail-safe log writes (reference/logging.md section 5): a failed log write
+    # is swallowed. deploy.log is held open by this process with no sharing
+    # (another process's lock) while the child logs at every level, under
+    # $ErrorActionPreference = "Stop" and inside its own try: no exception, the
+    # console lines still print, the counters still count.
+    $lockDir = Join-Path $tmpRoot "locked" "logs"
+    New-Item -ItemType Directory -Path $lockDir -Force | Out-Null
+    $lockLog = Join-Path $lockDir "deploy.log"
+    [IO.File]::WriteAllText($lockLog, "")
+    $snippet = '$ErrorActionPreference = "Stop"; try { Log "info-line"; LogDetail "detail-line"; LogWarn "warn-line"; LogError "error-line"; LogOk "ok-line"; Write-AiLog "ai-line"; Write-Output "COUNTS=$($script:errors)/$($script:warnings)"; Write-Output "REACHED-END" } catch { Write-Output "CAUGHT: $($_.Exception.Message)" }'
+    $env:AITOOLS_LOG_DIR = $lockDir
+    $h = [IO.File]::Open($lockLog, 'Open', 'ReadWrite', 'None')
+    try {
+        $lockOut = & pwsh -NoProfile -Command ". '$lib'; Initialize-Logging 't'; $snippet" *>&1 | Out-String
+        $lockRc = $LASTEXITCODE
+    } finally {
+        $h.Dispose()
+        $env:AITOOLS_LOG_DIR = $null
+    }
+    Check "lib: locked deploy.log -- no exception, the run goes on (exit 0)" (($lockRc -eq 0) -and ($lockOut -match 'REACHED-END') -and -not ($lockOut -match 'CAUGHT|Exception|AppendAllText'))
+    Check "lib: locked deploy.log -- console lines still printed (info, warn, error, ok)" (($lockOut -match '\[info\] info-line') -and ($lockOut -match '\[warn\] warn-line') -and ($lockOut -match '\[error\] error-line') -and ($lockOut -match '\[ok\] ok-line'))
+    Check "lib: locked deploy.log -- LogError/LogWarn still count" ($lockOut -match 'COUNTS=1/1')
+    Check "lib: locked deploy.log -- detail and AI telemetry stay off the console" (-not ($lockOut -match 'detail-line|ai-line'))
+    if ($IsWindows) {
+        Check "lib: locked deploy.log -- nothing written to it (the lock held)" ((Get-Item $lockLog).Length -eq 0)
+    } else {
+        # .NET maps FileShare.None to an advisory lock off Windows (not verified here)
+        Skip "lib: locked deploy.log -- nothing written to it (the lock held)" "Windows file locks only"
+    }
+
+    # The log directory cannot be created (its parent is a file)
+    $notDir = Join-Path $tmpRoot "not-a-dir"
+    [IO.File]::WriteAllText($notDir, "")
+    $env:AITOOLS_LOG_DIR = Join-Path $notDir "logs"
+    $ndOut = & pwsh -NoProfile -Command ". '$lib'; `$ErrorActionPreference = 'Stop'; Initialize-Logging 't'; LogWarn 'still-here'; Write-Output ""COUNTS=`$(`$script:errors)/`$(`$script:warnings)""" *>&1 | Out-String
+    $ndRc = $LASTEXITCODE
+    $env:AITOOLS_LOG_DIR = $null
+    Check "lib: log dir cannot be created -- Initialize-Logging and LogWarn go on" (($ndRc -eq 0) -and ($ndOut -match '\[warn\] still-here') -and ($ndOut -match 'COUNTS=0/1') -and -not ($ndOut -match 'Exception|New-Item'))
 
     # -----------------------------------------------------------------------
     # scripts/aitools.ps1 (entry point) -- uses the lib's logging, defines none of its own

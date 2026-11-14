@@ -19,6 +19,8 @@
 #   step3-*        Step 3 (resolve_repos_dir / Resolve-ReposDir): a relative path
 #                  made absolute; a path that cannot be created, or (bash) not
 #                  resolved, is one error and one ERROR row "aitools config"
+#   step3-prompt-* (bash, on a pseudo-terminal) the Step 3 prompt
+#                  (prompt_repos_path) is on the terminal and not on stdout
 #
 # Platform targeting (plans/ci-platform-targeting.md): each half runs only where
 # its installer runs. macOS/Linux run the bash blocks (aitools-install.sh with
@@ -35,7 +37,7 @@
 set -euo pipefail
 
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
-    perl -ne 'print if $. >= 2 && $. <= 33' "$0"
+    perl -ne 'print if $. >= 2 && $. <= 35' "$0"
     exit 0
 fi
 
@@ -179,6 +181,7 @@ log "harness start"
 case "$mode" in
     step5) run_config_writer "$WRITER" --repos-path /x/repos --repo-path /x/repos/aitools ;;
     step3) if resolve_repos_dir "$1"; then printf 'REPOS=%s\n' "$REPOS_PATH"; else printf 'REPOS_FAILED\n'; fi ;;
+    step3prompt) prompt_repos_path; printf 'REPOS=%s\n' "$REPOS_PATH" ;;
 esac
 log "harness end"
 printf 'END errors=%s warnings=%s\n' "$ERRORS" "$WARNINGS"
@@ -341,6 +344,46 @@ else
     want_out "step3-unresolvable (bash)" "REPOS_FAILED"
     want_end "step3-unresolvable (bash)" "errors=1 warnings=0"
     want_sum "step3-unresolvable (bash)" "ERROR|aitools config|repos path not absolute"
+fi
+
+# M5-Fixes item 10: the Step 3 prompt (prompt_repos_path) goes to the terminal
+# (/dev/tty), never stdout, and the answer is read from the terminal. The harness
+# runs on a pseudo-terminal (tests/managed-files/pty-run.py) with its stdout and
+# stderr sent to a file: the prompt must be on the terminal and not in the file.
+# bash only (macOS/Linux); needs python3 (stdlib pty).
+# run_step3_tty INPUT -- RC, $WORK/stdout.txt (the harness's stdout + stderr),
+# $WORK/tty.txt (what reached the terminal)
+run_step3_tty() {
+    RC=0
+    : > "$H/summary.txt"
+    printf '%s\n' "cd '$H' || exit 9" \
+        "exec env HOME='$H' AITOOLS_LOG_DIR='$H/.aitools/logs' AITOOLS_SUMMARY_FILE='$H/summary.txt' '$BASH_BIN' '$WORK/harness.sh' '$REPO' step3prompt > '$WORK/stdout.txt' 2>&1" \
+        > "$WORK/step3-tty.sh"
+    python3 "$REPO/tests/managed-files/pty-run.py" --input "$1" --log "$WORK/tty.txt" --timeout 30 -- "$BASH_BIN" "$WORK/step3-tty.sh" || RC=$?
+    OUT="$WORK/stdout.txt"
+}
+step3_prompt_case() {  # step3_prompt_case NAME INPUT WANT_REPOS
+    local name="step3-prompt-$1 (bash)" got
+    fresh; run_step3_tty "$2"
+    got=$(perl -ne 'print "$1\n" if /^REPOS=(.*)$/' "$OUT")
+    if [ "$RC" -eq 0 ] && [ "$got" = "$3" ]; then ok "$name: REPOS=$got"
+    else bad "$name: rc=$RC REPOS='$got', want '$3'"; perl -pe 's/^/       /' "$OUT"; fi
+    if grep -qF -- "Where should new repos live? [~/repos]: " "$WORK/tty.txt"; then ok "$name: the prompt reached the terminal"
+    else bad "$name: the prompt is not on the terminal"; perl -pe 's/^/       /' "$WORK/tty.txt"; fi
+    if grep -qF -- "Where should new repos live?" "$OUT"; then bad "$name: the prompt went to stdout/stderr"; perl -pe 's/^/       /' "$OUT"
+    else ok "$name: no prompt on stdout/stderr"; fi
+}
+if [ "$LANG_RUN" != sh ]; then
+    printf '  skip step3-prompt (bash installer only: macOS/Linux)\n'
+elif ! command -v python3 >/dev/null 2>&1; then
+    printf '  skip step3-prompt (python3 not on PATH: no pseudo-terminal)\n'
+else
+    step3_prompt_case answer 'myrepos\n' "myrepos"
+    step3_prompt_case tilde '~/code\n' "$H/code"
+    step3_prompt_case empty '\n' "$H/repos"
+    step3_prompt_case eof '\x04' "$H/repos"
+    if grep -qF -- "[warn] No input at prompt (EOF) -- defaulting to ~/repos" "$H/.aitools/logs/deploy.log"; then ok "step3-prompt-eof (bash): EOF warning logged"
+    else bad "step3-prompt-eof (bash): no EOF warning in deploy.log"; fi
 fi
 
 printf '\n%s passed, %s failed (%s: %s)\n' "$PASS" "$FAIL" "$TEST_PLATFORM" "$IMPLS"

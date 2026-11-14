@@ -63,7 +63,7 @@ reading one file:
 
 | File | Writer |
 |------|--------|
-| `deploy.log` | setup scripts (via `aitools-lib` `logging_init`/`Initialize-Logging`) |
+| `deploy.log` | setup scripts (via `aitools-lib` `logging_init`/`Initialize-Logging`); the PowerShell `[RELAY]` prompt under `hh.ps1` (script name `relay-outbound`: its menu answers) |
 | `deploy.jsonl` | `jsonl_record` / `Write-JsonlRecord` in `aitools-lib`, called by the installers' `log` / `Log` override and by the child relay (`run_child_relayed` / `Invoke-ChildRelayed`); one JSON record per line, fields `ts, host, os, script, run_id, level, msg`; one `run_id` per installer run (`AITOOLS_RUN_ID`, inherited by relayed children); an unwritable file is one warning, then records are skipped |
 | `ait-harvest.log` | `scripts/ait-harvest.py` |
 | `session-archive.log` | `session-archive.sh` shim (bash-fallback branch only) |
@@ -102,7 +102,14 @@ Same maxBytes/backupCount in all three.
 - Timestamps: UTC with `Z` suffix.
 - **Fail-safe**: logging must never crash the tool. A failed log write is
   swallowed (the only sanctioned silent-suppression in the harness), because a
-  broken log must not break the operation it records.
+  broken log must not break the operation it records. In `aitools-lib` every
+  `deploy.log` write (`log`, `log_detail`, `_ai_log` / `Log`, `LogDetail`,
+  `Write-AiLog`) goes through `_aitlib_log_append` / `Add-AitLibLogText`: a
+  locked, unwritable or missing log never ends the run (not under `set -e`, not
+  under `$ErrorActionPreference = "Stop"`), the console line still prints and
+  the counters still count; a log directory that cannot be created is the same
+  case (v0.77.1). `deploy.jsonl` differs: its first failed write is one warning
+  (the table in section 3).
 
 ### 6. Setup-vs-check separation preserved
 

@@ -64,9 +64,12 @@ answer with `read_menu_choice` / `Read-MenuChoice` in
   asked again`, or `EOF -> <default>`).
 - A `[y/n]` prompt has no Enter default, so its text has no capital letter.
 
-Prompts that cannot load the library (the relay-outbound prompt,
-`shared/shell/aliases.*`) re-ask the same way with a local loop; they do not
-log. Free-text prompts, where an empty answer is itself a value (an alias,
+`shared/shell/aliases.*` cannot load the library and the bash relay-outbound
+prompt does not: they re-ask the same way with a local loop and do not log.
+The PowerShell relay-outbound prompt reads through `Read-MenuChoice` (under
+`hh.ps1` it loads the library itself), so its read gets the cooked-mode guard
+of `Read-ConsoleChoice`; it falls back to the local loop only when the library
+is missing or does not load. Free-text prompts, where an empty answer is itself a value (an alias,
 a name, `Enter = hostname`, the repos path), are not choice menus and keep
 their defaults.
 

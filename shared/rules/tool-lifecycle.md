@@ -119,16 +119,28 @@ review ("Review after").
    dotprofile rebuild is the commander's (or a mission ordered to do it).
 2. Propagate CLAUDE.md with `aitools` (commander), never `setup-user-claude`
    against the real HOME from an agent.
-3. `bash scripts/check-post-push.sh` — all checks pass
+3. Before each aitools push, the pre-push checklist
+   (`@reference/pre-push-checklist.md`; macOS and Linux:
+   `bash scripts/check-pre-push.sh`, Windows:
+   `pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/check-pre-push.ps1`).
+   Its step 7 rebuilds `deploy/` into a temporary copy of the dotprofile under
+   a temporary `HOME` and dry-runs the generated scripts.
 4. Commit + push both repos (aitools via a PR; dotprofile to its main)
+5. After the push, the post-push checklist
+   (`@reference/post-push-checklist.md`; macOS and Linux:
+   `bash scripts/check-post-push.sh`, Windows:
+   `pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/check-post-push.ps1`).
+   It never runs `build-deploy.sh` (its step 7 is retired); its step 1 fails
+   until the change is on `origin/main`.
 
 ### Lifecycle field completeness
 
 Every tool in the registry (`/tool-registry` skill, including Under
 Evaluation entries) carries its lifecycle fields (platform status,
 concurrency, post-install config, dependencies, invocation) and a last
-verified version per platform (`pending` when unverified). Verify them
-before committing.
+verified version and date per platform: `null` until verified on that
+platform, and `null` on a platform the tool does not support (platform
+status `n/a`). Verify them before committing.
 
 ### Install command verification gate
 

@@ -12,6 +12,12 @@
 # empty line, a word or a letter not offered, then apply the offered answer;
 # EOF at the review menu still overwrites; -Force on a console and a
 # non-interactive run show no menu and log no answer.
+# The [RELAY] prompt (Read-RelayOutboundChoice in scripts/relay-outbound-prompt.ps1)
+# reads through Read-MenuChoice: with the library loaded by the caller
+# (aitools.ps1), loaded by the prompt itself (hh.ps1; nothing left behind), and
+# under Windows PowerShell 5.1; without the library next to it, a local loop with
+# the same answers. On a pseudo-terminal, Invoke-RelayOutboundPrompt reads in
+# cooked mode when the console was left raw, and puts the raw mode back.
 # Mirror of tests/menus/test-menu-choice.sh.
 #
 # Safe to re-run: every case runs in a child pwsh with its own temp HOME/log dir,
@@ -34,7 +40,7 @@
 # Usage: pwsh -NoProfile -File tests/menus/test-menu-choice.ps1 [-Help]
 
 param([switch]$Help)
-if ($Help) { Get-Content $PSCommandPath -TotalCount 34 | Select-Object -Skip 1; exit 0 }
+if ($Help) { Get-Content $PSCommandPath -TotalCount 40 | Select-Object -Skip 1; exit 0 }
 
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
@@ -232,6 +238,82 @@ function FileIs([string]$Rel, [string]$Want) { ((Txt $Rel) -replace '[\r\n]+$', 
 # JsonIs <relative path> <compact json>: the file's JSON without whitespace (the values here have none)
 function JsonIs([string]$Rel, [string]$Want) { ((Txt $Rel) -replace '\s', '') -ceq $Want }
 
+# --- The [RELAY] prompt (scripts/relay-outbound-prompt.ps1) ---
+$relayScript = Join-Path $root "scripts/relay-outbound-prompt.ps1"
+# The child: optionally dot-source the lib first (RO_LIB=1: the aitools.ps1
+# path; else the hh.ps1 path, where the prompt loads it), dot-source the relay
+# script (RO_RELAY), feed input.txt through [Console]::SetIn and call
+# Read-RelayOutboundChoice. Writes the answer(s), their number, whether
+# Read-MenuChoice is still defined after the call, and the captured console.
+# Results go to files: a console swapped with SetOut can lose the child's later
+# stdout.
+$relayChild = @'
+$ErrorActionPreference = "Stop"
+$C = $env:MC_C
+if ($env:RO_LIB -eq "1") { . $env:MC_LIB; Initialize-Logging "t" }
+. $env:RO_RELAY
+[Console]::SetIn((New-Object IO.StringReader([IO.File]::ReadAllText((Join-Path $C "input.txt")))))
+$orig = [Console]::Out
+$sw = New-Object IO.StringWriter
+[Console]::SetOut($sw)
+try {
+    $r = @(Read-RelayOutboundChoice)
+} finally {
+    [Console]::SetOut($orig)
+}
+[IO.File]::WriteAllText((Join-Path $C "console.txt"), $sw.ToString())
+[IO.File]::WriteAllText((Join-Path $C "result"), ($r -join "|"))
+[IO.File]::WriteAllText((Join-Path $C "count"), [string]$r.Count)
+[IO.File]::WriteAllText((Join-Path $C "leaked"), [string][bool](Get-Command Read-MenuChoice -ErrorAction SilentlyContinue))
+'@
+
+# Run-Relay <name> <input> [-WithLib] [-Exe <path>] [-Relay <path>]: one
+# Read-RelayOutboundChoice in a child (pwsh by default) with its own HOME and log
+# dir. (Not -Lib: PowerShell names are case-insensitive, it would hide $lib.)
+function Run-Relay([string]$Name, [string]$InputText, [switch]$WithLib, [string]$Exe = $pwshExe, [string]$Relay = $relayScript) {
+    $script:C = Join-Path $tmpRoot $Name
+    foreach ($d in @("home", "logs")) { New-Item -ItemType Directory -Path (Join-Path $script:C $d) -Force | Out-Null }
+    [IO.File]::WriteAllText((Join-Path $script:C "input.txt"), $InputText)
+    $snip = Join-Path $script:C "snippet.ps1"
+    [IO.File]::WriteAllText($snip, $relayChild)
+    $vars = @{
+        HOME = (Join-Path $script:C "home"); USERPROFILE = (Join-Path $script:C "home")
+        AITOOLS_LOG_DIR = (Join-Path $script:C "logs"); AITOOLS_SUMMARY_FILE = (Join-Path $script:C "summary")
+        MC_LIB = $lib; MC_C = $script:C; RO_RELAY = $Relay; RO_LIB = $(if ($WithLib) { "1" } else { $null })
+    }
+    $old = @{}
+    foreach ($k in $vars.Keys) { $old[$k] = [Environment]::GetEnvironmentVariable($k); [Environment]::SetEnvironmentVariable($k, $vars[$k]) }
+    try {
+        $null | & $Exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $snip *> (Join-Path $script:C "out")
+        Set-Content -Path (Join-Path $script:C "rc") -Value $LASTEXITCODE
+    } finally {
+        foreach ($k in $old.Keys) { [Environment]::SetEnvironmentVariable($k, $old[$k]) }
+    }
+}
+$relayHint = "  please type one of c/continue/q/quit/s/show"
+# NoLog: no menu answer was logged (the local loop logs nothing)
+function NoLog { -not (Has "menu answer" (Log)) }
+
+# The pty child: an aitools-like repo whose relay.md is uncommitted, the console
+# input mode set raw (line input and echo off) before the prompt, then the whole
+# Invoke-RelayOutboundPrompt on the hh.ps1 path (the prompt loads the lib). The
+# AitConsoleInput type is compiled from the lib's own source to set the raw mode.
+$relayPtyChild = @'
+$C = $env:MC_C
+$ast = [System.Management.Automation.Language.Parser]::ParseFile($env:MC_LIB, [ref]$null, [ref]$null)
+$init = $ast.Find({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq "Initialize-AitConsoleInput" }, $true)
+$src = $init.Find({ param($n) $n -is [System.Management.Automation.Language.StringConstantExpressionAst] -and $n.Value -match 'class AitConsoleInput' }, $true)
+Add-Type -TypeDefinition $src.Value -ErrorAction Stop
+$before = [AitConsoleInput]::Get()
+$raw = $before -band (-bnot 0x6)
+$setRc = [AitConsoleInput]::Set($raw)
+. $env:RO_RELAY
+$rc = Invoke-RelayOutboundPrompt -RepoPath $env:RO_REPO
+$after = [AitConsoleInput]::Get()
+$null = [AitConsoleInput]::Set($before)
+[IO.File]::WriteAllText((Join-Path $C "result"), "rc=$rc before=$before raw=$raw setrc=$setRc after=$after")
+'@
+
 try {
     # --- Real Read-ConsoleChoice, input through [Console]::SetIn ---
     # Default s (not o): an empty line taken as the default would end with s
@@ -370,6 +452,102 @@ try {
         Check "pty: both answers logged" ((Has '[detail] menu answer (review a.md): "" -> not one of o/a/m/s/x, asked again' (Log)) -and (Has '[detail] menu answer (review a.md): "s" -> s' (Log)))
     } else {
         Write-Output "SKIP pty case (no pseudo-terminal: python3 missing, or pywinpty not installed on Windows)"; $script:skip++
+    }
+
+    # ======================================================================
+    # The [RELAY] prompt: Read-RelayOutboundChoice reads through Read-MenuChoice
+    # ======================================================================
+    # --- Library loaded by the caller (scripts/aitools.ps1) ---
+    Run-Relay "relay-lib-reask" "x`n`nquit`n" -WithLib
+    Check "relay (lib loaded by caller): 'x' and empty re-ask, then 'quit' -> quit (one value)" ((Rc) -eq "0" -and (Txt "count") -eq "1" -and (Txt "result") -ceq "quit")
+    Check "relay (lib loaded by caller): 2 hints '$relayHint'" ((Occ $relayHint (Console)) -eq 2)
+    Check "relay (lib loaded by caller): prompt '  choice [c/q/s]: ' asked 3 times" ((Occ "  choice [c/q/s]: " (Console)) -eq 3)
+    Check "relay (lib loaded by caller): answers logged in the caller's log" ((Has '[t] [detail] menu answer (relay outbound): "x" -> not one of c/continue/q/quit/s/show, asked again' (Log)) -and (Has '[t] [detail] menu answer (relay outbound): "quit" -> quit' (Log)))
+
+    # --- Library loaded by the prompt itself (hh.ps1) ---
+    Run-Relay "relay-hh-c" "C`n"
+    Check "relay (hh path): 'C' -> continue (one value), no hint" ((Rc) -eq "0" -and (Txt "count") -eq "1" -and (Txt "result") -ceq "continue" -and (Occ "please type one of" (Console)) -eq 0)
+    Check "relay (hh path): answer logged as relay-outbound" (Has '[relay-outbound] [detail] menu answer (relay outbound): "C" -> c' (Log))
+    Check "relay (hh path): the lib's functions do not outlive the call" ((Txt "leaked") -eq "False")
+
+    Run-Relay "relay-hh-s" " s `n"
+    Check "relay (hh path): ' s ' -> show" ((Txt "result") -ceq "show")
+
+    Run-Relay "relay-hh-q" "maybe`nq`n"
+    Check "relay (hh path): 'maybe' re-asks, then q -> quit" ((Txt "result") -ceq "quit" -and (Occ $relayHint (Console)) -eq 1)
+
+    Run-Relay "relay-hh-eof" ""
+    Check "relay (hh path): EOF -> continue (one value)" ((Rc) -eq "0" -and (Txt "count") -eq "1" -and (Txt "result") -ceq "continue")
+    Check "relay (hh path): EOF warning and 'EOF -> c' logged" ((Has "[warn] No input at prompt (EOF) -- defaulting to continue" (Log)) -and (Has "[detail] menu answer (relay outbound): EOF -> c" (Log)))
+
+    Run-Relay "relay-hh-50" ("x`n" * 50)
+    Check "relay (hh path): 50 unrecognised answers -> continue, warning, 49 hints" ((Txt "result") -ceq "continue" -and (Has "[warn] No valid answer after 50 tries at relay outbound -- treating input as ended, defaulting to continue" (Log)) -and (Occ $relayHint (Console)) -eq 49)
+
+    # --- Without the library next to the prompt: the local loop ---
+    $soloDir = Join-Path $tmpRoot "relay-solo"
+    New-Item -ItemType Directory -Path $soloDir -Force | Out-Null
+    $soloRelay = Join-Path $soloDir "relay-outbound-prompt.ps1"
+    Copy-Item -LiteralPath $relayScript -Destination $soloRelay
+    Run-Relay "relay-nolib-q" "x`nQ`n" -Relay $soloRelay
+    Check "relay (no lib): 'x' re-asks, then 'Q' -> quit, said why" ((Txt "result") -ceq "quit" -and (Occ $relayHint (Console)) -eq 1 -and (Has "aitools-lib.ps1 not found next to this script" (Console)))
+    Check "relay (no lib): nothing logged" (NoLog)
+    Run-Relay "relay-nolib-eof" "" -Relay $soloRelay
+    Check "relay (no lib): EOF -> continue, '(no input -- continuing)'" ((Txt "result") -ceq "continue" -and (Has "(no input -- continuing)" (Console)))
+
+    # --- Windows PowerShell 5.1 (hh.ps1 may run there) ---
+    $ps51 = $null
+    if ($IsWindows) {
+        # Get-Command exempt: command-existence check; the cases SKIP without it
+        $ps51 = Get-Command powershell.exe -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty Source
+    }
+    if ($ps51) {
+        $parse51 = Join-Path $tmpRoot "parse51.ps1"
+        [IO.File]::WriteAllText($parse51, '$e = $null; $null = [System.Management.Automation.Language.Parser]::ParseFile($args[0], [ref]$null, [ref]$e); "errors=$(@($e).Count)"')
+        $p51 = (& $ps51 -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $parse51 $relayScript | Out-String).Trim()
+        Check "relay (PS 5.1): relay-outbound-prompt.ps1 parses" ($p51 -eq "errors=0")
+        $ascii = -not ([IO.File]::ReadAllText($relayScript) -match '[^\x00-\x7F]')
+        Check "relay (PS 5.1): relay-outbound-prompt.ps1 is ASCII (5.1 reads a file without a BOM as ANSI)" $ascii
+        Run-Relay "relay-ps51" "x`ns`n" -Exe $ps51
+        Check "relay (PS 5.1, hh path): 'x' re-asks, then s -> show (one value)" ((Rc) -eq "0" -and (Txt "count") -eq "1" -and (Txt "result") -ceq "show" -and (Occ $relayHint (Console)) -eq 1)
+        Check "relay (PS 5.1, hh path): answers logged" (Has '[relay-outbound] [detail] menu answer (relay outbound): "s" -> s' (Log))
+    } else {
+        Write-Output "SKIP relay PS 5.1 cases (Windows PowerShell not available)"; $script:skip++
+    }
+
+    # --- On a real console (pty): the read runs in cooked mode, the raw mode is put back ---
+    if ($havePty -and $IsWindows) {
+        $script:C = Join-Path $tmpRoot "relay-pty"
+        $C = $script:C
+        foreach ($d in @("home", "logs", "repo/.aitools/channel")) { New-Item -ItemType Directory -Path (Join-Path $C $d) -Force | Out-Null }
+        & git -C (Join-Path $C "repo") init -q
+        if ($LASTEXITCODE -ne 0) { throw "git init failed in $C" }
+        W "repo/.aitools/channel/relay.md" "# relay"
+        $snip = Join-Path $C "snippet.ps1"
+        [IO.File]::WriteAllText($snip, $relayPtyChild)
+        $vars = @{
+            HOME = (Join-Path $C "home"); USERPROFILE = (Join-Path $C "home")
+            AITOOLS_LOG_DIR = (Join-Path $C "logs"); MC_LIB = $lib; MC_C = $C
+            RO_RELAY = $relayScript; RO_REPO = (Join-Path $C "repo")
+            CI = $null; AITOOLS_SKIP_RELAY_PROMPT = $null; RELAY_PROMPT_FORCE = $null; TERM = "xterm"
+        }
+        $old = @{}
+        foreach ($k in $vars.Keys) { $old[$k] = [Environment]::GetEnvironmentVariable($k); [Environment]::SetEnvironmentVariable($k, $vars[$k]) }
+        try {
+            & python3 $pty --input 'x\nq\n' --log (Join-Path $C "out") --timeout 60 -- $pwshExe -NoProfile -File $snip
+            Set-Content -Path (Join-Path $C "rc") -Value $LASTEXITCODE
+        } finally {
+            foreach ($k in $old.Keys) { [Environment]::SetEnvironmentVariable($k, $old[$k]) }
+        }
+        $res = Txt "result"
+        $m = [regex]::Match($res, 'rc=(\d+) before=(\d+) raw=(\d+) setrc=(\d+) after=(-?\d+)')
+        Check "relay pty: the console was set raw before the prompt" ($m.Success -and $m.Groups[4].Value -eq "0" -and (([long]$m.Groups[3].Value -band 0x6) -eq 0))
+        if (-not $m.Success) { Write-Output "      result| $res" }
+        Check "relay pty: [RELAY] shown, 'x' re-asks, then q -> 2 (quit)" ($m.Success -and $m.Groups[1].Value -eq "2" -and (Has "[RELAY]" (Txt "out")) -and (Has "please type one of c/continue/q/quit/s/show" (Txt "out")))
+        Check "relay pty: the reads ran in cooked mode (Read-ConsoleChoice saw line input / echo off)" ((Occ "at prompt (line input or echo off) -- read in cooked mode" (Log)) -ge 2)
+        Check "relay pty: the raw mode is put back after the prompt" ($m.Success -and $m.Groups[5].Value -eq $m.Groups[3].Value)
+        Check "relay pty: both answers logged" ((Has '[relay-outbound] [detail] menu answer (relay outbound): "x" -> not one of c/continue/q/quit/s/show, asked again' (Log)) -and (Has '[relay-outbound] [detail] menu answer (relay outbound): "q" -> q' (Log)))
+    } else {
+        Write-Output "SKIP relay pty case (Windows console API, and a pseudo-terminal: pywinpty)"; $script:skip++
     }
 } finally {
     Remove-Item -LiteralPath $tmpRoot -Recurse -Force

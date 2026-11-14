@@ -407,8 +407,15 @@ try {
     Check "telemetry: every 'AI invocation' line goes through Write-AiLog" (($aiStrings.Count -ge 7) -and $notAiLog.Count -eq 0) "lines: $($aiStrings.Count), not via Write-AiLog: $($notAiLog.Count)"
     $aiLogFn = Find-Function $libAst "Write-AiLog"
     $aiLogText = if ($aiLogFn) { $aiLogFn.Extent.Text } else { "" }
+    # The write goes through the fail-safe Add-AitLibLogText (logging.md section 5),
+    # which appends to $logFile; it must itself touch neither the console nor a counter
+    $appendFn = Find-Function $libAst "Add-AitLibLogText"
+    $appendText = if ($appendFn) { $appendFn.Extent.Text } else { "" }
+    $writesLog = ($aiLogText.Contains('AppendAllText') -and $aiLogText.Contains('$logFile')) -or
+        ($aiLogText.Contains('Add-AitLibLogText') -and $appendText.Contains('AppendAllText') -and $appendText.Contains('$logFile') -and
+         -not ($appendText -match 'Write-Host|\[Console\]::|errors|warnings'))
     Check "telemetry: Write-AiLog writes the log file only and counts nothing" (
-        $aiLogText.Contains('AppendAllText') -and $aiLogText.Contains('$logFile') -and -not ($aiLogText -match 'Write-Host|\[Console\]::|errors|warnings'))
+        $writesLog -and -not ($aiLogText -match 'Write-Host|\[Console\]::|errors|warnings'))
 
     # -----------------------------------------------------------------------
     # Spinner with stdout redirected (CI, a pipe): nothing created, nothing written
