@@ -489,6 +489,8 @@ TOOL_CMDS = {
     'datadog-pup':      ['pup', 'version'],
     'perl':             ['perl', '--version'],
     'bash':             ['bash', '--version'],
+    # Managed library (tool-lifecycle.md "Managed libraries"): version from package metadata
+    'pywinpty':         ['python3', '-c', "import importlib.metadata as m; print(m.version('pywinpty'))"],
 }
 plat_key = {'Darwin': 'macos', 'Windows': 'windows'}.get(platform.system(), 'linux')
 plat_name = {'macos': 'macOS', 'windows': 'Windows', 'linux': 'Linux'}[plat_key]

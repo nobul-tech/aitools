@@ -556,6 +556,8 @@ if (-not (Test-Path $versionsJson)) {
         'go'               = @('go', 'version')
         'datadog-pup'      = @('pup', 'version')
         'perl'             = @('perl', '--version')
+        # Managed library (tool-lifecycle.md "Managed libraries"): version from package metadata
+        'pywinpty'         = @('python3', '-c', "import importlib.metadata as m; print(m.version('pywinpty'))")
     }
     foreach ($entry in $toolData.tools.PSObject.Properties) {
         $key = $entry.Name
