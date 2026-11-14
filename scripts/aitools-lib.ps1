@@ -1588,12 +1588,121 @@ function Stop-AiSpinner {
 }
 
 # ---------------------------------------------------------------------------
+# Console input mode helper (Windows only).
+# The input mode belongs to the console, not to a process: a child run in this
+# console (Git Bash / MSYS, node CLIs) can leave it raw (ENABLE_LINE_INPUT and
+# ENABLE_ECHO_INPUT off, e.g. 0x2E8 or 0x208), and the next
+# [Console]::ReadLine() then returns only when the NEXT key arrives, echoes
+# nothing, and that key leaks into the following prompt.
+# One Add-Type type, AitConsoleInput, serves Read-ConsoleChoice (cooked line
+# input for the one read, the previous mode put back afterwards) and
+# Save-ConsoleInputMode / Restore-ConsoleInputMode (around a child run in this
+# console, e.g. build-deploy in scripts/aitools.ps1). The type is compiled
+# lazily, at most once per process, and only when stdin is a Windows console
+# (Initialize-AitConsoleInput); off Windows and with redirected stdin nothing is
+# compiled and nothing changes. Typeahead is not flushed: keys typed before a
+# prompt are read by it, as with read_tty_choice in aitools-lib.sh.
+# ---------------------------------------------------------------------------
+$script:AitConsoleInputError = ""
+function Initialize-AitConsoleInput {
+    # $true when stdin is a Windows console and the type is loaded.
+    if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) { return $false }
+    if ([Console]::IsInputRedirected) { return $false }
+    if ('AitConsoleInput' -as [type]) { return $true }
+    # A failed compile is not retried: one detail line, then every caller falls back
+    if ($script:AitConsoleInputError) { return $false }
+    try {
+        Add-Type -ErrorAction Stop -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public static class AitConsoleInput {
+    [DllImport("kernel32.dll", SetLastError = true)] static extern IntPtr GetStdHandle(int n);
+    [DllImport("kernel32.dll", SetLastError = true)] static extern bool GetConsoleMode(IntPtr h, out uint m);
+    [DllImport("kernel32.dll", SetLastError = true)] static extern bool SetConsoleMode(IntPtr h, uint m);
+    const uint ProcessedInput = 0x1, LineInput = 0x2, EchoInput = 0x4, VirtualTerminalInput = 0x200;
+    // Win32 error of the last EnterCooked (0 = the cooked mode was set).
+    public static int LastError;
+    // Input mode of STD_INPUT_HANDLE (-10), or -1 when stdin is not a console.
+    public static long Get() { uint m; return GetConsoleMode(GetStdHandle(-10), out m) ? (long)m : -1; }
+    // 0 on success, else the Win32 error code.
+    public static int Set(long m) {
+        if (m < 0 || m > 0xFFFFFFFFL) return 87;
+        return SetConsoleMode(GetStdHandle(-10), (uint)m) ? 0 : Marshal.GetLastWin32Error();
+    }
+    // Cooked line input for one read: PROCESSED | LINE | ECHO on,
+    // VIRTUAL_TERMINAL_INPUT off. Returns the previous mode (put it back with
+    // Set), or -1 when stdin is not a console. LastError is set either way.
+    public static long EnterCooked() {
+        IntPtr h = GetStdHandle(-10); uint m;
+        if (!GetConsoleMode(h, out m)) { LastError = Marshal.GetLastWin32Error(); return -1; }
+        LastError = SetConsoleMode(h, (m | ProcessedInput | LineInput | EchoInput) & ~VirtualTerminalInput) ? 0 : Marshal.GetLastWin32Error();
+        return m;
+    }
+}
+'@
+    } catch {
+        $script:AitConsoleInputError = $_.Exception.Message
+        if (-not $script:AitConsoleInputError) { $script:AitConsoleInputError = "Add-Type failed" }
+        LogDetail "console input helper unavailable: $($script:AitConsoleInputError)"
+        return $false
+    }
+    return $true
+}
+
+# Save-ConsoleInputMode -- read the mode before running a child in this console.
+# Returns [pscustomobject]@{ Mode; Reason } (Mode -1 = not guarded; Reason
+# "console", "not Windows", "not a console" or "unavailable: <message>").
+function Save-ConsoleInputMode {
+    if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
+        return [pscustomobject]@{ Mode = [long]-1; Reason = "not Windows" }
+    }
+    if ([Console]::IsInputRedirected) {
+        return [pscustomobject]@{ Mode = [long]-1; Reason = "not a console" }
+    }
+    if (-not (Initialize-AitConsoleInput)) {
+        return [pscustomobject]@{ Mode = [long]-1; Reason = "unavailable: $($script:AitConsoleInputError)" }
+    }
+    $mode = [AitConsoleInput]::Get()
+    if ($mode -lt 0) { return [pscustomobject]@{ Mode = [long]-1; Reason = "not a console" } }
+    return [pscustomobject]@{ Mode = [long]$mode; Reason = "console" }
+}
+
+# Restore-ConsoleInputMode SAVED LABEL -- put back the mode Save-ConsoleInputMode
+# read and log (detail) any difference. Returns "restored", "unchanged",
+# "restore failed", or the reason nothing was saved ("not saved", "not Windows",
+# "not a console", "unavailable: ...").
+function Restore-ConsoleInputMode {
+    param($Saved, [string]$Label)
+    if ($null -eq $Saved -or $Saved.Mode -lt 0) {
+        $why = if ($null -eq $Saved) { "not saved" } else { $Saved.Reason }
+        LogDetail "console input mode around ${Label}: not guarded ($why)"
+        return $why
+    }
+    $now = [AitConsoleInput]::Get()
+    if ($now -eq $Saved.Mode) {
+        LogDetail ("console input mode 0x{0:X} unchanged after {1}" -f $now, $Label)
+        return "unchanged"
+    }
+    $nowText = if ($now -lt 0) { "unreadable" } else { "0x{0:X}" -f $now }
+    $rc = [AitConsoleInput]::Set($Saved.Mode)
+    if ($rc -eq 0) {
+        LogDetail ("console input mode {0} after {1}, restored 0x{2:X}" -f $nowText, $Label, $Saved.Mode)
+        return "restored"
+    }
+    LogWarn ("Could not restore the console input mode after {0} ({1}, wanted 0x{2:X}, Win32 error {3}) -- review menus may not echo; open a new terminal if a menu does not react" -f $Label, $nowText, $Saved.Mode, $rc)
+    return "restore failed"
+}
+
+# ---------------------------------------------------------------------------
 # Prompt helpers (parity with aitools-lib.sh read_tty_choice / the /dev/tty check).
 # Test-InteractiveConsole: one non-interactive test for every prompt -- a
 # redirected stdin or a non-interactive session never prompts.
 # Read-ConsoleChoice: [Console]::ReadLine() returns $null at EOF, and the
 # callers' .ToLower() then threw. This logs and returns "" so each caller's
-# default branch applies.
+# default branch applies. On a Windows console the one read runs in cooked
+# line mode (echo on, see the console input mode helper above) and the previous
+# mode is put back afterwards; read_tty_choice needs no such step (Git Bash
+# keeps its own terminal state, so a raw Windows console does not affect it).
 # ---------------------------------------------------------------------------
 function Test-InteractiveConsole {
     return ([Environment]::UserInteractive -and -not [Console]::IsInputRedirected)
@@ -1601,7 +1710,23 @@ function Test-InteractiveConsole {
 
 function Read-ConsoleChoice {
     param([string]$DefaultDesc)
-    $line = [Console]::ReadLine()
+    $saved = [long]-1
+    if (Initialize-AitConsoleInput) {
+        $saved = [AitConsoleInput]::EnterCooked()
+        if ([AitConsoleInput]::LastError -ne 0) {
+            LogDetail ("console input mode: cooked mode not set at prompt (mode {0}, Win32 error {1})" -f $saved, [AitConsoleInput]::LastError)
+        } elseif ($saved -ge 0 -and ($saved -band 0x6) -ne 0x6) {
+            LogDetail ("console input mode 0x{0:X} at prompt (line input or echo off) -- read in cooked mode" -f $saved)
+        }
+    }
+    try {
+        $line = [Console]::ReadLine()
+    } finally {
+        if ($saved -ge 0) {
+            $rc = [AitConsoleInput]::Set($saved)
+            if ($rc -ne 0) { LogDetail ("console input mode 0x{0:X} not restored after prompt (Win32 error {1})" -f $saved, $rc) }
+        }
+    }
     if ($null -eq $line) {
         [Console]::WriteLine("")
         LogWarn "No input at prompt (EOF) -- defaulting to $DefaultDesc"
