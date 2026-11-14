@@ -5,7 +5,7 @@
 # Safe to re-run: every case runs in its own temp HOME / log dir, removed on exit.
 # Platform: macOS, Linux, Windows (Git Bash). Exit 1 if any case fails.
 # Spec: .claude/rules/script-standards.md (log line format, levels, counters,
-# end-of-run summary), reference/logging.md (location, rotation),
+# end-of-run summary), reference/logging.md (location, rotation, fail-safe writes),
 # reference/script-standards-detail.md "Logging overrides".
 #
 # Usage: bash tests/logging/test-logging.sh [--help]
@@ -91,6 +91,43 @@ head -c 5242880 /dev/zero | tr '\0' 'x' > "$C/logs/deploy.log"
 env HOME="$C" AITOOLS_LOG_DIR="$C/logs" bash -c "source '$LIB'; logging_init t; log after" > /dev/null 2>&1
 check "lib: logging_init rotates a 5 MB log to deploy.log.1" \
     "[ -f '$C/logs/deploy.log.1' ] && grep -q '\[info\] after' '$C/logs/deploy.log' && [ \$(wc -c < '$C/logs/deploy.log') -lt 1000 ]"
+
+# Fail-safe log writes (reference/logging.md section 5): a failed log write is
+# swallowed. Under set -euo pipefail the script goes on, the console lines still
+# print, the counters still count, and no shell error message appears.
+# run_unwritable <case> <log dir>: every log helper, then the counters
+run_unwritable() {
+    C="$TMP_ROOT/$1"
+    mkdir -p "$C/home"
+    env HOME="$C/home" AITOOLS_LOG_DIR="$2" bash -c "set -euo pipefail; source '$LIB'; logging_init t; log info-line; log_detail detail-line; log_warn warn-line; log_error error-line; log_ok ok-line; _ai_log ai-line; echo \"COUNTS=\$ERRORS/\$WARNINGS\"; echo REACHED-END" > "$C/out" 2>&1
+    echo $? > "$C/rc"
+}
+unwritable_checks() {  # <what>
+    check "lib: $1 -- set -e run goes on (exit 0)" "[ \"\$(cat '$C/rc')\" = 0 ] && grep -q REACHED-END '$C/out'"
+    check "lib: $1 -- console lines still printed" \
+        "grep -q '\[info\] info-line' '$C/out' && grep -q '\[warn\] warn-line' '$C/out' && grep -q '\[error\] error-line' '$C/out' && grep -q '\[ok\] ok-line' '$C/out'"
+    check "lib: $1 -- log_error/log_warn still count" "grep -q 'COUNTS=1/1' '$C/out'"
+    check "lib: $1 -- no shell error, detail and AI lines stay off the console" \
+        "! grep -Eq 'Is a directory|Permission denied|cannot create|No such file|detail-line|ai-line' '$C/out'"
+}
+
+# deploy.log is a directory (cannot be opened for writing on any platform)
+mkdir -p "$TMP_ROOT/logdir-is-dir/logs/deploy.log"
+run_unwritable logdir-is-dir "$TMP_ROOT/logdir-is-dir/logs"
+unwritable_checks "deploy.log is a directory"
+
+# deploy.log without write permission (root ignores the mode: the write then works,
+# and the checks still hold)
+mkdir -p "$TMP_ROOT/no-write/logs"; : > "$TMP_ROOT/no-write/logs/deploy.log"
+chmod 000 "$TMP_ROOT/no-write/logs/deploy.log"
+run_unwritable no-write "$TMP_ROOT/no-write/logs"
+chmod 644 "$TMP_ROOT/no-write/logs/deploy.log"
+unwritable_checks "deploy.log not writable (chmod 000)"
+
+# The log directory cannot be created (its parent is a file)
+: > "$TMP_ROOT/not-a-dir"
+run_unwritable no-dir "$TMP_ROOT/not-a-dir/logs"
+unwritable_checks "log dir cannot be created"
 
 # ---------------------------------------------------------------------------
 # scripts/aitools (entry point) -- uses the lib's logging, defines none of its own

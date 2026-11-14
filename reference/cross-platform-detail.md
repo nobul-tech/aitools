@@ -247,6 +247,13 @@ next key arrives, and that key leaks into the following prompt.
   VIRTUAL_TERMINAL_INPUT off), the read, then the previous mode put back in a
   `finally`. Off Windows or with redirected stdin nothing is compiled or
   changed; EOF still returns `""` with a warning.
+- The `[RELAY]` prompt (`Read-RelayOutboundChoice` in
+  `scripts/relay-outbound-prompt.ps1`) reads through `Read-MenuChoice` too
+  (v0.77.1). Under `hh.ps1`, which does not load the library, it dot-sources
+  the library inside the function. Its own `[Console]::ReadLine()` loop is left
+  only as the fallback when the library is missing; with a raw console that
+  loop hangs (seen on a pseudo-terminal: all input sent, the read never
+  returned). The file is ASCII so Windows PowerShell 5.1 can parse it.
 - `Save-ConsoleInputMode` / `Restore-ConsoleInputMode` (same file) guard a
   child run in this console: Step 2 (build-deploy) of `scripts/aitools.ps1`.
 - One Add-Type type, `AitConsoleInput`, compiled lazily, at most once per
@@ -270,6 +277,19 @@ disposed), and `Invoke-AiMerge` calls it in a `finally`: `scripts/aitools.ps1`
 runs setup scripts in-process inside `try { & $scriptPath } catch`, so a
 spinner left running after Ctrl+C or an error would keep drawing over the next
 script, or over the pwsh prompt.
+
+**The bash spinner is a separate process.** `_start_spinner` forks a
+background subshell, and a background job of a non-interactive shell ignores
+SIGINT, so Ctrl+C ended the script but not the spinner, which kept drawing on
+`/dev/tty` (seen in Git Bash, mission M3b). Two guards (v0.77.1): the subshell
+watches the shell that started it (`BASHPID`, `$$` on bash 3.2) and ends,
+clearing its line, at the first 200 ms tick after that shell is gone, SIGKILL
+included; and `_invoke_ai_merge` wraps `invoke_ai` in
+`_spinner_traps_set` / `_spinner_traps_restore`, INT, TERM and EXIT traps that
+stop the spinner, then hand over to the caller's own traps (saved and put back
+unchanged). The PowerShell spinner needs neither: its runspace thread cannot
+outlive its process, and Ctrl+C reaches the `finally` above. Tests: the spinner
+cases of `tests/menus/test-menu-choice.sh`.
 
 **Nothing else writes the console while the spinner runs.** Any other console
 line lands in the spinner's row. `Invoke-AI` telemetry is therefore file-only:

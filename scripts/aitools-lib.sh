@@ -763,7 +763,10 @@ logging_init() {
     SCRIPT_NAME="${1:?logging_init requires a script name}"
     LOG_DIR="$AITOOLS_LOG_DIR"
     LOG_FILE="$LOG_DIR/deploy.log"
-    mkdir -p "$LOG_DIR"
+    # Fail-safe (logging.md section 5): a log directory that cannot be created
+    # leaves every log write failing, and each failed write is swallowed; the run
+    # goes on with its console output
+    mkdir -p "$LOG_DIR" 2>/dev/null || true
     _rotate_log "$LOG_FILE"
     ERRORS=0
     WARNINGS=0
@@ -783,11 +786,21 @@ _log_aitools_environment() {
 # ---------------------------------------------------------------------------
 # Standard logging (Pattern A: console + log file, with [level] tag)
 # ---------------------------------------------------------------------------
+# _aitlib_log_append LINE FILE -- append LINE to the log FILE. Fail-safe
+# (reference/logging.md section 5: "A failed log write is swallowed (the only
+# sanctioned silent-suppression in the harness), because a broken log must not
+# break the operation it records"): an unwritable, locked or missing log, or one
+# that is a directory, returns 0 with no message, so set -e never ends the run
+# and the console line is still printed. Parity: Add-AitLibLogText.
+_aitlib_log_append() {
+    { printf '%s\n' "$1" >> "$2"; } 2>/dev/null || true
+}
+
 log() {
     local level="${2:-info}"
     local ts; ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     local line="[$ts] [$SCRIPT_NAME] [$level] $1"
-    printf '%s\n' "$line" >> "$LOG_FILE"
+    _aitlib_log_append "$line" "$LOG_FILE"
     case "$level" in
         error) printf '\033[31m%s\033[0m\n' "$line" ;;
         warn)  printf '\033[33m%s\033[0m\n' "$line" ;;
@@ -799,7 +812,7 @@ log_error() { log "$1" "error"; ERRORS=$((ERRORS + 1)); }
 log_warn()  { log "$1" "warn"; WARNINGS=$((WARNINGS + 1)); }
 log_detail() {
     local ts; ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-    printf '[%s] [%s] [detail] %s\n' "$ts" "$SCRIPT_NAME" "$1" >> "$LOG_FILE"
+    _aitlib_log_append "[$ts] [$SCRIPT_NAME] [detail] $1" "$LOG_FILE"
 }
 
 # ---------------------------------------------------------------------------
@@ -822,7 +835,7 @@ log_detail() {
 # callers decide whether to count invoke_ai failures.
 _ai_log() {
     local ts; ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-    printf '[%s] [%s] [%s] %s\n' "$ts" "$SCRIPT_NAME" "${2:-info}" "$1" >> "${LOG_FILE:-/dev/null}"
+    _aitlib_log_append "[$ts] [$SCRIPT_NAME] [${2:-info}] $1" "${LOG_FILE:-/dev/null}"
 }
 
 AI_REJECT_REASON=""
@@ -1592,30 +1605,116 @@ MERGED_CONTENT=""
 
 # ---------------------------------------------------------------------------
 # Spinner for AI operations (visual progress indicator)
+# A background subshell draws "\r  <c> <msg>" on /dev/tty every 0.2 s until
+# _stop_spinner kills it. A background job of a non-interactive shell ignores
+# SIGINT, so Ctrl+C alone never stops it (it kept drawing after the script died,
+# mission M3b). Two guards:
+#   - It watches the shell that started it (the PID taken before the fork:
+#     BASHPID, or $$ on bash 3.2, which has no BASHPID) and ends, clearing its
+#     line, at the first tick after that shell is gone -- whatever ended it,
+#     SIGKILL included, where no trap can run.
+#   - While invoke_ai runs, _invoke_ai_merge stops it from INT, TERM and EXIT
+#     traps (_spinner_traps_set / _spinner_traps_restore).
+# Without a controlling terminal it draws nothing but keeps watching (each draw
+# fails quietly: the spinner is cosmetic). Starting one stops a running one.
+# Parity: Start-AiSpinner / Stop-AiSpinner in aitools-lib.ps1.
 # ---------------------------------------------------------------------------
 _AI_SPINNER_PID=""
 
 _start_spinner() {
-    local msg="${1:-working...}"
+    local msg="${1:-working...}" owner="${BASHPID:-$$}"
+    if [ -n "$_AI_SPINNER_PID" ]; then _stop_spinner; fi
+    # 2>/dev/null on the subshell: a draw on a missing or closed terminal fails
+    # with a shell message; there is nothing to draw, which is not an error
     (
         local chars='/-\|'
         local i=0
-        while true; do
-            printf '\r  %s %s' "${chars:$((i % 4)):1}" "$msg" > /dev/tty
+        while kill -0 "$owner" 2>/dev/null; do
+            printf '\r  %s %s' "${chars:$((i % 4)):1}" "$msg" > /dev/tty || :  # no terminal: keep watching
             i=$((i + 1))
             sleep 0.2
         done
-    ) &
+        printf '\r  \033[K' > /dev/tty || :  # the owner is gone: clear the line if there is one
+    ) 2>/dev/null &
     _AI_SPINNER_PID=$!
 }
 
 _stop_spinner() {
     if [ -n "$_AI_SPINNER_PID" ] && kill -0 "$_AI_SPINNER_PID" 2>/dev/null; then
-        kill "$_AI_SPINNER_PID" 2>/dev/null
+        # || true: the spinner may end on its own between the check and the kill;
+        # either way it is gone, which is all this needs
+        kill "$_AI_SPINNER_PID" 2>/dev/null || true
         wait "$_AI_SPINNER_PID" 2>/dev/null || true  # reap; exit code irrelevant for spinner
     fi
     _AI_SPINNER_PID=""
-    printf '\r  \033[K' > /dev/tty  # clear spinner line
+    # || true: no controlling terminal -- there is no spinner line to clear
+    { printf '\r  \033[K' > /dev/tty; } 2>/dev/null || true
+}
+
+# Traps that stop the spinner while an AI call runs (_invoke_ai_merge).
+# _spinner_traps_set saves the caller's INT, TERM and EXIT traps and sets its
+# own; _spinner_traps_restore puts the caller's back (a no-op when none are
+# saved, so it is safe to call twice). On INT or TERM the handler stops the
+# spinner, restores the caller's traps and sends the same signal to this shell
+# again, so the caller's own trap, or the default action (the script ends, its
+# EXIT trap runs), follows. On EXIT it stops the spinner and runs the caller's
+# EXIT command. bash runs a trap only after the foreground command ends: on
+# Ctrl+C the AI CLI gets SIGINT too and ends, then the handler runs.
+# trap -p goes through a temp file, not $(trap -p ...): whether a command
+# substitution sees the caller's traps differs between bash versions (not
+# verified for bash 3.2, macOS /bin/bash). No temp file: the traps are not set
+# (a detail line); the spinner's owner watch still ends it.
+_AITLIB_SPIN_TRAPS_SET=false
+_AITLIB_SPIN_PREV_INT=""
+_AITLIB_SPIN_PREV_TERM=""
+_AITLIB_SPIN_PREV_EXIT=""
+_AITLIB_SPIN_EXIT_CMD=""
+
+# _aitlib_spin_trap_arg -- '...' SIG: called with the arguments of a saved
+# "trap -- 'CMD' EXIT" line; keeps CMD
+_aitlib_spin_trap_arg() { _AITLIB_SPIN_EXIT_CMD="${2:-}"; }
+
+_spinner_traps_set() {
+    local tf=""
+    if [ "$_AITLIB_SPIN_TRAPS_SET" = "true" ]; then return 0; fi
+    if ! tf="$(mktemp)"; then
+        log_detail "AI spinner: mktemp failed -- no INT/TERM/EXIT traps (the owner watch still stops it)"
+        return 0
+    fi
+    trap -p INT > "$tf";  _AITLIB_SPIN_PREV_INT="$(cat "$tf")"
+    trap -p TERM > "$tf"; _AITLIB_SPIN_PREV_TERM="$(cat "$tf")"
+    trap -p EXIT > "$tf"; _AITLIB_SPIN_PREV_EXIT="$(cat "$tf")"
+    _aitlib_rm_tmp "$tf" "AI spinner"
+    _AITLIB_SPIN_EXIT_CMD=""
+    if [ -n "$_AITLIB_SPIN_PREV_EXIT" ]; then
+        eval "_aitlib_spin_trap_arg ${_AITLIB_SPIN_PREV_EXIT#trap }"
+    fi
+    _AITLIB_SPIN_TRAPS_SET=true
+    trap '_spinner_on_signal INT' INT
+    trap '_spinner_on_signal TERM' TERM
+    trap '_spinner_on_exit' EXIT
+}
+
+_spinner_traps_restore() {
+    if [ "$_AITLIB_SPIN_TRAPS_SET" != "true" ]; then return 0; fi
+    _AITLIB_SPIN_TRAPS_SET=false
+    if [ -n "$_AITLIB_SPIN_PREV_INT" ]; then eval "$_AITLIB_SPIN_PREV_INT"; else trap - INT; fi
+    if [ -n "$_AITLIB_SPIN_PREV_TERM" ]; then eval "$_AITLIB_SPIN_PREV_TERM"; else trap - TERM; fi
+    if [ -n "$_AITLIB_SPIN_PREV_EXIT" ]; then eval "$_AITLIB_SPIN_PREV_EXIT"; else trap - EXIT; fi
+}
+
+_spinner_on_signal() {
+    _stop_spinner
+    log_detail "AI spinner stopped by $1"
+    _spinner_traps_restore
+    kill -s "$1" "${BASHPID:-$$}"
+}
+
+_spinner_on_exit() {
+    _stop_spinner
+    log_detail "AI spinner stopped at exit"
+    _AITLIB_SPIN_TRAPS_SET=false
+    if [ -n "$_AITLIB_SPIN_EXIT_CMD" ]; then eval "$_AITLIB_SPIN_EXIT_CMD"; fi
 }
 
 # ---------------------------------------------------------------------------
@@ -1769,11 +1868,15 @@ _invoke_ai_merge() {
         fi
 
         local merged
+        # The traps stop the spinner if Ctrl+C, TERM or an exit ends the run
+        # during the AI call; the caller's traps are back right after it
+        _spinner_traps_set
         _start_spinner "merging $display_name (attempt $iteration)..."
         # invoke_ai returns 1 on failure with no stdout; || true suppresses set -e abort
         # (the empty result is checked just below)
         merged=$(printf '%s' "$prompt_text" | invoke_ai balanced none _merge_validate 1) || true
         _stop_spinner
+        _spinner_traps_restore
 
         # Defense-in-depth: strip leading/trailing code fences if AI ignored instructions
         if [ -n "$merged" ]; then
