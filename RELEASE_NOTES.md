@@ -26,6 +26,22 @@ Not tagged. Branch `fix/38dc-17-mf-pty-timeout`, mission M6-Polish (session 8779
 
 ---
 
+## v0.77.6 -- How tests run on Windows: the .ps1 suites; Git Bash only for cross-platform scripts (2026-11-14)
+
+Not tagged. Branch `docs/38dc-12-windows-test-practice`, mission 38dc-12 (M6-Polish, session 87795dc3).
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 1 | `reference/cross-platform-detail.md` "Running tests on Windows" (new): the commander's rule (2026-11-14), quoted: `.sh` scripts and tests run only on macOS and Linux, `.ps1` only on Windows, unless a script is explicitly marked cross-platform (his examples: `build-deploy.sh`, all Perl and Python scripts; where the marks are recorded is an open question); on Windows an agent runs the eight `.ps1` suites with `pwsh -NoProfile -File` and the tests of explicitly cross-platform scripts, and leaves `.ps1` code that has only a `.sh` driver to the Windows CI job. Eight known Git Bash issues, each with its source, five re-checked by a probe on the commander's workstation: Git's `usr/bin` first on PATH (a bare `find` in a `.cmd` stub walked C: and hung a suite), `bash` resolving to Git's or to the WSL launcher, `chmod 000` on a directory not enforced, `grep` dropping the line-end CR, MSYS argument rewriting (`/c/...`, `--opt=/tmp/...`, `origin/main:.aitools/...`), GNU tools not BSD, slow pseudo-terminal runs, a faked `uname`. What the Windows CI job runs today (42 suite steps: 8 `.ps1`, 2 Python, 32 `.sh` in Git Bash, in three groups) and that the bash AI merge has no Windows runtime path; follow-up mission 38dc-13 is changing that layout. "Git Bash PATH shadowing": `find`, `bash` and `sort.exe` added to the shadowed tools |
+| 2 | `CLAUDE.md` tests line: on Windows, the `.ps1` suites, and `.sh` suites in Git Bash only for scripts explicitly marked cross-platform, with a pointer to the new section |
+| 3 | `/delegate` skill v2.2 ("In the aitools repo", "Checks"): on Windows the `.ps1` check twins (the `.sh` checks refuse Windows), the same test rule, and the pointer to the new section |
+
+**Verified on:** Windows 11 (Git Bash 5.3.15, pwsh 7): the Git Bash probes cited in item 1; the CI step counts by a parse of `.github/workflows/check.yml`. Documentation only: no script or test changed.
+
+---
+
 ## v0.77.5 -- Fail-safe log writers in the installers, the profile resolver and check-lib; setup-pywinpty checks its listing; hh.ps1 is PowerShell 7 only (2026-11-14)
 
 Not tagged. Branch `fix/m6-logging` (PR #157), mission M6-Polish (session 87795dc3), items f, d and e (delegates M6-F and M6-DE).

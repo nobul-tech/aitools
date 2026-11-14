@@ -35,6 +35,8 @@ body of the /delegate skill").
 v2.1 (2026-11-13, S3-Clean): the protected-file list and the pointer to the
 deleted aitools sources-of-truth rule removed; "Review after" covers every
 change (D-DEL5).
+v2.2 (2026-11-14, 38dc-12): "In the aitools repo" "Checks" names the `.ps1`
+check twins for Windows and points to the Windows test practice.
 
 ## When to use
 
@@ -447,8 +449,12 @@ section travels with the skill).
   only on success, but the result is still a change to the commander's
   dotprofile). Only a prompt quoting the commander's order may run one against
   the real HOME.
-- **Checks**: `bash scripts/check-pre-commit.sh`, `check-pre-push.sh`,
-  `check-post-push.sh` from the worktree by absolute path. Known
+- **Checks**: on macOS and Linux, `bash scripts/check-pre-commit.sh`,
+  `check-pre-push.sh`, `check-post-push.sh` from the worktree by absolute
+  path; on Windows, their `.ps1` twins with `pwsh -NoProfile -File` (the
+  `.sh` checks refuse Windows). Tests on Windows: the `.ps1` suites, and
+  `.sh` suites only for scripts explicitly marked cross-platform
+  (`reference/cross-platform-detail.md` "Running tests on Windows"). Known
   pre-existing failures to record, not block on: pre-commit step 6 (a
   harvesting file at mode 100644); pre-push step 7 (dotprofile `deploy/`
   stale until rebuilt; it runs on every push since 2026-10-26).
