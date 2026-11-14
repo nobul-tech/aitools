@@ -49,7 +49,8 @@ Exemptions: libraries (aitools-lib, check-lib, init-logging), hooks, build
 scripts (build-deploy, build-package), scratch files, and (pending approval)
 bootstrap/hh/relay-outbound-prompt/init-hh-hooks entry points, helper modules
 (aitools-json.ps1, _validate-ps1.ps1) and analyze-session.sh; cross-platform
-test suites (hooks, build-deploy backup, build-package CLI, pywinpty); the
+test suites (hooks, build-deploy backup, build-package CLI, pywinpty); all
+Perl and Python scripts and their tests (commander, 2026-11-14); the
 logging and menus `.sh` suites until RFI 38dc-3 is decided. Full table in
 `.claude/rules/cross-platform.md`.
 
