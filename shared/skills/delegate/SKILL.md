@@ -35,6 +35,10 @@ body of the /delegate skill").
 v2.1 (2026-11-13, S3-Clean): the protected-file list and the pointer to the
 deleted aitools sources-of-truth rule removed; "Review after" covers every
 change (D-DEL5).
+v2.2 (2026-11-14, 38dc-08): "Environment limits" gains delegate identity and
+control (description as the name-to-agentId link, transcript path, TaskStop,
+repeat hand-backs, background tasks); "Verifying what comes back" points to the
+delegate's transcript.
 
 ## When to use
 
@@ -412,6 +416,18 @@ Verify these before relying on them; versions move. Source of record:
   `grep`/`find` in pipelines or scratch scripts when those tools are absent.
 - **Follow-up messages.** `SendMessage` to a running delegate's id is
   delivered at its next tool round; a message to a finished one resumes it.
+  A resumed delegate's second `SubagentHandback` is usually delivered but
+  was refused once (2.1.325); if it is refused, the delegate sends the
+  content by `SendMessage`.
+- **Identity and control** (2.1.325; `/tool-ops`, "Delegate Identity,
+  Transcripts and Control"). Start every Agent `description` with the
+  delegate's name: `meta.json` copies it, and it is the only link from the
+  name to the agentId. Record the agentId the launch returns. A delegate's
+  transcript is `subagents/agent-<agentId>.jsonl` under the main session's
+  project folder, not the `output_file`. You cannot TaskStop your own
+  delegate: message it instead. Tell delegates to stop their own monitors
+  and background shells before handing back: they outlive the hand-back,
+  and their completion can bring the delegate back to report again.
 - **Background delegates** may be denied writes they would get approval for
   in the foreground; expect `WRITE_BLOCKED` and plan to write from the
   delegating agent.
@@ -469,7 +485,9 @@ section travels with the skill).
 
 1. **Files**: every named output exists under its prefixed name; nothing was
    written outside the agreed paths (`git status` in every repo it could
-   touch).
+   touch). To check what the delegate actually did, read its transcript
+   (`subagents/agent-<agentId>.jsonl`, found by its `description` in the
+   `meta.json` files) with the harness readers, never whole.
 2. **`WRITE_BLOCKED` lines**: do the blocked step yourself, through the same
    gates the delegate faced.
 3. **`CONFLICT:` lines**: check each resolution followed D-DEL6; a mandated
