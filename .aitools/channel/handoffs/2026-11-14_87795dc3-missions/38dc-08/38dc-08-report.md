@@ -20,7 +20,8 @@ delegate's agent id: ab61a67f59bce2b10 (found by its `description` in
 3. Tested with two throwaway level-3 probes (2b10-01 id/env/tools/TaskStop/
    background shell/resume; 2b10-02 TaskStop on a running delegate).
 4. Also updated the `/delegate` skill (v2.2) and the `/tool-ops` skill lookup
-   table, and RELEASE_NOTES v0.77.4 (renumbered at merge if main moved).
+   table, and RELEASE_NOTES v0.77.7 (v0.77.4-v0.77.6 are reserved for PRs
+   #155, #157 and #159, per M6-Polish).
 5. Shipping: see the PR, review and merge record at the end of this file and
    in the final response.
 
@@ -73,7 +74,7 @@ delegate's agent id: ab61a67f59bce2b10 (found by its `description` in
 - `shared/skills/delegate/SKILL.md` v2.2: two "Environment limits" bullets,
   one "Verifying what comes back" sentence.
 - `shared/skills/tool-ops/SKILL.md`: one lookup-table row.
-- `RELEASE_NOTES.md`: v0.77.4.
+- `RELEASE_NOTES.md`: v0.77.7.
 - This report.
 
 `registries/tool-ops.json` unchanged: the `/tool-ops` skill routes session
@@ -102,6 +103,40 @@ worktree (gitignored).
   reviewer's three matching timestamps.)
 - What a delegate's TaskStop on itself does (not attempted: it could stop the
   caller).
+
+## Review and shipping
+
+- PR: https://github.com/nobul-tech/aitools/pull/158 (branch
+  `docs/38dc-08-subagent-transcripts`, base main).
+- Independent reviewer 2b10-03 (agent a2bc8f6f24e244be9, level 3, fresh
+  context, read this report last):
+  - verdict BLOCKING (5) at 3a984e4:
+    https://github.com/nobul-tech/aitools/pull/158#issuecomment-6882595825
+    (B1 output_file trigger, B2 repeat hand-backs, B3 transcript fields, B4
+    Agent `name` scope, B5 PowerShell recipe; 10 notes), fixed in 1d828eb;
+  - re-check BLOCKING (1) at e213153:
+    https://github.com/nobul-tech/aitools/pull/158#issuecomment-6882682810
+    (R1 repeat counts), fixed in cf1a0e3;
+  - re-check 2 PASS at cf1a0e3:
+    https://github.com/nobul-tech/aitools/pull/158#issuecomment-6882699922.
+- After the PASS: RELEASE_NOTES renumbered v0.77.4 -> v0.77.7 on M6-Polish's
+  instruction (v0.77.4-v0.77.6 reserved for #155, #157, #159), and this
+  section added. No reference or skill text changed after the PASS.
+- Merge SHA and main CI: in the final hand-back (they exist only after this
+  file is committed).
+
+## Operational learning added during shipping
+
+- A SendMessage resume result can carry `resumedAgentId` in the visible
+  result (`{"success":true,"message":"Resuming agent a2bc8f6","resumedAgentId":"a2bc8f6f24e244be9",...}`);
+  the earlier resume of 2b10-01 did not show it.
+- A delegate stopping its own background shell with TaskStop succeeds:
+  `{"message":"Successfully stopped task: bs71xda9h (bash ...)","task_id":"bs71xda9h","task_type":"local_bash",...}`.
+- A resumed reviewer's second and third hand-backs were delivered (2b10-03).
+- `git push` once failed with `! [remote rejected] ... (failed)` and
+  succeeded on an unchanged retry (a remote error, not a permission denial).
+- Parallel PRs on one day collide on RELEASE_NOTES version numbers and on the
+  `/delegate` skill version line: the orchestrator reserved numbers per PR.
 
 ## INCIDENT / CONFLICT / WRITE_BLOCKED
 

@@ -12,7 +12,7 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
-## v0.77.4 -- Delegate identity, transcripts and control documented (2026-11-14)
+## v0.77.7 -- Delegate identity, transcripts and control documented (2026-11-14)
 
 Not tagged. Branch `docs/38dc-08-subagent-transcripts`, mission 38dc-08-subagent-transcripts (delegate of M6-Polish, session 87795dc3).
 
