@@ -266,7 +266,8 @@ if $HAVE_PTY; then
         "has_line '$C/plain' '  ... (73 more lines -- full diff in deploy log)' && has_line '$C/plain' '-local 27' && ! has_line '$C/plain' '-local 28' && [ \"\$(grep -c 'diff a.md: ' '$LOG')\" = 103 ] && grep -qF 'diff a.md: +repo 50' '$LOG'"
 
     if $IS_WINDOWS; then
-        # ConPTY (pywinpty) passes ~330 KB of output too slowly for the 30 s
+        # ConPTY (pywinpty) passed ~330 KB of output (the 3000-line fixture of the
+        # time; now 1500 lines, ~170 KB) too slowly for the 30 s
         # pty-run timeout (CI run 41262590653: killed after 30.1 s with the menu
         # not yet shown; pywinpty issue #564, ConPTY throughput). The truncation
         # code is the same lib code the macOS/Linux run covers.
