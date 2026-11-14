@@ -12,6 +12,20 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.77.11 -- The bash compliance check no longer fails at random under pipefail (2026-11-14)
+
+Not tagged. Branch `fix/38dc-21-compliance-sigpipe`, mission M6-Polish (session 87795dc3), a fix-forward for the CI step added in v0.77.8 (PR #160).
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 1 | Medium | `scripts/check-script-compliance.sh` runs under `set -euo pipefail` and tested pipelines with `... | grep -q PATTERN`. `grep -q` exits at its first match; when the writer (`grep -A2` over `scripts/aitools-lib.sh`, or `echo` / `printf` of a captured block) still had output to write, it died of SIGPIPE, `pipefail` made the pipeline fail, and the check reported a violation that is not there. CI run 43640967140 (PR #154, linux job) failed steps 4 and 5 ("log_error does not increment ERRORS", "log_warn does not increment WARNINGS") on a library whose main CI run passed the same steps. The 12 pipelines now end in `grep PATTERN >/dev/null`, which reads its input to the end, so the writer never gets SIGPIPE; the match result is the same |
+
+**Verified on:** `bash -n` on the script (Windows 11, Git Bash, parse only); the diff is the 12 pipelines and nothing else. Not run locally: the `.sh` check (commander, 2026-11-14: tests and checks on Windows are `.ps1`); the linux CI job runs it on this PR.
+
+---
+
 ## v0.77.10 -- The 64 KB review-diff test no longer times out a slow macOS runner (2026-11-14)
 
 Not tagged. Branch `fix/38dc-17-mf-pty-timeout`, mission M6-Polish (session 87795dc3), a fix-forward for main CI run 43632383993.

@@ -100,15 +100,15 @@ for f in "${SH_SCRIPTS[@]}"; do
         start=$((lineno > 10 ? lineno - 10 : 1))
         context=$(sed -n "${start},${lineno}p" "$f")
         # Skip if write_summary is present
-        if echo "$context" | grep -q 'write_summary' 2>/dev/null; then continue; fi
+        if echo "$context" | grep 'write_summary' >/dev/null 2>/dev/null; then continue; fi
         # Skip if this is the main exit footer (ERRORS check)
-        if echo "$context" | grep -q 'ERRORS' 2>/dev/null; then continue; fi
+        if echo "$context" | grep 'ERRORS' >/dev/null 2>/dev/null; then continue; fi
         # Skip OS guard exits (fire before summary is available)
-        if echo "$context" | grep -q 'MINGW\|MSYS\|CYGWIN' 2>/dev/null; then continue; fi
+        if echo "$context" | grep 'MINGW\|MSYS\|CYGWIN' >/dev/null 2>/dev/null; then continue; fi
         # Skip Windows forwarding blocks
-        if echo "$context" | grep -q 'ps1_installer\|PowerShell\|ps_args\|cygpath' 2>/dev/null; then continue; fi
+        if echo "$context" | grep 'ps1_installer\|PowerShell\|ps_args\|cygpath' >/dev/null 2>/dev/null; then continue; fi
         # Skip log_error exits in script body (error is tracked by counter)
-        if echo "$context" | grep -q 'log_error' 2>/dev/null; then continue; fi
+        if echo "$context" | grep 'log_error' >/dev/null 2>/dev/null; then continue; fi
         step3_fail=$((step3_fail + 1))
         step3_details="${step3_details} $(basename "$f"):${lineno}"
     done <<< "$exit_lines"
@@ -123,7 +123,7 @@ fi
 # ---------------------------------------------------------------------------
 # 4. Error counter tracking -- log_error increments ERRORS in lib
 # ---------------------------------------------------------------------------
-if grep -A2 'log_error' scripts/aitools-lib.sh 2>/dev/null | grep -q 'ERRORS='; then
+if grep -A2 'log_error' scripts/aitools-lib.sh 2>/dev/null | grep 'ERRORS=' >/dev/null; then
     step_pass "4" "Error counter tracking (bash)" "log_error increments ERRORS"
 else
     step_fail "4" "Error counter tracking (bash)" "log_error does not increment ERRORS"
@@ -132,7 +132,7 @@ fi
 # ---------------------------------------------------------------------------
 # 5. Warning counter tracking -- log_warn increments WARNINGS in lib
 # ---------------------------------------------------------------------------
-if grep -A2 'log_warn' scripts/aitools-lib.sh 2>/dev/null | grep -q 'WARNINGS='; then
+if grep -A2 'log_warn' scripts/aitools-lib.sh 2>/dev/null | grep 'WARNINGS=' >/dev/null; then
     step_pass "5" "Warning counter tracking (bash)" "log_warn increments WARNINGS"
 else
     step_fail "5" "Warning counter tracking (bash)" "log_warn does not increment WARNINGS"
@@ -271,15 +271,15 @@ for f in "${PS1_SCRIPTS[@]}"; do
         [ "$check_end" -gt "$total_lines" ] && check_end=$total_lines
         nearby=$(sed -n "${check_start},${check_end}p" "$f")
         # Look for result checks: -not, if, .Count, .Length, null, catch
-        if echo "$nearby" | grep -qE '\-not|\bif\b|\.Count|\.Length|null|catch' 2>/dev/null; then
+        if echo "$nearby" | grep -E '\-not|\bif\b|\.Count|\.Length|null|catch' >/dev/null 2>/dev/null; then
             continue
         fi
         # Exempt: command-existence checks (Get-Command with explicit fallback)
         preceding_start=$((lineno > 3 ? lineno - 3 : 1))
         preceding=$(sed -n "${preceding_start},${lineno}p" "$f")
-        if echo "$preceding" | grep -q 'Get-Command' 2>/dev/null; then continue; fi
+        if echo "$preceding" | grep 'Get-Command' >/dev/null 2>/dev/null; then continue; fi
         # Also exempt if same line has a result check comment
-        if echo "$sc_line" | grep -q 'checked on' 2>/dev/null; then continue; fi
+        if echo "$sc_line" | grep 'checked on' >/dev/null 2>/dev/null; then continue; fi
         step11_fail=$((step11_fail + 1))
         step11_details="${step11_details} $(basename "$f"):${lineno}"
     done <<< "$sc_lines"
@@ -331,11 +331,11 @@ fi
 # ---------------------------------------------------------------------------
 step13_ok=true
 ws_body_sh=$(perl -0777 -ne 'print $1 if /^write_summary\(\)\s*\{(.*?)^\}/sm' scripts/aitools-lib.sh)
-if [ -z "$ws_body_sh" ] || ! printf '%s' "$ws_body_sh" | grep -q 'WARNINGS'; then
+if [ -z "$ws_body_sh" ] || ! printf '%s' "$ws_body_sh" | grep 'WARNINGS' >/dev/null; then
     step13_ok=false
 fi
 ws_body_ps1=$(perl -0777 -ne 'print $1 if /^function Write-Summary.*?\{(.*?)^\}/sm' scripts/aitools-lib.ps1)
-if [ -z "$ws_body_ps1" ] || ! printf '%s' "$ws_body_ps1" | grep -q 'warnings'; then
+if [ -z "$ws_body_ps1" ] || ! printf '%s' "$ws_body_ps1" | grep 'warnings' >/dev/null; then
     step13_ok=false
 fi
 
