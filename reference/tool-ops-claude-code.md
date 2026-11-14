@@ -646,12 +646,14 @@ its background tasks and finish, then wait for its notification.
     time this agent stops with no live background children of its own. The
     user can send it another message and resume it, so the same task-id may
     notify more than once.`
-- **A second hand-back is usually delivered, and was refused once.** When
-  a resumed delegate's turn ends, repeat SubagentHandback calls reached the
-  caller in most cases: after a SendMessage resume (M4-Winpty, M6-R4, M6-DE)
-  and after background-task resumes (M1-Ship 6 calls, M3-Fixes 4, M6-A 6,
-  M6-DE 3; counts by the reviewer 2b10-03 from the transcripts). Once, a
-  resumed 2b10-01 was refused (18:40:47Z): `Nothing was sent: an earlier
+- **A second hand-back is usually delivered, and was refused once.**
+  Repeat SubagentHandback calls (the first hand-back not counted) were
+  delivered 17 times: 13 after a background-task notification (M1-Ship 5,
+  M3-Fixes 3, M6-A 4, M6-DE 1) and 4 after a SendMessage resume (M4-Winpty,
+  M6-R4, M6-A, M6-DE, one each); 15 of the 17 came right after
+  `[handback-send-enforce]` (counts by the reviewer 2b10-03 from the
+  transcripts; its own re-check hand-back after a SendMessage resume was
+  delivered too). Once, a resumed 2b10-01 was refused (18:40:47Z): `Nothing was sent: an earlier
   report of yours was already delivered (SubagentHandback delivers one
   report), so this one did not reach your caller. Use SendMessage to send
   anything further, then stop.` Its caller's notification added: `This agent
@@ -674,8 +676,8 @@ its background tasks and finish, then wait for its notification.
 - **Forced hand-back**: the harness may tell a delegate `[handback-send-enforce]
   Your report has not been delivered. Call SubagentHandback({message: <your
   full report>}) now; the call ends your run.` Seen when a delegate ended a
-  turn with plain text instead of a tool call: M6-Polish at 18:34:08Z, one
-  second after a plain-text answer and amid safety-classifier stops; most
+  turn with plain text instead of a tool call: M6-Polish at 18:34:08Z, right
+  after a plain-text answer and amid safety-classifier stops; most
   of the repeat hand-backs above followed it (reviewer 2b10-03). A delegate
   that answers a resume with plain text can be pushed into a second
   hand-back this way. Write the report file before arming long

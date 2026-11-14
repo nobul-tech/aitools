@@ -34,7 +34,7 @@ delegate's agent id: ab61a67f59bce2b10 (found by its `description` in
 | 3a | output_file "is the full subagent JSONL transcript" | **Corrected**: created empty; for some delegates later a hard link to the transcript; trigger unknown | 2b10-01: 0 bytes before SendMessage, 877,743 bytes and nlink 2 after; but M5-Fixes, M6-G, M6-B, M2-Reask-D2 are linked though never resumed (reviewer 2b10-03, B1); 2b10-02 stayed 0 bytes; 14 of 42 linked at 18:44Z |
 | 4 | A delegate does not see its own id; TaskStop error reveals it; TaskStop cannot stop another agent's task | Confirmed; also: no env var holds it, the meta search finds it, an orchestrator cannot stop its own running delegate, and an unknown id lists the running agents | 38dc-08 -> 2b10-02 TaskStop refused, probe unaffected |
 | 5 | SendMessage to a finished agent resumes it with a pin | Confirmed; to a running agent it is queued to the next tool round; `to: "main"` works | 2b10-01 resume; M6-Polish 18:38:44Z |
-| 6 | A delegate with a background watcher hands back again on each resume | Refined: background work outlives the hand-back and its completion reaches the delegate again; repeat SubagentHandback calls were usually delivered (M1-Ship 6, M3-Fixes 4, M6-A 6, M6-DE 3, M4-Winpty and M6-R4 after SendMessage resumes) and refused once (2b10-01, "one report per result"); condition unknown | 2b10-01 refusal text and its b2pmsszp4 shell; reviewer 2b10-03 counts (B2) |
+| 6 | A delegate with a background watcher hands back again on each resume | Refined: background work outlives the hand-back and its completion reaches the delegate again; repeat SubagentHandback calls (first hand-back not counted) were delivered 17 times, 13 after a background-task notification (M1-Ship 5, M3-Fixes 3, M6-A 4, M6-DE 1) and 4 after a SendMessage resume (M4-Winpty, M6-R4, M6-A, M6-DE), 15 of them right after `[handback-send-enforce]`, and refused once (2b10-01, "one report per result"); condition unknown | 2b10-01 refusal text and its b2pmsszp4 shell; reviewer 2b10-03 counts (B2, R1) |
 | 7 | Foreground Bash moved to background after about 180 s | Confirmed from M6-Polish's transcript (17:41:54Z, verbatim text in the reference); a 150 s foreground wait was not moved (2b10-02) | |
 | 8 | Hand-backs arrive as `agent-message from=<agentId>` | Confirmed; frame text and the harness tag-neutralizing preface documented | probe hand-backs |
 | 9 | Sizes | Parent 17.2 MB, orchestrator about 4.4 MB at 18:44Z; a probe transcript is about 0.5 MB before its first turn | `ls`, count-links.py |
@@ -94,7 +94,7 @@ worktree (gitignored).
 
 - macOS, Linux, Claude Code web, Cursor.
 - Whether the main session can TaskStop a delegate.
-- Why repeat hand-backs were usually delivered (M6-A six times) while
+- Why repeat hand-backs were usually delivered (17 times; M6-A 5 repeats) while
   2b10-01's second hand-back was refused.
 - What makes an `output_file` become a hard link.
 - The meaning of the `<tools-used-before-summary>` reminder. (`revivedAt`:

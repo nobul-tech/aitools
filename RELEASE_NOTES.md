@@ -24,7 +24,7 @@ Not tagged. Branch `docs/38dc-08-subagent-transcripts`, mission 38dc-08-subagent
 | 2 | `reference/tool-ops-claude-code.md`: current version 2.1.325; item #25 (SendMessage gap) tested end to end and closed; item #27 level-3 tool set re-verified; "Agent Continuation Gap" marked closed (history kept); session-storage tree shows `subagents/*.meta.json` and `tool-results/`; release-notes watch entry for 2.1.325 |
 | 3 | `/delegate` skill v2.2: "Environment limits" gains delegate identity and control; "Verifying what comes back" points to the delegate's transcript. `/tool-ops` skill: lookup row for the new section |
 
-**Verified on:** Windows 11 (Claude Code 2.1.325, Git Bash, pwsh 7): each fact observed in session 87795dc3 (probe delegates 2b10-01 and 2b10-02, the session's 42 `meta.json` files, the M6-Polish transcript); independent review by 2b10-03 (27 claims checked against the raw files; its five blocking findings fixed); `check-pre-commit.ps1` (no `-Fix`) and `check-pre-push.ps1`: 0 FAIL. macOS, Linux, Claude Code web, Cursor: not tested (documentation only).
+**Verified on:** Windows 11 (Claude Code 2.1.325, Git Bash, pwsh 7): each fact observed in session 87795dc3 (probe delegates 2b10-01 and 2b10-02, the session's 42 `meta.json` files, the M6-Polish transcript); independent review by 2b10-03 (27 claims checked against the raw files; its five blocking findings fixed; its re-check finding on the repeat-hand-back counts fixed); `check-pre-commit.ps1` (no `-Fix`) and `check-pre-push.ps1`: 0 FAIL. macOS, Linux, Claude Code web, Cursor: not tested (documentation only).
 
 ---
 
