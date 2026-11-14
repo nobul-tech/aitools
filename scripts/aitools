@@ -105,9 +105,8 @@ check_profile() {
             printf '\033[33mprofile: profile.json is v1 (legacy). Migration to v2 recommended.\033[0m\n'
             if [ "$mode" = "interactive" ] && ui_can_ask; then
                 local answer="" ppath=""
-                printf "Migrate profile.json to v2 now? [y/N]: " > /dev/tty
-                read_tty_choice answer "no"
-                if [[ "$answer" =~ ^[Yy] ]]; then
+                read_menu_choice answer "y yes n no" n "no" "profile migrate" "Migrate profile.json to v2 now? [y/n]: "
+                if [ "$answer" = "y" ] || [ "$answer" = "yes" ]; then
                     ppath=$(printf '%s' "$result" | node -e "
                         let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{
                             try{console.log(JSON.parse(d).profilePath||'')}catch(e){console.error('profile-check output unreadable: '+e.message)}
@@ -365,7 +364,7 @@ ui_entries() {
 # claim, or the new alias). Returns 0 chosen; 1 no terminal to ask (log_error +
 # ERROR row + ACTION); 2 skipped at the prompt (log_warn; the caller writes the row).
 ui_choose() {
-    local pf="$1" sug="$2" i n=0 nums=() label choice
+    local pf="$1" sug="$2" i n=0 nums=() label choice valid=""
     UI_CHOICE_KIND=""; UI_CHOICE=""
     if ! ui_can_ask; then
         log_error "machine profile: this machine has no profile and there is no terminal to ask -- run: aitools user init --alias <name> (or aitools user init on a terminal)"
@@ -380,7 +379,7 @@ ui_choose() {
         label="${UI_E_ALIAS[i]}"
         case "${UI_E_OWNER[i]}" in
             unregistered)
-                n=$((n + 1)); nums+=("$i")
+                n=$((n + 1)); nums+=("$i"); valid="$valid$n "
                 if [ "${UI_E_KEY[i]}" = "$sug" ]; then label="$label (suggested)"; fi
                 printf '  [%d] %s\n' "$n" "$label" > /dev/tty ;;
             other)
@@ -392,13 +391,15 @@ ui_choose() {
         esac
         i=$((i + 1))
     done
-    printf '  [n] new profile for this machine\n  [s] skip\nChoice: ' > /dev/tty
-    read_tty_choice choice "skip"
+    printf '  [n] new profile for this machine\n  [s] skip\n' > /dev/tty
+    # Only the numbered entries, n and s are answers; anything else (an empty
+    # line included) is asked again by read_menu_choice; EOF = s (skip)
+    read_menu_choice choice "${valid}n s" s "skip" "which profile" "Choice: "
     case "$choice" in
-        [sS]|"")
+        s)
             log_warn "machine profile: registration skipped -- deploys will report no machine match"
             return 2 ;;
-        [nN])
+        n)
             printf 'New alias (e.g., laptop, workstation): ' > /dev/tty
             read_tty_choice UI_CHOICE "skip"
             if [ -z "$UI_CHOICE" ]; then
@@ -407,12 +408,8 @@ ui_choose() {
             fi
             UI_CHOICE_KIND=new ;;
         *)
-            if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le "$n" ]; then
-                UI_CHOICE="${UI_E_KEY[${nums[$((choice - 1))]}]}"; UI_CHOICE_KIND=claim
-            else
-                log_warn "machine profile: invalid choice '$choice' -- registration skipped"
-                return 2
-            fi ;;
+            # a listed number (read_menu_choice accepts nothing else)
+            UI_CHOICE="${UI_E_KEY[${nums[$((choice - 1))]}]}"; UI_CHOICE_KIND=claim ;;
     esac
     return 0
 }
@@ -469,10 +466,9 @@ ui_register() {
             ui_action "Run: aitools user init --alias <another name> (or confirm on a terminal)"
             return 1
         fi
-        printf 'Alias "%s" is used by another machine'\''s profile (%s). Use it for this machine too? [y/N]: ' "$value" "$okey" > /dev/tty
-        read_tty_choice ans "no"
+        read_menu_choice ans "y yes n no" n "no" "alias $value" "Alias \"$value\" is used by another machine's profile ($okey). Use it for this machine too? [y/n]: "
         case "$ans" in
-            [yY]*)
+            y|yes)
                 log "machine profile: alias \"$value\" shared with profile $okey (confirmed at the prompt)"
                 extra+=(--allow-duplicate-alias) ;;
             *)
@@ -811,12 +807,10 @@ ui_create_dotprofile() {
         return "$reg"
     fi
     if ui_can_ask; then
-        printf "Create the private GitHub repo '%s' and push? [Y/n]: " "$repo_name" > /dev/tty
-        read_tty_choice ans "yes"
-        if [ -z "$ans" ]; then ans="y"; fi
+        read_menu_choice ans "y yes n no" y "yes" "create dotprofile $repo_name" "Create the private GitHub repo '$repo_name' and push? [y/n]: "
     fi
     case "$ans" in
-        [yY]*) ;;
+        y|yes) ;;
         *)
             log_warn "user init: GitHub repo not created -- the dotprofile stays local; create it and push: gh repo create $repo_name --private --source $d --push"
             write_summary WARN "dotprofile" "created, not pushed"
