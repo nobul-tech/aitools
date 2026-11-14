@@ -150,6 +150,75 @@ function Get-RepoVersion {
     } catch { return "unknown" }
 }
 
+# Console input mode guard (Windows). A child run in this console (Git Bash /
+# MSYS during build-deploy, node CLIs) can leave the console input mode raw
+# (ENABLE_LINE_INPUT / ENABLE_ECHO_INPUT off, e.g. 0x2E8); the mode belongs to the
+# console, so it outlives the child. [Console]::ReadLine at the next review menu
+# then returns only when the NEXT key arrives, nothing echoes, and that key leaks
+# into the following menu. Save-ConsoleInputMode reads the mode before the child
+# runs; Restore-ConsoleInputMode puts it back afterwards and logs (detail) any
+# difference. A no-op when stdin is not a console (redirected, CI) and off Windows.
+# The type name differs from the lib's AitConsoleIn (Read-ConsoleChoice) on purpose;
+# the two may later be consolidated in aitools-lib.ps1.
+function Save-ConsoleInputMode {
+    if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
+        return [pscustomobject]@{ Mode = [long]-1; Reason = "not Windows" }
+    }
+    if ([Console]::IsInputRedirected) {
+        return [pscustomobject]@{ Mode = [long]-1; Reason = "not a console" }
+    }
+    if (-not ('AitConsoleModeGuard' -as [type])) {
+        try {
+            Add-Type -ErrorAction Stop -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public static class AitConsoleModeGuard {
+    [DllImport("kernel32.dll", SetLastError = true)] static extern IntPtr GetStdHandle(int n);
+    [DllImport("kernel32.dll", SetLastError = true)] static extern bool GetConsoleMode(IntPtr h, out uint m);
+    [DllImport("kernel32.dll", SetLastError = true)] static extern bool SetConsoleMode(IntPtr h, uint m);
+    // Input mode of STD_INPUT_HANDLE (-10), or -1 when stdin is not a console.
+    public static long Get() { uint m; return GetConsoleMode(GetStdHandle(-10), out m) ? (long)m : -1; }
+    // 0 on success, else the Win32 error code.
+    public static int Set(long m) {
+        if (m < 0 || m > 0xFFFFFFFFL) return 87;
+        return SetConsoleMode(GetStdHandle(-10), (uint)m) ? 0 : Marshal.GetLastWin32Error();
+    }
+}
+'@
+        } catch {
+            return [pscustomobject]@{ Mode = [long]-1; Reason = "unavailable: $($_.Exception.Message)" }
+        }
+    }
+    $mode = [AitConsoleModeGuard]::Get()
+    if ($mode -lt 0) { return [pscustomobject]@{ Mode = [long]-1; Reason = "not a console" } }
+    return [pscustomobject]@{ Mode = [long]$mode; Reason = "console" }
+}
+
+# Restore-ConsoleInputMode SAVED LABEL -- put back the mode Save-ConsoleInputMode
+# read. Returns "restored", "unchanged", "restore failed", or the reason nothing
+# was saved ("not Windows", "not a console", "unavailable: ...").
+function Restore-ConsoleInputMode {
+    param($Saved, [string]$Label)
+    if ($null -eq $Saved -or $Saved.Mode -lt 0) {
+        $why = if ($null -eq $Saved) { "not saved" } else { $Saved.Reason }
+        LogDetail "console input mode around ${Label}: not guarded ($why)"
+        return $why
+    }
+    $now = [AitConsoleModeGuard]::Get()
+    if ($now -eq $Saved.Mode) {
+        LogDetail ("console input mode 0x{0:X} unchanged after {1}" -f $now, $Label)
+        return "unchanged"
+    }
+    $nowText = if ($now -lt 0) { "unreadable" } else { "0x{0:X}" -f $now }
+    $rc = [AitConsoleModeGuard]::Set($Saved.Mode)
+    if ($rc -eq 0) {
+        LogDetail ("console input mode {0} after {1}, restored 0x{2:X}" -f $nowText, $Label, $Saved.Mode)
+        return "restored"
+    }
+    LogWarn ("Could not restore the console input mode after {0} ({1}, wanted 0x{2:X}, Win32 error {3}) -- review menus may not echo; open a new terminal if a menu does not react" -f $Label, $nowText, $Saved.Mode, $rc)
+    return "restore failed"
+}
+
 # Invoke-DeployAbort SCRIPT -- deploy-harness exited 2: the user chose [x]abort at a
 # review menu (D-TS13; abort ends the whole run, T-Q3). The remaining deploy steps
 # are not run; the caller shows the summary and exits 2. Parity: deploy_abort in
@@ -2023,12 +2092,20 @@ if ($unixRepoPath -match '^/([A-Za-z])/') {
 # The dotprofile resolved above reaches the build as AITOOLS_USER_REPO_PATH, scoped
 # to this one call (B5a Q1; PR #95 follow-up, review H5): restored right after it
 $prevUserRepoEnv = $env:AITOOLS_USER_REPO_PATH
+# Console input mode: with the console as stdin, the build's MSYS processes switch
+# the console input mode (0x1F7 -> 0x2E8/0xE7, dozens of times per build) and may
+# leave it raw; the review menus of the later steps read in that console. The build
+# reads no stdin, so it gets a pipe ($null |): MSYS then leaves the console alone.
+# Save-ConsoleInputMode / Restore-ConsoleInputMode also put the mode back in case a
+# process opens CONIN$ itself (no-op without a console).
+$consoleInMode = Save-ConsoleInputMode
 try {
     if ($buildUserRepo) { $env:AITOOLS_USER_REPO_PATH = $buildUserRepo }
-    $buildResult = & $bashExe "$unixRepoPath/scripts/build-deploy.sh" 2>&1 | Out-String
+    $buildResult = $null | & $bashExe "$unixRepoPath/scripts/build-deploy.sh" 2>&1 | Out-String
     $buildRc = $LASTEXITCODE
 } finally {
     $env:AITOOLS_USER_REPO_PATH = $prevUserRepoEnv
+    $null = Restore-ConsoleInputMode $consoleInMode "build-deploy"
 }
 Add-Content -Path $logFile -Value $buildResult
 if ($buildRc -eq 0) {

@@ -262,6 +262,14 @@ jobs:
         if: ${{ !cancelled() }}
         run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/build-deploy/test-build-deploy-backup.sh
 
+      - name: setup-user-shell login profile + rc tests (bash 5)
+        if: ${{ !cancelled() }}
+        run: bash tests/setup-user-shell/test-setup-user-shell.sh
+
+      - name: setup-user-shell login profile + rc tests (macOS /bin/bash 3.2)
+        if: ${{ !cancelled() }}
+        run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/setup-user-shell/test-setup-user-shell.sh
+
       # Hook output-channel tests: one step per suite (not run-hook-tests.sh),
       # so the "Every test suite is in CI" step sees each test-*.sh.
       - name: Hook output-channel tests, sh-file-fixup (bash 5)
@@ -571,6 +579,10 @@ jobs:
         if: ${{ !cancelled() }}
         run: bash tests/build-deploy/test-build-deploy-backup.sh
 
+      - name: setup-user-shell login profile + rc tests
+        if: ${{ !cancelled() }}
+        run: bash tests/setup-user-shell/test-setup-user-shell.sh
+
       # Hook output-channel tests: one step per suite (see the macos job).
       - name: Hook output-channel tests, sh-file-fixup
         if: ${{ !cancelled() }}
@@ -710,6 +722,11 @@ jobs:
         if: ${{ !cancelled() }}
         shell: pwsh
         run: pwsh -NoProfile -File tests/logging/test-logging.ps1
+
+      - name: aitools.ps1 console input mode guard tests (PowerShell, native)
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: pwsh -NoProfile -File tests/aitools-entry/test-console-mode-guard.ps1
 
       - name: Managed-file tests (bash, via Git Bash)
         if: ${{ !cancelled() }}
