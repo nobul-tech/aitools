@@ -63,7 +63,7 @@ reading one file:
 
 | File | Writer |
 |------|--------|
-| `deploy.log` | setup scripts (via `aitools-lib` `logging_init`/`Initialize-Logging`) |
+| `deploy.log` | setup scripts (via `aitools-lib` `logging_init`/`Initialize-Logging`); the PowerShell `[RELAY]` prompt under `hh.ps1` (script name `relay-outbound`: its menu answers) |
 | `deploy.jsonl` | `jsonl_record` / `Write-JsonlRecord` in `aitools-lib`, called by the installers' `log` / `Log` override and by the child relay (`run_child_relayed` / `Invoke-ChildRelayed`); one JSON record per line, fields `ts, host, os, script, run_id, level, msg`; one `run_id` per installer run (`AITOOLS_RUN_ID`, inherited by relayed children); an unwritable file is one warning, then records are skipped |
 | `ait-harvest.log` | `scripts/ait-harvest.py` |
 | `session-archive.log` | `session-archive.sh` shim (bash-fallback branch only) |

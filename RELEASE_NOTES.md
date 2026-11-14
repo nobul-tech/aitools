@@ -31,7 +31,7 @@ Not tagged. Mission M5-Fixes (batches M5-L1, M5-L2), from the findings of missio
 |---|--------|
 | 3 | `reference/cross-platform-detail.md` "Windows console: input mode, jobs, spinner": why the bash spinner could outlive its script, and its two guards |
 | 4 | `reference/logging.md` section 5: names the fail-safe write helpers and what they guarantee, and that `deploy.jsonl` warns once instead |
-| 6 | `.claude/rules/interactive-menus.md` "Answers", `reference/managed-file-deployment.md` "Menu answers", `reference/cross-platform-detail.md` "Windows console": the PowerShell `[RELAY]` prompt reads through `Read-MenuChoice`; only `shared/shell/aliases.*` and the bash `[RELAY]` prompt keep a local loop |
+| 6 | `.claude/rules/interactive-menus.md` "Answers", `reference/managed-file-deployment.md` "Menu answers", `reference/cross-platform-detail.md` "Windows console": the PowerShell `[RELAY]` prompt reads through `Read-MenuChoice`; only `shared/shell/aliases.*` and the bash `[RELAY]` prompt keep a local loop. `reference/logging.md` section 3: `deploy.log` also gets the `[RELAY]` prompt's answers under `hh.ps1` (`relay-outbound`) |
 
 **Verified on:** Windows 11 (Git Bash 5, pwsh 7). macOS and Linux run in CI only.
 
