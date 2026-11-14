@@ -18,8 +18,11 @@
 # ACL deny entry for the current user instead (Deny-Access; chmod changes
 # nothing on NTFS, so the old Git Bash harness skipped them); a probe of each
 # deny right they use (Test-DenyBlocks) turns them into one SKIP line where the
-# deny does not block. The case-only duplicate (case-sensitive file system)
-# and dangling symlink (creating a symlink needs a privilege on Windows) cases
+# deny does not block. Windows only, with no .sh counterpart (on POSIX an open
+# file never blocks a read): the manifest held open with no sharing by another
+# program (a FileShare.None handle held by this harness; probed by
+# Test-LockBlocks, SKIP where it does not block). The case-only duplicate
+# (case-sensitive file system) and dangling symlink (creating a symlink needs a privilege on Windows) cases
 # stay SKIP, with the .sh harness's Windows-run text.
 #
 # Safe to re-run: every case runs a copy of scripts/ in a temp aitools checkout,
@@ -360,15 +363,19 @@ try {
     }
     # Parity CASE: this run's exit code, ~/.claude/rules tree and summary rows equal
     # the golden result tests/rules-fanout/golden/CASE.result, which the .sh run
-    # (macOS/Linux) and the .ps1 run (Windows) must both give
-    function Parity([string]$Case) {
+    # (macOS/Linux) and the .ps1 run (Windows) must both give. GOLDEN: compare
+    # with another case's golden result (a Windows-only case with the same
+    # outcome); CHECKNAME: the check line's name then
+    function Parity([string]$Case, [string]$Golden = "", [string]$CheckName = "") {
+        if (-not $Golden) { $Golden = $Case }
+        if (-not $CheckName) { $CheckName = "parity: ${Case}: exit code, ~/.claude/rules and summary rows match golden (sh and ps share it)" }
         $text = "exit code: $($script:rc)`n# ~/.claude/rules (path md5)`n"
         foreach ($line in @(TreeSig (RulesDir))) { $text += "$line`n" }
         $text += "# summary rows`n"
         foreach ($line in @(Rows (Join-Path $script:C "$L.summary"))) { $text += "$line`n" }
         $f = Join-Path $script:C "$Case.result"
         WriteLf $f $text
-        Check "parity: ${Case}: exit code, ~/.claude/rules and summary rows match golden (sh and ps share it)" (Test-GoldenMatch "$Case.result" $f)
+        Check $CheckName (Test-GoldenMatch "$Golden.result" $f)
     }
 
     # ---------------------------------------------------------------------------
@@ -597,6 +604,66 @@ foreach ($n in @("a.md", "A.MD", "b.Md", "x.md.bak.1", "X.MD.BAK.2026", "odd.bak
         Skip "unreadable harness dir and manifest (a deny ACE does not block listing or reads here)"
     }
 
+    # The manifest held open with no sharing by another program (an editor or a
+    # sync client holding it exclusively; review RC-2's unreadable manifest, from
+    # its most common Windows cause). Windows only: on POSIX an open file never
+    # blocks a read, so the .sh harness has no equivalent (an intended platform
+    # difference, not a parity gap). An ordinary reader (FileShare.Read) does not
+    # block the read (e9d6-18 probe), so the hold is FileShare.None. The handle is
+    # held in this harness's process: setup-user-claude.ps1 runs in a child pwsh
+    # (Invoke-TestScript), so the harness is the other program; share modes are
+    # checked per handle, so this blocks as a separate process does. Expected: the
+    # outcome of the unreadable manifest (golden manifest-unreadable.result), the
+    # manifest unchanged; after release the next run is clean.
+    # Test-LockBlocks: a FileShare.None handle must block reading a probe file,
+    # and the read must work again once the handle is closed
+    function Test-LockBlocks {
+        $dir = Join-Path $tmpRoot "lock-probe"
+        $file = Join-Path $dir "item"
+        WriteLf $file "x`n"
+        $read = { $null = [IO.File]::ReadAllText($file) }
+        $blocks = $false
+        $fs = $null
+        try {
+            $fs = [IO.File]::Open($file, [IO.FileMode]::Open, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)
+            $blocks = -not (Test-Succeeds $read)
+        } catch {
+            Write-Host "      | lock probe: cannot hold ${file}: $($_.Exception.Message)"
+        } finally {
+            if ($fs) { $fs.Dispose() }
+        }
+        if ($blocks -and -not (Test-Succeeds $read)) {
+            Write-Host "      | lock probe: still blocked after the handle was closed"
+            $blocks = $false
+        }
+        try { Remove-Item -LiteralPath $dir -Recurse -Force } catch { Write-Host "      | could not remove the lock probe ${dir}: $($_.Exception.Message)" }
+        return $blocks
+    }
+    # SameBytes A B: both files exist with the same bytes
+    function SameBytes([string]$A, [string]$B) {
+        if (-not (IsFile $A) -or -not (IsFile $B)) { return $false }
+        [Linq.Enumerable]::SequenceEqual([IO.File]::ReadAllBytes($A), [IO.File]::ReadAllBytes($B))
+    }
+    if (Test-LockBlocks) {
+        try {
+            Case-Run manifest-locked {
+                Manifest @('a.md|shared'); Harness a.md 'rule a'
+                $mf = Join-Path $script:H ".aitools/rules/.aitools-rules-manifest"
+                Copy-Item -LiteralPath $mf -Destination (Join-Path $script:C "manifest.before")
+                $script:Held = [IO.File]::Open($mf, [IO.FileMode]::Open, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)
+            }
+        } finally {
+            if ($script:Held) { $script:Held.Dispose(); $script:Held = $null }
+        }
+        Check "$L locked: manifest held open with no sharing -- rules fanned out, ERROR rows, final row ERROR, exit 1" ($script:rc -eq 1 -and (IsFile (Join-Path (RulesDir) "a.md")) -and (Row 'ERROR|claude rules|cannot read rules manifest') -and (Row 'DETAIL|claude rules|failed: .aitools-rules-manifest') -and (Nondetail) -ceq 'ERROR|claude rules|1 failed' -and (Logged '[error] Cannot read the rules manifest '))
+        Check "$L locked: the manifest unchanged byte for byte" (SameBytes (Join-Path $script:C "manifest.before") (Join-Path $script:H ".aitools/rules/.aitools-rules-manifest"))
+        Parity manifest-locked manifest-unreadable "$L locked: exit code, ~/.claude/rules and summary rows match golden manifest-unreadable (same outcome)"
+        Rerun
+        Check "$L locked: released -- the next run is clean (verified, exit 0)" ($script:rc -eq 0 -and (Nondetail) -ceq 'OK|claude rules|1 verified' -and -not (SumLines | Where-Object { $_.StartsWith("ERROR|") }))
+    } else {
+        Skip "manifest held open (an open handle with no sharing does not block reads here)"
+    }
+
     # ~/.claude/rules cannot be created (a file is in the way): ERROR row, exit 1,
     # the script still reaches its exit footer
     $seedNocreate = { Harness a.md 'rule a'; WriteLf (Join-Path $script:H ".claude/rules") "not a dir`n" }
@@ -614,6 +681,8 @@ foreach ($n in @("a.md", "A.MD", "b.Md", "x.md.bak.1", "X.MD.BAK.2026", "odd.bak
     Check "manifest is a directory: unreadable, rules fanned out, final row ERROR, exit 1" ($script:rc -eq 1 -and (IsFile (Join-Path (RulesDir) "a.md")) -and (Row 'ERROR|claude rules|cannot read rules manifest') -and (Row 'DETAIL|claude rules|failed: .aitools-rules-manifest') -and (Nondetail) -ceq 'ERROR|claude rules|1 failed' -and -not (OutHas 'No rules manifest'))
     Parity manifest-dir
 } finally {
+    # A file handle still held (the locked case threw inside its hold): closed first
+    if ($script:Held) { $script:Held.Dispose() }
     foreach ($p in @($script:Denied)) {
         try { Undo-Deny $p } catch { Write-Host "      | could not remove the deny entry on ${p}: $($_.Exception.Message)" }
     }

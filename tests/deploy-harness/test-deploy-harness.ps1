@@ -12,8 +12,8 @@
 # run (no writes), config writer failure (stub and real writer), rules and
 # skills from aitools shared/ only (commander 2026-11-06), preserved files, bad
 # arguments, -Help, the rules and skills manifests and retired rules and skills,
-# rule names with an upper- or mixed-case .md extension, and the lib's manifest
-# reader (Read-HarnessManifest).
+# rule names with an upper- or mixed-case .md extension, the lib's manifest
+# reader (Read-HarnessManifest), and files held open by another program.
 #
 # Platform targeting (plans/ci-platform-targeting.md; commander 2026-11-14:
 # "sh scripts and tests should only run on linux/mac and ps1 on windows"):
@@ -774,6 +774,95 @@ try {
     }
 
     # ---------------------------------------------------------------------------
+    # Locked files: a file held open by another program, the most common real
+    # Windows cause of the write and copy failures above. Windows only: on POSIX
+    # an open file never blocks a rename over it or a copy of it, so the .sh
+    # harness has no equivalent (an intended platform difference, not a parity
+    # gap). The handle is held in this harness's process: deploy-harness.ps1 runs
+    # in a child pwsh (Invoke-TestScript), so the harness is the other program;
+    # share modes are checked per handle, so this blocks exactly as a separate
+    # process does (e9d6-18 probe). Every handle is closed in a finally.
+    # ---------------------------------------------------------------------------
+    # Hold-File PATH ACCESS SHARE: open PATH and keep the handle until Release-Held
+    $script:Held = [Collections.Generic.List[IO.FileStream]]::new()
+    function Hold-File([string]$Path, [IO.FileAccess]$Access, [IO.FileShare]$Share) {
+        $script:Held.Add([IO.File]::Open($Path, [IO.FileMode]::Open, $Access, $Share))
+    }
+    function Release-Held { foreach ($fs in @($script:Held)) { $fs.Dispose() }; $script:Held.Clear() }
+    # The lock probe: an ordinary reader (FileShare.Read) must leave a read alone
+    # and block a replace (File.Move over the file, as Write-HarnessManifest does);
+    # an exclusive opener (FileShare.None) must block File.Copy (Copy-SkillTree);
+    # both must work again once released. A hold that does not block leaves the
+    # cases as one SKIP line.
+    $lockProbe = Join-Path $tmpRoot "lock-probe"
+    New-Dirs @($lockProbe)
+    W "$lockProbe\m" "m`n"
+    $lockBlocked = 0
+    $haveLock = $false
+    try {
+        Hold-File "$lockProbe\m" Read Read
+        [void][IO.File]::ReadAllLines("$lockProbe\m")    # throws if a reader blocks reads: probe failed, SKIP
+        W "$lockProbe\m.tmp" "new`n"
+        try { [IO.File]::Move("$lockProbe\m.tmp", "$lockProbe\m", $true) } catch { $lockBlocked++ }   # the caught error is the answer: blocked
+        Release-Held
+        Hold-File "$lockProbe\m" ReadWrite None
+        try { [IO.File]::Copy("$lockProbe\m", "$lockProbe\c1") } catch { $lockBlocked++ }   # the caught error is the answer: blocked
+        Release-Held
+        [IO.File]::Move("$lockProbe\m.tmp", "$lockProbe\m", $true)    # released: both work again (throws otherwise)
+        [IO.File]::Copy("$lockProbe\m", "$lockProbe\c2")
+        $haveLock = ($lockBlocked -eq 2)
+    } catch {
+        Write-Host "      | lock probe: $($_.Exception.Message)"
+    } finally {
+        Release-Held
+    }
+    if ($haveLock) {
+        Setup-Case locked
+        Run-DH
+
+        # The rules manifest held open by an ordinary reader (an editor, a search
+        # indexer, a virus scanner: FileShare.Read). Get-HarnessManifestPlan still
+        # reads it; the replace in Write-HarnessManifest (temp file + File.Move)
+        # fails: ERROR row, the old manifest kept, the run completes. The next run
+        # writes it.
+        W "$R\shared\rules\new.md" "new rule`n"
+        Gitc @("-C", $R, "add", "-A"); Gitc @("-C", $R, "commit", "-q", "-m", "new-rule")
+        Copy-Item -LiteralPath (M) -Destination "$C\rules-manifest.before"
+        Fresh-Log
+        try {
+            Hold-File (M) Read Read
+            Run-DH
+        } finally {
+            Release-Held
+        }
+        Check "$lang locked: rules manifest held open by a reader -- ERROR row, exit 1, run completes" ($rc -eq 1 -and (Row 'ERROR|harness files|rules manifest not written') -and (GrepQ $LOG '\[error\] Rules manifest: cannot write .* -- manifest not written') -and (IsFile "$(A)\rules\new.md") -and (GrepQ $LOG 'Skills manifest: wrote'))
+        Check "$lang locked: the old rules manifest unchanged byte for byte, no .tmp left" ((Same "$C\rules-manifest.before" (M)) -and -not (Exists "$(M).tmp"))
+        Fresh-Log; Run-DH
+        Check "$lang locked: released -- the next run writes the rules manifest" ($rc -eq 0 -and (MfIs @("hook-lifecycle.md${T}shared", "new.md${T}shared", "scratch.md${T}shared")) -and -not (GrepQ "$C\summary" '^ERROR\|'))
+
+        # A file in a retired skill's directory held open with no sharing (an
+        # editor or a sync client holding it exclusively). The backup copy
+        # (Copy-SkillTree) fails half-way, the half-made backup is removed
+        # (Remove-SkillBackupCopy) and the skill is kept: ERROR row, exit 1. After
+        # release the next run backs it up and removes it.
+        Copy-Item -LiteralPath "$(A)\skills\s2\SKILL.md" -Destination "$C\s2-skill.before"
+        Gitc @("-C", $R, "rm", "-q", "-r", "shared/skills/s2"); Gitc @("-C", $R, "commit", "-q", "-m", "s2-gone")
+        Fresh-Log
+        try {
+            Hold-File "$(A)\skills\s2\SKILL.md" ReadWrite None
+            Run-DH
+        } finally {
+            Release-Held
+        }
+        Check "$lang locked: skill file held open with no sharing -- partial backup removed, skill kept (ERROR row, exit 1)" ($rc -eq 1 -and (Row 'ERROR|harness files|retire failed: s2') -and (GrepQ $LOG '\[error\] Retired skill s2: backup failed \(') -and (GrepQ $LOG 'Retired skill s2: removed the incomplete backup') -and (N-Bak s2) -eq 0 -and -not (HasRow 'bak cleanup failed'))
+        Check "$lang locked: the skill unchanged byte for byte" ((Same "$C\s2-skill.before" "$(A)\skills\s2\SKILL.md") -and (@(LsA "$(A)\skills\s2") -join "|") -ceq 'SKILL.md')
+        Fresh-Log; Run-DH
+        Check "$lang locked: released -- the next run backs up and removes the skill" ($rc -eq 0 -and -not (Exists "$(A)\skills\s2") -and (N-Bak s2) -eq 1 -and (BakLine s2 'SKILL.md' 'skill two') -and (GrepX (SM) "s2${T}retired"))
+    } else {
+        Skip "locked-file cases (an open handle does not block a replace or a copy here)"
+    }
+
+    # ---------------------------------------------------------------------------
     # Rule names with an upper- or mixed-case .md extension (plan rules-fanout-claude.md
     # F2/R9; D1 "case-insensitive, *.md only, skipping *.bak.*"): deployed as named,
     # listed in the manifest, no warning on the next run, retired when the source
@@ -852,6 +941,8 @@ foreach ($x in $r.Invalid) { [void]$out.Append("invalid`t$x`n") }
     Run-DH "" @('-Help')
     Check "--help: exit 0, usage shown, nothing deployed" ($rc -eq 0 -and (GrepQ "$C\out" "Usage: deploy-harness.$lang") -and -not (Exists "$(A)\rules"))
 } finally {
+    # File handles still held (a case that threw inside its hold): closed first
+    foreach ($fs in @($script:Held)) { if ($fs) { $fs.Dispose() } }
     # Deny ACEs still in place (a case that threw before its Undeny): removed first,
     # or the temp root cannot be deleted.
     foreach ($p in @($script:Denied | ForEach-Object { $_.Path } | Select-Object -Unique)) {
