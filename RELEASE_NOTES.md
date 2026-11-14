@@ -14,7 +14,7 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ## v0.77.11 -- On Windows the bash aitools hands off to aitools.ps1; OS guards on hh.sh, bootstrap.sh, init-hh-hooks.sh and analyze-session.sh (2026-11-14)
 
-Not tagged. Branch `fix/38dc-19-aitools-win-forwarder`, mission 38dc-19 under M6-Polish (session 87795dc3). Commander, 2026-11-14, RFI 38dc-3 ("make the bash `aitools` a forwarder on Windows"): "agreed"; RFI 38dc-5: "add an OS guard to all of them".
+Not tagged. Branch `fix/38dc-19-aitools-win-forwarder` (PR #162), mission 38dc-19 under M6-Polish (session 87795dc3). Commander, 2026-11-14, RFI 38dc-3 ("make the bash `aitools` a forwarder on Windows"): "agreed"; RFI 38dc-5: "add an OS guard to all of them".
 
 ### Bug fixes
 
@@ -36,7 +36,7 @@ Not tagged. Branch `fix/38dc-19-aitools-win-forwarder`, mission 38dc-19 under M6
 | # | Change |
 |---|--------|
 | 6 | `.claude/rules/cross-platform.md` (and `.cursor/rules/cross-platform.mdc`): "OS guard patterns" records the guard form of a script with no aitools-lib beside it; the exemptions table drops `bootstrap.sh`, `hh.sh`, `init-hh-hooks.sh` and the "Analysis tools" row (`analyze-session.sh`), and the `aitools` reason now says it forwards to `aitools.ps1`. `reference/tool-ops-claude-code.md` and `README.md` (init-hh-hooks is macOS/Linux) updated |
-| 7 | GitHub issue __ISSUE__: serve the dashboard-serve hook through a cross-platform Python entry (`aitools.py`) with a Python logging library feature-identical to aitools-lib.sh / .ps1; it answers "can the hook itself be Python?" from the Claude Code hooks docs (exec form `command` + `args`, no shell) |
+| 7 | GitHub issue #163: serve the dashboard-serve hook through a cross-platform Python entry (`aitools.py`) with a Python logging library feature-identical to aitools-lib.sh / .ps1; it answers "can the hook itself be Python?" from the Claude Code hooks docs (exec form `command` + `args`, no shell) |
 
 **Verified on:** Windows 11 (Git for Windows bash 5.3.15, pwsh 7.6): `test-win-forwarder.ps1` 32/0, and 12 of 12 mutations of the forward and of `aitools.ps1` make it fail; the four guards refuse Git Bash (exit 1, message, only logs written) and the 38dc-13 guard classifier lists them `posix`; `bash -n` on every touched shell script; the pwsh parser on `aitools.ps1`; `check-ci-suites.pl` 42 suites. macOS and Linux: CI (no `.sh` suite was run locally). Not run: the dashboard-serve hook in a live Claude Code session after an `aitools` run installs the new entry point.
 
