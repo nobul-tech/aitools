@@ -1,0 +1,14 @@
+Stop tracking deploy/: gitignore the generated MDM scripts
+
+build-deploy.sh (aitools) rebuilds deploy/ on every aitools run, so the
+tracked copy showed up as uncommitted changes after each run. deploy/ is
+now gitignored and removed from the index; the files stay on disk and are
+still regenerated locally. profile.json is not part of this commit.
+
+Requested by the commander (session 87795dc3, 2026-11-13): "gitignore
+anything in the deploy/ directory and commit/push that gittignore file".
+
+Consequence: an endpoint that pulled deploy/ from this repo no longer gets
+it from git; it must run build-deploy.sh (or get the scripts another way).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

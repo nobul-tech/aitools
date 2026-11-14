@@ -1,0 +1,8 @@
+Remove deploy/ from the index (files stay on disk, gitignored)
+
+Completes the previous commit: a pathspec commit (`git commit -- .gitignore
+deploy`) commits the working-tree content of the named paths, so it put
+deploy/ back instead of recording its removal. This commit records the
+`git rm -r --cached deploy` alone. profile.json is not part of it.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
