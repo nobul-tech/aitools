@@ -6,16 +6,30 @@
 # Safe to re-run: every case runs in its own temp HOME, removed on exit.
 # Interactive cases run on a pseudo-terminal (tests/managed-files/pty-run.py,
 # python3). The AI merge uses a stub `claude` on PATH; no real AI is called.
-# Platform: macOS, Linux, Windows Git Bash (aitools-lib.sh also runs there: the
-# bash entry point sources it). On Windows the pty cases run through pywinpty
-# (ConPTY, scripts/setup-pywinpty.ps1) and are skipped, with
-# the reason, when it is not installed. Exit 1 if any case fails.
+# Platform: macOS, Linux (OS guard below; commander, 2026-11-14: "sh scripts
+# and tests should only run on linux/mac and ps1 on windows"). On Windows,
+# tests/managed-files/test-managed-files.ps1 tests the PowerShell side
+# (aitools-lib.ps1). Exit 1 if any case fails.
 # Spec: .claude/rules/agentic-standards.md "Managed-file review choices and
 # merge"; reference/managed-file-deployment.md; .claude/rules/interactive-menus.md.
 #
 # Usage: bash tests/managed-files/test-managed-files.sh [--help]
 
 set -uo pipefail
+
+# OS guard: macOS/Linux only. BASH_VERSINFO[5] is bash's compiled-in machine
+# type (read-only, never taken from the environment), so neither a uname shim
+# on PATH nor an exported OSTYPE hides Git Bash.
+case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*)
+        printf 'This script is for macOS/Linux. On Windows, run tests/managed-files/test-managed-files.ps1 with pwsh.\n' >&2
+        exit 1 ;;
+esac
+case "${BASH_VERSINFO[5]:-}" in
+    *-msys*|*-cygwin*|*-mingw*)
+        printf 'This script is for macOS/Linux. On Windows, run tests/managed-files/test-managed-files.ps1 with pwsh.\n' >&2
+        exit 1 ;;
+esac
 
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
     perl -ne 'print if $. >= 2 && $. <= 14' "$0"
@@ -34,14 +48,7 @@ PASS=0
 FAIL=0
 SKIP=0
 HAVE_PTY=true
-HAVE_READONLY=true   # chmod 555/444 does not block writes under Git Bash
 command -v python3 >/dev/null 2>&1 || HAVE_PTY=false
-case "$(uname -s)" in
-    MINGW*|MSYS*|CYGWIN*)
-        HAVE_READONLY=false
-        # Windows pty = pywinpty (ConPTY); python3 -c's failure means "not installed".
-        if $HAVE_PTY && ! python3 -c 'import winpty' >/dev/null 2>&1; then HAVE_PTY=false; fi ;;
-esac
 
 check() {  # name, condition (eval'd)
     if eval "$2"; then
@@ -100,11 +107,6 @@ result() { cat "$C/result" 2>/dev/null; }
 ESC=$(printf '\033')
 # has_line <file> <exact line>: the file has this line (fixed string, whole line)
 has_line() { grep -qxF -- "$2" "$1"; }
-# shown <path>: a path the way the lib's display_path prints it (cygpath -w on
-# Windows Git Bash, unchanged elsewhere), for checks on review headers and menus.
-shown() { if command -v cygpath >/dev/null 2>&1; then cygpath -w "$1"; else printf '%s' "$1"; fi; }
-IS_WINDOWS=false
-case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) IS_WINDOWS=true ;; esac
 DMF='deploy_managed_file "$(cat "$SRCF")" "$DEST" tool item "$ADOPT"; printf "%s" "$MANAGED_FILE_RESULT" > "$C/result"'
 
 # ---------------------------------------------------------------------------
@@ -133,23 +135,19 @@ run_lib "C='$C' SRCF='$C/src.md' DEST='$C/dest/a.md' ADOPT=''; $DMF"
 check "deploy state: old files left on disk, noted once (detail)" \
     "[ -f '$C/home/.aitools/deploy-state/manifest.json' ] && [ \"\$(grep -c 'deploy state is no longer used' '$LOG')\" = 1 ]"
 
-if $HAVE_READONLY; then
-    setup_case readonly-dir
-    printf 'x\n' > "$C/src.md"; mkdir -p "$C/dest/ro"; chmod 555 "$C/dest/ro"
-    run_lib "C='$C' SRCF='$C/src.md' DEST='$C/dest/ro/new.md' ADOPT=''; $DMF; deploy_managed_file 'y' '$C/dest/b.md' tool b ''; printf '%s' \"\$MANAGED_FILE_RESULT\" > '$C/result2'"
-    check "write failure: result failed, nothing left" "[ \"\$(result)\" = failed ] && [ ! -e '$C/dest/ro/new.md' ]"
-    check "write failure: log_error with the reason" "grep -q '\[error\] Failed: item: write failed' '$LOG'"
-    check "write failure: the run continues" "[ \"\$(cat '$C/result2')\" = created ] && [ \"\$(cat '$C/rc')\" = 0 ]"
-    chmod 755 "$C/dest/ro"
+setup_case readonly-dir
+printf 'x\n' > "$C/src.md"; mkdir -p "$C/dest/ro"; chmod 555 "$C/dest/ro"
+run_lib "C='$C' SRCF='$C/src.md' DEST='$C/dest/ro/new.md' ADOPT=''; $DMF; deploy_managed_file 'y' '$C/dest/b.md' tool b ''; printf '%s' \"\$MANAGED_FILE_RESULT\" > '$C/result2'"
+check "write failure: result failed, nothing left" "[ \"\$(result)\" = failed ] && [ ! -e '$C/dest/ro/new.md' ]"
+check "write failure: log_error with the reason" "grep -q '\[error\] Failed: item: write failed' '$LOG'"
+check "write failure: the run continues" "[ \"\$(cat '$C/result2')\" = created ] && [ \"\$(cat '$C/rc')\" = 0 ]"
+chmod 755 "$C/dest/ro"
 
-    setup_case backup-fail
-    printf 'new\n' > "$C/src.md"; mkdir -p "$C/dest/ro"; printf 'old\n' > "$C/dest/ro/a.md"; chmod 555 "$C/dest/ro"
-    run_lib "C='$C' SRCF='$C/src.md' DEST='$C/dest/ro/a.md' ADOPT=''; $DMF"
-    check "failed backup: step failed, LOCAL unchanged" "[ \"\$(result)\" = failed ] && grep -qx old '$C/dest/ro/a.md'"
-    chmod 755 "$C/dest/ro"
-else
-    printf 'SKIP read-only cases (chmod does not block writes on this platform)\n'; SKIP=$((SKIP + 1))
-fi
+setup_case backup-fail
+printf 'new\n' > "$C/src.md"; mkdir -p "$C/dest/ro"; printf 'old\n' > "$C/dest/ro/a.md"; chmod 555 "$C/dest/ro"
+run_lib "C='$C' SRCF='$C/src.md' DEST='$C/dest/ro/a.md' ADOPT=''; $DMF"
+check "failed backup: step failed, LOCAL unchanged" "[ \"\$(result)\" = failed ] && grep -qx old '$C/dest/ro/a.md'"
+chmod 755 "$C/dest/ro"
 
 setup_case tracker
 run_lib "deploy_tracker_init; deploy_tracker_record failed tool x.md; deploy_tracker_record updated tool y.md; deploy_tracker_summary tool"
@@ -232,7 +230,7 @@ if $HAVE_PTY; then
     printf '# Title\nline one\nrepo line\nend\n' > "$C/repo/a.md"; printf '# Title\nline one\nmy local line\nend\n' > "$C/dest/a.md"
     run_lib "C='$C' SRCF='$C/repo/a.md' DEST='$C/dest/a.md' ADOPT='$C/repo/a.md'; $DMF" "s\n"
     P="$C/plain"
-    SD="$(shown "$C/dest/a.md")"; SR="$(shown "$C/repo/a.md")"
+    SD="$C/dest/a.md"; SR="$C/repo/a.md"
     check "display: diff is LOCAL -> SOURCE (- this machine, + repo)" "has_line '$P' '-my local line' && has_line '$P' '+repo line' && ! has_line '$P' '+my local line'"
     check "display: headers name both paths, padded" "has_line '$P' '--- this machine  $SD' && has_line '$P' '+++ repo          $SR'"
     check "display: legend above the diff" "has_line '$P' '  red - = only on this machine   green + = only in the repo' && [ \"\$(grep -n 'red - = only' '$P' | cut -d: -f1)\" -lt \"\$(grep -n '^--- this machine' '$P' | cut -d: -f1)\" ]"
@@ -265,20 +263,12 @@ if $HAVE_PTY; then
     check "display >40 lines: first 30 shown, rest in the log" \
         "has_line '$C/plain' '  ... (73 more lines -- full diff in deploy log)' && has_line '$C/plain' '-local 27' && ! has_line '$C/plain' '-local 28' && [ \"\$(grep -c 'diff a.md: ' '$LOG')\" = 103 ] && grep -qF 'diff a.md: +repo 50' '$LOG'"
 
-    if $IS_WINDOWS; then
-        # ConPTY (pywinpty) passes ~330 KB of output too slowly for the 30 s
-        # pty-run timeout (CI run 41262590653: killed after 30.1 s with the menu
-        # not yet shown; pywinpty issue #564, ConPTY throughput). The truncation
-        # code is the same lib code the macOS/Linux run covers.
-        printf 'SKIP display, diff over 64 KB: ConPTY output throughput exceeds the 30 s pty timeout on Windows\n'; SKIP=$((SKIP + 1))
-    else
     setup_case display-huge
     perl -e 'print "local line $_ " . ("x" x 40) . "\n" for 1..3000' > "$C/dest/a.md"; perl -e 'print "repo line $_ " . ("y" x 40) . "\n" for 1..3000' > "$C/src.md"
     GIT_DIFF_OPTS=--unified=0 run_lib "export GIT_DIFF_OPTS; C='$C' SRCF='$C/src.md' DEST='$C/dest/a.md' ADOPT=''; $DMF" "s\n"
     # ~330 KB diff, larger than a pipe buffer (head-based truncation died of SIGPIPE here)
     check "display, diff over 64 KB: menu shown, run continues, full diff logged" \
         "[ \"\$(cat '$C/rc')\" = 0 ] && [ \"\$(result)\" = skipped ] && has_line '$C/plain' '  ... (5973 more lines -- full diff in deploy log)' && [ \"\$(grep -c 'diff a.md: ' '$LOG')\" = 6003 ]"
-    fi
 
     setup_case display-nogit
     printf '#!/usr/bin/env bash\nexit 128\n' > "$C/bin/git"; chmod +x "$C/bin/git"
@@ -325,8 +315,7 @@ check "json label: Divergence and Updated name the item" \
 
 # ---------------------------------------------------------------------------
 # The JSON review's node script (plan mode): the twins embed the same text, and
-# the detail column (arrayDetail) for array fields. Runs on every platform: no
-# pseudo-terminal needed.
+# the detail column (arrayDetail) for array fields. No pseudo-terminal needed.
 # ---------------------------------------------------------------------------
 NODE_SH="$TMP_ROOT/review-sh.js"; NODE_PS1="$TMP_ROOT/review-ps1.js"
 perl -0777 -ne 's/\r//g; print $1 if /<<\x27REVIEW_JSON_NODE_EOF\x27\n(.*?\n)REVIEW_JSON_NODE_EOF\n/s' "$LIB" > "$NODE_SH"
@@ -466,11 +455,7 @@ fi
 # ---------------------------------------------------------------------------
 # setup-user-claude.sh: CLAUDE.md adopt filter round trip (isolated HOME)
 # ---------------------------------------------------------------------------
-if $IS_WINDOWS; then
-    # setup-user-claude.sh is POSIX-only (its OS guard refuses Git Bash, tested by
-    # tests/os-guards); its .ps1 twin is tested on Windows by tests/claude-mdm.
-    printf 'SKIP claude.md adopt round trip: setup-user-claude.sh does not run on Windows\n'; SKIP=$((SKIP + 1))
-elif $HAVE_PTY && command -v node >/dev/null 2>&1; then
+if $HAVE_PTY && command -v node >/dev/null 2>&1; then
     setup_case claude-md
     DP="$C/dotprofile"; mkdir -p "$DP/claude" "$C/home/.aitools"
     git -C "$C" init -q dotprofile

@@ -9,15 +9,21 @@
 # throwaway dotprofile git repo and a bare remote, removed on exit. The real
 # dotprofile is never touched (AITOOLS_USER_REPO_PATH points into the temp dir;
 # git's global and system config are ignored). Interactive cases run on a
-# pseudo-terminal (tests/managed-files/pty-run.py, python3; pywinpty/ConPTY on
-# Windows). Platform: Windows (pwsh 7; aitools-lib.ps1 is a Windows library, so
-# CI runs this suite on the windows job only, plans/ci-platform-targeting.md).
+# pseudo-terminal (tests/managed-files/pty-run.py, python3 with pywinpty/ConPTY).
+# Platform: Windows only (OS guard below; commander, 2026-11-14: "sh scripts and
+# tests should only run on linux/mac and ps1 on windows"). On macOS/Linux,
+# tests/managed-files/test-adopt-push.sh tests aitools-lib.sh.
 # Exit 1 if any case fails.
 #
 # Usage: pwsh -NoProfile -File tests/managed-files/test-adopt-push.ps1 [-Help]
 
 param([switch]$Help)
-if ($Help) { Get-Content $PSCommandPath -TotalCount 16 | Select-Object -Skip 1; exit 0 }
+if ($Help) { Get-Content $PSCommandPath -TotalCount 17 | Select-Object -Skip 1; exit 0 }
+
+if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
+    [Console]::Error.WriteLine("This script is for Windows. On macOS/Linux, run tests/managed-files/test-adopt-push.sh with bash.")
+    exit 1
+}
 
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
@@ -34,8 +40,8 @@ $env:GIT_CONFIG_NOSYSTEM = "1"
 $script:pass = 0; $script:fail = 0; $script:skip = 0
 $havePty = [bool](Get-Command python3 -ErrorAction SilentlyContinue)
 # Get-Command exempt: command-existence check; $havePty is the fallback branch
-if ($havePty -and $IsWindows) {
-    # Windows pty = pywinpty (ConPTY); a failing import means "not installed".
+if ($havePty) {
+    # pty = pywinpty (ConPTY); a failing import means "not installed".
     & python3 -c "import winpty" 2>$null
     $havePty = ($LASTEXITCODE -eq 0)
 }
@@ -74,15 +80,12 @@ function Setup-Case([string]$Name) {
 
 function Run-Lib([string]$Snippet, [string]$InputKeys = "") {
     $C = $script:C
-    # aitools-profile.ps1 refuses to run off Windows (OS guard), so the snippet
-    # starts as a caller that already ran Resolve-UserRepoPath; the resolver
-    # fallback inside Invoke-DotprofileCommitPush is exercised on Windows only.
-    $resolved = if ($IsWindows) { "" } else { "`$script:AitLibUserRepoPath = '$($script:DP)'" }
+    # The snippet starts unresolved: Invoke-DotprofileCommitPush falls back to
+    # the resolver (aitools-profile.ps1), which finds AITOOLS_USER_REPO_PATH=DP.
     $body = @"
 . '$lib'
 Initialize-Logging "t"
 `$C = '$C'
-$resolved
 $Snippet
 "@
     $snip = Join-Path $C "snippet.ps1"
@@ -157,14 +160,6 @@ try {
     W "dotprofile/claude/rules/r.md" "edited rule"
     Run-Lib (Dcp "$DP/claude/rules/r.md" "Adopt r.md")
     Check "push rejected: push-failed, ACTION pull --rebase" ((PushState) -eq "push-failed" -and (Log) -match "\[warn\] dotprofile push rejected" -and ((Summary) -ccontains "ACTION||git pull --rebase, then git push in $DP"))
-
-    if (-not $IsWindows) {
-        Setup-Case "direct-commit-fail"
-        [IO.File]::WriteAllText((Join-Path $DP ".git/hooks/pre-commit"), "#!/bin/sh`nexit 1`n"); & chmod +x (Join-Path $DP ".git/hooks/pre-commit")
-        W "dotprofile/claude/rules/r.md" "edited rule"
-        Run-Lib (Dcp "$DP/claude/rules/r.md" "Adopt r.md")
-        Check "commit failure: commit-failed, WARN + ACTION, nothing pushed" ((PushState) -eq "commit-failed" -and (Log) -match "\[warn\] dotprofile commit failed" -and ((Summary) -ccontains "ACTION||commit and push claude/rules/r.md in $DP") -and (RemoteHas "claude/rules/r.md" "source rule"))
-    }
 
     # --- Through Deploy-ManagedFile (interactive adopt) ---
     if ($havePty) {

@@ -4,16 +4,22 @@
 #
 # Safe to re-run: every case runs in a child pwsh with its own temp HOME/log dir,
 # removed on exit. Interactive cases run on a pseudo-terminal
-# (tests/managed-files/pty-run.py, python3; pywinpty/ConPTY on Windows). The AI
+# (tests/managed-files/pty-run.py, python3 with pywinpty/ConPTY). The AI
 # merge uses a stub `claude` on PATH; no real AI is called.
-# Platform: Windows (pwsh 7; aitools-lib.ps1 is a Windows library, so CI runs
-# this suite on the windows job only, plans/ci-platform-targeting.md).
+# Platform: Windows only (OS guard below; commander, 2026-11-14: "sh scripts and
+# tests should only run on linux/mac and ps1 on windows"). On macOS/Linux,
+# tests/managed-files/test-managed-files.sh tests aitools-lib.sh.
 # Exit 1 if any case fails.
 #
 # Usage: pwsh -NoProfile -File tests/managed-files/test-managed-files.ps1 [-Help]
 
 param([switch]$Help)
-if ($Help) { Get-Content $PSCommandPath -TotalCount 12 | Select-Object -Skip 1; exit 0 }
+if ($Help) { Get-Content $PSCommandPath -TotalCount 13 | Select-Object -Skip 1; exit 0 }
+
+if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
+    [Console]::Error.WriteLine("This script is for Windows. On macOS/Linux, run tests/managed-files/test-managed-files.sh with bash.")
+    exit 1
+}
 
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
@@ -26,8 +32,8 @@ $pwshExe = (Get-Process -Id $PID).Path
 $script:pass = 0; $script:fail = 0; $script:skip = 0
 $havePty = [bool](Get-Command python3 -ErrorAction SilentlyContinue)
 # Get-Command exempt: command-existence check; $havePty is the fallback branch
-if ($havePty -and $IsWindows) {
-    # Windows pty = pywinpty (ConPTY); a failing import means "not installed".
+if ($havePty) {
+    # pty = pywinpty (ConPTY); a failing import means "not installed".
     & python3 -c "import winpty" 2>$null
     $havePty = ($LASTEXITCODE -eq 0)
 }
@@ -53,17 +59,10 @@ function Setup-Case([string]$Name) {
 
 function Stub-Claude([string]$Kind) {
     $text = if ($Kind -eq "good") { "# Title`nmerged line" } else { "Sure, here is the merge" }
-    if ($IsWindows) {
-        # Native Windows runs a .cmd, not an extensionless bash script: read the
-        # prompt from stdin (discarded), print the canned answer line by line.
-        $lines = ($text -split "`n" | ForEach-Object { "echo $_" }) -join "`r`n"
-        [IO.File]::WriteAllText((Join-Path $script:C "bin/claude.cmd"), "@echo off`r`nmore > nul`r`n$lines`r`n")
-        return
-    }
-    $stub = "#!/usr/bin/env bash`ncat > /dev/null`nprintf '%s\n' '$($text -replace "`n", "' '")'`n"
-    $path = Join-Path $script:C "bin/claude"
-    [IO.File]::WriteAllText($path, $stub)
-    & chmod +x $path
+    # Native Windows runs a .cmd, not an extensionless bash script: read the
+    # prompt from stdin (discarded), print the canned answer line by line.
+    $lines = ($text -split "`n" | ForEach-Object { "echo $_" }) -join "`r`n"
+    [IO.File]::WriteAllText((Join-Path $script:C "bin/claude.cmd"), "@echo off`r`nmore > nul`r`n$lines`r`n")
 }
 
 # Stub-Git-Fail: a `git` on PATH that fails (exit > 1, which the review diff
@@ -73,12 +72,8 @@ function Stub-Claude([string]$Kind) {
 # given git's arguments ("-c core.quotePath=false ...") where.exe rejects the
 # option and exits 2. bin/git.cmd (exit 128) covers `& git` calls.
 function Stub-Git-Fail {
-    if ($IsWindows) {
-        Copy-Item -LiteralPath (Join-Path $env:SystemRoot "System32\where.exe") -Destination (Join-Path $script:C "bin/git.exe")
-        [IO.File]::WriteAllText((Join-Path $script:C "bin/git.cmd"), "@exit /b 128`r`n")
-        return
-    }
-    [IO.File]::WriteAllText((Join-Path $script:C "bin/git"), "#!/usr/bin/env bash`nexit 128`n"); & chmod +x (Join-Path $script:C "bin/git")
+    Copy-Item -LiteralPath (Join-Path $env:SystemRoot "System32\where.exe") -Destination (Join-Path $script:C "bin/git.exe")
+    [IO.File]::WriteAllText((Join-Path $script:C "bin/git.cmd"), "@exit /b 128`r`n")
 }
 
 # Run-Lib <snippet> [input]: dot-source the lib in a child pwsh under the case HOME.
@@ -148,14 +143,6 @@ try {
     Check "non-interactive: SOURCE overwrites LOCAL" ((Result) -eq "updated" -and (Txt "dest/a.md") -eq "new")
     Check "non-interactive: LOCAL backed up, adopt target untouched" ((@(Get-ChildItem "$C/dest" -Filter "a.md.bak.*").Count -ge 1) -and -not (Test-Path "$C/repo/a.md"))
     Check "non-interactive: no review diff, no colour" (-not (Out).Contains("this machine") -and -not (Out).Contains("$esc[31m") -and -not (Out).Contains("$esc[32m"))
-
-    if (-not $IsWindows) {
-        Setup-Case "readonly-dir"; W "src.md" "x"; New-Item -ItemType Directory -Path "$C/dest/ro" | Out-Null; & chmod 555 "$C/dest/ro"
-        Run-Lib "`$src='$C/src.md'; `$dest='$C/dest/ro/new.md'; `$adopt=''; $dmf; `$r2 = Deploy-ManagedFile -Content 'y' -DestPath '$C/dest/b.md' -ToolName tool -ItemName b; Set-Content -Path '$C/result2' -Value `$r2 -NoNewline"
-        Check "write failure: failed, nothing left" ((Result) -eq "failed" -and -not (Test-Path "$C/dest/ro/new.md"))
-        Check "write failure: the run continues" ((Txt "result2") -eq "created")
-        & chmod 755 "$C/dest/ro"
-    }
 
     Setup-Case "tracker"
     Run-Lib 'Initialize-DeployTracker; Record-DeployOutcome -Outcome failed -ToolName tool -ItemName x.md; Write-DeployTrackerSummary -ToolName tool'
@@ -338,7 +325,6 @@ try {
         Write-Output "SKIP interactive cases (no pseudo-terminal: python3 missing, or pywinpty not installed on Windows)"; $script:skip++
     }
 } finally {
-    if (-not $IsWindows) { & chmod -R u+w $tmpRoot }
     Remove-Item -LiteralPath $tmpRoot -Recurse -Force
 }
 
