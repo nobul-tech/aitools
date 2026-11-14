@@ -39,16 +39,21 @@ bash** is a different product — do not assume `bash` in PATH is Git Bash.
 
 Every script uses the canonical guard pattern. Guards MUST use structured
 logging (`LogError`/`log_error`), not raw output. Source `init-logging`
-before the guard. See `.claude/rules/cross-platform.md` "OS guard patterns".
+before the guard; a script with no aitools-lib beside it (bootstrap.sh from
+curl, hh.sh installed alone) prints the structured line itself, to stderr.
+See `.claude/rules/cross-platform.md` "OS guard patterns".
 
 **PS1:** `if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows)` —
 use `-not $IsWindows` (catches macOS AND Linux), never `$IsMacOS` alone.
 **Bash:** `case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*)` — exits on Windows.
 
 Exemptions: libraries (aitools-lib, check-lib, init-logging), hooks, build
-scripts (build-deploy, build-package), scratch files, and (pending approval)
-bootstrap/hh/relay-outbound-prompt/init-hh-hooks entry points, helper modules
-(aitools-json.ps1, _validate-ps1.ps1) and analyze-session.sh. Full table in
+scripts (build-deploy, build-package), scratch files, the entry points
+aitools-install.sh, aitools (on Windows it forwards to aitools.ps1 before its
+library loads) and the git pre-commit hook, and (pending approval)
+bootstrap.ps1, hh.ps1, relay-outbound-prompt and helper modules
+(aitools-json.ps1, _validate-ps1.ps1). bootstrap.sh, hh.sh, init-hh-hooks.sh
+and analyze-session.sh carry the POSIX guard (2026-11-14). Full table in
 `.claude/rules/cross-platform.md`.
 
 Dead code rule: Do not write platform branches for the rejected platform

@@ -31,6 +31,7 @@ if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
 # --- PS 5.1 compat: --flag arrives as positional $Command since PS 5.1 doesn't support -- prefix ---
 if ($Command -eq "--addmcp" -or $Command -eq "-addmcp") {
     $AddMcp = $Remaining
+    $Remaining = @()
     $Command = ""
 }
 if ($Command -eq "--version" -or $Command -eq "-v") {
@@ -49,14 +50,28 @@ if ($Command -eq "--force" -or $Command -eq "-force") {
     $Force = [switch]::Present
     $Command = ""
 }
-# Also check Remaining for --dry-run / --force (may come after a command)
-if ($Remaining -and $Remaining -contains "--dry-run") {
+# A flag given first in a native call (`aitools --force install`) took the place of
+# the command above: the next argument, when it is a command, is the command
+if (-not $Command -and $Remaining -and @($Remaining).Count -gt 0 -and
+    $Remaining[0] -in @("install", "gitpull", "mcp", "user", "sessions", "dashboard")) {
+    $Command = $Remaining[0]
+    $Remaining = @($Remaining | Select-Object -Skip 1)
+}
+# Also check Remaining for --dry-run / --force (may come after a command); not for
+# dashboard, whose arguments go to aitools-dashboard.ps1 unchanged (as in bash)
+if ($Command -ne "dashboard" -and $Remaining -and $Remaining -contains "--dry-run") {
     $DryRun = [switch]::Present
     $Remaining = @($Remaining | Where-Object { $_ -ne "--dry-run" })
 }
-if ($Remaining -and $Remaining -contains "--force") {
+if ($Command -ne "dashboard" -and $Remaining -and $Remaining -contains "--force") {
     $Force = [switch]::Present
     $Remaining = @($Remaining | Where-Object { $_ -ne "--force" })
+}
+# Under pwsh -File a list arrives as one string: the bash entry point forwards
+# `--addmcp a b` on Windows as -AddMcp "a,b" (scripts/aitools, aitools_ps1_args).
+# Split on commas and drop empty names (an empty list is reported below).
+if ($null -ne $AddMcp) {
+    $AddMcp = @($AddMcp | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 }
 
 # ---------------------------------------------------------------------------
@@ -562,6 +577,22 @@ if ($Command -and $Command -notin $knownCommands) {
     exit 1
 }
 
+# Reject unknown arguments when not installing (typos like "--forse"; bash parity,
+# scripts/aitools): only install, user, sessions and dashboard take more arguments,
+# and the installer flags belong to install. Without this an unknown flag ran the sync.
+$unknownArg = ""
+if (-not $doInstall) {
+    if ($SkipGhAuth) { $unknownArg = "--skip-gh-auth" }
+    elseif ($PSBoundParameters.ContainsKey('ReposPath')) { $unknownArg = "--repos-path" }
+    elseif ($SkipDriveDetection) { $unknownArg = "--skip-drive-detection" }
+    elseif (-not ($doUser -or $doSessions -or $doDashboard) -and $Remaining -and @($Remaining).Count -gt 0) { $unknownArg = @($Remaining)[0] }
+}
+if ($unknownArg) {
+    LogError "unknown argument '$unknownArg'"
+    Write-Host "Run 'aitools --help' for usage."
+    exit 1
+}
+
 # Reject --addmcp with no server names
 if ($PSBoundParameters.ContainsKey('AddMcp') -and $AddMcp.Count -eq 0) {
     LogError "--addmcp requires at least one server name (vercel, webflow)"
@@ -692,10 +723,19 @@ if ($doDashboard) {
         LogError "aitools-dashboard.ps1 not found at $dashboardScript"
         exit 1
     }
-    # Forward all remaining args to the dashboard script
+    # Forward all remaining args to the dashboard script with pwsh -File, which binds
+    # --background to -Background, --status to -Status, and so on (the bash entry
+    # point's dispatch; the dashboard-serve hook passes --background). An in-process
+    # call with an array splat binds every string by position (to -Port first) and
+    # fails: "Cannot convert value "--background" to type "System.Int32"".
     $dashArgs = @()
     if ($Remaining) { $dashArgs = $Remaining }
-    & $dashboardScript @dashArgs
+    $pwshExe = [Environment]::ProcessPath
+    if (-not $pwshExe) {
+        LogError "cannot find the path of this PowerShell process to run aitools-dashboard.ps1"
+        exit 1
+    }
+    & $pwshExe -NoProfile -ExecutionPolicy Bypass -File $dashboardScript @dashArgs
     exit $LASTEXITCODE
 }
 

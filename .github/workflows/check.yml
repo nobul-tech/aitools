@@ -768,6 +768,13 @@ jobs:
         shell: pwsh
         run: pwsh -NoProfile -File tests/aitools-entry/test-console-mode-guard.ps1
 
+      # The bash entry point scripts/aitools forwards to aitools.ps1 in Git Bash
+      # (RFI 38dc-3): argument translation, exit codes, stdin, the dashboard-serve call
+      - name: aitools bash entry Windows forward tests (PowerShell, native)
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: pwsh -NoProfile -File tests/aitools-entry/test-win-forwarder.ps1
+
       - name: Managed-file tests (bash, via Git Bash)
         if: ${{ !cancelled() }}
         shell: bash
