@@ -274,6 +274,24 @@ jobs:
         if: ${{ !cancelled() }}
         run: bash tests/check-pre-push/test-pre-push-step7.sh
 
+      # check-pre-commit steps 3 and 10 are retired: no twin runs build-deploy.sh (incident #136)
+      - name: check-pre-commit steps 3 and 10 tests (bash 5; whole .sh with --fix)
+        if: ${{ !cancelled() }}
+        run: bash tests/check-pre-commit/test-pre-commit-steps3-10.sh
+
+      - name: check-pre-commit steps 3 and 10 tests (macOS /bin/bash 3.2)
+        if: ${{ !cancelled() }}
+        run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/check-pre-commit/test-pre-commit-steps3-10.sh
+
+      # check-post-push steps 2, 6 and 14 never read the frozen aitools deploy/ (incident #176)
+      - name: check-post-push steps 2, 6 and 14 tests (both twins, bash 5)
+        if: ${{ !cancelled() }}
+        run: bash tests/check-post-push/test-post-push-deploy-steps.sh
+
+      - name: check-post-push steps 2, 6 and 14 tests (macOS /bin/bash 3.2)
+        if: ${{ !cancelled() }}
+        run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/check-post-push/test-post-push-deploy-steps.sh
+
       - name: setup-user-shell login profile + rc tests (bash 5)
         if: ${{ !cancelled() }}
         run: bash tests/setup-user-shell/test-setup-user-shell.sh
@@ -577,10 +595,20 @@ jobs:
         if: ${{ !cancelled() }}
         run: bash tests/check-post-push/test-post-push-step7.sh
 
+      # check-post-push steps 2, 6 and 14 never read the frozen aitools deploy/ (incident #176)
+      - name: check-post-push steps 2, 6 and 14 tests (both twins; .ps1 when pwsh is present)
+        if: ${{ !cancelled() }}
+        run: bash tests/check-post-push/test-post-push-deploy-steps.sh
+
       # check-post-push step 29: menu lines and read_menu_choice / Read-MenuChoice prompts
       - name: check-post-push step 29 menu parity tests (check-menu-parity.pl, both twins)
         if: ${{ !cancelled() }}
         run: bash tests/check-post-push/test-menu-parity.sh
+
+      # check-pre-commit steps 3 and 10 are retired: no twin runs build-deploy.sh (incident #136)
+      - name: check-pre-commit steps 3 and 10 tests (both twins; whole .sh with --fix)
+        if: ${{ !cancelled() }}
+        run: bash tests/check-pre-commit/test-pre-commit-steps3-10.sh
 
       - name: setup-user-shell login profile + rc tests
         if: ${{ !cancelled() }}
@@ -855,10 +883,20 @@ jobs:
         shell: bash
         run: bash tests/check-post-push/test-post-push-step7.sh
 
+      - name: check-post-push steps 2, 6 and 14 tests (both twins, native pwsh, via Git Bash)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: bash tests/check-post-push/test-post-push-deploy-steps.sh
+
       - name: check-post-push step 29 menu parity tests (both twins, native pwsh, via Git Bash)
         if: ${{ !cancelled() }}
         shell: bash
         run: bash tests/check-post-push/test-menu-parity.sh
+
+      - name: check-pre-commit steps 3 and 10 tests (both twins; whole .ps1 with -Fix, native pwsh, via Git Bash)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: bash tests/check-pre-commit/test-pre-commit-steps3-10.sh
 
       - name: Profile resolver tests (.ps1, native pwsh)
         if: ${{ !cancelled() }}

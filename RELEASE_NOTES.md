@@ -26,6 +26,34 @@ Not tagged. Branch `fix/38dc-17-mf-pty-timeout`, mission M6-Polish (session 8779
 
 ---
 
+## v0.77.9 -- No check builds against the real HOME or inspects the frozen deploy/ (2026-11-14)
+
+Not tagged. Branch `fix/m6-checks` (PR #154), mission M6-Polish (session 87795dc3), items b and c (delegates M6-B and 38dc-09).
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 1 | High | `check-pre-commit` step 3 with `--fix` / `-Fix` ran `build-deploy.sh` under the caller's HOME, which rebuilds the real dotprofile `deploy/`, discarded its output and exit code, staged the frozen aitools `deploy/` and reported PASS; without the flag the step advised it. Steps 3 ("Build freshness") and 10 ("Deploy drift", which diffed the frozen aitools `deploy/`) are now SKIPs in both twins, `retired: check-pre-push step 7 rebuilds into a temp dotprofile copy`; no path of the script runs `build-deploy.sh`. `--fix` / `-Fix` repairs line endings and exec bits only, and the `.sh` line-ending repair uses perl (GNU `sed -i ''` ended the run on Linux). Step 6 (exec bits) no longer lists the frozen aitools `deploy/` (`git ls-files -s -- '*.sh' ':!deploy/'`), so neither twin reports it or, with the fix flag, stages a mode change under it (PR review B1). Resolves Incident #136 |
+| 2 | Medium | `check-post-push` steps 2, 6 and 14 read the frozen aitools `deploy/` (bash -n, PowerShell parse, line endings), which `build-deploy.sh` has not written since 2c0fd32, so they passed whatever the dotprofile build produced. Step 2 ("Smoke-test deploy scripts") is now a SKIP in both twins with the same text; steps 6 and 14 check `scripts/` and `shared/hooks/` only. Neither check script reads the aitools `deploy/` any more; step numbers are unchanged. Resolves Incident #176 |
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 3 | `.claude/rules/deploy-paths.md` and `.cursor/rules/deploy-paths.mdc` item 3, `reference/pre-commit-checklist.md`, `reference/post-push-checklist.md` (steps 2, 6, 11, 14), `README.md` and `scripts/README.md` describe the retired steps; pre-push step 7 is the check of the generated `deploy/`. Known gap, stated there: pre-push step 7 does not `bash -n` every generated `.sh` or check its line endings |
+
+### Files created
+
+| File | Purpose |
+|------|---------|
+| `tests/check-pre-commit/test-pre-commit-steps3-10.sh` | Steps 3 and 10 of both twins never run build-deploy.sh, stage deploy/ or advise the fix flag; step 6 never reports or stages a 100644 `deploy/` file; the whole script with the fix flag leaves a temporary HOME and dotprofile unchanged (CI: macOS bash 5 and /bin/bash 3.2, Linux, Windows) |
+| `tests/check-post-push/test-post-push-deploy-steps.sh` | Steps 2, 6 and 14 of both twins ignore problems planted in `deploy/` and still FAIL on the same problems in the sources; no line of either twin reads `deploy/`; the temporary HOME is unchanged (CI: macOS bash 5 and /bin/bash 3.2, Linux, Windows) |
+
+**Verified on:** Windows 11: `test-pre-commit-steps3-10.sh` 38/0 (22 cases fail against the origin/main twins); `test-post-push-deploy-steps.sh` 19/0 (6 fail against origin/main, mutants killed); `check-pre-commit.ps1` and `check-pre-push.ps1` 0 FAIL; one `check-post-push.ps1` run under an isolated HOME/USERPROFILE/APPDATA/LOCALAPPDATA and log dir with a scratch clone of the dotprofile left the real dotprofile `deploy/`, `~/.aitools/logs` and `~/.aitools/config.json` unchanged. CI on linux, macos and windows ran both new suites green. Review fix (38dc-16): the step 6 cases were added after those counts; a native pwsh mirror of the `.ps1` step 6 case passes on the new twin and fails both modes on the previous one, and CI runs the suite.
+
+---
+
 ## v0.77.8 -- CI runs the script-compliance check; bootstrap.ps1 runs the installer under pwsh 7; the delegation rule ships as a shared rule (2026-11-14)
 
 Not tagged. Branch `fix/38dc-11-compliance-ci-bootstrap`, mission 38dc-11 (M6-Polish, session 87795dc3).

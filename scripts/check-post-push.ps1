@@ -43,34 +43,21 @@ if ($localHead -eq $remoteHead) {
     StepFail "1" "Verify push landed" "HEAD != origin/main"
 }
 
-# ---------------------------------------------------------------------------
-# 2. Smoke-test deploy scripts
-# ---------------------------------------------------------------------------
-$deployErrors = 0
-# The managed Git Bash for every bash step (2, 4, 6): never the WSL launcher a
+# The managed Git Bash for every bash step (4, 6): never the WSL launcher a
 # bare `bash` resolves to in a native pwsh (check-lib ResolveGitBash)
 $bashExe = ResolveGitBash
-if ($bashExe) {
-    $deployFiles = Get-ChildItem (Join-Path $script:RepoRoot "deploy") -Filter "*.sh" -ErrorAction SilentlyContinue
-    if (-not $deployFiles) {
-        StepFail "2" "Smoke-test deploy scripts" "no .sh files found in deploy/"
-    } else {
-        foreach ($f in $deployFiles) {
-            & $bashExe -n $f.FullName 2>$null
-            if ($LASTEXITCODE -ne 0) {
-                Write-Host "      FAIL: $($f.Name)"
-                $deployErrors++
-            }
-        }
-        if ($deployErrors -eq 0) {
-            StepPass "2" "Smoke-test deploy scripts"
-        } else {
-            StepFail "2" "Smoke-test deploy scripts" "$deployErrors file(s) failed bash -n"
-        }
-    }
-} else {
-    StepSkip "2" "Smoke-test deploy scripts" "Git Bash not found"
-}
+
+# ---------------------------------------------------------------------------
+# 2. Smoke-test deploy scripts (retired)
+# ---------------------------------------------------------------------------
+# Retired (incident #176): the step ran bash -n on the aitools deploy/*.sh, which
+# is frozen (build-deploy.sh writes the dotprofile deploy/ since 2c0fd32), so it
+# proved nothing about the generated scripts. check-pre-push step 7 runs on every
+# push (commander, 2026-10-26): it rebuilds into a temporary copy of the
+# dotprofile under a temporary HOME (build-deploy parses every generated .ps1
+# when pwsh is installed) and dry-runs the resolver consumers. No step reads the
+# aitools deploy/; the number stays so outputs stay stable.
+StepSkip "2" "Smoke-test deploy scripts" "retired: check-pre-push step 7 rebuilds into a temp dotprofile copy"
 
 # ---------------------------------------------------------------------------
 # 3. MCP config integrity
@@ -173,18 +160,20 @@ Write-Host ""
 # ---------------------------------------------------------------------------
 # 6. Full script syntax validation
 # ---------------------------------------------------------------------------
+# Source scripts only: scripts/ and shared/hooks/. The aitools deploy/ is frozen
+# and no longer read (incident #176); check-pre-push step 7 builds the generated
+# scripts into a temporary dotprofile copy.
 # .sh validation
 $shErrors = 0
 if ($bashExe) {
     $allSh = @()
     $allSh += Get-ChildItem (Join-Path $script:RepoRoot "scripts") -Filter "*.sh" -ErrorAction SilentlyContinue
-    $allSh += Get-ChildItem (Join-Path $script:RepoRoot "deploy") -Filter "*.sh" -ErrorAction SilentlyContinue
     $hooksDir = Join-Path (Join-Path $script:RepoRoot "shared") "hooks"
     if (Test-Path $hooksDir) {
         $allSh += Get-ChildItem $hooksDir -Filter "*.sh" -ErrorAction SilentlyContinue
     }
     if ($allSh.Count -eq 0) {
-        StepFail "6" "Full syntax (.sh)" "no .sh files found in scripts/, deploy/, or shared/hooks/"
+        StepFail "6" "Full syntax (.sh)" "no .sh files found in scripts/ or shared/hooks/"
     } else {
         foreach ($f in $allSh) {
             & $bashExe -n $f.FullName 2>$null
@@ -207,9 +196,8 @@ if ($bashExe) {
 $ps1Errors = 0
 $allPs1 = @()
 $allPs1 += Get-ChildItem (Join-Path $script:RepoRoot "scripts") -Filter "*.ps1" -ErrorAction SilentlyContinue
-$allPs1 += Get-ChildItem (Join-Path $script:RepoRoot "deploy") -Filter "*.ps1" -ErrorAction SilentlyContinue
 if ($allPs1.Count -eq 0) {
-    StepFail "6" "Full syntax (.ps1)" "no .ps1 files found in scripts/ or deploy/"
+    StepFail "6" "Full syntax (.ps1)" "no .ps1 files found in scripts/"
 } else {
     foreach ($f in $allPs1) {
         $e = $null
@@ -361,10 +349,11 @@ if ($refErrors -eq 0) {
 # ---------------------------------------------------------------------------
 # 14. Line ending audit
 # ---------------------------------------------------------------------------
+# Source scripts only: scripts/ and shared/hooks/ (the frozen aitools deploy/ is
+# not read, incident #176).
 $crlfCount = 0
 $allShFiles = @()
 $allShFiles += Get-ChildItem (Join-Path $script:RepoRoot "scripts") -Filter "*.sh" -ErrorAction SilentlyContinue
-$allShFiles += Get-ChildItem (Join-Path $script:RepoRoot "deploy") -Filter "*.sh" -ErrorAction SilentlyContinue
 $hooksDir2 = Join-Path (Join-Path $script:RepoRoot "shared") "hooks"
 if (Test-Path $hooksDir2) {
     $allShFiles += Get-ChildItem $hooksDir2 -Filter "*.sh" -ErrorAction SilentlyContinue
