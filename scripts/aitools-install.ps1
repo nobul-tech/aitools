@@ -492,76 +492,14 @@ if (Test-Path $hhPs1Src) {
 # ============================================================
 Log "Step 7: Shell integration"
 
-# Login-profile PATH ownership (managed marked block)
+# setup-user-shell.ps1 is the single owner of $PROFILE (incident #173): the
+# PATH block, the shell integration block (aliases.ps1, aitools, hh) and the
+# migration of the legacy "# aitools shell integration" lines.
 $shellScript = Join-Path $PSScriptRoot "setup-user-shell.ps1"
 if (Test-Path $shellScript) {
     Invoke-ValidatedScript $shellScript
 } else {
-    LogWarn "setup-user-shell.ps1 not found -- skipping login-profile PATH block (MDM deploy)"
-}
-
-$aliasesPath = Join-Path $PSScriptRoot "..\shared\shell\aliases.ps1"
-if (Test-Path $aliasesPath) {
-    $aliasesAbs = (Resolve-Path $aliasesPath).Path
-    $profileDir = Split-Path $PROFILE -Parent
-    if (-not (Test-Path $profileDir)) { New-Item -ItemType Directory -Path $profileDir -Force | Out-Null }
-    $oldMarker = "# ai-tooling shell integration"
-    $marker = "# aitools shell integration"
-
-    if (Test-Path $PROFILE) {
-        $content = Get-Content $PROFILE -Raw
-    } else {
-        $content = ""
-    }
-
-    # Remove old marker block if present
-    if ($content -match [regex]::Escape($oldMarker)) {
-        $lines = @(Get-Content $PROFILE)
-        $result = @()
-        $i = 0
-        while ($i -lt $lines.Count) {
-            if ($lines[$i] -match [regex]::Escape($oldMarker)) {
-                $i++  # skip marker
-                while ($i -lt $lines.Count -and $lines[$i].Trim() -ne '') { $i++ }
-            } else {
-                $result += $lines[$i]
-                $i++
-            }
-        }
-        Set-Content $PROFILE -Value ($result -join "`n")
-        $content = Get-Content $PROFILE -Raw
-        Log "Removed old shell integration marker from $PROFILE"
-    }
-
-    $desiredBlock = @"
-$marker
-. "$aliasesAbs"
-function aitools { & "`$HOME\.local\bin\aitools.ps1" @args }
-function hh { & "`$HOME\.local\bin\hh.ps1" @args }
-"@
-
-    if ($content -notmatch [regex]::Escape($marker)) {
-        Add-Content -Path $PROFILE -Value "`n$desiredBlock"
-        LogOk "Added shell integration to $PROFILE"
-    } else {
-        # Upgrade: remove old block (marker + following non-empty lines), re-add current
-        $lines = @(Get-Content $PROFILE)
-        $result = @()
-        $i = 0
-        while ($i -lt $lines.Count) {
-            if ($lines[$i] -match [regex]::Escape($marker)) {
-                $i++  # skip marker
-                while ($i -lt $lines.Count -and $lines[$i].Trim() -ne '') { $i++ }
-            } else {
-                $result += $lines[$i]
-                $i++
-            }
-        }
-        Set-Content $PROFILE -Value (($result -join "`n") + "`n`n$desiredBlock`n")
-        LogOk "Updated shell integration in $PROFILE"
-    }
-} else {
-    LogWarn "aliases.ps1 not found -- skipping shell integration (MDM deploy)"
+    LogWarn "setup-user-shell.ps1 not found -- skipping the PowerShell profile blocks (MDM deploy)"
 }
 
 # ============================================================
