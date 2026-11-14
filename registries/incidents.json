@@ -4160,6 +4160,16 @@
       "rootCause": "Two scripts wrote $PROFILE: setup-user-shell.ps1 (PATH block) and aitools-install.ps1 Step 7, which wrote the integration lines inline with a start marker and no end marker. With no end marker, Step 7 found the old block as 'the marker and every following non-blank line', and it took that upgrade path whenever the marker was present, with no Backup-File. It wrote $PROFILE directly, so no test could target it (PR #144 body), and the bash Step 7, which leaves an existing block alone, diverged unnoticed.",
       "preventionLayer": "Prevention: one owner of $PROFILE (aitools-install Step 7 only runs setup-user-shell). Detection: tests/setup-user-shell .ps1 suite in the Windows CI job, .sh suite in the macOS (bash 5 and /bin/bash 3.2) and Linux CI jobs.",
       "updated": "2026-11-14"
+    },
+    {
+      "id": 175,
+      "title": "bootstrap.ps1 ran aitools-install.ps1 with `powershell` (Windows PowerShell 5.1) and called aitools in-process in its own host, against the PowerShell 7 baseline, and never installed pwsh",
+      "closedIn": "branch fix/38dc-11-compliance-ci-bootstrap (mission 38dc-11)",
+      "closedDate": "2026-11-14",
+      "correctiveAction": "Branch fix/38dc-11-compliance-ci-bootstrap (mission 38dc-11): scripts/bootstrap.ps1 Step 3 finds pwsh (Get-Command -CommandType Application); when it is missing it runs the tool registry's preferred Windows method, `winget install --id Microsoft.PowerShell --source winget` (verified with chrome-devtools against learn.microsoft.com 'Install PowerShell 7 on Windows' on 2026-11-14), refreshes PATH additively (Update-SessionPath, a copy of the Refresh-Path logic) and throws a clear message when pwsh or winget is still missing. Step 4 runs aitools-install.ps1 with `pwsh -NoProfile -ExecutionPolicy Bypass -File` and reports a non-zero exit (bootstrap.sh parity); Step 5 runs %USERPROFILE%\\.local\\bin\\aitools.ps1 (the installer's Step 6 target, found by path as bootstrap.sh does) with pwsh for `user init` and the rebuild. The file stays ASCII and parses under 5.1. Verified: new tests/bootstrap/test-bootstrap.ps1 (bootstrap.ps1 under powershell.exe 5.1 with stubbed git, winget, installer and aitools.ps1; Windows CI job): 20 passed on the fix; against origin/main's bootstrap.ps1 11 checks fail (installer recorded '5|Desktop'); 6 of 6 mutants killed.",
+      "rootCause": "bootstrap.ps1 predates the PS 7 baseline (.claude/rules/cross-platform.md 'PowerShell 7 baseline') and was never revisited: it launched the installer with `& powershell` because powershell.exe is what a fresh machine has, and nothing installed pwsh before the installer. No test ran bootstrap.ps1 (it was only parsed by the CI syntax step), and the installer has no version guard, so it ran under 5.1 where aitools-lib.ps1 uses PS 6+ syntax (3-argument Join-Path).",
+      "preventionLayer": "Detection: tests/bootstrap/test-bootstrap.ps1 in the Windows CI job (fails when the installer or aitools.ps1 runs under 5.1, when the pwsh install command differs from the registry's, or when bootstrap.ps1 stops being ASCII or 5.1-parseable).",
+      "updated": "2026-11-14"
     }
   ]
 }

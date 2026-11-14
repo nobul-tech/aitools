@@ -12,6 +12,41 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.77.7 -- CI runs the script-compliance check; bootstrap.ps1 runs the installer under pwsh 7; the delegation rule ships as a shared rule (2026-11-14)
+
+Not tagged. Branch `fix/38dc-11-compliance-ci-bootstrap`, mission 38dc-11 (M6-Polish, session 87795dc3).
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 1 | High | `scripts/bootstrap.ps1` ran `aitools-install.ps1` with `powershell` (Windows PowerShell 5.1), against the PowerShell 7 baseline, and called `aitools` for the dotprofile step inside its own (possibly 5.1) host. It now finds `pwsh`, installs it when missing with the tool registry's preferred Windows method (`winget install --id Microsoft.PowerShell --source winget`, verified against learn.microsoft.com on 2026-11-14), refreshes PATH additively, and runs the installer and `%USERPROFILE%\.local\bin\aitools.ps1` (`user init`, then the rebuild) with `pwsh -NoProfile -ExecutionPolicy Bypass -File`; a non-zero installer exit is reported (bootstrap.sh parity). With no `pwsh` and no `winget` it stops with a message. The file stays ASCII and parses under 5.1. Resolves Incident #175 |
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 2 | CI runs the script-standards compliance check (until now only check-post-push step 23, after a push) on every PR and push to main: `bash scripts/check-script-compliance.sh` in the linux job, `pwsh -NoProfile -File scripts/check-script-compliance.ps1` in the windows job. A FAIL check fails the job, so a #177-class line (an unchecked `-ErrorAction SilentlyContinue` in a setup script) no longer reaches main |
+| 3 | The delegation rule ships to user scope: `shared/rules/delegation.md`, a byte-identical copy of the dotprofile `claude/rules/delegation.md` (commander, 2026-11-14). deploy-harness copies it to `~/.aitools/rules`, setup-user-claude to `~/.claude/rules/delegation.md`, setup-user-cursor to `~/.cursor/rules/delegation.mdc` (`alwaysApply: true`), on the next `aitools` run. Until now `~/.claude/rules/delegation.md`, which CLAUDE.md and the `/delegate` skill cite, was not deployed (R-8 deploys `shared/rules` only) |
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 4 | `reference/post-push-checklist.md` step 23 (CI also runs it), `reference/cross-platform-detail.md` (new section "bootstrap.ps1: runs under 5.1, launches pwsh 7"), `reference/tool-registry.md` and the registry's `pwsh` entry (the bootstrap note; Windows install command verified 2026-11-14), `reference/rules.md` v1.4 and `reference/cursor-practices.md` (the new shared rule), the `/delegate` skill's cross-reference (rule source), README (the Windows one-liner also installs PowerShell 7) |
+| 5 | Incident registry (`/incident` skill): #175 filed and closed (bootstrap.ps1 ran the installer under 5.1) |
+
+### Files created
+
+| File | Purpose |
+|------|---------|
+| `shared/rules/delegation.md` | The delegation rule, deployed to every machine (copy of the dotprofile rule) |
+| `tests/bootstrap/test-bootstrap.ps1` | bootstrap.ps1 under Windows PowerShell 5.1 with stubbed git, winget, installer and aitools.ps1 (Windows CI job) |
+
+**Verified on:** Windows 11 (pwsh 7.6.10, Windows PowerShell 5.1): `tests/bootstrap/test-bootstrap.ps1` 20 passed; against origin/main's bootstrap.ps1 11 checks fail; 6 of 6 mutants killed. `check-script-compliance.ps1` on origin/main: exit 1 (`setup-pywinpty.ps1:151`, #177, fixed by PR #157); on a scratch copy with #157's file: exit 0; with a planted unchecked `SilentlyContinue`: exit 1. `check-ci-suites.pl` finds the new suite, and fails when its step is removed. macOS/Linux: the `.sh` twin of the compliance check runs in the linux CI job only (not run locally on Windows).
+
+---
+
 ## v0.77.3 -- Pre-commit path-ref check fixed on Windows; release notes backfilled for PRs #144-#147 (2026-11-14)
 
 Not tagged. Branch `docs/m5-docs`, mission M5-Fixes (session 87795dc3), items 6, 7, 8 and 13.
