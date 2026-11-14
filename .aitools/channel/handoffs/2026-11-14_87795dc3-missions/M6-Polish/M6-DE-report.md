@@ -1,6 +1,7 @@
 # M6-DE report: setup-pywinpty result checks (item d, #177) and hh.ps1 is pwsh 7 only (item e)
 
-**Version**: v1.0 (2026-11-14). **Author**: M6-DE, delegated by M6-Polish (level 2), delegated by Session Commander 87795dc3-e.
+**Version**: v1.1 (2026-11-14). **Author**: M6-DE, delegated by M6-Polish (level 2), delegated by Session Commander 87795dc3-e.
+v1.1: PR https://github.com/nobul-tech/aitools/pull/157 opened. The `closedIn` of #174 and #177 in `registries/incidents.json` is now "PR #157 (branch fix/m6-logging, commits ...; the orchestrator adds the version)". The CI result is in the hand-back.
 **Branch**: `fix/m6-logging`. It carries M6-F's item f (c2d3587, b39b735). This mission added:
 - the merge of origin/main b3c2f2e;
 - `bb1edce` (items d and e);
