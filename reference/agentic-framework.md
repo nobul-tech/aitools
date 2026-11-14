@@ -96,11 +96,12 @@ Failed merge example:
 [2026-03-12T15:32:38Z] [setup-user-claude] [info] AI invocation: speed=balanced backend=claude attempt=2 result=accepted
 ```
 
-### File-only telemetry (bash)
+### File-only telemetry
 
-`invoke_ai` uses `_ai_log()` (file-only) instead of `log()` to avoid polluting
-stdout when output is captured via `$()`. PS1 `Invoke-AI` uses standard `Log`
-(`Write-Host` goes to Information stream, not Output stream).
+`invoke_ai` uses `_ai_log()` and `Invoke-AI` uses `Write-AiLog` (both file-only)
+instead of `log()` / `Log`: in bash this avoids polluting stdout when output is
+captured via `$()`, and in both nothing prints into the AI-merge spinner row
+(`_start_spinner` / `Start-AiSpinner`).
 
 ## Prompt design standard
 

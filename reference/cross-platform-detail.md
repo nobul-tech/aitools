@@ -233,3 +233,46 @@ $env:PERLIO = ":perlio"
 `PERLIO` is the only global override mechanism.
 
 **Applied in**: `build-deploy.sh` (`export PERLIO=:perlio` near top).
+
+## Windows console: input mode, jobs, spinner
+
+**The input mode belongs to the console, not to a process.** A child run in
+the same console (Git Bash / MSYS during build-deploy, node CLIs) can leave it
+raw: `ENABLE_LINE_INPUT` and `ENABLE_ECHO_INPUT` off (seen: `0x2E8`, `0x208`).
+The next `[Console]::ReadLine()` then echoes nothing and returns only when the
+next key arrives, and that key leaks into the following prompt.
+
+- `Read-ConsoleChoice` (`scripts/aitools-lib.ps1`) reads every menu answer in
+  cooked mode: `[AitConsoleInput]::EnterCooked()` (PROCESSED, LINE and ECHO on,
+  VIRTUAL_TERMINAL_INPUT off), the read, then the previous mode put back in a
+  `finally`. Off Windows or with redirected stdin nothing is compiled or
+  changed; EOF still returns `""` with a warning.
+- `Save-ConsoleInputMode` / `Restore-ConsoleInputMode` (same file) guard a
+  child run in this console: Step 2 (build-deploy) of `scripts/aitools.ps1`.
+- One Add-Type type, `AitConsoleInput`, compiled lazily, at most once per
+  process (`Initialize-AitConsoleInput`).
+- No bash twin is needed: Git Bash keeps its own terminal state, so
+  `read_tty_choice` is not affected by a raw Windows console.
+
+**A job has no console.** `Start-Job` runs its script block in another pwsh
+process with no console window and a redirected stdout. Whatever it writes with
+`[Console]::Write` is never shown (not even through `Receive-Job`). Console UI
+(spinners, prompts) must run in-process.
+
+**The AI-merge spinner** (`Start-AiSpinner` / `Stop-AiSpinner` in
+`scripts/aitools-lib.ps1`) runs in a second runspace of the same process
+(`[powershell]::Create()` + `BeginInvoke()`). Parity with `_start_spinner` /
+`_stop_spinner` in `scripts/aitools-lib.sh`: frame `\r  <c> <msg>`, chars
+`/-\|`, 200 ms, clear `\r  \e[K`. One difference: bash writes `/dev/tty`;
+PowerShell writes the console through stdout and does nothing when stdout is
+redirected. Stop is synchronous (2 s cap, then the runspace is stopped and
+disposed), and `Invoke-AiMerge` calls it in a `finally`: `scripts/aitools.ps1`
+runs setup scripts in-process inside `try { & $scriptPath } catch`, so a
+spinner left running after Ctrl+C or an error would keep drawing over the next
+script, or over the pwsh prompt.
+
+**Nothing else writes the console while the spinner runs.** Any other console
+line lands in the spinner's row. `Invoke-AI` telemetry is therefore file-only:
+`Write-AiLog`, the twin of bash `_ai_log` (same line format, same log file, no
+counters). The user-facing line `>> AI merge: <backend> (balanced)` is printed
+by `Invoke-AiMerge` before the spinner starts.

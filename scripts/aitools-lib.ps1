@@ -5,7 +5,7 @@
 # $AitoolsEnvironment, Test-ClaudeCodeWeb, Test-LocalEnvironment,
 # Write-EnvironmentSkip), ReadConfigKey, Resolve-UserRepoPath,
 # Resolve-MachineProfile, Get-ToolException, Set-ToolException, Initialize-Logging,
-# Log/LogOk/LogError/LogWarn/LogDetail, Invoke-AI, Write-Summary, Show-Summary,
+# Log/LogOk/LogError/LogWarn/LogDetail, Invoke-AI (Write-AiLog), Write-Summary, Show-Summary,
 # Refresh-Path, Log-WingetOutput, Repair-UvToolEnv, Remove-OrphanedPythonDirs,
 # Normalize-JsonForComparison.
 #
@@ -692,6 +692,19 @@ function LogDetail($msg) {
 # Known limitations: Agent CLI has no --model flag; speed is hint-only via
 #   prompt prefix. Retry prepends rejection reason but may not fix structural
 #   issues (e.g., model always wrapping in code fences).
+# Telemetry ("AI invocation: ..." lines) is file-only, through Write-AiLog.
+
+# File-only AI telemetry (parity: _ai_log in aitools-lib.sh). The same line as
+# Log ("[ts] [script] [level] msg", same log file), but nothing on the console:
+# Invoke-AI's lines never print into the AI-merge spinner row (Start-AiSpinner),
+# and its caller's console output stays its own. Counts no error or warning --
+# callers decide whether an Invoke-AI failure counts.
+function Write-AiLog([string]$Msg, [string]$Level = "info") {
+    $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+    $resolvedLog = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($logFile)
+    [IO.File]::AppendAllText($resolvedLog, "[$ts] [$scriptName] [$Level] $Msg`n", [System.Text.UTF8Encoding]::new($false))
+}
+
 $script:AIRejectReason = ""
 
 function Invoke-AI {
@@ -716,7 +729,7 @@ function Invoke-AI {
 
     if (-not $cliCmd) {
         $script:AIRejectReason = "No AI CLI available (claude or agent)"
-        Log "AI invocation: no CLI available (claude or agent)" "error"
+        Write-AiLog "AI invocation: no CLI available (claude or agent)" "error"
         return $null
     }
 
@@ -767,7 +780,7 @@ function Invoke-AI {
     # Retry loop
     $currentPrompt = $Prompt
     for ($attempt = 1; $attempt -le ($MaxRetries + 1); $attempt++) {
-        Log "AI invocation: speed=$Speed backend=$cliCmd attempt=$attempt"
+        Write-AiLog "AI invocation: speed=$Speed backend=$cliCmd attempt=$attempt"
 
         $fullPrompt = "${speedPrefix}${currentPrompt}"
 
@@ -777,7 +790,7 @@ function Invoke-AI {
             if ($LASTEXITCODE -ne 0) { $output = $null }
         } catch {
             # CLI invocation failed (e.g., binary not found despite Get-Command)
-            Log "AI invocation error: $_" "warn"
+            Write-AiLog "AI invocation error: $_" "warn"
             $output = $null
         }
 
@@ -786,7 +799,7 @@ function Invoke-AI {
 
         if ([string]::IsNullOrWhiteSpace($output)) {
             $script:AIRejectReason = "Empty output from $cliCmd"
-            Log "AI invocation: speed=$Speed backend=$cliCmd attempt=$attempt result=empty" "warn"
+            Write-AiLog "AI invocation: speed=$Speed backend=$cliCmd attempt=$attempt result=empty" "warn"
             if ($attempt -le $MaxRetries) {
                 $currentPrompt = "Your previous output was empty. Try again.`n`n$Prompt"
                 continue
@@ -799,7 +812,7 @@ function Invoke-AI {
             $valid = & $ValidateFn $output
             if (-not $valid) {
                 if (-not $script:AIRejectReason) { $script:AIRejectReason = "Validation failed" }
-                Log "AI invocation: speed=$Speed backend=$cliCmd attempt=$attempt result=rejected reason=$($script:AIRejectReason)" "warn"
+                Write-AiLog "AI invocation: speed=$Speed backend=$cliCmd attempt=$attempt result=rejected reason=$($script:AIRejectReason)" "warn"
                 foreach ($rejLine in ($output -split "`n")) {
                     LogDetail "ai-rejected: $rejLine"
                 }
@@ -807,13 +820,13 @@ function Invoke-AI {
                     $currentPrompt = "Your previous output was rejected: $($script:AIRejectReason). Try again.`n`n$Prompt"
                     continue
                 }
-                Log "AI invocation: speed=$Speed backend=$cliCmd exhausted after $attempt attempts" "warn"
+                Write-AiLog "AI invocation: speed=$Speed backend=$cliCmd exhausted after $attempt attempts" "warn"
                 return $null
             }
         }
 
         # Success
-        Log "AI invocation: speed=$Speed backend=$cliCmd attempt=$attempt result=accepted"
+        Write-AiLog "AI invocation: speed=$Speed backend=$cliCmd attempt=$attempt result=accepted"
         return $output
     }
 
@@ -1558,33 +1571,178 @@ function Test-AiMergeOutput {
 }
 
 # ---------------------------------------------------------------------------
-# Spinner for AI operations (visual progress indicator)
+# Spinner for AI operations (visual progress indicator).
+# Parity: _start_spinner / _stop_spinner in aitools-lib.sh -- same frame
+# "`r  <c> <msg>", chars / - \ |, 200 ms period, and the stop clears the line
+# with "`r  `e[K". One difference: bash writes /dev/tty, so it draws even when
+# stdout is redirected; here the frames reach the console through stdout, like
+# the rest of Invoke-AiMerge, and the spinner is a no-op when stdout is
+# redirected or the session is not interactive (no frames in a pipe, a log or
+# CI output).
+# In-process: the loop runs in a second runspace on its own thread
+# ([powershell]::Create() + BeginInvoke), so [Console]::Write reaches this
+# process's console. Not Start-Job: a job is a separate pwsh process with no
+# console and a redirected stdout, so nothing it writes is ever shown.
+# Start-AiSpinner stops a running spinner first (one at a time). Stop-AiSpinner
+# is synchronous: it signals the loop, waits for it to end (2 s cap, then
+# PowerShell.Stop()), disposes the runspace, and only then clears the line, so
+# no spinner thread outlives it. With no spinner running it writes nothing
+# (bash _stop_spinner clears the line anyway).
 # ---------------------------------------------------------------------------
-$script:_aiSpinnerJob = $null
+$script:_aiSpinner = $null
 
 function Start-AiSpinner {
     param([string]$Message = "working...")
-    $script:_aiSpinnerJob = Start-Job -ScriptBlock {
-        param($msg)
-        $chars = '/-\|'
-        $i = 0
-        while ($true) {
-            $c = $chars[$i % 4]
-            [Console]::Write("`r  $c $msg")
-            $i++
-            Start-Sleep -Milliseconds 200
-        }
-    } -ArgumentList $Message
+    Stop-AiSpinner
+    if ([Console]::IsOutputRedirected -or -not [Environment]::UserInteractive) { return }
+    $stop = $null; $ps = $null
+    try {
+        $stop = [System.Threading.ManualResetEventSlim]::new($false)
+        $ps = [powershell]::Create()
+        [void]$ps.AddScript({
+            param($msg, $stop)
+            $chars = '/-\|'
+            $i = 0
+            do {
+                [Console]::Write("`r  $($chars[$i % 4]) $msg")
+                $i++
+            } while (-not $stop.Wait(200))
+        }).AddArgument($Message).AddArgument($stop)
+        $script:_aiSpinner = @{ PS = $ps; Stop = $stop; Handle = $ps.BeginInvoke() }
+    } catch {
+        # The spinner is cosmetic: the AI call goes on without it
+        LogDetail "AI spinner not started: $($_.Exception.Message)"
+        if ($ps) { $ps.Dispose() }
+        if ($stop) { $stop.Dispose() }
+        $script:_aiSpinner = $null
+    }
 }
 
 function Stop-AiSpinner {
-    if ($script:_aiSpinnerJob) {
-        Stop-Job $script:_aiSpinnerJob -ErrorAction SilentlyContinue
-        Remove-Job $script:_aiSpinnerJob -Force -ErrorAction SilentlyContinue
-        # ErrorAction exempt: spinner cleanup; job may already be stopped
-        $script:_aiSpinnerJob = $null
-        [Console]::Write("`r  `e[K")  # clear spinner line
+    $s = $script:_aiSpinner
+    if (-not $s) { return }
+    $script:_aiSpinner = $null
+    try {
+        $s.Stop.Set()
+        if (-not $s.Handle.AsyncWaitHandle.WaitOne(2000)) {
+            LogDetail "AI spinner did not stop within 2 s -- stopping its runspace"
+            $s.PS.Stop()
+        }
+        $null = $s.PS.EndInvoke($s.Handle)
+    } catch {
+        LogDetail "AI spinner stop: $($_.Exception.Message)"
+    } finally {
+        if ($s.PS.Runspace) { $s.PS.Runspace.Dispose() }
+        $s.PS.Dispose()
+        $s.Stop.Dispose()
     }
+    [Console]::Write("`r  `e[K")  # clear spinner line
+}
+
+# ---------------------------------------------------------------------------
+# Console input mode helper (Windows only).
+# The input mode belongs to the console, not to a process: a child run in this
+# console (Git Bash / MSYS, node CLIs) can leave it raw (ENABLE_LINE_INPUT and
+# ENABLE_ECHO_INPUT off, e.g. 0x2E8 or 0x208), and the next
+# [Console]::ReadLine() then returns only when the NEXT key arrives, echoes
+# nothing, and that key leaks into the following prompt.
+# One Add-Type type, AitConsoleInput, serves Read-ConsoleChoice (cooked line
+# input for the one read, the previous mode put back afterwards) and
+# Save-ConsoleInputMode / Restore-ConsoleInputMode (around a child run in this
+# console, e.g. build-deploy in scripts/aitools.ps1). The type is compiled
+# lazily, at most once per process, and only when stdin is a Windows console
+# (Initialize-AitConsoleInput); off Windows and with redirected stdin nothing is
+# compiled and nothing changes. Typeahead is not flushed: keys typed before a
+# prompt are read by it, as with read_tty_choice in aitools-lib.sh.
+# ---------------------------------------------------------------------------
+$script:AitConsoleInputError = ""
+function Initialize-AitConsoleInput {
+    # $true when stdin is a Windows console and the type is loaded.
+    if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) { return $false }
+    if ([Console]::IsInputRedirected) { return $false }
+    if ('AitConsoleInput' -as [type]) { return $true }
+    # A failed compile is not retried: one detail line, then every caller falls back
+    if ($script:AitConsoleInputError) { return $false }
+    try {
+        Add-Type -ErrorAction Stop -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public static class AitConsoleInput {
+    [DllImport("kernel32.dll", SetLastError = true)] static extern IntPtr GetStdHandle(int n);
+    [DllImport("kernel32.dll", SetLastError = true)] static extern bool GetConsoleMode(IntPtr h, out uint m);
+    [DllImport("kernel32.dll", SetLastError = true)] static extern bool SetConsoleMode(IntPtr h, uint m);
+    const uint ProcessedInput = 0x1, LineInput = 0x2, EchoInput = 0x4, VirtualTerminalInput = 0x200;
+    // Win32 error of the last EnterCooked (0 = the cooked mode was set).
+    public static int LastError;
+    // Input mode of STD_INPUT_HANDLE (-10), or -1 when stdin is not a console.
+    public static long Get() { uint m; return GetConsoleMode(GetStdHandle(-10), out m) ? (long)m : -1; }
+    // 0 on success, else the Win32 error code.
+    public static int Set(long m) {
+        if (m < 0 || m > 0xFFFFFFFFL) return 87;
+        return SetConsoleMode(GetStdHandle(-10), (uint)m) ? 0 : Marshal.GetLastWin32Error();
+    }
+    // Cooked line input for one read: PROCESSED | LINE | ECHO on,
+    // VIRTUAL_TERMINAL_INPUT off. Returns the previous mode (put it back with
+    // Set), or -1 when stdin is not a console. LastError is set either way.
+    public static long EnterCooked() {
+        IntPtr h = GetStdHandle(-10); uint m;
+        if (!GetConsoleMode(h, out m)) { LastError = Marshal.GetLastWin32Error(); return -1; }
+        LastError = SetConsoleMode(h, (m | ProcessedInput | LineInput | EchoInput) & ~VirtualTerminalInput) ? 0 : Marshal.GetLastWin32Error();
+        return m;
+    }
+}
+'@
+    } catch {
+        $script:AitConsoleInputError = $_.Exception.Message
+        if (-not $script:AitConsoleInputError) { $script:AitConsoleInputError = "Add-Type failed" }
+        LogDetail "console input helper unavailable: $($script:AitConsoleInputError)"
+        return $false
+    }
+    return $true
+}
+
+# Save-ConsoleInputMode -- read the mode before running a child in this console.
+# Returns [pscustomobject]@{ Mode; Reason } (Mode -1 = not guarded; Reason
+# "console", "not Windows", "not a console" or "unavailable: <message>").
+function Save-ConsoleInputMode {
+    if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
+        return [pscustomobject]@{ Mode = [long]-1; Reason = "not Windows" }
+    }
+    if ([Console]::IsInputRedirected) {
+        return [pscustomobject]@{ Mode = [long]-1; Reason = "not a console" }
+    }
+    if (-not (Initialize-AitConsoleInput)) {
+        return [pscustomobject]@{ Mode = [long]-1; Reason = "unavailable: $($script:AitConsoleInputError)" }
+    }
+    $mode = [AitConsoleInput]::Get()
+    if ($mode -lt 0) { return [pscustomobject]@{ Mode = [long]-1; Reason = "not a console" } }
+    return [pscustomobject]@{ Mode = [long]$mode; Reason = "console" }
+}
+
+# Restore-ConsoleInputMode SAVED LABEL -- put back the mode Save-ConsoleInputMode
+# read and log (detail) any difference. Returns "restored", "unchanged",
+# "restore failed", or the reason nothing was saved ("not saved", "not Windows",
+# "not a console", "unavailable: ...").
+function Restore-ConsoleInputMode {
+    param($Saved, [string]$Label)
+    if ($null -eq $Saved -or $Saved.Mode -lt 0) {
+        $why = if ($null -eq $Saved) { "not saved" } else { $Saved.Reason }
+        LogDetail "console input mode around ${Label}: not guarded ($why)"
+        return $why
+    }
+    $now = [AitConsoleInput]::Get()
+    if ($now -eq $Saved.Mode) {
+        LogDetail ("console input mode 0x{0:X} unchanged after {1}" -f $now, $Label)
+        return "unchanged"
+    }
+    $nowText = if ($now -lt 0) { "unreadable" } else { "0x{0:X}" -f $now }
+    $rc = [AitConsoleInput]::Set($Saved.Mode)
+    if ($rc -eq 0) {
+        LogDetail ("console input mode {0} after {1}, restored 0x{2:X}" -f $nowText, $Label, $Saved.Mode)
+        return "restored"
+    }
+    LogWarn ("Could not restore the console input mode after {0} ({1}, wanted 0x{2:X}, Win32 error {3}) -- review menus may not echo; open a new terminal if a menu does not react" -f $Label, $nowText, $Saved.Mode, $rc)
+    return "restore failed"
 }
 
 # ---------------------------------------------------------------------------
@@ -1592,8 +1750,13 @@ function Stop-AiSpinner {
 # Test-InteractiveConsole: one non-interactive test for every prompt -- a
 # redirected stdin or a non-interactive session never prompts.
 # Read-ConsoleChoice: [Console]::ReadLine() returns $null at EOF, and the
-# callers' .ToLower() then threw. This logs and returns "" so each caller's
-# default branch applies.
+# callers' .ToLower() then threw. This logs and returns "", and sets
+# $script:ReadConsoleEof = $true ($false after any other read), so a typed empty
+# line and EOF can be told apart: Read-MenuChoice takes its EOF default only at
+# EOF and asks again otherwise. On a Windows console the one read runs in cooked
+# line mode (echo on, see the console input mode helper above) and the previous
+# mode is put back afterwards; read_tty_choice needs no such step (Git Bash
+# keeps its own terminal state, so a raw Windows console does not affect it).
 # ---------------------------------------------------------------------------
 function Test-InteractiveConsole {
     return ([Environment]::UserInteractive -and -not [Console]::IsInputRedirected)
@@ -1601,8 +1764,26 @@ function Test-InteractiveConsole {
 
 function Read-ConsoleChoice {
     param([string]$DefaultDesc)
-    $line = [Console]::ReadLine()
+    $script:ReadConsoleEof = $false
+    $saved = [long]-1
+    if (Initialize-AitConsoleInput) {
+        $saved = [AitConsoleInput]::EnterCooked()
+        if ([AitConsoleInput]::LastError -ne 0) {
+            LogDetail ("console input mode: cooked mode not set at prompt (mode {0}, Win32 error {1})" -f $saved, [AitConsoleInput]::LastError)
+        } elseif ($saved -ge 0 -and ($saved -band 0x6) -ne 0x6) {
+            LogDetail ("console input mode 0x{0:X} at prompt (line input or echo off) -- read in cooked mode" -f $saved)
+        }
+    }
+    try {
+        $line = [Console]::ReadLine()
+    } finally {
+        if ($saved -ge 0) {
+            $rc = [AitConsoleInput]::Set($saved)
+            if ($rc -ne 0) { LogDetail ("console input mode 0x{0:X} not restored after prompt (Win32 error {1})" -f $saved, $rc) }
+        }
+    }
     if ($null -eq $line) {
+        $script:ReadConsoleEof = $true
         [Console]::WriteLine("")
         LogWarn "No input at prompt (EOF) -- defaulting to $DefaultDesc"
         return ""
@@ -1625,10 +1806,10 @@ function Read-ConsoleChoice {
 # -Default. Every answer is logged at detail (deploy.log only). Writes nothing
 # to the pipeline except the answer.
 # EOF detection: Read-ConsoleChoice returns "" both at EOF and for a typed empty
-# line. $script:ReadConsoleEof = $true after the read marks EOF (contract for
-# Read-ConsoleChoice, see the M2-Reask PR "Contract change"); until
-# Read-ConsoleChoice sets it, an empty answer with $script:warnings raised
-# during the read is EOF (its EOF branch calls LogWarn). 50 unrecognised
+# line. $script:ReadConsoleEof = $true after the read marks EOF (set by
+# Read-ConsoleChoice); as a fallback for an older Read-ConsoleChoice, an empty
+# answer with $script:warnings raised during the read is also EOF (its EOF
+# branch calls LogWarn). 50 unrecognised
 # answers in a row are treated as EOF, so a closed input that is not detected
 # cannot loop forever.
 # Spec: .claude/rules/interactive-menus.md "Answers";
@@ -1724,9 +1905,14 @@ function Invoke-AiMerge {
         }
 
         Start-AiSpinner "merging $displayName (attempt $iteration)..."
-        $merged = $promptText | Invoke-AI -Speed "balanced" -Permissions "none" `
-            -ValidateFn "_MergeValidateWrapper" -MaxRetries 1
-        Stop-AiSpinner
+        # finally: Ctrl+C or an error thrown inside Invoke-AI (e.g. a failed log
+        # write) must not leave the spinner drawing over what runs next
+        try {
+            $merged = $promptText | Invoke-AI -Speed "balanced" -Permissions "none" `
+                -ValidateFn "_MergeValidateWrapper" -MaxRetries 1
+        } finally {
+            Stop-AiSpinner
+        }
 
         # Defense-in-depth: strip leading/trailing code fences if AI ignored instructions
         if ($merged) {

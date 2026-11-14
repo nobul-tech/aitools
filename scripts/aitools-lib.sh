@@ -1635,11 +1635,15 @@ tty_interactive() {
 # EOF-safe prompt read. Usage: read_tty_choice <var> <what-the-default-does>
 # Bare `read -r x < /dev/tty` returns 1 at EOF (closed stdin under a pty), which
 # aborts the caller under set -e with no log line. This logs and returns 0 with
-# <var> empty, so each caller's `*)` default branch applies.
+# <var> empty, and sets READ_TTY_EOF=1 (0 after any other read), so a typed
+# empty line and EOF can be told apart: read_menu_choice takes its EOF default
+# only at EOF and asks again otherwise.
 # ---------------------------------------------------------------------------
 read_tty_choice() {
     local __var="$1" __default_desc="$2" __line=""
+    READ_TTY_EOF=0
     if ! IFS= read -r __line < /dev/tty; then
+        READ_TTY_EOF=1
         printf '\n' > /dev/tty
         log_warn "No input at prompt (EOF) -- defaulting to $__default_desc"
         __line=""
@@ -1661,10 +1665,9 @@ read_tty_choice() {
 # 2026-11-13: "no default or other characters should re-ask"). EOF sets VAR to
 # DEFAULT. Every answer is logged at detail (deploy.log only).
 # EOF detection: read_tty_choice returns "" both at EOF and for a typed empty
-# line. READ_TTY_EOF=1 after the read marks EOF (contract for read_tty_choice,
-# see the M2-Reask PR "Contract change"); until read_tty_choice sets it, an
-# empty answer with WARNINGS raised during the read is EOF (its EOF branch
-# calls log_warn). 50 unrecognised answers in a row are treated as EOF, so a
+# line. READ_TTY_EOF=1 after the read marks EOF (set by read_tty_choice); as a
+# fallback for an older read_tty_choice, an empty answer with WARNINGS raised
+# during the read is also EOF (its EOF branch calls log_warn). 50 unrecognised answers in a row are treated as EOF, so a
 # closed input that is not detected cannot loop forever.
 # Spec: .claude/rules/interactive-menus.md "Answers";
 # reference/managed-file-deployment.md "Menus". Parity: Read-MenuChoice in
