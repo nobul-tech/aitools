@@ -367,7 +367,8 @@ if command -v node >/dev/null 2>&1; then
     check "array detail: key order inside an element is no difference" "[ ! -s '$C/plan.tsv' ]"
     plan_detail '{"t":["x","y"]}' '{"t":["y","x"]}'
     check "array detail: a reorder alone is one line" "detail_is '2 local, 2 source element(s)' '~ order differs (same elements)'"
-    plan_detail "{\"t\":[$(seq -s, 0 24)]}" '{"t":[]}'
+    # 0,1,...,24 (perl, not seq: BSD seq -s leaves a trailing separator on macOS)
+    plan_detail "{\"t\":[$(perl -e 'print join(",", 0 .. 24)')]}" '{"t":[]}'
     check "array detail: at most 20 element lines, then a count of the rest" \
         "[ \"\$(wc -l < '$C/detail')\" -eq 22 ] && [ \"\$(sed -n 2p '$C/detail')\" = '+ [0] 0' ] && [ \"\$(sed -n 21p '$C/detail')\" = '+ [19] 19' ] && [ \"\$(tail -n 1 '$C/detail')\" = '... 5 more line(s)' ]"
     plan_detail '{"t":["a\tb\u001fc"]}' '{"t":[]}'
