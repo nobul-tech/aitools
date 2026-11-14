@@ -246,10 +246,12 @@ log_subjects() {
     if [ ! -d "$1" ]; then printf '(none)\n'; return 0; fi
     git -C "$1" log --format=%s main 2>&1 || printf '(no main branch)\n'  # shown in the golden diff
 }
-# result_golden -- this case's result (exit code, summary rows, profile.json, remote
-# commits) must equal the golden file userinit-$CASE.txt (sh and ps1 share it)
+# result_golden [NAME] -- this case's result (exit code, summary rows, profile.json,
+# remote commits) must equal the golden file userinit-NAME.txt (sh and ps1 share it;
+# NAME defaults to this case's name). A case that only compares with another
+# case's golden (NAME given) never writes it under AITOOLS_TEST_UPDATE_GOLDEN=1.
 result_golden() {
-    local f="$D/result.txt"
+    local g="${1:-$CASE}" f="$D/result.txt"
     {
         printf 'exit %s\n-- summary rows\n' "$RC"; cat "$SUM"
         printf -- '-- profile.json\n'
@@ -257,8 +259,11 @@ result_golden() {
         printf -- '-- remote.git commits\n'; log_subjects "$D/remote.git"
         printf -- '-- gh-remote.git commits\n'; log_subjects "$D/gh-remote.git"
     } > "$f"
-    if golden_match "userinit-$CASE.txt" "$f"; then ok "$CASE: exit, rows, profile.json and commits match golden"
-    else bad "$CASE: result differs from golden userinit-$CASE.txt"; fi
+    if [ "$g" != "$CASE" ] && [ "${AITOOLS_TEST_UPDATE_GOLDEN:-}" = "1" ]; then
+        printf '      | %s: compared with userinit-%s.txt, not written\n' "$CASE" "$g"; return 0
+    fi
+    if golden_match "userinit-$g.txt" "$f"; then ok "$CASE: exit, rows, profile.json and commits match golden${1:+ userinit-$g.txt}"
+    else bad "$CASE: result differs from golden userinit-$g.txt"; fi
 }
 
 # case_run NAME WANT_RC SETUP ARGS... -- SETUP builds the fixture; one run, then the golden
@@ -274,6 +279,20 @@ case_run() {
 has_row() { if grep -qxF "$1" "$SUM"; then ok "$CASE: row $1"; else bad "$CASE: no row '$1'"; perl -pe 's/^/       /' "$SUM"; fi; }
 no_row_like() { if grep -q -- "$1" "$SUM"; then bad "$CASE: unexpected row /$1/"; perl -pe 's/^/       /' "$SUM"; else ok "$CASE: no row /$1/"; fi; }
 out_has() { if grep -qF -- "$1" "$OUT"; then ok "$CASE: output has '$1'"; else bad "$CASE: output lacks '$1'"; perl -pe 's/^/       /' "$OUT"; fi; }
+# out_count STRING N -- the console output has STRING exactly N times (on Windows at
+# least N: ConPTY re-renders the screen and may repeat a line it already sent)
+out_count() {
+    local n
+    n=$(perl -0777 -ne 'BEGIN { $s = shift @ARGV } $n++ while /\Q$s\E/g; END { print $n + 0 }' "$1" "$OUT")
+    if [ "$n" -eq "$2" ] || { [ "$TEST_PLATFORM" = windows ] && [ "$n" -ge "$2" ]; }; then ok "$CASE: output has '$1' $2 time(s)"
+    else bad "$CASE: output has '$1' $n time(s), want $2"; perl -pe 's/^/       /' "$OUT"; fi
+}
+# log_has STRING -- the case HOME's deploy.log has STRING (fixed string)
+log_has() {
+    local lf="$H/.aitools/logs/deploy.log"
+    if [ -f "$lf" ] && grep -qF -- "$1" "$lf"; then ok "$CASE: deploy.log has '$1'"
+    else bad "$CASE: deploy.log lacks '$1'"; if [ -f "$lf" ]; then perl -ne 'print "       $_" if /menu answer/' "$lf"; fi; fi
+}
 pj_has() {  # pj_has PERL-REGEX -- the dotprofile's profile.json matches (whole file)
     if perl -0777 -ne 'BEGIN { $r = shift @ARGV } exit(/$r/s ? 0 : 1)' "$1" "$DP/profile.json"; then ok "$CASE: profile.json /$1/"
     else bad "$CASE: profile.json lacks /$1/"; perl -pe 's/^/       /' "$DP/profile.json" 2>/dev/null || true; fi  # absent file: the FAIL above says so
@@ -642,6 +661,35 @@ if $USE_PTY; then
     no_machine_flag yes
     no_row_like "no machine match"
     pj_lacks "\"$THIS_KEY\""
+
+    # Re-ask (commander 2026-11-13: "no default or other characters should re-ask"):
+    # an empty answer at a choice prompt asks again and applies nothing; the next
+    # offered answer gives the same result as answering it at once (the golden of
+    # that case). Every answer is logged at detail.
+    echo "== interactive (pty): empty answer at the which-profile menu -> asked again; then 1 claims"
+    CASE=pty-claim-reask; fx_two
+    PTY_INPUT=$'\n1\n'
+    run
+    if [ "$RC" -eq 0 ]; then ok "$CASE: $LANG_RUN exit $RC"; else bad "$CASE: $LANG_RUN exit $RC, want 0"; perl -pe 's/^/       /' "$OUT"; fi
+    result_golden pty-claim
+    pj_alias "$THIS_KEY" nobul-mac
+    pj_other_intact
+    out_count "please type one of 1/n/s" 1
+    out_count "Which profile is this machine?" 1
+    log_has '[detail] menu answer (which profile): "" -> not one of 1/n/s, asked again'
+    log_has '[detail] menu answer (which profile): "1" -> 1'
+
+    echo "== interactive (pty): empty answer at the duplicate-alias confirm -> asked again; then y shares the alias"
+    CASE=pty-dup-reask; fx_two
+    PTY_INPUT=$'\n\n\ny\n'
+    run --alias laptop
+    if [ "$RC" -eq 0 ]; then ok "$CASE: $LANG_RUN exit $RC"; else bad "$CASE: $LANG_RUN exit $RC, want 0"; perl -pe 's/^/       /' "$OUT"; fi
+    result_golden pty-dup-confirm
+    pj_alias "$THIS_KEY" laptop
+    pj_other_intact
+    out_count "please type one of y/yes/n/no" 1
+    log_has '[detail] menu answer (alias laptop): "" -> not one of y/yes/n/no, asked again'
+    log_has '[detail] menu answer (alias laptop): "y" -> y'
 
     echo "== interactive (pty) with --force: no prompt; an unregistered machine is refused like no terminal"
     PTY_INPUT=$'1\n'

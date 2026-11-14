@@ -6,13 +6,20 @@
 # EOF warning; every answer is logged at detail (deploy.log only); 50
 # unrecognised answers in a row end with the default and a warning; the prompt
 # is printed as data; READ_TTY_EOF=1 from read_tty_choice is honoured as EOF.
+# The real menus end to end: deploy_managed_file's text review (with and
+# without an adopt target), its JSON field review (a differing field and a
+# field only in LOCAL) and the AI merge preview (a stub `claude` on PATH)
+# re-ask on an empty line, a word or a letter not offered, then apply the
+# offered answer; EOF at the review menu still overwrites; --force on a
+# terminal and a non-interactive run show no menu and log no answer.
 #
 # Safe to re-run: every case runs in its own temp HOME and log dir, removed on
 # exit. The real read_menu_choice and read_tty_choice run on a pseudo-terminal
 # (tests/managed-files/pty-run.py, python3); the guard, flag and CR cases
 # replace read_tty_choice with a stub inside the same pty run (the wrapper
 # still writes to /dev/tty). Without a pty (python3 missing, or pywinpty not
-# installed on Windows) the pty cases SKIP with the reason.
+# installed on Windows) the pty cases SKIP with the reason. The JSON cases
+# need node (SKIP without it).
 # Platform: macOS, Linux, Windows Git Bash (aitools-lib.sh also runs there).
 # AITOOLS_TEST_BASH=/bin/bash runs the lib under another bash (macOS 3.2).
 # Spec: .claude/rules/interactive-menus.md; reference/managed-file-deployment.md
@@ -24,7 +31,7 @@
 set -uo pipefail
 
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
-    perl -ne 'print if $. >= 2 && $. <= 22' "$0"
+    perl -ne 'print if $. >= 2 && $. <= 29' "$0"
     exit 0
 fi
 
@@ -202,6 +209,156 @@ if $HAVE_PTY; then
     check "trailing CR trimmed: 'a<CR>' -> a" res_is a
 else
     printf 'SKIP pty cases (no pseudo-terminal: python3 missing, or pywinpty not installed on Windows)\n'; SKIP=$((SKIP + 1))
+fi
+
+# ===========================================================================
+# The real menus: deploy_managed_file (text review, JSON field review) and the
+# AI merge preview
+# ===========================================================================
+# setup_dmf <name>: setup_case plus dest/, repo/ (a git repo: the adopt target)
+# and bin/ (first on PATH: the stub claude)
+setup_dmf() {
+    setup_case "$1"
+    mkdir -p "$C/dest" "$C/repo" "$C/bin"
+    git -C "$C/repo" init -q
+}
+# stub_claude: a fake AI CLI that prints a fixed valid merge
+stub_claude() {
+    printf '#!/usr/bin/env bash\ncat > /dev/null\nprintf "# Title\\nmerged line\\n"\n' > "$C/bin/claude"
+    chmod +x "$C/bin/claude"
+}
+# run_snip <snippet> [input]: a fresh bash sources the lib and runs the snippet.
+# With input: on a pty, the keystrokes fed one line per prompt. Without: stdin
+# is /dev/null (non-interactive). Terminal output -> $C/out, $C/plain.
+run_snip() {
+    local snippet="$1" input="${2:-}"
+    printf '%s\n' "set -euo pipefail" "source '$LIB'" "logging_init t" "$snippet" > "$C/snippet.sh"
+    local envs=(HOME="$C/home" AITOOLS_LOG_DIR="$C/logs" AITOOLS_SUMMARY_FILE="$C/summary"
+        PATH="$C/bin:$PATH" TERM=xterm)
+    if [ -n "$input" ]; then
+        env -u AITOOLS_FORCE "${envs[@]}" python3 "$PTY" --input "$input" --log "$C/out" --timeout "${RUN_TIMEOUT:-60}" -- "$BASH_BIN" "$C/snippet.sh"
+    else
+        env -u AITOOLS_FORCE "${envs[@]}" "$BASH_BIN" "$C/snippet.sh" < /dev/null > "$C/out" 2>&1
+    fi
+    echo $? > "$C/rc"
+    perl -pe 's/\e\][^\a\e]*(\a|\e\\)//g; s/\e\[[0-9;?]*[A-Za-z]//g; s/\e[=>]//g; s/\r//g' "$C/out" > "$C/plain"
+    [ -f "$LOG" ] || : > "$LOG"
+}
+# DMF: deploy_managed_file SOURCE=$SRCF to LOCAL=$DEST, adopt target $ADOPT
+# ("" = none); the result goes to $C/result (res_is reads it)
+DMF='deploy_managed_file "$(cat "$SRCF")" "$DEST" tool item "$ADOPT"; printf "%s" "$MANAGED_FILE_RESULT" > "$C/result"'
+# json_is <file> <compact json>: the file's JSON without whitespace (the values
+# used here have none)
+json_is() { [ "$(perl -0777 -pe 's/\s+//g' "$1")" = "$2" ]; }
+HAVE_NODE=true
+command -v node >/dev/null 2>&1 || HAVE_NODE=false
+
+# --- Without a terminal: no menu, no answer logged (unchanged behaviour) ---
+setup_dmf dmf-noninteractive
+printf 'new\n' > "$C/src.md"; printf 'old\n' > "$C/dest/a.md"
+run_snip "C='$C' SRCF='$C/src.md' DEST='$C/dest/a.md' ADOPT='$C/repo/a.md'; $DMF"
+check "non-interactive text review: overwrite, no menu" \
+    eval 'res_is updated && grep -qx new "$C/dest/a.md" && ! has "choice [" "$C/plain" && [ ! -e "$C/repo/a.md" ]'
+check "non-interactive text review: no answer logged" not has "menu answer" "$LOG"
+
+if $HAVE_NODE; then
+    setup_dmf dmf-json-noninteractive
+    printf '{"a":1,"b":2}\n' > "$C/repo/c.json"; printf '{"a":9,"b":2,"z":0}\n' > "$C/dest/c.json"
+    run_snip "C='$C' SRCF='$C/repo/c.json' DEST='$C/dest/c.json' ADOPT='$C/repo/c.json'; $DMF"
+    check "non-interactive JSON review: field overwritten, LOCAL-only kept, no menu" \
+        eval 'res_is updated && json_is "$C/dest/c.json" "{\"a\":1,\"b\":2,\"z\":0}" && ! has "choice [" "$C/plain"'
+    check "non-interactive JSON review: no answer logged" not has "menu answer" "$LOG"
+fi
+
+if $HAVE_PTY; then
+    # --- Text review with an adopt target: empty, word, letter not offered, then s ---
+    setup_dmf dmf-reask-adopt
+    printf 'new\n' > "$C/src.md"; printf 'old\n' > "$C/dest/a.md"
+    run_snip "C='$C' SRCF='$C/src.md' DEST='$C/dest/a.md' ADOPT='$C/repo/a.md'; $DMF" '\nskip\nq\ns\n'
+    check "text review (adopt): empty, 'skip', 'q' re-ask, then s -> skipped" res_is skipped
+    check "text review (adopt): LOCAL unchanged, nothing adopted" \
+        eval 'grep -qx old "$C/dest/a.md" && [ ! -e "$C/repo/a.md" ]'
+    check "text review (adopt): 3 hints '  please type one of o/a/m/s/x'" tty_occ 3 "  please type one of o/a/m/s/x"
+    check "text review (adopt): prompt asked 4 times" tty_occ 4 "  choice [o/a/m/s/x]: "
+    check "text review (adopt): 4 answers logged at detail" occ_is 4 "[detail] menu answer (review a.md): " "$LOG"
+    check "text review (adopt): empty, word and letter logged as not offered" \
+        eval 'has "[detail] menu answer (review a.md): \"\" -> not one of o/a/m/s/x, asked again" "$LOG" && has "[detail] menu answer (review a.md): \"skip\" -> not one of o/a/m/s/x, asked again" "$LOG" && has "[detail] menu answer (review a.md): \"q\" -> not one of o/a/m/s/x, asked again" "$LOG"'
+    check "text review (adopt): s logged" has '[detail] menu answer (review a.md): "s" -> s' "$LOG"
+    check "text review (adopt): skipped logged" has "Skipped: item (local differs from source" "$LOG"
+    if ! $IS_WINDOWS; then
+        # ConPTY may repeat lines it already sent; the exact menu count is POSIX only
+        check "text review (adopt): re-ask prints the hint and the prompt, not the menu again" \
+            occ_is 1 "  [s]kip            : nothing written; asked again next run" "$C/plain"
+    fi
+
+    # --- Text review without an adopt target: a and m are not offered ---
+    setup_dmf dmf-reask-noadopt
+    printf 'new\n' > "$C/src.md"; printf 'old\n' > "$C/dest/a.md"
+    run_snip "C='$C' SRCF='$C/src.md' DEST='$C/dest/a.md' ADOPT=''; $DMF" 'a\nm\no\n'
+    check "text review (no adopt): a and m re-ask, then o -> updated" \
+        eval 'res_is updated && grep -qx new "$C/dest/a.md"'
+    check "text review (no adopt): 2 hints '  please type one of o/s/x'" tty_occ 2 "  please type one of o/s/x"
+    check "text review (no adopt): a and m logged as not offered, o accepted" \
+        eval 'has "[detail] menu answer (review a.md): \"a\" -> not one of o/s/x, asked again" "$LOG" && has "[detail] menu answer (review a.md): \"m\" -> not one of o/s/x, asked again" "$LOG" && has "[detail] menu answer (review a.md): \"o\" -> o" "$LOG"'
+    check "text review (no adopt): no AI merge started, nothing adopted" \
+        eval '! has "AI merge" "$C/plain" && [ ! -e "$C/repo/a.md" ]'
+
+    # --- Text review: case and surrounding spaces ignored ---
+    setup_dmf dmf-case-space
+    printf 'new\n' > "$C/src.md"; printf 'old\n' > "$C/dest/a.md"
+    run_snip "C='$C' SRCF='$C/src.md' DEST='$C/dest/a.md' ADOPT=''; $DMF" ' O \n'
+    check "text review: ' O ' -> o, updated, no hint" \
+        eval 'res_is updated && grep -qx new "$C/dest/a.md" && tty_occ 0 "please type one of"'
+    check "text review: raw answer logged" has '[detail] menu answer (review a.md): " O " -> o' "$LOG"
+
+    # --- EOF at the review menu: overwrite (unchanged) ---
+    setup_dmf dmf-eof
+    printf 'new\n' > "$C/src.md"; printf 'old\n' > "$C/dest/a.md"
+    run_snip "C='$C' SRCF='$C/src.md' DEST='$C/dest/a.md' ADOPT='$C/repo/a.md'; $DMF" '\x04'
+    check "EOF at the review menu: overwrite" eval 'res_is updated && grep -qx new "$C/dest/a.md"'
+    check "EOF at the review menu: warning and 'EOF -> o' logged, no hint" \
+        eval 'has "[warn] No input at prompt (EOF) -- defaulting to overwrite" "$LOG" && has "[detail] menu answer (review a.md): EOF -> o" "$LOG" && tty_occ 0 "please type one of"'
+
+    # --- --force on a terminal: no menu, no answer read or logged ---
+    setup_dmf dmf-force
+    printf 'new\n' > "$C/src.md"; printf 'old\n' > "$C/dest/a.md"
+    run_snip "export AITOOLS_FORCE=1; C='$C' SRCF='$C/src.md' DEST='$C/dest/a.md' ADOPT='$C/repo/a.md'; $DMF" 'a\n'
+    check "--force on a terminal: overwrite, no menu" \
+        eval 'res_is updated && grep -qx new "$C/dest/a.md" && ! has "choice [" "$C/plain" && [ ! -e "$C/repo/a.md" ]'
+    check "--force on a terminal: no answer logged" not has "menu answer" "$LOG"
+
+    # --- AI merge preview: empty and a word re-ask, then y ---
+    setup_dmf dmf-merge-reask
+    stub_claude
+    printf '# Title\nsource line\n' > "$C/repo/a.md"; printf '# Title\nlocal line\n' > "$C/dest/a.md"
+    run_snip "C='$C' SRCF='$C/repo/a.md' DEST='$C/dest/a.md' ADOPT='$C/repo/a.md'; $DMF" 'm\n\nmaybe\ny\n'
+    check "merge preview: empty and 'maybe' re-ask, then y -> accept & adopt" res_is "accept & adopt"
+    check "merge preview: the merge in LOCAL and the repo" \
+        eval 'grep -qx "merged line" "$C/dest/a.md" && cmp -s "$C/dest/a.md" "$C/repo/a.md"'
+    check "merge preview: 2 hints '  please type one of y/r/n'" tty_occ 2 "  please type one of y/r/n"
+    check "merge preview: m, the two re-asks and y logged" \
+        eval 'has "[detail] menu answer (review a.md): \"m\" -> m" "$LOG" && has "[detail] menu answer (merge preview a.md): \"\" -> not one of y/r/n, asked again" "$LOG" && has "[detail] menu answer (merge preview a.md): \"maybe\" -> not one of y/r/n, asked again" "$LOG" && has "[detail] menu answer (merge preview a.md): \"y\" -> y" "$LOG"'
+
+    # --- JSON field review: a differing field, then a field only in LOCAL ---
+    if $HAVE_NODE; then
+        setup_dmf dmf-json-reask
+        printf '{"a":1,"b":2}\n' > "$C/repo/c.json"; printf '{"a":9,"b":2,"z":0}\n' > "$C/dest/c.json"
+        run_snip "C='$C' SRCF='$C/repo/c.json' DEST='$C/dest/c.json' ADOPT='$C/repo/c.json'; $DMF" '\no\no\ns\n'
+        check "json review: a: empty re-asks, then o; z (only in LOCAL): o re-asks, then s -> skipped" res_is skipped
+        check "json review: a overwritten, z kept in LOCAL, the repo unchanged" \
+            eval 'json_is "$C/dest/c.json" "{\"a\":1,\"b\":2,\"z\":0}" && json_is "$C/repo/c.json" "{\"a\":1,\"b\":2}"'
+        check "json review: one hint '  please type one of o/a/s/x' (field a)" tty_occ 1 "  please type one of o/a/s/x"
+        check "json review: one hint '  please type one of a/s/x' (field z: no overwrite)" tty_occ 1 "  please type one of a/s/x"
+        check "json review: field a answers logged" \
+            eval 'has "[detail] menu answer (json item: a): \"\" -> not one of o/a/s/x, asked again" "$LOG" && has "[detail] menu answer (json item: a): \"o\" -> o" "$LOG"'
+        check "json review: field z answers logged" \
+            eval 'has "[detail] menu answer (json item: z): \"o\" -> not one of a/s/x, asked again" "$LOG" && has "[detail] menu answer (json item: z): \"s\" -> s" "$LOG"'
+    fi
+else
+    printf 'SKIP real-menu pty cases (no pseudo-terminal: python3 missing, or pywinpty not installed on Windows)\n'; SKIP=$((SKIP + 1))
+fi
+if ! $HAVE_NODE; then
+    printf 'SKIP JSON review cases (node not on PATH)\n'; SKIP=$((SKIP + 1))
 fi
 
 printf '\n%d passed, %d failed, %d skipped\n' "$PASS" "$FAIL" "$SKIP"
