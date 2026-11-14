@@ -28,6 +28,20 @@ Not tagged. Branch `docs/38dc-12-windows-test-practice`, mission 38dc-12 (M6-Pol
 
 ---
 
+## v0.77.4 -- EOF regression cases for every prompt of issue #29 (2026-11-14)
+
+Not tagged. Branch `test/m6-eof` (PR #155), mission M6-Polish (session 87795dc3), item a.
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 1 | Issue #29 fix 3 completed: ten EOF regression cases, the same names in `tests/menus/test-menu-choice.sh` and `.ps1`, for the JSON field prompt (`deploy_managed_file` / `Deploy-ManagedFile` JSON review: `o`; a field only in LOCAL: `s`), the settings sync (`sync_managed_json` / `Sync-ManagedJson`: `o`), the AI-merge preview (`n`, back to the review menu; EOF there then overwrites and the merge is written nowhere) and the `[r]efine` feedback read (empty feedback, the merge refined). The stub AI CLI records each prompt it gets, so the cases count AI calls and read the refine prompt. Tests only; the library is unchanged |
+
+**Verified on:** Windows 11 (Git Bash 5.3 with pywinpty ConPTY, pwsh 7): menus `.sh` 88/0 (was 78), `.ps1` 97/0 (was 87); 10 library mutants (5 per language, one EOF default broken per call site) each fail at least one new case, every new case fails under at least one mutant, no older case fails under any; managed-files, adopt-push, os-guards, logging and menu-parity suites green; `check-pre-commit.ps1` and `check-pre-push.ps1` 0 FAIL. macOS (bash 5 and /bin/bash 3.2) and Linux: CI.
+
+---
+
 ## v0.77.3 -- Pre-commit path-ref check fixed on Windows; release notes backfilled for PRs #144-#147 (2026-11-14)
 
 Not tagged. Branch `docs/m5-docs`, mission M5-Fixes (session 87795dc3), items 6, 7, 8 and 13.
