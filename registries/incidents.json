@@ -4162,7 +4162,7 @@
       "updated": "2026-11-14"
     },
     {
-      "id": 175,
+      "id": 179,
       "title": "bootstrap.ps1 ran aitools-install.ps1 with `powershell` (Windows PowerShell 5.1) and called aitools in-process in its own host, against the PowerShell 7 baseline, and never installed pwsh",
       "closedIn": "v0.77.7 (PR #160, branch fix/38dc-11-compliance-ci-bootstrap, mission 38dc-11)",
       "closedDate": "2026-11-14",

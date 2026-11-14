@@ -20,7 +20,7 @@ Not tagged. Branch `fix/38dc-11-compliance-ci-bootstrap`, mission 38dc-11 (M6-Po
 
 | # | Severity | Fix |
 |---|----------|-----|
-| 1 | High | `scripts/bootstrap.ps1` ran `aitools-install.ps1` with `powershell` (Windows PowerShell 5.1), against the PowerShell 7 baseline, and called `aitools` for the dotprofile step inside its own (possibly 5.1) host. It now finds `pwsh`, installs it when missing with the tool registry's preferred Windows method (`winget install --id Microsoft.PowerShell --source winget`, verified against learn.microsoft.com on 2026-11-14), refreshes PATH additively, and runs the installer and `%USERPROFILE%\.local\bin\aitools.ps1` (`user init`, then the rebuild) with `pwsh -NoProfile -ExecutionPolicy Bypass -File`; a non-zero installer exit is reported (bootstrap.sh parity). With no `pwsh` and no `winget` it stops with a message. The file stays ASCII and parses under 5.1. Resolves Incident #175 |
+| 1 | High | `scripts/bootstrap.ps1` ran `aitools-install.ps1` with `powershell` (Windows PowerShell 5.1), against the PowerShell 7 baseline, and called `aitools` for the dotprofile step inside its own (possibly 5.1) host. It now finds `pwsh`, installs it when missing with the tool registry's preferred Windows method (`winget install --id Microsoft.PowerShell --source winget`, verified against learn.microsoft.com on 2026-11-14), refreshes PATH additively, and runs the installer and `%USERPROFILE%\.local\bin\aitools.ps1` (`user init`, then the rebuild) with `pwsh -NoProfile -ExecutionPolicy Bypass -File`; a non-zero installer exit is reported (bootstrap.sh parity). With no `pwsh` and no `winget` it stops with a message. The file stays ASCII and parses under 5.1. Resolves Incident #179 |
 
 ### Improvements
 
@@ -34,7 +34,7 @@ Not tagged. Branch `fix/38dc-11-compliance-ci-bootstrap`, mission 38dc-11 (M6-Po
 | # | Change |
 |---|--------|
 | 4 | `reference/post-push-checklist.md` step 23 (CI also runs it), `reference/cross-platform-detail.md` (new section "bootstrap.ps1: runs under 5.1, launches pwsh 7"), `reference/tool-registry.md` and the registry's `pwsh` entry (the bootstrap note; Windows install command verified 2026-11-14), `reference/rules.md` v1.4 and `reference/cursor-practices.md` (the new shared rule), the `/delegate` skill's cross-reference (rule source), README (the Windows one-liner also installs PowerShell 7) |
-| 5 | Incident registry (`/incident` skill): #175 filed and closed (bootstrap.ps1 ran the installer under 5.1) |
+| 5 | Incident registry (`/incident` skill): #179 filed and closed (bootstrap.ps1 ran the installer under 5.1; id reserved by the M6-Polish orchestrator) |
 
 ### Files created
 
