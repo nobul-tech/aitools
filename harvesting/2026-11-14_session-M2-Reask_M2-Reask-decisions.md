@@ -1,0 +1,12 @@
+# M2-Reask decisions v1.0 (2026-11-13)
+
+Made by M2-Reask under the commander's words "no default or other characters should re-ask" (session 87795dc3). Each is listed in the PR body; open ones go to the commander with a suggested answer.
+
+- D1 y/N confirms (scripts/aitools check_profile migrate + ui_register duplicate alias, and twins): re-ask on empty/unrecognised; prompt text `[y/N]` -> `[y/n]` (an Enter default is no longer honoured); VALID `y yes n no`; EOF default `n` (unchanged).
+- D2 `[Y/n]` create-dotprofile (ui_create_dotprofile / Invoke-UiCreateDotprofile): re-ask on empty; text -> `[y/n]`; VALID `y yes n no`; EOF default `y` kept, because non-interactive/--force already create and push and the mission keeps EOF behaviour. OPEN for the commander: should EOF at this prompt decline instead? Suggested: keep `y` (unchanged behaviour), revisit with the create-repo flow.
+- D3 ui_choose / Read-UiChoose: VALID = the selectable numbers + `n s`; EOF default `s`; empty and anything else (out-of-range number, word) re-ask (today: empty = skip, unrecognised = skip with a warning).
+- D4 reverse discovery (setup-user-hooks, setup-user-skills, both twins): VALID `a adopt s skip`, case-insensitive (fixes the bash/PS1 `A` parity gap); EOF default `s`; non-interactive unchanged (skip, info log).
+- D5 relay-outbound prompt (relay-outbound-prompt.sh/.ps1, no aitools-lib available from hh): local re-ask loop (same hint text as the wrapper); VALID `c continue q quit s show` (exact, no prefix match); prompt `choice [c/q/s]: ` (drop "(default c)"); EOF -> continue (unchanged); `s` keeps today's effect (show git status, then continue). PS1 moves from Read-Host/Write-Host to [Console]::ReadLine/WriteLine (interactive-menus.md Console I/O) and treats redirected stdin as non-interactive (same hint as non-interactive today).
+- D6 shell aliases `cc` and `clip2md` (shared/shell/aliases.sh/.ps1): local re-ask loop; `[y/N]` -> `[y/n]`; VALID `y yes n no`; EOF -> no (unchanged). Code must run in bash and zsh (aliases.sh is sourced into the user's shell).
+- D7 Answer logging: every answer at `detail` (deploy.log only), not `info`, because the console already shows the outcome line (`  >> overwritten ...`); keeps pty output and goldens unchanged. Libless scripts (relay, aliases) do not log (they have no logging framework); recorded as not covered.
+- D8 EOF detection: contract flag READ_TTY_EOF / $script:ReadConsoleEof (proposed to M3) with a warnings-counter fallback; plus a 50-try hot-loop guard.
