@@ -1155,8 +1155,9 @@ GENERATED=$((GENERATED + 1))
 # after the inlined lib as the here-string $AitoolsEmbeddedPywinptyPin, which
 # setup-pywinpty.ps1 reads when no pin file sits beside it. Only the pin data is
 # embedded; the setup logic is copied. A pin that is missing or empty, has no
-# pywinpty== line, or has a line starting with '@ (it would end the here-string)
-# fails the build.
+# pywinpty== line, has a line starting with '@ (it would end the here-string), has
+# no "# wheel-tags:" line or no --hash=sha256: entry fails the build
+# (tests/pywinpty/test-setup-pywinpty.sh).
 blog "Copying deploy/setup-pywinpty.sh"
 {
     echo '#!/usr/bin/env bash'
@@ -1185,8 +1186,10 @@ _pin_msg=$(perl -e '
         or die "$src has no pywinpty== line\n";
     die "$src has a line starting with ${q}\@ (it would end the here-string)\n"
         if $t =~ /^\s*\x27\x40/m;
+    die "$src has no # wheel-tags: line\n" unless $t =~ /^\s*#\s*wheel-tags:/m;
     $t .= "\n" unless $t =~ /\n\z/;
     my $n = () = $t =~ /--hash=sha256:/g;
+    die "$src has no --hash=sha256: entries\n" unless $n;
     open my $o, ">", $out or die "$out: cannot write ($!)\n";
     print $o "# Embedded by scripts/build-deploy.sh from scripts/requirements-pywinpty.txt -- the pin setup-pywinpty.ps1 uses when no requirements-pywinpty.txt sits beside it\n";
     print $o "\$AitoolsEmbeddedPywinptyPin = \@$q\n", $t, "$q\@\n";

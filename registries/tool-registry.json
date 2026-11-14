@@ -1083,7 +1083,7 @@
         "harness": "scripts/setup-pywinpty.ps1 + .sh (aitools install Step 15b; CI windows job); pin scripts/requirements-pywinpty.txt",
         "lastRun": {
           "macos": null,
-          "windows": "2026-11-14 (Phase 2 install approved by the commander, run by M4-Winpty with the pip command above against the pin then at tests/managed-files/requirements-windows.txt; not yet through setup-pywinpty.ps1)",
+          "windows": "2026-11-14 (Phase 2 install approved by the commander, run by M4-Winpty with the pip command above against the pin then at tests/managed-files/requirements-windows.txt; then scripts/setup-pywinpty.ps1 run on the same workstation: 'pywinpty 3.1.2 verified', python3 = PyManager CPython 3.14.6, exit 0)",
           "linux": null
         },
         "workarounds": [
