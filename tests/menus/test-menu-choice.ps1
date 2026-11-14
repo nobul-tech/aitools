@@ -214,19 +214,26 @@ function Setup-Dmf([string]$Name) {
 # W <relative path> <text>: write a case file (text + newline)
 function W([string]$Rel, [string]$Text) { [IO.File]::WriteAllText((Join-Path $script:C $Rel), "$Text`n") }
 # Stub-Claude: a fake AI CLI that prints a fixed valid merge. Each prompt it
-# gets is appended to bin/calls.txt, followed by a line "==CALL==".
+# gets is appended to bin/calls.txt, followed by a line "==CALL==". From the
+# 5th call on it prints nothing and exits 1 (a failed AI call), so a menu
+# regression that loops through the AI merge ends instead of hanging the suite
+# (no case here makes more than 2 calls).
 function Stub-Claude {
     $text = "# Title`nmerged line"
     if ($IsWindows) {
         # Native Windows runs a .cmd: append the prompt from stdin to calls.txt,
-        # then print the canned answer line by line
+        # stop after 4 calls, then print the canned answer line by line. find.exe
+        # by full path: on a Git Bash PATH a bare "find" is the Unix find, which
+        # walks /c (the whole drive) instead of counting lines
         $lines = ($text -split "`n" | ForEach-Object { "echo $_" }) -join "`r`n"
-        $rec = 'more >> "%~dp0calls.txt"' + "`r`n" + 'echo ==CALL==>> "%~dp0calls.txt"'
+        $rec = 'more >> "%~dp0calls.txt"' + "`r`n" + 'echo ==CALL==>> "%~dp0calls.txt"' + "`r`n" +
+            'for /f %%n in (''%SystemRoot%\System32\find.exe /c "==CALL==" ^< "%~dp0calls.txt"'') do if %%n GEQ 5 exit /b 1'
         [IO.File]::WriteAllText((Join-Path $script:C "bin/claude.cmd"), "@echo off`r`n$rec`r`n$lines`r`n")
         return
     }
     $path = Join-Path $script:C "bin/claude"
-    $rec = 'cat >> "$(dirname "$0")/calls.txt"' + "`n" + 'printf "\n==CALL==\n" >> "$(dirname "$0")/calls.txt"'
+    $rec = 'cat >> "$(dirname "$0")/calls.txt"' + "`n" + 'printf "\n==CALL==\n" >> "$(dirname "$0")/calls.txt"' + "`n" +
+        '[ "$(grep -c "==CALL==" "$(dirname "$0")/calls.txt")" -lt 5 ] || exit 1'
     [IO.File]::WriteAllText($path, "#!/usr/bin/env bash`n$rec`nprintf '%s\n' '# Title' 'merged line'`n")
     & chmod +x $path
 }

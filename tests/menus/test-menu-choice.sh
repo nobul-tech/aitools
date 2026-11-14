@@ -233,9 +233,12 @@ setup_dmf() {
     git -C "$C/repo" init -q
 }
 # stub_claude: a fake AI CLI that prints a fixed valid merge. Each prompt it
-# gets is appended to bin/calls.txt, followed by a line "==CALL==".
+# gets is appended to bin/calls.txt, followed by a line "==CALL==". From the
+# 5th call on it prints nothing and exits 1 (a failed AI call), so a menu
+# regression that loops through the AI merge ends instead of hanging the suite
+# (no case here makes more than 2 calls).
 stub_claude() {
-    printf '#!/usr/bin/env bash\ncat >> "$(dirname "$0")/calls.txt"\nprintf "\\n==CALL==\\n" >> "$(dirname "$0")/calls.txt"\nprintf "# Title\\nmerged line\\n"\n' > "$C/bin/claude"
+    printf '#!/usr/bin/env bash\ncat >> "$(dirname "$0")/calls.txt"\nprintf "\\n==CALL==\\n" >> "$(dirname "$0")/calls.txt"\n[ "$(grep -c "==CALL==" "$(dirname "$0")/calls.txt")" -lt 5 ] || exit 1\nprintf "# Title\\nmerged line\\n"\n' > "$C/bin/claude"
     chmod +x "$C/bin/claude"
 }
 # run_snip <snippet> [input]: a fresh bash sources the lib and runs the snippet.
@@ -261,6 +264,9 @@ DMF='deploy_managed_file "$(cat "$SRCF")" "$DEST" tool item "$ADOPT"; printf "%s
 # json_is <file> <compact json>: the file's JSON without whitespace (the values
 # used here have none)
 json_is() { [ "$(perl -0777 -pe 's/\s+//g' "$1")" = "$2" ]; }
+# text_is <file> <printf format>: the file's content, trailing newlines dropped,
+# equals the formatted text (the PowerShell twin's FileIs)
+text_is() { [ "$(perl -0777 -pe 's/[\r\n]+\z//' "$1")" = "$(printf "$2")" ]; }
 HAVE_NODE=true
 command -v node >/dev/null 2>&1 || HAVE_NODE=false
 
@@ -414,7 +420,7 @@ if $HAVE_PTY; then
     check "EOF at the merge preview: rejected (n), back to the review menu" \
         eval 'has "[warn] No input at prompt (EOF) -- defaulting to reject the merge (back to the review menu)" "$LOG" && has "[detail] menu answer (merge preview a.md): EOF -> n" "$LOG" && has "merge rejected -- back to the review menu" "$C/plain" && occ_is 2 "[detail] menu answer (review a.md): " "$LOG"'
     check "EOF at the merge preview, then at the review menu: overwrite, the merge not written" \
-        eval 'res_is updated && has "[detail] menu answer (review a.md): EOF -> o" "$LOG" && grep -qx "source line" "$C/dest/a.md" && ! has "merged line" "$C/dest/a.md" && ! has "merged line" "$C/repo/a.md"'
+        eval 'res_is updated && has "[detail] menu answer (review a.md): EOF -> o" "$LOG" && text_is "$C/dest/a.md" "# Title\nsource line" && ! has "merged line" "$C/dest/a.md" && ! has "merged line" "$C/repo/a.md"'
 
     # The [r]efine feedback read: EOF -> empty feedback, the merge is refined
     # (a second AI call); then EOF at the preview rejects it and EOF at the
@@ -426,7 +432,7 @@ if $HAVE_PTY; then
     check "EOF at the refine feedback: warning logged, the refine prompt has empty feedback" \
         eval 'has "[warn] No input at prompt (EOF) -- defaulting to no feedback" "$LOG" && occ_is 1 "You are refining" "$C/bin/calls.txt" && perl -0777 -ne "exit(/## User Feedback\s*## Rules/ ? 0 : 1)" "$C/bin/calls.txt"'
     check "EOF at the refine feedback: the merge refined (AI called twice), then EOF rejects it and EOF overwrites" \
-        eval 'occ_is 2 "==CALL==" "$C/bin/calls.txt" && has "[detail] menu answer (merge preview a.md): \"r\" -> r" "$LOG" && has "[detail] menu answer (merge preview a.md): EOF -> n" "$LOG" && has "[detail] menu answer (review a.md): EOF -> o" "$LOG" && res_is updated && grep -qx "source line" "$C/dest/a.md" && ! has "merged line" "$C/repo/a.md"'
+        eval 'occ_is 2 "==CALL==" "$C/bin/calls.txt" && has "[detail] menu answer (merge preview a.md): \"r\" -> r" "$LOG" && has "[detail] menu answer (merge preview a.md): EOF -> n" "$LOG" && has "[detail] menu answer (review a.md): EOF -> o" "$LOG" && res_is updated && text_is "$C/dest/a.md" "# Title\nsource line" && ! has "merged line" "$C/dest/a.md" && ! has "merged line" "$C/repo/a.md"'
 else
     printf 'SKIP real-menu pty cases (no pseudo-terminal: python3 missing, or pywinpty not installed on Windows)\n'; SKIP=$((SKIP + 1))
 fi
