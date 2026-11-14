@@ -526,7 +526,8 @@ names so provenance survives the chain (`S4-A`, prefix `S4-A-`).
 
 ## Cross-references
 
-- Governing rule: `~/.claude/rules/delegation.md` (source: dotprofile
+- Governing rule: `~/.claude/rules/delegation.md` (source: aitools
+  `shared/rules/delegation.md`, a copy of the dotprofile
   `claude/rules/delegation.md`)
 - Detection hook: `delegation-duty-guard.sh` (aitools `shared/hooks/`)
 - Claude Code limits: `/tool-ops` skill
