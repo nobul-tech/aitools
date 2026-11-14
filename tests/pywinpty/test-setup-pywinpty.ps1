@@ -12,21 +12,40 @@
 #   e  AITOOLS_PYWINPTY_PYTHON set to a missing interpreter: exit 0,
 #      WARN "python not found" + ACTION
 #   f  a fake interpreter (a .ps1 that answers the script's -c probes; pwsh runs it
-#      in-process through `& $Python @Arguments`): externally managed, venv, an
-#      uncovered tag (cp399), pip refusing (externally-managed-environment), pip
-#      failing, and pip succeeding without an importable winpty -- each with its
-#      summary rows, and no pip call where the script must refuse
+#      in-process through `& $Python @Arguments`): venv, an uncovered tag (cp399),
+#      pip failing, pip succeeding without an importable winpty, and the PEP 668
+#      paths (commander, RFI fa81-9: "fix pep" -- --target <user site>, never
+#      --break-system-packages): EXTERNALLY-MANAGED -> pip --target <user site>
+#      --upgrade, no --user, "<ver> (installed, --target)"; user site disabled, or
+#      inside prefix / base_prefix -> WARN "managed python, no user site" + ACTION,
+#      no pip call; an older pywinpty-*.dist-info in the target replaced and removed
+#      ("Removed stale"), and a locked one -> ERROR "stale dist-info not removed";
+#      pip refusing --user (externally-managed-environment) -> one --target retry
+#      (OK; refused again -> WARN; no user site -> WARN, no retry); managed dry run
+#      -> "Would run:" with --target, no pip call. Each with its summary rows.
+#      The fake records each pip argv (tab-separated, one line per call); a pip
+#      --target call that exits 0 writes <target>\winpty\__init__.py and
+#      <target>\pywinpty-<pinned>.dist-info\METADATA, and its import check reports
+#      the version of the lowest-sorted pywinpty-*.dist-info in the user site (so a
+#      stale one left behind would fail the verify)
 #   g  MDM copy: build-deploy.sh (Git Bash, temp HOME, fixture dotprofile, stub
 #      pwsh validator) generates deploy/setup-pywinpty.ps1; copied alone into an
 #      empty dir, -DryRun gives the dry-run row and "Pin: embedded in this script",
 #      a real run into a fresh APPDATA gives "<ver> (installed)" (pip -r on the
 #      temp copy of the embedded pin; the suite's pip cache saves the download)
+#   h  optional, real PEP 668 path: the uv-managed CPython (`uv python find
+#      --managed-python`) with an EXTERNALLY-MANAGED marker installs into a fresh
+#      APPDATA -> "<ver> (installed, --target)", re-run "(verified)", nothing new in
+#      its own Lib\site-packages. SKIP (also under CI=true) without uv or such a CPython
+#   z  across every case: no recorded pip argv contains --break-system-packages, and
+#      every log line that names it is the script's "is never used" disclaimer
 # a, b, c and g's runs need python3 to be a CPython the pin covers, neither a venv
 # nor EXTERNALLY-MANAGED: otherwise they are SKIP with the reason (FAIL under
 # CI=true, where the windows job provides one).
 #
-# Safe to re-run: never reads or writes the real APPDATA, HOME or dotprofile (a temp
-# root, removed on exit). Needs network for b. Platform: Windows (pwsh 7);
+# Safe to re-run: never writes the real APPDATA, HOME or dotprofile, and reads none
+# of them except to run the uv-managed CPython that may live under %APPDATA%\uv (h)
+# (a temp root, removed on exit). Needs network for b. Platform: Windows (pwsh 7);
 # setup-pywinpty.ps1 is Windows-guarded, so on macOS/Linux the suite prints one
 # SKIP line and exits 0 (CI runs it on the windows job only,
 # plans/ci-platform-targeting.md). Exit 1 if any case fails.
@@ -34,7 +53,10 @@
 # Usage: pwsh -NoProfile -File tests/pywinpty/test-setup-pywinpty.ps1 [-Help]
 
 param([switch]$Help)
-if ($Help) { Get-Content $PSCommandPath -TotalCount 34 | Select-Object -Skip 1; exit 0 }
+if ($Help) {
+    foreach ($l in @(Get-Content $PSCommandPath | Select-Object -Skip 1)) { if ($l -notmatch '^#') { break }; $l }
+    exit 0
+}
 
 if (-not $IsWindows) {
     Write-Output "SKIP test-setup-pywinpty.ps1 -- setup-pywinpty.ps1 is Windows-guarded; on macOS/Linux tests/pywinpty/test-setup-pywinpty.sh covers setup-pywinpty.sh"
@@ -76,6 +98,8 @@ function Skip([string]$Name, [string]$Reason) {
     if ($onCI) { Write-Output "FAIL $Name -- $Reason (not allowed under CI)"; $script:fail++ }
     else { Write-Output "SKIP $Name -- $Reason"; $script:skip++ }
 }
+# Optional extras (case h): SKIP everywhere, CI included
+function OptSkip([string]$Name, [string]$Reason) { Write-Output "SKIP $Name -- $Reason (optional)"; $script:skip++ }
 
 # Pinned version and covered tags, from the pin itself
 $pinText = [IO.File]::ReadAllText($pin)
@@ -192,15 +216,33 @@ try {
 
     # --- f: fake interpreter -------------------------------------------------------
     # Answers the script's three -c calls (run check, probe, import check) from
-    # FAKE_PY_* variables; a pip call is appended to FAKE_PY_CALLS and answered
-    # with FAKE_PY_PIP_RC / FAKE_PY_PIP_OUT.
+    # FAKE_PY_* variables. A pip call is appended to FAKE_PY_CALLS (one line per
+    # call: "pip" and each argument, tab-separated) and answered with FAKE_PY_PIP_RC /
+    # FAKE_PY_PIP_OUT, or FAKE_PY_PIP_USER_RC / FAKE_PY_PIP_USER_OUT for a --user call
+    # when FAKE_PY_PIP_USER_RC is set. A --target call that exits 0 writes a minimal
+    # install into the target (winpty\__init__.py, pywinpty-FAKE_PY_PIN_VER.dist-info);
+    # a --user call writes nothing. The import check answers from the user site's
+    # state: importable when winpty\__init__.py and a pywinpty-*.dist-info exist there,
+    # reporting the lowest-sorted dist-info's version (a stale older one shadows).
     $fake = Join-Path $tmpRoot "fake-python.ps1"
     [IO.File]::WriteAllText($fake, @'
 $joined = $args -join ' '
 if ($args[0] -eq '-m' -and $args[1] -eq 'pip') {
-    [IO.File]::AppendAllText($env:FAKE_PY_CALLS, "pip $joined`n")
-    if ($env:FAKE_PY_PIP_OUT) { Write-Output $env:FAKE_PY_PIP_OUT }
-    exit ([int]$env:FAKE_PY_PIP_RC)
+    [IO.File]::AppendAllText($env:FAKE_PY_CALLS, "pip`t" + ($args -join "`t") + "`n")
+    $rc = [int]$env:FAKE_PY_PIP_RC
+    $out = $env:FAKE_PY_PIP_OUT
+    if (($args -contains '--user') -and $env:FAKE_PY_PIP_USER_RC) { $rc = [int]$env:FAKE_PY_PIP_USER_RC; $out = $env:FAKE_PY_PIP_USER_OUT }
+    $ti = [array]::IndexOf($args, '--target')
+    if ($rc -eq 0 -and $ti -ge 0) {
+        $t = "$($args[$ti + 1])"
+        New-Item -ItemType Directory -Path (Join-Path $t 'winpty') -Force | Out-Null
+        [IO.File]::WriteAllText((Join-Path $t 'winpty\__init__.py'), "")
+        $di = Join-Path $t "pywinpty-$env:FAKE_PY_PIN_VER.dist-info"
+        New-Item -ItemType Directory -Path $di -Force | Out-Null
+        [IO.File]::WriteAllText((Join-Path $di 'METADATA'), "Name: pywinpty`nVersion: $env:FAKE_PY_PIN_VER`n")
+    }
+    if ($out) { Write-Output $out }
+    exit $rc
 }
 $code = "$($args[1])"
 if ($code -match 'externally_managed') {
@@ -211,10 +253,21 @@ if ($code -match 'externally_managed') {
     Write-Output "venv=$env:FAKE_PY_VENV"
     Write-Output "externally_managed=$env:FAKE_PY_EM"
     Write-Output "user_site=$env:FAKE_PY_USER_SITE"
-    Write-Output 'user_site_enabled=True'
+    Write-Output "user_site_enabled=$env:FAKE_PY_USER_SITE_ENABLED"
+    Write-Output "prefix=$env:FAKE_PY_PREFIX"
+    Write-Output "base_prefix=$env:FAKE_PY_BASE_PREFIX"
     exit 0
 }
 if ($code -match 'winpty') {
+    $us = $env:FAKE_PY_USER_SITE
+    if ($us -and (Test-Path -LiteralPath (Join-Path $us 'winpty\__init__.py'))) {
+        $di = @(Get-ChildItem -LiteralPath $us -Directory -Filter 'pywinpty-*.dist-info' | Sort-Object Name)
+        if ($di.Count -gt 0) {
+            Write-Output ('version=' + ($di[0].Name -replace '^pywinpty-(.+)\.dist-info$', '$1'))
+            Write-Output ('file=' + (Join-Path $us 'winpty\__init__.py'))
+            exit 0
+        }
+    }
     Write-Output "ModuleNotFoundError: No module named 'winpty'"
     exit 1
 }
@@ -224,24 +277,86 @@ exit 3
 '@)
 
     # (PowerShell names are case-insensitive: the parameter must not be called $Fake)
+    function FakeSite([string]$Name) { Join-Path $tmpRoot "$Name\appdata\Python\Python312\site-packages" }
     function Run-Fake([string]$Name, [hashtable]$Over) {
         $calls = Join-Path $tmpRoot "$Name.calls"
         [IO.File]::WriteAllText($calls, "")
         $e = @{
             AITOOLS_PYWINPTY_PYTHON = $fake; FAKE_PY_CALLS = $calls; FAKE_PY_TAG = "cp312-win_amd64"; FAKE_PY_VENV = "False"; FAKE_PY_EM = "False"
-            FAKE_PY_USER_SITE = (Join-Path $tmpRoot "$Name\appdata\Python\Python312\site-packages"); FAKE_PY_PIP_RC = "0"; FAKE_PY_PIP_OUT = ""
+            FAKE_PY_USER_SITE = (FakeSite $Name); FAKE_PY_USER_SITE_ENABLED = "True"; FAKE_PY_PIN_VER = $pinVer
+            FAKE_PY_PREFIX = (Join-Path $tmpRoot "fake-py-home"); FAKE_PY_BASE_PREFIX = (Join-Path $tmpRoot "fake-py-home")
+            FAKE_PY_PIP_RC = "0"; FAKE_PY_PIP_OUT = ""; FAKE_PY_PIP_USER_RC = $null; FAKE_PY_PIP_USER_OUT = $null
         }
         foreach ($k in $Over.Keys) { $e[$k] = $Over[$k] }
         $c = Run-Setup -Name $Name -ScriptPath $setup -Env $e
         foreach ($k in $e.Keys) { if ($k -like "FAKE_PY_*") { [Environment]::SetEnvironmentVariable($k, $null) } }
         return $c
     }
-    function PipCalls([string]$Name) { @([IO.File]::ReadAllLines((Join-Path $tmpRoot "$Name.calls")) | Where-Object { $_ }).Count }
+    # Recorded pip calls of a fake case: one string[] of arguments per call
+    function PipArgv([string]$Name) {
+        foreach ($l in @([IO.File]::ReadAllLines((Join-Path $tmpRoot "$Name.calls")) | Where-Object { $_ })) { , @($l.Split("`t") | Select-Object -Skip 1) }
+    }
+    function PipCalls([string]$Name) { @(PipArgv $Name).Count }
+    # --target <Dir> --upgrade, no --user, and the hash-pinned wheel-only flags with the repo pin
+    function IsTargetArgv([string[]]$A, [string]$Dir) {
+        $i = [array]::IndexOf($A, '--target')
+        $i -ge 0 -and $A[$i + 1] -eq $Dir -and ($A -contains '--upgrade') -and -not ($A -contains '--user') -and
+            ($A -contains '--only-binary=:all:') -and ($A -contains '--require-hashes') -and ($A -contains '--no-input') -and
+            ($A[0] -eq '-m') -and ($A[1] -eq 'pip') -and ($A[2] -eq 'install') -and ($A[-2] -eq '-r') -and ($A[-1] -eq $pin)
+    }
+    function DistInfos([string]$Dir) { @(Get-ChildItem -LiteralPath $Dir -Directory -Filter 'pywinpty-*.dist-info' -ErrorAction SilentlyContinue | ForEach-Object { $_.Name } | Sort-Object) }
+    $emWarn = "WARN|pywinpty|managed python, no user site"
+    $emAction = '^ACTION\|\|Run once with a non-managed CPython 3\.12 .*AITOOLS_PYWINPTY_PYTHON'
+    $targetRow = "OK|pywinpty|$pinVer (installed, --target)"
 
+    # 1. EXTERNALLY-MANAGED, user site enabled and outside prefix: --target <user site>
+    $us = FakeSite "f-em"
     $c = Run-Fake "f-em" @{ FAKE_PY_EM = "True" }
-    Check "f fake externally managed: exit 0" ((Rc $c) -eq "0")
-    Check "f fake externally managed: rows WARN 'python externally managed' + ACTION naming AITOOLS_PYWINPTY_PYTHON" ((HasRow $c "WARN|pywinpty|python externally managed") -and (RowLike $c '^ACTION\|\|Run once with a non-managed CPython 3\.12 .*AITOOLS_PYWINPTY_PYTHON') -and (Rows $c).Count -eq 2)
-    Check "f fake externally managed: the fake interpreter was used, no pip call" ((LogText $c).Contains("Interpreter: AITOOLS_PYWINPTY_PYTHON -> $fake") -and (PipCalls "f-em") -eq 0 -and -not (LogText $c).Contains("Running: "))
+    $a = @(PipArgv "f-em")
+    Check "f fake externally managed: exit 0, one row '$targetRow'" ((Rc $c) -eq "0" -and (@(Rows $c) -join "`n") -ceq $targetRow)
+    Check "f fake externally managed: the fake interpreter was used, log 'Install mode: --target <user site>'" ((LogText $c).Contains("Interpreter: AITOOLS_PYWINPTY_PYTHON -> $fake") -and (LogText $c).Contains("Install mode: --target $us -- "))
+    Check "f fake externally managed: one pip call, --target <user site> --upgrade, no --user, hash-pinned with the repo pin" ($a.Count -eq 1 -and (IsTargetArgv $a[0] $us))
+    Check "f fake externally managed: the import verify found winpty $pinVer in the user site" ((LogText $c).Contains("pywinpty $pinVer installed with --target (winpty at $us\winpty\__init__.py)") -and ((DistInfos $us) -join ',') -eq "pywinpty-$pinVer.dist-info")
+
+    # 2. EXTERNALLY-MANAGED, user site disabled
+    $c = Run-Fake "f-em-nosite" @{ FAKE_PY_EM = "True"; FAKE_PY_USER_SITE_ENABLED = "False" }
+    Check "f fake externally managed, user site disabled: exit 0, rows WARN 'managed python, no user site' + ACTION naming AITOOLS_PYWINPTY_PYTHON" ((Rc $c) -eq "0" -and (HasRow $c $emWarn) -and (RowLike $c $emAction) -and (Rows $c).Count -eq 2)
+    Check "f fake externally managed, user site disabled: reason logged, no pip call" ((LogText $c).Contains("its user site is disabled (site.ENABLE_USER_SITE is False)") -and (PipCalls "f-em-nosite") -eq 0 -and -not (LogText $c).Contains("Running: "))
+
+    # 3. EXTERNALLY-MANAGED, user site inside prefix (and inside base_prefix)
+    $ph = Join-Path $tmpRoot "f-em-inprefix-home"
+    $c = Run-Fake "f-em-inprefix" @{ FAKE_PY_EM = "True"; FAKE_PY_PREFIX = $ph; FAKE_PY_USER_SITE = (Join-Path $ph "Lib\site-packages") }
+    Check "f fake externally managed, user site inside prefix: exit 0, rows WARN 'managed python, no user site' + ACTION, no pip call" ((Rc $c) -eq "0" -and (HasRow $c $emWarn) -and (RowLike $c $emAction) -and (Rows $c).Count -eq 2 -and (PipCalls "f-em-inprefix") -eq 0 -and (LogText $c).Contains("is inside its install tree $ph"))
+    $bh = Join-Path $tmpRoot "f-em-inbase-home"
+    $c = Run-Fake "f-em-inbase" @{ FAKE_PY_EM = "True"; FAKE_PY_BASE_PREFIX = $bh; FAKE_PY_USER_SITE = (Join-Path $bh "lib\site-packages") }
+    Check "f fake externally managed, user site inside base_prefix: exit 0, rows WARN 'managed python, no user site' + ACTION, no pip call" ((Rc $c) -eq "0" -and (HasRow $c $emWarn) -and (RowLike $c $emAction) -and (Rows $c).Count -eq 2 -and (PipCalls "f-em-inbase") -eq 0 -and (LogText $c).Contains("is inside its install tree $bh"))
+
+    # 4. an older pywinpty in the target: replaced, its dist-info removed
+    $us = FakeSite "f-em-replace"
+    New-Item -ItemType Directory -Path (Join-Path $us "winpty"), (Join-Path $us "pywinpty-3.1.1.dist-info") -Force | Out-Null
+    [IO.File]::WriteAllText((Join-Path $us "winpty\__init__.py"), "")
+    [IO.File]::WriteAllText((Join-Path $us "pywinpty-3.1.1.dist-info\METADATA"), "Name: pywinpty`nVersion: 3.1.1`n")
+    $c = Run-Fake "f-em-replace" @{ FAKE_PY_EM = "True"; FAKE_PY_PIP_OUT = "Successfully installed pywinpty-$pinVer" }
+    $a = @(PipArgv "f-em-replace")
+    Check "f fake externally managed, 3.1.1 in the target: exit 0, one row '$targetRow'" ((Rc $c) -eq "0" -and (@(Rows $c) -join "`n") -ceq $targetRow)
+    Check "f fake externally managed, 3.1.1 in the target: seen before pip, one pip call --target <user site> --upgrade" ((LogText $c).Contains("pywinpty 3.1.1 is installed") -and $a.Count -eq 1 -and (IsTargetArgv $a[0] $us))
+    Check "f fake externally managed, 3.1.1 in the target: only pywinpty-$pinVer.dist-info left, log 'Removed stale pywinpty-3.1.1.dist-info'" (((DistInfos $us) -join ',') -eq "pywinpty-$pinVer.dist-info" -and (LogText $c).Contains("Removed stale pywinpty-3.1.1.dist-info from $us (pinned $pinVer)"))
+
+    # 4b. the stale dist-info cannot be removed (a file in it held open without sharing)
+    $us = FakeSite "f-em-locked"
+    New-Item -ItemType Directory -Path (Join-Path $us "pywinpty-3.1.1.dist-info") -Force | Out-Null
+    $lockFile = Join-Path $us "pywinpty-3.1.1.dist-info\METADATA"
+    [IO.File]::WriteAllText($lockFile, "Name: pywinpty`nVersion: 3.1.1`n")
+    $lock = [IO.File]::Open($lockFile, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::None)
+    try { $c = Run-Fake "f-em-locked" @{ FAKE_PY_EM = "True" } } finally { $lock.Dispose() }
+    Check "f fake externally managed, stale dist-info locked: exit 1, one row 'ERROR|pywinpty|stale dist-info not removed', one pip call" ((Rc $c) -eq "1" -and (@(Rows $c) -join "`n") -ceq "ERROR|pywinpty|stale dist-info not removed" -and (PipCalls "f-em-locked") -eq 1 -and (LogText $c).Contains("Could not remove stale "))
+
+    # 7. managed dry run: the --target command is shown, not run
+    $us = FakeSite "f-em-dryrun"
+    $c = Run-Fake "f-em-dryrun" @{ FAKE_PY_EM = "True"; AITOOLS_DRY_RUN = "1" }
+    $wr = @((LogText $c) -split "`r?`n" | Where-Object { $_.Contains("[DRY RUN] Would run: ") })
+    Check "f fake externally managed, dry run: exit 0, one row 'OK|pywinpty|dry-run: would install $pinVer'" ((Rc $c) -eq "0" -and (@(Rows $c) -join "`n") -ceq "OK|pywinpty|dry-run: would install $pinVer")
+    Check "f fake externally managed, dry run: 'Would run:' has --target <user site> --upgrade and no --user; no pip call, nothing in the user site" ($wr.Count -eq 1 -and $wr[0].Contains("-m pip install --target $us --upgrade ") -and -not $wr[0].Contains("--user") -and (PipCalls "f-em-dryrun") -eq 0 -and -not (LogText $c).Contains("Running: ") -and -not (Test-Path -LiteralPath $us))
 
     $c = Run-Fake "f-venv" @{ FAKE_PY_VENV = "True" }
     Check "f fake venv: exit 0, rows WARN 'venv python, --user refused' + ACTION, no pip call" ((Rc $c) -eq "0" -and (HasRow $c "WARN|pywinpty|venv python, --user refused") -and (RowLike $c '^ACTION\|\|Deactivate the virtual environment') -and (Rows $c).Count -eq 2 -and (PipCalls "f-venv") -eq 0)
@@ -249,8 +364,22 @@ exit 3
     $c = Run-Fake "f-tag" @{ FAKE_PY_TAG = "cp399-win_amd64" }
     Check "f fake uncovered tag: exit 0, rows WARN 'no wheel for cp399-win_amd64' + ACTION, no pip call" ((Rc $c) -eq "0" -and (HasRow $c "WARN|pywinpty|no wheel for cp399-win_amd64") -and (RowLike $c '^ACTION\|\|Python 3\.12\.7 \(cp399-win_amd64\) has no pinned pywinpty wheel') -and (Rows $c).Count -eq 2 -and (PipCalls "f-tag") -eq 0)
 
-    $c = Run-Fake "f-pip-em" @{ FAKE_PY_PIP_RC = "1"; FAKE_PY_PIP_OUT = "error: externally-managed-environment" }
-    Check "f fake pip refuses (externally-managed-environment): exit 0, WARN 'python externally managed' + ACTION, one pip call" ((Rc $c) -eq "0" -and (HasRow $c "WARN|pywinpty|python externally managed") -and (RowLike $c '^ACTION\|\|Run once with a non-managed CPython') -and (PipCalls "f-pip-em") -eq 1)
+    # 5. not managed per the probe, but pip refuses --user: one --target retry
+    $us = FakeSite "f-pip-em"
+    $c = Run-Fake "f-pip-em" @{ FAKE_PY_PIP_USER_RC = "1"; FAKE_PY_PIP_USER_OUT = "error: externally-managed-environment"; FAKE_PY_PIP_OUT = "Successfully installed pywinpty-$pinVer" }
+    $a = @(PipArgv "f-pip-em")
+    Check "f fake pip refuses --user (externally-managed-environment): exit 0, one row '$targetRow'" ((Rc $c) -eq "0" -and (@(Rows $c) -join "`n") -ceq $targetRow)
+    Check "f fake pip refuses --user: two pip calls, --user then --target <user site> --upgrade" ($a.Count -eq 2 -and ($a[0] -contains '--user') -and -not ($a[0] -contains '--target') -and (IsTargetArgv $a[1] $us))
+    Check "f fake pip refuses --user: log 'Install mode: --target <user site> -- pip reported externally-managed-environment for --user'" ((LogText $c).Contains("Install mode: --user -- ") -and (LogText $c).Contains("Install mode: --target $us -- pip reported externally-managed-environment for --user"))
+
+    # 5b. pip refuses --user and the user site is disabled: WARN, no retry
+    $c = Run-Fake "f-pip-em-nosite" @{ FAKE_PY_USER_SITE_ENABLED = "False"; FAKE_PY_PIP_RC = "1"; FAKE_PY_PIP_OUT = "error: externally-managed-environment" }
+    Check "f fake pip refuses --user, user site disabled: exit 0, rows WARN 'managed python, no user site' + ACTION, one pip call (--user)" ((Rc $c) -eq "0" -and (HasRow $c $emWarn) -and (RowLike $c $emAction) -and (Rows $c).Count -eq 2 -and (PipCalls "f-pip-em-nosite") -eq 1 -and (@(PipArgv "f-pip-em-nosite")[0] -contains '--user'))
+
+    # 5c. pip refuses --user and then --target as well: WARN after the one retry
+    $c = Run-Fake "f-pip-em-both" @{ FAKE_PY_PIP_RC = "1"; FAKE_PY_PIP_OUT = "error: externally-managed-environment" }
+    $a = @(PipArgv "f-pip-em-both")
+    Check "f fake pip refuses --user and --target: exit 0, rows WARN 'pip refused (PEP 668)' + ACTION, two pip calls (--user, --target)" ((Rc $c) -eq "0" -and (HasRow $c "WARN|pywinpty|pip refused (PEP 668)") -and (RowLike $c $emAction) -and (Rows $c).Count -eq 2 -and $a.Count -eq 2 -and ($a[0] -contains '--user') -and (IsTargetArgv $a[1] (FakeSite "f-pip-em-both")) -and (LogText $c).Contains("pip refused the install (target mode)"))
 
     $c = Run-Fake "f-pip-fail" @{ FAKE_PY_PIP_RC = "2"; FAKE_PY_PIP_OUT = "ERROR: THESE PACKAGES DO NOT MATCH THE HASHES" }
     Check "f fake pip fails: exit 1, one row 'ERROR|pywinpty|pip install failed (exit 2)'" ((Rc $c) -eq "1" -and (@(Rows $c) -join "`n") -ceq "ERROR|pywinpty|pip install failed (exit 2)")
@@ -319,6 +448,56 @@ exit 3
             Skip "g MDM copy runs (-DryRun, install)" $pyReason
         }
     }
+
+    # --- h: optional, the real PEP 668 path (uv-managed CPython) -----------------------
+    $hName = "h uv-managed CPython (EXTERNALLY-MANAGED): --target install into a fresh APPDATA"
+    $uv = Get-Command uv -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    # Get-Command exempt: command-existence check; $null selects the optional SKIP below
+    $hPy = $null; $hReason = $null; $hi = @{}
+    if (-not $uv) { $hReason = "uv is not on PATH" }
+    else {
+        Push-Location -LiteralPath $tmpRoot
+        try { $found = @(& $uv.Source python find --managed-python 2>&1); $foundRc = $LASTEXITCODE } finally { Pop-Location }
+        $hPy = @($found | ForEach-Object { "$_".Trim() } | Where-Object { $_ -match '\.exe$' -and (Test-Path -LiteralPath $_ -PathType Leaf) }) | Select-Object -Last 1
+        if ($foundRc -ne 0 -or -not $hPy) { $hReason = "uv finds no managed CPython (exit $foundRc)"; $hPy = $null }
+        else {
+            $hLines = @(& $hPy -c ($probe + "; print('prefix=' + sys.prefix)") 2>&1)
+            if ($LASTEXITCODE -ne 0) { $hReason = "$hPy does not run (exit $LASTEXITCODE)" }
+            else {
+                foreach ($l in $hLines) { if ("$l" -match '^([a-z]+)=(.*)$') { $hi[$Matches[1]] = $Matches[2].Trim() } }
+                if ($hi.em -ne "True") { $hReason = "$hPy has no EXTERNALLY-MANAGED marker" }
+                elseif ($hi.venv -eq "True") { $hReason = "$hPy is a venv" }
+                elseif ($pinTags -notcontains $hi.tag) { $hReason = "$hPy is $($hi.tag), not covered by the pin" }
+            }
+        }
+    }
+    if ($hReason) {
+        OptSkip $hName $hReason
+    } else {
+        $hSite = Join-Path $hi.prefix "Lib\site-packages"
+        $hBefore = @(Get-ChildItem -LiteralPath $hSite -Force -ErrorAction SilentlyContinue | ForEach-Object { $_.Name } | Sort-Object) -join "|"
+        # SilentlyContinue: a missing site-packages lists nothing before and after alike
+        $hAppData = Join-Path $tmpRoot "h-appdata"
+        $t0 = Get-Date
+        $c = Run-Setup -Name "h-uv-install" -ScriptPath $setup -AppData $hAppData -Env @{ AITOOLS_PYWINPTY_PYTHON = $hPy }
+        $hSecs = [int]((Get-Date) - $t0).TotalSeconds
+        Check "h uv $hPy ($($hi.tag)): exit 0, one row '$targetRow' ($hSecs s)" ((Rc $c) -eq "0" -and (@(Rows $c) -join "`n") -ceq $targetRow)
+        Check "h uv: log 'Install mode: --target <temp APPDATA user site>', pip ran --target --upgrade, no --user" ((LogText $c) -match ("Install mode: --target " + [regex]::Escape($hAppData) + "\\Python\\Python\d+t?\\site-packages -- ") -and (LogText $c) -match ("Running: .* -m pip install --target " + [regex]::Escape($hAppData) + "\S* --upgrade ") -and -not ((LogText $c) -match "Running: .* --user "))
+        Check "h uv: winpty landed in the temp APPDATA user site" (WinptyIn $hAppData)
+        $c = Run-Setup -Name "h-uv-rerun" -ScriptPath $setup -AppData $hAppData -Env @{ AITOOLS_PYWINPTY_PYTHON = $hPy }
+        Check "h uv re-run: exit 0, one row 'OK|pywinpty|$pinVer (verified)', no 'Running:' pip line" ((Rc $c) -eq "0" -and (@(Rows $c) -join "`n") -ceq "OK|pywinpty|$pinVer (verified)" -and -not (LogText $c).Contains("Running: "))
+        $hAfter = @(Get-ChildItem -LiteralPath $hSite -Force -ErrorAction SilentlyContinue | ForEach-Object { $_.Name } | Sort-Object) -join "|"
+        Check "h uv: the interpreter's own Lib\site-packages unchanged (top-level entries)" ($hBefore -eq $hAfter -and -not ($hAfter -match '(^|\|)(winpty|pywinpty-)'))
+    }
+
+    # --- z: never --break-system-packages ------------------------------------------
+    $callFiles = @(Get-ChildItem -LiteralPath $tmpRoot -File -Filter "*.calls")
+    $argvLines = @($callFiles | ForEach-Object { [IO.File]::ReadAllLines($_.FullName) } | Where-Object { $_ })
+    Check "z no recorded pip argv ($($argvLines.Count) calls, $($callFiles.Count) fake cases) contains --break-system-packages" ($argvLines.Count -gt 0 -and -not ($argvLines | Where-Object { $_.Split("`t") -contains '--break-system-packages' }))
+    $caseLogs = @(Get-ChildItem -LiteralPath $tmpRoot -Recurse -File -Filter "deploy.log")
+    $bsp = @($caseLogs | ForEach-Object { [IO.File]::ReadAllLines($_.FullName) } | Where-Object { $_.Contains("--break-system-packages") })
+    $bspUse = @($bsp | Where-Object { -not $_.Contains("--break-system-packages is never used") })
+    Check "z every case log ($($caseLogs.Count)): --break-system-packages appears only in the 'is never used' disclaimer ($($bsp.Count) lines), never in a pip command" ($caseLogs.Count -gt 0 -and $bspUse.Count -eq 0)
 } finally {
     Remove-Item -LiteralPath $tmpRoot -Recurse -Force -ErrorAction SilentlyContinue
     if (Test-Path -LiteralPath $tmpRoot) { Write-Output "warning: could not remove $tmpRoot" }

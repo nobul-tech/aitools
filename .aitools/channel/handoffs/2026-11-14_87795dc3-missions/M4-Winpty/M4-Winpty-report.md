@@ -1,6 +1,16 @@
 # M4-Winpty report: pywinpty adopted as a managed Windows library on all three deployment paths
 
-Version 1.0 (2026-11-14). Author: M4-Winpty, delegated by Session Commander 87795dc3-e.
+Version 1.1 (2026-11-14). Author: M4-Winpty, delegated by Session Commander 87795dc3-e.
+
+v1.1: open question 1 (PEP 668) decided by the commander, RFI fa81-9, verbatim: "fix pep,
+add it to same branch commit, watch ci/cd, fix any errors, merge when ready" -- option (b)
+implemented in this PR: for an EXTERNALLY-MANAGED interpreter `setup-pywinpty.ps1` installs
+with `pip install --target <its user site> --upgrade ...` (never `--break-system-packages`,
+never into the install tree), removes stale `pywinpty-*.dist-info`, verifies by import.
+Verified against uv CPython 3.14.10 in an isolated APPDATA (install, verified re-run, stale
+3.1.1 dist-info replaced, `PYTHONNOUSERSITE=1` -> WARN, uv's tree unchanged); real run on
+the workstation still "verified". The order also authorised merging PR #148 (merge commit
+and main's CI result: in the final hand-back).
 
 **Intent**: **Purpose**: Record what mission M4-Winpty delivered and how it was verified,
 and the decisions it leaves for the commander. **Scope**: the pywinpty adoption (pin, setup
@@ -130,7 +140,7 @@ The report commit itself triggers one more run; its result is in the final hand-
 
 ## Open questions (with suggested answers)
 
-1. **PEP 668 on an aitools-built machine.** Step 15 (`setup-python.ps1`, `uv python install
+1. **PEP 668 on an aitools-built machine.** (Decided in v1.1: option (b), implemented.) Step 15 (`setup-python.ps1`, `uv python install
    --default`) makes `python3` the uv CPython, which carries EXTERNALLY-MANAGED; `python3 -m
    pip install --dry-run --user ... -r scripts/requirements-pywinpty.txt` exits 1 with
    "error: externally-managed-environment ... This Python installation is managed by uv and

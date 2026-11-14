@@ -7,11 +7,21 @@
 # Install source, version and health flags: the /tool-registry skill, entry "pywinpty".
 # Evaluation: reference/evaluations/pywinpty-windows-2026-11-13.md.
 #
-# Command (commander, RFI fa81-7, 2026-11-14; the last two flags only silence pip):
-#   <python> -m pip install --user --only-binary=:all: --require-hashes
-#            --disable-pip-version-check --no-input -r <pin>
-# Never --break-system-packages, never --target: an EXTERNALLY-MANAGED interpreter
-# (PEP 668) is reported as WARN + ACTION and left untouched.
+# Commands (the last two flags only silence pip):
+#   unmanaged interpreter (commander, RFI fa81-7, 2026-11-14):
+#     <python> -m pip install --user --only-binary=:all: --require-hashes
+#              --disable-pip-version-check --no-input -r <pin>
+#   EXTERNALLY-MANAGED interpreter (PEP 668; e.g. the uv CPython that aitools Step 15
+#   makes python3) -- commander, RFI fa81-9, 2026-11-14: "fix pep":
+#     <python> -m pip install --target <its user site> --upgrade --only-binary=:all:
+#              --require-hashes --disable-pip-version-check --no-input -r <pin>
+#   pip skips the PEP 668 check for --target by design (pip/_internal/commands/install.py:
+#   check_externally_managed() runs only when target_dir, prefix_path and root_path are
+#   None). The user site is outside the interpreter's install tree, and that interpreter
+#   reads it; --upgrade replaces an existing pywinpty there, and stale pywinpty-*.dist-info
+#   directories of other versions are removed after the install. Refused (WARN + ACTION):
+#   user site disabled for the interpreter, or a user site inside its install tree.
+#   Never --break-system-packages; never a write into the interpreter's install tree.
 #
 # Writes: the pywinpty package in the interpreter's user site (%APPDATA%\Python\PythonXY\
 #   site-packages) through pip. No config file is written.
@@ -28,12 +38,11 @@
 # python3 is tried first (first match on PATH, which must run: the Microsoft Store
 # WindowsApps stub does not), then python. On CI (actions/setup-python) and on a
 # PyManager workstation both names resolve to the same interpreter. aitools install
-# Step 15 makes python3 the uv-managed CPython, which is EXTERNALLY-MANAGED: pip
-# refuses it (WARN + ACTION). The user site is shared by every CPython of one
-# major.minor, so the remedy is one run with a non-managed CPython of that version:
-#   $env:AITOOLS_PYWINPTY_PYTHON='<path>\python.exe'; pwsh -File scripts\setup-pywinpty.ps1
-# AITOOLS_PYWINPTY_PYTHON is that documented remedy and the test override; when it is
-# set, only that interpreter is used.
+# Step 15 makes python3 the uv-managed CPython, which is EXTERNALLY-MANAGED: pip refuses
+# --user there, so the script installs with --target into that interpreter's user site
+# (above). The user site is shared by every CPython of one major.minor.
+# AITOOLS_PYWINPTY_PYTHON overrides the interpreter (tests; or to install for a specific
+# CPython); when it is set, only that interpreter is used.
 #
 # Usage: setup-pywinpty.ps1 [-DryRun]   (AITOOLS_DRY_RUN=1 is the same)
 
@@ -93,20 +102,65 @@ function ConvertFrom-KeyValueLines([string[]]$Lines) {
 # Python one-liners. No double quotes inside (native argument passing). '' and '.' are
 # dropped from sys.path so a winpty module in the current directory cannot pass as installed.
 $probeCode = @'
-import sys, os, site, sysconfig; tag = 'cp%d%d' % sys.version_info[:2] + ('t' if sysconfig.get_config_var('Py_GIL_DISABLED') else '') + '-' + sysconfig.get_platform().replace('-', '_').replace('.', '_'); print('version=' + sys.version.split()[0]); print('majmin=%d.%d' % sys.version_info[:2]); print('executable=' + sys.executable); print('tag=' + tag); print('venv=' + str(sys.prefix != sys.base_prefix)); print('externally_managed=' + str(os.path.isfile(os.path.join(sysconfig.get_path('stdlib'), 'EXTERNALLY-MANAGED')))); print('user_site=' + str(site.getusersitepackages())); print('user_site_enabled=' + str(site.ENABLE_USER_SITE))
+import sys, os, site, sysconfig; tag = 'cp%d%d' % sys.version_info[:2] + ('t' if sysconfig.get_config_var('Py_GIL_DISABLED') else '') + '-' + sysconfig.get_platform().replace('-', '_').replace('.', '_'); print('version=' + sys.version.split()[0]); print('majmin=%d.%d' % sys.version_info[:2]); print('executable=' + sys.executable); print('tag=' + tag); print('venv=' + str(sys.prefix != sys.base_prefix)); print('externally_managed=' + str(os.path.isfile(os.path.join(sysconfig.get_path('stdlib'), 'EXTERNALLY-MANAGED')))); print('user_site=' + str(site.getusersitepackages())); print('user_site_enabled=' + str(site.ENABLE_USER_SITE)); print('prefix=' + sys.prefix); print('base_prefix=' + sys.base_prefix)
 '@
 $importCode = @'
 import sys; sys.path[:] = [p for p in sys.path if p not in ('', '.')]; import importlib.metadata as m, winpty; print('version=' + m.version('pywinpty')); print('file=' + winpty.__file__)
 '@
 
-# WARN + ACTION for an EXTERNALLY-MANAGED interpreter (marker found, or pip refused).
+# WARN + ACTION for an EXTERNALLY-MANAGED interpreter that has no usable user site for
+# the --target install (disabled, or inside the interpreter's install tree).
 function Write-ExternallyManaged {
-    param([string]$Python, [string]$MajMin, [string]$UserSite)
-    LogWarn "$Python is EXTERNALLY-MANAGED (PEP 668): pip refuses to install into it, --user included. Not overridden (--break-system-packages is never used)."
-    Write-Summary "WARN" "pywinpty" "python externally managed"
-    $action = 'Run once with a non-managed CPython ' + $MajMin + ' (python.org or PyManager): $env:AITOOLS_PYWINPTY_PYTHON=''<path>\python.exe''; pwsh -File ' + $PSCommandPath + ' -- its --user install lands in ' + $UserSite + ', which ' + $Python + ' also reads'
+    param([string]$Python, [string]$MajMin, [string]$Reason, [string]$Row = "managed python, no user site")
+    LogWarn "$Python is EXTERNALLY-MANAGED (PEP 668) and $Reason -- nothing installed (--break-system-packages is never used, and nothing is written into the interpreter's install tree)"
+    Write-Summary "WARN" "pywinpty" $Row
+    $action = 'Run once with a non-managed CPython ' + $MajMin + ' (python.org or PyManager): $env:AITOOLS_PYWINPTY_PYTHON=''<path>\python.exe''; pwsh -File ' + $PSCommandPath + ' -- or enable the user site for ' + $Python
     LogWarn $action
     Write-Summary "ACTION" "" $action
+}
+
+# Can an EXTERNALLY-MANAGED interpreter take the --target install into its user site?
+# Returns the reason it cannot, or $null when it can.
+function Get-TargetRefusal {
+    param([hashtable]$Info)
+    if ($Info['user_site_enabled'] -ne 'True') { return "its user site is disabled (site.ENABLE_USER_SITE is $($Info['user_site_enabled']))" }
+    $us = $Info['user_site']
+    if ([string]::IsNullOrWhiteSpace($us)) { return "it reports no user site" }
+    try {
+        $usFull = [IO.Path]::GetFullPath($us).TrimEnd('\', '/') + '\'
+        foreach ($p in @($Info['prefix'], $Info['base_prefix'])) {
+            if ([string]::IsNullOrWhiteSpace($p)) { continue }
+            $pFull = [IO.Path]::GetFullPath($p).TrimEnd('\', '/') + '\'
+            if ($usFull.StartsWith($pFull, [StringComparison]::OrdinalIgnoreCase)) {
+                return "its user site $us is inside its install tree $p"
+            }
+        }
+    } catch {
+        return "its user site path $us could not be resolved ($_)"
+    }
+    return $null
+}
+
+# After a --target install: remove pywinpty-*.dist-info directories of other versions
+# (pip --target --upgrade replaces same-named items only, so an older version's metadata
+# would stay and could shadow the version check). Returns $false when one cannot be removed.
+function Remove-StaleDistInfo {
+    param([string]$Target, [string]$Version)
+    $ok = $true
+    $keep = "pywinpty-$Version.dist-info"
+    $stale = @(Get-ChildItem -LiteralPath $Target -Directory -Filter 'pywinpty-*.dist-info' -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -ne $keep })
+    # SilentlyContinue: a missing target lists nothing; the import verify below decides.
+    foreach ($d in $stale) {
+        try {
+            Remove-Item -LiteralPath $d.FullName -Recurse -Force -ErrorAction Stop
+            Log "Removed stale $($d.Name) from $Target (pinned $Version)"
+        } catch {
+            LogError "Could not remove stale $($d.FullName): $_"
+            $ok = $false
+        }
+    }
+    return $ok
 }
 
 # WARN + ACTION for a virtual-environment interpreter (pip refuses --user there).
@@ -254,31 +308,62 @@ function Invoke-PywinptySetup {
         return
     }
 
-    # --- 5. Can pip install --user into it? ---
+    # --- 5. Install mode: --user, or --target <user site> for an EXTERNALLY-MANAGED one ---
     if ($info['venv'] -eq 'True') {
         Write-VenvRefused -Python $py -MajMin $info['majmin']
         return
     }
+    $mode = "user"
     if ($info['externally_managed'] -eq 'True') {
-        Write-ExternallyManaged -Python $py -MajMin $info['majmin'] -UserSite $info['user_site']
-        return
+        $refusal = Get-TargetRefusal -Info $info
+        if ($refusal) {
+            Write-ExternallyManaged -Python $py -MajMin $info['majmin'] -Reason $refusal
+            return
+        }
+        $mode = "target"
+        Log "Install mode: --target $($info['user_site']) -- $py is EXTERNALLY-MANAGED (PEP 668 marker in its stdlib dir), so pip refuses --user; its user site is outside its install tree and on its sys.path"
+    } else {
+        Log "Install mode: --user -- $py is not externally managed"
     }
 
     # --- 6. Install ---
-    $pipArgs = @("-m", "pip", "install", "--user", "--only-binary=:all:", "--require-hashes",
-                 "--disable-pip-version-check", "--no-input", "-r", $pinPath)
-    $pipCmdText = "$py " + ($pipArgs -join ' ')
-    if ($DryRun) {
-        Log "[DRY RUN] Would run: $pipCmdText"
-        Write-Summary "OK" "pywinpty" "dry-run: would install $pinVersion"
-        return
+    $pip = $null
+    $pipText = ""
+    foreach ($attempt in 1..2) {
+        if ($mode -eq "target") {
+            $pipArgs = @("-m", "pip", "install", "--target", $info['user_site'], "--upgrade",
+                         "--only-binary=:all:", "--require-hashes",
+                         "--disable-pip-version-check", "--no-input", "-r", $pinPath)
+        } else {
+            $pipArgs = @("-m", "pip", "install", "--user", "--only-binary=:all:", "--require-hashes",
+                         "--disable-pip-version-check", "--no-input", "-r", $pinPath)
+        }
+        $pipCmdText = "$py " + ($pipArgs -join ' ')
+        if ($DryRun) {
+            Log "[DRY RUN] Would run: $pipCmdText"
+            Write-Summary "OK" "pywinpty" "dry-run: would install $pinVersion"
+            return
+        }
+        Log "Running: $pipCmdText"
+        $pip = Invoke-Python -Python $py -Label "pip install" -Arguments $pipArgs
+        $pipText = $pip.Lines -join "`n"
+        # pip refused --user although no marker was found where the probe looked: switch
+        # to --target once, under the same conditions as a marker found by the probe.
+        if ($pip.Code -ne 0 -and $mode -eq "user" -and $attempt -eq 1 -and $pipText -match 'externally-managed-environment') {
+            $refusal = Get-TargetRefusal -Info $info
+            if ($refusal) {
+                Write-ExternallyManaged -Python $py -MajMin $info['majmin'] -Reason $refusal
+                return
+            }
+            $mode = "target"
+            Log "Install mode: --target $($info['user_site']) -- pip reported externally-managed-environment for --user"
+            continue
+        }
+        break
     }
-    Log "Running: $pipCmdText"
-    $pip = Invoke-Python -Python $py -Label "pip install" -Arguments $pipArgs
-    $pipText = $pip.Lines -join "`n"
     if ($pip.Code -ne 0) {
         if ($pipText -match 'externally-managed-environment') {
-            Write-ExternallyManaged -Python $py -MajMin $info['majmin'] -UserSite $info['user_site']
+            Write-ExternallyManaged -Python $py -MajMin $info['majmin'] -Reason "pip refused the install ($mode mode)" -Row "pip refused (PEP 668)"
         } elseif ($pipText -match "Can not perform a '--user' install") {
             Write-VenvRefused -Python $py -MajMin $info['majmin']
         } elseif ($pipText -match 'No module named pip') {
@@ -294,6 +379,12 @@ function Invoke-PywinptySetup {
         return
     }
     $outcome = "installed"
+    if ($mode -eq "target") {
+        if (-not (Remove-StaleDistInfo -Target $info['user_site'] -Version $pinVersion)) {
+            Write-Summary "ERROR" "pywinpty" "stale dist-info not removed"
+            return
+        }
+    }
     if ($pipText -match 'Successfully installed') {
         Log "pip: Successfully installed pywinpty $pinVersion"
     } elseif ($pipText -match 'Requirement already satisfied') {
@@ -307,8 +398,14 @@ function Invoke-PywinptySetup {
     $imp2 = Invoke-Python -Python $py -Label "import verify" -Arguments @("-c", $importCode)
     $imp2Info = ConvertFrom-KeyValueLines $imp2.Lines
     if ($imp2.Code -eq 0 -and $imp2Info['version'] -eq $pinVersion) {
-        LogOk "pywinpty $pinVersion $outcome (winpty at $($imp2Info['file']))"
-        Write-Summary "OK" "pywinpty" "$pinVersion ($outcome)"
+        LogOk "pywinpty $pinVersion $outcome with --$mode (winpty at $($imp2Info['file']))"
+        if ($mode -eq "target") {
+            # "already present" would exceed 30 characters with the mode; say "present"
+            $short = $outcome -replace '^already present$', 'present'
+            Write-Summary "OK" "pywinpty" (Get-ShortDetail "$pinVersion ($short, --target)")
+        } else {
+            Write-Summary "OK" "pywinpty" "$pinVersion ($outcome)"
+        }
     } else {
         LogError "pywinpty $pinVersion not importable by $py after pip (exit $($imp2.Code), version '$($imp2Info['version'])') -- see $logFile"
         Write-Summary "ERROR" "pywinpty" "import failed after install"

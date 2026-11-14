@@ -2,6 +2,7 @@
 # version and wheel hashes (tool registry entry "pywinpty", /tool-registry skill).
 # Install (Windows): scripts/setup-pywinpty.ps1 (aitools install Step 15b; CI windows job),
 # which runs: python -m pip install --user --only-binary=:all: --require-hashes -r scripts/requirements-pywinpty.txt
+# (for an EXTERNALLY-MANAGED interpreter, PEP 668: --target <its user site> --upgrade instead of --user).
 # Lives in scripts/ so it ships on all three deployment paths: dev (aitools install),
 # package (build-package.sh payload) and MDM (build-deploy.sh embeds it in
 # deploy/setup-pywinpty.ps1). Moved from tests/managed-files/requirements-windows.txt (M4-Winpty, 2026-11-14).

@@ -1,10 +1,24 @@
 # Evaluation: pywinpty as a local Windows test dependency — Windows 11 workstation — 2026-11-13
 
-Version 1.2 (2026-11-14). Authors: v1.0 M3-Fixes-D (delegate of M3-Fixes, Session
+Version 1.3 (2026-11-14). Authors: v1.0 M3-Fixes-D (delegate of M3-Fixes, Session
 Commander 87795dc3-e); v1.1 M3-Fixes; v1.2 M4-Winpty (written by its delegate
-M4-F-Registry). Phase 2 gate: **approved** by the commander on 2026-11-14 (RFI fa81-7:
+M4-F-Registry); v1.3 M4-Winpty. Phase 2 gate: **approved** by the commander on 2026-11-14 (RFI fa81-7:
 "yes, i stated i approved it"); pywinpty 3.1.2 installed on this workstation the same day
 (section 6, "Phase 2 result").
+
+v1.3 (M4-Winpty, 2026-11-14): the PEP 668 question (section 4 "Finding", section 8
+unknown 4) is decided -- commander, RFI fa81-9: "fix pep, add it to same branch commit,
+watch ci/cd, fix any errors, merge when ready" (option (b)). For an EXTERNALLY-MANAGED
+interpreter `setup-pywinpty.ps1` now runs `pip install --target <that interpreter's user
+site> --upgrade --only-binary=:all: --require-hashes -r scripts/requirements-pywinpty.txt`
+(pip skips its PEP 668 check for `--target`: `pip/_internal/commands/install.py`,
+`check_externally_managed()` runs only when `target_dir`, `prefix_path` and `root_path` are
+None), removes stale `pywinpty-*.dist-info` of other versions, and verifies by import; it
+still never passes `--break-system-packages` and never writes into the interpreter's
+install tree (WARN + ACTION when the user site is disabled or inside that tree). Verified
+against uv CPython 3.14.10 in an isolated APPDATA: install "(installed, --target)",
+verified re-run, a seeded `pywinpty-3.1.1.dist-info` replaced, `PYTHONNOUSERSITE=1` ->
+WARN; uv's `Lib\site-packages` unchanged.
 
 v1.2 (M4-Winpty, 2026-11-14): the commander approved Phase 2 and ordered adoption:
 "/tool-adopt pywinpty.  we will need setup-pywinpty.ps1.  document its source of truth in
@@ -230,12 +244,13 @@ M4-F-Registry). It corrects the assumption of sections 3 and 4 that this worksta
   shared with any non-managed CPython 3.14, so a `--user` install made by a
   python.org/PyManager interpreter is importable by the uv `python3` (option A still
   serves the suites).
-- `setup-pywinpty.ps1` reports WARN "python externally managed" + ACTION (run it once with
-  `$env:AITOOLS_PYWINPTY_PYTHON` set to a non-managed CPython of the same minor) and never
-  passes `--break-system-packages`.
-- Open: on an endpoint whose only CPython is the aitools/uv-managed one, the script cannot
-  install. Decision pending: `--target <user site>` vs a non-managed CPython vs status.
-  Recorded in the registry entry's pending changes (`/tool-registry` skill).
+- v1.2 (then): `setup-pywinpty.ps1` reported WARN "python externally managed" + ACTION
+  and never passed `--break-system-packages`; the endpoint case was open.
+- v1.3 (decided, commander RFI fa81-9, 2026-11-14): for such an interpreter the script
+  installs with `pip install --target <its user site> --upgrade ...` (see the v1.3
+  changelog at the top); WARN "managed python, no user site" + ACTION remains only when
+  the user site is disabled or inside the install tree. Still never
+  `--break-system-packages`.
 
 Version skew to disclose: CI runs the cp312 wheel on Python 3.12; the workstation would run
 the cp314 wheel on 3.14.6. Same release, different build; the CI probe results
@@ -410,7 +425,8 @@ Updated in v1.2.
    `GOT[abc]` and no pty SKIP (source: M4-Winpty brief, 2026-11-14). Issue #72's "Done
    when" depends on it.
 4. New (v1.2): how an endpoint whose only CPython is the aitools/uv-managed one gets
-   pywinpty (section 4, "Finding"); decision pending.
+   pywinpty (section 4, "Finding"). Answered in v1.3: `pip --target <its user site>`
+   (commander, RFI fa81-9, 2026-11-14).
 
 ## Sources
 
