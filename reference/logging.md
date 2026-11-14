@@ -108,8 +108,19 @@ Same maxBytes/backupCount in all three.
   locked, unwritable or missing log never ends the run (not under `set -e`, not
   under `$ErrorActionPreference = "Stop"`), the console line still prints and
   the counters still count; a log directory that cannot be created is the same
-  case (v0.77.1). `deploy.jsonl` differs: its first failed write is one warning
-  (the table in section 3).
+  case (v0.77.1). These log writers outside the lib use the same helpers
+  (incident #174): the installers' `log` / `Log` override and their Step 22
+  relay sync output (`run_relay_sync` / `Invoke-RelaySync`), the profile
+  resolver's `log` / `Log` override, and check-lib's `checks.log` /
+  `checks.jsonl` writes (`_aitlib_log_append` with the file as its argument;
+  `Write-CheckLogText` in PowerShell), whose log directory is created
+  fail-safe too. Not fail-safe yet (open incident #178): the `aitools` entry
+  points' own appends to deploy.log (`scripts/aitools`: the build-deploy output
+  and the relay sync output; `scripts/aitools.ps1`: the same two, through
+  `Add-Content`) and two hooks (`standing-order-guard.sh`: its log directory
+  and observe-mode line; `tool-ops-session-audit.sh`: its result line).
+  `deploy.jsonl` differs: its first failed write is one warning (the table in
+  section 3).
 
 ### 6. Setup-vs-check separation preserved
 

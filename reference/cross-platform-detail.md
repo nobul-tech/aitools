@@ -130,6 +130,15 @@ scripts — harmless on PS 7, cleanup deferred. Patterns you'll see:
 - `$null = [Parser]::ParseFile(...)` to suppress AST dump
 - `ConvertPSObjectToHashtable` helper for JSON round-tripping
 
+`scripts/hh.ps1` is PowerShell 7 only (commander, 2026-11-14: "17) its is pwsh
+7 only"). It is UTF-8 without a BOM and has non-ASCII strings, so Windows
+PowerShell 5.1 (which reads such a file as ANSI) cannot parse it. Its
+`#Requires -Version 7.0` line makes 5.1 refuse it with a version message instead
+of parse errors, whether it is run with `-File` or through the profile's `hh`
+function (verified with 5.1.26100). `scripts/relay-outbound-prompt.ps1` stays
+ASCII: `scripts/aitools.ps1`, which loads it, has no version requirement and
+parses under 5.1.
+
 ## PowerShell pipeline encoding (advisory)
 
 On Windows, PowerShell can mangle non-ASCII bytes from external commands

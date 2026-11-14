@@ -33,7 +33,8 @@ frozen tree (incident #176); no step reads it now
 (`tests/check-post-push/test-post-push-deploy-steps.sh`).
 
 What checks the generated scripts instead: check-pre-push step 7, on every
-push, rebuilds them into a temporary copy of the dotprofile under a temporary
+push when a dotprofile is configured (it SKIPs without one and WARNs without
+node or Git Bash), rebuilds them into a temporary copy of the dotprofile under a temporary
 HOME. The build fails on a generated `.ps1` that does not parse (where pwsh is
 installed), and the step dry-runs the three resolver consumers
 (`setup-user-claude`, `-settings`, `-cursor`). It does not run `bash -n` on
