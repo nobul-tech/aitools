@@ -579,7 +579,8 @@ pwsh --version
 ### Notes
 
 - Binary is `pwsh` on both platforms (not `powershell` or `powershell.exe`)
-- Windows also ships `powershell.exe` (PS 5.1) -- not used by this project except as bootstrap fallback in `aitools-install.sh`
+- Windows also ships `powershell.exe` (PS 5.1) -- not used by this project except to bootstrap pwsh: `scripts/bootstrap.ps1` may itself run under 5.1 (`irm | iex`), installs pwsh with the winget command above when it is missing, and launches the installer and `aitools.ps1` with pwsh; the Git Bash forwarder in `aitools-install.sh` calls `powershell.exe` only to winget-install pwsh
+- Windows install command verified 2026-11-14 (chrome-devtools, learn.microsoft.com "Install PowerShell 7 on Windows", view powershell-7.6): since the 7.6.0 winget package it installs the MSIX package; `--installer-type wix` gives the MSI; no MSI from 7.7.0
 - Used by: PS1 syntax validation in check scripts and build-deploy.sh, all Windows dispatch from bash scripts
 
 ### Lifecycle
