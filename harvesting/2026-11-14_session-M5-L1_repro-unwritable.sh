@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# repro-unwritable.sh -- bash lib: does log/log_detail abort set -euo pipefail when deploy.log is unwritable?
+LIB="${1:-C:/Users/jdpal/repos/aitools/.claude/worktrees/m5-lib/scripts/aitools-lib.sh}"
+D="$(cd "$(dirname "$0")" && pwd)/repro-unwritable"
+rm -rf "$D"; mkdir -p "$D/logs/deploy.log" "$D/home"
+echo "== case 1: deploy.log is a directory"
+env HOME="$D/home" AITOOLS_LOG_DIR="$D/logs" bash -c "set -euo pipefail; source '$LIB'; logging_init t; log one; log_detail two; log_warn three; log_error four; echo COUNTS=\$ERRORS/\$WARNINGS"
+echo "rc=$?"
+echo "== case 2: log dir is a file"
+: > "$D/logfile"
+env HOME="$D/home" AITOOLS_LOG_DIR="$D/logfile" bash -c "set -euo pipefail; source '$LIB'; logging_init t; log one; echo REACHED"
+echo "rc=$?"
+echo "== case 3: chmod 000 deploy.log"
+mkdir -p "$D/logs3"; : > "$D/logs3/deploy.log"; chmod 000 "$D/logs3/deploy.log"
+env HOME="$D/home" AITOOLS_LOG_DIR="$D/logs3" bash -c "set -euo pipefail; source '$LIB'; logging_init t; log one; echo REACHED"
+echo "rc=$?"
+chmod 644 "$D/logs3/deploy.log"
