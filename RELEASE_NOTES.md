@@ -12,7 +12,7 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
-## v0.77.7 -- CI runs the script-compliance check; bootstrap.ps1 runs the installer under pwsh 7; the delegation rule ships as a shared rule (2026-11-14)
+## v0.77.8 -- CI runs the script-compliance check; bootstrap.ps1 runs the installer under pwsh 7; the delegation rule ships as a shared rule (2026-11-14)
 
 Not tagged. Branch `fix/38dc-11-compliance-ci-bootstrap`, mission 38dc-11 (M6-Polish, session 87795dc3).
 
