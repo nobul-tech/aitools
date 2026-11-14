@@ -12,6 +12,29 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.77.3 -- Pre-commit path-ref check fixed on Windows; release notes backfilled for PRs #144-#147 (2026-11-14)
+
+Not tagged. Branch `docs/m5-docs`, mission M5-Fixes (session 87795dc3), items 6, 7, 8 and 13.
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 1 | Medium | Pre-commit step 20 reported gitignored paths (`.claude/settings.local.json`, `.cursor/mcp.json`) as dead path references, on Windows only: `scripts/check-path-refs.py` `git_ignored()` passed the path list to `git check-ignore --no-index --stdin` in Python text mode, which writes `\n` as `\r\n` on Windows, so every path but the last reached git with a trailing CR and never matched. PRs #144 and #147 recorded these as pre-existing step-20 FAILs. The input now goes as UTF-8 bytes with a final newline, and the output is decoded as UTF-8. Step 20 on Windows: 5 dead refs -> 0 (the fifth is row 2) |
+| 2 | Low | `CLAUDE.md` "Relay outbound (git)" cited `.claude/rules/relay-outbound.md`, deleted in 3cebd24 on the commander's order (2026-11-13); it now points to "Channel exception" |
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 3 | RELEASE_NOTES: v0.76.2 backfilled for PRs #144-#147, which merged on 2026-11-14 before #148 (v0.77.0) and had no entry |
+| 4 | Incident registry (`/incident` skill): #173 closed (closedIn v0.76.2, PR #144); closed #172's corrective action names PR #143 and records the PR #144 follow-up; new open #174 (high): the log writers outside aitools-lib (installer and profile-resolver log overrides, check-lib's checks.log / checks.jsonl writers) are not fail-safe as `reference/logging.md` section 5 requires |
+| 5 | Issue #72 closed ([comment](https://github.com/nobul-tech/aitools/issues/72#issuecomment-6872294548)): the Windows job runs the PS1 interactive cases and a broken menu branch fails the suite. Issue #29 commented ([comment](https://github.com/nobul-tech/aitools/issues/29#issuecomment-6872294831)) and left open: EOF cases are still missing for the JSON field prompt and the AI-merge preview and feedback reads. Comment bodies and the M5-D1 / M5-D2 reports: `.aitools/channel/handoffs/2026-11-14_87795dc3-missions/M5-Fixes/` |
+
+**Verified on:** Windows 11 (pwsh 7, Git Bash): `check-path-refs.py` 5 dead refs before, 0 after; a scratch fixture passes with the fix and fails without it; `check-pre-commit.ps1` and `check-pre-push.ps1` 0 FAIL. macOS/Linux: not run locally (bytes input is platform-neutral; no suite covers `check-path-refs.py`).
+
+---
+
 ## v0.77.0 -- pywinpty is a managed Windows library on all three deployment paths (2026-11-14)
 
 Not tagged. Commander order 2026-11-14: "/tool-adopt pywinpty.  we will need setup-pywinpty.ps1.  document its source of truth in registry via /tool-registry.  mark windows/linux as N/A." and "we should support pywinpty through all 3 methods of deployment/install". Platform status: Windows supported, macOS and Linux n/a (the stdlib `pty` module is used there).
@@ -52,6 +75,64 @@ Not tagged. Commander order 2026-11-14: "/tool-adopt pywinpty.  we will need set
 **PEP 668:** aitools Step 15 makes `python3` the uv-managed CPython, which carries EXTERNALLY-MANAGED, so pip refuses `--user` there. Commander, 2026-11-14: "fix pep, add it to same branch commit, watch ci/cd, fix any errors, merge when ready". The script installs into that interpreter's user site with `--target` (pip skips its PEP 668 check for `--target` by design; uv's install tree is not touched). Verified against uv CPython 3.14.10 in an isolated APPDATA.
 
 **Verified on:** Windows 11 (pwsh 7, Git Bash 5.3.15, PyManager CPython 3.14.6): pywinpty 3.1.2 installed into the user site; `winpty-probe.py` GOT[abc] for git-bash and pwsh; managed-files suites 79/0/3 (bash) and 56/0/0 (pwsh), no pywinpty SKIP; `setup-pywinpty.ps1` real run "verified". macOS/Linux: CI.
+
+---
+
+## v0.76.2 -- One self-repairing owner of the shell profile, JSON reviews that name the file, menus that re-ask, cooked-mode console reads on Windows (2026-11-14)
+
+Not tagged. Backfilled 2026-11-14 (mission M5-Fixes). Four PRs merged on 2026-11-14 before #148 (v0.77.0): [#144](https://github.com/nobul-tech/aitools/pull/144) (`fix/console-and-profile`, merge c66d4b1, 00:51Z), [#145](https://github.com/nobul-tech/aitools/pull/145) (`fix/json-review-display`, merge e8ebd07, 01:47Z), [#146](https://github.com/nobul-tech/aitools/pull/146) (`fix/menus-reask`, merge a98208e, 02:17Z), [#147](https://github.com/nobul-tech/aitools/pull/147) (`fix/console-input-mode`, merge 301dd22, 02:54Z). Same-day changes roll into one release; it is a patch number only because v0.77.0 (#148, merged 04:32Z) was written first. Resolves Incident #173. Commander, session 87795dc3 (2026-11-13): "launch mission to create all other fixes in its own worktree" (#144, #147); RFI fa81-2, "no default or other characters should re-ask" (#146); "gitignore anything in the deploy/ directory and commit/push that gittignore file to avoid these issues moving forward, also gittinore the harvest manifest in aitools repo" (#145).
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 1 | Medium | Incident #173: `aitools-install.ps1` Step 7 rewrote the `# aitools shell integration` block of `$PROFILE` on every run, with no backup, and its removal loop deleted every non-blank line after the marker. Step 7 (both installers) now only runs `setup-user-shell`, the single owner of the profile and the rc files. The Windows integration (`aliases.ps1`, `aitools`, `hh`) is a second marked block (`# >>> aitools shell integration >>>`) replaced in place (`Update-MarkedBlock`); legacy blocks are migrated by known line shapes only (`Remove-LegacyIntegration`), so a user line after `function hh {...}` is kept; an unchanged profile is neither written nor backed up; every write is backed up first. ([#144](https://github.com/nobul-tech/aitools/pull/144)) |
+| 2 | High | Follow-up to Incident #172 (v0.76.1): a profile already multiplied (64 blocks) still reported OK. `setup-user-shell.ps1` now collapses duplicate managed blocks to one, checks exactly one start and one end marker per block after writing, refuses a write that would add parse errors, and reports damage it cannot fix safely (parse errors, stray `_aitoolsLocalBin` / `Owned by aitools` lines outside the blocks) as WARN `profile damage left in place` plus an ACTION naming the newest clean `<profile>.bak.<UTC>`. `setup-user-shell.sh` applies the same rules to `~/.bash_profile` (Perl, `bash -n` as the parse check) and now owns the `.bashrc` / `.zshrc` aliases source line. ([#144](https://github.com/nobul-tech/aitools/pull/144)) |
+| 3 | High | `aitools.ps1` Step 2: while `build-deploy.sh` ran with the console as stdin, its Git Bash/MSYS processes flipped the console input mode (0x1F7 to 0x2E8 and back, about 45 times per build). Left raw, the next review menu read with no echo and one key late, and the extra key fell into the next menu's default (overwrite). The build now gets a pipe for stdin, and the input mode is saved before it and restored after it. ([#144](https://github.com/nobul-tech/aitools/pull/144)) |
+| 4 | High | The text review, JSON field review and AI-merge preview menus treated any unrecognised input (a bare Enter, a word, a leftover keystroke) as overwrite, and deploy.log did not record what was typed. Every choice menu now accepts only an offered answer and asks again otherwise (`please type one of o/a/m/s/x`); EOF, `--force` and non-interactive runs keep their documented defaults; every answer is logged at `detail`. New `read_menu_choice` / `Read-MenuChoice` (stops after 50 unrecognised answers). Also converted: the `aitools user init` profile menu and confirms, hook and skill reverse discovery (`a adopt s skip` in any case: bash used to skip on `A` while PS1 adopted), `relay-outbound-prompt.sh/.ps1`, and the `cc` / `clip2md` confirms in `shared/shell/aliases.*`. Issue #29 (partly). ([#146](https://github.com/nobul-tech/aitools/pull/146)) |
+| 5 | High | `Read-ConsoleChoice` read in whatever mode a child process had left the Windows console: in raw mode an answer needed two Enters, nothing echoed, and the extra key fell into the next menu (default overwrite). It now reads in cooked mode and restores the previous mode in `finally` (real console: one `o<CR>`, echoed, mode restored). One `AitConsoleInput` type in `aitools-lib.ps1`, compiled once and only on Windows with a console as stdin, serves `Read-ConsoleChoice` and `Save-/Restore-ConsoleInputMode`, which move out of `aitools.ps1`. ([#147](https://github.com/nobul-tech/aitools/pull/147)) |
+| 6 | Medium | The AI-merge spinner never appeared on Windows: it ran in `Start-Job`, a separate process with no console. It now runs in a second runspace of the same process (parity with bash `_start_spinner`) and stops in a `finally` around `Invoke-AI`; `Invoke-AI` telemetry is file-only through the new `Write-AiLog` (twin of bash `_ai_log`), so it no longer prints into the spinner row. ([#147](https://github.com/nobul-tech/aitools/pull/147)) |
+| 7 | Medium | `check-pre-push` step 7 FAILed (`diff exit 2`, .sh) or threw (`Cannot find path ...\committed\deploy`, .ps1) once the dotprofile stopped tracking `deploy/`. Without a committed `deploy/` it now skips the staleness compare (PASS `fresh build OK (dotprofile deploy/ untracked, not compared)`); the build and the dry runs still run. The PS1 extracts with `System32\tar.exe` (from a Git Bash parent, GNU tar read `C:\...` as a remote host). ([#145](https://github.com/nobul-tech/aitools/pull/145)) |
+
+### New features
+
+| # | Change |
+|---|--------|
+| 8 | JSON field reviews name the file (`[REVIEW] registries/incidents.json: incidents differs from source.`), and so do the Created / Updated / Accept & adopt / Skipped log lines (`Review-JsonFields -ItemName` / `review_json_fields` `$4`). ([#145](https://github.com/nobul-tech/aitools/pull/145)) |
+| 9 | An array field shows which elements differ, colour-coded (red `-` only in LOCAL, green `+` only in SOURCE, yellow `~` changed), at most 20 lines, each also logged to deploy.log (`Write-JsonFieldDetail` / `_json_field_detail`; node `arrayDetail()`, identical text in both libs). ([#145](https://github.com/nobul-tech/aitools/pull/145)) |
+| 10 | `deploy-harness` deploys `~/.aitools/reference/` and `~/.aitools/registries/` as read-only copies: overwritten with a backup, no review menu, no adopt (`Deploy-ManagedFile -NoReview` / `MANAGED_NO_REVIEW=true`). ([#145](https://github.com/nobul-tech/aitools/pull/145)) |
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 11 | `harvesting/harvest-manifest.json` is gitignored and removed from the index (machine-local; the file stays on disk). The dotprofile gitignores `deploy/` (nobul-jose/aitools-nobul-jose `6a98d1b`, `fecff7e`). ([#145](https://github.com/nobul-tech/aitools/pull/145)) |
+| 12 | Menu contract asked for by #146: `read_tty_choice` / `Read-ConsoleChoice` set `READ_TTY_EOF=1` / `$script:ReadConsoleEof = $true` at EOF, so EOF and a typed empty line are told apart. ([#147](https://github.com/nobul-tech/aitools/pull/147)) |
+| 13 | `tests/managed-files/requirements-windows.txt` pins the pywinpty 3.1.2 hashes of every win_amd64 wheel (cp310-cp315, was cp312 and cp313); CI still installs the same cp312 wheel. Nothing was installed then (Phase 2 gate; adopted in v0.77.0). ([#144](https://github.com/nobul-tech/aitools/pull/144)) |
+| 14 | Tests and CI: `tests/setup-user-shell` .ps1 8 -> 37 checks and a new .sh suite (23 checks; CI macOS bash 5 and /bin/bash 3.2, Linux) ([#144](https://github.com/nobul-tech/aitools/pull/144)); `tests/aitools-entry/test-console-mode-guard.ps1` (18 checks, Windows CI; [#144](https://github.com/nobul-tech/aitools/pull/144)), 83 checks ([#147](https://github.com/nobul-tech/aitools/pull/147)); managed-files cases for array detail, the item label and `-NoReview`, and `tests/check-pre-push/test-pre-push-step7.sh` (CI macOS, Linux, Windows) ([#145](https://github.com/nobul-tech/aitools/pull/145)); `tests/menus/test-menu-choice.sh/.ps1` (CI macOS bash 5 and /bin/bash 3.2, Linux, Windows) and two re-ask cases in `tests/profile/test-user-init.sh` ([#146](https://github.com/nobul-tech/aitools/pull/146)) |
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 15 | `reference/ait-shellintegration.md` v1.1 (both blocks, repair and damage reporting, rc targets); new `reference/evaluations/pywinpty-windows-2026-11-13.md` v1.1. ([#144](https://github.com/nobul-tech/aitools/pull/144)) |
+| 16 | Read-only harness copies and the gitignored manifest and dotprofile `deploy/`: `.claude/rules/agentic-standards.md`, `aitools-workspace.md`, `deploy-paths.md` (and its `.cursor` twin), `shared/skills/harvest/SKILL.md`, `reference/artifact-harvesting.md`, `harness.md`, `managed-file-deployment.md`, `pre-push-checklist.md`, `user-repo.md`, `README.md`. ([#145](https://github.com/nobul-tech/aitools/pull/145)) |
+| 17 | Menu answers: `.claude/rules/interactive-menus.md` (new section "Answers: only an offered answer counts"), `hook-lifecycle.md`, `agentic-standards.md` (Choices table row), `reference/managed-file-deployment.md` (new section "Menu answers"); prompts `[y/N]` and `[Y/n]` read `[y/n]`. ([#146](https://github.com/nobul-tech/aitools/pull/146)) |
+| 18 | `reference/cross-platform-detail.md` new section "Windows console: input mode, jobs, spinner"; `reference/agentic-framework.md` and `reference/script-standards-detail.md`: PowerShell AI telemetry goes through `Write-AiLog`. ([#147](https://github.com/nobul-tech/aitools/pull/147)) |
+
+### Files created
+
+| File | Purpose |
+|------|---------|
+| `tests/setup-user-shell/test-setup-user-shell.sh` | setup-user-shell rules for `~/.bash_profile` and the rc files (CI: macOS, Linux) |
+| `tests/aitools-entry/test-console-mode-guard.ps1` | Console input-mode helpers, cooked-mode read, spinner, Step 2 structure (CI: Windows) |
+| `reference/evaluations/pywinpty-windows-2026-11-13.md` | pywinpty evaluation for local Windows pty tests |
+| `tests/check-pre-push/test-pre-push-step7.sh` | check-pre-push step 7 against an untracked and a stale committed dotprofile `deploy/` |
+| `tests/menus/test-menu-choice.sh` / `.ps1` | `read_menu_choice` / `Read-MenuChoice` contract and end-to-end menus |
+
+**Once per checkout, before pulling this release (#145):** a locally modified `harvesting/harvest-manifest.json` blocks `git pull --ff-only`; copy it aside, `git checkout -- harvesting/harvest-manifest.json`, pull, copy it back (it is now ignored). Every other machine's dotprofile: pulling `fecff7e` deletes `deploy/` from disk, and a dirty `deploy/` blocks the pull (`git checkout -- deploy` first); the next `aitools` run rebuilds it.
+
+**Verified on:** Windows 11 (pwsh 7, Git Bash 5.3.15), from each PR body: #144 `test-setup-user-shell.ps1` 37/0/0, `test-console-mode-guard.ps1` 18/0/0; #145 all 33 tracked suites exit 0, 0 failed; #146 CI run 43542753176 green (tests/menus 63/0/0 on macOS bash 5, /bin/bash 3.2, Linux and Windows pwsh; 61/0/0 Windows Git Bash ConPTY); #147 38 suites, 2,899 passed, 0 failed, 57 platform skips, and console-mode-guard 76/0/7 in CI. macOS/Linux: CI.
 
 ---
 
