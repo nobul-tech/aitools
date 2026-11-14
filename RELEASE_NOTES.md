@@ -12,6 +12,20 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.77.11 -- The bash compliance check no longer fails at random under pipefail (2026-11-14)
+
+Not tagged. Branch `fix/38dc-21-compliance-sigpipe`, mission M6-Polish (session 87795dc3), a fix-forward for the CI step added in v0.77.8 (PR #160).
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 1 | Medium | `scripts/check-script-compliance.sh` runs under `set -euo pipefail` and tested pipelines with `... | grep -q PATTERN`. `grep -q` exits at its first match; when the writer (`grep -A2` over `scripts/aitools-lib.sh`, or `echo` / `printf` of a captured block) still had output to write, it died of SIGPIPE, `pipefail` made the pipeline fail, and the check reported a violation that is not there. CI run 43640967140 (PR #154, linux job) failed steps 4 and 5 ("log_error does not increment ERRORS", "log_warn does not increment WARNINGS") on a library whose main CI run passed the same steps. The 12 pipelines now end in `grep PATTERN >/dev/null`, which reads its input to the end, so the writer never gets SIGPIPE; the match result is the same |
+
+**Verified on:** `bash -n` on the script (Windows 11, Git Bash, parse only); the diff is the 12 pipelines and nothing else. Not run locally: the `.sh` check (commander, 2026-11-14: tests and checks on Windows are `.ps1`); the linux CI job runs it on this PR.
+
+---
+
 ## v0.77.10 -- The 64 KB review-diff test no longer times out a slow macOS runner (2026-11-14)
 
 Not tagged. Branch `fix/38dc-17-mf-pty-timeout`, mission M6-Polish (session 87795dc3), a fix-forward for main CI run 43632383993.
@@ -86,6 +100,22 @@ Not tagged. Branch `fix/38dc-11-compliance-ci-bootstrap`, mission 38dc-11 (M6-Po
 | `tests/bootstrap/test-bootstrap.ps1` | bootstrap.ps1 under Windows PowerShell 5.1 (run with `-File` and through `Invoke-Expression`) with stubbed git, winget, installer and aitools.ps1 (Windows CI job) |
 
 **Verified on:** Windows 11 (pwsh 7.6.10, Windows PowerShell 5.1): `tests/bootstrap/test-bootstrap.ps1` 26 passed (including the `irm | iex` form); against origin/main's bootstrap.ps1 15 checks fail; 8 of 8 one-line mutants killed. `check-script-compliance.ps1` on origin/main: exit 1 (`setup-pywinpty.ps1:151`, #177, fixed by PR #157); on a scratch copy with #157's file: exit 0; with a planted unchecked `SilentlyContinue`: exit 1. `check-ci-suites.pl` finds the new suite, and fails when its step is removed. macOS/Linux: the `.sh` twin of the compliance check runs in the linux CI job only (not run locally on Windows).
+
+---
+
+## v0.77.7 -- Delegate identity, transcripts and control documented (2026-11-14)
+
+Not tagged. Branch `docs/38dc-08-subagent-transcripts`, mission 38dc-08-subagent-transcripts (delegate of M6-Polish, session 87795dc3).
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 1 | `reference/tool-ops-claude-code.md`: new section "Delegate Identity, Transcripts and Control" (v1.0) and Version Dependencies items #31 and #32, tested on Claude Code 2.1.325 (Windows 11) with two throwaway probe delegates: where every delegate's transcript and `meta.json` live (`subagents/agent-<agentId>.*` under the main session, flat for all depths), `meta.json` fields, mapping a mission name to an agentId through the Agent call's `description`, the Agent launch result verbatim, why `output_file` is not a transcript copy (created empty; only some later become a hard link), how a delegate finds its own id (no environment variable; search `meta.json` descriptions, bash and PowerShell recipes), TaskStop (an orchestrator cannot stop its own delegate; an unknown id lists the running agents), SendMessage (queued to a running delegate, resumes a finished one, `to: "main"`), repeat hand-backs (usually delivered, refused once), background tasks that outlive a delegate's hand-back, forced hand-backs and classifier interruptions, and guidance for orchestrators |
+| 2 | `reference/tool-ops-claude-code.md`: current version 2.1.325; item #25 (SendMessage gap) tested end to end and closed; item #27 level-3 tool set re-verified; "Agent Continuation Gap" marked closed (history kept); session-storage tree shows `subagents/*.meta.json` and `tool-results/`; release-notes watch entry for 2.1.325 |
+| 3 | `/delegate` skill v2.2: "Environment limits" gains delegate identity and control; "Verifying what comes back" points to the delegate's transcript. `/tool-ops` skill: lookup row for the new section |
+
+**Verified on:** Windows 11 (Claude Code 2.1.325, Git Bash, pwsh 7): each fact observed in session 87795dc3 (probe delegates 2b10-01 and 2b10-02, the session's 42 `meta.json` files, the M6-Polish transcript); independent review by 2b10-03 (27 claims checked against the raw files; its five blocking findings fixed; its re-check finding on the repeat-hand-back counts fixed); `check-pre-commit.ps1` (no `-Fix`) and `check-pre-push.ps1`: 0 FAIL. macOS, Linux, Claude Code web, Cursor: not tested (documentation only).
 
 ---
 
