@@ -443,48 +443,21 @@ jobs:
       - name: Every test suite is in CI
         if: ${{ !cancelled() }}
         run: |
-          # Fails when a tracked tests/<dir>/test-*.sh is not run by a step of
-          # this workflow (a "run:" line that runs "bash <path>"). The only
-          # copy of this step (the check is static; the macos job points here).
-          # A suite that cannot run in CI goes in %exempt with the reason; an
-          # exempt suite that is also run, or no longer exists, fails the step
-          # too (stale exemption).
-          # Blind spots (a cheap check, plan FO-0): it sees single-line run:
-          # only (a suite started inside a "run: |" block is reported missing);
-          # it counts a suite run in any job, not in macos and linux each; it
-          # ignores if: conditions (an if: false step still counts); it only
-          # needs "bash <path>" somewhere on the run: line before any "#"; it
-          # covers test-*.sh only, not test-*.ps1 run by pwsh -File.
-          git ls-files 'tests/*/test-*.sh' | perl -e '
-            my %exempt = (
-              # "tests/<dir>/test-<name>.sh" => "reason it cannot run in CI",
-            );
-            open(my $fh, "<", ".github/workflows/check.yml") or die "cannot read .github/workflows/check.yml: $!\n";
-            my $yml = do { local $/; <$fh> };
-            close($fh);
-            my ($n, $bad) = (0, 0);
-            my %seen;
-            while (my $p = <STDIN>) {
-              chomp $p;
-              next if $p eq "";
-              $n++;
-              $seen{$p} = 1;
-              my $run = $yml =~ /^\s*run:\s[^#\n]*\bbash\s+\Q$p\E(?:\s|$)/m;
-              if (exists $exempt{$p}) {
-                if ($run) { print "::error::$p is run in CI and also exempt: remove the exemption\n"; $bad++; }
-                else { print "exempt: $p ($exempt{$p})\n"; }
-              } elsif (!$run) {
-                print "::error::$p is not run by any step in .github/workflows/check.yml\n"; $bad++;
-              }
-            }
-            for my $p (sort keys %exempt) {
-              next if $seen{$p};
-              print "::error::exempt suite $p is not tracked: remove the exemption\n"; $bad++;
-            }
-            die "::error::no tests/*/test-*.sh found (git ls-files)\n" if $n == 0;
-            exit 1 if $bad;
-            print "All $n test suites are in CI or exempt\n";
-          '
+          # Fails when a tracked tests/<dir>/test-*.sh or test-*.ps1 is not run
+          # by a step of this workflow: a single-line "run:" that runs
+          # "bash <path>" (.sh) or "pwsh [-File] <path>" (.ps1, / or \ in the
+          # path). The only copy of this step (the check is static; the macos
+          # job points here). The logic, its %exempt table (a suite that cannot
+          # run in CI, with the reason; a stale exemption fails) and its blind
+          # spots (a suite started inside a "run: |" block is reported missing;
+          # a suite run in any job counts, not one per platform; if: conditions
+          # are ignored) live in scripts/check-ci-suites.pl (--help); its tests
+          # are tests/ci-suites/test-check-ci-suites.sh (next step).
+          git ls-files 'tests/*/test-*.sh' 'tests/*/test-*.ps1' | perl scripts/check-ci-suites.pl .github/workflows/check.yml
+
+      - name: check-ci-suites tests (the step above, planted gaps)
+        if: ${{ !cancelled() }}
+        run: bash tests/ci-suites/test-check-ci-suites.sh
 
       - name: Hook-registration parity audit
         run: |
