@@ -214,4 +214,47 @@ function InvokeGit {
     }
 }
 
+# ---------------------------------------------------------------------------
+# Managed Git Bash (Windows)
+# ---------------------------------------------------------------------------
+# ResolveGitBash -- the path of the managed Windows bash, Git Bash from Git for
+# Windows (.claude/rules/cross-platform.md "Windows: managed bash"), or $null.
+# Every check step that runs bash calls this (check-pre-commit steps 2 and 3,
+# check-pre-push step 7, check-post-push steps 2, 4 and 6), never
+# `Get-Command bash` or a bare `bash`: in a native pwsh the first bash on PATH
+# is the WSL launcher (%LOCALAPPDATA%\Microsoft\WindowsApps\bash.exe on the
+# commander's workstation, C:\Windows\System32\bash.exe on older Windows), not
+# Git Bash. Probes the Git for Windows install locations only (the list
+# setup-bash.ps1 probes), with no PATH fallback, and refuses any candidate
+# under %SystemRoot% or the WindowsApps alias directory (the WSL launchers).
+# Returns the first candidate that is an existing file.
+# -Candidates replaces the probe list (tests point it at a scratch directory).
+# A caller that gets $null reports its step as WARN or SKIP, never falls back
+# to another bash.
+function ResolveGitBash {
+    param([string[]]$Candidates)
+    if (-not $PSBoundParameters.ContainsKey('Candidates')) {
+        $Candidates = @()
+        # Verified: 2026-11-13 (Git for Windows 2.56.0, bash 5.3.15)
+        if ($env:ProgramFiles) { $Candidates += Join-Path $env:ProgramFiles "Git\bin\bash.exe" }
+        # UNVERIFIED: 32-bit Git for Windows on 64-bit Windows (setup-bash.ps1 list)
+        if (${env:ProgramFiles(x86)}) { $Candidates += Join-Path ${env:ProgramFiles(x86)} "Git\bin\bash.exe" }
+        # UNVERIFIED: per-user Git for Windows install (setup-bash.ps1 list)
+        if ($env:LOCALAPPDATA) { $Candidates += Join-Path $env:LOCALAPPDATA "Programs\Git\bin\bash.exe" }
+    }
+    $refused = @()
+    if ($env:SystemRoot) { $refused += $env:SystemRoot.TrimEnd('\') + '\' }
+    if ($env:LOCALAPPDATA) { $refused += (Join-Path $env:LOCALAPPDATA "Microsoft\WindowsApps").TrimEnd('\') + '\' }
+    foreach ($c in @($Candidates)) {
+        if (-not $c) { continue }
+        $isRefused = $false
+        foreach ($r in $refused) {
+            if ($c.StartsWith($r, [StringComparison]::OrdinalIgnoreCase)) { $isRefused = $true; break }
+        }
+        if ($isRefused) { continue }
+        if (Test-Path -LiteralPath $c -PathType Leaf) { return $c }
+    }
+    return $null
+}
+
 # Platform detection ($IsMacOS, $IsWindows) is built-in to PS 7+.
