@@ -511,7 +511,7 @@
           { "method": "homebrew-tap", "command": "brew install powershell/tap/powershell", "preferred": true, "autoUpdates": false, "ccCompatible": true, "notes": "Microsoft tap" }
         ],
         "windows": [
-          { "method": "winget", "command": "winget install --id Microsoft.PowerShell --source winget", "preferred": true, "autoUpdates": false, "ccCompatible": true, "notes": null }
+          { "method": "winget", "command": "winget install --id Microsoft.PowerShell --source winget", "preferred": true, "autoUpdates": false, "ccCompatible": true, "notes": "Verified 2026-11-14 with chrome-devtools against https://learn.microsoft.com/en-us/powershell/scripting/install/install-powershell-on-windows (view=powershell-7.6): the page's install command; since the 7.6.0 winget package it installs the MSIX package (MSI: --installer-type wix; no MSI from 7.7.0). Runs from scripts/bootstrap.ps1 and the Git Bash forwarder in scripts/aitools-install.sh when pwsh is missing." }
         ],
         "linux": []
       },
@@ -520,7 +520,7 @@
       },
       "versionCheck": "pwsh --version",
       "systemRequirements": null,
-      "notes": "Binary is `pwsh` on both platforms (not `powershell` or `powershell.exe`). Windows also ships `powershell.exe` (PS 5.1) — not used by this project except as bootstrap fallback in aitools-install.sh.",
+      "notes": "Binary is `pwsh` on both platforms (not `powershell` or `powershell.exe`). Windows also ships `powershell.exe` (PS 5.1) — not used by this project except to bootstrap pwsh: scripts/bootstrap.ps1 may itself run under 5.1 (`irm | iex`) and launches the installer and aitools.ps1 with pwsh; the Git Bash forwarder in aitools-install.sh calls powershell.exe only to winget-install pwsh.",
       "lifecycle": {
         "platformStatus": { "macos": "supported", "windows": "supported", "linux": "supported" },
         "concurrency": "Yes — independent sessions",
