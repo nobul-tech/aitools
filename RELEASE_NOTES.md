@@ -44,7 +44,7 @@ Not tagged. Mission M5-Fixes (items 9 and 4, batch M5-C1).
 | `scripts/check-menu-parity.pl` | The step 29 comparison (menu lines and menu-read prompts), called by both twins |
 | `tests/check-post-push/test-menu-parity.sh` | The current libs match; planted mismatches in a `read_menu_choice` prompt, a `Read-MenuChoice -Prompt`, a choice list and a menu line fail (the old extraction misses the prompt ones); variable prompts; comments; errors; step 29 of both twins (CI linux and windows jobs) |
 
-**Verified on:** Windows 11 (Git for Windows 2.56.0, bash 5.3.15, pwsh 7): the new suite 17/17; against the pre-fix check scripts it fails 4 cases. check-pre-commit.ps1 and check-pre-push.ps1 run from the branch; check-post-push.ps1 not run (its step 7 rebuilds deploy/ against the real HOME).
+**Verified on:** Windows 11 (Git for Windows 2.56.0, bash 5.3.15, pwsh 7): the new suite 17/17; against the pre-fix check scripts it fails 4 cases. check-pre-commit.ps1 and check-pre-push.ps1 run from the branch. Items 2-4 (M5-C2): `test-post-push-step7.sh` 10/10 (6 cases fail against the pre-fix twins), `test-menu-parity.sh` 24/24, both with bash and pwsh 7.6; check-post-push.ps1 run once after the step 7 fix under an isolated HOME/USERPROFILE/APPDATA/LOCALAPPDATA and log dir with a scratch clone of the dotprofile: step 7 SKIP, step 29 PASS, the real dotprofile `deploy/` and `~/.aitools/logs` unchanged. The .sh twins and the new suites on macOS and Linux run first in CI.
 
 ---
 
