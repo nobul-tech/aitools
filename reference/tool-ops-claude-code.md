@@ -64,7 +64,7 @@ Post-push checklist #20 triggers this review automatically.
 | 29 | Hook output channel: stderr of a hook that exits 0 never reaches Claude; observe-mode hooks reach Claude through stdout JSON `hookSpecificOutput.additionalContext`. Hooks docs (https://code.claude.com/docs/en/hooks, read 2026-10-28): "Claude never sees stderr from a hook that exits 0."; PreToolUse decision control, `additionalContext`: "String added to Claude’s context alongside the tool result."; "A hook’s additionalContext, systemMessage, and initialUserMessage strings, and its plain stdout, are capped at 10,000 characters" | 2.1.309 | 2.1.309 (2026-10-28) | `shared/hooks/delegation-duty-guard.sh`, `shared/hooks/workflow-delegation-guard.sh` (`finish()`: 4,000-character cap), `.claude/rules/hook-rollout.md` | -- |
 | 30 | Workflow event shape: Claude Code fires ONE PreToolUse(Workflow) per Workflow tool call, whose `tool_input` carries the whole `script` (the 5 real payloads of session 10cf255a-c carry only `script`); no hook event fires per `agent()` call (a workflow-runtime function, not a tool call); tool calls made inside workflow agents fire the configured hooks with `agent_id`. Hooks docs (read 2026-10-28): PreToolUse "Matches on any tool name except EndConversation: built-in tools such as Bash, PowerShell, Edit, Write, Read, Glob, Grep, Agent, Workflow, WebFetch, WebSearch, AskUserQuestion, and ExitPlanMode, and any MCP tool names."; "When a subagent calls a tool, tool events such as PreToolUse and PostToolUse fire the same configured hooks as in the main conversation, and the input carries the agent_id and agent_type common input fields that identify the subagent." Live record: workflow wf_11a87d20-2c7's agent transcripts hold 34 `PreToolUse:Bash`, 1 `PreToolUse:Read` and 68 `PostToolUse:Write` hook records. Not seen by the workflow guard: a saved workflow launched by `tool_input.name` (no `script` / `scriptPath`: reported "not checked"), and child workflows a script starts with `workflow(...)` (their `agent()` prompts reach no hook). Parser limits (hook header LIMITS): a `/` after `)` is read as division; in `const A = '...', B = '...'` only `A` is captured; a method named `agent(p) { }` counts as an unresolved call site | 2.1.309 | 2.1.309 (2026-10-28) | `shared/hooks/workflow-delegation-guard.sh` (parses the script at that one event), `shared/hooks/hooks-manifest.json`, `.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-Hook2/S3-Hook2-spec.md` section 1 | -- |
 | 31 | Delegate identity and files: every delegate's transcript is `~/.claude/projects/<project-dir>/<main-session-id>/subagents/agent-<agentId>.jsonl` (flat for all depths) with `agent-<agentId>.meta.json`, whose `description` (the Agent call's `description`) is the only link from a mission name to an agentId; the Agent tool returns the agentId and an `output_file` but no session id; the `output_file` is an empty file until the delegate is resumed (then a hard link to the transcript); no environment variable holds a delegate's own id (`CLAUDE_CODE_SESSION_ID` is the main session's) | 2.1.325 | 2.1.325 (2026-11-14, Windows) | "Delegate Identity, Transcripts and Control" section below, `shared/skills/delegate/SKILL.md` ("Environment limits"), delegation prompts | -- (not in the official docs as observed) |
-| 32 | Delegate control: TaskStop cannot stop a delegate it does not own (an orchestrator cannot stop its own delegate; the error names the caller's id) and with an unknown id lists the session's running background agents; SendMessage queues to a running delegate and resumes a finished one; SubagentHandback delivers one report per result (a second call is refused); a delegate's background tasks outlive its hand-back and resume it when they finish | 2.1.325 | 2.1.325 (2026-11-14, Windows) | "Delegate Identity, Transcripts and Control" section below, `shared/skills/delegate/SKILL.md`, delegation prompts | -- |
+| 32 | Delegate control: TaskStop cannot stop a delegate it does not own (an orchestrator cannot stop its own delegate; the error names the caller's id) and with an unknown id lists the session's running background agents; SendMessage queues to a running delegate and resumes a finished one; SubagentHandback delivers one report per result (a second call is refused); a delegate's background tasks outlive its hand-back and their completion can bring it back to report again | 2.1.325 | 2.1.325 (2026-11-14, Windows) | "Delegate Identity, Transcripts and Control" section below, `shared/skills/delegate/SKILL.md`, delegation prompts | -- |
 
 ### MEDIUM -- Affects developer experience or specific features
 
@@ -106,7 +106,7 @@ Notable changes in CC releases that may affect this registry.
   delegate, resumes a finished one, `to: "main"` reaches the main
   conversation. See items #31 and #32.
 - **SubagentHandback** delivers one report per result; a delegate's
-  background tasks resume it after its hand-back. See item #32.
+  background tasks outlive its hand-back. See item #32.
 - Changelog not read for this entry; the behaviour above was observed, not
   read from release notes.
 
@@ -477,16 +477,17 @@ any other way. So:
    the lookup ambiguous.
 2. Record the agentId from the launch result in your notes and report.
 3. To recover it later, search the descriptions:
-   `grep -o '"description":"[^"]*"' <...>/subagents/*.meta.json` (M6-Polish,
-   18:07:50Z) or the Grep tool on `subagents\` with the mission name. The
+   `grep -o '"description":"[^"]*"' -r <...>/subagents --include=*.meta.json`
+   (the search M6-Polish ran at 18:07:50Z) or the Grep tool on `subagents\`
+   with the mission name. The
    file name is the agentId; `parentAgentId` gives the chain upward.
 4. The main session is not in `subagents/`: its transcript is
    `<project-dir>/<session-id>.jsonl`.
 
 #### What the Agent tool returns
 
-Every delegate launch in this session returned at once, before the delegate
-did any work (verbatim, probe 2b10-01):
+Every launch observed (M6-Polish's nine, 38dc-08's three) returned at once,
+in this shape (verbatim, probe 2b10-01):
 
 ```
 Async agent launched successfully. (This tool result is internal metadata — never quote or paste any part of it, including the agentId below, into a user-facing reply.)
@@ -498,7 +499,7 @@ Do NOT Read or tail this file via the shell tool — it is the full subagent JSO
 ```
 
 No session id is returned: a delegate runs inside the main session, and the
-agentId (17 hex characters after an `a`) is its only identifier. The
+agentId (17 characters: `a` and 16 hex digits) is its only identifier. The
 "internal ID" note concerns user-facing replies; an orchestrator records the
 id in its own notes and reports when the commander asks for it.
 
@@ -634,12 +635,14 @@ its background tasks and finish, then wait for its notification.
   it.` Earlier the same day M6-A's report arrived as a full hand-back five
   times (17:57-18:14Z) while its CI Monitor ran; which condition lets a
   repeat through: unknown.
-- **A delegate's background work outlives its hand-back and resumes it.**
-  2b10-01 handed back with a 90 s background shell running (`b2pmsszp4`).
-  The shell finished normally (`start`, `done`, `[exited with code 0]`), its
-  completion notification resumed the delegate, and the delegate messaged
-  its caller again. This is why a delegate with a live CI watch keeps
-  reporting. **Stop your own monitors and background shells before you hand
+- **A delegate's background work outlives its hand-back.** 2b10-01 handed
+  back with a 90 s background shell running (`b2pmsszp4`). The shell kept
+  running and finished normally (`start`, `done`, `[exited with code 0]`);
+  its completion notification reached the delegate (by then resumed by a
+  message), which reported to its caller again by SendMessage. The caller's
+  notification says such a delegate "may resume on its own when that work
+  completes or reports". This matches M6-A's repeated reports while its CI
+  watch ran. **Stop your own monitors and background shells before you hand
   back** (or say in the report that one still runs).
 - **Forced hand-back**: the harness may tell a delegate `[handback-send-enforce]
   Your report has not been delivered. Call SubagentHandback({message: <your
@@ -661,7 +664,8 @@ its background tasks and finish, then wait for its notification.
 - **Background move**: a foreground Bash call running longer than 180 s
   returns `Command was moved to the background (ID: <shellId>) after running
   for 180s. Output is being written to: <...>\tasks\<shellId>.output. You
-  will be notified when it completes.` (M6-Polish, 17:41:54Z).
+  will be notified when it completes.` (M6-Polish, 17:41:54Z). A 150 s
+  foreground wait was not moved (2b10-02).
 
 #### Guidance for orchestrators
 

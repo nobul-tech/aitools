@@ -13,9 +13,9 @@ delegate's agent id: ab61a67f59bce2b10 (found by its `description` in
    `reference/tool-ops-claude-code.md` ("Delegate Identity, Transcripts and
    Control", v1.0) plus Version Dependencies items #31 and #32.
 2. Verified all eleven starting OL items; corrected two (output_file is not a
-   transcript copy until the delegate is resumed; repeated hand-backs come
-   from background work resuming the delegate, and a second SubagentHandback
-   is now refused) and added about fifteen new facts.
+   transcript copy until the delegate is resumed; a delegate's background
+   work outlives its hand-back and can bring it back to report again, and a
+   second SubagentHandback is now refused) and added about fifteen new facts.
 3. Tested with two throwaway level-3 probes (2b10-01 id/env/tools/TaskStop/
    background shell/resume; 2b10-02 TaskStop on a running delegate).
 4. Also updated the `/delegate` skill (v2.2) and the `/tool-ops` skill lookup
@@ -33,7 +33,7 @@ delegate's agent id: ab61a67f59bce2b10 (found by its `description` in
 | 3a | output_file "is the full subagent JSONL transcript" | **Corrected**: empty until the delegate is resumed, then a hard link | 2b10-01: 0 bytes before SendMessage, 877,743 bytes and nlink 2 after; 2b10-02 (never resumed) stayed 0 bytes; 14 of 42 linked |
 | 4 | A delegate does not see its own id; TaskStop error reveals it; TaskStop cannot stop another agent's task | Confirmed; also: no env var holds it, the meta search finds it, an orchestrator cannot stop its own running delegate, and an unknown id lists the running agents | 38dc-08 -> 2b10-02 TaskStop refused, probe unaffected |
 | 5 | SendMessage to a finished agent resumes it with a pin | Confirmed; to a running agent it is queued to the next tool round; `to: "main"` works | 2b10-01 resume; M6-Polish 18:38:44Z |
-| 6 | A delegate with a background watcher hands back again on each resume | Refined: background work outlives the hand-back and resumes the delegate; a second SubagentHandback is now refused ("one report per result"), so the delegate re-reports by SendMessage | 2b10-01 refusal text and its b2pmsszp4 shell |
+| 6 | A delegate with a background watcher hands back again on each resume | Refined: background work outlives the hand-back and its completion reaches the delegate again; a second SubagentHandback is now refused ("one report per result"), so the delegate re-reports by SendMessage | 2b10-01 refusal text and its b2pmsszp4 shell |
 | 7 | Foreground Bash moved to background after about 180 s | Confirmed from M6-Polish's transcript (17:41:54Z, verbatim text in the reference); a 150 s foreground wait was not moved (2b10-02) | |
 | 8 | Hand-backs arrive as `agent-message from=<agentId>` | Confirmed; frame text and the harness tag-neutralizing preface documented | probe hand-backs |
 | 9 | Sizes | Parent 17.2 MB, orchestrator about 4.4 MB at 18:44Z; a probe transcript is about 0.5 MB before its first turn | `ls`, count-links.py |
@@ -83,7 +83,7 @@ hooks, governance modes, KPIs and verifications, none of which changed.
 
 | Probe | agentId | Purpose | Result |
 |-------|---------|---------|--------|
-| 2b10-01-idprobe | ad2eb0549286e5589 | own id, env, tool set, TaskStop unknown id, background shell, resume | all observed; second hand-back refused; shell completed after hand-back and resumed it |
+| 2b10-01-idprobe | ad2eb0549286e5589 | own id, env, tool set, TaskStop unknown id, background shell, resume | all observed; second hand-back refused; shell kept running after the hand-back, completed, and its notification reached the delegate |
 | 2b10-02-stopprobe | a42820dbaa5685b08 | TaskStop by its orchestrator while running | refused; probe unaffected |
 
 Scratch: `.scratch/session-2b10-01/`, `.scratch/session-2b10-02/` in this

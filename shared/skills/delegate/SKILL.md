@@ -425,8 +425,8 @@ Verify these before relying on them; versions move. Source of record:
   transcript is `subagents/agent-<agentId>.jsonl` under the main session's
   project folder, not the `output_file`. You cannot TaskStop your own
   delegate: message it instead. Tell delegates to stop their own monitors
-  and background shells before handing back: they outlive the hand-back and
-  resume the delegate, which then reports again.
+  and background shells before handing back: they outlive the hand-back,
+  and their completion can bring the delegate back to report again.
 - **Background delegates** may be denied writes they would get approval for
   in the foreground; expect `WRITE_BLOCKED` and plan to write from the
   delegating agent.
