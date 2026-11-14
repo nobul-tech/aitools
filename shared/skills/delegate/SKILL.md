@@ -452,7 +452,8 @@ section travels with the skill).
 - **Checks**: on macOS and Linux, `bash scripts/check-pre-commit.sh`,
   `check-pre-push.sh`, `check-post-push.sh` from the worktree by absolute
   path; on Windows, their `.ps1` twins with `pwsh -NoProfile -File` (the
-  `.sh` checks refuse Windows). Tests on Windows: the `.ps1` suites only
+  `.sh` checks refuse Windows). Tests on Windows: the `.ps1` suites, and
+  `.sh` suites only for scripts explicitly marked cross-platform
   (`reference/cross-platform-detail.md` "Running tests on Windows"). Known
   pre-existing failures to record, not block on: pre-commit step 6 (a
   harvesting file at mode 100644); pre-push step 7 (dotprofile `deploy/`

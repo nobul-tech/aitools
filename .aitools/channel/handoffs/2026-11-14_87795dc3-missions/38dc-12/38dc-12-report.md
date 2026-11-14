@@ -8,7 +8,8 @@ operational learning. NOT the section's text itself (it is in
 `reference/cross-platform-detail.md` "Running tests on Windows"). **Audience**:
 M6-Polish, the independent reviewer, the commander.
 
-Version 1.0, 2026-11-14. PR: https://github.com/nobul-tech/aitools/pull/159
+Version 1.1, 2026-11-14 (v1.0 the same day; v1.1 applies the independent
+review, "Review" below). PR: https://github.com/nobul-tech/aitools/pull/159
 (branch `docs/38dc-12-windows-test-practice`). Merge SHA and main CI run: in the
 hand-back (they come after this file is committed).
 
@@ -22,8 +23,8 @@ hand-back (they come after this file is committed).
    tests line and the `/delegate` skill "Checks" item (v2.2).
 3. RELEASE_NOTES v0.77.6. Documentation only: no script, test or CI change.
 4. The CI layout is decided (commander, 2026-11-14T18:58:47Z) and owned by
-   follow-up mission 38dc-13; one RFI remains (local Git Bash runs for
-   explicitly cross-platform scripts).
+   follow-up mission 38dc-13; one RFI remains (is the exemptions table the
+   record of "explicitly marked cross-platform"?).
 
 ## Facts of the brief
 
@@ -50,7 +51,9 @@ hand-back (they come after this file is committed).
    does run in Git Bash on Windows; `scripts/aitools` uses its
    `read_menu_choice` / `read_tty_choice` in `aitools user init` (`ui_choose`,
    line 397, and others). So the menu cases test real Windows code; the AI-merge
-   cases do not.
+   cases do not. On Windows CI three `.sh` suites reach the bash AI merge:
+   test-menu-choice, test-managed-files and test-adopt-push (its "merge & adopt
+   into the dotprofile" case; found by the review).
 3. **Verified and counted.** Windows job (`.scratch/session-38dc-12/win-steps.pl`
    over `check.yml` at 2ee68d9): 42 suite steps: 32 `.sh` with `shell: bash`, 8
    `.ps1` with `pwsh`, 2 Python. The 32: 4 `.sh` twins of `.ps1` suites
@@ -76,14 +79,20 @@ hand-back (they come after this file is committed).
      (append refused: probe; M5-L1 report line 220). On a directory, `cd` and
      file creation both succeed (probe; M6-F report line 97).
    - `grep` and CR: **refined.** Probe: `grep -c $'\r'` counted 2 lines on a file
-     whose only CR ends line 1 (it matched the LF-only line too); M6-B (report
-     line 89) saw it never fire. Either way unusable; perl works.
-   - MSYS: **refined.** Probe: `/c/Users/x` -> `C:/Users/x`, `--opt=/tmp/x` ->
-     `--opt=C:/Users/jdpal/AppData/Local/Temp/x`; `origin/main:reference/x.md`
-     was **not** rewritten, and `git show origin/main:reference/cross-platform-detail.md`
-     worked from Git Bash without `MSYS_NO_PATHCONV`. With `MSYS_NO_PATHCONV=1`,
-     `/c/Users/x` arrives unconverted (probe), and `git.exe` then fails (38dc-09
-     report line 140). The section records only what was reproduced.
+     whose only CR ends line 1. The review's probes explain it: Git for Windows
+     grep drops the CR at the end of each input line, so a CR-only pattern acts
+     as an empty pattern (`grep 'a$'` matches `a<CR>`). M6-B's "never fires"
+     (report line 89) is not what the probes show; the section cites the probes.
+     Perl works.
+   - MSYS: **verified, with a condition.** Probe: `/c/Users/x` -> `C:/Users/x`,
+     `--opt=/tmp/x` -> `--opt=C:/Users/jdpal/AppData/Local/Temp/x`.
+     `origin/main:reference/x.md` and `HEAD:.aitools/...` pass unchanged, but
+     `origin/main:.aitools/channel/relay.md` reaches git as `origin\main` and
+     `git cat-file -e` fails; with `MSYS_NO_PATHCONV=1` it works
+     (`.scratch/session-38dc-12/probe-msys-ref.sh`; found by the review). So the
+     orchestrator's item holds for a ref with `/` and a dot-directory path. With
+     `MSYS_NO_PATHCONV=1`, `/c/Users/x` arrives unconverted and `git.exe` then
+     fails (38dc-09 report line 140).
    - GNU vs BSD: `.claude/rules/cross-platform.md` "Hook portability".
    - Slow pty: `verify-n1.txt` (m6-eof scratch): `.sh` 62 s branch, 171-173 s
      mutant; `.ps1` 31 s.
@@ -135,33 +144,70 @@ Windows").
 
 WRITE_BLOCKED: none. INCIDENT: none.
 
+## Review
+
+Independent reviewer 2bcd-01 (fresh delegate, no author notes) posted CHANGES
+NEEDED, 6 blocking, on head 72add19:
+https://github.com/nobul-tech/aitools/pull/159#issuecomment-6882827115. Spot-checked
+before acting: findings 1 (test-adopt-push.sh lines 204-205), 2
+(test-post-push-step7.sh runs the `.sh` step in bash; test-menu-parity.sh header
+"(.sh in bash ...)"; three suites run build-deploy.sh) and 6 (probe above) hold.
+All six fixed, and non-blocking 7-11:
+
+1. AI merge: test-adopt-push.sh added.
+2. Drivers row: the bash parts named (post-push step 7 and menu parity cut a
+   step out of the guarded `check-post-push.sh`; three suites run
+   `build-deploy.sh`).
+3. "Git Bash PATH shadowing": `find`, `bash`, `sort` added to the confirmed list.
+4. The exemptions table is no longer called "the record": where the marks are
+   recorded is an open question (RFI 38dc-12-1, replaced).
+5. The exception carved out: tests of explicitly cross-platform scripts run on
+   Windows too (section, CLAUDE.md, /delegate); hooks and build-deploy.sh
+   suites may run locally in Git Bash. The old RFI (answered by the
+   commander's 18:58:47Z message) is withdrawn.
+6. MSYS: the `origin/main:.aitools/...` case added to issue 5 and fixed here.
+7. grep: reworded to the review's explanation. 8: "PR #155 changes". 9: Q1 and
+   Q2 stated, labelled as M6-Polish's wording. 10: notes below. 11: the inline
+   pwsh test step mentioned.
+
 ## Open questions
 
-RFI 38dc-12-1: May an agent on Windows run, locally in Git Bash, the tests of a
-`.sh` script explicitly marked cross-platform?
-The rule says `.sh` tests run only on Linux/macOS "unless a script is explicitly
-marked as cross-platform for good reasons". Hooks, `build-deploy.sh`,
-`build-package.sh` and the bash entry points are in the exemptions table because
-their Windows runtime is Git Bash; their suites have no `.ps1` form. The section
-as written leaves every suite without a `.ps1` form to the Windows CI job.
-Suggest: yes, for those scripts only (Git Bash is the runtime under test there,
-so the run is real evidence); everything else stays `.ps1`-only. If yes, one
-sentence is added to the section's rule list.
+RFI 38dc-12-1 (v1.0, withdrawn: the commander's 18:58:47Z answer already
+exempts explicitly cross-platform scripts and their tests).
+
+RFI 38dc-12-2: Is the `.claude/rules/cross-platform.md` "OS guard exemptions"
+table the record of "explicitly marked as cross-platform for good reasons"?
+The table lists the unguarded scripts (hooks, libraries, entry points, builders),
+but it has no Perl or Python rows although "all perl/python scripts" is one of
+your examples, and several rows still read "pending approval" or "rationale
+unrecorded" (e.g. `build-package.sh`, P-1; `bootstrap.sh`, `hh.sh`). The
+section says the record is unsettled.
+Suggest: yes, the table is the record; mission 38dc-13 (which owns the table)
+adds a Perl/Python row and asks you to approve or drop the pending rows, after
+which the section names the table as the record.
 
 ## Observations
 
-- PRs #155 and #158 both add `## v0.77.4` to RELEASE_NOTES; #158 also adds a
-  `/delegate` v2.2 line, as this PR does. Whichever merges second renumbers.
+- At review time: PR #158 had moved to v0.77.7, and PR #160 (38dc-11) also uses
+  v0.77.7; v0.77.6 is unique. #158 and #160 also edit the `/delegate` skill
+  (#158 adds a v2.2 line, as this PR does), and #160 edits
+  `reference/cross-platform-detail.md` and adds a ninth `.ps1` suite
+  (`tests/bootstrap/test-bootstrap.ps1`). Whichever merges later renumbers and
+  updates the counts.
 
 ## New operational learning
 
 - A pwsh started from the Claude Code Bash tool inherits Git Bash's PATH (Git
   `usr/bin` first): a bare `find`, `sort` or `perl` in a test stub is the Unix
   one. The PowerShell tool's pwsh has the Windows PATH.
-- Git for Windows `grep -c $'\r'` over-matches (it counted an LF-only line);
-  test CR with perl.
-- MSYS rewrites `/c/...` and `--opt=/tmp/...` arguments to native programs, not
-  `origin/main:<relative path>`.
+- Git for Windows `grep` drops the line-end CR, so `grep $'\r'` matches every
+  line; test CR with perl.
+- MSYS rewrites `/c/...`, `--opt=/tmp/...` and `<ref-with-slash>:.<dir>/...`
+  arguments to native programs (`git show origin/main:.aitools/...` fails);
+  prefix such a git call with `MSYS_NO_PATHCONV=1`. `origin/main:reference/...`
+  passes unchanged.
+- The independent review caught six real defects in a documentation PR I had
+  checked twice; a fresh reviewer without the author's notes is worth it.
 - A relayed "commander's answer" can be verified in the delegating agent's
   transcript: `queued_command` attachments with `origin.kind == "human"` are his
   words (`.scratch/session-38dc-12/extract-quote.py`).
