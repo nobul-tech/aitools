@@ -1750,8 +1750,10 @@ function Restore-ConsoleInputMode {
 # Test-InteractiveConsole: one non-interactive test for every prompt -- a
 # redirected stdin or a non-interactive session never prompts.
 # Read-ConsoleChoice: [Console]::ReadLine() returns $null at EOF, and the
-# callers' .ToLower() then threw. This logs and returns "" so each caller's
-# default branch applies. On a Windows console the one read runs in cooked
+# callers' .ToLower() then threw. This logs and returns "", and sets
+# $script:ReadConsoleEof = $true ($false after any other read), so a typed empty
+# line and EOF can be told apart: Read-MenuChoice takes its EOF default only at
+# EOF and asks again otherwise. On a Windows console the one read runs in cooked
 # line mode (echo on, see the console input mode helper above) and the previous
 # mode is put back afterwards; read_tty_choice needs no such step (Git Bash
 # keeps its own terminal state, so a raw Windows console does not affect it).
@@ -1762,6 +1764,7 @@ function Test-InteractiveConsole {
 
 function Read-ConsoleChoice {
     param([string]$DefaultDesc)
+    $script:ReadConsoleEof = $false
     $saved = [long]-1
     if (Initialize-AitConsoleInput) {
         $saved = [AitConsoleInput]::EnterCooked()
@@ -1780,6 +1783,7 @@ function Read-ConsoleChoice {
         }
     }
     if ($null -eq $line) {
+        $script:ReadConsoleEof = $true
         [Console]::WriteLine("")
         LogWarn "No input at prompt (EOF) -- defaulting to $DefaultDesc"
         return ""
@@ -1802,10 +1806,10 @@ function Read-ConsoleChoice {
 # -Default. Every answer is logged at detail (deploy.log only). Writes nothing
 # to the pipeline except the answer.
 # EOF detection: Read-ConsoleChoice returns "" both at EOF and for a typed empty
-# line. $script:ReadConsoleEof = $true after the read marks EOF (contract for
-# Read-ConsoleChoice, see the M2-Reask PR "Contract change"); until
-# Read-ConsoleChoice sets it, an empty answer with $script:warnings raised
-# during the read is EOF (its EOF branch calls LogWarn). 50 unrecognised
+# line. $script:ReadConsoleEof = $true after the read marks EOF (set by
+# Read-ConsoleChoice); as a fallback for an older Read-ConsoleChoice, an empty
+# answer with $script:warnings raised during the read is also EOF (its EOF
+# branch calls LogWarn). 50 unrecognised
 # answers in a row are treated as EOF, so a closed input that is not detected
 # cannot loop forever.
 # Spec: .claude/rules/interactive-menus.md "Answers";

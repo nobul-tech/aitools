@@ -69,6 +69,7 @@ switch ($Mode) {
         "LOADED-AFTER-SAVE $([bool]('AitConsoleInput' -as [type]))"
         $r = Read-ConsoleChoice "overwrite"
         "READ [$r]"
+        "EOFFLAG $script:ReadConsoleEof"
         "LOADED-AFTER-READ $([bool]('AitConsoleInput' -as [type]))"
         if ($IsWindows) {
             # Compile the type from the lib's own source (no console needed to compile)
@@ -83,8 +84,10 @@ switch ($Mode) {
         }
     }
     "piped" {
+        $script:ReadConsoleEof = $true   # a stale flag must be cleared by the next read
         $r = Read-ConsoleChoice "overwrite"
         "READ [$r]"
+        "EOFFLAG $script:ReadConsoleEof"
         "LOADED-AFTER-READ $([bool]('AitConsoleInput' -as [type]))"
     }
     "console" {
@@ -284,6 +287,7 @@ try {
     Check "EOF: Read-ConsoleChoice returns an empty string" ($out -match 'READ \[\]') $out.Trim()
     Check "EOF: the warn line is logged" ($r.Log -match '\[warn\] No input at prompt \(EOF\) -- defaulting to overwrite') $r.Log
     Check "EOF: one warning counted, no error" ($out -match 'END errors=0 warnings=1') $out.Trim()
+    Check "EOF: Read-ConsoleChoice sets `$script:ReadConsoleEof (Read-MenuChoice contract)" ($out -match 'EOFFLAG True') $out.Trim()
     Check "no console: AitConsoleInput is not loaded by Save/Restore or the read" (($out -match 'LOADED-AFTER-SAVE False') -and ($out -match 'LOADED-AFTER-READ False')) $out.Trim()
     if ($IsWindows) {
         $want = @("EnterCooked", "Get", "Set")
@@ -312,6 +316,7 @@ try {
     Check "piped: child ran without error (exit 0)" ($r.Rc -eq 0) $r.Out.Trim()
     Check "piped: Read-ConsoleChoice returns the piped line" ($r.Out -match 'READ \[o\]') $r.Out.Trim()
     Check "piped: no warning or error counted" ($r.Out -match 'END errors=0 warnings=0') $r.Out.Trim()
+    Check "piped: a read that is not EOF clears `$script:ReadConsoleEof" ($r.Out -match 'EOFFLAG False') $r.Out.Trim()
     Check "piped: AitConsoleInput is not loaded (nothing compiled)" ($r.Out -match 'LOADED-AFTER-READ False') $r.Out.Trim()
 
     # -----------------------------------------------------------------------
