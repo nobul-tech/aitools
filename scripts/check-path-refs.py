@@ -111,19 +111,23 @@ def git_ignored(root: Path, paths: list[str]) -> set[str]:
     """Return the subset of paths that git ignores (best effort, logged)."""
     if not paths:
         return set()
+    # Bytes, not text mode: on Windows text mode writes "\n" as "\r\n", so every
+    # path but the last reached git with a trailing CR and never matched.
     try:
         proc = subprocess.run(
             ["git", "-C", str(root), "check-ignore", "--no-index", "--stdin"],
-            input="\n".join(paths), capture_output=True, text=True, check=False,
+            input=("\n".join(paths) + "\n").encode("utf-8"), capture_output=True, check=False,
         )
     except FileNotFoundError:
         print("check-path-refs: git not found; ignored-path filtering disabled", file=sys.stderr)
         return set()
+    stdout = proc.stdout.decode("utf-8", errors="replace")
     # Exit 0 = some ignored, 1 = none ignored, >1 = error.
     if proc.returncode > 1:
-        print(f"check-path-refs: git check-ignore failed: {proc.stderr.strip()}", file=sys.stderr)
+        stderr = proc.stderr.decode("utf-8", errors="replace").strip()
+        print(f"check-path-refs: git check-ignore failed: {stderr}", file=sys.stderr)
         return set()
-    return {line.strip() for line in proc.stdout.splitlines() if line.strip()}
+    return {line.strip() for line in stdout.splitlines() if line.strip()}
 
 
 ALLOW_FILE = "scripts/check-path-refs-allow.txt"

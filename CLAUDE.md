@@ -96,8 +96,8 @@ it. Every entry adds leverage.
 `relay.md` lives in this repo — not a managed deploy file under `~/.claude/`. After
 `aitools` or `hh -n`, the harness may show `[RELAY]` if `relay.md` is uncommitted or
 your branch is ahead of `origin/main`. Scripts: `scripts/relay-outbound-prompt.sh`
-and `.ps1`. Skip with `AITOOLS_SKIP_RELAY_PROMPT=1`. See
-`.claude/rules/relay-outbound.md`.
+and `.ps1`. Skip with `AITOOLS_SKIP_RELAY_PROMPT=1`. Committing `relay.md`: "Channel
+exception" below.
 
 ### Channel exception (direct to main)
 

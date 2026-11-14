@@ -7,7 +7,7 @@
       "scope": "Incident entries only. NOT the filing process (incident-governance.md rule). NOT the framework documentation (framework-incident-governance.md). NOT incident reference files (reference/incident-*.md)",
       "audience": "/incident skill, /audit skill, check scripts, hooks, agents checking whether a deficiency has already been filed"
     },
-    "lastUpdated": "2026-11-13"
+    "lastUpdated": "2026-11-14"
   },
   "incidents": [
     {
@@ -4067,27 +4067,32 @@
       "updated": "2026-10-26"
     },
     {
-      "id": 173,
-      "title": "aitools-install.ps1 Step 7 rewrites the '# aitools shell integration' block on every run with no backup, leaving the blank line above it each time, and its removal loop deletes every non-blank line that follows the marker",
+      "id": 174,
+      "title": "Log writers outside aitools-lib (aitools-install.ps1/.sh log overrides, aitools-profile.sh/.ps1 log overrides, check-lib.sh/.ps1 checks.log and checks.jsonl writers) append to the log file unguarded, so a locked or unwritable log can abort the installer, the profile resolver or a check script instead of being swallowed",
       "status": "open",
-      "severity": "medium",
+      "severity": "high",
       "affected": [
-        "scripts/aitools-install.ps1"
+        "scripts/aitools-install.ps1",
+        "scripts/aitools-install.sh",
+        "scripts/aitools-profile.ps1",
+        "scripts/aitools-profile.sh",
+        "scripts/check-lib.ps1",
+        "scripts/check-lib.sh"
       ],
-      "linked": "incident #172",
+      "linked": "Branch fix/m5-lib commit 4cb0b46 (mission M5-L1, not merged on 2026-11-14) makes aitools-lib's own deploy.log writes fail-safe through Add-AitLibLogText / _aitlib_log_append; this incident is the rest",
       "referenceFile": null,
-      "observation": "aitools-install.ps1 Step 7 (origin/main 2faf897, the '# aitools shell integration' block after the setup-user-shell.ps1 call) takes its upgrade path whenever the marker is present, i.e. on every run after the first: it drops the marker line and every following non-blank line (`while (... $lines[$i].Trim() -ne '') { $i++ }`), joins the remaining lines with LF and writes them plus \"`n`n\" and the block with Set-Content, which appends a CRLF. The blank line above the old block stays. The commander's Windows profile, which had held only this 4-line block, had 163 blank lines above it on 2026-06-15 (backup Microsoft.PowerShell_profile.ps1.bak.2026-06-21T212708Z, 364 bytes). Step 7 calls no Backup-File, and the bash Step 7 does not rewrite an existing block ('Shell integration already in ...').",
-      "expected": "Parity with aitools-install.sh Step 7, which leaves an existing block alone; .claude/rules/config-file-safety.md 'Backup before overwrite' and 'Diff logging on overwrite' (identical: skip and log unchanged).",
-      "impact": "$PROFILE gains blank lines on every `aitools install` run and is rewritten twice per run (setup-user-shell, then Step 7). A user's own line placed directly after `function hh { ... }`, with no blank line between, is deleted on the next run; the only copy is the backup setup-user-shell.ps1 takes just before.",
-      "discoveryContext": "Cursor agent 423faec3-8, 2026-11-13, while restoring the commander's broken $PROFILE (incident #172): read the three profile backups byte by byte and Step 7 of aitools-install.ps1 and aitools-install.sh. Not reproduced in isolation: the blank-line growth is inferred from the backups and the code, the deletion from the code only. Audited #1-#172 for aitools-install Step 7 / shell integration: #170 (profile function argument binding) is the only other Step 7 entry.",
+      "observation": "Read on branch docs/m5-docs (origin/main 592c5b3 plus docs commits; none of these files changed). (1) scripts/aitools-install.ps1, the install log override block, function Log: `Add-Content -Path $logFile -Value $line`, no try/catch; the relay sync step also pipes child output with `$out | Add-Content -Path $logFile`. (2) scripts/aitools-install.sh (set -euo pipefail), the install log override block, function log: `printf ... | tee -a \"$LOG_FILE\"`; the relay sync step redirects `>>\"$LOG_FILE\" 2>&1` inside an if. (3) scripts/aitools-profile.sh (set -euo pipefail), function log: `printf '%s\\n' \"$line\" >> \"$LOG_FILE\"`. (4) scripts/aitools-profile.ps1, function Log: `[IO.File]::AppendAllText($resolvedLog, ...)`, unguarded, and the script's `trap` turns any escaped exception into exit 2. (5) scripts/check-lib.sh, check_log_init, _check_log_step and print_summary: `>> \"$_CHECK_LOG\"` / `>> \"$_CHECK_JSONL\"`. (6) scripts/check-lib.ps1, CheckLogInit, CheckLogStep and PrintSummary: `Add-Content -Path $script:CheckLog` / `$script:CheckJsonl`; check-pre-commit.ps1 sets `$ErrorActionPreference = \"Stop\"`, so there a failed Add-Content is terminating. Every one of these files loads aitools-lib first (aitools-install.ps1 and check-lib.ps1 dot-source aitools-lib.ps1; aitools-install.sh, aitools-profile.sh and check-lib.sh source aitools-lib.sh; aitools-profile.ps1 dot-sources it before defining Log). Not reproduced: the effects below are read from the code, not observed.",
+      "expected": "reference/logging.md section 5 'Format', Fail-safe bullet: \"A failed log write is swallowed (the only sanctioned silent-suppression in the harness), because a broken log must not break the operation it records.\" Also .claude/rules/script-standards.md 'Error and warning tracking' / 'Error handling requirements' (the suppression must be deliberate, not an accident of the writer).",
+      "impact": "When deploy.log or checks.log/checks.jsonl cannot be written (locked by another process on Windows, a full disk, a read-only or missing log directory, a permission change), the operation that is being logged fails instead: aitools-install.sh and aitools-profile.sh exit through set -e at the first log line (the installer runs first on a new machine, before anything else can report); aitools-profile.ps1 exits 2 through its trap, which its callers (the lib's resolver wrappers, setup-user-claude/-settings/-cursor, user init) treat as a resolver error; check-pre-commit.ps1 stops at the first step line; aitools-install.ps1 prints a non-terminating error per log line and continues, so the console fills with errors while deploy.log loses the record. The lib itself is fail-safe once fix/m5-lib merges, so the same condition behaves differently depending on which writer logs the line.",
+      "discoveryContext": "Reported by mission M5-L1 (fix/m5-lib, commit 4cb0b46) to M5-Fixes, filed by M5-D2 on 2026-11-14 (session 87795dc3, mission M5-Fixes item: file one incident). Audited on docs/m5-docs: reference/logging.md section 5; scripts/aitools-install.ps1 function Log and the relay sync step; scripts/aitools-install.sh function log; scripts/aitools-profile.sh function log; scripts/aitools-profile.ps1 function Log and its trap; scripts/check-lib.sh check_log_init, _check_log_step, print_summary; scripts/check-lib.ps1 CheckLogInit, CheckLogStep, PrintSummary; $ErrorActionPreference settings in check-pre-commit.ps1; origin/fix/m5-lib scripts/aitools-lib.ps1 Add-AitLibLogText and scripts/aitools-lib.sh _aitlib_log_append.",
       "discipline": null,
       "frameworks": null,
-      "suggestedResolution": "Mirror the bash Step 7: skip when the current block is already present verbatim (log 'already in'). When it differs, replace it in place between a start and an end marker as setup-user-shell.ps1 does (MatchEvaluator, pre-write parse check), Backup-File first, and drop the blank lines the old block leaves. Add Step 7 cases to tests/setup-user-shell (run twice: byte-identical; a user line after the block kept).",
+      "suggestedResolution": "After fix/m5-lib merges: route each writer through the lib's fail-safe append (Add-AitLibLogText / _aitlib_log_append), which every affected file can reach because each loads aitools-lib first. Options: (a) the installer and aitools-profile overrides keep their own console behaviour (Write-Host / stderr, JSONL record) but write the file line through the lib helper; (b) check-lib gets a small guarded twin for checks.log/checks.jsonl (same contract: try/catch or `2>/dev/null || :` with a comment, one warning per run at most), since the lib helper targets $logFile / $LOG_FILE; (c) the relay sync child-output appends in both installers go through the same helper. Add a test per writer: an unwritable log file (read-only file, or a directory in its place) must not change the exit code. Artifacts: the six scripts above, tests/logging (sh and ps1), reference/logging.md section 5 (name the helpers).",
       "rootCause": null,
       "correctiveAction": null,
       "preventionLayer": null,
-      "created": "2026-11-13",
-      "updated": "2026-11-13"
+      "created": "2026-11-14",
+      "updated": "2026-11-14"
     }
   ],
   "closed": [
@@ -4141,9 +4146,20 @@
       "title": "setup-user-shell.ps1 refreshed its managed block through a .NET regex replacement string, where `$_` expands to the whole input, so every re-run on Windows multiplied $PROFILE and left it unparseable",
       "closedIn": "v0.76.1",
       "closedDate": "2026-11-13",
-      "correctiveAction": "v0.76.1 (branch fix/setup-user-shell-replace): setup-user-shell.ps1 inserts the block with a MatchEvaluator, and parse-checks the spliced profile before writing it; a result with more parse errors than the current profile is not written (ERROR `managed block splice failed parse check`, exit 1). New tests/setup-user-shell/test-setup-user-shell.ps1 in the Windows CI job: 10/10 on the fix, 6 of 10 failing against the previous script. Commander's machine (2026-11-13): $PROFILE restored from Microsoft.PowerShell_profile.ps1.bak.2026-06-22T221110Z with its leading blank lines dropped; the corrupted copy kept as Microsoft.PowerShell_profile.ps1.bak.2026-11-13T214623Z.",
+      "correctiveAction": "v0.76.1 (PR #143, branch fix/setup-user-shell-replace, merge 941e64a): setup-user-shell.ps1 inserts the block with a MatchEvaluator, and parse-checks the spliced profile before writing it; a result with more parse errors than the current profile is not written (ERROR `managed block splice failed parse check`, exit 1). New tests/setup-user-shell/test-setup-user-shell.ps1 in the Windows CI job: 10/10 on the fix, 6 of 10 failing against the previous script. Commander's machine (2026-11-13): $PROFILE restored from Microsoft.PowerShell_profile.ps1.bak.2026-06-22T221110Z with its leading blank lines dropped; the corrupted copy kept as Microsoft.PowerShell_profile.ps1.bak.2026-11-13T214623Z. Follow-up PR #144 (fix/console-and-profile, merge c66d4b12c97daa0b8ca5241a9a7c72c301579a44, 2026-11-14): after #143 a profile already multiplied (64 blocks) still reported OK; setup-user-shell.ps1 now collapses duplicate blocks to one at the first block's position, removes stray marker lines, and reports damage it does not repair (parse errors, stray `_aitoolsLocalBin` lines) as WARN `profile damage left in place` plus an ACTION naming the newest clean `<profile>.bak.<UTC>`; tests/setup-user-shell 8 -> 37 checks (.ps1) and a new .sh suite.",
       "rootCause": "The refresh passed the block to [regex]::Replace as the replacement string. In a .NET replacement string `$_` is the whole input, and the block holds `$__aitoolsLocalBin` four times, so each became a copy of the whole profile followed by `_aitoolsLocalBin`. Contributing: the script was written on macOS with no pwsh (its header said UNTESTED on Windows), no test ran the refresh path, and the post-write check only looked for the two markers, which a multiplied profile still has, so every run reported OK. On the commander's machine the second run (2026-06-22) broke the profile (694 to 2,664 bytes, 5 blocks) and the third (2026-11-13) grew it to 41,783 bytes, 84 blocks and 135 parse errors.",
-      "preventionLayer": "Detection (pre-write parse check in setup-user-shell.ps1; tests/setup-user-shell in the Windows CI job)"
+      "preventionLayer": "Detection (pre-write parse check and damage report in setup-user-shell.ps1; tests/setup-user-shell .ps1 suite in the Windows CI job, .sh suite in the macOS and Linux CI jobs)",
+      "updated": "2026-11-14"
+    },
+    {
+      "id": 173,
+      "title": "aitools-install.ps1 Step 7 rewrites the '# aitools shell integration' block on every run with no backup, leaving the blank line above it each time, and its removal loop deletes every non-blank line that follows the marker",
+      "closedIn": "v0.76.2 (PR #144, fix/console-and-profile, merge c66d4b1)",
+      "closedDate": "2026-11-14",
+      "correctiveAction": "PR #144 (merge c66d4b12c97daa0b8ca5241a9a7c72c301579a44, merged 2026-11-14): aitools-install.ps1 and aitools-install.sh Step 7 only run setup-user-shell; the inline profile code is gone. setup-user-shell.ps1 owns a second marked block (`# >>> aitools shell integration >>>` ... `# <<< aitools shell integration <<<`), replaced in place by Update-MarkedBlock (line-based, no regex replacement string). A profile whose blocks are current is not written and not backed up; every write calls Backup-File first and is parse-checked. Remove-LegacyIntegration migrates the legacy `# aitools shell integration` / `# ai-tooling shell integration` lines by known line shapes only (dot-source of aliases.ps1, `function aitools {...}`, `function hh {...}`) and removes at most one blank line above each, so a user line after `function hh {...}` is kept. Verified: tests/setup-user-shell/test-setup-user-shell.ps1 cases `legacy: user line right after function hh kept (#173)`, `re-run: profile byte-identical after the 2nd and 3rd run`, `re-run: no write, so no backup taken`, in the Windows CI job (step `setup-user-shell PowerShell profile block tests (PowerShell, native)`), green on main 592c5b3 (https://github.com/nobul-tech/aitools/actions/runs/43557171983); 37/0/0 on Windows 11 on 2026-11-14 (mission M5-D1).",
+      "rootCause": "Two scripts wrote $PROFILE: setup-user-shell.ps1 (PATH block) and aitools-install.ps1 Step 7, which wrote the integration lines inline with a start marker and no end marker. With no end marker, Step 7 found the old block as 'the marker and every following non-blank line', and it took that upgrade path whenever the marker was present, with no Backup-File. It wrote $PROFILE directly, so no test could target it (PR #144 body), and the bash Step 7, which leaves an existing block alone, diverged unnoticed.",
+      "preventionLayer": "Prevention: one owner of $PROFILE (aitools-install Step 7 only runs setup-user-shell). Detection: tests/setup-user-shell .ps1 suite in the Windows CI job, .sh suite in the macOS (bash 5 and /bin/bash 3.2) and Linux CI jobs.",
+      "updated": "2026-11-14"
     }
   ]
 }
