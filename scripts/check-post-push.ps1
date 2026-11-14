@@ -47,7 +47,7 @@ if ($localHead -eq $remoteHead) {
 # 2. Smoke-test deploy scripts
 # ---------------------------------------------------------------------------
 $deployErrors = 0
-# The managed Git Bash for every bash step (2, 4, 6, 7): never the WSL launcher a
+# The managed Git Bash for every bash step (2, 4, 6): never the WSL launcher a
 # bare `bash` resolves to in a native pwsh (check-lib ResolveGitBash)
 $bashExe = ResolveGitBash
 if ($bashExe) {
@@ -69,7 +69,7 @@ if ($bashExe) {
         }
     }
 } else {
-    StepSkip "2" "Smoke-test deploy scripts" "bash not found"
+    StepSkip "2" "Smoke-test deploy scripts" "Git Bash not found"
 }
 
 # ---------------------------------------------------------------------------
@@ -200,7 +200,7 @@ if ($bashExe) {
         }
     }
 } else {
-    StepSkip "6" "Full syntax (.sh)" "bash not found"
+    StepSkip "6" "Full syntax (.sh)" "Git Bash not found"
 }
 
 # .ps1 validation (native on Windows)
@@ -230,21 +230,15 @@ if ($allPs1.Count -eq 0) {
 }
 
 # ---------------------------------------------------------------------------
-# 7. deploy/ drift audit
+# 7. deploy/ drift audit (retired)
 # ---------------------------------------------------------------------------
-if ($bashExe) {
-    & $bashExe (Join-Path $scriptDir "build-deploy.sh") 2>$null | Out-Null
-    $drift = InvokeGit diff deploy/
-    if (-not $drift) {
-        StepPass "7" "deploy/ drift audit"
-    } else {
-        StepFail "7" "deploy/ drift audit" "deploy/ is stale -- rebuild needed"
-        InvokeGit checkout -- deploy/
-    }
-} else {
-    StepSkip "7" "deploy/ drift audit" "bash not found"
-}
-
+# Retired (M5-Fixes item 3): the step ran build-deploy.sh with this shell's HOME,
+# which replaces the real dotprofile deploy/ (incident #86 class), then diffed the
+# frozen aitools deploy/, which build-deploy no longer writes, so it always passed.
+# check-pre-push step 7 runs on every push (commander, 2026-10-26) and does the real
+# check: a rebuild into a temporary copy of the dotprofile under a temporary HOME.
+# This step never runs build-deploy.sh; the number stays so outputs stay stable.
+StepSkip "7" "deploy/ drift audit" "retired: check-pre-push step 7 rebuilds into a temp dotprofile copy"
 
 
 # ---------------------------------------------------------------------------

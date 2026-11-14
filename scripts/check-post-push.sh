@@ -199,16 +199,15 @@ if require_pwsh "6" "Full syntax (.ps1)"; then
 fi
 
 # ---------------------------------------------------------------------------
-# 7. deploy/ drift audit
+# 7. deploy/ drift audit (retired)
 # ---------------------------------------------------------------------------
-bash "$SCRIPT_DIR/build-deploy.sh" >/dev/null 2>&1
-drift=$(git diff deploy/ 2>/dev/null || true)
-if [ -z "$drift" ]; then
-    step_pass "7" "deploy/ drift audit"
-else
-    step_fail "7" "deploy/ drift audit" "deploy/ is stale -- rebuild needed"
-    git checkout -- deploy/ 2>/dev/null || true
-fi
+# Retired (M5-Fixes item 3): the step ran build-deploy.sh with this shell's HOME,
+# which replaces the real dotprofile deploy/ (incident #86 class), then diffed the
+# frozen aitools deploy/, which build-deploy no longer writes, so it always passed.
+# check-pre-push step 7 runs on every push (commander, 2026-10-26) and does the real
+# check: a rebuild into a temporary copy of the dotprofile under a temporary HOME.
+# This step never runs build-deploy.sh; the number stays so outputs stay stable.
+step_skip "7" "deploy/ drift audit" "retired: check-pre-push step 7 rebuilds into a temp dotprofile copy"
 
 # ---------------------------------------------------------------------------
 # 9. Source-of-truth consistency

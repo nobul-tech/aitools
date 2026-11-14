@@ -572,6 +572,11 @@ jobs:
         if: ${{ !cancelled() }}
         run: bash tests/check-pre-push/test-pre-push-step7.sh
 
+      # check-post-push step 7 is retired: neither twin runs build-deploy.sh
+      - name: check-post-push step 7 tests (both twins; .ps1 when pwsh is present)
+        if: ${{ !cancelled() }}
+        run: bash tests/check-post-push/test-post-push-step7.sh
+
       - name: setup-user-shell login profile + rc tests
         if: ${{ !cancelled() }}
         run: bash tests/setup-user-shell/test-setup-user-shell.sh
@@ -822,6 +827,11 @@ jobs:
         if: ${{ !cancelled() }}
         shell: bash
         run: bash tests/check-pre-push/test-pre-push-step7.sh
+
+      - name: check-post-push step 7 tests (step 7 of both twins, native pwsh, via Git Bash)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: bash tests/check-post-push/test-post-push-step7.sh
 
       - name: Profile resolver tests (.ps1, native pwsh)
         if: ${{ !cancelled() }}
