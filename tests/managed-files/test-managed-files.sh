@@ -266,18 +266,22 @@ if $HAVE_PTY; then
         "has_line '$C/plain' '  ... (73 more lines -- full diff in deploy log)' && has_line '$C/plain' '-local 27' && ! has_line '$C/plain' '-local 28' && [ \"\$(grep -c 'diff a.md: ' '$LOG')\" = 103 ] && grep -qF 'diff a.md: +repo 50' '$LOG'"
 
     if $IS_WINDOWS; then
-        # ConPTY (pywinpty) passes ~330 KB of output too slowly for the 30 s
+        # ConPTY (pywinpty) passed ~330 KB of output (the 3000-line fixture of the
+        # time; now 1500 lines, ~170 KB) too slowly for the 30 s
         # pty-run timeout (CI run 41262590653: killed after 30.1 s with the menu
         # not yet shown; pywinpty issue #564, ConPTY throughput). The truncation
         # code is the same lib code the macOS/Linux run covers.
         printf 'SKIP display, diff over 64 KB: ConPTY output throughput exceeds the 30 s pty timeout on Windows\n'; SKIP=$((SKIP + 1))
     else
     setup_case display-huge
-    perl -e 'print "local line $_ " . ("x" x 40) . "\n" for 1..3000' > "$C/dest/a.md"; perl -e 'print "repo line $_ " . ("y" x 40) . "\n" for 1..3000' > "$C/src.md"
+    perl -e 'print "local line $_ " . ("x" x 40) . "\n" for 1..1500' > "$C/dest/a.md"; perl -e 'print "repo line $_ " . ("y" x 40) . "\n" for 1..1500' > "$C/src.md"
     GIT_DIFF_OPTS=--unified=0 run_lib "export GIT_DIFF_OPTS; C='$C' SRCF='$C/src.md' DEST='$C/dest/a.md' ADOPT=''; $DMF" "s\n"
-    # ~330 KB diff, larger than a pipe buffer (head-based truncation died of SIGPIPE here)
+    # ~170 KB diff, larger than a pipe buffer (head-based truncation died of SIGPIPE
+    # here). 1500 lines a side, not 3000: with 3000 the case took 25 s of the 30 s
+    # pty-run timeout on macOS and timed out on a slower runner (main CI run
+    # 43632383993, 2026-11-14)
     check "display, diff over 64 KB: menu shown, run continues, full diff logged" \
-        "[ \"\$(cat '$C/rc')\" = 0 ] && [ \"\$(result)\" = skipped ] && has_line '$C/plain' '  ... (5973 more lines -- full diff in deploy log)' && [ \"\$(grep -c 'diff a.md: ' '$LOG')\" = 6003 ]"
+        "[ \"\$(cat '$C/rc')\" = 0 ] && [ \"\$(result)\" = skipped ] && has_line '$C/plain' '  ... (2973 more lines -- full diff in deploy log)' && [ \"\$(grep -c 'diff a.md: ' '$LOG')\" = 3003 ]"
     fi
 
     setup_case display-nogit
