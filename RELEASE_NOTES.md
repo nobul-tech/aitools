@@ -12,6 +12,34 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.77.5 -- Fail-safe log writers outside the library; setup-pywinpty checks its listing; hh.ps1 is PowerShell 7 only (2026-11-14)
+
+Not tagged. Branch `fix/m6-logging` (PR #157), mission M6-Polish (session 87795dc3), items f, d and e (delegates M6-F and M6-DE).
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 1 | High | Log writers outside aitools-lib are fail-safe (`reference/logging.md` section 5). The installers' log override and Step 22 relay sync (`run_relay_sync` / `Invoke-RelaySync`), the profile resolver's log override and check-lib's checks.log / checks.jsonl writers now append through `_aitlib_log_append` / `Add-AitLibLogText` (check-lib.ps1 through `Write-CheckLogText`). A locked, unwritable or missing log no longer ends the bash installer, the resolver or a check script (`set -e`), throws from the PowerShell installer or check-lib under `$ErrorActionPreference = "Stop"`, turns `aitools-profile.ps1` into exit 2, or skips the bash installer's relay sync. On Windows, deploy.log, checks.log and checks.jsonl lines written by these writers now end in LF instead of CRLF. Resolves Incident #174 |
+| 2 | Medium | `setup-pywinpty.ps1` checks the result of its stale dist-info listing: when the `--target` user site exists but cannot be listed, the run reports ERROR `stale dist-info not removed` instead of silently skipping the removal. The listing no longer uses `Get-ChildItem -Filter`, which hides "access denied" on the listed directory even under `-ErrorAction Stop`. Post-push step 23 passes again (it failed on `setup-pywinpty.ps1` since PR #148). Resolves Incident #177 |
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 3 | `scripts/hh.ps1` is PowerShell 7 (pwsh) only (commander, 2026-11-14: "its is pwsh 7 only"): its header says so and `#Requires -Version 7.0` makes Windows PowerShell 5.1 print one version message instead of six parse errors, with `-File` and through the profile's `hh` function. `scripts/relay-outbound-prompt.ps1` stays ASCII because `aitools.ps1`, which 5.1 can load, loads it; its note now names `aitools.ps1` |
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 4 | `reference/logging.md` section 5 names the writers outside the library and the helper each uses; `reference/script-standards-detail.md` shows the new installer override; `reference/cross-platform-detail.md` "PowerShell 7 baseline" records that `hh.ps1` is pwsh 7 only |
+| 5 | Incident registry (`/incident` skill): #174 closed; #177 (high, setup-pywinpty unchecked `SilentlyContinue`) filed and closed |
+
+**Verified on:** Windows 11 (Git Bash, pwsh 7.6): the new failure-mode cases fail against origin/main's scripts (test-logging .sh 12, .ps1 11, test-install PowerShell 17, bash 20, test-profile PowerShell 4, bash 8) and pass on the branch (test-logging .sh 54/0, .ps1 45/0; test-install PowerShell 51/0); `tests/pywinpty` .ps1 54/0 (new case 4c fails against the old script); post-push step 23's script 12 PASS / 0 FAIL (was 1 FAIL); `check-pre-commit.ps1` and `check-pre-push.ps1` 0 FAIL, pre-push step 7's isolated build OK. The bash halves ran on Windows with `uname` spoofed to Linux; macOS and Linux: CI. Not run: any Windows PowerShell 5.1 run of `bootstrap.ps1` or the installer.
+
+---
+
 ## v0.77.3 -- Pre-commit path-ref check fixed on Windows; release notes backfilled for PRs #144-#147 (2026-11-14)
 
 Not tagged. Branch `docs/m5-docs`, mission M5-Fixes (session 87795dc3), items 6, 7, 8 and 13.
