@@ -221,8 +221,9 @@ try {
     # --- Interactive (pty) ---
     if ($havePty) {
         Setup-Case "enter"; W "src.md" "new"; W "dest/a.md" "old"
-        Run-Lib "`$src='$C/src.md'; `$dest='$C/dest/a.md'; `$adopt='$C/repo/a.md'; $dmf" "\n"
-        Check "empty choice at the menu: overwrite" ((Result) -eq "updated" -and (Txt "dest/a.md") -eq "new")
+        Run-Lib "`$src='$C/src.md'; `$dest='$C/dest/a.md'; `$adopt='$C/repo/a.md'; $dmf" "\ns\n"
+        # Commander 2026-11-13: "no default or other characters should re-ask"
+        Check "empty choice at the menu: asked again, then skip applies" ((Result) -eq "skipped" -and (Txt "dest/a.md") -eq "old" -and (Out).Contains("please type one of o/a/m/s/x") -and (Log).Contains('menu answer (review a.md): "" -> not one of o/a/m/s/x, asked again'))
 
         Setup-Case "skip"; W "src.md" "new"; W "dest/a.md" "old"
         Run-Lib "`$src='$C/src.md'; `$dest='$C/dest/a.md'; `$adopt='$C/repo/a.md'; $dmf" "s\n"
@@ -245,11 +246,12 @@ try {
         Check "merge & adopt: next run verifies" ((Result) -eq "verified")
 
         Setup-Case "merge-reject"; Stub-Claude "good"; W "repo/a.md" "# Title`nsource line"; W "dest/a.md" "# Title`nlocal line"
-        Run-Lib "`$src='$C/repo/a.md'; `$dest='$C/dest/a.md'; `$adopt='$C/repo/a.md'; $dmf" "m\nn\ns\n"
+        Run-Lib "`$src='$C/repo/a.md'; `$dest='$C/dest/a.md'; `$adopt='$C/repo/a.md'; $dmf" "m\nn\ns\ns\ns\n"
         # The read after the menu returns is not asserted: under this pty harness the
         # console input after the AI spinner job (Start-Job) comes back corrupted
-        # (open observation, see the mission report). Asserted: the menu is shown
-        # again and the rejected merge is not written.
+        # (open observation, see the mission report). A corrupted answer now asks
+        # again instead of overwriting, so spare "s" lines end the menu. Asserted:
+        # the menu is shown again and the rejected merge is not written.
         $menus = ([regex]::Matches((Get-Content "$C/out" -Raw), [regex]::Escape("choice [o/a/m/s/x]"))).Count
         Check "merge [n]o: back to the menu, merge not written" ($menus -ge 2 -and (Txt "dest/a.md") -notmatch "merged line" -and (Txt "repo/a.md") -match "source line")
 

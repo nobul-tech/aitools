@@ -1611,6 +1611,67 @@ function Read-ConsoleChoice {
 }
 
 # ---------------------------------------------------------------------------
+# Read-MenuChoice: choice-menu read. Usage:
+#   $c = Read-MenuChoice -Valid @("o","a","s","x") -Default "o" -DefaultDesc "overwrite" `
+#        -Context "review CLAUDE.md" -Prompt "  choice [o/a/s/x]: "
+# -Valid: the accepted answers, lowercase. -Default: the answer taken only at
+# EOF (one of -Valid). -DefaultDesc: what the default does (Read-ConsoleChoice's
+# EOF warning). -Context: a short label for the log. -Prompt: printed before
+# every read; the caller prints the menu.
+# Reads through Read-ConsoleChoice, trims surrounding whitespace and lowercases.
+# Returns an offered answer. Anything else -- an empty line, a word, a letter
+# not offered -- prints "  please type one of a/b/c" and asks again (commander,
+# 2026-11-13: "no default or other characters should re-ask"). EOF returns
+# -Default. Every answer is logged at detail (deploy.log only). Writes nothing
+# to the pipeline except the answer.
+# EOF detection: Read-ConsoleChoice returns "" both at EOF and for a typed empty
+# line. $script:ReadConsoleEof = $true after the read marks EOF (contract for
+# Read-ConsoleChoice, see the M2-Reask PR "Contract change"); until
+# Read-ConsoleChoice sets it, an empty answer with $script:warnings raised
+# during the read is EOF (its EOF branch calls LogWarn). 50 unrecognised
+# answers in a row are treated as EOF, so a closed input that is not detected
+# cannot loop forever.
+# Spec: .claude/rules/interactive-menus.md "Answers";
+# reference/managed-file-deployment.md "Menus". Parity: read_menu_choice in
+# aitools-lib.sh.
+# ---------------------------------------------------------------------------
+$script:ReadConsoleEof = $false
+function Read-MenuChoice {
+    param(
+        [string[]]$Valid,
+        [string]$Default,
+        [string]$DefaultDesc,
+        [string]$Context,
+        [string]$Prompt
+    )
+    $hint = $Valid -join "/"
+    $tries = 0
+    while ($true) {
+        [Console]::Write($Prompt)
+        $script:ReadConsoleEof = $false
+        $w0 = [int]$script:warnings
+        $raw = Read-ConsoleChoice $DefaultDesc
+        if ($null -eq $raw) { $raw = "" }
+        if ($script:ReadConsoleEof -or ($raw -eq "" -and [int]$script:warnings -gt $w0)) {
+            LogDetail "menu answer (${Context}): EOF -> $Default"
+            return $Default
+        }
+        $ans = $raw.Trim().ToLowerInvariant()
+        if ($Valid -ccontains $ans) {
+            LogDetail "menu answer (${Context}): `"$raw`" -> $ans"
+            return $ans
+        }
+        LogDetail "menu answer (${Context}): `"$raw`" -> not one of $hint, asked again"
+        $tries++
+        if ($tries -ge 50) {
+            LogWarn "No valid answer after 50 tries at $Context -- treating input as ended, defaulting to $DefaultDesc"
+            return $Default
+        }
+        [Console]::WriteLine("  please type one of $hint")
+    }
+}
+
+# ---------------------------------------------------------------------------
 # Agentic merge via Invoke-AI with refinement loop ([m]erge & adopt).
 # Uses structured prompts from Get-AiMergePrompt / Get-AiMergeRefinePrompt.
 # Parity: _invoke_ai_merge in aitools-lib.sh. Returns:
@@ -1691,9 +1752,11 @@ function Invoke-AiMerge {
             [Console]::WriteLine("  | ... ($($mergedLines.Count - 30) more lines)")
         }
         [Console]::WriteLine("")
-        [Console]::Write("  [y]es accept / [r]efine / [n]o reject: ")
-        $accept = Read-ConsoleChoice "reject the merge (back to the review menu)"
-        switch ($accept.ToLower()) {
+        # Only y, r or n count; anything else asks again; EOF = n (reject)
+        $accept = Read-MenuChoice -Valid @("y", "r", "n") -Default "n" `
+            -DefaultDesc "reject the merge (back to the review menu)" `
+            -Context "merge preview $displayName" -Prompt "  [y]es accept / [r]efine / [n]o reject: "
+        switch ($accept) {
             "y" {
                 $script:MergedContent = $merged
                 [Console]::WriteLine("  >> merged: AI-merged content accepted (iteration $iteration)")
@@ -1705,6 +1768,7 @@ function Invoke-AiMerge {
                 # continue loop
             }
             default {
+                # n (Read-MenuChoice returns only y, r or n)
                 [Console]::WriteLine("  >> merge rejected -- back to the review menu")
                 return "menu"
             }
@@ -1987,30 +2051,28 @@ function Prompt-DiffReview {
         }
         [Console]::WriteLine("  [s]kip            : nothing written; asked again next run")
         [Console]::WriteLine("  [x]abort          : stop this script (exit 2)")
-        if ($AdoptOffered) {
-            [Console]::Write("  choice [o/a/m/s/x]: ")
-        } else {
-            [Console]::Write("  choice [o/s/x]: ")
-        }
 
-        $choice = Read-ConsoleChoice "overwrite"
-        switch ($choice.ToLower()) {
-            "a" {
-                if ($AdoptOffered) {
-                    [Console]::WriteLine("  >> accept & adopt: local kept, copied to the repo")
-                    return "adopt"
-                }
+        # Only an offered letter counts; an empty line or anything else asks
+        # again (Read-MenuChoice); EOF = o (overwrite)
+        if ($AdoptOffered) {
+            $choice = Read-MenuChoice -Valid @("o", "a", "m", "s", "x") -Default "o" -DefaultDesc "overwrite" `
+                -Context "review $leafName" -Prompt "  choice [o/a/m/s/x]: "
+        } else {
+            $choice = Read-MenuChoice -Valid @("o", "s", "x") -Default "o" -DefaultDesc "overwrite" `
+                -Context "review $leafName" -Prompt "  choice [o/s/x]: "
+        }
+        switch ($choice) {
+            "o" {
                 [Console]::WriteLine("  >> overwritten: source deployed to local (backup kept)")
                 return "overwrite"
             }
+            "a" {
+                [Console]::WriteLine("  >> accept & adopt: local kept, copied to the repo")
+                return "adopt"
+            }
             "m" {
-                if ($AdoptOffered) {
-                    $mergeResult = Invoke-AiMerge -FilePath $FilePath -SourceContent $NewContent -LocalContent $CurrentContent -DiffOutput $diffOutput
-                    if ($mergeResult -ne "menu") { return $mergeResult }
-                } else {
-                    [Console]::WriteLine("  >> overwritten: source deployed to local (backup kept)")
-                    return "overwrite"
-                }
+                $mergeResult = Invoke-AiMerge -FilePath $FilePath -SourceContent $NewContent -LocalContent $CurrentContent -DiffOutput $diffOutput
+                if ($mergeResult -ne "menu") { return $mergeResult }
             }
             "s" {
                 [Console]::WriteLine("  >> skipped: local file unchanged")
@@ -2020,8 +2082,8 @@ function Prompt-DiffReview {
                 Invoke-ManagedAbort
             }
             default {
-                [Console]::WriteLine("  >> overwritten: source deployed to local (backup kept)")
-                return "overwrite"
+                # unreachable: Read-MenuChoice returns only an offered letter
+                LogError "review ${leafName}: unexpected answer '$choice' -- asking again"
             }
         }
     }
@@ -3698,35 +3760,23 @@ function Prompt-JsonFieldReview {
     }
     [Console]::WriteLine("  [s]kip      : leave this setting unchanged")
     [Console]::WriteLine("  [x]abort    : stop the run")
-    if ($OverwriteAllowed -ne "1") {
-        [Console]::Write("  choice [a/s/x]: ")
-    } elseif ($AdoptAllowed -eq "1") {
-        [Console]::Write("  choice [o/a/s/x]: ")
-    } else {
-        [Console]::Write("  choice [o/s/x]: ")
-    }
 
-    $choice = Read-ConsoleChoice $defaultDesc
-    switch ($choice.ToLower()) {
-        "a" {
-            if ($AdoptAllowed -eq "1") {
-                [Console]::WriteLine("  >> adopted: $LocalLabel value kept -> $SourceLabel")
-                return "adopt"
-            }
-            if ($OverwriteAllowed -eq "1") {
-                [Console]::WriteLine("  >> overwritten from $SourceLabel")
-                return "overwrite"
-            }
-            [Console]::WriteLine("  >> skipped: $Leaf unchanged")
-            return "skip"
-        }
-        "s" { [Console]::WriteLine("  >> skipped: $Leaf unchanged"); return "skip" }
+    # The offered letters, from the same flags as the menu lines. Only an
+    # offered letter counts; an empty line or anything else asks again
+    # (Read-MenuChoice); EOF = the default (o, or s without overwrite).
+    $valid = @()
+    $defaultLetter = "o"
+    if ($OverwriteAllowed -eq "1") { $valid += "o" } else { $defaultLetter = "s" }
+    if ($AdoptAllowed -eq "1") { $valid += "a" }
+    $valid += @("s", "x")
+    $choice = Read-MenuChoice -Valid $valid -Default $defaultLetter -DefaultDesc $defaultDesc `
+        -Context "json $what" -Prompt "  choice [$($valid -join '/')]: "
+    switch ($choice) {
+        "o" { [Console]::WriteLine("  >> overwritten from $SourceLabel"); return "overwrite" }
+        "a" { [Console]::WriteLine("  >> adopted: $LocalLabel value kept -> $SourceLabel"); return "adopt" }
         "x" { Invoke-ManagedAbort }
         default {
-            if ($OverwriteAllowed -eq "1") {
-                [Console]::WriteLine("  >> overwritten from $SourceLabel")
-                return "overwrite"
-            }
+            # s (Read-MenuChoice returns only an offered letter)
             [Console]::WriteLine("  >> skipped: $Leaf unchanged")
             return "skip"
         }
