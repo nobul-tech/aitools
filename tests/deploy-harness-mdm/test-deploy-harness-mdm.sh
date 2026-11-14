@@ -27,31 +27,41 @@
 # dotprofile (pre-push step 7's git-archive copy) gives the same output.
 # Probe files: this repo's shared/rules/scratch.md and tool-ops.md.
 #
-# Platform targeting (plans/ci-platform-targeting.md): build-deploy.sh is a
-# bash builder that runs on every platform (Git Bash on Windows;
-# .claude/rules/cross-platform.md exemptions), so every platform builds and
-# checks the generated files. The generated and dev deploy-harness run only
-# where their OS guard allows: deploy-harness.sh on macOS/Linux,
-# deploy-harness.ps1 (+ deploy-harness.payload) on Windows with native pwsh
-# (HOME and USERPROFILE set, native paths, .cmd stubs on PATH). Windows builds
-# also get USERPROFILE (their resolver runs pwsh) and the dotprofile as
-# AITOOLS_USER_REPO_PATH in C:/... form. Dev and MDM
+# Platform targeting (plans/ci-platform-targeting.md; commander 2026-11-14:
+# "sh scripts and tests should only run on linux/mac and ps1 on windows"):
+# this harness builds with build-deploy.sh and runs the generated and dev
+# deploy-harness.sh on macOS/Linux, and refuses Windows; Windows (build-deploy.sh
+# in Git Bash, deploy-harness.ps1 + deploy-harness.payload with native pwsh) is
+# tested by tests/deploy-harness-mdm/test-deploy-harness-mdm.ps1. Dev and MDM
 # are compared on the same machine in the same language; parity between the
 # languages: the normalized summary rows of the equivalence and config.json
 # runs must equal tests/deploy-harness-mdm/golden/ (tests/lib/platform-lib.sh
 # golden_match); AITOOLS_TEST_UPDATE_GOLDEN=1 on macOS/Linux rewrites them.
-# Needs node, perl, git (pwsh on Windows); python3 for the pty case (pywinpty
-# on Windows). AITOOLS_TEST_BASH picks the bash that runs build-deploy.sh and
-# the .sh scripts (default: bash). KEEP_TMP=1 keeps the temp directory. Exit 1
-# if any case fails.
+# Needs node, perl, git; python3 for the pty case. AITOOLS_TEST_BASH picks the
+# bash that runs build-deploy.sh and the .sh scripts (default: bash). KEEP_TMP=1
+# keeps the temp directory. Exit 1 if any case fails.
 #
 # Usage: bash tests/deploy-harness-mdm/test-deploy-harness-mdm.sh [--bash-only] [--help]
-#   --bash-only  accepted for compatibility: macOS/Linux always run only .sh
+#   --bash-only  accepted for compatibility: the harness always runs only .sh
 
 set -uo pipefail
 
+# OS guard: macOS/Linux only. BASH_VERSINFO[5] is bash's compiled-in machine
+# type (read-only, never taken from the environment), so neither a uname shim
+# on PATH nor an exported OSTYPE hides Git Bash.
+case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*)
+        printf 'This script is for macOS/Linux. On Windows, run tests/deploy-harness-mdm/test-deploy-harness-mdm.ps1 with pwsh.\n' >&2
+        exit 1 ;;
+esac
+case "${BASH_VERSINFO[5]:-}" in
+    *-msys*|*-cygwin*|*-mingw*)
+        printf 'This script is for macOS/Linux. On Windows, run tests/deploy-harness-mdm/test-deploy-harness-mdm.ps1 with pwsh.\n' >&2
+        exit 1 ;;
+esac
+
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
-    perl -ne 'print if $. >= 2 && $. <= 49' "$0"
+    perl -ne 'print if $. >= 2 && $. <= 45' "$0"
     exit 0
 fi
 if [ "${1:-}" = "--bash-only" ]; then shift; fi
@@ -69,8 +79,8 @@ else
 fi
 GOLDEN_DIR="$ROOT/tests/deploy-harness-mdm/golden"
 GOLDEN_TMP="$TMP_ROOT"
-LANG_RUN="$TEST_LANG"   # sh on macOS/Linux, ps1 on Windows
-EXT="$LANG_RUN"         # the generated / dev script run here: deploy-harness.$EXT
+LANG_RUN=sh   # the language under test (the .ps1 scripts: the .ps1 harness)
+EXT=sh        # the generated / dev script run here: deploy-harness.$EXT
 
 PASS=0
 FAIL=0
@@ -94,10 +104,6 @@ for t in node perl git; do
         exit 0
     fi
 done
-if [ "$LANG_RUN" = ps1 ] && ! command -v pwsh >/dev/null 2>&1; then
-    printf 'FAIL pwsh is not on PATH: deploy-harness.ps1 cannot be tested on Windows\n'
-    exit 1
-fi
 
 gitc() { git -c user.name=test -c user.email=test@example.invalid -c commit.gpgsign=false "$@"; }
 
@@ -115,37 +121,25 @@ gitc -C "$DOT" commit -q -m fixture
 P1="$ROOT/shared/rules/scratch.md"
 P2="$ROOT/shared/rules/tool-ops.md"
 
-# write_config HOME_DIR [native|posix] -- bootstrap config.json. native (the
-# default): the paths as the script under test reads them (pwsh on Windows);
-# posix: for build-deploy.sh (bash). Identical off Windows.
-cfg_path() { if [ "$2" = posix ]; then printf '%s' "$1"; else native_path "$1"; fi; }
+# write_config HOME_DIR -- bootstrap config.json (the same paths for the build
+# and the scripts under test)
 write_config() {
-    local form="${2:-native}"
     mkdir -p "$1/.aitools"
     printf '{\n  "version": 3,\n  "reposPath": "%s",\n  "repoPath": "%s",\n  "userRepoPath": "%s"\n}\n' \
-        "$(cfg_path "$TMP_ROOT" "$form")" "$(cfg_path "$ROOT" "$form")" "$(cfg_path "$DOT" "$form")" > "$1/.aitools/config.json"
+        "$TMP_ROOT" "$ROOT" "$DOT" > "$1/.aitools/config.json"
 }
 
 # run_build HOME_DIR DOTPROFILE BUILD_SCRIPT -- one build-deploy.sh run, output to
-# $OUT. HOME and USERPROFILE are both the isolated HOME: on Windows the
-# dotprofile resolver runs aitools-profile.ps1 through pwsh, whose $HOME follows
-# USERPROFILE, so HOME alone let it read the runner's real config.json (CI run
-# 41265193554: "No dotprofile found"). On Windows the dotprofile is passed as
-# AITOOLS_USER_REPO_PATH in C:/... form, the way scripts/aitools passes it; on
-# macOS/Linux the build resolves it from the isolated config.json.
+# $OUT. The build resolves the dotprofile from the isolated config.json.
+# (DOTPROFILE is the dotprofile that config.json names.)
 run_build() {
-    if [ "$TEST_PLATFORM" = windows ]; then
-        HOME="$1" USERPROFILE="$(native_path "$1")" AITOOLS_USER_REPO_PATH="$(native_path "$2")" \
-            "$TB" "$3" > "$OUT" 2>&1
-    else
-        env -u AITOOLS_USER_REPO_PATH HOME="$1" "$TB" "$3" > "$OUT" 2>&1
-    fi
+    env -u AITOOLS_USER_REPO_PATH HOME="$1" "$TB" "$3" > "$OUT" 2>&1
 }
 
 # build NAME -- build-deploy.sh into $DOT/deploy, then copy deploy/ to $TMP_ROOT/NAME
 build() {
     local hb="$TMP_ROOT/home-build-$1"
-    write_config "$hb" posix
+    write_config "$hb"
     OUT="$TMP_ROOT/build-$1.out"
     run_build "$hb" "$DOT" "$ROOT/scripts/build-deploy.sh"
     echo $? > "$TMP_ROOT/build-$1.rc"
@@ -157,68 +151,23 @@ build() {
 # Failing git for the MDM runs: the MDM path must not need git. One exception:
 # the terminal review menu displays its diff with `git diff --no-index` (#81);
 # without git it shows "(diff unavailable)" and the menu still works.
-# Windows: a git.cmd twin records `& git` calls from native pwsh, which cannot
-# run an extensionless script. The review diff starts git through .NET
-# ProcessStartInfo("git"), which finds only git.exe (CI run 41267819083: it
-# found the real one), so fakegit/git.exe is a copy of where.exe: it rejects
-# git's "-c ..." arguments and exits 2 (as Stub-Git-Fail in
-# tests/managed-files/test-managed-files.ps1). Calls to that git.exe are not
-# recorded in fakegit.calls; they fail, which is what the checks need.
 mkdir -p "$TMP_ROOT/fakegit"
 printf '#!/bin/sh\necho "$*" >> "%s/fakegit.calls"\nexit 99\n' "$TMP_ROOT" > "$TMP_ROOT/fakegit/git"
-printf '@echo %%*>> "%s/fakegit.calls"\r\n@exit /b 99\r\n' "$(native_path "$TMP_ROOT")" > "$TMP_ROOT/fakegit/git.cmd"
 chmod +x "$TMP_ROOT/fakegit/git"
-FAKE_GIT_EXE=true
-if [ "$TEST_PLATFORM" = windows ]; then
-    WHERE_EXE="$(cygpath -u "${SYSTEMROOT:-C:\\Windows}")/System32/where.exe"
-    if ! cp "$WHERE_EXE" "$TMP_ROOT/fakegit/git.exe"; then
-        printf 'WARN cannot copy %s to fakegit/git.exe: pwsh can still find the real git.exe\n' "$WHERE_EXE"
-        FAKE_GIT_EXE=false
-    fi
-fi
 
-# ps_args ARGS...: the .sh flags as the .ps1 spells them, one per line
-ps_args() {
-    local a
-    for a in "$@"; do
-        case "$a" in
-            --dry-run)     printf '%s\n' -DryRun ;;
-            --force)       printf '%s\n' -Force ;;
-            --help)        printf '%s\n' -Help ;;
-            --skip-config) printf '%s\n' -SkipConfig ;;
-            *)             printf '%s\n' "$a" ;;
-        esac
-    done
-}
-
-# run_script SCRIPT HOME SUMMARY LOGDIR FAKEGIT(0|1) ARGS... -- one run of the
-# deploy-harness of the language under test (SCRIPT without extension),
-# non-interactive; console output to $OUT, exit code to $OUT.rc. CRs are
-# removed from the summary and the output afterwards. PS_TMPDIR: the temp root
-# for the MDM stage directory (TMPDIR; TMP and TEMP for .NET on Windows).
+# run_script SCRIPT HOME SUMMARY LOGDIR FAKEGIT(0|1) ARGS... -- one run of
+# SCRIPT.sh (a deploy-harness, SCRIPT without extension), non-interactive;
+# console output to $OUT, exit code to $OUT.rc. CRs are removed from the
+# summary and the output afterwards. PS_TMPDIR: the temp root (TMPDIR) for
+# the MDM stage directory.
 run_script() {
     local script="$1" h="$2" sum="$3" logs="$4" fg="$5"; shift 5
     local path="$PATH"
     [ "$fg" = 1 ] && path="$TMP_ROOT/fakegit:$PATH"
-    if [ "$LANG_RUN" = sh ]; then
-        env -u AITOOLS_FORCE -u AITOOLS_DRY_RUN HOME="$h" PATH="$path" AITOOLS_LOG_DIR="$logs" \
-            AITOOLS_SUMMARY_FILE="$sum" TMPDIR="${PS_TMPDIR:-${TMPDIR:-/tmp}}" \
-            "$TB" "$script.sh" "$@" < /dev/null > "$OUT" 2>&1
-        echo $? > "$OUT.rc"
-    else
-        local a=() line tmpd
-        if [ $# -gt 0 ]; then
-            while IFS= read -r line; do a+=("$line"); done <<EOF
-$(ps_args "$@")
-EOF
-        fi
-        tmpd="$(native_path "${PS_TMPDIR:-${TMPDIR:-/tmp}}")"
-        env -u AITOOLS_FORCE -u AITOOLS_DRY_RUN HOME="$(native_path "$h")" USERPROFILE="$(native_path "$h")" \
-            PATH="$path" AITOOLS_LOG_DIR="$(native_path "$logs")" AITOOLS_SUMMARY_FILE="$(native_path "$sum")" \
-            TMP="$tmpd" TEMP="$tmpd" \
-            pwsh -NoProfile -NonInteractive -File "$(native_path "$script.ps1")" ${a[@]+"${a[@]}"} < /dev/null > "$OUT" 2>&1
-        echo $? > "$OUT.rc"
-    fi
+    env -u AITOOLS_FORCE -u AITOOLS_DRY_RUN HOME="$h" PATH="$path" AITOOLS_LOG_DIR="$logs" \
+        AITOOLS_SUMMARY_FILE="$sum" TMPDIR="${PS_TMPDIR:-${TMPDIR:-/tmp}}" \
+        "$TB" "$script.sh" "$@" < /dev/null > "$OUT" 2>&1
+    echo $? > "$OUT.rc"
     if [ -f "$sum" ]; then perl -pi -e 's/\r//g' "$sum"; fi
     perl -pi -e 's/\r//g' "$OUT"
 }
@@ -261,15 +210,11 @@ only_review_diff_git() {
 # every number replaced by N (file counts follow this repo's sources)
 rows_golden() { perl -pe 's/\r//g; s/\d+/N/g' "$1" | LC_ALL=C sort > "$2"; }
 # set_payload_sha DIR -- write the sha256 of DIR/deploy-harness.payload into the
-# generated script of the language under test (after a payload edit)
+# generated deploy-harness.sh (after a payload edit)
 set_payload_sha() {
     local sha
     sha=$(perl -MDigest::SHA=sha256_hex -0777 -ne 's/\r//g; print sha256_hex($_)' "$1/deploy-harness.payload")
-    if [ "$LANG_RUN" = sh ]; then
-        perl -i -pe "s/^MDM_PAYLOAD_SHA256=.*/MDM_PAYLOAD_SHA256=$sha/" "$1/deploy-harness.sh"
-    else
-        perl -i -pe "s/^\\\$mdmPayloadSha256 = \"[0-9a-f]+\"/\\\$mdmPayloadSha256 = \"$sha\"/" "$1/deploy-harness.ps1"
-    fi
+    perl -i -pe "s/^MDM_PAYLOAD_SHA256=.*/MDM_PAYLOAD_SHA256=$sha/" "$1/deploy-harness.sh"
 }
 
 # ---------------------------------------------------------------------------
@@ -282,18 +227,8 @@ G="$TMP_ROOT/b1/deploy"
 check "build: exit 0, not skipped" "[ \"\$(rc_of build-b1)\" = 0 ] && ! grep -q 'skipping deploy build' '$TMP_ROOT/build-b1.out'"
 check "build: deploy-harness.sh/.ps1 and the config writer bundle generated" \
     "[ -f '$G/deploy-harness.sh' ] && [ -f '$G/deploy-harness.ps1' ] && [ -f '$G/setup-user-config.sh' ] && [ -f '$G/setup-user-config.ps1' ] && [ -f '$G/aitools-profile.sh' ] && [ -f '$G/aitools-profile.ps1' ] && [ -f '$G/aitools-json.pl' ] && [ -f '$G/aitools-json.ps1' ]"
-if [ "$TEST_PLATFORM" != windows ]; then
-    # Windows has no executable bit (Git Bash fakes it from the content).
-    check "build: the generated .sh scripts are executable" "[ -x '$G/deploy-harness.sh' ] && [ -x '$G/setup-user-config.sh' ]"
-fi
-if [ "$LANG_RUN" = sh ]; then
-    check "MDM parse: bash -n deploy-harness.sh" "'$TB' -n '$G/deploy-harness.sh'"
-else
-    printf '%s\n' '$e = $null' \
-        '$null = [System.Management.Automation.Language.Parser]::ParseFile($args[0], [ref]$null, [ref]$e)' \
-        'if ($e.Count -gt 0) { $e | ForEach-Object { [Console]::WriteLine($_.Message) }; exit 1 }' > "$TMP_ROOT/parse.ps1"
-    check "MDM parse: pwsh parser deploy-harness.ps1" "pwsh -NoProfile -NonInteractive -File '$(native_path "$TMP_ROOT/parse.ps1")' '$(native_path "$G/deploy-harness.ps1")' > /dev/null"
-fi
+check "build: the generated .sh scripts are executable" "[ -x '$G/deploy-harness.sh' ] && [ -x '$G/setup-user-config.sh' ]"
+check "MDM parse: bash -n deploy-harness.sh" "'$TB' -n '$G/deploy-harness.sh'"
 check "cursor (MDM): step 4 once in .sh and .ps1" \
     "[ \"\$(grep -c 'Step 4: Cursor user rules' '$G/setup-user-cursor.sh')\" = 1 ] && [ \"\$(grep -c 'Step 4: Cursor user rules' '$G/setup-user-cursor.ps1')\" = 1 ]"
 check "cursor (MDM): header ported from the source (five things, rules scope)" \
@@ -426,38 +361,22 @@ PTY="$ROOT/tests/managed-files/pty-run.py"
 HAVE_PTY=true
 command -v python3 >/dev/null 2>&1 || HAVE_PTY=false
 [ -f "$PTY" ] || HAVE_PTY=false
-# Windows pty = pywinpty (ConPTY); python3 -c's failure means "not installed".
-if [ "$TEST_PLATFORM" = windows ] && $HAVE_PTY && ! python3 -c 'import winpty' >/dev/null 2>&1; then
-    HAVE_PTY=false
-fi
 if $HAVE_PTY; then
     printf 'local edit\n' > "$TMP_ROOT/eq-mdm/.aitools/rules/scratch.md"
     OUT="$TMP_ROOT/pty-mdm.out"
     : > "$TMP_ROOT/pty-mdm.summary"
-    if [ "$LANG_RUN" = sh ]; then
-        env -u AITOOLS_FORCE -u AITOOLS_DRY_RUN HOME="$TMP_ROOT/eq-mdm" PATH="$TMP_ROOT/fakegit:$PATH" \
-            AITOOLS_LOG_DIR="$TMP_ROOT/eq-mdm/logs" AITOOLS_SUMMARY_FILE="$TMP_ROOT/pty-mdm.summary" \
-            python3 "$PTY" --input 's\n' --log "$OUT" -- "$TB" "$TMP_ROOT/b1/deploy/deploy-harness.sh"
-    else
-        env -u AITOOLS_FORCE -u AITOOLS_DRY_RUN HOME="$(native_path "$TMP_ROOT/eq-mdm")" USERPROFILE="$(native_path "$TMP_ROOT/eq-mdm")" \
-            PATH="$TMP_ROOT/fakegit:$PATH" AITOOLS_LOG_DIR="$(native_path "$TMP_ROOT/eq-mdm/logs")" \
-            AITOOLS_SUMMARY_FILE="$(native_path "$TMP_ROOT/pty-mdm.summary")" \
-            python3 "$(native_path "$PTY")" --input 's\n' --log "$(native_path "$OUT")" -- \
-            pwsh -NoProfile -File "$(native_path "$TMP_ROOT/b1/deploy/deploy-harness.ps1")"
-    fi
+    env -u AITOOLS_FORCE -u AITOOLS_DRY_RUN HOME="$TMP_ROOT/eq-mdm" PATH="$TMP_ROOT/fakegit:$PATH" \
+        AITOOLS_LOG_DIR="$TMP_ROOT/eq-mdm/logs" AITOOLS_SUMMARY_FILE="$TMP_ROOT/pty-mdm.summary" \
+        python3 "$PTY" --input 's\n' --log "$OUT" -- "$TB" "$TMP_ROOT/b1/deploy/deploy-harness.sh"
     echo $? > "$TMP_ROOT/pty-mdm.rc"
     perl -pi -e 's/\r//g' "$TMP_ROOT/pty-mdm.summary"
     perl -pe 's/\e\[[0-9;?]*[A-Za-z]//g; s/\r//g' "$OUT" > "$OUT.plain"
     check "terminal review (MDM): overwrite offered, adopt and merge not; skip keeps LOCAL" \
         "[ \"\$(rc_of pty-mdm)\" = 0 ] && grep -q '\[o\]verwrite' '$OUT.plain' && ! grep -q '\[a\]ccept & adopt' '$OUT.plain' && ! grep -q '\[m\]erge & adopt' '$OUT.plain' && grep -qx 'local edit' '$TMP_ROOT/eq-mdm/.aitools/rules/scratch.md' && grep -q '^WARN|harness files|1 skipped' '$TMP_ROOT/pty-mdm.summary'"
-    if $FAKE_GIT_EXE; then
-        check "terminal review (MDM) without git: diff unavailable, menu still shown" \
-            "grep -q 'diff unavailable' '$OUT.plain' && grep -q '\[o\]verwrite' '$OUT.plain'"
-    else
-        printf 'SKIP terminal review without git (no fake git.exe: pwsh finds the real git)\n'; SKIP=$((SKIP + 1))
-    fi
+    check "terminal review (MDM) without git: diff unavailable, menu still shown" \
+        "grep -q 'diff unavailable' '$OUT.plain' && grep -q '\[o\]verwrite' '$OUT.plain'"
 else
-    printf 'SKIP terminal review case (no pseudo-terminal: python3 missing, or pywinpty not installed on Windows)\n'; SKIP=$((SKIP + 1))
+    printf 'SKIP terminal review case (no pseudo-terminal: python3 missing)\n'; SKIP=$((SKIP + 1))
 fi
 
 run dev dry --dry-run
@@ -477,9 +396,6 @@ mkdir -p "$TMP_ROOT/stub/deploy"
 cp -Rp "$TMP_ROOT/b1/deploy/." "$TMP_ROOT/stub/deploy/"
 printf '#!/usr/bin/env bash\necho "$*" >> "%s/writer.calls"\nexit 0\n' "$TMP_ROOT" > "$TMP_ROOT/stub/deploy/setup-user-config.sh"
 chmod +x "$TMP_ROOT/stub/deploy/setup-user-config.sh"
-printf '%s\n' 'param([switch]$DryRun, [switch]$Force)' \
-    "[IO.File]::AppendAllText('$(native_path "$TMP_ROOT/writer.calls")', \"called\`n\")" \
-    'exit 0' > "$TMP_ROOT/stub/deploy/setup-user-config.ps1"
 writer_calls() { if [ -f "$TMP_ROOT/writer.calls" ]; then perl -ne '$n++; END { print $n + 0 }' "$TMP_ROOT/writer.calls"; else echo 0; fi; }
 # run_fresh NAME ARGS... -- the stub MDM copy under a HOME with no ~/.aitools at all
 run_fresh() {
@@ -500,7 +416,7 @@ rows_golden "$TMP_ROOT/fresh-mdm.summary" "$TMP_ROOT/fresh.rows"
 check "fresh HOME parity: summary rows (numbers as N) match golden" "golden_match fresh.rows '$TMP_ROOT/fresh.rows'"
 # Only one bootstrap key: still no bootstrap
 mkdir -p "$TMP_ROOT/half-mdm/.aitools"
-printf '{\n  "version": 3,\n  "reposPath": "%s"\n}\n' "$(native_path "$TMP_ROOT")" > "$TMP_ROOT/half-mdm/.aitools/config.json"
+printf '{\n  "version": 3,\n  "reposPath": "%s"\n}\n' "$TMP_ROOT" > "$TMP_ROOT/half-mdm/.aitools/config.json"
 run_fresh half
 check "MDM, config.json without repoPath: n/a (no bootstrap), writer not called" \
     "[ \"\$(rc_of half-mdm)\" = 0 ] && row half-mdm 'OK|config.json|n/a (no bootstrap)' && [ \"\$(writer_calls)\" = 0 ]"
@@ -522,7 +438,7 @@ run dev skipd --skip-config
 check "--skip-config (dev): exit 0, OK config.json n/a (written by installer), writer not run" \
     "[ \"\$(rc_of skipd-dev)\" = 0 ] && row skipd-dev 'OK|config.json|n/a (written by installer)' && ! grep -q '|aitools config|' '$TMP_ROOT/skipd-dev.summary' && cmp -s '$TMP_ROOT/skipd-config.before' '$TMP_ROOT/skipd-dev/.aitools/config.json' && ! grep -q '\"meta\"' '$TMP_ROOT/skipd-dev/.aitools/config.json'"
 run dev helpd --help
-if [ "$LANG_RUN" = sh ]; then SKIP_FLAG=--skip-config; else SKIP_FLAG=-SkipConfig; fi
+SKIP_FLAG=--skip-config
 check "--help (dev): documents $SKIP_FLAG, no marker lines" \
     "[ \"\$(rc_of helpd-dev)\" = 0 ] && grep -q -- '$SKIP_FLAG' '$TMP_ROOT/helpd-dev.out' && ! grep -q -- '--- BEGIN' '$TMP_ROOT/helpd-dev.out' && ! grep -q -- '--- END' '$TMP_ROOT/helpd-dev.out'"
 
@@ -536,7 +452,7 @@ cp -Rp "$TMP_ROOT/b1/deploy/." "$TMP_ROOT/bad/deploy/"
 corrupt_record() {
     perl -i -ne 'if ($skip) { print "QUJD\n"; $skip = 0; next } $skip = 1 if /^aitools\/shared\/rules\/scratch\.md\t/; print' "$1"
 }
-restore_bad() {  # the b1 payload and generated script of the language under test
+restore_bad() {  # the b1 payload and generated deploy-harness.sh
     cp -p "$TMP_ROOT/b1/deploy/deploy-harness.payload" "$TMP_ROOT/bad/deploy/deploy-harness.payload"
     cp -p "$TMP_ROOT/b1/deploy/deploy-harness.$EXT" "$TMP_ROOT/bad/deploy/deploy-harness.$EXT"
 }
@@ -546,34 +462,14 @@ run mdm corrupt
 check "damaged payload (checksum): exit 1, ERROR payload damaged, nothing deployed" \
     "[ \"\$(rc_of corrupt-mdm)\" = 1 ] && row corrupt-mdm 'ERROR|harness files|payload damaged' && grep -q 'sha256 mismatch' '$TMP_ROOT/corrupt-mdm.out' && [ ! -e '$TMP_ROOT/corrupt-mdm/.aitools/rules' ]"
 # The same damage with the script's sha256 updated: the record check catches it.
-# The stage directory goes under pstmp/ (TMPDIR; TMP and TEMP on Windows).
+# The stage directory goes under pstmp/ (TMPDIR).
 set_payload_sha "$TMP_ROOT/bad/deploy"
 mkdir -p "$TMP_ROOT/pstmp"
 PS_TMPDIR="$TMP_ROOT/pstmp/" run mdm record
 check "damaged record: exit 1, ERROR row, that file not deployed, the others are" \
     "[ \"\$(rc_of record-mdm)\" = 1 ] && grep -q '^ERROR|harness files|1 embedded file(s) damaged' '$TMP_ROOT/record-mdm.summary' && grep -q 'shared/rules/scratch.md is damaged' '$TMP_ROOT/record-mdm.out' && [ ! -e '$TMP_ROOT/record-mdm/.aitools/rules/scratch.md' ] && [ -f '$TMP_ROOT/record-mdm/.aitools/rules/tool-ops.md' ]"
-if [ "$LANG_RUN" = ps1 ]; then
-    # .ps1: the stage directory is removed in a finally block, also on exit 1.
-    # Where it was made: the "unpacked in" path's parent is pstmp. The same
-    # directory is compared with -ef (device and inode), not by spelling: .NET
-    # may print an 8.3 short name or a long one, with \ (CI run 41267819083).
-    # Removed: no aitools-harness-* entry is left in pstmp (other temp files that
-    # pwsh itself makes there are not this script's).
-    STAGE_W=$(perl -ne 's/\e\[[0-9;?]*[A-Za-z]//g; if (/unpacked in (\S+)/) { print $1; exit }' "$TMP_ROOT/record-mdm.out")
-    STAGE_P="$STAGE_W"
-    if [ -n "$STAGE_W" ] && [ "$TEST_PLATFORM" = windows ]; then STAGE_P="$(cygpath -u "$STAGE_W")"; fi
-    stage_ok() {
-        [ -n "$STAGE_W" ] || return 1
-        case "${STAGE_P##*/}" in aitools-harness-*) ;; *) return 1 ;; esac
-        [ "${STAGE_P%/*}" -ef "$TMP_ROOT/pstmp" ] || return 1
-        ! ls -A "$TMP_ROOT/pstmp" | grep -q '^aitools-harness-'
-    }
-    check "ps1 exit 1 after unpacking: the stage directory was created there and removed (finally)" "stage_ok"
-    if ! stage_ok; then
-        printf '      | stage path from the output: %s\n      | pstmp holds:\n' "${STAGE_W:-(no 'unpacked in' line)}"
-        ls -A "$TMP_ROOT/pstmp" | perl -pe 's/^/      |   /'
-    fi
-fi
+# (The .ps1 stage-directory case, removed in a finally block on exit 1, is in
+# the .ps1 harness.)
 # A CRLF copy of the payload (Windows checkout with autocrlf) still verifies
 restore_bad
 perl -pi -e 's/\n/\r\n/' "$TMP_ROOT/bad/deploy/deploy-harness.payload"
@@ -585,29 +481,27 @@ run mdm nopayload
 check "missing payload: exit 1, ERROR payload missing, nothing deployed" \
     "[ \"\$(rc_of nopayload-mdm)\" = 1 ] && row nopayload-mdm 'ERROR|harness files|payload missing' && [ ! -e '$TMP_ROOT/nopayload-mdm/.aitools/rules' ]"
 restore_bad
-if [ "$LANG_RUN" = sh ]; then
-    # Truncated copies (review B1): the guard is the first command, so every cut
-    # after it -- inside the inlined library (a bash parse error otherwise, exit
-    # 2), at a top-level line in section 1 (exit 0 with nothing done otherwise),
-    # or in sections 3-7 -- exits 1 with the row and deploys nothing.
-    # trunc_case NAME PERL_EXPR -- cut a copy of b1's script at byte PERL_EXPR($s = size, $t = text)
-    trunc_case() {
-        cp -p "$TMP_ROOT/b1/deploy/deploy-harness.sh" "$TMP_ROOT/bad/deploy/deploy-harness.sh"
-        perl -e 'my ($f, $e) = @ARGV; my $s = -s $f; open my $h, "<", $f or die; my $t = do { local $/; <$h> }; close $h; my $n = eval $e; die "no cut point\n" unless $n && $n < $s; truncate($f, $n) or die "truncate: $!\n"' \
-            "$TMP_ROOT/bad/deploy/deploy-harness.sh" "$2"
-        run mdm "$1"
-    }
-    trunc_case trunc40 'int($s * 0.40)'
-    check "truncated script at 40% (inside the library): exit 1, ERROR row, nothing deployed" \
-        "[ \"\$(rc_of trunc40-mdm)\" = 1 ] && row trunc40-mdm 'ERROR|harness files|script truncated' && [ ! -e '$TMP_ROOT/trunc40-mdm/.aitools/rules' ]"
-    trunc_case truncs1 'index($t, "\n# 1. config.json") + 1'
-    check "truncated script at the section 1 heading: exit 1, ERROR row, nothing deployed" \
-        "[ \"\$(rc_of truncs1-mdm)\" = 1 ] && row truncs1-mdm 'ERROR|harness files|script truncated' && [ ! -e '$TMP_ROOT/truncs1-mdm/.aitools/rules' ]"
-    trunc_case trunc95 'int($s * 0.95)'
-    check "truncated script at 95% (sections 3-7): exit 1, ERROR row, nothing deployed" \
-        "[ \"\$(rc_of trunc95-mdm)\" = 1 ] && row trunc95-mdm 'ERROR|harness files|script truncated' && [ ! -e '$TMP_ROOT/trunc95-mdm/.aitools/rules' ]"
-    restore_bad
-fi
+# Truncated copies (review B1): the guard is the first command, so every cut
+# after it -- inside the inlined library (a bash parse error otherwise, exit
+# 2), at a top-level line in section 1 (exit 0 with nothing done otherwise),
+# or in sections 3-7 -- exits 1 with the row and deploys nothing.
+# trunc_case NAME PERL_EXPR -- cut a copy of b1's script at byte PERL_EXPR($s = size, $t = text)
+trunc_case() {
+    cp -p "$TMP_ROOT/b1/deploy/deploy-harness.sh" "$TMP_ROOT/bad/deploy/deploy-harness.sh"
+    perl -e 'my ($f, $e) = @ARGV; my $s = -s $f; open my $h, "<", $f or die; my $t = do { local $/; <$h> }; close $h; my $n = eval $e; die "no cut point\n" unless $n && $n < $s; truncate($f, $n) or die "truncate: $!\n"' \
+        "$TMP_ROOT/bad/deploy/deploy-harness.sh" "$2"
+    run mdm "$1"
+}
+trunc_case trunc40 'int($s * 0.40)'
+check "truncated script at 40% (inside the library): exit 1, ERROR row, nothing deployed" \
+    "[ \"\$(rc_of trunc40-mdm)\" = 1 ] && row trunc40-mdm 'ERROR|harness files|script truncated' && [ ! -e '$TMP_ROOT/trunc40-mdm/.aitools/rules' ]"
+trunc_case truncs1 'index($t, "\n# 1. config.json") + 1'
+check "truncated script at the section 1 heading: exit 1, ERROR row, nothing deployed" \
+    "[ \"\$(rc_of truncs1-mdm)\" = 1 ] && row truncs1-mdm 'ERROR|harness files|script truncated' && [ ! -e '$TMP_ROOT/truncs1-mdm/.aitools/rules' ]"
+trunc_case trunc95 'int($s * 0.95)'
+check "truncated script at 95% (sections 3-7): exit 1, ERROR row, nothing deployed" \
+    "[ \"\$(rc_of trunc95-mdm)\" = 1 ] && row trunc95-mdm 'ERROR|harness files|script truncated' && [ ! -e '$TMP_ROOT/trunc95-mdm/.aitools/rules' ]"
+restore_bad
 check "truncation guard: the first command of the generated .sh (before the library)" \
     "[ \"\$(perl -ne 'if (/^if command -v perl .*END OF GENERATED SCRIPT/) { print \$.; exit }' '$G/deploy-harness.sh')\" -lt \"\$(perl -ne 'if (/^logging_init\\b/ || /^set -euo pipefail\$/) { print \$.; exit }' '$G/deploy-harness.sh')\" ]"
 # A record line with a non-numeric size (sha updated): malformed, payload damaged
@@ -664,9 +558,9 @@ marker_build() {
     local hb="$TMP_ROOT/home-build-$1"
     cp -p "$RC/scripts/$3" "$TMP_ROOT/$3.orig"
     perl -i -pe "$2" "$RC/scripts/$3"
-    write_config "$hb" posix
+    write_config "$hb"
     OUT="$TMP_ROOT/build-$1.out"
-    HOME="$hb" USERPROFILE="$(native_path "$hb")" AITOOLS_USER_REPO_PATH="$(native_path "$DOT")" \
+    HOME="$hb" AITOOLS_USER_REPO_PATH="$DOT" \
         "$TB" "$RC/scripts/build-deploy.sh" > "$OUT" 2>&1
     echo $? > "$TMP_ROOT/build-$1.rc"
     cp -p "$TMP_ROOT/$3.orig" "$RC/scripts/$3"
