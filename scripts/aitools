@@ -66,7 +66,8 @@ to_native_path() {
 #   pwsh -NoProfile -ExecutionPolicy Bypass -File <aitools.ps1> <arguments>
 # with exec, before the argument parsing below and before aitools-lib.sh is
 # sourced, so no bash library code (logging, read_menu_choice, the relay prompt,
-# deploy_configs) runs on Windows; the exit code is aitools.ps1's. aitools.ps1 is
+# deploy_configs) runs on Windows; the exit code is aitools.ps1's, and USERPROFILE
+# is set to this $HOME (Windows form) for it. aitools.ps1 is
 # the repo copy (<repoPath>/scripts/aitools.ps1, repoPath read from
 # ~/.aitools/config.json as below), else the copy beside this script
 # (~/.local/bin/aitools.ps1, installed by aitools-install.ps1; it clones a missing
@@ -148,6 +149,15 @@ aitools_win_forward() {
         return 1
     fi
     aitools_ps1_args "$@"
+    # aitools.ps1 works under $env:USERPROFILE; this entry point under $HOME. Hand
+    # it the same profile (they differ when HOME is set, e.g. an isolated test HOME)
+    local up=""
+    if up=$(cygpath -w "$HOME"); then
+        export USERPROFILE="$up"
+    else
+        printf 'error: cygpath -w failed for HOME=%s -- aitools.ps1 would use USERPROFILE=%s instead\n' "$HOME" "${USERPROFILE:-}" >&2
+        return 1
+    fi
     exec pwsh -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$ps1")" ${AITOOLS_PS1_ARGS[@]+"${AITOOLS_PS1_ARGS[@]}"}
 }
 

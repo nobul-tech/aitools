@@ -13,8 +13,9 @@
 #               documented command and flag (--skip-gh-auth, --repos-path,
 #               --skip-drive-detection, --dry-run, --addmcp A B, --alias, dashboard
 #               arguments, quotes, spaces, $); the stub's exit code (0, 1, 2, 7) is
-#               the entry point's; stdin reaches aitools.ps1; the fixture
-#               aitools-lib.sh (it writes a marker and exits 99) is never sourced
+#               the entry point's; stdin reaches aitools.ps1; USERPROFILE is this
+#               HOME even when the caller's differs; the fixture aitools-lib.sh (it
+#               writes a marker and exits 99) is never sourced
 #   errors   -- no pwsh on PATH, or no aitools.ps1 anywhere: exit 1, a clear
 #               message, nothing run; aitools.ps1 beside the entry point is used
 #               when the repo copy is missing (~/.local/bin/aitools.ps1)
@@ -22,8 +23,12 @@
 #               --project-root P` reaches aitools-dashboard.ps1 (a stub with its
 #               real param block) as -Background, through pwsh -File, and its exit
 #               code comes back (the dashboard-serve SessionStart hook's call);
+#               later dashboard arguments (--dry-run) reach it unchanged;
 #               `--addmcp vercel bogus` is split into two names; `--addmcp` alone
-#               reports "requires at least one server name"
+#               reports "requires at least one server name"; an unknown argument,
+#               or an installer flag without install, is "unknown argument", exit 1
+#   native   -- a pwsh user's call of aitools.ps1: a leading flag does not swallow
+#               the command; `--addmcp` names are not unknown arguments
 #
 # The stubs and fixtures live in a temp dir (HOME, USERPROFILE and AITOOLS_LOG_DIR
 # point into it), removed on exit; the real HOME and the real repos are never
@@ -41,7 +46,7 @@ if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
 }
 
 if ($Help) {
-    Get-Content $PSCommandPath | Select-Object -Skip 1 -First 33 | ForEach-Object { $_ -replace '^# ?', '' }
+    Get-Content $PSCommandPath | Select-Object -Skip 1 -First 39 | ForEach-Object { $_ -replace '^# ?', '' }
     exit 0
 }
 
@@ -85,6 +90,7 @@ foreach ($k in @($PSBoundParameters.Keys | Sort-Object)) {
 }
 if ($args.Count) { $lines += "ARGS=" + ((@($args) | ForEach-Object { "[$_]" }) -join '') }
 if ($env:STUB_READ_STDIN) { $lines += "STDIN=[" + [Console]::In.ReadLine() + "]" }
+if ($env:STUB_SHOW_PROFILE) { $lines += "PROFILE=" + $env:USERPROFILE }
 [IO.File]::WriteAllLines($env:STUB_OUT, [string[]]$lines)
 exit [int]$env:STUB_EXIT
 '@
@@ -111,11 +117,10 @@ function New-Case([string]$Name, [string]$RepoPath) {
     return [pscustomobject]@{ Dir = $c; Home = $h; Out = (Join-Path $c "stub-out.txt"); Cwd = (Join-Path $c "cwd") }
 }
 
-# Run ENTRY (a bash script) with Git Bash: args one per argv entry, the case's HOME,
-# extra environment, stdin text. Returns Rc, Out (stdout), Err (stderr).
-function Invoke-Entry($Case, [string[]]$Arguments, [hashtable]$Env = @{}, [string]$Stdin = "", [string]$Entry = $entry) {
-    $psi = [System.Diagnostics.ProcessStartInfo]::new($script:gitBash)
-    $psi.ArgumentList.Add((Fwd $Entry))
+# Run FILE with ARGS (one per argv entry) in the case's HOME and USERPROFILE, extra
+# environment, stdin text. Returns Rc, Out (stdout), Err (stderr).
+function Invoke-Proc($Case, [string]$File, [string[]]$Arguments, [hashtable]$Env = @{}, [string]$Stdin = "") {
+    $psi = [System.Diagnostics.ProcessStartInfo]::new($File)
     foreach ($a in $Arguments) { $psi.ArgumentList.Add($a) }
     $psi.WorkingDirectory = $Case.Cwd
     $psi.UseShellExecute = $false
@@ -137,6 +142,16 @@ function Invoke-Entry($Case, [string[]]$Arguments, [hashtable]$Env = @{}, [strin
     if (-not $p.WaitForExit(180000)) { $p.Kill($true); throw "timeout: $($Arguments -join ' ')" }
     $p.WaitForExit()
     return [pscustomobject]@{ Rc = $p.ExitCode; Out = $so.Result; Err = $se.Result }
+}
+# Run ENTRY (a bash script, default scripts/aitools) with Git Bash
+function Invoke-Entry($Case, [string[]]$Arguments, [hashtable]$Env = @{}, [string]$Stdin = "", [string]$Entry = $entry) {
+    return Invoke-Proc $Case $script:gitBash (@((Fwd $Entry)) + @($Arguments)) $Env $Stdin
+}
+# Call aitools.ps1 the way a pwsh user does: through the profile function that
+# setup-user-shell.ps1 writes (function aitools { & "...\aitools.ps1" @args })
+function Invoke-Native($Case, [string]$Ps1, [string]$ArgText) {
+    $pwshExe = [Environment]::ProcessPath
+    return Invoke-Proc $Case $pwshExe @("-NoProfile", "-Command", "function aitools { & '$Ps1' @args }; aitools $ArgText; exit `$LASTEXITCODE")
 }
 
 function Read-Stub($Case) {
@@ -197,7 +212,7 @@ try {
         @{ N = "sessions list with a space"; A = @("sessions", "list", "proj name"); W = @("Command=sessions", "Remaining=[list][proj name]") },
         @{ N = "dashboard arguments unchanged (the dashboard-serve hook's call)"; A = @("dashboard", "--background", "--project-root", "C:/a b")
            W = @("Command=dashboard", "Remaining=[--background][--project-root][C:/a b]") },
-        @{ N = "dashboard: --dry-run after dashboard is not translated"; A = @("dashboard", "--stop", "--dry-run"); W = @("Command=dashboard", "Remaining=[--stop][--dry-run]") },
+        @{ N = "dashboard: the forward does not rewrite --dry-run after dashboard"; A = @("dashboard", "--stop", "--dry-run"); W = @("Command=dashboard", "Remaining=[--stop][--dry-run]") },
         @{ N = "quotes, `$ and backticks are kept"; A = @("sessions", "move", 'a"b', 'c$d ''q'' `e'); W = @("Command=sessions", "Remaining=[move][a`"b][c`$d 'q' ``e]") }
     )
     $i = 0
@@ -215,6 +230,15 @@ try {
         $r = Invoke-Entry $c @("mcp") @{ STUB_EXIT = "$code" }
         Check "exit: aitools.ps1 exit $code is the entry point's exit code" (($r.Rc -eq $code) -and (Test-Path -LiteralPath $c.Out) -and -not (LibSourced $c)) "rc=$($r.Rc) err=$($r.Err.Trim())"
     }
+
+    $c = New-Case "profile" $repoA
+    $otherProfile = Join-Path $c.Dir "other-profile"
+    New-Item -ItemType Directory -Path $otherProfile | Out-Null
+    $r = Invoke-Entry $c @("mcp") @{ USERPROFILE = $otherProfile; STUB_SHOW_PROFILE = "1" }
+    $stubLines = Read-Stub $c
+    $prof = @(@($stubLines) | Where-Object { $_ -like "PROFILE=*" } | ForEach-Object { $_ -replace '^PROFILE=', '' })
+    Check "profile: HOME and USERPROFILE differ -> aitools.ps1 gets USERPROFILE = this HOME (Windows form)" (
+        ($r.Rc -eq 0) -and ($prof.Count -eq 1) -and ($prof[0].TrimEnd('\') -ieq $c.Home.TrimEnd('\'))) "rc=$($r.Rc) profile=[$($prof -join ',')] home=$($c.Home) err=$($r.Err.Trim())"
 
     $c = New-Case "stdin" $repoA
     $r = Invoke-Entry $c @("user", "init") @{ STUB_READ_STDIN = "1" } "o`n"
@@ -268,6 +292,35 @@ try {
     $c = New-Case "e2e-dash-status" $repoB
     $r = Invoke-Entry $c @("dashboard", "--status")
     Check "e2e: dashboard --status reaches aitools-dashboard.ps1 as -Status" (Same (Read-Stub $c) @("Status=True")) "rc=$($r.Rc) err=$($r.Err.Trim())"
+
+    $c = New-Case "e2e-dash-dryrun" $repoB
+    $r = Invoke-Entry $c @("dashboard", "--status", "--dry-run")
+    Check "e2e: arguments after dashboard reach aitools-dashboard.ps1 unchanged (--dry-run not taken by aitools.ps1)" (
+        Same (Read-Stub $c) @("Status=True", "ARGS=[--dry-run]")) "got=[$(@(Read-Stub $c) -join ', ')] rc=$($r.Rc) err=$($r.Err.Trim())"
+
+    foreach ($u in @(
+            @{ A = @("--bogus-flag"); W = "--bogus-flag" },
+            @{ A = @("mcp", "extra"); W = "extra" },
+            @{ A = @("--skip-gh-auth"); W = "--skip-gh-auth" },
+            @{ A = @("--repos-path", "C:/x"); W = "--repos-path" })) {
+        $c = New-Case ("e2e-unknown-" + ($u.W -replace '[^a-z]', '')) $repoB
+        $r = Invoke-Entry $c $u.A
+        $all = $r.Out + $r.Err
+        Check "e2e: $($u.A -join ' ') -> unknown argument '$($u.W)', exit 1 (bash parity; no sync runs)" (
+            ($r.Rc -eq 1) -and ($all -match [regex]::Escape("unknown argument '$($u.W)'"))) "rc=$($r.Rc) out=$($all.Trim())"
+    }
+
+    # A pwsh user's native call (aitools.ps1 from ~/.local/bin): GNU flags arrive as strings
+    $realPs1 = Join-Path $repoB "scripts\aitools.ps1"
+    $c = New-Case "native-flag-first" $repoB
+    $r = Invoke-Native $c $realPs1 "--force dashboard --status"
+    Check "native: aitools --force dashboard --status -> the command after a leading flag is still the command" (
+        Same (Read-Stub $c) @("Status=True")) "got=[$(@(Read-Stub $c) -join ', ')] rc=$($r.Rc) out=$(($r.Out + $r.Err).Trim())"
+    $c = New-Case "native-addmcp" $repoB
+    $r = Invoke-Native $c $realPs1 "--addmcp vercel bogus"
+    $all = $r.Out + $r.Err
+    Check "native: aitools --addmcp vercel bogus -> unknown MCP server 'bogus' (the names are not unknown arguments)" (
+        ($r.Rc -eq 1) -and ($all -match "unknown MCP server 'bogus'") -and -not ($all -match 'unknown argument')) "rc=$($r.Rc) out=$($all.Trim())"
 
     $c = New-Case "e2e-addmcp" $repoB
     $r = Invoke-Entry $c @("--addmcp", "vercel", "bogus")

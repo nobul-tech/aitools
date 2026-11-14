@@ -3,7 +3,8 @@
 # check-lib.sh's checks.log / checks.jsonl writers, and the bash entry point (scripts/aitools).
 #
 # Safe to re-run: every case runs in its own temp HOME / log dir, removed on exit.
-# Platform: macOS, Linux, Windows (Git Bash). Exit 1 if any case fails.
+# Platform: macOS, Linux, Windows (Git Bash); the scripts/aitools run cases are
+# macOS/Linux only (on Windows it forwards to aitools.ps1). Exit 1 if any case fails.
 # Spec: .claude/rules/script-standards.md (log line format, levels, counters,
 # end-of-run summary), reference/logging.md (location, rotation, fail-safe writes),
 # reference/script-standards-detail.md "Logging overrides".
@@ -187,6 +188,18 @@ check_run_checks "log dir cannot be created"
 check "entry: defines no log functions (uses aitools-lib)" \
     "! grep -Eq '^[[:space:]]*(log|log_ok|log_warn|log_error|log_detail)\(\)' '$ENTRY'"
 
+# The cases below run scripts/aitools past its argument parsing, on macOS and Linux
+# only: in Git Bash on Windows it hands off to aitools.ps1 before any of this code
+# runs (commander, 2026-11-14, RFI 38dc-3); tests/aitools-entry/test-win-forwarder.ps1
+# covers that path.
+case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*) ENTRY_RUNS=false ;;
+    *) ENTRY_RUNS=true ;;
+esac
+if ! $ENTRY_RUNS; then
+    printf 'SKIP entry: 7 pre-lib and argument cases (Windows: scripts/aitools forwards to aitools.ps1)\n'
+else
+
 # fake_repo <case> [with-lib]: HOME with config.json -> a repo dir holding the lib.
 fake_repo() {
     C="$TMP_ROOT/$1"
@@ -225,6 +238,7 @@ rm -rf "$C/repo"
 run_entry --version
 check "entry: --version answers without the repo" \
     "[ \"\$(cat '$C/rc')\" = 0 ] && grep -q '^aitools ' '$C/out' && grep -q 'repo: not found' '$C/out'"
+fi
 
 printf -- '---- %d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

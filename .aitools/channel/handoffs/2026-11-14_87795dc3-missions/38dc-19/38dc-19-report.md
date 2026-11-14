@@ -1,4 +1,4 @@
-# 38dc-19-report -- mission 38dc-19-aitools-win-forwarder (v1.0)
+# 38dc-19-report -- mission 38dc-19-aitools-win-forwarder (v1.1)
 
 **Intent**: **Purpose**: record what mission 38dc-19 changed, why, how it was
 verified and what is left, for the orchestrator M6-Polish and the commander.
@@ -6,8 +6,21 @@ verified and what is left, for the orchestrator M6-Polish and the commander.
 the evidence behind both. NOT the 38dc-13 test-suite guards. **Audience**: the
 commander; M6-Polish.
 
-Version 1.0, 2026-11-14, written before the independent review and the merge;
-the merge commit and main's CI run are in the mission's final response.
+Version 1.0, 2026-11-14, written before the independent review and the merge.
+v1.1: the review's findings (comment
+https://github.com/nobul-tech/aitools/pull/162#issuecomment-6884329725, CHANGES
+NEEDED, 2 blocking) and what was done; see "Review" below. The merge commit and
+main's CI run are in the mission's final response.
+
+## Review (v1.1)
+
+Reviewer 38dc-19-01-pr162-review (fresh delegate, did not see this report):
+1. BLOCKING: the Windows CI step for `tests/logging/test-logging.sh` failed (49/5). Its 7 `entry:` cases ran `bash scripts/aitools` with only HOME isolated; the forward reached the real `aitools.ps1`, which uses USERPROFILE, and on the runner it cloned the repo. Fix: those cases run on macOS/Linux only; Windows prints one SKIP line.
+2. BLOCKING: the forward read config.json from `$HOME`, but `aitools.ps1` works under `$env:USERPROFILE`. Fix: `export USERPROFILE="$(cygpath -w "$HOME")"` before `exec`, with a test case where the two differ. Evidence that a normal session is unchanged: `HOME=/c/Users/jdpal`, `cygpath -w` gives `C:\Users\jdpal` = USERPROFILE; nsswitch has `db_home: env windows cygwin desc`.
+3, 5, 8, 10: dashboard `--dry-run` / `--force` stay dashboard arguments; `aitools.ps1` rejects unknown arguments, as bash does. M6-Polish's condition (a), every caller and what it passes, is checked and listed in the PR body; condition (b), an explicit re-check by the reviewer, is requested. Also: `[Environment]::ProcessPath` with a null check; a "Files created" section in the release notes.
+4, 6: follow-ups (`--project-root` never binds `-ProjectRoot`; dead Windows branches). 7: the merge order is M6-Polish's. 9 (pwsh fallback path): not done, because the prompt says to call pwsh by name after `command -v`.
+
+Re-verification: `test-win-forwarder.ps1` 40/0; 17/17 mutations killed (5 new: USERPROFILE not set, unknown arguments accepted, no command after a leading flag, `--dry-run` taken from dashboard arguments, compat `--addmcp` names left in `$Remaining`); `test-logging.ps1` 45/0; `test-console-mode-guard.ps1` 76/0, 7 skipped.
 
 ## Summary
 
