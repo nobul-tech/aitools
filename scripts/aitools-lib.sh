@@ -641,13 +641,14 @@ _aitlib_relay_reset() {
 # warn and error lines), mirror it to deploy.jsonl when it is a structured log
 # line (unless --no-mirror), count its warn/error level in the child counts
 # (never in the parent's WARNINGS / ERRORS), and keep it as the child's last
-# stdout line
+# stdout line (not an exit footer, which only restates the counts: a failed
+# child's reason comes from the line before it)
 _aitlib_relay_line() {
-    local line="$1" clean esc=$'\033' f_ts f_script f_level f_msg
+    local line="$1" clean esc=$'\033' f_ts f_script f_level f_msg last
     local re='^\[([^]]+)\] \[([^]]+)\] \[([a-z]+)\] (.*)$'
     if [ -z "$line" ]; then return 0; fi
     clean="${line//$'\r'/}"
-    _AITLIB_RELAY_LAST="$clean"
+    last="$clean"
     clean="${clean//"${esc}[31m"/}"
     clean="${clean//"${esc}[33m"/}"
     clean="${clean//"${esc}[0m"/}"
@@ -663,11 +664,15 @@ _aitlib_relay_line() {
         case "$f_msg" in
             "COMPLETED with "*|"FAILED with "*) return 0 ;;   # the exit footer restates the counts
         esac
+        _AITLIB_RELAY_LAST="$last"
         case "$f_level" in
             warn)  AITLIB_CHILD_WARNINGS=$((AITLIB_CHILD_WARNINGS + 1)) ;;
             error) _AITLIB_RELAY_ERR_SCRIPTS="${_AITLIB_RELAY_ERR_SCRIPTS}${f_script}"$'\n' ;;
         esac
-    elif [ "${_AITLIB_RELAY_QUIET:-false}" != "true" ]; then
+        return 0
+    fi
+    _AITLIB_RELAY_LAST="$last"
+    if [ "${_AITLIB_RELAY_QUIET:-false}" != "true" ]; then
         printf '%s\n' "$line"
     fi
     return 0
@@ -855,14 +860,14 @@ run_child_relayed() {
     fi
     if ! err=$(mktemp 2>&1); then
         AITLIB_CHILD_RC=1
-        write_error "$name" "$label not run" "mktemp failed: $err"
+        write_error "$name" "$label not run" "mktemp failed${err:+: $err}"
         return 1
     fi
     rcf="$err"
     if ! err=$(mktemp 2>&1); then
         _aitlib_rm_tmp "$rcf" "$label"
         AITLIB_CHILD_RC=1
-        write_error "$name" "$label not run" "mktemp failed: $err"
+        write_error "$name" "$label not run" "mktemp failed${err:+: $err}"
         return 1
     fi
     errf="$err"
@@ -1425,6 +1430,38 @@ summary_end() {
 }
 
 # ---------------------------------------------------------------------------
+# run_relay_sync CMD ARGS... -- run the relay -> Cursor AGENTS.md sync (CMD ARGS =
+# the python command, sync-relay-to-cursor-agents.py and its options; moved here
+# from the installers, plan step I1, so the installers and the entry points share
+# one copy). Its output (stdout and stderr) is captured and logged through the
+# library: each non-empty line a detail line on success. A failure is one
+# warning, write_warn "relay sync" "relay -> AGENTS.md sync failed (exit N,
+# non-fatal): <reason>" (the reason from error_reason, which logs the output as
+# detail lines); CMD not found is "relay -> AGENTS.md sync not run (non-fatal):
+# CMD not found" (returns 127). The caller records nothing more for it. A
+# deploy.log that cannot be written never skips the sync (fail-safe logging,
+# logging.md section 5). Returns the sync's exit code. Parity: Invoke-RelaySync.
+# ---------------------------------------------------------------------------
+run_relay_sync() {
+    local out="" rc=0 line
+    # command -v exempt: an existence check; the branch is the fallback
+    if ! command -v "${1:-}" >/dev/null 2>&1; then
+        write_warn "relay sync" "relay -> AGENTS.md sync not run (non-fatal): ${1:-(no command)} not found"
+        return 127
+    fi
+    out=$("$@" 2>&1) || rc=$?
+    if [ "$rc" -ne 0 ]; then
+        write_warn "relay sync" "relay -> AGENTS.md sync failed (exit $rc, non-fatal): $(error_reason "$out" "$rc")"
+        return "$rc"
+    fi
+    while IFS= read -r line; do
+        line="${line//$'\r'/}"
+        if [ -n "$line" ]; then log_detail "relay sync: $line"; fi
+    done <<< "$out"
+    return 0
+}
+
+# ---------------------------------------------------------------------------
 # Environment skip: a step that does not apply in this environment reports one
 # OK row "n/a (<environment>)" plus the reason in the log (cross-platform.md
 # "Environment branches"). Not WARN (nothing is wrong) and not "skipped" (a
@@ -1628,6 +1665,8 @@ _managed_state_notice() {
 # automatically). Parity: Invoke-DotprofileCommitPush in aitools-lib.ps1.
 #   FILE     absolute path of a file this run wrote
 #   MESSAGE  commit message
+#   TOOL     optional: the record name of its warnings (the deploying tool);
+#            default "dotprofile"
 # "In the dotprofile" is decided by git, not by the path string: FILE's git top
 # level equals the dotprofile's git top level. The dotprofile is
 # AITLIB_USER_REPO_PATH when the caller already ran resolve_user_repo_path
@@ -1641,17 +1680,20 @@ _managed_state_notice() {
 # Sets AITLIB_DOTPROFILE_PUSH (never empty after the call):
 #   committed-pushed  committed and pushed (log_ok)
 #   unchanged         FILE matches HEAD: nothing committed, no push, no warning
-#   commit-failed     log_warn + ACTION "commit and push <file> in <dotprofile>"
-#   push-failed       committed, not pushed: log_warn + ACTION "git pull --rebase,
-#                     then git push in <dotprofile>" (remote has newer commits)
-#                     or "run git push in <dotprofile>" (any other failure)
+#   commit-failed     write_action TOOL, ACTION "commit and push <file> in
+#                     <dotprofile>" (git's output: detail lines)
+#   push-failed       committed, not pushed: write_action TOOL, ACTION "git pull
+#                     --rebase, then git push in <dotprofile>" (remote has newer
+#                     commits) or "run git push in <dotprofile>" (any other
+#                     failure); the warning text carries git's error line
 #   not-dotprofile    FILE is not in the dotprofile, or there is none: nothing done
 # Always returns 0: a failed commit or push is a warning, the caller's own
 # outcome (e.g. "accept & adopt") is unchanged and the run continues.
 # ---------------------------------------------------------------------------
 dotprofile_commit_push() {
     AITLIB_DOTPROFILE_PUSH="not-dotprofile"
-    local file="$1" msg="$2" dir base top dp="" dptop prefix rel d out rc=0 drc=0
+    local file="$1" msg="$2" tool="${3:-}" dir base top dp="" dptop prefix rel d out rc=0 drc=0 why
+    if [ -z "$tool" ]; then tool="dotprofile"; fi
     dir=$(dirname "$file"); base=$(basename "$file")
     if ! command -v git >/dev/null 2>&1; then
         log_detail "dotprofile commit: git not found -- $(display_path "$file") not committed"
@@ -1674,8 +1716,7 @@ dotprofile_commit_push() {
         case "$file" in
             "$dp"/*)
                 AITLIB_DOTPROFILE_PUSH="commit-failed"
-                log_warn "dotprofile $d is not a git repository -- $base written but not committed"
-                _aitlib_action_once "commit and push $base in $d" ;;
+                write_action "$tool" "dotprofile $d is not a git repository -- $base written but not committed" "commit and push $base in $d" ;;
             *) log_detail "dotprofile commit: $d is not a git repository; $(display_path "$file") is outside it" ;;
         esac
         return 0
@@ -1697,27 +1738,26 @@ dotprofile_commit_push() {
         # drc 1 = a staged change to commit; >1 = diff error: the commit reports a real problem
         out=$(git -C "$dir" commit -m "$msg" -- "$base" 2>&1) || rc=$?
     fi
-    if [ -n "$out" ]; then log_detail "git commit in $d: $out"; fi
     if [ "$rc" -ne 0 ]; then
         AITLIB_DOTPROFILE_PUSH="commit-failed"
-        log_warn "dotprofile commit failed (exit $rc) -- commit and push $rel in $d by hand"
-        _aitlib_action_once "commit and push $rel in $d"
+        why=$(error_reason "$out" "$rc")
+        write_action "$tool" "dotprofile commit failed (exit $rc: $why) -- commit and push $rel in $d by hand" "commit and push $rel in $d"
         return 0
     fi
+    if [ -n "$out" ]; then log_detail "git commit in $d: $out"; fi
     out=$(GIT_TERMINAL_PROMPT=0 GIT_SSH_COMMAND="${GIT_SSH_COMMAND:-ssh -o BatchMode=yes}" git -C "$dir" push 2>&1) || rc=$?
-    if [ -n "$out" ]; then log_detail "git push in $d: $out"; fi
     if [ "$rc" -ne 0 ]; then
         AITLIB_DOTPROFILE_PUSH="push-failed"
+        why=$(error_reason "$out" "$rc")
         case "$out" in
             *rejected*|*non-fast-forward*|*"fetch first"*)
-                log_warn "dotprofile push rejected (exit $rc): the remote has newer commits -- run git pull --rebase, then git push in $d"
-                _aitlib_action_once "git pull --rebase, then git push in $d" ;;
+                write_action "$tool" "dotprofile push rejected (exit $rc: $why): the remote has newer commits -- run git pull --rebase, then git push in $d" "git pull --rebase, then git push in $d" ;;
             *)
-                log_warn "dotprofile push failed (exit $rc) -- run git push in $d"
-                _aitlib_action_once "run git push in $d" ;;
+                write_action "$tool" "dotprofile push failed (exit $rc: $why) -- run git push in $d" "run git push in $d" ;;
         esac
         return 0
     fi
+    if [ -n "$out" ]; then log_detail "git push in $d: $out"; fi
     AITLIB_DOTPROFILE_PUSH="committed-pushed"
     log_ok "dotprofile: $rel committed and pushed ($msg)"
     return 0
@@ -1727,9 +1767,11 @@ dotprofile_commit_push() {
 # pushed (dotprofile_commit_push, N-Q2). Any other adopt target (the aitools
 # repo) stays a working-tree change: say that its repo has an uncommitted
 # change to review (it is reviewed at commit, D-DEL5).
+# _managed_adopt_notice TARGET [TOOL] -- TOOL: the record name of a commit or
+# push warning (dotprofile_commit_push; default "dotprofile").
 _managed_adopt_notice() {
-    local target="$1" top
-    dotprofile_commit_push "$target" "Adopt $(basename "$target") from the deployed copy"
+    local target="$1" tool="${2:-}" top
+    dotprofile_commit_push "$target" "Adopt $(basename "$target") from the deployed copy" "$tool"
     if [ "$AITLIB_DOTPROFILE_PUSH" != "not-dotprofile" ]; then return 0; fi
     # 2>/dev/null: outside a git repo there is nothing to commit (empty result checked).
     top=$(git -C "$(dirname "$target")" rev-parse --show-toplevel 2>/dev/null) || top=""
@@ -2408,7 +2450,8 @@ _invoke_ai_merge() {
 #                       now; "accept & adopt". [n]: back to this menu. No valid
 #                       merge output: nothing written; "failed".
 #   [s]kip           -> nothing written; "skipped"; reviewed again next run
-#   [x]abort         -> log_error, exit 2: ends this script
+#   [x]abort         -> error line (logged, counted, not recorded: the relay
+#                       records the abort), exit 2: ends this script
 # After adopt or merge, SOURCE, LOCAL and the adopt target agree, so the next
 # run verifies the file and asks nothing. A caller whose adopt target is not a
 # plain copy of LOCAL (CLAUDE.md: machine footer stripped, profile tokens
@@ -2428,11 +2471,12 @@ _invoke_ai_merge() {
 # file fails the step: nothing written) and validated after (non-empty; JSON
 # parses and keeps SOURCE's top-level keys, except keys the review chose to
 # leave absent). If a write, the merge or a validation fails, the files are
-# restored, the reason is logged (log_error), the result is "failed" (the
-# caller records it; deploy_tracker_summary writes an ERROR row) and the run
-# continues with the next file. After adopt or merge, an adopt target in the
+# restored, the error is recorded once (write_error under the caller's tool,
+# with the reason), the result is "failed" (the caller records the outcome with
+# the deploy tracker, which writes OK status and DETAIL records only) and the
+# run continues with the next file. After adopt or merge, an adopt target in the
 # dotprofile is committed (that file only) and pushed (dotprofile_commit_push,
-# N-Q2; a failed commit or push is a warning + ACTION, the result stays
+# N-Q2; a failed commit or push is one write_action, the result stays
 # "accept & adopt"). Any other adopt target (the aitools repo) is not
 # committed: the library logs that its repo has an uncommitted change to
 # review and ship.
@@ -2526,6 +2570,7 @@ _review_colour() {
 # ---------------------------------------------------------------------------
 DIFF_REVIEW_RESULT=""
 _PDR_ADOPT_TARGET=""   # set by deploy_managed_file; display only (+++ header, menu)
+_PDR_TOOL=""           # set by deploy_managed_file: the record name of its warnings
 prompt_diff_review() {
     local file_path="$1"
     local new_content="$2"
@@ -2535,15 +2580,18 @@ prompt_diff_review() {
     DIFF_REVIEW_RESULT="overwrite"
     MERGED_CONTENT=""
 
-    # --force or AITOOLS_FORCE: auto-overwrite
+    # --force or AITOOLS_FORCE: auto-overwrite. The user asked for it in this
+    # run and it completed as asked: info, not a warning (reference/logging.md
+    # 8.3 "What is a warning")
     if [ "${AITOOLS_FORCE:-}" = "1" ] || [ "${FORCE:-}" = "true" ]; then
-        log_warn "Diff in $(display_path "$file_path") -- overwriting (--force)"
+        log "Diff in $(display_path "$file_path") -- overwriting (--force)"
         return 0
     fi
 
-    # Non-interactive: auto-overwrite
+    # Non-interactive: auto-overwrite. Local edits are overwritten without the
+    # user's choice: a warning (8.3)
     if ! tty_interactive; then
-        log_warn "Diff in $(display_path "$file_path") -- overwriting (non-interactive)"
+        write_warn "$_PDR_TOOL" "Diff in $(display_path "$file_path") -- overwriting (non-interactive)"
         return 0
     fi
 
@@ -2581,7 +2629,7 @@ prompt_diff_review() {
     local leaf
     leaf=$(basename "$file_path")
     if ! _review_diff "$cur_content" "$new_content" "$(display_path "$file_path")" "$src_label"; then
-        log_warn "Review diff unavailable for $(display_path "$file_path"): $REVIEW_DIFF_ERROR"
+        write_warn "$_PDR_TOOL" "Review diff unavailable for $(display_path "$file_path"): $REVIEW_DIFF_ERROR"
         printf '  (diff unavailable -- see deploy log)\n' > /dev/tty
     elif [ -z "$REVIEW_DIFF" ]; then
         printf '  (whitespace-only differences)\n' > /dev/tty
@@ -2674,10 +2722,18 @@ prompt_diff_review() {
 #   reviewed field by field. Parity: -NoReview in aitools-lib.ps1.
 #
 # Sets MANAGED_FILE_RESULT to "created", "updated", "verified",
-# "accept & adopt", "skipped" or "failed". On "failed" nothing is left
-# half-written (snapshots restored) and the reason is logged with log_error;
-# the caller records the outcome (deploy_tracker_record, or its own ERROR
-# row). Exits 2 on [x]abort. Honors DRY_RUN (reports, writes nothing).
+# "accept & adopt", "skipped" or "failed". The library records each warning and
+# error once, under TOOL_NAME (the script's name when TOOL_NAME is ""), at the
+# source (reference/logging.md 8.3 "Managed files"):
+#   failed   nothing is left half-written (snapshots restored); one write_error,
+#            WHAT "Failed: <item>", REASON the write, read, AI merge, adopt
+#            filter or validation error
+#   skipped  one write_warn "Skipped: <item> (...)"
+#   a non-interactive overwrite of a differing LOCAL: one write_warn; under
+#            --force it is info (the user asked for it)
+# The caller records the outcome with the deploy tracker (OK status and DETAIL
+# records only) and writes no second WARN or ERROR record. Exits 2 on [x]abort.
+# Honors DRY_RUN (reports, writes nothing).
 # ---------------------------------------------------------------------------
 MANAGED_FILE_RESULT=""
 deploy_managed_file() {
@@ -2701,7 +2757,7 @@ deploy_managed_file() {
     # through, as before (dotfile managers link deployed files). Parity:
     # Deploy-ManagedFile (same message, also in a dry run).
     if [ -L "$dest" ] && [ ! -e "$dest" ]; then
-        log_error "Failed: $item_name: $(display_path "$dest") is a dangling symlink -- not written through it"
+        write_error "$tool_name" "Failed: $item_name" "$(display_path "$dest") is a dangling symlink -- not written through it"
         MANAGED_FILE_RESULT="failed"
         return 0
     fi
@@ -2727,19 +2783,19 @@ deploy_managed_file() {
     case "$dest" in
         *.json)
             if [ "$no_review" != "true" ]; then
-                local _src_tmp
-                if ! _src_tmp=$(mktemp); then
-                    log_error "Failed: $item_name: could not create a temp file for the JSON review"
+                local _src_tmp _src_err
+                if ! _src_tmp=$(mktemp 2>&1); then
+                    write_error "$tool_name" "Failed: $item_name" "could not create a temp file for the JSON review: $_src_tmp"
                     MANAGED_FILE_RESULT="failed"
                     return 0
                 fi
-                if ! printf '%s\n' "$src_content" > "$_src_tmp"; then
+                if ! _src_err=$( { printf '%s\n' "$src_content" > "$_src_tmp"; } 2>&1 ); then
                     rm -f "$_src_tmp"
-                    log_error "Failed: $item_name: could not write a temp file for the JSON review"
+                    write_error "$tool_name" "Failed: $item_name" "could not write a temp file for the JSON review: ${_src_err:-write failed}"
                     MANAGED_FILE_RESULT="failed"
                     return 0
                 fi
-                review_json_fields "$_src_tmp" "$dest" "$adopt_path" "$item_name"
+                review_json_fields "$_src_tmp" "$dest" "$adopt_path" "$item_name" "$tool_name"
                 rm -f "$_src_tmp"
                 return 0
             fi ;;
@@ -2751,15 +2807,18 @@ deploy_managed_file() {
             log_ok "Created: $item_name -> $(display_path "$dest")"
             MANAGED_FILE_RESULT="created"
         else
-            log_error "Failed: $item_name: $MANAGED_WRITE_ERROR"
+            write_error "$tool_name" "Failed: $item_name" "$MANAGED_WRITE_ERROR"
             MANAGED_FILE_RESULT="failed"
         fi
         return 0
     fi
 
-    local existing
-    if ! existing=$(cat "$dest"); then
-        log_error "Failed: $item_name: cannot read $(display_path "$dest")"
+    local existing _read_err
+    # 2>/dev/null: the failure is checked here and its reason recorded below
+    if ! existing=$(cat "$dest" 2>/dev/null); then
+        # Read again for the reason only (stdout discarded, stderr captured)
+        _read_err=$(cat "$dest" 2>&1 >/dev/null) || :
+        write_error "$tool_name" "Failed: $item_name" "cannot read $(display_path "$dest"): ${_read_err:-cat failed}"
         MANAGED_FILE_RESULT="failed"
         return 0
     fi
@@ -2775,7 +2834,7 @@ deploy_managed_file() {
             log_ok "Updated: $item_name -> $(display_path "$dest") (read-only copy: source wins, backup kept)"
             MANAGED_FILE_RESULT="updated"
         else
-            log_error "Failed: $item_name: $MANAGED_WRITE_ERROR (files restored)"
+            write_error "$tool_name" "Failed: $item_name" "$MANAGED_WRITE_ERROR (files restored)"
             MANAGED_FILE_RESULT="failed"
         fi
         return 0
@@ -2785,17 +2844,19 @@ deploy_managed_file() {
     local adopt_offered=0
     if [ -n "$adopt_path" ]; then adopt_offered=1; fi
     _PDR_ADOPT_TARGET="$adopt_path"
+    _PDR_TOOL="$tool_name"
     prompt_diff_review "$dest" "$src_content" "$adopt_offered" "$existing"
     _PDR_ADOPT_TARGET=""
+    _PDR_TOOL=""
 
     local p_local="$dest" local_out="$src_content" p_repo="" repo_content=""
     case "$DIFF_REVIEW_RESULT" in
         skip)
-            log_warn "Skipped: $item_name (local differs from source; reviewed again next run)"
+            write_warn "$tool_name" "Skipped: $item_name (local differs from source; reviewed again next run)"
             MANAGED_FILE_RESULT="skipped"
             return 0 ;;
         failed)
-            log_error "Failed: $item_name: ${MANAGED_MERGE_ERROR:-AI merge failed} -- nothing written"
+            write_error "$tool_name" "Failed: $item_name" "${MANAGED_MERGE_ERROR:-AI merge failed} -- nothing written"
             MANAGED_FILE_RESULT="failed"
             return 0 ;;
         adopt)
@@ -2808,9 +2869,14 @@ deploy_managed_file() {
 
     # The adopt target gets LOCAL (or the merge), passed through the filter if any
     if [ -n "$p_repo" ] && [ -n "$adopt_filter" ]; then
-        local filtered
-        if ! filtered=$(printf '%s\n' "$repo_content" | "$adopt_filter") || [ -z "$filtered" ]; then
-            log_error "Failed: $item_name: adopt filter $adopt_filter failed -- nothing written"
+        local filtered filter_rc=0
+        filtered=$(printf '%s\n' "$repo_content" | "$adopt_filter") || filter_rc=$?
+        if [ "$filter_rc" -ne 0 ] || [ -z "$filtered" ]; then
+            if [ "$filter_rc" -ne 0 ]; then
+                write_error "$tool_name" "Failed: $item_name" "adopt filter $adopt_filter failed (exit $filter_rc) -- nothing written"
+            else
+                write_error "$tool_name" "Failed: $item_name" "adopt filter $adopt_filter returned nothing -- nothing written"
+            fi
             MANAGED_FILE_RESULT="failed"
             return 0
         fi
@@ -2818,14 +2884,14 @@ deploy_managed_file() {
     fi
 
     if ! _managed_write "$p_local" "$local_out" "$p_repo" "$repo_content"; then
-        log_error "Failed: $item_name: $MANAGED_WRITE_ERROR (files restored)"
+        write_error "$tool_name" "Failed: $item_name" "$MANAGED_WRITE_ERROR (files restored)"
         MANAGED_FILE_RESULT="failed"
         return 0
     fi
 
     if [ -n "$p_repo" ]; then
         log_ok "Accept & adopt: $item_name -> $(display_path "$p_repo")"
-        _managed_adopt_notice "$p_repo"
+        _managed_adopt_notice "$p_repo" "$tool_name"
         MANAGED_FILE_RESULT="accept & adopt"
     else
         log_ok "Updated: $item_name -> $(display_path "$dest")"
@@ -2843,16 +2909,21 @@ deploy_managed_file() {
 #   $3 = ADOPT_PATH  repo JSON file that is the source of truth; "" = no adopt
 #   $4 = ITEM_NAME   the file as the review header names it (default: DEST's
 #                    file name)
+#   $5 = TOOL        optional: the record name of its warnings and errors
+#                    (deploy_managed_file passes its TOOL_NAME); default the
+#                    script's name
 #
 # Sets MANAGED_FILE_RESULT, one per file by precedence failed > accept & adopt
 # > skipped > updated > verified: "created" (LOCAL was missing), "failed"
-# (files restored, log_error), "accept & adopt" (a field was adopted into
+# (files restored; one write_error TOOL "Failed: <file>" with the reason),
+# "accept & adopt" (a field was adopted into
 # ADOPT_PATH; overwrites chosen in the same run are written too), "skipped"
-# (a field was left differing), "updated" (fields overwritten from SOURCE),
-# "verified" (nothing written). Requires node. Exits 2 on [x]abort.
+# (a field was left differing; one write_warn TOOL), "updated" (fields
+# overwritten from SOURCE), "verified" (nothing written). Requires node.
+# Exits 2 on [x]abort.
 # ---------------------------------------------------------------------------
 review_json_fields() {
-    local src_file="$1" dest="$2" adopt_path="${3:-}" file_label="${4:-}"
+    local src_file="$1" dest="$2" adopt_path="${3:-}" file_label="${4:-}" tool="${5:-}"
     local item
     item=$(basename "$dest")
     # The review header names the file (the caller's item name, else the file name)
@@ -2860,14 +2931,14 @@ review_json_fields() {
     MANAGED_FILE_RESULT="verified"
 
     if ! command -v node >/dev/null 2>&1; then
-        log_error "Failed: $item: node is required for the JSON field review"
+        write_error "$tool" "Failed: $item" "node is required for the JSON field review (not found on PATH)"
         MANAGED_FILE_RESULT="failed"
         return 0
     fi
 
     local work
-    if ! work=$(mktemp -d); then
-        log_error "Failed: $item: could not create a work directory for the JSON review"
+    if ! work=$(mktemp -d 2>&1); then
+        write_error "$tool" "Failed: $item" "could not create a work directory for the JSON review: $work"
         MANAGED_FILE_RESULT="failed"
         return 0
     fi
@@ -3077,7 +3148,7 @@ REVIEW_JSON_NODE_EOF
         local src_json
         node "$work/review.js" keys "$src_file" "$work/keys.json" 2> "$work/err" || rc=$?
         if [ "$rc" -ne 0 ] || ! src_json=$(cat "$src_file"); then
-            log_error "Failed: $item: cannot read the source JSON (node exit $rc): $(cat "$work/err")"
+            write_error "$tool" "Failed: $item" "cannot read the source JSON (node exit $rc): $(cat "$work/err")"
             rm -rf "$work"
             MANAGED_FILE_RESULT="failed"
             return 0
@@ -3088,7 +3159,7 @@ REVIEW_JSON_NODE_EOF
             log_ok "Created: $file_label -> $(display_path "$dest")"
             MANAGED_FILE_RESULT="created"
         else
-            log_error "Failed: $item: $MANAGED_WRITE_ERROR"
+            write_error "$tool" "Failed: $item" "$MANAGED_WRITE_ERROR"
             MANAGED_FILE_RESULT="failed"
         fi
         return 0
@@ -3096,7 +3167,7 @@ REVIEW_JSON_NODE_EOF
 
     node "$work/review.js" plan "$src_file" "$dest" "$work/plan.tsv" 2> "$work/err" || rc=$?
     if [ "$rc" -ne 0 ]; then
-        log_error "Failed: $item: field comparison failed (node exit $rc): $(cat "$work/err")"
+        write_error "$tool" "Failed: $item" "field comparison failed (node exit $rc): $(cat "$work/err")"
         rm -rf "$work"
         MANAGED_FILE_RESULT="failed"
         return 0
@@ -3138,7 +3209,7 @@ REVIEW_JSON_NODE_EOF
         "$work/local.out" "$work/adopt.out" "$work/result.txt" \
         "$work/req-local.json" "$work/req-adopt.json" 2> "$work/err" || rc=$?
     if [ "$rc" -ne 0 ]; then
-        log_error "Failed: $item: applying the field choices failed (node exit $rc): $(cat "$work/err")"
+        write_error "$tool" "Failed: $item" "applying the field choices failed (node exit $rc): $(cat "$work/err")"
         rm -rf "$work"
         MANAGED_FILE_RESULT="failed"
         return 0
@@ -3161,7 +3232,7 @@ REVIEW_JSON_NODE_EOF
         MANAGED_WRITE_REQUIRED_1="$r_local"
         MANAGED_WRITE_REQUIRED_2="$r_adopt"
         if ! _managed_write "$p_local" "$c_local" "$p_adopt" "$c_adopt"; then
-            log_error "Failed: $item: $MANAGED_WRITE_ERROR (files restored)"
+            write_error "$tool" "Failed: $item" "$MANAGED_WRITE_ERROR (files restored)"
             MANAGED_FILE_RESULT="failed"
             return 0
         fi
@@ -3171,10 +3242,10 @@ REVIEW_JSON_NODE_EOF
     fi
     if [ "${n_adopt:-0}" -gt 0 ]; then
         log_ok "Accept & adopt: $file_label -> $(display_path "$adopt_path") ($n_adopt field(s))"
-        _managed_adopt_notice "$adopt_path"
+        _managed_adopt_notice "$adopt_path" "$tool"
     fi
     if [ "${n_skip:-0}" -gt 0 ]; then
-        log_warn "Skipped: $file_label ($n_skip field(s) differ from source; reviewed again next run)"
+        write_warn "$tool" "Skipped: $file_label ($n_skip field(s) differ from source; reviewed again next run)"
     fi
     if [ "${n_adopt:-0}" -gt 0 ]; then
         MANAGED_FILE_RESULT="accept & adopt"
@@ -3202,19 +3273,24 @@ REVIEW_JSON_NODE_EOF
 # optional path (e.g. "${VAR:+...}") without branching.
 #
 # Args:
+#   --tool TOOL  optional, first: the record name of its errors (default the
+#                script's name)
 #   $1     = adopted source file to copy FROM (the deployed file on disk)
 #   $2..$N = one or more target paths to write back to (empty entries skipped)
 #
 # Sets ADOPT_TARGETS_WRITTEN to the count written. Returns 0 if >=1 target was
-# written, 1 otherwise (source missing or no non-empty targets).
+# written, 1 otherwise (source missing or no non-empty targets). Each failure
+# is one write_error TOOL with its reason.
 # ---------------------------------------------------------------------------
 ADOPT_TARGETS_WRITTEN=0
 adopt_managed_file() {
-    local src="$1"; shift
+    local tool="" src err
+    if [ "${1:-}" = "--tool" ]; then tool="${2:-}"; shift 2; fi
+    src="$1"; shift
     ADOPT_TARGETS_WRITTEN=0
 
     if [ ! -f "$src" ]; then
-        log_error "adopt_managed_file: adopted source not found: $(display_path "$src")"
+        write_error "$tool" "adopt_managed_file: adopt failed" "adopted source not found: $(display_path "$src")"
         return 1
     fi
 
@@ -3222,12 +3298,15 @@ adopt_managed_file() {
     for target in "$@"; do
         [ -n "$target" ] || continue
         backup_file "$target"                 # rotation; no-op if target absent
-        mkdir -p "$(dirname "$target")"
-        if cp "$src" "$target"; then
+        if ! err=$(mkdir -p "$(dirname "$target")" 2>&1); then
+            write_error "$tool" "adopt_managed_file: failed to write $(display_path "$target")" "cannot create its directory: $err"
+            continue
+        fi
+        if err=$(cp "$src" "$target" 2>&1); then
             log_ok "Adopted -> $(display_path "$target")"
             ADOPT_TARGETS_WRITTEN=$((ADOPT_TARGETS_WRITTEN + 1))
         else
-            log_error "adopt_managed_file: failed to write $(display_path "$target")"
+            write_error "$tool" "adopt_managed_file: failed to write $(display_path "$target")" "${err:-cp failed}"
         fi
     done
 
@@ -3272,14 +3351,19 @@ deploy_tracker_record() {
                    write_summary DETAIL "$tool_name" "removed: $item_name" ;;
         verified)  _DT_VERIFIED=$((_DT_VERIFIED + 1)) ;;
         preserved) _DT_PRESERVED=$((_DT_PRESERVED + 1)) ;;
-        *)         log_error "deploy_tracker_record: unknown outcome \"$outcome\" for $item_name ($tool_name) -- counted as failed"
+        *)         write_error "$tool_name" "deploy_tracker_record: unknown outcome \"$outcome\" for $item_name" "caller bug -- counted as failed"
                    _DT_FAILED=$((_DT_FAILED + 1))
                    write_summary DETAIL "$tool_name" "failed: $item_name" ;;
     esac
 }
 
-# Write aggregate summary for a deploy loop. Uses non-zero counts.
-# ERROR when any file failed, WARN when any was skipped, else OK.
+# Write the tool's status for a deploy loop: one OK record with the non-zero
+# counts (e.g. "1 updated, 5 verified, 1 skipped, 1 failed"); the DETAIL
+# records were written by deploy_tracker_record. It writes no WARN or ERROR
+# record: each skipped item's warning and each failed item's error was
+# recorded once where it happened (deploy_managed_file, the fan-out:
+# reference/logging.md 8.3 "Managed files"), and the panel shows a tool with a
+# warning or an error in yellow or red, not this OK record.
 # Sets DEPLOY_TRACKER_TEXT for use in log lines.
 # Args: $1=tool_name
 deploy_tracker_summary() {
@@ -3290,19 +3374,13 @@ deploy_tracker_summary() {
     if [ "$_DT_ACCEPTED" -gt 0 ]; then parts="${parts:+$parts, }$_DT_ACCEPTED accepted"; fi
     if [ "$_DT_REMOVED" -gt 0 ];  then parts="${parts:+$parts, }$_DT_REMOVED removed"; fi
     if [ "$_DT_VERIFIED" -gt 0 ]; then parts="${parts:+$parts, }$_DT_VERIFIED verified"; fi
+    if [ "$_DT_SKIPPED" -gt 0 ];  then parts="${parts:+$parts, }$_DT_SKIPPED skipped"; fi
     if [ "$_DT_FAILED" -gt 0 ];   then parts="${parts:+$parts, }$_DT_FAILED failed"; fi
-    # Every count 0 (nothing recorded, or only skipped/preserved items): not
+    # Every count 0 (nothing recorded, or only preserved items): not
     # "verified", which would claim a check that never ran
     if [ -z "$parts" ]; then parts="n/a (nothing to deploy)"; fi
     DEPLOY_TRACKER_TEXT="$parts"
-
-    if [ "$_DT_FAILED" -gt 0 ]; then
-        write_summary ERROR "$tool_name" "$_DT_FAILED failed"
-    elif [ "$_DT_SKIPPED" -gt 0 ]; then
-        write_summary WARN "$tool_name" "$_DT_SKIPPED skipped (user review)"
-    else
-        write_summary OK "$tool_name" "$parts"
-    fi
+    write_summary OK "$tool_name" "$parts"
 }
 
 # ---------------------------------------------------------------------------
@@ -3574,15 +3652,16 @@ _fanout_is_binary() {
     ' "$1"
 }
 
-# _fanout_copy_binary SRC DEST ITEM: deploy a non-text file byte for byte (no
-# review menu: a binary has no line diff; SOURCE wins, as on a non-interactive
-# run). Equal bytes -> "verified". Otherwise an existing DEST is backed up
-# (backup_file; no backup -> failed, nothing written), SRC is copied to a temp
-# file beside DEST, compared, and moved over DEST. Sets MANAGED_FILE_RESULT to
-# created / updated / verified / failed (failed: log_error with the reason).
-# Honors DRY_RUN. Parity: Copy-FanoutBinary in aitools-lib.ps1.
+# _fanout_copy_binary SRC DEST ITEM [TOOL]: deploy a non-text file byte for byte
+# (no review menu: a binary has no line diff; SOURCE wins, as on a
+# non-interactive run). Equal bytes -> "verified". Otherwise an existing DEST is
+# backed up (backup_file; no backup -> failed, nothing written), SRC is copied
+# to a temp file beside DEST, compared, and moved over DEST. Sets
+# MANAGED_FILE_RESULT to created / updated / verified / failed (failed: one
+# write_error TOOL "Failed: <item>" with the reason; TOOL default the script's
+# name). Honors DRY_RUN. Parity: Copy-FanoutBinary in aitools-lib.ps1.
 _fanout_copy_binary() {
-    local src="$1" dest="$2" item="$3" tmp
+    local src="$1" dest="$2" item="$3" tool="${4:-}" tmp err
     MANAGED_FILE_RESULT="failed"
     if [ -f "$dest" ] && cmp -s "$src" "$dest"; then
         MANAGED_FILE_RESULT="verified"
@@ -3594,8 +3673,8 @@ _fanout_copy_binary() {
         MANAGED_FILE_RESULT="verified"
         return 0
     fi
-    if ! mkdir -p "$(dirname "$dest")"; then
-        log_error "Failed: $item: cannot create the directory of $(display_path "$dest")"
+    if ! err=$(mkdir -p "$(dirname "$dest")" 2>&1); then
+        write_error "$tool" "Failed: $item" "cannot create the directory of $(display_path "$dest"): ${err:-mkdir failed}"
         return 0
     fi
     local existed=false
@@ -3603,19 +3682,20 @@ _fanout_copy_binary() {
         existed=true
         backup_file "$dest"
         if [ "$BACKUP_FILE_OK" != "true" ]; then
-            log_error "Failed: $item: backup of $(display_path "$dest") failed -- nothing written"
+            write_error "$tool" "Failed: $item" "backup of $(display_path "$dest") failed -- nothing written"
             return 0
         fi
     fi
     tmp="$dest.aitools-tmp.$$"
-    if ! cp "$src" "$tmp" || ! cmp -s "$src" "$tmp"; then
+    err=""
+    if ! err=$(cp "$src" "$tmp" 2>&1) || ! cmp -s "$src" "$tmp"; then
         rm -f "$tmp"
-        log_error "Failed: $item: cannot copy $(display_path "$src") (binary)"
+        write_error "$tool" "Failed: $item" "cannot copy $(display_path "$src") (binary): ${err:-the copy differs}"
         return 0
     fi
-    if ! mv -f "$tmp" "$dest" || ! cmp -s "$src" "$dest"; then
+    if ! err=$(mv -f "$tmp" "$dest" 2>&1) || ! cmp -s "$src" "$dest"; then
         rm -f "$tmp"
-        log_error "Failed: $item: cannot write $(display_path "$dest") (binary)"
+        write_error "$tool" "Failed: $item" "cannot write $(display_path "$dest") (binary): ${err:-the written file differs}"
         return 0
     fi
     if $existed; then
@@ -3726,23 +3806,25 @@ _fanout_prune_dest_backups() {
 # with a log line; a dangling symlink, a case-only duplicate name and an
 # unexpected deploy result are failed items; the executable bit follows the
 # harness copy. DEST/<name> that is a symlink or a file is never written
-# (preserved, WARN, one ACTION row), nor is any directory in DEST the fan-out
+# (preserved, a warning, one ACTION), nor is any directory in DEST the fan-out
 # did not deploy this run (third-party skills, the firecrawl symlinks). The
 # copy of a retired skill is removed only when fanout_dir_matches says it holds
 # the harness copy's files (~/.aitools/skills/<name> or a <name>.bak.* backup
 # there), after a verified backup to DEST.bak.<UTC>/<name>/ beside DEST (not in
-# DEST, where the tool would still load it as a skill); else kept, WARN and
-# one ACTION row; OS junk files (.DS_Store, Thumbs.db, desktop.ini) in the
+# DEST, where the tool would still load it as a skill); else kept, a warning
+# and one ACTION; OS junk files (.DS_Store, Thumbs.db, desktop.ini) in the
 # copy do not block it; the newest 5 DEST.bak.<UTC> directories are kept. A
 # file with a NUL byte or invalid UTF-8 is copied byte for byte (no review
 # menu, backup kept). The names synced and anthropic-skills* belong to Claude
 # Code: a harness skill of that name is a failed item, never written, and is
 # never removed from DEST. No ~/.aitools/skills: info log only, no row
 # (setup-user-skills, the fallback, owns the TOOL rows then). DRY_RUN=true
-# writes nothing. Rows: see the contract; the final row is the tracker's
-# (OK / WARN skipped / ERROR failed).
-# Returns 0 (failures are log_error + an ERROR row, counted in ERRORS for the
-# caller's exit footer); [x]abort at a review exits 2 from the library.
+# writes nothing. Records (reference/logging.md 8.3): each warning is one
+# write_warn TOOL and each failed item one write_error TOOL with its reason, at
+# the source; the tool's status is the tracker's OK record (counts, also of
+# failed and skipped items); an ACTION is written once (_aitlib_action_once).
+# Returns 0 (failures are counted in ERRORS for the caller's exit footer);
+# [x]abort at a review exits 2 from the library.
 # Parity: Invoke-HarnessSkillsFanout in aitools-lib.ps1.
 # ---------------------------------------------------------------------------
 fanout_harness_skills() {
@@ -3752,8 +3834,7 @@ fanout_harness_skills() {
     local _fs_tab _fs_who _fs_shown _fs_err="" _fs_unlisted=false
     _fs_tab=$(printf '\t')
     if [ -z "$_fs_tool" ] || [ -z "$_fs_dest" ]; then
-        log_error "fanout_harness_skills: TOOL and DEST are required (caller bug)"
-        write_summary ERROR "${_fs_tool:-skills}" "fan-out not run (caller bug)"
+        write_error "${_fs_tool:-skills}" "fan-out not run" "fanout_harness_skills: TOOL and DEST are required (caller bug)"
         return 0
     fi
     _fs_dest="${_fs_dest%/}"
@@ -3779,8 +3860,7 @@ fanout_harness_skills() {
         _fs_lrc=1; _fs_entries="permission denied"
     fi
     if [ "$_fs_lrc" -ne 0 ]; then
-        log_error "Cannot list $(display_path "$_fs_src") ($_fs_entries)"
-        write_summary ERROR "$_fs_tool" "cannot read harness skills"
+        write_error "$_fs_tool" "cannot read harness skills" "cannot list $(display_path "$_fs_src"): $_fs_entries"
         return 0
     fi
 
@@ -3791,12 +3871,10 @@ fanout_harness_skills() {
     if [ ! -e "$_fs_manifest" ] && [ ! -L "$_fs_manifest" ]; then
         log "No skills manifest at $(display_path "$_fs_manifest") -- every skill fanned out, none retired, adopt not offered"
     elif ! _fs_m_out=$(read_harness_manifest "$_fs_manifest" skills 2>&1); then
-        log_error "Cannot read the skills manifest $(display_path "$_fs_manifest"): $_fs_m_out -- every skill fanned out, none retired"
-        write_summary ERROR "$_fs_tool" "cannot read skills manifest"
+        write_error "$_fs_tool" "cannot read skills manifest" "$(display_path "$_fs_manifest"): $_fs_m_out -- every skill fanned out, none retired"
         _fs_m_failed=true
     elif [ "$_fs_m_out" = "header-bad" ]; then
-        log_warn "Skills manifest $(display_path "$_fs_manifest"): the first line is not \"$SKILLS_MANIFEST_HEADER\" -- every skill fanned out, none retired, adopt not offered -- Run aitools to rebuild ~/.aitools/skills and its manifest"
-        write_summary ACTION "" "Run aitools to rebuild ~/.aitools/skills and its manifest"
+        write_action "$_fs_tool" "Skills manifest $(display_path "$_fs_manifest"): the first line is not \"$SKILLS_MANIFEST_HEADER\" -- every skill fanned out, none retired, adopt not offered -- Run aitools to rebuild ~/.aitools/skills and its manifest" "Run aitools to rebuild ~/.aitools/skills and its manifest"
     else
         local _fs_m_invalid=false
         _fs_m_ok=true
@@ -3805,7 +3883,7 @@ fanout_harness_skills() {
             case "$_fs_m_line" in
                 "invalid$_fs_tab"*)
                     _fs_m_invalid=true
-                    log_warn "Skills manifest $(display_path "$_fs_manifest"): line ignored: ${_fs_m_line#invalid"$_fs_tab"} -- Run aitools to rebuild ~/.aitools/skills and its manifest" ;;
+                    write_warn "$_fs_tool" "Skills manifest $(display_path "$_fs_manifest"): line ignored: ${_fs_m_line#invalid"$_fs_tab"} -- Run aitools to rebuild ~/.aitools/skills and its manifest" ;;
                 "rule$_fs_tab"*)
                     _fs_m_rest="${_fs_m_line#rule"$_fs_tab"}"
                     _fs_m_name="${_fs_m_rest%%"$_fs_tab"*}"
@@ -3822,7 +3900,7 @@ fanout_harness_skills() {
             esac
         done <<< "$_fs_m_out"
         if [ "$_fs_m_invalid" = "true" ]; then
-            write_summary ACTION "" "Run aitools to rebuild ~/.aitools/skills and its manifest"
+            _aitlib_action_once "Run aitools to rebuild ~/.aitools/skills and its manifest"
         fi
     fi
 
@@ -3853,7 +3931,7 @@ fanout_harness_skills() {
 
     if [ -z "$_fs_skills" ] && [ -z "$_fs_broken" ] && [ -z "$_fs_retired" ]; then
         log "No skills in $(display_path "$_fs_src") -- skipping"
-        # An unreadable manifest already wrote this tool's ERROR row
+        # An unreadable manifest already recorded this tool's error
         if [ "$_fs_m_failed" != "true" ]; then
             write_summary OK "$_fs_tool" "n/a (no harness skills)"
         fi
@@ -3862,15 +3940,13 @@ fanout_harness_skills() {
     if [ "${DRY_RUN:-}" = "true" ]; then
         # The dry run predicts the real run's outcome for a DEST that is not a directory
         if [ -e "$_fs_dest" ] && [ ! -d "$_fs_dest" ]; then
-            log_error "Cannot create $(display_path "$_fs_dest") (a file is in the way) [DRY RUN]"
-            write_summary ERROR "$_fs_tool" "cannot create skills dir"
+            write_error "$_fs_tool" "cannot create skills dir" "$(display_path "$_fs_dest"): a file is in the way [DRY RUN]"
             return 0
         fi
     else
         backup_dir "$_fs_dest"
         if ! _fs_err=$(mkdir -p "$_fs_dest" 2>&1) || [ ! -d "$_fs_dest" ]; then
-            log_error "Cannot create $(display_path "$_fs_dest") (${_fs_err:-not a directory})"
-            write_summary ERROR "$_fs_tool" "cannot create skills dir"
+            write_error "$_fs_tool" "cannot create skills dir" "$(display_path "$_fs_dest"): ${_fs_err:-not a directory}"
             return 0
         fi
     fi
@@ -3882,7 +3958,7 @@ fanout_harness_skills() {
     fi
     while IFS= read -r _fs_ent; do
         [ -n "$_fs_ent" ] || continue
-        log_error "Failed: $_fs_ent: dangling symlink in $(display_path "$_fs_src")"
+        write_error "$_fs_tool" "Failed: $_fs_ent" "dangling symlink in $(display_path "$_fs_src")"
         deploy_tracker_record "failed" "$_fs_tool" "$_fs_ent"
     done <<< "$_fs_broken"
 
@@ -3894,21 +3970,21 @@ fanout_harness_skills() {
         _fs_lc=$(lower_name "$_fs_ent")
         # A name Claude Code owns in its skills directory: never written
         if _fanout_skill_reserved "$_fs_ent"; then
-            log_error "Not fanned out: $_fs_ent (a reserved skills directory name: synced and anthropic-skills* belong to Claude Code) -- rename the harness skill"
+            write_error "$_fs_tool" "Not fanned out: $_fs_ent" "a reserved skills directory name: synced and anthropic-skills* belong to Claude Code -- rename the harness skill"
             deploy_tracker_record "failed" "$_fs_tool" "$_fs_ent"
             continue
         fi
         # Two harness skills whose names differ only in case (possible on a
         # case-sensitive file system) map to one directory here: the first wins
         if in_list "$_fs_lc" "$_fs_owned_lc"; then
-            log_error "Skipped duplicate: $_fs_ent (a harness skill whose name differs only in case was already fanned out)"
+            write_error "$_fs_tool" "Skipped duplicate: $_fs_ent" "a harness skill whose name differs only in case was already fanned out"
             deploy_tracker_record "failed" "$_fs_tool" "$_fs_ent"
             continue
         fi
         _fs_owned_lc="${_fs_owned_lc}${_fs_lc}
 "
         if [ -L "$_fs_dest/$_fs_ent" ] || { [ -e "$_fs_dest/$_fs_ent" ] && [ ! -d "$_fs_dest/$_fs_ent" ]; }; then
-            log_warn "Kept $_fs_ent: not a directory this fan-out owns ($(display_path "$_fs_dest/$_fs_ent") is a symlink or a file) -- the harness copy is not deployed; move it aside to get the aitools copy"
+            write_warn "$_fs_tool" "Kept $_fs_ent: not a directory this fan-out owns ($(display_path "$_fs_dest/$_fs_ent") is a symlink or a file) -- the harness copy is not deployed; move it aside to get the aitools copy"
             deploy_tracker_record "preserved" "$_fs_tool" "$_fs_ent"
             _fs_kept="${_fs_kept:+$_fs_kept, }$_fs_ent"
             continue
@@ -3939,7 +4015,7 @@ fanout_harness_skills() {
             print "$_\n" for sort { substr($a, 2) cmp substr($b, 2) } @out;
         ' "$_fs_src/$_fs_ent" 2>&1) || _fs_lrc=$?
         if [ "$_fs_lrc" -ne 0 ]; then
-            log_error "Failed: $_fs_ent: $_fs_files"
+            write_error "$_fs_tool" "Failed: $_fs_ent" "$_fs_files"
             deploy_tracker_record "failed" "$_fs_tool" "$_fs_ent"
             continue
         fi
@@ -3991,12 +4067,12 @@ fanout_harness_skills() {
         _fs_lrc=0
         _fs_content=$(_fanout_is_binary "$_fs_sfile") || _fs_lrc=$?
         if [ "$_fs_lrc" -ne 0 ] && [ "$_fs_lrc" -ne 1 ]; then
-            log_error "Cannot read harness skill file $(display_path "$_fs_sfile"): ${_fs_content:-perl failed (exit $_fs_lrc)}"
+            write_error "$_fs_tool" "Failed: $_fs_item" "cannot read harness skill file $(display_path "$_fs_sfile"): ${_fs_content:-perl failed (exit $_fs_lrc)}"
             deploy_tracker_record "failed" "$_fs_tool" "$_fs_item"
             continue
         fi
         if [ "$_fs_lrc" -eq 0 ]; then
-            _fanout_copy_binary "$_fs_sfile" "$_fs_dfile" "$_fs_item"
+            _fanout_copy_binary "$_fs_sfile" "$_fs_dfile" "$_fs_item" "$_fs_tool"
         else
             _fs_content=""
             # 2>/dev/null: the failure is checked here and its reason logged below
@@ -4006,7 +4082,7 @@ fanout_harness_skills() {
                 # captured); "|| :" because it fails by definition here -- the
                 # empty case falls back to "cat failed" below
                 _fs_err=$(cat "$_fs_sfile" 2>&1 >/dev/null) || :
-                log_error "Cannot read harness skill file $(display_path "$_fs_sfile"): ${_fs_err:-cat failed}"
+                write_error "$_fs_tool" "Failed: $_fs_item" "cannot read harness skill file $(display_path "$_fs_sfile"): ${_fs_err:-cat failed}"
                 deploy_tracker_record "failed" "$_fs_tool" "$_fs_item"
                 continue
             fi
@@ -4016,7 +4092,7 @@ fanout_harness_skills() {
         case "$_fs_res" in
             created|updated|verified|"accept & adopt"|skipped|failed) ;;
             *)
-                log_error "Unexpected deploy result for ${_fs_item}: $_fs_res"
+                write_error "$_fs_tool" "Failed: $_fs_item" "unexpected deploy result: $_fs_res"
                 _fs_res="failed" ;;
         esac
         # The executable bit follows the harness copy (a skill may ship scripts)
@@ -4025,12 +4101,12 @@ fanout_harness_skills() {
                 created|updated|verified|"accept & adopt")
                     if [ -x "$_fs_sfile" ] && [ ! -x "$_fs_dfile" ]; then
                         if ! _fs_err=$(chmod +x "$_fs_dfile" 2>&1); then
-                            log_error "Failed: $_fs_item: cannot set the executable bit on $(display_path "$_fs_dfile"): ${_fs_err:-chmod failed}"
+                            write_error "$_fs_tool" "Failed: $_fs_item" "cannot set the executable bit on $(display_path "$_fs_dfile"): ${_fs_err:-chmod failed}"
                             _fs_res="failed"
                         fi
                     elif [ ! -x "$_fs_sfile" ] && [ -x "$_fs_dfile" ]; then
                         if ! _fs_err=$(chmod a-x "$_fs_dfile" 2>&1); then
-                            log_error "Failed: $_fs_item: cannot clear the executable bit on $(display_path "$_fs_dfile"): ${_fs_err:-chmod failed}"
+                            write_error "$_fs_tool" "Failed: $_fs_item" "cannot clear the executable bit on $(display_path "$_fs_dfile"): ${_fs_err:-chmod failed}"
                             _fs_res="failed"
                         fi
                     fi ;;
@@ -4041,7 +4117,7 @@ fanout_harness_skills() {
         deploy_tracker_record "$_fs_res" "$_fs_tool" "$_fs_item"
     done 3<<< "$_fs_list"
     if [ -n "$_fs_kept" ]; then
-        write_summary ACTION "" "$_fs_who skills in $_fs_shown not updated (a symlink or a file, not a directory the fan-out owns): $_fs_kept -- move them aside to get the aitools copy"
+        _aitlib_action_once "$_fs_who skills in $_fs_shown not updated (a symlink or a file, not a directory the fan-out owns): $_fs_kept -- move them aside to get the aitools copy"
     fi
 
     # Retired skills: the copy in DEST is backed up and removed when it holds
@@ -4052,7 +4128,7 @@ fanout_harness_skills() {
     local _fs_bak_root="" _fs_ts _fs_n _fs_dlist="" _fs_rm_seen_lc=""
     if [ -n "$_fs_retired" ] && [ -d "$_fs_dest" ]; then
         if ! _fs_dlist=$(_fanout_list_dir "$_fs_dest" 2>&1); then
-            log_warn "Cannot list $(display_path "$_fs_dest") for the retired skills -- $_fs_dlist -- check its permissions"
+            write_warn "$_fs_tool" "Cannot list $(display_path "$_fs_dest") for the retired skills -- $_fs_dlist -- check its permissions"
             _fs_dlist=""
             _fs_unlisted=true
         fi
@@ -4090,11 +4166,11 @@ fanout_harness_skills() {
                 break
             fi
             if [ "$_fs_rc" -ne 1 ]; then
-                log_warn "Cannot compare $(display_path "$_fs_rm_path") with $(display_path "$_fs_cand")"
+                write_warn "$_fs_tool" "Cannot compare $(display_path "$_fs_rm_path") with $(display_path "$_fs_cand") (see the detail lines in deploy.log)"
             fi
         done
         if [ -z "$_fs_rm_why" ]; then
-            log_warn "Kept $_fs_rm_dir: the skills manifest retires $_fs_rm, but this directory matches no harness copy (it may be your own) -- $_fs_who still loads it; delete it if it is an old fan-out copy"
+            write_warn "$_fs_tool" "Kept $_fs_rm_dir: the skills manifest retires $_fs_rm, but this directory matches no harness copy (it may be your own) -- $_fs_who still loads it; delete it if it is an old fan-out copy"
             _fs_rm_kept="${_fs_rm_kept:+$_fs_rm_kept, }$_fs_rm_dir"
             continue
         fi
@@ -4112,7 +4188,7 @@ fanout_harness_skills() {
                 _fs_bak_root="${_fs_dest}.bak.${_fs_ts}-$_fs_n"
             done
             if ! _fs_err=$(mkdir -p "$_fs_bak_root" 2>&1); then
-                log_warn "Cannot create the backup directory $(display_path "$_fs_bak_root"): ${_fs_err:-mkdir failed}"
+                write_warn "$_fs_tool" "Cannot create the backup directory $(display_path "$_fs_bak_root"): ${_fs_err:-mkdir failed}"
             else
                 # Keep the newest 5 DEST.bak.<UTC> directories (this one included)
                 _fanout_prune_dest_backups "$_fs_dest" 5
@@ -4128,13 +4204,13 @@ fanout_harness_skills() {
             fi
         fi
         if [ "$_fs_rc" -ne 0 ]; then
-            log_error "Not removed: $_fs_rm_dir (retired skill): backup to $(display_path "$_fs_bak_root") failed: ${_fs_err:-cp failed}"
+            write_error "$_fs_tool" "Not removed: $_fs_rm_dir (retired skill)" "backup to $(display_path "$_fs_bak_root") failed: ${_fs_err:-cp failed}"
             deploy_tracker_record "failed" "$_fs_tool" "$_fs_rm_dir"
             continue
         fi
         _fs_err=""
         if ! _fs_err=$(rm -rf "$_fs_rm_path" 2>&1) || [ -e "$_fs_rm_path" ] || [ -L "$_fs_rm_path" ]; then
-            log_error "Cannot remove $(display_path "$_fs_rm_path") (retired skill; it may be partly removed; backup in $(display_path "$_fs_bak_root/$_fs_rm_dir")): $(printf '%s' "${_fs_err:-still present}" | perl -0777 -pe 's/\s*\n\s*/; /g')"
+            write_error "$_fs_tool" "Cannot remove $(display_path "$_fs_rm_path") (retired skill; it may be partly removed; backup in $(display_path "$_fs_bak_root/$_fs_rm_dir"))" "$(printf '%s' "${_fs_err:-still present}" | perl -0777 -pe 's/\s*\n\s*/; /g')"
             deploy_tracker_record "failed" "$_fs_tool" "$_fs_rm_dir"
             continue
         fi
@@ -4142,15 +4218,16 @@ fanout_harness_skills() {
         deploy_tracker_record "removed" "$_fs_tool" "$_fs_rm_dir"
     done <<< "$_fs_retired"
     if [ -n "$_fs_rm_kept" ]; then
-        write_summary ACTION "" "$_fs_who still loads retired skills in $_fs_shown: $_fs_rm_kept -- delete them unless you wrote them"
+        _aitlib_action_once "$_fs_who still loads retired skills in $_fs_shown: $_fs_rm_kept -- delete them unless you wrote them"
     fi
 
     if [ "${DRY_RUN:-}" = "true" ]; then
         if [ "$_fs_unlisted" = "true" ]; then
-            write_summary ACTION "" "$_fs_who skills in $_fs_shown cannot be listed: retired skills not checked -- check its permissions"
+            _aitlib_action_once "$_fs_who skills in $_fs_shown cannot be listed: retired skills not checked -- check its permissions"
         fi
+        # Each failed item was recorded where it failed: the status only
         if [ "$_DT_FAILED" -gt 0 ]; then
-            write_summary ERROR "$_fs_tool" "$_DT_FAILED failed (dry run)"
+            write_summary OK "$_fs_tool" "dry run (no files written), $_DT_FAILED failed"
         else
             write_summary OK "$_fs_tool" "dry run (no files written)"
         fi
@@ -4160,12 +4237,12 @@ fanout_harness_skills() {
     # Preserved: skills in DEST this fan-out did not deploy this run
     # (directories and symlinks; never touched)
     if ! _fs_dlist=$(_fanout_list_dir "$_fs_dest" 2>&1); then
-        log_warn "Cannot list $(display_path "$_fs_dest") for the preserved report -- $_fs_dlist -- check its permissions"
+        write_warn "$_fs_tool" "Cannot list $(display_path "$_fs_dest") for the preserved report -- $_fs_dlist -- check its permissions"
         _fs_dlist=""
         _fs_unlisted=true
     fi
     if [ "$_fs_unlisted" = "true" ]; then
-        write_summary ACTION "" "$_fs_who skills in $_fs_shown cannot be listed: retired skills not checked and other skills not counted -- check its permissions"
+        _aitlib_action_once "$_fs_who skills in $_fs_shown cannot be listed: retired skills not checked and other skills not counted -- check its permissions"
     fi
     while IFS= read -r _fs_ent; do
         [ -n "$_fs_ent" ] || continue
@@ -4183,21 +4260,19 @@ fanout_harness_skills() {
     while IFS= read -r _fs_f; do
         [ -n "$_fs_f" ] || continue
         if [ -f "$_fs_f" ] && [ ! -s "$_fs_f" ]; then
-            log_error "Validation failed: $(display_path "$_fs_f") is empty after deploy"
+            write_error "$_fs_tool" "Validation failed" "$(display_path "$_fs_f") is empty after deploy"
         fi
     done <<< "$_fs_deployed"
 
+    # The tool's status (OK record); every failed item and failed validation
+    # was recorded as its own error above, so the panel shows the tool in red
     local _fs_pres="$_DT_PRESERVED preserved"
     if [ "$_fs_unlisted" = "true" ]; then _fs_pres="preserved count unknown (cannot list)"; fi
-    if [ "$_DT_FAILED" -gt 0 ]; then
-        # deploy_tracker_summary writes the ERROR row ("N failed")
-        deploy_tracker_summary "$_fs_tool"
-        log "Skills ($_fs_tool): $DEPLOY_TRACKER_TEXT, $_fs_pres in $(display_path "$_fs_dest")"
-    elif [ "$ERRORS" -eq "$_fs_errs_before" ]; then
-        deploy_tracker_summary "$_fs_tool"
+    deploy_tracker_summary "$_fs_tool"
+    if [ "$_DT_FAILED" -eq 0 ] && [ "$ERRORS" -eq "$_fs_errs_before" ]; then
         log_ok "Skills ($_fs_tool): $DEPLOY_TRACKER_TEXT, $_fs_pres in $(display_path "$_fs_dest")"
     else
-        write_summary ERROR "$_fs_tool" "validation failed"
+        log "Skills ($_fs_tool): $DEPLOY_TRACKER_TEXT, $_fs_pres in $(display_path "$_fs_dest")"
     fi
     return 0
 }
@@ -4337,25 +4412,37 @@ prompt_json_field_review() {
 #   $3 = profile sub-path holding the mirror, dot form (e.g. "claude.settings")
 #   $4 = exclude keys, comma-separated (default "hooks")
 #   $5 = deprecated permission rules, comma-separated (default "")
+#   $6 = TOOL, optional: the record name of its warnings and errors (e.g.
+#        "claude settings"); default the script's name
 #
 # Sets SYNC_MANAGED_JSON_RESULT to "unchanged", "updated", or "created".
+# A leaf the user skipped at its prompt is left differing: one write_warn TOOL
+# per skipped leaf ("Skipped: <leaf> in <file> (differs from profile.json;
+# reviewed again next run)"). A failure is one write_error TOOL "settings sync
+# failed" with its reason ("plan pass: ...", "apply pass: ...", "<file> is not
+# valid JSON after write -- ..."), and returns 1. Parity: Sync-ManagedJson.
 # Requires node. Honors DRY_RUN (plan only, no writes). Exits 2 on user abort.
 # ---------------------------------------------------------------------------
 SYNC_MANAGED_JSON_RESULT=""
 sync_managed_json() {
     local live_file="$1" profile_file="$2" subpath="$3"
-    local exclude_keys="${4:-hooks}" deprecated_rules="${5:-}"
+    local exclude_keys="${4:-hooks}" deprecated_rules="${5:-}" tool="${6:-}"
 
     SYNC_MANAGED_JSON_RESULT="unchanged"
 
     if ! command -v node >/dev/null 2>&1; then
-        log_error "sync_managed_json: node required for JSON sync"
+        write_error "$tool" "settings sync failed" "node is required for the JSON sync (not found on PATH)"
         return 1
     fi
 
-    local nodescript plan_json decisions_tsv choices_tsv
-    nodescript=$(mktemp) || { log_error "sync_managed_json: mktemp failed"; return 1; }
-    plan_json=$(mktemp); decisions_tsv=$(mktemp); choices_tsv=$(mktemp)
+    local nodescript="" plan_json="" decisions_tsv="" choices_tsv="" applyerr="" t
+    for t in nodescript plan_json decisions_tsv choices_tsv applyerr; do
+        if ! printf -v "$t" '%s' "$(mktemp 2>&1)" || [ ! -f "${!t}" ]; then
+            write_error "$tool" "settings sync failed" "cannot create a temp file: ${!t}"
+            rm -f "$nodescript" "$plan_json" "$decisions_tsv" "$choices_tsv" "$applyerr" 2>/dev/null || true  # best-effort cleanup: the failure is already recorded
+            return 1
+        fi
+    done
 
     cat > "$nodescript" <<'SYNC_NODE_EOF'
 const fs = require('fs');
@@ -4501,8 +4588,8 @@ SYNC_NODE_EOF
     # --- Plan pass ---
     local plan_stderr
     plan_stderr=$(node "$nodescript" plan "$live_file" "$profile_file" "$subpath" "$exclude_keys" "$deprecated_rules" "$plan_json" 2>&1 1>"$decisions_tsv") || {
-        log_error "sync_managed_json: plan pass failed: $plan_stderr"
-        rm -f "$nodescript" "$plan_json" "$decisions_tsv" "$choices_tsv"
+        write_error "$tool" "settings sync failed" "plan pass: $plan_stderr"
+        rm -f "$nodescript" "$plan_json" "$decisions_tsv" "$choices_tsv" "$applyerr"
         return 1
     }
     log "Settings sync plan: $plan_stderr"
@@ -4515,7 +4602,7 @@ SYNC_NODE_EOF
 
     if [ "${DRY_RUN:-}" = "true" ]; then
         log "[DRY RUN] settings sync: $plan_stderr (would prompt for $decision_count divergent leaf/leaves)"
-        rm -f "$nodescript" "$plan_json" "$decisions_tsv" "$choices_tsv"
+        rm -f "$nodescript" "$plan_json" "$decisions_tsv" "$choices_tsv" "$applyerr"
         SYNC_MANAGED_JSON_RESULT="unchanged"
         return 0
     fi
@@ -4524,7 +4611,7 @@ SYNC_NODE_EOF
     case "$plan_stderr" in
         "adopts=0 deprecated=0 decisions=0")
             log_ok "Settings unchanged: $(display_path "$live_file")"
-            rm -f "$nodescript" "$plan_json" "$decisions_tsv" "$choices_tsv"
+            rm -f "$nodescript" "$plan_json" "$decisions_tsv" "$choices_tsv" "$applyerr"
             SYNC_MANAGED_JSON_RESULT="unchanged"
             return 0 ;;
     esac
@@ -4548,6 +4635,11 @@ SYNC_NODE_EOF
             else
                 prompt_json_field_review "$id" "$cur" "$prop" "profile.json" "$adoptf"
             fi
+            # A skipped leaf is left differing: one warning per leaf
+            # (reference/logging.md 8.3). Parity: Sync-ManagedJson.
+            if [ "$JSON_FIELD_REVIEW_RESULT" = "skip" ]; then
+                write_warn "$tool" "Skipped: $id in $(display_path "$live_file") (differs from profile.json; reviewed again next run)"
+            fi
             printf '%s\t%s\n' "$id" "$JSON_FIELD_REVIEW_RESULT" >> "$choices_tsv"
         done 3< "$decisions_tsv"
     fi
@@ -4557,17 +4649,19 @@ SYNC_NODE_EOF
     [ -f "$profile_file" ] && backup_file "$profile_file"
 
     # --- Apply pass ---
-    local apply_out
-    apply_out=$(node "$nodescript" apply "$live_file" "$profile_file" "$subpath" "$exclude_keys" "$deprecated_rules" "$plan_json" "$choices_tsv") || {
-        log_error "sync_managed_json: apply pass failed"
-        rm -f "$nodescript" "$plan_json" "$decisions_tsv" "$choices_tsv"
+    local apply_out apply_rc=0
+    apply_out=$(node "$nodescript" apply "$live_file" "$profile_file" "$subpath" "$exclude_keys" "$deprecated_rules" "$plan_json" "$choices_tsv" 2>"$applyerr") || apply_rc=$?
+    if [ "$apply_rc" -ne 0 ]; then
+        write_error "$tool" "settings sync failed" "apply pass: $(error_reason "$apply_out"$'\n'"$(cat "$applyerr")" "$apply_rc")"
+        rm -f "$nodescript" "$plan_json" "$decisions_tsv" "$choices_tsv" "$applyerr"
         return 1
-    }
+    fi
 
     # --- Post-write validation ---
-    if [ -f "$live_file" ] && ! node -e "JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'))" "$live_file" 2>/dev/null; then
-        log_error "sync_managed_json: $(display_path "$live_file") is not valid JSON after write"
-        rm -f "$nodescript" "$plan_json" "$decisions_tsv" "$choices_tsv"
+    local verr=""
+    if [ -f "$live_file" ] && ! verr=$(node -e "JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'))" "$live_file" 2>&1); then
+        write_error "$tool" "settings sync failed" "$(display_path "$live_file") is not valid JSON after write -- $(error_reason "$verr" 1)"
+        rm -f "$nodescript" "$plan_json" "$decisions_tsv" "$choices_tsv" "$applyerr"
         return 1
     fi
 
@@ -4583,7 +4677,7 @@ SYNC_NODE_EOF
         *profile-changed) log_ok "Profile updated: $(display_path "$profile_file")" ;;
     esac
 
-    rm -f "$nodescript" "$plan_json" "$decisions_tsv" "$choices_tsv"
+    rm -f "$nodescript" "$plan_json" "$decisions_tsv" "$choices_tsv" "$applyerr"
     return 0
 }
 
@@ -4593,16 +4687,28 @@ SYNC_NODE_EOF
 # When `uv tool upgrade <tool>` fails with "missing a valid environment",
 # find a working Python via `uv python find` (fallback: system python/python3)
 # and reinstall with --force --python <path>.
-# Returns 0 if repaired, 1 if not applicable or failed.
+# Usage: repair_uv_tool_env UV_TOOL UPGRADE_OUTPUT [TOOL]
+#   UV_TOOL         the uv tool package name (e.g. "modal")
+#   UPGRADE_OUTPUT  the failed upgrade's captured output
+#   TOOL            optional: the record name of a failed repair (the tool name
+#                   table's name, e.g. "modal cli"); default the script's name
+# Returns (parity: Repair-UvToolEnv):
+#   0  repaired (the broken environment is logged at info: it is fixed, nothing
+#      is left for the user -- reference/logging.md 8.3 "What is a warning")
+#   1  not applicable: the output does not show a broken environment (nothing
+#      logged or recorded; the caller handles its own failure)
+#   3  the repair failed and is recorded (one write_error TOOL with its reason):
+#      the caller records nothing more for it
 repair_uv_tool_env() {
     local tool_name="$1"
     local upgrade_output="${2:-}"
+    local tool="${3:-}"
 
     if ! printf '%s\n' "$upgrade_output" | grep 'missing a valid environment' >/dev/null; then
         return 1
     fi
 
-    log_warn "$tool_name uv environment is broken (Python removed?) -- repairing..."
+    log "$tool_name uv environment is broken (Python removed?) -- repairing..."
 
     # Find a working Python -- uv's own Pythons first, then system
     local working_python=""
@@ -4619,8 +4725,8 @@ repair_uv_tool_env() {
     fi
 
     if [ -z "$working_python" ]; then
-        log_error "Cannot repair $tool_name -- no working Python found"
-        return 1
+        write_error "$tool" "$tool_name uv environment repair failed" "no working Python found (uv python find, python3, python)"
+        return 3
     fi
 
     log "Repairing with: uv tool install --force --python $working_python $tool_name"
@@ -4628,15 +4734,16 @@ repair_uv_tool_env() {
     # Capture the exit code instead of aborting under set -e; it decides success below.
     local repair_rc=0
     repair_output=$(uv tool install --force --python "$working_python" "$tool_name" 2>&1) || repair_rc=$?
+
+    if [ "$repair_rc" -ne 0 ]; then
+        # error_reason logs the output as detail lines
+        write_error "$tool" "$tool_name uv environment repair failed (uv exit $repair_rc)" "$(error_reason "$repair_output" "$repair_rc")"
+        return 3
+    fi
     local line
     while IFS= read -r line; do
         if [ -n "$line" ]; then log "$line"; fi
     done <<< "$repair_output"
-
-    if [ "$repair_rc" -ne 0 ]; then
-        log_error "$tool_name environment repair failed (uv exit $repair_rc)"
-        return 1
-    fi
 
     log_ok "Repaired $tool_name uv environment"
     return 0
@@ -4716,7 +4823,9 @@ detect_go_provenance() {
 
 # ---------------------------------------------------------------------------
 # Ensure GOPATH/bin is on PATH for current session
-# Returns 0 if already on PATH, 1 if added (caller should warn re persistence)
+# Returns 0 if already on PATH, 1 if added for this session. Not a warning: new
+# shells get Go's bin directory from the managed PATH block (setup-user-shell,
+# issue #185), so the caller logs it at info.
 # ---------------------------------------------------------------------------
 ensure_gopath_bin_on_path() {
     local gopath_bin="${GOPATH:-$HOME/go}/bin"
