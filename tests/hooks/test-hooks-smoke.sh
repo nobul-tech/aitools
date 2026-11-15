@@ -76,6 +76,25 @@ run_hook "$OBS" "$P" "$NOGIT" HOME="$DIRLOGHOME"
 check "observe, log path a directory: exit 0, no output" quiet0
 run_hook "$OBS" "$P" "$NOGIT" HOME="$BADHOME"
 check "observe, ~/.aitools a file: exit 0, no output" quiet0
+# Session telemetry (emit_hook_event): a repo whose .scratch/.current-session
+# names a session dir. Writable: the event line is appended (proves the path is
+# reached). events.jsonl a directory: same decision, stderr only the block message.
+SOGREPO="$WORK/sog-repo"
+mkdir -p "$SOGREPO/.scratch/session-ok" "$SOGREPO/.scratch/session-bad/events.jsonl"
+git -C "$SOGREPO" init -q
+printf '%s\n' "$SOGREPO/.scratch/session-ok" > "$SOGREPO/.scratch/.current-session"
+printf '{"tool_name":"Bash","tool_input":{"command":"ls"}}' > "$P"
+run_hook "$H" "$P" "$SOGREPO"
+check "events.jsonl writable, clean: exit 0, no output" quiet0
+# cat fails when the file is missing; the "none" sentinel then fails contains
+check "events.jsonl writable: hook_fire event appended" contains "$(cat "$SOGREPO/.scratch/session-ok/events.jsonl" 2>/dev/null || echo none)" '"type":"hook_fire"'
+printf '%s\n' "$SOGREPO/.scratch/session-bad" > "$SOGREPO/.scratch/.current-session"
+run_hook "$H" "$P" "$SOGREPO"
+check "events.jsonl a directory, clean: exit 0, no output" quiet0
+printf '{"tool_name":"Bash","tool_input":{"command":"git status && git log"}}' > "$P"
+run_hook "$H" "$P" "$SOGREPO"
+check "events.jsonl a directory, &&: exit 2" [ "$RC" -eq 2 ]
+check "events.jsonl a directory, &&: stderr is exactly the block message" [ "$ERR" = "USO: Simple Bash commands only --: Don't use '&&' to chain commands. Make separate Bash tool calls instead. For git in another repo, use 'git -C /path' instead of 'cd /path && git'." ]
 
 echo "== block-claude-code-guide.sh =="
 H="$HOOKS/block-claude-code-guide.sh"

@@ -39,8 +39,9 @@
 #   - Pipeline exemption: cat/head/tail in pipelines (cmd | ...) are allowed
 #     because the Read tool cannot pipe output into other commands
 #   - Log writes are fail-safe (reference/logging.md section 5): a log directory
-#     that cannot be created, or an observe log that cannot be written, never
-#     changes the exit code or the decision. Until 2026-11-14 a failed mkdir
+#     that cannot be created, or an observe log or session events.jsonl that
+#     cannot be written, never changes the exit code, the decision or the
+#     stderr message. Until 2026-11-14 a failed mkdir
 #     exited 1, which Claude Code treats as a non-blocking error: the hook
 #     failed open and the violating command ran
 #
@@ -85,10 +86,11 @@ fi
 emit_hook_event() {
     local event_type="$1" detail_json="$2"
     [ -n "$_SESSION_DIR" ] || return 0
-    printf '{"t":"%s","type":"%s","src":"sog","d":%s}\n' \
+    # Fail-safe (reference/logging.md section 5): the group puts the redirection's own error under 2>/dev/null; || true keeps going.
+    { printf '{"t":"%s","type":"%s","src":"sog","d":%s}\n' \
         "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
         "$event_type" "$detail_json" \
-        >> "$_SESSION_DIR/events.jsonl" 2>/dev/null || true
+        >> "$_SESSION_DIR/events.jsonl"; } 2>/dev/null || true
 }
 
 # violation() — dispatch based on per-check mode
