@@ -1,0 +1,965 @@
+# summary-cases.txt -- the shared fixture of tests L1-L32 (plan
+# summary-warn-reporting section 13): for each case, its input and its expected
+# run summary records, counts, deploy.log lines and panel lines.
+#
+# v1.0 (2026-11-15). Read by tests/logging/test-logging.sh (macOS, Linux) and
+# tests/logging/test-logging.ps1 (Windows). One file, so the bash and PowerShell
+# expectations cannot drift apart. Every expected value is derived from
+# reference/logging.md section 8 (8.2 helpers, 8.3 rules, 8.4 the run summary
+# file, 8.5 the panel). Where plan section 13 and section 8 disagree, section 8
+# wins; the case says so in a "note" line.
+#
+# ---------------------------------------------------------------------------
+# FILE
+# ---------------------------------------------------------------------------
+# UTF-8 without a BOM, LF line ends (.gitattributes "* text=auto eol=lf"
+# keeps LF on every checkout). No raw CR, ESC or TAB byte appears in this file:
+# they are written as escapes (below), so git's line-end handling cannot
+# change a case.
+#
+# A line whose first character is "#" is a comment. An empty line is ignored.
+# Every other line is:   [@sh |@ps1 ]KEYWORD[ REST]
+#   - "@sh " / "@ps1 " at the start: the line applies to that harness only.
+#   - KEYWORD runs to the first space. REST is everything after that one
+#     space, kept exactly (leading spaces included).
+#   - A line never ends with a space; a value that must end with one writes
+#     the last space as \s.
+#
+# Escapes, decoded in every REST value after it is split (below):
+#   \\  backslash        \p  |  (needed only inside "call" arguments)
+#   \n  LF               \r  CR           \t  TAB        \e  ESC (0x1B)
+#   \s  space            \u{HEX}  the code point HEX
+# Any other backslash sequence is a fixture error: the harness fails the case.
+#
+# Splitting: "call", "relay", "relay-native" and "file" split REST on "|"
+# first, then decode each part. Keep trailing empty parts: "write_error|t|w|"
+# has 4 parts, the last one empty (Perl: split /\|/, $rest, -1; PowerShell:
+# $rest -split '\|' keeps them). Every other keyword decodes REST whole, so
+# "record" and "expect record" lines keep their literal "|" separators.
+#
+# ---------------------------------------------------------------------------
+# CASES
+# ---------------------------------------------------------------------------
+# case ID          starts a case (ends at the next "case" line or end of file)
+# plan ID          the plan section 13 case it covers (L1 ... L32)
+# title TEXT       what it tests
+# spec TEXT        the logging.md sections it is derived from
+# lang both|sh|ps1 which harness runs it (default both)
+# note TEXT        a remark: a difference from plan section 13, an open point
+# needs pty        the case needs a terminal: a harness without one reports
+#                  the case as SKIP with the reason, never as PASS
+# migration-only   valid only while the recording switch and the legacy
+#                  write_summary WARN / ERROR exist (until plan step I5);
+#                  I5 deletes the case
+# external PATH    the case is covered by another suite (PATH and its .ps1
+#                  twin); the harness runs nothing for it
+#
+# Every case runs in a fresh process, in its own temp directory {CASEDIR},
+# with stdin from the null device, AITOOLS_LOG_DIR={CASEDIR}/logs, and the
+# library loaded with script name "test-logging" (logging_init test-logging /
+# Initialize-Logging "test-logging"). "the script" below is that process.
+#
+# Setup lines (before the steps):
+# switch on|off    the migration switch that makes log_warn / log_error
+#                  record (plan 5.2); default on. After I5 there is no switch
+#                  and "on" is the only behaviour.
+# summary unset    AITOOLS_SUMMARY_FILE is unset for the case. Default: set
+#                  to a new empty file {CASEDIR}/summary.txt
+# env NAME=VALUE   set for the case process and its children
+# stdin pty TEXT   (with "needs pty") run under a terminal; TEXT, then a newline,
+#                  is typed at the first prompt
+#
+# Steps, run in file order:
+# record LINE      append LINE to the run summary file as it is (input of a
+#                  renderer case)
+# file NAME|TEXT   write TEXT to {CASEDIR}/NAME
+# call HELPER|ARG|...   call a library helper (table below) with ARGs.
+#                  {CASEDIR} in an ARG is the case directory (native form);
+#                  {RESULT} is the last deploy_managed_file result
+# child NAME ACTION [REST]   one line of a child script NAME (below)
+# relay LABEL|TOOL|CHILD[|abort-warn]          run child CHILD through the relay
+# relay-native LABEL|TOOL|CHILD[|abort-warn]   run child CHILD as a separate process
+#                  An empty TOOL means no summary tool is given. The optional
+#                  4th field "abort-warn" is the runner's request that a user
+#                  abort (exit 2) of this child be recorded by the relay as one
+#                  warning under TOOL, "aborted by user" (deploy-harness):
+#                  one warning of the parent and no error. Without it, an
+#                  abort is a failed child: one error. The relay records an
+#                  abort; the runner never records it as well.
+# render           draw the panel from the run summary file
+#
+# Helpers (the notation uses the bash names):
+#   notation               bash                      PowerShell
+#   log                    log                       Log
+#   log_warn               log_warn                  LogWarn
+#   log_error              log_error                 LogError
+#   write_warn             write_warn                Write-AitWarn
+#   write_action           write_action              Write-AitAction
+#   write_error            write_error               Write-AitError
+#   error_reason OUT|CODE  error_reason OUT CODE     Get-AitErrorReason -Output OUT -ExitCode CODE
+#                          (the reason on stdout)    (the reason returned)
+#   write_summary          write_summary             Write-Summary
+#   managed_abort          _managed_abort            Invoke-ManagedAbort
+#   deploy_tracker_init    deploy_tracker_init       Initialize-DeployTracker
+#   deploy_managed_file SRC|DEST|TOOL|ITEM
+#                          deploy_managed_file SRC DEST TOOL ITEM;
+#                          result MANAGED_FILE_RESULT
+#                                                    Deploy-ManagedFile -Content SRC -DestPath DEST
+#                                                    -ToolName TOOL -ItemName ITEM; result = its return value
+#   deploy_tracker_record  deploy_tracker_record     Record-DeployOutcome -Outcome -ToolName -ItemName
+#   deploy_tracker_summary deploy_tracker_summary    Write-DeployTrackerSummary -ToolName
+#   render                 show_summary              Show-Summary
+#   relay                  run_child_relayed [--summary-tool TOOL] LABEL bash {CASEDIR}/CHILD.sh
+#                                                    Invoke-ChildRelayed LABEL {CASEDIR}/CHILD.ps1 @{} TOOL
+#                                                    (in-process)
+#   relay-native           (as relay)                Invoke-NativeRelayed: LABEL, TOOL and the command
+#                                                    pwsh -NoProfile -File {CASEDIR}/CHILD.ps1
+#                                                    (argument order as I1 defines it)
+#   abort-warn             the relay's option for the runner's abort-as-warning
+#                          request, in both languages, as I1 names it
+#
+# Child scripts. The harness writes {CASEDIR}/CHILD.sh or CHILD.ps1: the
+# library loaded, logging_init CHILD / Initialize-Logging CHILD (so the
+# child's script name is CHILD), then its action lines in order, then
+# "exit N" (default exit 0). The child inherits the run summary file, the
+# log directory and the switch. Actions:
+#   call HELPER|ARG|...    as the step "call"
+#   stdout TEXT            bash: printf '%s\n' TEXT   PowerShell: Write-Host TEXT
+#   stderr TEXT            bash: printf '%s\n' TEXT >&2 (bash children only)
+#   throw TEXT             PowerShell: throw TEXT (in-process children only)
+#   write-error TEXT       PowerShell: Write-Error TEXT (default
+#                          ErrorActionPreference, so the child goes on)
+#   exit N                 the child's exit code
+#
+# ---------------------------------------------------------------------------
+# EXPECTATIONS (checked after the steps)
+# ---------------------------------------------------------------------------
+# expect record LINE      the run summary file holds exactly the "expect
+#                         record" lines of the case, in this order, one per
+#                         line (compare the file without its final newline)
+# expect no-records       the run summary file is empty
+# expect record-count N PREFIX   exactly N records start with PREFIX
+# expect count warnings N the script's warning count (WARNINGS / $script:warnings)
+# expect count errors N   the script's error count (ERRORS / $script:errors)
+# expect log TEXT         deploy.log has a line "[<utc-Z>] TEXT" (the
+#                         timestamp removed, the rest equal)
+# expect logsub LEVEL TEXT   deploy.log has a line at LEVEL whose message
+#                         contains TEXT
+# expect reason TEXT      the value of the last error_reason call
+# expect result TEXT      the last deploy_managed_file result
+# expect relay-rc N       the return value of the last relay call (0 or 1)
+# expect child-rc N       AITLIB_CHILD_RC / $script:AitLibChildRc after it
+# expect case-exit N      the case process, with "exit 0" appended to its
+#                         steps, under set -euo pipefail /
+#                         $ErrorActionPreference = "Stop", exits N
+# expect panel-none       render printed nothing
+# panel blank             a panel line: empty
+# panel rule              a panel line: the rule (bash: U+2500 x 56;
+#                         PowerShell: "-" x 60)
+# panel COLOUR TEXT       a panel line: TEXT in COLOUR, one of green, yellow,
+#                         red, magenta. bash: the line's ANSI colour (32, 33,
+#                         31, 1;35), compared after every CSI sequence is
+#                         removed; PowerShell: Write-Host -ForegroundColor
+#                         (Green, Yellow, Red, Magenta)
+# The "panel" lines of a case are the whole render output, in order.
+# ---------------------------------------------------------------------------
+
+# ===========================================================================
+# L1-L12: records, counts, the relay
+# ===========================================================================
+
+case L1
+plan L1
+title log_warn records a WARN under the script name; a later OK record is written as it is
+spec 8.2 log_warn, write_summary; 8.3 "never recoloured"; 8.5 Green
+switch on
+call log_warn|w
+call write_summary|OK|tool|v1
+expect record WARN|test-logging|w
+expect record OK|tool|v1
+expect count warnings 1
+expect count errors 0
+expect log [test-logging] [warn] w
+render
+panel blank
+panel rule
+panel green   [ok]  tool             v1
+panel yellow   [!]   test-logging     w
+panel rule
+
+case L2
+plan L2
+title write_warn names the tool: the tool leaves green, one yellow line
+spec 8.2 write_warn; 8.5 Green, Yellow
+call write_warn|tool|w
+call write_summary|OK|tool|v1
+expect record WARN|tool|w
+expect record OK|tool|v1
+expect count warnings 1
+expect log [test-logging] [warn] w
+render
+panel blank
+panel rule
+panel yellow   [!]   tool             w
+panel rule
+
+case L3
+plan L3
+title write_action: one WARN record, then one ACTION record; one warning
+spec 8.2 write_action; 8.5 action-block
+call write_action|tool|w|do X
+expect record WARN|tool|w
+expect record ACTION||do X
+expect count warnings 1
+expect count errors 0
+expect log [test-logging] [warn] w
+render
+panel blank
+panel rule
+panel yellow   [!]   tool             w
+panel blank
+panel magenta   ACTION REQUIRED -- run before tools are ready:
+panel magenta   >>  do X
+panel rule
+
+case L4
+plan L4
+title write_error records WHAT and REASON; log_error records an empty reason
+spec 8.2 write_error, log_error; 8.5 red-line
+switch on
+call write_error|tool|what|why
+call log_error|f
+expect record ERROR|tool|what|why
+expect record ERROR|test-logging|f|
+expect count errors 2
+expect count warnings 0
+expect log [test-logging] [error] what: why
+expect log [test-logging] [error] f
+render
+panel blank
+panel rule
+panel red   [ERR] tool             what: why
+panel red   [ERR] test-logging     f
+panel rule
+
+case L5
+plan L5
+title a relayed child's warning is recorded by the child, not counted in the parent
+spec 8.3 Recorded at the source, Children (Relayed lines); 8.6
+switch on
+child fx-warn call log_warn|w
+child fx-warn exit 0
+relay-native fx warn||fx-warn
+expect record WARN|fx-warn|w
+expect count warnings 0
+expect count errors 0
+expect relay-rc 0
+expect child-rc 0
+note PowerShell runs the child as a separate process (Invoke-NativeRelayed); L12 covers the in-process relay
+
+case L6
+plan L6
+title a failed child that recorded its own error: one ERROR record, one parent error
+spec 8.3 A failed child, Recording that error; 8.6 A child fails
+child fx-fail call write_error|fx tool|install failed|exit 3
+child fx-fail exit 1
+relay fx fail|fx tool|fx-fail
+expect record ERROR|fx tool|install failed|exit 3
+expect count errors 1
+expect count warnings 0
+expect relay-rc 1
+expect child-rc 1
+note "parent exit 1" (plan) follows from the error count 1 and the exit footer (8.3, 8.6 Exit footer); the fixture checks the count and the relay's return value
+
+case L7
+plan L7
+title | becomes /, CR and LF become a space, in every field; an ACTION instruction keeps |
+spec 8.4 (writer replacement rule)
+call write_warn|a\pb\rc|d\ne\pf
+call write_error|t\p1|w\rhat|re\pa\nson
+call write_action|x\py|te\nxt|run a \p b\rnow
+call write_summary|OK|o\pk|v\n1
+call write_summary|DETAIL|o\pk|a\pb
+call log_warn|l\pw\r\nx
+call write_summary|ACTION||step \p two
+expect record WARN|a/b c|d e/f
+expect record ERROR|t/1|w hat|re/a son
+expect record WARN|x/y|te xt
+expect record ACTION||run a | b now
+expect record OK|o/k|v 1
+expect record DETAIL|o/k|a/b
+expect record WARN|test-logging|l/w  x
+expect record ACTION||step | two
+expect count warnings 3
+expect count errors 1
+note "l|w CR LF x": CR and LF are each replaced, so two spaces
+
+case L8a
+plan L8
+title no AITOOLS_SUMMARY_FILE: nothing is recorded, nothing fails, the counts still count
+spec 8.3 Outside a run, Fail-safe; 8.6
+summary unset
+call write_warn|tool|w
+call write_action|tool|w2|do X
+call write_error|tool|what|why
+call log_warn|lw
+call log_error|le
+call write_summary|OK|tool|v1
+call write_summary|DETAIL|tool|d
+call write_summary|ACTION||do Y
+expect case-exit 0
+expect count warnings 3
+expect count errors 2
+expect log [test-logging] [error] what: why
+expect log [test-logging] [warn] lw
+
+case L8b
+plan L8
+title an empty run summary file: nothing is drawn
+spec 8.5 When it is drawn
+render
+expect panel-none
+
+case L9a
+plan L9
+title identical yellow lines collapse into the first, with (xN); same text under another name does not
+spec 8.5 Yellow and red (collapse), yellow-line
+record WARN|fx-tool|disk almost full
+record WARN|other|disk almost full
+record WARN|fx-tool|disk almost full
+record WARN|fx-tool|disk almost full
+render
+panel blank
+panel rule
+panel yellow   [!]   fx-tool          disk almost full (x3)
+panel yellow   [!]   other            disk almost full
+panel rule
+
+case L9b
+plan L9
+title yellow text: 70 code points shown whole, 71 and 75 cut to 67 plus "..."; (xN) after the cut text
+spec 8.5 Cutting
+record WARN|w70|long-text-long-text-long-text-long-text-long-text-long-text-long-text-
+record WARN|w71|long-text-long-text-long-text-long-text-long-text-long-text-long-text-1
+record WARN|w75|long-text-long-text-long-text-long-text-long-text-long-text-long-text-12345
+record WARN|w75|long-text-long-text-long-text-long-text-long-text-long-text-long-text-12345
+render
+panel blank
+panel rule
+panel yellow   [!]   w70              long-text-long-text-long-text-long-text-long-text-long-text-long-text-
+panel yellow   [!]   w71              long-text-long-text-long-text-long-text-long-text-long-text-long-te...
+panel yellow   [!]   w75              long-text-long-text-long-text-long-text-long-text-long-text-long-te... (x2)
+panel rule
+
+case L9c
+plan L9
+title 25 warnings: 20 yellow lines, then "+5 more in deploy.log" in yellow
+spec 8.5 Yellow and red (cap), more-line, Colours
+record WARN|w01|warning 01
+record WARN|w02|warning 02
+record WARN|w03|warning 03
+record WARN|w04|warning 04
+record WARN|w05|warning 05
+record WARN|w06|warning 06
+record WARN|w07|warning 07
+record WARN|w08|warning 08
+record WARN|w09|warning 09
+record WARN|w10|warning 10
+record WARN|w11|warning 11
+record WARN|w12|warning 12
+record WARN|w13|warning 13
+record WARN|w14|warning 14
+record WARN|w15|warning 15
+record WARN|w16|warning 16
+record WARN|w17|warning 17
+record WARN|w18|warning 18
+record WARN|w19|warning 19
+record WARN|w20|warning 20
+record WARN|w21|warning 21
+record WARN|w22|warning 22
+record WARN|w23|warning 23
+record WARN|w24|warning 24
+record WARN|w25|warning 25
+render
+panel blank
+panel rule
+panel yellow   [!]   w01              warning 01
+panel yellow   [!]   w02              warning 02
+panel yellow   [!]   w03              warning 03
+panel yellow   [!]   w04              warning 04
+panel yellow   [!]   w05              warning 05
+panel yellow   [!]   w06              warning 06
+panel yellow   [!]   w07              warning 07
+panel yellow   [!]   w08              warning 08
+panel yellow   [!]   w09              warning 09
+panel yellow   [!]   w10              warning 10
+panel yellow   [!]   w11              warning 11
+panel yellow   [!]   w12              warning 12
+panel yellow   [!]   w13              warning 13
+panel yellow   [!]   w14              warning 14
+panel yellow   [!]   w15              warning 15
+panel yellow   [!]   w16              warning 16
+panel yellow   [!]   w17              warning 17
+panel yellow   [!]   w18              warning 18
+panel yellow   [!]   w19              warning 19
+panel yellow   [!]   w20              warning 20
+panel yellow         +5 more in deploy.log
+panel rule
+
+case L10
+plan L10
+title a mixed file: green, yellow, red, purple; DETAIL lines under their tool's first panel line, in its colour
+spec 8.5 panel, Green, DETAIL lines, ACTION lines, Colours
+record OK|alpha|1.0
+record DETAIL|alpha|added: a.md
+record WARN|beta|beta needs login
+record DETAIL|eps|d-eps
+record ERROR|gamma|install failed|exit 3
+record ACTION||run login
+record OK|beta|2.0
+record WARN|eps|w-eps
+record DETAIL|gamma|step: x
+record OK|delta|3.0
+record ERROR|eps|e-what|e-why
+record DETAIL|beta|added: b
+record WARN|beta|second beta warning
+record ACTION||run setup
+render
+panel blank
+panel rule
+panel green   [ok]  alpha            1.0
+panel green                           added: a.md
+panel green   [ok]  delta            3.0
+panel yellow   [!]   beta             beta needs login
+panel yellow                           added: b
+panel yellow   [!]   eps              w-eps
+panel yellow                           d-eps
+panel yellow   [!]   beta             second beta warning
+panel red   [ERR] gamma            install failed: exit 3
+panel red                           step: x
+panel red   [ERR] eps              e-what: e-why
+panel blank
+panel magenta   ACTION REQUIRED -- run before tools are ready:
+panel magenta   >>  run login
+panel magenta   >>  run setup
+panel rule
+note beta's OK record gives no green line (beta has a WARN); eps's DETAIL follows its first panel line, the yellow one
+
+case L11
+plan L11
+title read_menu_choice still detects the end of input
+external tests/menus/test-menu-choice.sh
+note the menu suite runs unchanged (plan L11: "tests/menus unchanged"); read_menu_choice reads the warning count (8.6), so it must still pass after I1
+
+case L12
+plan L12
+lang ps1
+title an in-process child (Invoke-ChildRelayed) that logs a warning: one WARN record, parent count unchanged
+spec 8.3 Children (Relayed lines); 8.0 Relay
+switch on
+child fx-warn call log_warn|w
+child fx-warn exit 0
+relay fx warn||fx-warn
+expect record WARN|fx-warn|w
+expect count warnings 0
+expect count errors 0
+expect relay-rc 0
+
+# ===========================================================================
+# L13-L17: error reasons
+# ===========================================================================
+
+case L13
+plan L13
+title error_reason: the first line matching an error marker (brew)
+spec 8.3 Every error has a reason, rule 3
+call error_reason|==> Downloading https://formulae.brew.sh/api/formula.jws.json\nError: No available formula with the name "pandoc".\n==> Searching for similarly named formulae...|1
+expect reason Error: No available formula with the name "pandoc".
+expect logsub detail ==> Searching for similarly named formulae...
+expect count errors 0
+expect count warnings 0
+
+case L14
+plan L14
+title error_reason, no marker: the last non-empty line, with CR, ANSI and the [ts] [script] [level] prefix removed
+spec 8.3 rule 4 and "Before matching"
+call error_reason|step one\n\e[33m[2026-11-15T10:00:00Z] [fx-child] [info] final step reached\e[0m\r\n\e[0m\n\n|1
+expect reason final step reached
+expect logsub detail step one
+note the line "\e[0m" is empty once its CSI sequence is removed, so it is not the last non-empty line
+
+case L15a
+plan L15
+title error_reason with no output
+spec 8.3 rule 5
+call error_reason||2
+expect reason no output (exit 2)
+
+case L15b
+plan L15
+title error_reason over output that is empty once CR is removed
+spec 8.3 rules 4, 5 and "Before matching"
+call error_reason|\r\n\r\n|5
+expect reason no output (exit 5)
+note an addition to plan L15: lines of only CR are empty after the CR is removed
+
+case L16
+plan L16
+title the red cut: WHAT shortened only as far as needed, never below 20 (or its own length); the reason cut last
+spec 8.5 Cutting (red line)
+record ERROR|pandoc|brew install failed|Error: No available formula with the name "pandoc".
+record ERROR|r-b|what-part-what-part-what-part-what-part-what-part-what-part-|exit code was 9
+record ERROR|r-c|what-part-what-part-what-part-what-part-what-part-what-part-|reason-pt-reason-pt-reason-pt-reason-pt-reason-pt-reason-pt-
+record ERROR|r-d|what-part-what-part-|reason-pt-reason-pt-reason-pt-reason-pt-reason-p
+record ERROR|r-e|what-part-what-part-|reason-pt-reason-pt-reason-pt-reason-pt-reason-pt
+render
+panel blank
+panel rule
+panel red   [ERR] pandoc           brew install failed: Error: No available formula with the name "pan...
+panel red   [ERR] r-b              what-part-what-part-what-part-what-part-what-part-...: exit code was 9
+panel red   [ERR] r-c              what-part-what-pa...: reason-pt-reason-pt-reason-pt-reason-pt-reaso...
+panel red   [ERR] r-d              what-part-what-part-: reason-pt-reason-pt-reason-pt-reason-pt-reason-p
+panel red   [ERR] r-e              what-part-what-part-: reason-pt-reason-pt-reason-pt-reason-pt-reaso...
+panel rule
+note pandoc: w=19 r=51 (72): WHAT kept (19 <= 20), reason cut to 49 -- the plan 2.2 example line; r-b: w=60 r=15: WHAT cut to 53; r-c: w=60 r=60: WHAT cut to 20, reason to 48; r-d: 20+2+48 = 70, whole; r-e: 20+2+49 = 71, reason cut to 48
+
+case L17a
+plan L17
+lang sh
+title a child crashes after writing boom to stderr and a log line to stdout, with no record: one red line from the parent
+spec 8.3 A failed child (name, WHAT, REASON: last 20 stderr lines)
+child fx-crash call log|working on it
+child fx-crash stderr boom
+child fx-crash exit 1
+relay fx crash||fx-crash
+expect record ERROR|fx-crash|fx crash failed (exit 1)|boom
+expect count errors 1
+expect relay-rc 1
+expect child-rc 1
+render
+panel blank
+panel rule
+panel red   [ERR] fx-crash         fx crash failed (exit 1): boom
+panel rule
+note no summary tool: the name is the base name of the first argument ending in .sh (8.3 Its name)
+
+case L17b
+plan L17
+lang ps1
+title an in-process child throws boom: one red line "<label> failed (exception): boom"
+spec 8.3 A failed child (WHAT for a throw; REASON: the exception message)
+child fx-crash throw boom
+relay fx crash||fx-crash
+expect record ERROR|fx-crash|fx crash failed (exception)|boom
+expect count errors 1
+expect relay-rc 1
+render
+panel blank
+panel rule
+panel red   [ERR] fx-crash         fx crash failed (exception): boom
+panel rule
+
+case L17c
+plan L17
+lang ps1
+title an in-process child runs Write-Error boom and exits 1: one red line "<label> failed (exit 1): boom"
+spec 8.3 A failed child (REASON: the error records an in-process child wrote)
+child fx-crash write-error boom
+child fx-crash exit 1
+relay fx crash||fx-crash
+expect record ERROR|fx-crash|fx crash failed (exit 1)|boom
+expect count errors 1
+expect relay-rc 1
+expect child-rc 1
+render
+panel blank
+panel rule
+panel red   [ERR] fx-crash         fx crash failed (exit 1): boom
+panel rule
+
+# ===========================================================================
+# L18-L32: edge cases
+# ===========================================================================
+
+case L18a
+plan L18
+title "0 failed", "NOTE: x" and "SOURCE: y" are not error markers: the last non-empty line
+spec 8.3 rule 3 (markers), rule 4
+call error_reason|0 failed\nNOTE: x\nSOURCE: y\ndone|1
+expect reason done
+
+case L18b
+plan L18
+title pip-style "ERROR: z" is a marker, found before the last line
+spec 8.3 rule 3 (error:, any case, at the start of the line)
+call error_reason|0 failed\nNOTE: x\nSOURCE: y\nERROR: z\ndone|1
+expect reason ERROR: z
+
+case L18c
+plan L18
+title "E: " only at the start of a line; "error:" not inside a word
+spec 8.3 rule 3
+call error_reason|xerror: nope\n  E: indented\nE: Unable to locate package fx\nlast|100
+expect reason E: Unable to locate package fx
+note an addition to plan L18
+
+case L18d
+plan L18
+title "fatal:" after a space matches; the whole line is the reason; the first match wins
+spec 8.3 rule 3
+call error_reason|progress 50%\ngit: fatal: not a git repository\nerror: second match\nwarning: later|128
+expect reason git: fatal: not a git repository
+note an addition to plan L18
+
+case L19
+plan L19
+title a known build-failure signature comes first, as <NAME>: <REMEDY>, before a marker line
+spec 8.3 rule 1
+call error_reason|   Compiling fx v0.1.0\nerror: linker `cc` not found\n  = note: No such file or directory (os error 2)\nerror: could not compile `fx`|101
+@sh expect reason Linker: Install build-essential (Linux) or Xcode CLI tools (macOS)
+@ps1 expect reason MSVC linker: Install MSVC Build Tools with C++ workload
+note the signature tables differ by platform (diagnose_build_failure in aitools-lib.sh, $script:BuildFailureSignatures in aitools-lib.ps1); a change to either table changes this case
+
+case L20
+plan L20
+title log_error: an empty reason gives no trailing ": "; a 100-character text is cut at 70
+spec 8.2 log_error; 8.5 Cutting (empty reason)
+switch on
+call log_error|x
+call log_error|error-txt-error-txt-error-txt-error-txt-error-txt-error-txt-error-txt-error-txt-error-txt-error-txt-
+expect record ERROR|test-logging|x|
+expect record ERROR|test-logging|error-txt-error-txt-error-txt-error-txt-error-txt-error-txt-error-txt-error-txt-error-txt-error-txt-|
+expect count errors 2
+render
+panel blank
+panel rule
+panel red   [ERR] test-logging     x
+panel red   [ERR] test-logging     error-txt-error-txt-error-txt-error-txt-error-txt-error-txt-error-t...
+panel rule
+
+case L21
+plan L21
+title identical errors collapse into one red line with (xN); a different reason does not; (xN) follows the cut text
+spec 8.5 Yellow and red (collapse)
+record ERROR|t|w|r
+record ERROR|t|w|r
+record ERROR|t|w|r2
+record ERROR|r-c|what-part-what-part-what-part-what-part-what-part-what-part-|reason-pt-reason-pt-reason-pt-reason-pt-reason-pt-reason-pt-
+record ERROR|r-c|what-part-what-part-what-part-what-part-what-part-what-part-|reason-pt-reason-pt-reason-pt-reason-pt-reason-pt-reason-pt-
+render
+panel blank
+panel rule
+panel red   [ERR] t                w: r (x2)
+panel red   [ERR] t                w: r2
+panel red   [ERR] r-c              what-part-what-pa...: reason-pt-reason-pt-reason-pt-reason-pt-reaso... (x2)
+panel rule
+
+case L22
+plan L22
+title 26 error records, one pair identical: collapse first, then 20 red lines and "+5 more"; DETAIL lines do not count; DETAIL lines of a tool beyond the cap are not shown
+spec 8.5 Yellow and red (cap), DETAIL lines
+record DETAIL|e02|detail one
+record ERROR|e01|install failed|exit 1
+record ERROR|e02|install failed|exit 1
+record ERROR|e01|install failed|exit 1
+record DETAIL|e02|detail two
+record ERROR|e03|install failed|exit 1
+record ERROR|e04|install failed|exit 1
+record ERROR|e05|install failed|exit 1
+record ERROR|e06|install failed|exit 1
+record ERROR|e07|install failed|exit 1
+record ERROR|e08|install failed|exit 1
+record ERROR|e09|install failed|exit 1
+record ERROR|e10|install failed|exit 1
+record ERROR|e11|install failed|exit 1
+record ERROR|e12|install failed|exit 1
+record ERROR|e13|install failed|exit 1
+record ERROR|e14|install failed|exit 1
+record ERROR|e15|install failed|exit 1
+record ERROR|e16|install failed|exit 1
+record ERROR|e17|install failed|exit 1
+record ERROR|e18|install failed|exit 1
+record ERROR|e19|install failed|exit 1
+record ERROR|e20|install failed|exit 1
+record ERROR|e21|install failed|exit 1
+record ERROR|e22|install failed|exit 1
+record ERROR|e23|install failed|exit 1
+record ERROR|e24|install failed|exit 1
+record ERROR|e25|install failed|exit 1
+record DETAIL|e22|hidden detail
+render
+panel blank
+panel rule
+panel red   [ERR] e01              install failed: exit 1 (x2)
+panel red   [ERR] e02              install failed: exit 1
+panel red                           detail one
+panel red                           detail two
+panel red   [ERR] e03              install failed: exit 1
+panel red   [ERR] e04              install failed: exit 1
+panel red   [ERR] e05              install failed: exit 1
+panel red   [ERR] e06              install failed: exit 1
+panel red   [ERR] e07              install failed: exit 1
+panel red   [ERR] e08              install failed: exit 1
+panel red   [ERR] e09              install failed: exit 1
+panel red   [ERR] e10              install failed: exit 1
+panel red   [ERR] e11              install failed: exit 1
+panel red   [ERR] e12              install failed: exit 1
+panel red   [ERR] e13              install failed: exit 1
+panel red   [ERR] e14              install failed: exit 1
+panel red   [ERR] e15              install failed: exit 1
+panel red   [ERR] e16              install failed: exit 1
+panel red   [ERR] e17              install failed: exit 1
+panel red   [ERR] e18              install failed: exit 1
+panel red   [ERR] e19              install failed: exit 1
+panel red   [ERR] e20              install failed: exit 1
+panel red         +5 more in deploy.log
+panel rule
+note plan L22 says "25 errors"; 26 records with one identical pair give 25 lines after collapse, so +5 (not +6) proves the collapse comes first
+
+case L23a
+plan L23
+title non-ASCII and non-BMP text: cut and padded by code points
+spec 8.5 Cutting (code points, every locale), <x:16>
+record OK|日本語ツール|v1
+record DETAIL|日本語ツール|ädded: ü.md
+record WARN|Ünïcödé-tool|Ünïcödé-tëxt-Ünïcödé-tëxt-Ünïcödé-tëxt-Ünïcödé-tëxt-Ünïcödé-tëxt-é😀ñ✓🎉end
+record WARN|🚀-tool|🎉seventy-cp-seventy-cp-seventy-cp-seventy-cp-seventy-cp-seventy-cp-end
+record ERROR|fx-tool|ïnstall failed|Ërrör: ñøpé-ñøpé-ñøpé-ñøpé-ñøpé-ñøpé-ñøpé-ñøpé-abc🚀tail-text
+render
+panel blank
+panel rule
+panel green   [ok]  日本語ツール           v1
+panel green                           ädded: ü.md
+panel yellow   [!]   Ünïcödé-tool     Ünïcödé-tëxt-Ünïcödé-tëxt-Ünïcödé-tëxt-Ünïcödé-tëxt-Ünïcödé-tëxt-é😀...
+panel yellow   [!]   🚀-tool           🎉seventy-cp-seventy-cp-seventy-cp-seventy-cp-seventy-cp-seventy-cp-end
+panel red   [ERR] fx-tool          ïnstall failed: Ërrör: ñøpé-ñøpé-ñøpé-ñøpé-ñøpé-ñøpé-ñøpé-ñøpé-abc🚀...
+panel rule
+note the 67th code point of the first warning is U+1F600 (two UTF-16 units): a cut by UTF-16 units or bytes splits or drops it; the second warning is exactly 70 code points (71 UTF-16 units) and is not cut; "🚀-tool" is 6 code points (7 UTF-16 units) and is padded to 16 code points; the reason's 51st code point is U+1F680, the last one kept
+
+case L23b
+plan L23
+lang sh
+title the same panel under LC_ALL=C
+spec 8.5 Cutting ("in every locale")
+env LC_ALL=C
+record OK|日本語ツール|v1
+record DETAIL|日本語ツール|ädded: ü.md
+record WARN|Ünïcödé-tool|Ünïcödé-tëxt-Ünïcödé-tëxt-Ünïcödé-tëxt-Ünïcödé-tëxt-Ünïcödé-tëxt-é😀ñ✓🎉end
+record WARN|🚀-tool|🎉seventy-cp-seventy-cp-seventy-cp-seventy-cp-seventy-cp-seventy-cp-end
+record ERROR|fx-tool|ïnstall failed|Ërrör: ñøpé-ñøpé-ñøpé-ñøpé-ñøpé-ñøpé-ñøpé-ñøpé-abc🚀tail-text
+render
+panel blank
+panel rule
+panel green   [ok]  日本語ツール           v1
+panel green                           ädded: ü.md
+panel yellow   [!]   Ünïcödé-tool     Ünïcödé-tëxt-Ünïcödé-tëxt-Ünïcödé-tëxt-Ünïcödé-tëxt-Ünïcödé-tëxt-é😀...
+panel yellow   [!]   🚀-tool           🎉seventy-cp-seventy-cp-seventy-cp-seventy-cp-seventy-cp-seventy-cp-end
+panel red   [ERR] fx-tool          ïnstall failed: Ërrör: ñøpé-ñøpé-ñøpé-ñøpé-ñøpé-ñøpé-ñøpé-ñøpé-abc🚀...
+panel rule
+note bash only: PowerShell strings do not depend on LC_ALL
+
+case L24
+plan L24
+title a 3-field (legacy) ERROR record has an empty reason; extra fields are joined back with /; an unknown kind is skipped and logged at detail
+spec 8.4 Reader rules
+record ERROR|legacy-tool|script failed (exit 1)
+record INFO|x|y
+record ERROR|t5|a|b|c
+render
+panel blank
+panel rule
+panel red   [ERR] legacy-tool      script failed (exit 1)
+panel red   [ERR] t5               a: b/c
+panel rule
+expect logsub detail INFO|x|y
+note the detail line quotes the skipped record verbatim (lead decision 2026-11-15, added to 8.4 by S1b)
+
+case L25
+plan L25
+title a DETAIL record with no panel line for its tool is not shown
+spec 8.5 DETAIL lines
+record OK|a|1
+record DETAIL|ghost|orphan
+render
+panel blank
+panel rule
+panel green   [ok]  a                1
+panel rule
+
+case L26
+plan L26
+title a WARN or ERROR record under a tool's name suppresses its green line
+spec 8.5 Green
+record OK|node.js|v26.3.1
+record WARN|node.js|update available
+record OK|go|go1.27.4
+record ERROR|go|go install failed|exit 1
+record OK|uv|0.13.8
+render
+panel blank
+panel rule
+panel green   [ok]  uv               0.13.8
+panel yellow   [!]   node.js          update available
+panel red   [ERR] go               go install failed: exit 1
+panel rule
+
+case L27
+plan L27
+migration-only
+title switch off: a legacy write_summary WARN / ERROR and its log_warn / log_error give one record each, never two
+spec plan 5.2 "During the migration only"; 8.4 Reader rules (3-field ERROR)
+switch off
+call log_warn|w
+call write_summary|WARN|tool|w
+call log_error|e
+call write_summary|ERROR|tool|e
+call write_summary|OK|tool2|v1
+expect record WARN|tool|w
+expect record ERROR|tool|e
+expect record OK|tool2|v1
+expect count warnings 1
+expect count errors 1
+render
+panel blank
+panel rule
+panel green   [ok]  tool2            v1
+panel yellow   [!]   tool             w
+panel red   [ERR] tool             e
+panel rule
+
+case L28a
+plan L28
+title deploy-harness aborts (exit 2): the relay records one warning, "harness files" / "aborted by user"; no record from the child
+spec 8.3 A user abort (exit 2); 8.6 A child aborts
+child deploy-harness call managed_abort
+relay deploy-harness|harness files|deploy-harness|abort-warn
+expect record WARN|harness files|aborted by user
+expect count warnings 1
+expect count errors 0
+expect child-rc 2
+render
+panel blank
+panel rule
+panel yellow   [!]   harness files    aborted by user
+panel rule
+note "the run stops with exit 2" is the entry point's step (G1), not the relay's: the fixture checks the record and the child's exit code
+note the relay records the abort and the runner never records it as well; the runner's request (abort-warn) makes it one warning of the parent and no error (lead decision 2026-11-15, written into 8.3 and 8.6 by S1b)
+
+case L28b
+plan L28
+title another setup script aborts (exit 2): one red line, reason "aborted by user"; no record from the child
+spec 8.3 A user abort (exit 2), A failed child; 8.6 A child aborts
+child fx-setup call managed_abort
+relay fx-setup.sh|fx tool|fx-setup
+expect record ERROR|fx tool|fx-setup.sh failed (exit 2)|aborted by user
+expect count errors 1
+expect relay-rc 1
+expect child-rc 2
+render
+panel blank
+panel rule
+panel red   [ERR] fx tool          fx-setup.sh failed (exit 2): aborted by user
+panel rule
+note managed_abort logs "Aborted by user" in the child at error level and counts it, through the library-internal path that records nothing (plan 5.2 "Relay internal")
+
+case L29
+plan L29
+title two OK records for one tool: the first gives the status; identical ACTION records are shown once
+spec 8.5 Green, ACTION lines
+record OK|uv|0.13.8
+record OK|uv|0.13.9
+record ACTION||uv login
+record ACTION||uv login
+record ACTION||other step
+render
+panel blank
+panel rule
+panel green   [ok]  uv               0.13.8
+panel blank
+panel magenta   ACTION REQUIRED -- run before tools are ready:
+panel magenta   >>  uv login
+panel magenta   >>  other step
+panel rule
+
+case L30
+plan L30
+title records with an empty name are skipped and logged at detail; an ACTION instruction keeps |
+spec 8.4 Reader rules
+record WARN||orphan warning
+record ERROR||what|why
+record OK||v1
+record ACTION||run a | b
+record OK|z|1
+render
+panel blank
+panel rule
+panel green   [ok]  z                1
+panel blank
+panel magenta   ACTION REQUIRED -- run before tools are ready:
+panel magenta   >>  run a | b
+panel rule
+expect logsub detail WARN||orphan warning
+expect logsub detail ERROR||what|why
+expect logsub detail OK||v1
+note as L24: the detail line quotes the skipped record verbatim (8.4, S1b)
+
+case L31
+plan L31
+title write_error with an empty reason: deploy.log "[error] WHAT" with no ": "
+spec 8.2 write_error ("WHAT alone when REASON is empty"); 8.5 red-line
+call write_error|tool|what|
+expect record ERROR|tool|what|
+expect count errors 1
+expect log [test-logging] [error] what
+render
+panel blank
+panel rule
+panel red   [ERR] tool             what
+panel rule
+
+case L32a
+plan L32
+title a managed file that differs, under --force: an info line, no WARN record
+spec 8.3 What is a warning
+env AITOOLS_FORCE=1
+file fx.md|local edit\n
+call deploy_tracker_init
+call deploy_managed_file|source text\n|{CASEDIR}/fx.md|fx tool|fx.md
+call deploy_tracker_record|{RESULT}|fx tool|fx.md
+call deploy_tracker_summary|fx tool
+expect result updated
+expect record-count 0 WARN|
+expect count warnings 0
+expect logsub info overwriting (--force)
+
+case L32b
+plan L32
+title a managed file that differs, in a non-interactive run: one WARN record under the tool
+spec 8.3 What is a warning ("local edits overwritten in a non-interactive run")
+file fx.md|local edit\n
+call deploy_tracker_init
+call deploy_managed_file|source text\n|{CASEDIR}/fx.md|fx tool|fx.md
+call deploy_tracker_record|{RESULT}|fx tool|fx.md
+call deploy_tracker_summary|fx tool
+expect result updated
+expect record-count 1 WARN|
+expect record-count 1 WARN|fx tool|
+expect count warnings 1
+expect logsub warn overwriting (non-interactive)
+
+case L32c
+plan L32
+needs pty
+title a managed file that differs, skipped at the review menu: one WARN record under the tool
+spec 8.3 What is a warning ("a managed file left differing after a skipped review")
+stdin pty s
+file fx.md|local edit\n
+call deploy_tracker_init
+call deploy_managed_file|source text\n|{CASEDIR}/fx.md|fx tool|fx.md
+call deploy_tracker_record|{RESULT}|fx tool|fx.md
+call deploy_tracker_summary|fx tool
+expect result skipped
+expect record-count 1 WARN|
+expect record-count 1 WARN|fx tool|
+expect count warnings 1
+note the menu prompt needs a terminal (tty_interactive / the PowerShell console check); the pty harness of tests/profile can drive it, as plan I6 does
