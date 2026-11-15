@@ -93,7 +93,7 @@ line_of() {
 }
 
 # listed <file:line> <step7 file>: 0 when that site is in the step 7 line
-# (a whole token: not a prefix of file:line0 or a longer path)
+# (matched as a whole word, never as a prefix of file:line0 or a longer path)
 listed() {
     S7_SITE="$1" perl -ne '$f = 1 if /(?<!\S)\Q$ENV{S7_SITE}\E(?![0-9])/; END { exit($f ? 0 : 1) }' "$2"
 }
