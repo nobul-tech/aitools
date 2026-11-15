@@ -12,6 +12,20 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.77.24 -- The adversarial workflow-guard timing case gets the 250 ms hard limit on macOS (2026-11-15)
+
+Not tagged. Branch `fix/fa81-05-wdg-timing`, mission fa81-05-wdg under fa81-05-merge-queue (session 87795dc3). Commander, 2026-11-15, answering RFI fa81-55 (give the adversarial case the stress case's rule: WARN at 100 ms or more, FAIL only at the 250 ms hard limit): "55) yes".
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 1 | Medium | `tests/hooks/test-workflow-delegation-guard.sh`: the timing case "adversarial 476 KB 'name prefix x.md' prompt" FAILed on the GitHub macOS runner at 100-107 ms (run 43668923612: 100 ms; run 43674468619: 107 ms on `/bin/bash` 3.2, then 103 ms on bash 5 on the rerun; each `FAIL adversarial 476 KB 'name prefix x.md' prompt: <n> ms (>= 100)`), turning main and the queued PRs red. Its `timing` call now passes `250` as the hard limit, the one the stress case already has: on macOS 100-249 ms is a counted WARN and 250 ms or more still FAILs; on Linux and Windows Git Bash nothing changes (advisory). The comment above the call gives the observed times and the reason. The hook and its 100 ms budget (spec v1.1 section 9) are unchanged |
+
+**Verified on:** Windows 11 (Git Bash): `bash -n` on the test; the whole test suite in Git Bash; `scripts/check-pre-commit.ps1`. macOS and Linux (bash 5 and `/bin/bash` 3.2): CI.
+
+---
+
 ## v0.77.22 -- The pre-commit checklist's line-ending command works on Linux and Windows (2026-11-14)
 
 Not tagged. Branch `docs/m7-precommit-sed`, mission M7-Ckl under M7-Sweep (session 87795dc3), item 5c. Commander, 2026-11-14: "launch mission go fix them, dont bother filing incidents, check to see if these were already fixed by the other running missions first, if not do it".
