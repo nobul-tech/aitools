@@ -437,8 +437,8 @@ fi
 # ---------------------------------------------------------------------------
 # 20. CC version-dep review
 # ---------------------------------------------------------------------------
-cc_version=$(claude --version 2>/dev/null | head -1 || echo "unknown")
-registry_version=$(grep -E 'Current version' "$REPO_ROOT/reference/tool-ops-claude-code.md" 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || echo "unknown")
+cc_version=$(claude --version 2>/dev/null | sed -n '1p' || echo "unknown")
+registry_version=$(grep -E 'Current version' "$REPO_ROOT/reference/tool-ops-claude-code.md" 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | sed -n '1p' || echo "unknown")
 if [ "$cc_version" = "unknown" ]; then
     step_skip "20" "CC version-dep review" "claude CLI not found"
 elif echo "$cc_version" | grep "$registry_version" >/dev/null; then
