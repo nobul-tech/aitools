@@ -207,7 +207,13 @@ bullet). Re-check at 9801bdd: **PASS**,
 https://github.com/nobul-tech/aitools/pull/165#issuecomment-6886226086 (it
 withdrew note 6). Its two wording leftovers were applied afterwards: the
 table order, and "observed" wording for the `output_file` link in
-RELEASE_NOTES, `/delegate` and registry workaround #32.
+RELEASE_NOTES, `/delegate` and registry workaround #32. Re-check 2 (the
+version renumber, the d21994b record, the merge of #167): PASS,
+comment 6887174073. Re-check 3 at 8a93c05 (the commander's /delegate merge,
+the ten-element test, the merge of 70b7054): BLOCKING (1), RFI 38dc-25-4
+still shown open after the commander's "keep" (comment 6888186342); fixed.
+Re-check 4 at 294b1bc: PASS (comment 6888232324); its one note (RELEASE_NOTES
+item 6 "eight-element test") fixed after it.
 
 ## CONFLICT / WRITE_BLOCKED
 
