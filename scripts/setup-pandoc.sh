@@ -61,13 +61,13 @@ case "$OS_NAME" in
                 log "Already installed via Homebrew — upgrading..."
                 upgrade_rc=0
                 UPGRADE_OUTPUT=$(brew upgrade pandoc 2>&1) || upgrade_rc=$?
-                if [ "$upgrade_rc" -eq 0 ] && printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'already installed\|up.to.date\|No available upgrade'; then
+                if [ "$upgrade_rc" -eq 0 ] && printf '%s\n' "$UPGRADE_OUTPUT" | grep -i 'already installed\|up.to.date\|No available upgrade' >/dev/null; then
                     log_ok "Pandoc already up to date"
                     write_summary OK "pandoc" "$(pandoc --version | head -1)"
                 else
                     while IFS= read -r line; do log "$line"; done <<< "$UPGRADE_OUTPUT"
                     # Exit code first (C-F2); the output grep stays for brew upgrade (Standard 3).
-                    if [ "$upgrade_rc" -ne 0 ] || printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'error\|fatal'; then
+                    if [ "$upgrade_rc" -ne 0 ] || printf '%s\n' "$UPGRADE_OUTPUT" | grep -i 'error\|fatal' >/dev/null; then
                         log_error "brew upgrade pandoc failed (exit $upgrade_rc) -- see $(display_path "$LOG_FILE")"
                         write_summary ERROR "pandoc" "brew upgrade failed (exit $upgrade_rc)"
                     else
@@ -88,7 +88,7 @@ case "$OS_NAME" in
                     if [ "$conda_rc" -ne 0 ]; then
                         log_detail "conda-list-pandoc: $conda_list"
                         log_warn "conda list pandoc failed (exit $conda_rc) -- skipping conda cleanup"
-                    elif printf '%s\n' "$conda_list" | grep -q '^pandoc '; then
+                    elif printf '%s\n' "$conda_list" | grep '^pandoc ' >/dev/null; then
                         log_warn "Removing conda pandoc..."
                         remove_package "conda remove -y pandoc" conda remove -y pandoc
                     fi
@@ -99,7 +99,7 @@ case "$OS_NAME" in
                     if [ "$port_rc" -ne 0 ]; then
                         log_detail "port-installed-pandoc: $port_list"
                         log_warn "port installed pandoc failed (exit $port_rc) -- skipping MacPorts cleanup"
-                    elif printf '%s\n' "$port_list" | grep -q '^ *pandoc '; then
+                    elif printf '%s\n' "$port_list" | grep '^ *pandoc ' >/dev/null; then
                         log_warn "Removing MacPorts pandoc..."
                         remove_package "sudo port uninstall pandoc" sudo port uninstall pandoc
                     fi

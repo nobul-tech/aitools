@@ -109,6 +109,7 @@ in `<session dir>/events.jsonl`.
 
 The hook lifecycle beyond rollout (source, deploy, adopt, user-created hooks,
 retirement) is governed by the project rule `@.claude/rules/hook-lifecycle.md`
-(loaded in aitools sessions only: since 2026-11-06 deploy-harness deploys
+(loaded in aitools sessions only, and there only once a file matching its
+`paths:` frontmatter is read: since 2026-11-06 deploy-harness deploys
 `shared/rules/` only, so it no longer reaches `~/.claude/rules/` or
 `~/.cursor/rules/`).

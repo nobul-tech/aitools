@@ -335,6 +335,15 @@ jobs:
         if: ${{ !cancelled() }}
         run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/check-post-push/test-menu-parity.sh
 
+      # check-script-compliance step 7: a pipeline ending in grep -q under pipefail FAILS; BSD grep mechanism
+      - name: check-script-compliance step 7 grep -q tests (bash 5)
+        if: ${{ !cancelled() }}
+        run: bash tests/check-script-compliance/test-step7-grepq.sh
+
+      - name: check-script-compliance step 7 grep -q tests (macOS /bin/bash 3.2)
+        if: ${{ !cancelled() }}
+        run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/check-script-compliance/test-step7-grepq.sh
+
       - name: setup-user-shell login profile + rc tests (bash 5)
         if: ${{ !cancelled() }}
         run: bash tests/setup-user-shell/test-setup-user-shell.sh
@@ -701,6 +710,11 @@ jobs:
             echo "::error::deploy/ is stale -- run build-deploy.sh and commit"
             exit 1
           fi
+
+      # check-script-compliance step 7: a pipeline ending in grep -q under pipefail FAILS; GNU grep mechanism
+      - name: check-script-compliance step 7 grep -q tests
+        if: ${{ !cancelled() }}
+        run: bash tests/check-script-compliance/test-step7-grepq.sh
 
       # Script standards compliance, the .sh twin (check-post-push step 23 runs it,
       # but only after a push): fails the job on a FAIL check (an unchecked

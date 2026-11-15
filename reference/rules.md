@@ -79,8 +79,9 @@ architecture" (rules are "concise behavioral directives, ~40-100 lines";
 references are "implementation detail, unlimited length"; "one authoritative
 location per fact"); `@reference/framework-three-layer-governance.md`
 "Rule-skill governance" ("Rules govern and enforce process; skills implement
-it. Rules are always in context and contain trigger directives stating WHEN
-to invoke their corresponding skill.").
+it. Rules are always in context (governance rules carry no `paths:`
+frontmatter ...) and contain trigger directives stating WHEN to invoke their
+corresponding skill.").
 
 What a rule is not:
 
@@ -209,9 +210,13 @@ How the tools load rules:
   code.claude.com/docs/en/memory, verified with chrome-devtools on
   2026-10-27 against Claude Code 2.1.309 (`@reference/tool-ops-claude-code.md`
   item #28).
-- **Claude Code sub-agents** do not load project `.claude/rules/` or
-  `CLAUDE.md` (version dependency #5, issue #29423); delegation prompts must
-  carry the rules (user rule `delegation.md`, element 2).
+- **Claude Code sub-agents** may not receive every rule or `CLAUDE.md`:
+  at 2.1.325 general-purpose delegates launched with the Agent tool get the
+  CLAUDE.md files and the rules without `paths:` at launch and `paths:`
+  rules only after reading files, all from the session's working directory
+  (the main checkout), not the delegate's worktree; Explore, Plan and some
+  built-in types get less (version dependency #5, issue #29423). Delegation
+  prompts must carry the rules (user rule `delegation.md`, element 2).
 - **Cursor** loads `<dir>/.cursor/rules/**/*.mdc` for the workspace and every
   ancestor directory, so `~/.cursor/rules` reaches every workspace under
   `$HOME`; `.md` files are ignored and a `.mdc` needs frontmatter (header

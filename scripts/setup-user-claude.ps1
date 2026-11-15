@@ -192,7 +192,7 @@ $sharedContent
 ## Machine-Specific
 
 - Machine: $osInfo ($machineHost; profile $profileShown)
-- Shell: bash (Claude Code requires Git Bash on Windows)
+- Shell: PowerShell and Git Bash (Claude Code on Windows: a PowerShell tool, and a Bash tool that runs Git Bash)
 "@
 
 # ---------------------------------------------------------------------------
