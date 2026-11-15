@@ -256,6 +256,22 @@ Not tagged. Branch `docs/38dc-08-subagent-transcripts`, mission 38dc-08-subagent
 
 ---
 
+## v0.77.6 -- How tests run on Windows: the .ps1 suites; Git Bash only for cross-platform scripts (2026-11-14)
+
+Not tagged. Branch `docs/38dc-12-windows-test-practice`, mission 38dc-12 (M6-Polish, session 87795dc3).
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 1 | `reference/cross-platform-detail.md` "Running tests on Windows" (new): the commander's rule (2026-11-14), quoted: `.sh` scripts and tests run only on macOS and Linux, `.ps1` only on Windows, unless a script is explicitly marked cross-platform (his examples: `build-deploy.sh`, all Perl and Python scripts; the marks are the `.claude/rules/cross-platform.md` "OS guard exemptions" table, whose unsettled rows he answered row by row in RFI 38dc-7, an answer main's table shows so far only for the relay prompt guards of PR #167); on Windows an agent runs the twelve `.ps1` suites with `pwsh -NoProfile -File` and the tests of explicitly cross-platform scripts, and leaves `.ps1` code that has only a `.sh` driver to the Windows CI job. Eight known Git Bash issues, each with its source, five re-checked by a probe on the commander's workstation: Git's `usr/bin` first on PATH (a bare `find` in a `.cmd` stub walked C: and hung a suite), `bash` resolving to Git's or to the WSL launcher, `chmod 000` on a directory not enforced, `grep` dropping the line-end CR, MSYS argument rewriting (`/c/...`, `--opt=/tmp/...`, `origin/main:.aitools/...`), GNU tools not BSD, slow pseudo-terminal runs, a faked `uname`. What the Windows CI job runs on main at 8bf15d9 (48 suite steps: 12 `.ps1`, 2 Python, 34 `.sh` in Git Bash, in three groups) and that the bash AI merge has no Windows runtime path (since PR #162 the bash entry point `scripts/aitools` forwards to `aitools.ps1` on Windows before it loads `aitools-lib.sh`); follow-up mission 38dc-13 is changing that layout. "Git Bash PATH shadowing": `find`, `bash` and `sort.exe` added to the shadowed tools |
+| 2 | `CLAUDE.md` tests line: on Windows, the `.ps1` suites, and `.sh` suites in Git Bash only for scripts explicitly marked cross-platform, with a pointer to the new section |
+| 3 | `/delegate` skill v2.3 ("In the aitools repo", "Checks"): on Windows the `.ps1` check twins (the `.sh` checks refuse Windows), the same test rule, the pointer to the new section, and no known pre-existing check failures (pre-commit step 6 and pre-push step 7, listed before, pass on main) |
+
+**Verified on:** Windows 11 (Git Bash 5.3.15, pwsh 7): the Git Bash probes cited in item 1; the CI step counts by a parse of `.github/workflows/check.yml`. Documentation only: no script or test changed.
+
+---
+
 ## v0.77.5 -- Fail-safe log writers in the installers, the profile resolver and check-lib; setup-pywinpty checks its listing; hh.ps1 is PowerShell 7 only (2026-11-14)
 
 Not tagged. Branch `fix/m6-logging` (PR #157), mission M6-Polish (session 87795dc3), items f, d and e (delegates M6-F and M6-DE).

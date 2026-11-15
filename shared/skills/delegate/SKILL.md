@@ -39,12 +39,13 @@ v2.2 (2026-11-14, 38dc-08): "Environment limits" gains delegate identity and
 control (description as the name-to-agentId link, transcript path, TaskStop,
 repeat hand-backs, background tasks); "Verifying what comes back" points to the
 delegate's transcript.
-v2.4 (2026-11-14, 38dc-25; v2.3 reserved for PR #159, whose branch still
-calls it v2.2): "Environment limits"
-corrected by the 2.1.325 probes (which repeat hand-back is refused, TaskStop by
-the main session, what a sub-agent receives, the level-3 tool set); "In the
-aitools repo" no longer says every aitools rule and skill is deployed at user
-level.
+v2.3 (2026-11-14, 38dc-12, 38dc-26): "In the aitools repo" "Checks" names
+the `.ps1` check twins for Windows, points to the Windows test practice, and
+lists no known pre-existing check failures (the two it listed pass on main).
+v2.4 (2026-11-14, 38dc-25): "Environment limits" corrected by the 2.1.325
+probes (which repeat hand-back is refused, TaskStop by the main session, what
+a sub-agent receives, the level-3 tool set); "In the aitools repo" no longer
+says every aitools rule and skill is deployed at user level.
 
 ## When to use
 
@@ -563,11 +564,17 @@ list them by path.
   only on success, but the result is still a change to the commander's
   dotprofile). Only a prompt quoting the commander's order may run one against
   the real HOME.
-- **Checks**: `bash scripts/check-pre-commit.sh`, `check-pre-push.sh`,
-  `check-post-push.sh` from the worktree by absolute path. Known
-  pre-existing failures to record, not block on: pre-commit step 6 (a
-  harvesting file at mode 100644); pre-push step 7 (dotprofile `deploy/`
-  stale until rebuilt; it runs on every push since 2026-10-26).
+- **Checks**: on macOS and Linux, `bash scripts/check-pre-commit.sh`,
+  `check-pre-push.sh`, `check-post-push.sh` from the worktree by absolute
+  path; on Windows, their `.ps1` twins with `pwsh -NoProfile -File` (the
+  `.sh` checks refuse Windows). Tests on Windows: the `.ps1` suites, and
+  `.sh` suites only for scripts explicitly marked cross-platform
+  (`reference/cross-platform-detail.md` "Running tests on Windows"). Known
+  pre-existing failures to record, not block on: none on main at 8bf15d9.
+  The two listed before both passed on 2026-11-14: pre-commit step 6 (no
+  tracked `.sh` is at mode 100644 any more) and pre-push step 7 (it rebuilds
+  the dotprofile `deploy/` into a temp copy on every push but no longer
+  compares it, the dotprofile no longer tracking `deploy/`).
 - **Registries**: `registries/incidents.json` is long; parse all of it before
   choosing an id. Governed JSON only through its skill.
 - **Scratch**: `<worktree>/.scratch/session-<NAME>`, NAME 10 characters or
