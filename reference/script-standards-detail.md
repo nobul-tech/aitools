@@ -1021,12 +1021,18 @@ In a script that runs under `set -o pipefail` (every reusable script runs
 
 **Why it fails at random.** `grep -q` exits at its first match without reading
 the rest of its input. If the writer still has output to write, it is killed by
-SIGPIPE (exit status 141, 128 + 13). With `pipefail` the pipeline's status is
+SIGPIPE (exit status 141, 128 + 13), or, where SIGPIPE is ignored (GitHub
+Actions runners), its write fails and it exits non-zero (`seq`: 1). With
+`pipefail` the pipeline's status is
 that of the last command that exited non-zero (Bash manual, "Pipelines"), so
 `if writer | grep -q P` is false although P matched, and `if ! writer | grep -q P`
 is true. Whether the writer is still writing is a race: the same commit can pass
 and fail. CI runs 43640967140 and 43642017937 (check-script-compliance steps 4
-and 5, fixed in v0.77.11) failed this way.
+and 5, fixed in v0.77.11) failed this way. On the linux runner (GNU grep
+3.11) `seq 1 300000 | grep -qx 1` under `pipefail` failed 20 runs of 20 with
+status 1 (`tests/check-script-compliance/test-step7-grepq.sh` case D, CI run
+43658571751); the fix form passed 20 of 20 there and on macOS (BSD grep
+2.6.0-FreeBSD).
 
 **The fix.** Keep the pattern and the other flags, drop `q`, and send the output to
 `/dev/null`:
