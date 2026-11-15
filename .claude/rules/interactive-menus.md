@@ -79,11 +79,22 @@ Every menu function (`prompt_diff_review`, `review_json_fields`,
 `prompt_json_field_review` and their PS1 twins) MUST handle:
 - `AITOOLS_FORCE` env var (`--force` / `-Force` on `aitools` and `aitools install`): auto-select `overwrite`
 - Non-terminal stdin: auto-select `overwrite`
-- EOF at the prompt (interactive, input ended): log a warning, auto-select `overwrite`
+- EOF at a prompt (interactive, input ended): log a warning and take that
+  prompt's documented default: `overwrite` at the text review menu
+  (`prompt_diff_review` / `Prompt-DiffReview`) and at every JSON field
+  prompt that offers `[o]verwrite` (`prompt_json_field_review` /
+  `Prompt-JsonFieldReview`: a field in SOURCE, whether or not LOCAL has it;
+  the settings.json sync included); `skip` at a JSON field only in LOCAL
+  (no overwrite offered; LOCAL kept); `n` (reject, back to the review menu)
+  at the AI merge preview (`_invoke_ai_merge` / `Invoke-AiMerge`); empty
+  feedback at the `[r]efine` feedback read, so the merge is refined once
+  more (one more AI merge attempt), then EOF at the preview rejects it and
+  EOF at the review menu overwrites
 
 An empty or unrecognised answer at an interactive prompt is not a
-non-interactive case: it re-asks (see "Answers" above). No AI merge runs in
-a non-interactive run.
+non-interactive case: it re-asks (see "Answers" above). No AI merge starts
+in a run with no terminal or `--force`: no menu is shown. EOF reaches the
+merge prompts only after `[m]` was chosen at an interactive review menu.
 
 ### Abort
 
