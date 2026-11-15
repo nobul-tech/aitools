@@ -1,6 +1,6 @@
 # e9d6-13 report: platform guards on the four tests/managed-files suites
 
-Version 1.0, 2026-11-14. Author: e9d6-13-guard-managed (delegate of 38dc-13-windows-ci-ps1-only,
+Version 1.1, 2026-11-14 (v1.1, 38dc-27: Q3 notes that id #180 went to PR #172's incident). Author: e9d6-13-guard-managed (delegate of 38dc-13-windows-ci-ps1-only,
 under M6-Polish, Session Commander 87795dc3-e). Worktree `.claude/worktrees/38dc-13`
 (HEAD 1e454ca at report time; no commit touched `tests/managed-files` since b79bf7c).
 Nothing committed, staged or pushed (shared worktree).
@@ -192,4 +192,6 @@ asserts no ACTION row), adopt-dotprofile (`.sh` also asserts the commit message)
   pwsh PATH.** Suggested: a follow-up replaces `& chmod 444/644` with
   `(Get-Item ...).IsReadOnly = $true/$false`, so the suite needs no Git Bash tool.
 - **Q3. Close M1-M16 and A1-A6?** Suggested: file them as one follow-up per suite (38dc-13
-  reserved ids #180, #182); M2/M5/A6 (failure handling) first.
+  reserved ids #180, #182); M2/M5/A6 (failure handling) first. (v1.1: the id #180
+  reserved for them went to incident #180, PR #172; if filed later they take the next
+  free id. #182 was still free on origin/main and on PR #172's branch.)

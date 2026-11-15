@@ -293,9 +293,13 @@ jobs:
         if: ${{ !cancelled() }}
         run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/pywinpty/test-setup-pywinpty.sh
 
-      - name: check-pre-push step 7 tests
+      - name: check-pre-push step 7 tests (.sh twin, bash 5)
         if: ${{ !cancelled() }}
         run: bash tests/check-pre-push/test-pre-push-step7.sh
+
+      - name: check-pre-push step 7 tests (macOS /bin/bash 3.2)
+        if: ${{ !cancelled() }}
+        run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/check-pre-push/test-pre-push-step7.sh
 
       # check-pre-commit steps 3 and 10 are retired: no twin runs build-deploy.sh (incident #136)
       - name: check-pre-commit steps 3 and 10 tests (bash 5; whole .sh with --fix)

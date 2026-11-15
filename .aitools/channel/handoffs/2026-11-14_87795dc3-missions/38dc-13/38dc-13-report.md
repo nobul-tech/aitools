@@ -1,4 +1,8 @@
-# 38dc-13 report: Windows CI runs .ps1 only (v1.1, interim: mission not finished)
+# 38dc-13 report: Windows CI runs .ps1 only (v1.2: finished by 38dc-27, see 38dc-27-report.md)
+
+v1.2 (38dc-27): the incident id note below updated (#180 went to PR #172);
+the remaining steps were done by mission 38dc-27 (commits 15ce209 onwards,
+listed in 38dc-27-report.md).
 
 Mission 38dc-13-windows-ci-ps1-only, delegated by M6-Polish (session 87795dc3).
 Branch `fix/38dc-13-windows-ci-ps1-only`, pushed, head bbb22c6 (v1.0 of this
@@ -67,7 +71,7 @@ before the CI change, the PR and the merge. Resume this agent to continue.
   (AI merge, menus) vs M6-Polish "hold the guard decision" -- resolved by
   following the commander's later answer to RFI 38dc-13-1 (fix via 38dc-19
   first, then guard): the menus .sh stays on Windows only until 38dc-19 merges.
-- INCIDENT (not filed; reserved #180): .ps1 checks gated `-not $IsWindows`
+- INCIDENT (not filed; the id #180 reserved for it went to incident #180, PR #172; if filed later it takes the next free id): .ps1 checks gated `-not $IsWindows`
   never ran in CI (managed-files write failure, adopt-push commit failure);
   16 + 6 parity gaps (e9d6-13-report.md).
 - INCIDENT (relayed from 38dc-09, out of scope): the deploy/ steps of check.yml

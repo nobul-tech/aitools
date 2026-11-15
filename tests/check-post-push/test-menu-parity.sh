@@ -203,7 +203,8 @@ if [ -f "$TMP_ROOT/planted-prompt.sh" ]; then
 fi
 
 section "$ROOT/scripts/check-post-push.sh" "$TMP_ROOT/step29.sh"
-check "sh twin: step 29 calls scripts/check-menu-parity.pl" "grep -q 'check-menu-parity.pl' '$TMP_ROOT/step29.sh'"
+# (comment lines are skipped: a comment that names the checker is not a call)
+check "sh twin: step 29 calls scripts/check-menu-parity.pl" "perl -ne 'next if /^\\s*#/; \$f = 1 if /check-menu-parity\\.pl/; END { exit(\$f ? 0 : 1) }' '$TMP_ROOT/step29.sh'"
 cat > "$TMP_ROOT/run29.sh" <<'EOF'
 set -euo pipefail
 step_pass() { printf 'PASS %s %s\n' "$1" "${3:-}" >> "$STEP_REC"; }
@@ -225,7 +226,7 @@ done
 
 # The .ps1 twin: static only (its step 29 runs in the .ps1 harness, on Windows)
 section "$ROOT/scripts/check-post-push.ps1" "$TMP_ROOT/step29.ps1"
-check "ps1 twin: step 29 calls scripts/check-menu-parity.pl" "grep -q 'check-menu-parity.pl' '$TMP_ROOT/step29.ps1'"
+check "ps1 twin: step 29 calls scripts/check-menu-parity.pl" "perl -ne 'next if /^\\s*#/; \$f = 1 if /check-menu-parity\\.pl/; END { exit(\$f ? 0 : 1) }' '$TMP_ROOT/step29.ps1'"
 
 printf '\n%d passed, %d failed, %d skipped\n' "$PASS" "$FAIL" "$SKIP"
 [ "$FAIL" -eq 0 ]

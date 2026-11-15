@@ -21,7 +21,7 @@
 # section natively on Windows and refuses other platforms. It never runs bash
 # (the stub is a .cmd): the .sh twin's section runs on macOS/Linux in the .sh
 # harness. Perl (static cases): check-lib.ps1's Strawberry-first PATH block,
-# then the perl on PATH, else Git for Windows' own; PERLIO=:perlio.
+# then the perl on PATH (no Git-perl fallback: FAIL); PERLIO=:perlio.
 #
 # Override the scripts under test with POST_PUSH_SH / POST_PUSH_PS1 (absolute
 # paths), e.g. to show that the pre-fix scripts fail.
@@ -77,20 +77,16 @@ if ($clErrors) { Remove-TestTempRoot $tmpRoot; throw "cannot parse scripts/check
 $clPerlBlock = $clAst.Find({ param($n) $n -is [System.Management.Automation.Language.IfStatementAst] -and $n.Extent.Text.Contains('Strawberry') }, $false)
 if (-not $clPerlBlock) { Remove-TestTempRoot $tmpRoot; throw "the Strawberry Perl PATH block of scripts/check-lib.ps1 was not found" }
 . ([scriptblock]::Create($clPerlBlock.Extent.Text))
-# perl: the one on PATH, else Git for Windows' own (Git\usr\bin\perl.exe)
+# perl: the one on PATH after that block. No fallback to Git for Windows'
+# bundled perl ("Fail, don't mask"; cross-platform.md "no fallback to bundled
+# versions"): without perl on PATH the suite FAILs.
 $perl = (Get-Command perl -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1).Source
 if (-not $perl) {
-    $gitBash = Resolve-TestGitBash
-    if ($gitBash) {
-        $gitPerl = Join-Path (Split-Path -Parent (Split-Path -Parent $gitBash)) "usr\bin\perl.exe"
-        if (Test-Path -LiteralPath $gitPerl -PathType Leaf) { $perl = $gitPerl }
-    }
-}
-if (-not $perl) {
-    Write-Output "FAIL perl not found (PATH, Git for Windows usr\bin): the cases need it"
+    Write-Output "FAIL perl not found on PATH (after check-lib's Strawberry block): the cases need it"
     Remove-TestTempRoot $tmpRoot
     exit 1
 }
+Write-Output "perl: $perl"
 
 # Invoke-PerlTo PROGRAM OUTFILE FILE: perl -n PROGRAM (written to a file, so no
 # command-line quoting) over FILE; perl itself writes stdout to OUTFILE byte for

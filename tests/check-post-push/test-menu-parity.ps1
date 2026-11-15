@@ -29,7 +29,7 @@
 # cases and the .ps1 twin's step 29 natively on Windows and refuses other
 # platforms. It never runs bash: the .sh twin's step 29 runs on macOS/Linux in
 # the .sh harness. Perl: check-lib.ps1's Strawberry-first PATH block, then the
-# perl on PATH, else Git for Windows' own (Git\usr\bin\perl.exe); PERLIO=:perlio.
+# perl on PATH (no Git-perl fallback: the suite FAILs); PERLIO=:perlio.
 #
 # Safe to re-run: writes only to a temp dir, removed on exit. Needs perl. Exit 1
 # if any case fails. Platform: Windows, pwsh 7 (CI: windows job).
@@ -88,19 +88,20 @@ if ($clErrors) { Remove-TestTempRoot $tmpRoot; throw "cannot parse scripts/check
 $clPerlBlock = $clAst.Find({ param($n) $n -is [System.Management.Automation.Language.IfStatementAst] -and $n.Extent.Text.Contains('Strawberry') }, $false)
 if (-not $clPerlBlock) { Remove-TestTempRoot $tmpRoot; throw "the Strawberry Perl PATH block of scripts/check-lib.ps1 was not found" }
 . ([scriptblock]::Create($clPerlBlock.Extent.Text))
-# perl: the one on PATH, else Git for Windows' own (Git\usr\bin\perl.exe)
+# perl: the one on PATH after that block, as step 29 finds it. No fallback to
+# Git for Windows' bundled perl ("Fail, don't mask"; cross-platform.md "no
+# fallback to bundled versions"): without perl on PATH the suite FAILs.
 $perl = (Get-Command perl -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1).Source
 if (-not $perl) {
-    $gitBash = Resolve-TestGitBash
-    if ($gitBash) {
-        $gitPerl = Join-Path (Split-Path -Parent (Split-Path -Parent $gitBash)) "usr\bin\perl.exe"
-        if (Test-Path -LiteralPath $gitPerl -PathType Leaf) { $perl = $gitPerl }
-    }
-}
-if (-not $perl) {
-    Write-Output "FAIL perl not found (PATH, Git for Windows usr\bin): the cases need it"
+    Write-Output "FAIL perl not found on PATH (after check-lib's Strawberry block): the cases need it"
     Remove-TestTempRoot $tmpRoot
     exit 1
+}
+Write-Output "perl: $perl"
+
+# Test-CallsParity FILE: a line that is not a comment names check-menu-parity.pl
+function Test-CallsParity([string]$Path) {
+    [bool](@(Lines $Path) | Where-Object { $_ -notmatch '^\s*#' -and $_ -match 'check-menu-parity\.pl' })
 }
 
 # Run-Check BASH_LIB PS1_LIB: perl check-menu-parity.pl; exit code in $script:rc,
@@ -263,11 +264,12 @@ function Ask {
     # The .sh twin: static only (its step 29 runs in the .sh harness, on macOS/Linux)
     $step29Sh = Join-Path $tmpRoot "step29.sh"
     Section (Join-Path $root "scripts/check-post-push.sh") $step29Sh
-    Check "sh twin: step 29 calls scripts/check-menu-parity.pl" ((ReadText $step29Sh).Contains('check-menu-parity.pl'))
+    # Comment lines are skipped: a comment that names the checker is not a call
+    Check "sh twin: step 29 calls scripts/check-menu-parity.pl" (Test-CallsParity $step29Sh)
 
     $step29Ps1 = Join-Path $tmpRoot "step29.ps1"
     Section (Join-Path $root "scripts/check-post-push.ps1") $step29Ps1
-    Check "ps1 twin: step 29 calls scripts/check-menu-parity.pl" ((ReadText $step29Ps1).Contains('check-menu-parity.pl'))
+    Check "ps1 twin: step 29 calls scripts/check-menu-parity.pl" (Test-CallsParity $step29Ps1)
     $run29 = Join-Path $tmpRoot "run29.ps1"
     $run29Text = @'
 $ErrorActionPreference = "Stop"
@@ -279,12 +281,8 @@ $script:RepoRoot = $env:STEP_REPO
 . $env:STEP_SECTION
 '@
     [IO.File]::WriteAllText($run29, ($run29Text -replace "`r`n", "`n") + "`n")
-    # The step runs "perl" from PATH: put the resolved perl's directory first when
-    # PATH has none
+    # The step runs "perl" from PATH: the same PATH that resolved $perl above
     $runPath = $env:PATH
-    if (-not (Get-Command perl -CommandType Application -ErrorAction SilentlyContinue)) {
-        $runPath = (Split-Path -Parent $perl) + [IO.Path]::PathSeparator + $env:PATH
-    }
     foreach ($v in @("ok", "bad")) {
         $repo = Join-Path $tmpRoot "repo-$v"
         if (-not (Test-Path -LiteralPath $repo)) { continue }

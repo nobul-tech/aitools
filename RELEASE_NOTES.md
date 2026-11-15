@@ -12,6 +12,28 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.77.16 -- Windows CI runs .ps1 test suites only; the .sh suites refuse Git Bash (2026-11-14)
+
+Not tagged. Branch `fix/38dc-13-windows-ci-ps1-only` (PR #166), missions 38dc-13 and 38dc-27 under M6-Polish / M6b-Finish (session 87795dc3). Commander, 2026-11-14: "unless a script is explicitly marked as cross-platform for good reasons, such as build-deploy.sh and all perl/python scripts, sh scripts and tests should only run on linux/mac and ps1 on windows"; "tests should be .ps1 here on windows and executed as powershell scripts, git bash scripts cause known issues."
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 1 | Native PowerShell harnesses (`tests/<dir>/test-*.ps1`, Windows guard) for every suite whose `.sh` drove the `.ps1` scripts from Git Bash: b8-consumers, claude-mdm, hookin, profile (test-profile, test-config, test-lib, test-user-init, test-install), fanout-lib, rules-fanout, rules-fanout-cursor, skills-fanout, skills-legacy, deploy-harness, deploy-harness-mdm, and the check suites check-pre-push step 7, check-post-push step 7, steps 2/6/14 and step 29 (menu parity, with `check-menu-parity.pl` run from pwsh), check-pre-commit steps 3/10. Each has the same cases as its `.sh` twin and compares against the same golden files; shared helpers in `tests/lib/platform-lib.ps1` (tested by `tests/lib/test-platform-lib.ps1`) |
+| 2 | Every `tests/<dir>/test-*.sh` that is not cross-platform carries the POSIX guard, with a second case on `BASH_VERSINFO[5]` (bash's compiled-in machine type) that a `uname` shim or an exported `OSTYPE` cannot change; the `.sh` harnesses test only the `.sh` scripts (their pwsh/`.ps1` cases moved to the `.ps1` harnesses). Every `.ps1` suite carries the Windows guard (`tests/bootstrap/test-bootstrap.ps1` refused nothing before: it SKIPped every case off Windows) |
+| 3 | `.github/workflows/check.yml`: the windows job runs the `.ps1` suites with `pwsh -NoProfile -File`; the `.sh` steps left there are the cross-platform suites (hooks, build-deploy backup, build-package CLI, setup-pywinpty MDM embed). The macos job gains `test-post-push-step7.sh` and `test-menu-parity.sh` (bash 5 and /bin/bash 3.2), which had never run there |
+| 4 | `scripts/check-ci-suites.pl` v2: a `.ps1` suite must run in the windows job only, a POSIX-guarded `.sh` suite in the macos and linux jobs only, an unguarded `.sh` suite in all three. `tests/os-guards` gains `classify-guards.pl` (one classifier for scripts and suites) and a `.ps1` harness for the windows job; a suite's POSIX guard must have the `BASH_VERSINFO[5]` case |
+| 5 | Windows test harnesses: locked-file cases (a file held open by another program) for the deploy-harness rules manifest replace, the retired-skill backup copy, and the setup-user-claude rules manifest read; probe-gated; Windows only by design. Plus the permission-denied (ACL) cases of deploy-harness, rules-fanout and skills-legacy, and the pinned try-log-retry rule for a retired skill that cannot be deleted |
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 6 | `.claude/rules/cross-platform.md` (+ `.mdc`): "Test suites" guard patterns; exemption rows "Cross-platform test suites" and "Perl and Python scripts (commander, 2026-11-14)"; build-package approved; helper modules recorded (commander, 2026-11-14) |
+
+**Verified on:** Windows 11 (pwsh 7.6.10): every `.ps1` suite above green locally, each case mutation-proofed; os-guards `.ps1` 68/0/0; `check-ci-suites.pl`: all suites in CI on their platforms. macOS and Linux: CI.
+
 ## v0.77.13 -- OS guards on the [RELAY] prompt scripts; the Windows checks call Git Bash only for build-deploy.sh (2026-11-14)
 
 Not tagged. Branch `fix/38dc-23-relay-guards-no-gitbash`, mission 38dc-23 under M6-Polish (session 87795dc3). Commander, 2026-11-14, answer to RFI 38dc-7: "relay-outbound.sh/.ps1 need os guards they are not exempt, the aitools dependency needs to be resolved (how to resolve it and resolving it need to be part of same mission) ... for the check-*.ps1 can youj explain this further? id like to avoid calling git bash on thowse ps1 scripts."

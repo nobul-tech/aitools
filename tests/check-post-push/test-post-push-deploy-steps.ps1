@@ -21,8 +21,8 @@
 # Cases:
 #   static   perl over the text of both twins (perl is cross-platform; the .sh
 #            harness runs the same programs): no non-comment line reads the
-#            aitools deploy/. perl: the one on PATH, else Git for Windows'
-#            usr\bin\perl.exe; without perl these cases FAIL.
+#            aitools deploy/. perl: the one on PATH (no fallback to Git
+#            for Windows' bundled perl); without perl these cases FAIL.
 #   frozen   steps 2, 6 and 14 of check-post-push.ps1 (cut between their "# N."
 #            headings and the next step's heading) dot-sourced in a child pwsh
 #            with stub step functions, a temporary HOME and a fake repo whose
@@ -122,18 +122,26 @@ function Save-Snapshot([string]$Dir, [string]$Out) {
 # Write-Expect FILE LINES: the expected records, one per line
 function Write-Expect([string]$File, [string[]]$Lines) { WriteText $File ((@($Lines | ForEach-Object { "$_`n" })) -join "") }
 
-# perl for the static cases: the one on PATH, else Git for Windows' own
+# Perl as the check scripts get it: scripts/check-lib.ps1 puts Strawberry Perl
+# first on PATH when it is installed ("Fail, don't mask": never Git's bundled
+# perl ahead of it). Its top-level "if ($IsWindows)" block is loaded from that
+# file's syntax tree and run here, not the whole library (as
+# tests/lib/platform-lib.ps1 loads ResolveGitBash); a missing block throws.
+$clErrors = $null
+$clAst = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $root "scripts/check-lib.ps1"), [ref]$null, [ref]$clErrors)
+if ($clErrors) { Remove-TestTempRoot $tmpRoot; throw "cannot parse scripts/check-lib.ps1" }
+$clPerlBlock = $clAst.Find({ param($n) $n -is [System.Management.Automation.Language.IfStatementAst] -and $n.Extent.Text.Contains('Strawberry') }, $false)
+if (-not $clPerlBlock) { Remove-TestTempRoot $tmpRoot; throw "the Strawberry Perl PATH block of scripts/check-lib.ps1 was not found" }
+. ([scriptblock]::Create($clPerlBlock.Extent.Text))
+# perl for the static cases: the one on PATH, no fallback to Git for Windows'
+# bundled perl ("no fallback to bundled versions"): without it they FAIL
 $gitBash = Resolve-TestGitBash
 $perl = (Get-Command perl -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1).Source
-if (-not $perl -and $gitBash) {
-    $gitPerl = Join-Path (Split-Path -Parent (Split-Path -Parent $gitBash)) "usr\bin\perl.exe"
-    if (Test-Path -LiteralPath $gitPerl -PathType Leaf) { $perl = $gitPerl }
-}
 # Invoke-PerlCheck CODE FILE: perl -n CODE over FILE, output to the out file;
 # $true when perl ran (exit 0). Without perl the out file says so.
 $script:perlN = 0
 function Invoke-PerlCheck([string]$Code, [string]$File) {
-    if (-not $perl) { WriteText $outFile "perl not found (PATH, Git for Windows usr\bin)`n"; return $false }
+    if (-not $perl) { WriteText $outFile "perl not found on PATH`n"; return $false }
     $script:perlN++
     $pl = Join-Path $tmpRoot "static-$($script:perlN).pl"
     WriteText $pl ($Code + "`n")
