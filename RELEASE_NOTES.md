@@ -12,6 +12,33 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.77.14 -- No pipefail script ends a pipeline in grep -q; compliance step 7 fails on it (2026-11-14)
+
+Not tagged. Branch `fix/38dc-24-pipefail-grepq`, mission 38dc-24 (M6-Polish, session 87795dc3), the follow-up to v0.77.11 (commander, 2026-11-14: "dont file incident, just launch mission to fix this").
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 1 | Medium | 49 pipelines in 17 bash files that run under `set -o pipefail` (or are sourced by one) ended in `grep -q`. `grep -q` exits at its first match; a writer that still had output died of SIGPIPE (141), `pipefail` failed the pipeline, and the condition read "no match" although the pattern matched (or "match" under `if !`). The class failed CI runs 43640967140 and 43642017937 (v0.77.11). Each now ends in `grep PATTERN >/dev/null` with the same pattern and flags, which reads its input to the end on GNU grep (it drains a pipe when stdout is `/dev/null`) and on BSD grep (no `-q`, so its read loop runs to EOF). Highest exposure first: `build-deploy.sh` (the embed EOF-marker collision check, perl writing a whole source file), `check-pre-commit.sh` (8, including the five hook-portability scans that could hide a real violation), `aitools-dashboard.sh` (3, including `ss -tlnp` port detection); then `check-post-push.sh` (8), `check-pre-push.sh` (4), `check-prereq-detection.sh`, `aitools-install.sh`, `aitools-lib.sh` (3), `githooks/pre-commit`, `setup-datadog.sh` (3), `setup-gh-cli.sh` (2), `setup-go.sh` (2), `setup-pandoc.sh` (4), `setup-typst.sh` (3), `setup-uv.sh` (2), `setup-vercelcli.sh` (2) and the SessionEnd hook `tool-ops-session-audit.sh` |
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 2 | `check-script-compliance.sh` step 7 ("Grep pipefail safety") scans `scripts/*.sh`, `scripts/githooks/*` and `shared/hooks/*.sh` (files that set pipefail, plus `aitools-lib.sh`, `check-lib.sh`, `init-logging.sh`) and FAILs with `file:line` on any line where a single pipe feeds a `grep` with `q` in its options, `--quiet` or `--silent`, wherever the pipeline sits (`if`, `!`, `$(...)`, continued lines). Until now it scanned only setup scripts, skipped every line containing `if `, and only WARNed. Its old grep-without-`|| true` heuristic still WARNs. CI runs the check in the linux job, so the class cannot return |
+| 3 | New suite `tests/check-script-compliance/test-step7-grepq.sh` (CI: linux; macos bash 5 and `/bin/bash` 3.2): planted bad pipelines FAIL step 7 and are listed, lines it must ignore are not, the fixed form passes, and 20 runs of `seq 1 300000 \| grep -x 1 >/dev/null` under pipefail must all exit 0 on the host grep (GNU on Linux, BSD on macOS) |
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 4 | `reference/script-standards-detail.md`: new section "Pipelines into grep -q under pipefail" (mechanism, fix form, GNU and BSD grep source citations, enforcement); its three examples that used `\| grep -qi` use the fix form. `.claude/rules/script-standards.md` and `.cursor/rules/script-standards.mdc`: one paragraph under "Cross-platform grep portability". `reference/post-push-checklist.md` step 23: step 7 now FAILs on the class |
+
+**Verified on:** Windows 11 (Git Bash): `bash -n` on every changed script; the rewrite was a counted perl script that refuses to write unless each file gets its exact expected count, and reproduces PR #164's hand-made 12 edits byte for byte; diff is 49 lines changed in the 17 files and nothing else; the hook smoke and violation tests (isolated HOME) give the same JSONL line as main's hook; a static run of step 7's perl program finds 0 sites on this branch and 62 on main before #164 and this fix. Linux and macOS: CI (the `.sh` check and suite).
+
+---
+
 ## v0.77.12 -- On Windows the bash aitools hands off to aitools.ps1; OS guards on hh.sh, bootstrap.sh, init-hh-hooks.sh and analyze-session.sh (2026-11-14)
 
 Not tagged. Branch `fix/38dc-19-aitools-win-forwarder` (PR #162), mission 38dc-19 under M6-Polish (session 87795dc3). Commander, 2026-11-14, RFI 38dc-3 ("make the bash `aitools` a forwarder on Windows"): "agreed"; RFI 38dc-5: "add an OS guard to all of them".
