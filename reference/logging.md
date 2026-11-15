@@ -23,7 +23,7 @@ library-style tools, managed-file records, user-abort recording and skipped
 records stated.
 
 v2.2 (2026-11-15): a nested abort is recorded once; the relay's mirror and
-quiet options.
+quiet options; streamed output that fails is logged twice.
 
 > Ratified 2026-06-14 as part of the harvest/archive/logging plan
 > (`plans/harvest-archive-resilience.md` §14). This doc consolidates logging
@@ -265,7 +265,11 @@ error line at error level and count it without recording it; no other code
 may use that path.
 
 A caller does not log the output it passes to `error_reason` /
-`Get-AitErrorReason`; the helper logs it as detail lines.
+`Get-AitErrorReason`; the helper logs it as detail lines. The one exception
+is a command whose output the caller streams to the console as it arrives
+(logged line by line at info) and captures at the same time: when it fails,
+its output appears in deploy.log twice, once as it streamed and once as
+detail.
 
 A library-style tool (section 7) sets the library's stderr console option,
 which also turns recording off: its helpers log and count but write no
