@@ -22,8 +22,9 @@ v2.1 (2026-11-15): error markers extended; the non-recording path,
 library-style tools, managed-file records, user-abort recording and skipped
 records stated.
 
-v2.2 (2026-11-15): a nested abort is recorded once; the relay's mirror and
-quiet options; streamed output that fails is logged twice.
+v2.2 (2026-11-15): a nested abort is recorded once; only the outermost relay
+mirrors to deploy.jsonl; the relay's mirror and quiet options; streamed
+output that fails is logged twice; 8.1 names its check.
 
 > Ratified 2026-06-14 as part of the harvest/archive/logging plan
 > (`plans/harvest-archive-resilience.md` §14). This doc consolidates logging
@@ -297,9 +298,13 @@ record, and its warnings and errors reach the run summary through its caller
 - **Children.**
   - **Relayed lines.** The relay prints a child's lines. It mirrors the
     structured lines (`[<time>] [<script>] [<level>] <message>`) to
-    deploy.jsonl. A runner may ask it not to mirror them (a child that writes
-    its own deploy.jsonl records) or to print only the `warn` and `error`
-    lines (a child whose other output is not shown). It counts the `warn` and `error` lines, but not the exit
+    deploy.jsonl. Only the outermost relay mirrors: a process that runs
+    inside a relay writes no deploy.jsonl records of its own (neither its
+    relays nor its jsonl option), because the outer relay already mirrors
+    every structured line it prints. A runner may also ask a relay not to
+    mirror (a child that writes its own deploy.jsonl records) or to print only
+    the `warn` and `error` lines (a child whose other output is not shown). It
+    counts the `warn` and `error` lines, but not the exit
     footer (`COMPLETED with ...`, `FAILED with ...`), in the child counts.
     A child's warnings are not added to the parent's warning count.
   - **A failed child** (non-zero exit, a throw, or error lines with exit 0)
