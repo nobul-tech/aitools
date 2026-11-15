@@ -16,7 +16,7 @@ Usage:
     python3 scripts/harness-db.py session end --id <session-id>
     python3 scripts/harness-db.py mission start --session <id> --mission <name> [--type <type>] [--description <text>] [--parent <mission-id>]
     python3 scripts/harness-db.py mission end --session <id> --mission <name> --status <status> [--result <text>]
-    python3 scripts/harness-db.py log --session <id> --type <sitrep|finding> --message <text> [--agent <role>] [--severity <level>]
+    python3 scripts/harness-db.py log --session <id> --type <sitrep|spotrep> --message <text> [--agent <role>] [--severity <level>]
     python3 scripts/harness-db.py export --format json [--session <id>]
     python3 scripts/harness-db.py process-events [--session <id>]
     python3 scripts/harness-db.py ship
@@ -31,16 +31,24 @@ Usage:
     python3 scripts/harness-db.py nogood list
     python3 scripts/harness-db.py nogood check --items <id,id,...>
     python3 scripts/harness-db.py provenance-export [--output <file>]
+    python3 scripts/harness-db.py schema [--output <file>]   # print the canonical DDL
 
     # Lean subcommands -- designed for one-liner Bash calls:
-    python3 scripts/harness-db.py ol add "text"
+    python3 scripts/harness-db.py ol add "text" [--refs <id,id>] [--attributed-to <who>] [--source-kind <kind>] [--source <where>] [--quote <verbatim>]
     python3 scripts/harness-db.py ol list
     python3 scripts/harness-db.py decision add "title" [--description <text>]
     python3 scripts/harness-db.py decision list
     python3 scripts/harness-db.py incident add "text" [--impact <text>]
     python3 scripts/harness-db.py incident list
-    python3 scripts/harness-db.py observation add "text" [--category <cat>] [--severity <level>]
+    python3 scripts/harness-db.py observation add "text" [--category <type>] [--severity <level>] [--confidence <level>]
+        [--criteria <text>] [--cause <text>] [--effect <text>] [--suggestion <text>] [--refs <id,id>]
+        [--attributed-to <who>] [--source-kind <kind>] [--source <where>] [--quote <verbatim>]
     python3 scripts/harness-db.py search "query"
+
+Schema: SCHEMA_VERSION, SESSION_SCHEMA and HARNESS_SCHEMA below are the single
+source of truth. reference/harness-db-schema.sql is generated from them
+(`schema --output reference/harness-db-schema.sql`); tests/harness-db/test-schema.py
+fails when the two differ. Intelligence types: reference/framework-intelligence-types.md.
 
     # Command channel -- commander directives:
     python3 scripts/harness-db.py directive add "message" [--type <type>] [--priority <level>] [--target <text>]
@@ -63,139 +71,214 @@ import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 
 # -- Constants ----------------------------------------------------------------
 
-SCHEMA_VERSION = 3
+# Schema version of both tiers. Each DB records every version it was created
+# at or migrated to in its schema_version table (see ensure_schema).
+# History: 1 (2026-03-24) both tiers; 2 (2026-03-25) provenance tables
+# (knowledge_items, provenance_edges, nogood_sets); 3 (2026-06-21)
+# session.project_dir, project_claude_md, user_claude_md; 4 (2026-11-15)
+# intelligence types (finding redefined as the analysis type, the SALUTE
+# FINDING retired, ol_entry renamed operational_learning), provenance and
+# finding columns, SPOTREP messages, version rows recorded on migration.
+SCHEMA_VERSION = 4
+
+# Value sets. The CHECK constraints in the DDL below and the CLI choices are
+# built from these tuples, so the schema and the CLI cannot disagree.
+# Intelligence types (reference/framework-intelligence-types.md): the session
+# observations.category and the harness knowledge_items.item_type.
+INTELLIGENCE_TYPES: tuple[str, ...] = (
+    "observation",           # what was seen at a source; no interpretation
+    "fact",                  # an observation confirmed against its source or a second source
+    "assumption",            # an unverified belief the work rests on
+    "finding",               # analysis: condition vs criteria, cause, effect, suggestion
+    "operational_learning",  # the lesson drawn from findings, carried forward (OL)
+    "proposal",              # a worked change to make, with barrier analysis
+    "rfi",                   # a question for the commander (session RFI)
+)
+# The harness DB also records decisions and changes promoted at session boundaries.
+KNOWLEDGE_ITEM_TYPES: tuple[str, ...] = INTELLIGENCE_TYPES + (
+    "decision", "commander_directive", "rule_change", "framework_change",
+)
+MESSAGE_TYPES: tuple[str, ...] = ("sitrep", "spotrep")
+SEVERITIES: tuple[str, ...] = ("critical", "high", "medium", "low")
+CONFIDENCE_LEVELS: tuple[str, ...] = ("low", "moderate", "high")
+SOURCE_KINDS: tuple[str, ...] = ("commander", "agent", "telemetry", "artifact", "web")
+TRUST_LEVELS: tuple[str, ...] = (
+    "commander_directive", "verified_fact", "agent_observation", "unverified_assumption",
+)
+RELATIONSHIPS: tuple[str, ...] = (
+    "derived_from", "informed", "triggered", "validated", "invalidated", "superseded",
+)
+
+
+def _sql_in(values: tuple[str, ...]) -> str:
+    """Render a value set as the body of a SQL IN (...) list."""
+    return ", ".join(f"'{v}'" for v in values)
+
 
 # Session DB tables (Tier 1)
-SESSION_SCHEMA = """\
+SESSION_SCHEMA = f"""\
+-- Required pragmas, set on every connection by open_db():
+--   journal_mode=WAL, synchronous=NORMAL, busy_timeout=5000, foreign_keys=ON
+
+-- Session metadata (one row per DB)
 CREATE TABLE IF NOT EXISTS session (
     session_id TEXT PRIMARY KEY,
     prior_session TEXT,
-    schwerpunkt TEXT NOT NULL,
+    schwerpunkt TEXT NOT NULL,  -- the session's main effort (column name predates the English term)
     accepting_schwerpunkt TEXT,
-    current_state TEXT,
-    started_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    ended_at TEXT,
+    current_state TEXT,  -- free text summary
+    started_at TEXT NOT NULL,  -- ISO 8601 UTC (Z suffix)
+    updated_at TEXT NOT NULL,  -- ISO 8601 UTC (Z suffix)
+    ended_at TEXT,  -- ISO 8601 UTC (Z suffix), NULL while active
     version REAL NOT NULL DEFAULT 1.0,
-    platform TEXT,
+    platform TEXT,  -- darwin, win32, linux
     agent_identity TEXT,  -- 'Session Commander <session_id[:10]>', set at session start
     project_dir TEXT,  -- absolute repo/working dir (git root), set at session start
     project_claude_md TEXT,  -- <project_dir>/CLAUDE.md
     user_claude_md TEXT  -- ~/.claude/CLAUDE.md
 );
 
+-- Missions: delegated agent missions (self-referential for nesting)
 CREATE TABLE IF NOT EXISTS missions (
-    mission_id TEXT PRIMARY KEY,
+    mission_id TEXT PRIMARY KEY,  -- e.g. "M24", "S2-Echo"
     parent_mission_id TEXT REFERENCES missions(mission_id),
-    mission_type TEXT NOT NULL,
+    mission_type TEXT NOT NULL,  -- s2, s3, s5, recon, fragord
     description TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'launched'
         CHECK (status IN ('launched', 'in_progress', 'complete', 'failed', 'killed')),
-    launched_at TEXT NOT NULL,
-    completed_at TEXT,
-    findings_count INTEGER DEFAULT 0,
-    key_result TEXT
+    launched_at TEXT NOT NULL,  -- ISO 8601 UTC
+    completed_at TEXT,  -- ISO 8601 UTC
+    findings_count INTEGER DEFAULT 0,  -- v1 name; no command writes it
+    key_result TEXT  -- one-line outcome
 );
 CREATE INDEX IF NOT EXISTS idx_missions_parent ON missions(parent_mission_id);
 CREATE INDEX IF NOT EXISTS idx_missions_status ON missions(status);
 
+-- Decisions: architectural and session decisions
 CREATE TABLE IF NOT EXISTS decisions (
-    decision_id TEXT PRIMARY KEY,
+    decision_id TEXT PRIMARY KEY,  -- e.g. "D-DASHBOARD-SHIP"
     title TEXT NOT NULL,
     description TEXT,
     status TEXT NOT NULL DEFAULT 'decided'
         CHECK (status IN ('decided', 'implemented', 'verified', 'deferred', 'reversed')),
     implementation_evidence TEXT,
-    decided_at TEXT NOT NULL,
-    implemented_at TEXT
+    decided_at TEXT NOT NULL,  -- ISO 8601 UTC
+    implemented_at TEXT  -- ISO 8601 UTC
 );
 CREATE INDEX IF NOT EXISTS idx_decisions_status ON decisions(status);
 
+-- Intelligence items of this session, one row per item (the table keeps its
+-- v1 name). category is the intelligence type. The finding columns (criteria,
+-- cause, effect, suggestion) are NULL for the other types.
 CREATE TABLE IF NOT EXISTS observations (
     observation_id INTEGER PRIMARY KEY AUTOINCREMENT,
     category TEXT NOT NULL
-        CHECK (category IN ('observation', 'assumption', 'fact', 'finding')),
-    text TEXT NOT NULL,
-    status TEXT,
+        CHECK (category IN ({_sql_in(INTELLIGENCE_TYPES)})),
+    text TEXT NOT NULL,  -- the statement; for a finding, the condition found
+    status TEXT,  -- pending, verified, falsified
     evidence TEXT,
     severity TEXT
-        CHECK (severity IS NULL OR severity IN ('critical', 'high', 'medium', 'low')),
-    created_at TEXT NOT NULL
+        CHECK (severity IS NULL OR severity IN ({_sql_in(SEVERITIES)})),
+    confidence TEXT  -- analytic confidence (JP 2-0 appendix A)
+        CHECK (confidence IS NULL OR confidence IN ({_sql_in(CONFIDENCE_LEVELS)})),
+    criteria TEXT,  -- finding: what should be (rule, spec, expectation)
+    cause TEXT,  -- finding: why the condition differs from the criteria
+    effect TEXT,  -- finding: what the condition leads to, or could
+    suggestion TEXT,  -- finding: one-line direction; the worked change is a proposal
+    refs TEXT,  -- JSON array of the item ids this item rests on, e.g. ["OBS-3"]
+    attributed_to TEXT,  -- who reported it: commander, a delegate's name, a hook
+    source_kind TEXT
+        CHECK (source_kind IS NULL OR source_kind IN ({_sql_in(SOURCE_KINDS)})),
+    source TEXT,  -- where: path:line, commit SHA, URL, transcript line
+    quote TEXT,  -- the source text verbatim (always for the commander's words)
+    legacy_category TEXT,  -- set only by the v4 migration: the row's v3 category
+    created_at TEXT NOT NULL  -- ISO 8601 UTC
 );
 CREATE INDEX IF NOT EXISTS idx_observations_category ON observations(category);
 
+-- Messages: SITREP (status report) and SPOTREP (an observation reported at
+-- once, SALUTE-style; replaced the FINDING message in v4)
 CREATE TABLE IF NOT EXISTS messages (
     message_id INTEGER PRIMARY KEY AUTOINCREMENT,
     message_type TEXT NOT NULL
-        CHECK (message_type IN ('sitrep', 'finding')),
-    agent_role TEXT NOT NULL,
+        CHECK (message_type IN ({_sql_in(MESSAGE_TYPES)})),
+    agent_role TEXT NOT NULL,  -- e.g. "S3-Victor", "S2-Echo"
     title TEXT,
     message TEXT NOT NULL,
     severity TEXT NOT NULL DEFAULT 'routine'
         CHECK (severity IN ('routine', 'priority', 'flash', 'low', 'medium', 'high', 'critical')),
     actionable BOOLEAN DEFAULT 0,
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL  -- ISO 8601 UTC
 );
 CREATE INDEX IF NOT EXISTS idx_messages_type ON messages(message_type);
 
+-- Delegation log: every agent launch
 CREATE TABLE IF NOT EXISTS delegation_log (
     entry_id INTEGER PRIMARY KEY AUTOINCREMENT,
     mission_id TEXT REFERENCES missions(mission_id),
-    agent_type TEXT NOT NULL,
-    agent_name TEXT NOT NULL,
+    agent_type TEXT NOT NULL,  -- s2, s3, s5
+    agent_name TEXT NOT NULL,  -- "S2-Echo", "S3-Mike"
     prompt_summary TEXT,
     status TEXT NOT NULL DEFAULT 'launched'
         CHECK (status IN ('launched', 'in_progress', 'complete', 'failed', 'killed')),
-    launched_at TEXT NOT NULL,
-    completed_at TEXT,
+    launched_at TEXT NOT NULL,  -- ISO 8601 UTC
+    completed_at TEXT,  -- ISO 8601 UTC
     token_usage INTEGER,
     duration_ms INTEGER,
     outcome TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_delegation_mission ON delegation_log(mission_id);
 
+-- Deviations: process deviations (the `incident` verbs write here)
 CREATE TABLE IF NOT EXISTS deviations (
     deviation_id INTEGER PRIMARY KEY AUTOINCREMENT,
     description TEXT NOT NULL,
     impact TEXT,
     batch_origin TEXT,
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL  -- ISO 8601 UTC
 );
 
+-- Hard requirements
 CREATE TABLE IF NOT EXISTS hard_requirements (
     requirement_id TEXT PRIMARY KEY,
     requirement TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'not-started'
         CHECK (status IN ('not-started', 'in-progress', 'complete', 'deferred')),
     plan_scale_item TEXT,
-    prerequisites TEXT,
+    prerequisites TEXT,  -- pipe-delimited IDs
     surfaced_by TEXT,
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL  -- ISO 8601 UTC
 );
 
+-- Completed work
 CREATE TABLE IF NOT EXISTS completed_work (
     work_id INTEGER PRIMARY KEY AUTOINCREMENT,
     item TEXT NOT NULL,
     category TEXT,
     decided_by TEXT,
-    completed_at TEXT NOT NULL
+    completed_at TEXT NOT NULL  -- ISO 8601 UTC
 );
 
+-- Session event log, append-only. Hooks write events.jsonl; the SessionEnd
+-- processor (process-events) reads it. Event types: hook_fire, hook_block,
+-- hook_warn, delegation, session_event.
 CREATE TABLE IF NOT EXISTS events (
     event_id INTEGER PRIMARY KEY AUTOINCREMENT,
     event_type TEXT NOT NULL,
-    source TEXT NOT NULL,
-    detail TEXT,
-    created_at TEXT NOT NULL
+    source TEXT NOT NULL,  -- hook name or 'agent' or 'system'
+    detail TEXT,  -- JSON blob with event-specific data
+    created_at TEXT NOT NULL  -- ISO 8601 UTC (Z suffix)
 );
 CREATE INDEX IF NOT EXISTS idx_events_type ON events(event_type);
 CREATE INDEX IF NOT EXISTS idx_events_source ON events(source);
 
+-- Command channel: the commander's directives to the session (`directive`
+-- verbs, command-channel-stop.sh)
 CREATE TABLE IF NOT EXISTS commander_directives (
     directive_id INTEGER PRIMARY KEY AUTOINCREMENT,
     directive_type TEXT NOT NULL
@@ -222,6 +305,8 @@ CREATE TABLE IF NOT EXISTS commander_directives (
 );
 CREATE INDEX IF NOT EXISTS idx_directives_status ON commander_directives(status);
 
+-- Command channel: the commander's feedback (written by Mission Control;
+-- acknowledged by command-channel-stop.sh)
 CREATE TABLE IF NOT EXISTS commander_feedback (
     feedback_id INTEGER PRIMARY KEY AUTOINCREMENT,
     feedback_type TEXT NOT NULL
@@ -237,117 +322,182 @@ CREATE TABLE IF NOT EXISTS commander_feedback (
 );
 CREATE INDEX IF NOT EXISTS idx_feedback_status ON commander_feedback(status);
 
+-- Version history (replaces meta.versionHistory array)
 CREATE TABLE IF NOT EXISTS version_history (
     version REAL NOT NULL PRIMARY KEY,
-    timestamp TEXT NOT NULL,
+    timestamp TEXT NOT NULL,  -- ISO 8601 UTC
     changes TEXT NOT NULL
 );
 
+-- Schema versions this DB was created at or migrated to (one row each)
 CREATE TABLE IF NOT EXISTS schema_version (
     version INTEGER PRIMARY KEY,
-    applied_at TEXT NOT NULL
+    applied_at TEXT NOT NULL  -- ISO 8601 UTC
 );
 """
 
 # Harness DB tables (Tier 2)
-HARNESS_SCHEMA = """\
+HARNESS_SCHEMA = f"""\
+-- Session index: lightweight discovery of all sessions
 CREATE TABLE IF NOT EXISTS session_index (
     session_id TEXT PRIMARY KEY,
-    db_path TEXT NOT NULL,
-    started_at TEXT NOT NULL,
-    ended_at TEXT,
+    db_path TEXT NOT NULL,  -- relative path to session DB
+    started_at TEXT NOT NULL,  -- ISO 8601 UTC
+    ended_at TEXT,  -- ISO 8601 UTC
     schwerpunkt TEXT,
-    platform TEXT,
+    platform TEXT,  -- darwin, win32, linux
     status TEXT NOT NULL DEFAULT 'active'
         CHECK (status IN ('active', 'completed', 'crashed'))
 );
 
+-- KPI events: individual metric measurements
 CREATE TABLE IF NOT EXISTS kpi_events (
     event_id INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id TEXT NOT NULL,
-    metric_name TEXT NOT NULL,
+    metric_name TEXT NOT NULL,  -- e.g. "guard.fireCount", "delegation.avgScore"
     metric_value REAL NOT NULL,
-    dimensions TEXT,
-    collected_at TEXT NOT NULL
+    dimensions TEXT,  -- JSON blob
+    collected_at TEXT NOT NULL  -- ISO 8601 UTC
 );
 CREATE INDEX IF NOT EXISTS idx_kpi_session ON kpi_events(session_id);
 CREATE INDEX IF NOT EXISTS idx_kpi_metric ON kpi_events(metric_name);
 CREATE INDEX IF NOT EXISTS idx_kpi_collected ON kpi_events(collected_at);
 
+-- KPI shipping state: what has been sent to Datadog
 CREATE TABLE IF NOT EXISTS kpi_ship_log (
     ship_id INTEGER PRIMARY KEY AUTOINCREMENT,
     batch_size INTEGER NOT NULL,
-    shipped_at TEXT NOT NULL,
+    shipped_at TEXT NOT NULL,  -- ISO 8601 UTC
     status TEXT NOT NULL DEFAULT 'pending'
         CHECK (status IN ('pending', 'shipped', 'failed')),
     error_message TEXT,
     datadog_response TEXT
 );
 
+-- Dashboard state: which dashboards are serving
 CREATE TABLE IF NOT EXISTS dashboard_state (
     port INTEGER PRIMARY KEY,
     session_id TEXT NOT NULL,
     pid INTEGER,
     db_path TEXT,
-    started_at TEXT NOT NULL,
-    last_checked TEXT
+    started_at TEXT NOT NULL,  -- ISO 8601 UTC
+    last_checked TEXT  -- ISO 8601 UTC
 );
 
+-- PROVENANCE SYSTEM: cross-session knowledge with dependency-directed
+-- invalidation. Based on ATMS (de Kleer 1986), W3C PROV, dbt freshness,
+-- the Graphiti bitemporal model, Pachyderm lineage and Apache Atlas
+-- classification (reference/framework-provenance.md).
+
+-- Knowledge items: intelligence items promoted from sessions, plus decisions
+-- and changes. item_type is the intelligence type (or a record type).
 CREATE TABLE IF NOT EXISTS knowledge_items (
-    item_id TEXT PRIMARY KEY,
+    item_id TEXT PRIMARY KEY,  -- stable ID, e.g. "OL-2", "D-34"
     item_type TEXT NOT NULL
-        CHECK (item_type IN ('observation', 'assumption', 'fact', 'finding',
-               'decision', 'ol_entry', 'rule_change', 'framework_change',
-               'commander_directive')),
-    version INTEGER NOT NULL DEFAULT 1,
-    content TEXT NOT NULL,
-    t_valid TEXT,
-    t_invalid TEXT,
-    attributed_to TEXT NOT NULL,
-    produced_by_session TEXT,
-    produced_by_mission TEXT,
+        CHECK (item_type IN ({_sql_in(KNOWLEDGE_ITEM_TYPES)})),
+    version INTEGER NOT NULL DEFAULT 1,  -- monotonic, never reused
+    content TEXT NOT NULL,  -- the statement; for a finding, the condition found
+    severity TEXT
+        CHECK (severity IS NULL OR severity IN ({_sql_in(SEVERITIES)})),
+    confidence TEXT  -- analytic confidence (JP 2-0 appendix A)
+        CHECK (confidence IS NULL OR confidence IN ({_sql_in(CONFIDENCE_LEVELS)})),
+    criteria TEXT,  -- finding: what should be
+    cause TEXT,  -- finding: why
+    effect TEXT,  -- finding: what it leads to
+    suggestion TEXT,  -- finding: one-line direction
+    t_valid TEXT,  -- when it became true in the real world (ISO 8601 UTC)
+    t_invalid TEXT,  -- when superseded (ISO 8601 UTC; NULL = current)
+    attributed_to TEXT NOT NULL,  -- 'commander' | 'agent' | agent name
+    produced_by_session TEXT,  -- session_id that created this item
+    produced_by_mission TEXT,  -- mission_id, when a delegate produced it
+    source_kind TEXT
+        CHECK (source_kind IS NULL OR source_kind IN ({_sql_in(SOURCE_KINDS)})),
+    source TEXT,  -- where: path:line, commit SHA, URL, transcript line
+    quote TEXT,  -- the source text verbatim
     authority_level INTEGER NOT NULL DEFAULT 1
         CHECK (authority_level BETWEEN 0 AND 3),
-    warn_after_days INTEGER DEFAULT 30,
+        -- L0 system (hooks), L1 agent, L2 agent and commander-reviewed, L3 commander
+    warn_after_days INTEGER DEFAULT 30,  -- staleness (dbt freshness)
     error_after_days INTEGER DEFAULT 90,
-    last_verified_at TEXT,
+    last_verified_at TEXT,  -- ISO 8601 UTC (NULL = never verified)
     trust_level TEXT NOT NULL DEFAULT 'agent_observation'
-        CHECK (trust_level IN ('commander_directive', 'verified_fact',
-               'agent_observation', 'unverified_assumption')),
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+        CHECK (trust_level IN ({_sql_in(TRUST_LEVELS)})),
+    legacy_item_type TEXT,  -- set only by the v4 migration: the row's v3 item_type
+    created_at TEXT NOT NULL,  -- ISO 8601 UTC: when the harness learned this
+    updated_at TEXT NOT NULL  -- ISO 8601 UTC: last record modification
 );
 CREATE INDEX IF NOT EXISTS idx_ki_type ON knowledge_items(item_type);
 CREATE INDEX IF NOT EXISTS idx_ki_trust ON knowledge_items(trust_level);
 CREATE INDEX IF NOT EXISTS idx_ki_session ON knowledge_items(produced_by_session);
 CREATE INDEX IF NOT EXISTS idx_ki_valid ON knowledge_items(t_invalid);
 
+-- Provenance edges: source_item_id --[relationship]--> target_item_id.
+-- Example: OL-2 --[derived_from]--> FND-7 (OL-2 was drawn from finding FND-7).
+-- Invalidating a target flags its dependents (ATMS).
 CREATE TABLE IF NOT EXISTS provenance_edges (
     edge_id INTEGER PRIMARY KEY AUTOINCREMENT,
     source_item_id TEXT NOT NULL REFERENCES knowledge_items(item_id),
     target_item_id TEXT NOT NULL REFERENCES knowledge_items(item_id),
     relationship TEXT NOT NULL
-        CHECK (relationship IN ('derived_from', 'informed', 'triggered',
-               'validated', 'invalidated', 'superseded')),
-    created_at TEXT NOT NULL,
-    session_id TEXT NOT NULL
+        CHECK (relationship IN ({_sql_in(RELATIONSHIPS)})),
+    created_at TEXT NOT NULL,  -- ISO 8601 UTC
+    session_id TEXT NOT NULL  -- session where the edge was recorded
 );
 CREATE INDEX IF NOT EXISTS idx_prov_source ON provenance_edges(source_item_id);
 CREATE INDEX IF NOT EXISTS idx_prov_target ON provenance_edges(target_item_id);
 CREATE INDEX IF NOT EXISTS idx_prov_rel ON provenance_edges(relationship);
 
+-- Nogood sets: known contradiction combinations (ATMS)
 CREATE TABLE IF NOT EXISTS nogood_sets (
     nogood_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    item_ids TEXT NOT NULL,
-    contradiction TEXT NOT NULL,
-    discovered_in_session TEXT NOT NULL,
-    discovered_at TEXT NOT NULL
+    item_ids TEXT NOT NULL,  -- JSON array of item_id strings
+    contradiction TEXT NOT NULL,  -- human-readable description
+    discovered_in_session TEXT NOT NULL,  -- session_id
+    discovered_at TEXT NOT NULL  -- ISO 8601 UTC
 );
 
+-- Schema versions this DB was created at or migrated to (one row each)
 CREATE TABLE IF NOT EXISTS schema_version (
     version INTEGER PRIMARY KEY,
-    applied_at TEXT NOT NULL
+    applied_at TEXT NOT NULL  -- ISO 8601 UTC
 );
+"""
+
+SCHEMA_SQL_HEADER = f"""\
+-- harness-db-schema.sql -- schema of the aitools harness SQLite databases
+-- schema-version: {SCHEMA_VERSION}
+--
+-- GENERATED FILE: do not edit by hand. The source of truth is
+-- scripts/harness-db.py (SCHEMA_VERSION, SESSION_SCHEMA, HARNESS_SCHEMA).
+-- After changing it, regenerate this file:
+--   python3 scripts/harness-db.py schema --output reference/harness-db-schema.sql
+-- tests/harness-db/test-schema.py fails when this file and the script differ.
+--
+-- Two tiers:
+--   1. Session DB (.aitools/sessions/<prefix>.db): per-session state. Each
+--      session writes only to its own DB (no WAL write contention between
+--      concurrent sessions).
+--   2. Harness DB (.aitools/harness.db): cross-session state, written at
+--      session boundaries.
+-- Both tiers share SCHEMA_VERSION and the schema_version table shape. A DB
+-- holds one schema_version row per version it was created at or migrated to.
+-- ensure_schema() in harness-db.py migrates forward only and idempotently,
+-- whenever the CLI opens a DB to write it.
+--
+-- Runtime model: DB files are gitignored runtime artifacts; JSON exports
+-- (running-estimate.json) are tracked for cross-machine carry-forward.
+-- Connection: Python sqlite3 stdlib only (no sqlite3 CLI on Windows Git Bash).
+-- Intelligence types and their doctrine: reference/framework-intelligence-types.md
+--
+-- Version history:
+--   1 (2026-03-24) session and harness tiers
+--   2 (2026-03-25) provenance tables: knowledge_items, provenance_edges, nogood_sets
+--   3 (2026-06-21) session.project_dir, project_claude_md, user_claude_md
+--   4 (2026-11-15) intelligence types: finding is the analysis type (criteria,
+--      cause, effect, suggestion); the SALUTE FINDING is retired (observation
+--      with a severity; message type spotrep); ol_entry is operational_learning;
+--      provenance columns (attributed_to, source_kind, source, quote) and
+--      confidence; schema_version rows recorded on every migration
 """
 
 
@@ -466,26 +616,281 @@ def get_running_estimate_path(project_root: Path) -> Path:
     return project_root / ".aitools" / "channel" / "running-estimate.json"
 
 
-def ensure_schema(conn: sqlite3.Connection, schema_sql: str) -> None:
-    """Apply schema DDL and set schema version if not already set."""
-    conn.executescript(schema_sql)
-    # Set schema version if table is empty
-    row = conn.execute("SELECT COUNT(*) FROM schema_version").fetchone()
-    if row[0] == 0:
-        conn.execute(
-            "INSERT INTO schema_version (version, applied_at) VALUES (?, ?)",
-            (SCHEMA_VERSION, utcnow()),
-        )
-        conn.commit()
+def schema_sql_text() -> str:
+    """Return the canonical DDL of both tiers: reference/harness-db-schema.sql."""
+    banner = "-- " + "=" * 76 + "\n"
+    return (
+        SCHEMA_SQL_HEADER
+        + "\n" + banner
+        + "-- TIER 1: SESSION DB (.aitools/sessions/<prefix>.db)\n"
+        + "-- One DB per Claude Code session, written by that session's agents only.\n"
+        + banner + "\n"
+        + SESSION_SCHEMA
+        + "\n" + banner
+        + "-- TIER 2: HARNESS DB (.aitools/harness.db)\n"
+        + "-- Cross-session state, written at session boundaries.\n"
+        + banner + "\n"
+        + HARNESS_SCHEMA
+    )
 
 
-def migrate_session_columns(conn: sqlite3.Connection) -> None:
+def _table_sql(conn: sqlite3.Connection, table: str) -> str | None:
+    """Return the stored CREATE TABLE statement of a table, or None if absent."""
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?", (table,)
+    ).fetchone()
+    return None if row is None else row[0]
+
+
+def _table_columns(conn: sqlite3.Connection, table: str) -> set[str]:
+    """Return the column names of a table (empty set if the table is absent)."""
+    return {row[1] for row in conn.execute(f'PRAGMA table_info("{table}")')}
+
+
+def _create_table_ddl(tier_sql: str, table: str, new_name: str) -> str:
+    """Return the CREATE TABLE statement for `table` from a tier's DDL, renamed.
+
+    The rebuilt table gets exactly the columns and constraints a fresh DB gets.
+    """
+    marker = f"CREATE TABLE IF NOT EXISTS {table} ("
+    start = tier_sql.index(marker)
+    end = tier_sql.index("\n);", start) + len("\n);")
+    return f"CREATE TABLE {new_name} (" + tier_sql[start + len(marker):end]
+
+
+def _rebuild_table(
+    conn: sqlite3.Connection,
+    table: str,
+    tier_sql: str,
+    needs_rebuild: Callable[[sqlite3.Connection], bool],
+    copy_sql: str,
+) -> bool:
+    """Rebuild `table` to its current DDL, copying every row through copy_sql.
+
+    SQLite cannot change a CHECK constraint in place, so this follows the
+    documented table-rebuild procedure (sqlite.org/lang_altertable.html,
+    "Making Other Kinds Of Table Schema Changes"): foreign keys off, one
+    IMMEDIATE transaction, create the new table, copy, drop the old one,
+    rename, check foreign keys, commit. copy_sql is an
+    "INSERT INTO {new} (...) SELECT ... FROM {table}" with {new} as the
+    placeholder for the new table's name. needs_rebuild(conn) is re-checked
+    under the write lock, so two processes never rebuild twice. The row count
+    must match and no new foreign-key violation may appear, or the
+    transaction rolls back and the error propagates. The AUTOINCREMENT
+    sequence is kept, so ids are never reused. Returns True if it rebuilt.
+    """
+    new_name = f"{table}_v{SCHEMA_VERSION}_rebuild"
+    conn.commit()
+    conn.execute("PRAGMA foreign_keys=OFF")
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            if not needs_rebuild(conn):
+                conn.rollback()
+                return False
+            fk_before = len(conn.execute("PRAGMA foreign_key_check").fetchall())
+            has_seq = _table_sql(conn, "sqlite_sequence") is not None
+            old_seq = None
+            if has_seq:
+                row = conn.execute(
+                    "SELECT seq FROM sqlite_sequence WHERE name = ?", (table,)
+                ).fetchone()
+                old_seq = None if row is None else row[0]
+            before = conn.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()[0]
+            conn.execute(f'DROP TABLE IF EXISTS "{new_name}"')
+            conn.execute(_create_table_ddl(tier_sql, table, new_name))
+            conn.execute(copy_sql.format(new=new_name))
+            after = conn.execute(f'SELECT COUNT(*) FROM "{new_name}"').fetchone()[0]
+            if after != before:
+                raise sqlite3.DatabaseError(
+                    f"rebuild of {table}: copied {after} of {before} rows")
+            conn.execute(f'DROP TABLE "{table}"')
+            conn.execute(f'ALTER TABLE "{new_name}" RENAME TO "{table}"')
+            if old_seq is not None:
+                conn.execute(
+                    "UPDATE sqlite_sequence SET seq = MAX(seq, ?) WHERE name = ?",
+                    (old_seq, table),
+                )
+            fk_after = len(conn.execute("PRAGMA foreign_key_check").fetchall())
+            if fk_after > fk_before:
+                raise sqlite3.DatabaseError(
+                    f"rebuild of {table}: foreign key violations {fk_before} -> {fk_after}")
+            conn.commit()
+        except BaseException:
+            conn.rollback()
+            raise
+    finally:
+        conn.execute("PRAGMA foreign_keys=ON")
+    return True
+
+
+def _observations_need_v4(conn: sqlite3.Connection) -> bool:
+    cols = _table_columns(conn, "observations")
+    return bool(cols) and "legacy_category" not in cols
+
+
+def _messages_need_v4(conn: sqlite3.Connection) -> bool:
+    sql = _table_sql(conn, "messages")
+    return sql is not None and "'spotrep'" not in sql
+
+
+def _knowledge_items_need_v4(conn: sqlite3.Connection) -> bool:
+    cols = _table_columns(conn, "knowledge_items")
+    return bool(cols) and "legacy_item_type" not in cols
+
+
+# v3 -> v4 row mapping (reference/framework-intelligence-types.md, "Migration").
+# A v3 'finding' was the SALUTE reported fact, and `ol add` stored operational
+# learning as category 'finding', status 'verified', no severity. That exact
+# signature becomes operational_learning; every other v3 finding becomes an
+# observation (its severity and status kept). legacy_category keeps the old
+# value. In v4, 'finding' means the analysis type: no v3 row is mapped to it.
+_V4_OBSERVATIONS_COPY = """\
+INSERT INTO "{new}" (observation_id, category, text, status, evidence, severity,
+                    legacy_category, created_at)
+SELECT observation_id,
+       CASE
+           WHEN category = 'finding' AND severity IS NULL AND status = 'verified'
+               THEN 'operational_learning'
+           WHEN category = 'finding' THEN 'observation'
+           ELSE category
+       END,
+       text, status, evidence, severity,
+       CASE WHEN category = 'finding' THEN 'finding' END,
+       created_at
+FROM observations"""
+
+_V4_MESSAGES_COPY = """\
+INSERT INTO "{new}" (message_id, message_type, agent_role, title, message, severity,
+                    actionable, created_at)
+SELECT message_id,
+       CASE WHEN message_type = 'finding' THEN 'spotrep' ELSE message_type END,
+       agent_role, title, message, severity, actionable, created_at
+FROM messages"""
+
+_V4_KNOWLEDGE_ITEMS_COPY = """\
+INSERT INTO "{new}" (item_id, item_type, version, content, t_valid, t_invalid,
+                    attributed_to, produced_by_session, produced_by_mission,
+                    authority_level, warn_after_days, error_after_days,
+                    last_verified_at, trust_level, legacy_item_type,
+                    created_at, updated_at)
+SELECT item_id,
+       CASE item_type
+           WHEN 'finding' THEN 'observation'
+           WHEN 'ol_entry' THEN 'operational_learning'
+           ELSE item_type
+       END,
+       version, content, t_valid, t_invalid, attributed_to, produced_by_session,
+       produced_by_mission, authority_level, warn_after_days, error_after_days,
+       last_verified_at, trust_level,
+       CASE WHEN item_type IN ('finding', 'ol_entry') THEN item_type END,
+       created_at, updated_at
+FROM knowledge_items"""
+
+
+def migrate_v4(conn: sqlite3.Connection, tier: str) -> list[str]:
+    """Rebuild the tables whose value sets changed in schema version 4.
+
+    Idempotent: each table is rebuilt only while it still has its v3 shape
+    (session: observations without legacy_category, messages without
+    'spotrep'; harness: knowledge_items without legacy_item_type).
+    Returns the names of the tables rebuilt.
+    """
+    steps: list[tuple[str, Callable[[sqlite3.Connection], bool], str]]
+    if tier == "session":
+        steps = [
+            ("observations", _observations_need_v4, _V4_OBSERVATIONS_COPY),
+            ("messages", _messages_need_v4, _V4_MESSAGES_COPY),
+        ]
+        tier_sql = SESSION_SCHEMA
+    else:
+        steps = [("knowledge_items", _knowledge_items_need_v4, _V4_KNOWLEDGE_ITEMS_COPY)]
+        tier_sql = HARNESS_SCHEMA
+    rebuilt: list[str] = []
+    for table, needs, copy_sql in steps:
+        if needs(conn) and _rebuild_table(conn, table, tier_sql, needs, copy_sql):
+            rebuilt.append(table)
+    return rebuilt
+
+
+def record_schema_version(conn: sqlite3.Connection) -> bool:
+    """Add a schema_version row for SCHEMA_VERSION if the DB has none at or above it.
+
+    A DB whose highest recorded version is above SCHEMA_VERSION was written by
+    a newer harness-db.py: warn on stderr and in harness-db.log, change nothing.
+    Returns True if a row was added.
+    """
+    row = conn.execute("SELECT MAX(version) FROM schema_version").fetchone()
+    highest = row[0]
+    if highest is not None and highest > SCHEMA_VERSION:
+        msg = (f"WARNING: harness DB schema is newer than this helper "
+               f"(DB version {highest}, helper version {SCHEMA_VERSION})")
+        sys.stderr.write(msg + "\n")
+        _log_detail(msg)
+        return False
+    if highest is not None and highest == SCHEMA_VERSION:
+        return False
+    conn.execute(
+        "INSERT INTO schema_version (version, applied_at) VALUES (?, ?)",
+        (SCHEMA_VERSION, utcnow()),
+    )
+    conn.commit()
+    return True
+
+
+def ensure_schema(conn: sqlite3.Connection, tier: str) -> list[str]:
+    """Create or migrate a DB of the given tier ("session" or "harness") to SCHEMA_VERSION.
+
+    Order: rebuild tables still in their v3 shape (migrate_v4), create every
+    missing table and index (the tier DDL is CREATE ... IF NOT EXISTS), add
+    session columns introduced after creation, then record the version.
+    Safe to re-run: a DB already at SCHEMA_VERSION is left unchanged.
+    Returns a description of each change made to an existing DB (empty when
+    none, and for a DB created by this call).
+    """
+    if tier not in ("session", "harness"):
+        raise ValueError(f"unknown tier: {tier}")
+    fresh = conn.execute(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table'").fetchone()[0] == 0
+    changes = [f"rebuilt {t}" for t in migrate_v4(conn, tier)]
+    conn.executescript(SESSION_SCHEMA if tier == "session" else HARNESS_SCHEMA)
+    if tier == "session" and migrate_session_columns(conn):
+        changes.append("added session columns")
+    if record_schema_version(conn):
+        changes.append(f"schema_version {SCHEMA_VERSION}")
+    if fresh:
+        _log_detail(f"ensure_schema({tier}): created at schema version {SCHEMA_VERSION}")
+        return []
+    if changes:
+        _log_detail(f"ensure_schema({tier}): " + "; ".join(changes))
+    return changes
+
+
+def prepare_db(path: Path, tier: str) -> None:
+    """Open an existing DB, bring it to SCHEMA_VERSION, close it.
+
+    Called before a command writes to a DB that an older harness-db.py may
+    have created, so a v4 value never meets a v3 CHECK constraint.
+    """
+    conn = open_db(path)
+    try:
+        changes = ensure_schema(conn, tier)
+    finally:
+        conn.close()
+    if changes:
+        # stderr: the verbs' stdout (OL-3, OBS-4, ...) stays one parseable line.
+        sys.stderr.write(
+            f"Migrated {path.name} to schema {SCHEMA_VERSION}: {'; '.join(changes)}\n")
+
+
+def migrate_session_columns(conn: sqlite3.Connection) -> bool:
     """Idempotently add session-table columns introduced after initial creation.
 
     CREATE TABLE IF NOT EXISTS does not alter existing tables, so session DBs
     created before a column existed need an explicit ALTER. Safe to re-run:
     only adds columns that are missing. Column names are hardcoded literals
     (no user input), so the f-string interpolation is injection-safe.
+    Returns True if it added a column.
     """
     existing = {row[1] for row in conn.execute("PRAGMA table_info(session)")}
     added = False
@@ -495,6 +900,7 @@ def migrate_session_columns(conn: sqlite3.Connection) -> None:
             added = True
     if added:
         conn.commit()
+    return added
 
 
 def find_session_scratch_dir(project_root: Path, session_id: str) -> Path | None:
@@ -524,11 +930,16 @@ def find_active_session_id(project_root: Path) -> str | None:
     return None
 
 
-def resolve_session_db(project_root: Path, session_id: str | None = None) -> tuple[Path, str] | None:
+def resolve_session_db(
+    project_root: Path, session_id: str | None = None, *, for_write: bool = False
+) -> tuple[Path, str] | None:
     """Resolve session DB path from explicit ID or auto-detection.
 
+    for_write: the caller will write, so bring the DB to SCHEMA_VERSION
+    first (prepare_db). Read-only callers leave an older DB untouched; the
+    queries they run work on schema 3 and 4 alike.
     Returns (db_path, session_id) or None if no session found.
-    Logs detail to deploy.log on failure.
+    Logs detail to harness-db.log on failure.
     """
     if session_id is None:
         session_id = find_active_session_id(project_root)
@@ -539,6 +950,8 @@ def resolve_session_db(project_root: Path, session_id: str | None = None) -> tup
     if not db_path.exists():
         _log_detail(f"Session DB not found: {db_path}")
         return None
+    if for_write:
+        prepare_db(db_path, "session")
     return db_path, session_id
 
 
@@ -558,8 +971,10 @@ def cmd_init(args: argparse.Namespace) -> int:
     # Initialize harness DB
     harness_path = get_harness_db_path(project_root)
     conn = open_db(harness_path)
-    ensure_schema(conn, HARNESS_SCHEMA)
+    changes = ensure_schema(conn, "harness")
     conn.close()
+    if changes:
+        print(f"Harness DB schema {SCHEMA_VERSION}: {'; '.join(changes)}")
     print(f"Harness DB: {harness_path}")
 
     print("Harness databases initialized.")
@@ -585,8 +1000,9 @@ def cmd_session_start(args: argparse.Namespace) -> int:
     # Create session DB
     db_path = get_session_db_path(project_root, session_id)
     conn = open_db(db_path)
-    ensure_schema(conn, SESSION_SCHEMA)
-    migrate_session_columns(conn)
+    changes = ensure_schema(conn, "session")
+    if changes:
+        print(f"Session DB schema {SCHEMA_VERSION}: {'; '.join(changes)}")
 
     now = utcnow()
     platform = detect_platform()
@@ -778,7 +1194,7 @@ def cmd_mission_end(args: argparse.Namespace) -> int:
 
 
 def cmd_log(args: argparse.Namespace) -> int:
-    """Write a SITREP or FINDING message to the session DB."""
+    """Write a SITREP or SPOTREP message to the session DB."""
     project_root = find_project_root()
     session_id = args.session
     msg_type = args.type
@@ -791,6 +1207,7 @@ def cmd_log(args: argparse.Namespace) -> int:
     if not db_path.exists():
         _log_detail(f"Session DB not found: {db_path}")
         return 1
+    prepare_db(db_path, "session")
 
     now = utcnow()
     conn = open_db(db_path)
@@ -816,7 +1233,7 @@ def export_session_to_dict(conn: sqlite3.Connection) -> dict[str, Any]:
     """Export a session DB to a dictionary matching running-estimate JSON format.
 
     Produces fields compatible with the existing dashboard
-    (generate-dashboard.py): meta, delegationLog, findings, openThreads,
+    (generate-dashboard.py): meta, delegationLog, findings (SPOTREP messages), openThreads,
     decisions, assumptions, completedWork, hardRequirements, deviations.
     """
     data: dict[str, Any] = {}
@@ -878,9 +1295,11 @@ def export_session_to_dict(conn: sqlite3.Connection) -> dict[str, Any]:
         for d in delegations
     ]
 
-    # Messages (findings) -> findings
+    # Messages (SPOTREPs) -> "findings", the running-estimate key the dashboard
+    # reads (the estimate's structure is issue #180's). A DB still at schema 3
+    # (export opens it read-only, so never migrates it) stores them as 'finding'.
     findings = conn.execute(
-        "SELECT * FROM messages WHERE message_type = 'finding' ORDER BY created_at"
+        "SELECT * FROM messages WHERE message_type IN ('spotrep', 'finding') ORDER BY created_at"
     ).fetchall()
     data["findings"] = [
         {
@@ -1679,8 +2098,22 @@ def cmd_knowledge_add(args: argparse.Namespace) -> int:
         _log_detail("Harness DB not found. Run 'harness-db.py init' first.")
         return 1
 
+    prepare_db(harness_path, "harness")
     now = utcnow()
     conn = open_db(harness_path)
+
+    # Intelligence and provenance fields (schema 4); None leaves a field unset.
+    extra = {
+        "severity": args.severity,
+        "confidence": args.confidence,
+        "criteria": args.criteria,
+        "cause": args.cause,
+        "effect": args.effect,
+        "suggestion": args.suggestion,
+        "source_kind": args.source_kind,
+        "source": args.source,
+        "quote": args.quote,
+    }
 
     # Check for existing item (idempotent on item_id)
     existing = conn.execute(
@@ -1691,15 +2124,16 @@ def cmd_knowledge_add(args: argparse.Namespace) -> int:
     if existing is not None:
         # Supersede: bump version, keep old content accessible via provenance
         new_version = existing["version"] + 1
+        extra_set = "".join(f",\n                   {k} = COALESCE(?, {k})" for k in extra)
         conn.execute(
-            """UPDATE knowledge_items
+            f"""UPDATE knowledge_items
                SET version = ?, content = ?, updated_at = ?,
                    t_valid = COALESCE(?, t_valid),
                    attributed_to = COALESCE(?, attributed_to),
                    produced_by_session = COALESCE(?, produced_by_session),
                    produced_by_mission = COALESCE(?, produced_by_mission),
                    authority_level = COALESCE(?, authority_level),
-                   trust_level = COALESCE(?, trust_level)
+                   trust_level = COALESCE(?, trust_level){extra_set}
                WHERE item_id = ?""",
             (
                 new_version, args.content, now,
@@ -1709,6 +2143,7 @@ def cmd_knowledge_add(args: argparse.Namespace) -> int:
                 args.mission,
                 args.authority_level,
                 args.trust_level,
+                *extra.values(),
                 args.item_id,
             ),
         )
@@ -1717,13 +2152,15 @@ def cmd_knowledge_add(args: argparse.Namespace) -> int:
         print(f"Updated knowledge item: {args.item_id} (v{new_version})")
         return 0
 
+    extra_cols = "".join(f", {k}" for k in extra)
+    extra_marks = ", ?" * len(extra)
     conn.execute(
-        """INSERT INTO knowledge_items
+        f"""INSERT INTO knowledge_items
            (item_id, item_type, version, content, t_valid, t_invalid,
             attributed_to, produced_by_session, produced_by_mission,
             authority_level, warn_after_days, error_after_days,
-            trust_level, created_at, updated_at)
-           VALUES (?, ?, 1, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            trust_level, created_at, updated_at{extra_cols})
+           VALUES (?, ?, 1, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?{extra_marks})""",
         (
             args.item_id,
             args.item_type,
@@ -1738,6 +2175,7 @@ def cmd_knowledge_add(args: argparse.Namespace) -> int:
             args.trust_level or "agent_observation",
             now,
             now,
+            *extra.values(),
         ),
     )
     conn.commit()
@@ -2196,16 +2634,24 @@ def cmd_provenance_export(args: argparse.Namespace) -> int:
 
     data: dict[str, Any] = {}
 
-    # Knowledge items
+    # Knowledge items. The schema-4 columns are exported when present: export
+    # opens the DB read-only, so a DB still at schema 3 is not migrated here.
     items = conn.execute(
         "SELECT * FROM knowledge_items ORDER BY created_at"
     ).fetchall()
+    v4_fields = {
+        "severity": "severity", "confidence": "confidence", "criteria": "criteria",
+        "cause": "cause", "effect": "effect", "suggestion": "suggestion",
+        "sourceKind": "source_kind", "source": "source", "quote": "quote",
+        "legacyItemType": "legacy_item_type",
+    }
     data["knowledgeItems"] = [
         {
             "itemId": ki["item_id"],
             "itemType": ki["item_type"],
             "version": ki["version"],
             "content": ki["content"],
+            **{key: ki[col] for key, col in v4_fields.items() if col in ki.keys()},
             "tValid": ki["t_valid"],
             "tInvalid": ki["t_invalid"],
             "attributedTo": ki["attributed_to"],
@@ -2269,20 +2715,43 @@ def cmd_provenance_export(args: argparse.Namespace) -> int:
 # -- Lean subcommands (one-liner Bash calls) ----------------------------------
 
 
-def cmd_ol_add(args: argparse.Namespace) -> int:
-    """Add an operational learning entry to the session observations table."""
-    project_root = find_project_root()
-    result = resolve_session_db(project_root, getattr(args, "session", None))
-    if result is None:
-        return 1
-    db_path, session_id = result
+def _refs_json(refs: str | None) -> str | None:
+    """Turn a comma-separated --refs value into the JSON array stored in refs."""
+    if not refs:
+        return None
+    return json.dumps([r.strip() for r in refs.split(",") if r.strip()])
 
+
+def _insert_intelligence_item(
+    db_path: Path, session_id: str, category: str, status: str, args: argparse.Namespace
+) -> int:
+    """Insert one row into the session observations table; return its id.
+
+    Optional fields come from args when the subcommand defines them (getattr
+    default None), so `ol add` and `observation add` share one writer.
+    """
+    fields = {
+        "severity": getattr(args, "severity", None),
+        "confidence": getattr(args, "confidence", None),
+        "criteria": getattr(args, "criteria", None),
+        "cause": getattr(args, "cause", None),
+        "effect": getattr(args, "effect", None),
+        "suggestion": getattr(args, "suggestion", None),
+        "refs": _refs_json(getattr(args, "refs", None)),
+        "attributed_to": getattr(args, "attributed_to", None),
+        "source_kind": getattr(args, "source_kind", None),
+        "source": getattr(args, "source", None),
+        "quote": getattr(args, "quote", None),
+    }
     now = utcnow()
     conn = open_db(db_path)
+    # Column names are the literal keys above (no user input).
+    cols = ", ".join(fields)
+    marks = ", ".join("?" for _ in fields)
     conn.execute(
-        """INSERT INTO observations (category, text, status, created_at)
-           VALUES ('finding', ?, 'verified', ?)""",
-        (args.text, now),
+        f"""INSERT INTO observations (category, text, status, {cols}, created_at)
+            VALUES (?, ?, ?, {marks}, ?)""",
+        (category, args.text, status, *fields.values(), now),
     )
     conn.execute(
         "UPDATE session SET updated_at = ? WHERE session_id = ?",
@@ -2291,12 +2760,28 @@ def cmd_ol_add(args: argparse.Namespace) -> int:
     conn.commit()
     row_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
     conn.close()
+    return int(row_id)
+
+
+def cmd_ol_add(args: argparse.Namespace) -> int:
+    """Add an operational learning entry (category operational_learning)."""
+    project_root = find_project_root()
+    result = resolve_session_db(project_root, getattr(args, "session", None), for_write=True)
+    if result is None:
+        return 1
+    db_path, session_id = result
+    row_id = _insert_intelligence_item(db_path, session_id, "operational_learning", "verified", args)
     print(f"OL-{row_id}")
     return 0
 
 
 def cmd_ol_list(args: argparse.Namespace) -> int:
-    """List operational learning entries (facts and findings only)."""
+    """List operational learning entries (category operational_learning).
+
+    Before schema 4 this listed categories 'fact' and 'finding'; a v3
+    'finding' written by `ol add` is migrated to operational_learning. Reads
+    only: a DB still at schema 3 is listed by the same rule, not migrated.
+    """
     project_root = find_project_root()
     result = resolve_session_db(project_root, getattr(args, "session", None))
     if result is None:
@@ -2305,12 +2790,18 @@ def cmd_ol_list(args: argparse.Namespace) -> int:
 
     limit = getattr(args, "limit", 20) or 20
     conn = open_db(db_path, readonly=True)
+    # A list does not migrate (it only reads). On a DB still at schema 3, OL
+    # rows are the `ol add` signature the v4 migration maps (see migrate_v4).
+    if "legacy_category" in _table_columns(conn, "observations"):
+        where = "category = 'operational_learning'"
+    else:
+        where = "category = 'finding' AND severity IS NULL AND status = 'verified'"
     total = conn.execute(
-        "SELECT COUNT(*) as cnt FROM observations WHERE category IN ('fact', 'finding')"
+        f"SELECT COUNT(*) as cnt FROM observations WHERE {where}"
     ).fetchone()["cnt"]
     rows = conn.execute(
         "SELECT observation_id, text, created_at FROM observations "
-        "WHERE category IN ('fact', 'finding') "
+        f"WHERE {where} "
         "ORDER BY created_at DESC LIMIT ?",
         (limit,),
     ).fetchall()
@@ -2326,7 +2817,7 @@ def cmd_ol_list(args: argparse.Namespace) -> int:
 def cmd_decision_add(args: argparse.Namespace) -> int:
     """Add a decision to the session decisions table."""
     project_root = find_project_root()
-    result = resolve_session_db(project_root, getattr(args, "session", None))
+    result = resolve_session_db(project_root, getattr(args, "session", None), for_write=True)
     if result is None:
         return 1
     db_path, session_id = result
@@ -2396,7 +2887,7 @@ def cmd_decision_list(args: argparse.Namespace) -> int:
 def cmd_incident_add(args: argparse.Namespace) -> int:
     """Add a process deviation/incident to the session DB."""
     project_root = find_project_root()
-    result = resolve_session_db(project_root, getattr(args, "session", None))
+    result = resolve_session_db(project_root, getattr(args, "session", None), for_write=True)
     if result is None:
         return 1
     db_path, session_id = result
@@ -2446,30 +2937,15 @@ def cmd_incident_list(args: argparse.Namespace) -> int:
 
 
 def cmd_observation_add(args: argparse.Namespace) -> int:
-    """Add an observation to the session DB."""
+    """Add an intelligence item of any type (--category, default observation)."""
     project_root = find_project_root()
-    result = resolve_session_db(project_root, getattr(args, "session", None))
+    result = resolve_session_db(project_root, getattr(args, "session", None), for_write=True)
     if result is None:
         return 1
     db_path, session_id = result
 
     category = getattr(args, "category", None) or "observation"
-    severity = getattr(args, "severity", None)
-
-    now = utcnow()
-    conn = open_db(db_path)
-    conn.execute(
-        """INSERT INTO observations (category, text, status, severity, created_at)
-           VALUES (?, ?, 'pending', ?, ?)""",
-        (category, args.text, severity, now),
-    )
-    conn.execute(
-        "UPDATE session SET updated_at = ? WHERE session_id = ?",
-        (now, session_id),
-    )
-    conn.commit()
-    row_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
-    conn.close()
+    row_id = _insert_intelligence_item(db_path, session_id, category, "pending", args)
     print(f"OBS-{row_id}")
     return 0
 
@@ -2550,7 +3026,7 @@ def cmd_search(args: argparse.Namespace) -> int:
 def cmd_directive_add(args: argparse.Namespace) -> int:
     """Add a commander directive to the session DB."""
     project_root = find_project_root()
-    result = resolve_session_db(project_root, getattr(args, "session", None))
+    result = resolve_session_db(project_root, getattr(args, "session", None), for_write=True)
     if result is None:
         return 1
     db_path, session_id = result
@@ -2560,24 +3036,9 @@ def cmd_directive_add(args: argparse.Namespace) -> int:
     priority = getattr(args, "priority", "normal") or "normal"
     target = getattr(args, "target", None)
 
+    # resolve_session_db(for_write=True) ran ensure_schema, which creates
+    # commander_directives from SESSION_SCHEMA on a DB that lacks it.
     conn = open_db(db_path)
-    # Ensure table exists (schema migration for existing DBs)
-    conn.executescript(
-        """CREATE TABLE IF NOT EXISTS commander_directives (
-            directive_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            directive_type TEXT NOT NULL,
-            priority TEXT NOT NULL DEFAULT 'normal',
-            message TEXT NOT NULL,
-            target TEXT,
-            status TEXT NOT NULL DEFAULT 'pending',
-            response TEXT,
-            created_at TEXT NOT NULL,
-            acknowledged_at TEXT,
-            executed_at TEXT
-        );
-        CREATE INDEX IF NOT EXISTS idx_directives_status
-            ON commander_directives(status);"""
-    )
     conn.execute(
         """INSERT INTO commander_directives
            (directive_type, priority, message, target, status, created_at)
@@ -2735,7 +3196,7 @@ def cmd_directive_poll(args: argparse.Namespace) -> int:
 def cmd_directive_ack(args: argparse.Namespace) -> int:
     """Mark a directive as executed with an optional response."""
     project_root = find_project_root()
-    result = resolve_session_db(project_root, getattr(args, "session", None))
+    result = resolve_session_db(project_root, getattr(args, "session", None), for_write=True)
     if result is None:
         return 1
     db_path, _session_id = result
@@ -2766,7 +3227,46 @@ def cmd_directive_ack(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_schema(args: argparse.Namespace) -> int:
+    """Print the canonical DDL of both tiers, or write it to --output (LF endings)."""
+    text = schema_sql_text()
+    if args.output:
+        Path(args.output).write_bytes(text.encode("utf-8"))
+        print(f"Schema {SCHEMA_VERSION} written to: {args.output}")
+    else:
+        sys.stdout.write(text)
+    return 0
+
+
 # -- CLI setup ----------------------------------------------------------------
+
+def _add_item_args(
+    p: argparse.ArgumentParser,
+    *,
+    severity: bool = True,
+    finding: bool = True,
+    refs: bool = True,
+    attribution: bool = True,
+) -> None:
+    """Add the optional intelligence-item fields (schema 4) to a subcommand."""
+    if severity:
+        p.add_argument("--severity", choices=list(SEVERITIES), help="Severity level")
+    p.add_argument("--confidence", choices=list(CONFIDENCE_LEVELS),
+                   help="Analytic confidence (JP 2-0 appendix A)")
+    if finding:
+        p.add_argument("--criteria", help="Finding: what should be (rule, spec, expectation)")
+        p.add_argument("--cause", help="Finding: why the condition differs from the criteria")
+        p.add_argument("--effect", help="Finding: what the condition leads to, or could")
+        p.add_argument("--suggestion", help="Finding: one-line direction (the worked change is a proposal)")
+    if refs:
+        p.add_argument("--refs", help="Comma-separated ids this item rests on (e.g. OBS-3,OBS-4)")
+    if attribution:
+        p.add_argument("--attributed-to", help="Who reported it: commander, a delegate's name, a hook")
+    p.add_argument("--source-kind", choices=list(SOURCE_KINDS),
+                   help="Kind of source: commander, agent, telemetry, artifact, web")
+    p.add_argument("--source", help="Where: path:line, commit SHA, URL, transcript line")
+    p.add_argument("--quote", help="The source text verbatim")
+
 
 def build_parser() -> argparse.ArgumentParser:
     """Build the argument parser with all subcommands."""
@@ -2813,16 +3313,16 @@ def build_parser() -> argparse.ArgumentParser:
     mission_end.add_argument("--result", help="One-line key result")
 
     # log
-    log_parser = subparsers.add_parser("log", help="Log a SITREP or FINDING")
+    log_parser = subparsers.add_parser("log", help="Log a SITREP or SPOTREP")
     log_parser.add_argument("--session", required=True, help="Session ID")
     log_parser.add_argument(
-        "--type", required=True, choices=["sitrep", "finding"],
-        help="Message type",
+        "--type", required=True, choices=list(MESSAGE_TYPES),
+        help="Message type: sitrep (status) or spotrep (an observation reported at once)",
     )
     log_parser.add_argument("--message", required=True, help="Message text")
     log_parser.add_argument("--agent", help="Agent role (e.g. S3-Victor)")
     log_parser.add_argument("--severity", help="Message severity")
-    log_parser.add_argument("--title", help="Finding title (for findings)")
+    log_parser.add_argument("--title", help="SPOTREP title")
 
     # export
     export_parser = subparsers.add_parser("export", help="Export DB to JSON")
@@ -2859,24 +3359,19 @@ def build_parser() -> argparse.ArgumentParser:
     ka.add_argument("--item-id", required=True, help="Stable ID (e.g., OL-2, D-34)")
     ka.add_argument(
         "--type", dest="item_type", required=True,
-        choices=["observation", "assumption", "fact", "finding", "decision",
-                 "ol_entry", "rule_change", "framework_change", "commander_directive"],
-        help="Knowledge item type",
+        choices=list(KNOWLEDGE_ITEM_TYPES),
+        help="Knowledge item type (an intelligence type or a record type)",
     )
     ka.add_argument("--content", required=True, help="The knowledge content")
     ka.add_argument("--attributed-to", help="Who produced it (commander|agent|name)")
     ka.add_argument("--session", help="Producing session ID")
     ka.add_argument("--mission", help="Producing mission ID")
     ka.add_argument("--authority-level", type=int, choices=[0, 1, 2, 3], help="Authority (0-3)")
-    ka.add_argument(
-        "--trust-level",
-        choices=["commander_directive", "verified_fact",
-                 "agent_observation", "unverified_assumption"],
-        help="Trust classification",
-    )
+    ka.add_argument("--trust-level", choices=list(TRUST_LEVELS), help="Trust classification")
     ka.add_argument("--t-valid", dest="t_valid", help="When fact became true (ISO 8601)")
     ka.add_argument("--warn-after", help="Days before staleness warning (default: 30)")
     ka.add_argument("--error-after", help="Days before staleness error (default: 90)")
+    _add_item_args(ka, refs=False, attribution=False)
 
     # knowledge invalidate
     ki_inv = knowledge_sub.add_parser("invalidate", help="Invalidate an item and propagate")
@@ -2888,25 +3383,18 @@ def build_parser() -> argparse.ArgumentParser:
     ki_ver = knowledge_sub.add_parser("verify", help="Mark an item as verified")
     ki_ver.add_argument("--item-id", required=True, help="Item ID to verify")
     ki_ver.add_argument(
-        "--trust-level",
-        choices=["commander_directive", "verified_fact",
-                 "agent_observation", "unverified_assumption"],
+        "--trust-level", choices=list(TRUST_LEVELS),
         help="New trust level (default: verified_fact)",
     )
 
     # knowledge list
     ki_ls = knowledge_sub.add_parser("list", help="List knowledge items")
     ki_ls.add_argument(
-        "--type", dest="item_type",
-        choices=["observation", "assumption", "fact", "finding", "decision",
-                 "ol_entry", "rule_change", "framework_change", "commander_directive"],
+        "--type", dest="item_type", choices=list(KNOWLEDGE_ITEM_TYPES),
         help="Filter by type",
     )
     ki_ls.add_argument(
-        "--trust-level",
-        choices=["commander_directive", "verified_fact",
-                 "agent_observation", "unverified_assumption"],
-        help="Filter by trust level",
+        "--trust-level", choices=list(TRUST_LEVELS), help="Filter by trust level",
     )
     ki_ls.add_argument("--valid-only", action="store_true", help="Only current (non-invalidated) items")
     ki_ls.add_argument("--stale", action="store_true", help="Only stale items past warn_after_days")
@@ -2920,10 +3408,7 @@ def build_parser() -> argparse.ArgumentParser:
     ea.add_argument("--source", required=True, help="Source item ID (the dependent)")
     ea.add_argument("--target", required=True, help="Target item ID (the basis)")
     ea.add_argument(
-        "--relationship", required=True,
-        choices=["derived_from", "informed", "triggered",
-                 "validated", "invalidated", "superseded"],
-        help="Edge type",
+        "--relationship", required=True, choices=list(RELATIONSHIPS), help="Edge type",
     )
     ea.add_argument("--session", help="Session ID where edge was recorded")
 
@@ -2954,6 +3439,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     prov_export.add_argument("--output", help="Output file path (stdout if omitted)")
 
+    # schema
+    schema_parser = subparsers.add_parser(
+        "schema", help="Print the canonical DDL (reference/harness-db-schema.sql)"
+    )
+    schema_parser.add_argument(
+        "--output", help="Write to this file (LF line endings) instead of stdout"
+    )
+
     # -- Lean subcommands (one-liner Bash calls) ------------------------------
 
     # ol (operational learning)
@@ -2963,6 +3456,7 @@ def build_parser() -> argparse.ArgumentParser:
     ol_add = ol_sub.add_parser("add", help="Add an OL entry")
     ol_add.add_argument("text", help="The operational learning text")
     ol_add.add_argument("--session", help="Session ID (auto-detects if omitted)")
+    _add_item_args(ol_add, finding=False, severity=False)
 
     ol_ls = ol_sub.add_parser("list", help="List OL entries")
     ol_ls.add_argument("--session", help="Session ID (auto-detects if omitted)")
@@ -2998,19 +3492,15 @@ def build_parser() -> argparse.ArgumentParser:
     obs_parser = subparsers.add_parser("observation", help="Observations (quick add/list)")
     obs_sub = obs_parser.add_subparsers(dest="observation_command")
 
-    obs_add = obs_sub.add_parser("add", help="Add an observation")
-    obs_add.add_argument("text", help="Observation text")
+    obs_add = obs_sub.add_parser("add", help="Add an intelligence item (default: an observation)")
+    obs_add.add_argument("text", help="The statement (for a finding: the condition found)")
     obs_add.add_argument(
         "--category", default="observation",
-        choices=["observation", "assumption", "fact", "finding"],
-        help="Category (default: observation)",
-    )
-    obs_add.add_argument(
-        "--severity",
-        choices=["critical", "high", "medium", "low"],
-        help="Severity level",
+        choices=list(INTELLIGENCE_TYPES),
+        help="Intelligence type (default: observation)",
     )
     obs_add.add_argument("--session", help="Session ID (auto-detects if omitted)")
+    _add_item_args(obs_add)
 
     # search
     search_parser = subparsers.add_parser("search", help="Search across all session tables")
@@ -3074,6 +3564,7 @@ def main() -> int:
         "process-events": cmd_process_events,
         "ship": cmd_ship,
         "provenance-export": cmd_provenance_export,
+        "schema": cmd_schema,
     }
 
     if args.command in dispatch:

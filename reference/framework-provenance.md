@@ -207,10 +207,13 @@ CLI commands:
 
 - `reference/framework-provenance.md` (this file -- discipline source
   and adoption rationale)
-- `reference/harness-db-schema.sql` (`knowledge_items`,
-  `provenance_edges`, `nogood_sets` tables)
 - `scripts/harness-db.py` (`knowledge`, `edge`, `nogood` and `export`
-  commands)
+  commands; `HARNESS_SCHEMA` defines the `knowledge_items`,
+  `provenance_edges` and `nogood_sets` tables, the source of truth since
+  schema version 4)
+- `reference/harness-db-schema.sql` (generated from `scripts/harness-db.py`
+  by `harness-db.py schema`; `tests/harness-db/test-schema.py` fails when
+  they differ)
 - Future: `.claude/rules/provenance.md` (governance rule -- always in
   context)
 - Future: `shared/skills/provenance/SKILL.md` (user-level access to
@@ -233,4 +236,6 @@ CLI commands:
 - Framework adoption process: `@reference/framework-adoption.md`
 - Governed data access: `@reference/framework-governed-data-access.md`
 - Harness DB schema: `@reference/harness-db-schema.sql`
+- The intelligence types a knowledge item can have, and their doctrine:
+  `@reference/framework-intelligence-types.md`
 - Framework registry: `/frameworks` skill

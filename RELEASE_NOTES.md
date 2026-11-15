@@ -26,6 +26,44 @@ Not tagged. Branch `fix/fa81-05-wdg-timing`, mission fa81-05-wdg under fa81-05-m
 
 ---
 
+## v0.77.23 -- One versioned harness-DB schema (version 4) and doctrine-based intelligence types (2026-11-15)
+
+Not tagged. Branch `feature/fa81-04-intel-schema`, mission fa81-04-intel-schema (session 87795dc3). Commander, 2026-11-15: "43) dont file incident. launch mission to fix this. mission to figure correct schema and give it version number. have this mission decide on rfi 44 as well."; then "i kind of like findings over insights ... perhaps can carry third element 1cause/2effect/3suggestion"; then "46) yes" (the AAR's middle node is `findings`).
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 1 | Medium | `reference/harness-db-schema.sql` had drifted from `scripts/harness-db.py`: the command-channel tables `commander_directives` and `commander_feedback` (and their indexes) existed only in the script, added in `8a5e869` (2026-03-25, a commit titled "Harvest 49 session artifacts"), and the `delegation_log` index had a different name. The script is now the single source of truth and the .sql is generated from it (`harness-db.py schema --output reference/harness-db-schema.sql`); `tests/harness-db/test-schema.py` fails when they differ |
+| 2 | Medium | `schema_version` recorded only the version a DB was created at (`ensure_schema` inserted a row only into an empty table): the live `harness.db` said 2 while the code was at 3. Every migration now records its version row; a DB newer than the script gets a warning and is left alone |
+
+### New features
+
+| # | Change |
+|---|--------|
+| 3 | Schema version 4. Intelligence types, one set for both tiers: observation, fact, assumption, finding, operational learning, proposal, rfi (`INTELLIGENCE_TYPES`); the harness DB also keeps decision, commander_directive, rule_change, framework_change. `finding` is now the analysis type, with `criteria`, `cause`, `effect`, `suggestion` columns; the SALUTE FINDING is retired (an observation with a severity; the message type is `spotrep`); `ol_entry` is `operational_learning`. New provenance and judgement columns on session observations and knowledge items: `attributed_to` (session), `source_kind`, `source`, `quote`, `confidence`, `refs` (session), and severity on knowledge items |
+| 4 | Forward-only, idempotent migration from schema 3 (`ensure_schema`, `migrate_v4`): tables whose CHECK sets changed are rebuilt in one transaction with foreign keys off, row counts and AUTOINCREMENT sequences kept, foreign keys checked; v3 values are remapped by rule (`ol add`'s signature becomes operational_learning, other findings become observations, `legacy_category` / `legacy_item_type` keep the old value). Commands that write to an older DB (`ol add`, `observation add`, `decision add`, `incident add`, `directive add`/`ack`, `log`, `knowledge add`, `session start`, `init`) migrate it first; the list and search commands never migrate (`ol list` reads a v3 DB by the same mapping rule; `directive poll`, which acknowledges directives, does not migrate either: v4 did not change `commander_directives`), and `directive add` no longer creates its own CHECK-less copy of `commander_directives` |
+| 5 | `harness-db.py schema [--output]` prints the canonical DDL. `observation add` takes every intelligence type and `--confidence`, `--criteria`, `--cause`, `--effect`, `--suggestion`, `--refs`, `--attributed-to`, `--source-kind`, `--source`, `--quote`; `ol add` and `knowledge add` take the provenance options. `log --type` is `sitrep` or `spotrep` (`finding` is refused). `ol list` lists category `operational_learning` (before: `fact` and `finding`) |
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 6 | `reference/framework-intelligence-types.md` (new, v1.0): the doctrine read (JP 2-0, FM 2-0, FM 1-02.1, JDP 2-00 with the NATO grading system, GAO Yellow Book), quoted with URLs; the doctrine-to-type mapping; the decided types with fields, lifecycle and origin; the RFI 44 decision; the migration rule. Registered as framework "Intelligence types" |
+| 7 | Glossary: new terms intelligence type, fact, finding (the analysis type), proposal, SPOTREP, SITREP; `insight` deprecated (`replacedBy: finding`); `observation` widened from an incident field to an intelligence type; `assumption` no longer says a falsified assumption "becomes a finding"; `operational learning` sits under the AAR's `findings` node; the `intelligence` source names where RFC 0005 v3 lives (nobul-tech/nobulai-tools `f408790`) |
+
+### Files created
+
+| File | Purpose |
+|------|---------|
+| `reference/framework-intelligence-types.md` | Intelligence types and their doctrine |
+| `tests/harness-db/test-schema.py` | Schema single-source check, value sets, v3 -> v4 migration, CLI end to end |
+| `tests/harness-db/fixtures/harness-db-v3-session.sql`, `harness-db-v3-harness.sql` | Frozen schema-3 DDL for the migration test |
+
+**Verified on:** Windows 11 (Python 3.14): `tests/harness-db/test-schema.py` 12/12 and `test-delegation-score.py` 14/14; migration of copies of the 10 live DBs (1 harness, 9 session): every row count kept, schema_version +1 row, migrated shape equal to a fresh v4 DB, second run a no-op. Linux and macOS: CI.
+
+---
+
 ## v0.77.22 -- The pre-commit checklist's line-ending command works on Linux and Windows (2026-11-14)
 
 Not tagged. Branch `docs/m7-precommit-sed`, mission M7-Ckl under M7-Sweep (session 87795dc3), item 5c. Commander, 2026-11-14: "launch mission go fix them, dont bother filing incidents, check to see if these were already fixed by the other running missions first, if not do it".
@@ -37,6 +75,27 @@ Not tagged. Branch `docs/m7-precommit-sed`, mission M7-Ckl under M7-Sweep (sessi
 | 1 | `reference/pre-commit-checklist.md` step 4 (Line endings): the manual fix is `PERLIO=:perlio perl -pi -e 's/\r$//' <file>` (macOS, Linux, Git Bash) and `$env:PERLIO = ':perlio'` then `perl -pi -e 's/\r$//' <file>` (PowerShell), replacing `sed -i '' 's/\r$//' <file>`, which is BSD-only: GNU sed (Linux, Git Bash) takes `''` as the script and exits 2. A one-line warning says Strawberry Perl without `PERLIO=:perlio` leaves the CRLF and exits 0, with a pointer to `reference/cross-platform-detail.md` "Strawberry Perl text mode". The step now says what it checks (a CR in the working-tree copy of a staged `.sh`; the `.ps1` twin: CRLF) and that `--fix` / `-Fix` converts CRLF to LF and stages the file again. The unverified "the Write tool on macOS produces CRLF" is dropped (it did not reproduce on Claude Code 2.1.307; tool-ops item #10) |
 
 **Verified on:** Windows 11 (Git Bash: GNU sed 4.9 exits 2 on the old command; Git perl 5.42.3 and Strawberry Perl 5.42.0 with `PERLIO=:perlio` turn a CRLF `.sh` into LF, Strawberry without it leaves CRLF; PowerShell 7 with Strawberry Perl, same results; a scratch repo with this repo's `.gitattributes` stores a staged CRLF `.sh` as LF and leaves the working copy CRLF). Not run on macOS or Linux.
+
+---
+
+## v0.77.21 -- Incident #180: an orchestrator re-asked the commander an RFI he had already answered (2026-11-14)
+
+Not tagged. Branch `docs/38dc-28-rfi-repeat-rca`, mission 38dc-28 under M6-Polish (session 87795dc3). Commander, 2026-11-14: "launch a mission to 1) file this as incident 2) use the investigate skill and other skills to determine RCA of why you asked me when i had previously given answer." Documentation only; no harness behaviour changes.
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 1 | Incident #180 filed (`registries/incidents.json`, medium): M6-Polish relayed its delegate's RFI 38dc-19-1 to the commander as RFI 38dc-11 (Windows OS guards on `bootstrap.ps1` and `hh.ps1`), which his answer 1 ("ps1 on windows") had already decided; answers 5 and 7 had applied it to the same exemptions row. Root cause: the check-before-asking steps (CLAUDE.md "The process", prompt-turn checklist items 1 and 4) faded, and nothing records or enforces them. There is no ledger of the commander's answers, `/delegate` "Verifying what comes back" has no open-questions step, and no hook looks at RFI text. The same question had reached him earlier in RFI 38dc-7, and RFI 38dc-5 had the same shape |
+| 2 | GitHub issue #171 records the root cause, the timeline with transcript locations, the barrier analysis and the proposed preventive changes: prompt-turn checklist items 4-5, a `/delegate` open-questions step, a session RFI ledger, and an observe-mode Stop/SubagentStop RFI hook |
+
+### Files created
+
+| File | Purpose |
+|------|---------|
+| `.aitools/channel/handoffs/2026-11-14_87795dc3-missions/38dc-28/38dc-28-report.md` | The full RCA (v1.2): the commander's answers verbatim, timeline, 5 Whys, Swiss cheese analysis, other instances, preventive actions with a barrier replay |
+
+**Verified on:** Windows 11 (documentation only; `check-pre-commit.ps1` and `check-pre-push.ps1`).
 
 ---
 
