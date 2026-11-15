@@ -46,10 +46,10 @@
 #
 # Safe to re-run: never writes the real APPDATA, HOME or dotprofile, and reads none
 # of them except to run the uv-managed CPython that may live under %APPDATA%\uv (h)
-# (a temp root, removed on exit). Needs network for b. Platform: Windows (pwsh 7);
-# setup-pywinpty.ps1 is Windows-guarded, so on macOS/Linux the suite prints one
-# SKIP line and exits 0 (CI runs it on the windows job only,
-# plans/ci-platform-targeting.md). Exit 1 if any case fails.
+# (a temp root, removed on exit). Needs network for b. Platform: Windows only
+# (pwsh 7; commander 2026-11-14: "ps1 on windows"): on macOS/Linux it refuses
+# (exit 1) and tests/pywinpty/test-setup-pywinpty.sh covers setup-pywinpty.sh.
+# Exit 1 if any case fails.
 #
 # Usage: pwsh -NoProfile -File tests/pywinpty/test-setup-pywinpty.ps1 [-Help]
 
@@ -59,11 +59,9 @@ if ($Help) {
     exit 0
 }
 
-if (-not $IsWindows) {
-    Write-Output "SKIP test-setup-pywinpty.ps1 -- setup-pywinpty.ps1 is Windows-guarded; on macOS/Linux tests/pywinpty/test-setup-pywinpty.sh covers setup-pywinpty.sh"
-    Write-Output ""
-    Write-Output "0 passed, 0 failed, 1 skipped"
-    exit 0
+if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
+    [Console]::Error.WriteLine("This script is for Windows. On macOS/Linux, run tests/pywinpty/test-setup-pywinpty.sh with bash (it covers setup-pywinpty.sh).")
+    exit 1
 }
 
 $ErrorActionPreference = "Stop"

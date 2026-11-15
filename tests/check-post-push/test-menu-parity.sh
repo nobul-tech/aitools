@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # test-menu-parity.sh -- tests for scripts/check-menu-parity.pl, the logic of
 # check-post-push step 29 ("Deployment menu parity audit"), and for step 29
-# itself in both twins.
+# itself in the .sh twin.
 #
 # Cases:
 #   lib        the current scripts/aitools-lib.sh / .ps1 pair matches; every
@@ -17,19 +17,44 @@
 #              comments and trailing comments do not count; Read-MenuChoice
 #              in any letter case counts
 #   errors     nothing found, usage, an unreadable file, --help
-#   twins      the step 29 section of each twin (.sh in bash; .ps1 in pwsh
-#              when installed), run with stub step functions against a copy
-#              of the libs: PASS on the current pair, FAIL on a planted one
+#   twins      static: the step 29 section of each twin calls
+#              scripts/check-menu-parity.pl (a perl read of the text); run: the
+#              step 29 section of scripts/check-post-push.sh (the .sh twin),
+#              run in bash with stub step functions against a copy of the
+#              libs: PASS on the current pair, FAIL on a planted one
 #
-# Safe to re-run: writes only to a temp dir, removed on exit. Needs perl; the
-# .ps1 twin case needs pwsh (skipped without it). Exit 1 if any case fails.
-# Platform: macOS, Linux, Windows Git Bash (CI: linux and windows jobs).
+# Platform targeting (commander, 2026-11-14: "sh scripts and tests should only
+# run on linux/mac and ps1 on windows", and perl scripts are cross-platform:
+# "build-deploy.sh and all perl/python scripts"): this harness runs the perl
+# cases and the .sh twin's step 29 on macOS/Linux and refuses Windows. On
+# Windows, tests/check-post-push/test-menu-parity.ps1 runs the same perl and
+# static cases with native pwsh and the .ps1 twin's step 29; this harness no
+# longer runs any .ps1 code.
+#
+# Safe to re-run: writes only to a temp dir, removed on exit. Needs perl.
+# AITOOLS_TEST_BASH picks the bash that runs the step 29 section (default: bash;
+# e.g. /bin/bash for 3.2). Exit 1 if any case fails.
+# Platform: macOS, Linux (CI: macos and linux jobs).
 # Usage: bash tests/check-post-push/test-menu-parity.sh [--help]
 
 set -uo pipefail
 
+# OS guard: macOS/Linux only. BASH_VERSINFO[5] is bash's compiled-in machine
+# type (read-only, never taken from the environment), so neither a uname shim
+# on PATH nor an exported OSTYPE hides Git Bash.
+case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*)
+        printf 'This script is for macOS/Linux. On Windows, run tests/check-post-push/test-menu-parity.ps1 with pwsh.\n' >&2
+        exit 1 ;;
+esac
+case "${BASH_VERSINFO[5]:-}" in
+    *-msys*|*-cygwin*|*-mingw*)
+        printf 'This script is for macOS/Linux. On Windows, run tests/check-post-push/test-menu-parity.ps1 with pwsh.\n' >&2
+        exit 1 ;;
+esac
+
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
-    perl -ne 'print if $. >= 2 && $. <= 27' "$0"
+    perl -ne 'print if $. >= 2 && $. <= 38' "$0"
     exit 0
 fi
 
@@ -37,14 +62,13 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 CHECK="$ROOT/scripts/check-menu-parity.pl"
 SH_LIB="$ROOT/scripts/aitools-lib.sh"
 PS1_LIB="$ROOT/scripts/aitools-lib.ps1"
+TB="${AITOOLS_TEST_BASH:-bash}"
 TMP_ROOT="$(mktemp -d)"
 trap 'rm -rf "$TMP_ROOT"' EXIT
 
 PASS=0
 FAIL=0
 SKIP=0
-IS_WINDOWS=false
-case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) IS_WINDOWS=true ;; esac
 
 check() {  # name, condition (eval'd)
     if eval "$2"; then
@@ -56,9 +80,6 @@ check() {  # name, condition (eval'd)
         fi
     fi
 }
-
-# native <path>: the path as native tools want it (C:/... on Windows)
-native() { if $IS_WINDOWS; then cygpath -m "$1"; else printf '%s' "$1"; fi; }
 
 # run_check <bash lib> <ps1 lib>: exit code in RC, output in $TMP_ROOT/out
 run_check() {
@@ -182,7 +203,8 @@ if [ -f "$TMP_ROOT/planted-prompt.sh" ]; then
 fi
 
 section "$ROOT/scripts/check-post-push.sh" "$TMP_ROOT/step29.sh"
-check "sh twin: step 29 calls scripts/check-menu-parity.pl" "grep -q 'check-menu-parity.pl' '$TMP_ROOT/step29.sh'"
+# (comment lines are skipped: a comment that names the checker is not a call)
+check "sh twin: step 29 calls scripts/check-menu-parity.pl" "perl -ne 'next if /^\\s*#/; \$f = 1 if /check-menu-parity\\.pl/; END { exit(\$f ? 0 : 1) }' '$TMP_ROOT/step29.sh'"
 cat > "$TMP_ROOT/run29.sh" <<'EOF'
 set -euo pipefail
 step_pass() { printf 'PASS %s %s\n' "$1" "${3:-}" >> "$STEP_REC"; }
@@ -197,36 +219,14 @@ for v in ok bad; do
     rm -f "$TMP_ROOT/rec-sh-$v"
     RC=0
     STEP_REC="$TMP_ROOT/rec-sh-$v" STEP_REPO="$TMP_ROOT/repo-$v" STEP_SECTION="$TMP_ROOT/step29.sh" \
-        bash "$TMP_ROOT/run29.sh" > "$TMP_ROOT/out" 2>&1 || RC=$?
+        "$TB" "$TMP_ROOT/run29.sh" > "$TMP_ROOT/out" 2>&1 || RC=$?
     if [ "$v" = ok ]; then want='^PASS 29 PS1 and bash menus match: menus '; else want='^FAIL 29 .*prompts only in bash'; fi
     check "sh twin: step 29 on the $v pair: exit 0, $want" "[ $RC -eq 0 ] && grep -q '$want' '$TMP_ROOT/rec-sh-$v'"
 done
 
+# The .ps1 twin: static only (its step 29 runs in the .ps1 harness, on Windows)
 section "$ROOT/scripts/check-post-push.ps1" "$TMP_ROOT/step29.ps1"
-check "ps1 twin: step 29 calls scripts/check-menu-parity.pl" "grep -q 'check-menu-parity.pl' '$TMP_ROOT/step29.ps1'"
-if ! command -v pwsh >/dev/null 2>&1; then
-    printf 'SKIP ps1 twin run: pwsh not installed\n'; SKIP=$((SKIP + 1))
-else
-    cat > "$TMP_ROOT/run29.ps1" <<'EOF'
-$ErrorActionPreference = "Stop"
-function StepPass { param($n, $name, $d) Add-Content -Path $env:STEP_REC -Value "PASS $n $d" }
-function StepFail { param($n, $name, $d) Add-Content -Path $env:STEP_REC -Value "FAIL $n $d" }
-function StepSkip { param($n, $name, $d) Add-Content -Path $env:STEP_REC -Value "SKIP $n $d" }
-$Extensive = $true
-$script:RepoRoot = $env:STEP_REPO
-. $env:STEP_SECTION
-EOF
-    for v in ok bad; do
-        [ -d "$TMP_ROOT/repo-$v" ] || continue
-        rm -f "$TMP_ROOT/rec-ps1-$v"
-        RC=0
-        STEP_REC="$(native "$TMP_ROOT/rec-ps1-$v")" STEP_REPO="$(native "$TMP_ROOT/repo-$v")" \
-            STEP_SECTION="$(native "$TMP_ROOT/step29.ps1")" \
-            pwsh -NoProfile -NonInteractive -File "$(native "$TMP_ROOT/run29.ps1")" > "$TMP_ROOT/out" 2>&1 || RC=$?
-        if [ "$v" = ok ]; then want='^PASS 29 PS1 and bash menus match: menus '; else want='^FAIL 29 .*prompts only in bash'; fi
-        check "ps1 twin: step 29 on the $v pair: exit 0, $want" "[ $RC -eq 0 ] && grep -q '$want' '$TMP_ROOT/rec-ps1-$v'"
-    done
-fi
+check "ps1 twin: step 29 calls scripts/check-menu-parity.pl" "perl -ne 'next if /^\\s*#/; \$f = 1 if /check-menu-parity\\.pl/; END { exit(\$f ? 0 : 1) }' '$TMP_ROOT/step29.ps1'"
 
 printf '\n%d passed, %d failed, %d skipped\n' "$PASS" "$FAIL" "$SKIP"
 [ "$FAIL" -eq 0 ]
