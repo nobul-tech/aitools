@@ -53,7 +53,7 @@ if [ -f "$guide_hook" ]; then
     test_input='{"tool_name":"Agent","tool_input":{"subagent_type":"claude-code-guide"}}'
     # Capture output; ignore non-zero exit (should not happen but guard against it)
     test_output=$(echo "$test_input" | bash "$guide_hook" 2>/dev/null) || true  # hook may fail in unusual env — don't abort audit
-    if echo "$test_output" | grep -q 'permissionDecision.*deny' 2>/dev/null; then  # grep stderr suppressed — pattern match only
+    if echo "$test_output" | grep 'permissionDecision.*deny' >/dev/null 2>/dev/null; then  # grep stderr suppressed — pattern match only
         test_pass=$((test_pass + 1))
     else
         test_fail=$((test_fail + 1))
