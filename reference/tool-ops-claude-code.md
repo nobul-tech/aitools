@@ -14,7 +14,7 @@ behavior, check scripts validating version deps.
 
 Registry of version-dependent workarounds, behaviors, and assumptions in this repo.
 
-- **Current version**: 2.1.325 (observed `claude --version`, Windows 11, 2026-11-14). Re-verified at this version: #1 (Windows shell), #25, #27 (level-3 tool set), #31, #32 (#31 and #32 again by mission 38dc-25, the same day). Every other item keeps its own "Last verified" (items #1-#24 at or before 2.1.81: open item 2 of `reference/evaluations/claude-code-macos-2026-10-21.md`). Previous observation: 2.1.309, macOS, 2026-10-27.
+- **Current version**: 2.1.325 (observed `claude --version`, Windows 11, 2026-11-14). Re-verified at this version: #1 (Windows shell), #25, #27 (level-3 tool set), #31, #32 (#31 and #32 again by mission 38dc-25, the same day). Every other item keeps its own "Last verified" (items #1-#24 at or before 2.1.81: open item 2 of `reference/evaluations/claude-code-macos-2026-10-21.md`). Previous observation: 2.1.309, macOS, 2026-10-27. Observed at 2.1.325 on macOS (2026-11-15): #36 (`/compact`).
 - **Baseline version**: 2.1.51 (2026-02-16) -- version when most workarounds were written
 
 ### How to use
@@ -32,7 +32,7 @@ Post-push checklist #20 triggers this review automatically.
 ### Item numbers
 
 Each item keeps its number for life; a new item takes the next free number
-(after #35) whatever its severity, so a table is not in numeric order. Before
+(after #36) whatever its severity, so a table is not in numeric order. Before
 adding one, check every severity table for the number.
 
 **Renumbered 2026-11-14** (mission 38dc-25): #28 and #29 had each been given
@@ -83,6 +83,7 @@ moved them to #29 and #30 the same day).
 | 31 | Delegate identity and files: every delegate's transcript is `~/.claude/projects/<project-dir>/<main-session-id>/subagents/agent-<agentId>.jsonl` (flat for all depths) with `agent-<agentId>.meta.json`, whose `description` (the Agent call's `description`) is the only link from a mission name to an agentId; the Agent tool returns the agentId and an `output_file` but no session id; the `output_file` is created empty and was observed to become a hard link to the transcript when the delegate was woken again after it stopped (by a SendMessage or by its own background task), and not otherwise (v1.1 probes); no environment variable holds a delegate's own id (`CLAUDE_CODE_SESSION_ID` is the main session's) | 2.1.325 | 2.1.325 (2026-11-14, Windows) | "Delegate Identity, Transcripts and Control" section below, `shared/skills/delegate/SKILL.md` ("Environment limits"), delegation prompts | -- (not in the official docs as observed) |
 | 32 | Delegate control: an orchestrator cannot TaskStop its own delegate (the error names the caller's id), but the main session stopped a level-1 delegate it launched (v1.1); TaskStop with an unknown id lists the session's running background agents; SendMessage queues to a running delegate and resumes a finished one; a second SubagentHandback is delivered in a run woken by a Monitor event or started by a SendMessage to a finished delegate, and refused ("one report per result") in a run woken while a background shell from before the first report still runs, or by that shell's completion (v1.1 probes); a delegate's background tasks outlive its hand-back and their completion can bring it back | 2.1.325 | 2.1.325 (2026-11-14, Windows; v1.1 probes af14-01 to af14-07 the same day) | "Delegate Identity, Transcripts and Control" section below, `shared/skills/delegate/SKILL.md`, delegation prompts | -- |
 | 35 | SessionEnd hook time budget: hooks docs (read 2026-11-14 by af14-08, spot-checked by 38dc-25): "SessionEnd hooks have a default timeout of 1.5 seconds. It applies when you exit, run `/clear`, or switch sessions with interactive `/resume`."; a per-hook `timeout` raises the shared budget up to 60 s, `CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS` overrides it; a hook that overruns is cancelled ("Hook cancelled"). The harness archive hook overran it on every exit and runs detached since 2026-06-21 (`reference/artifact-harvesting.md` "Detached archive"); item #23 is the same message from `claude update` | 2.1.74 (changelog: SessionEnd hooks were killed after 1.5 s "regardless of `hook.timeout`" before) | docs 2026-11-14 (2.1.325); not re-measured | `shared/hooks/session-archive.sh`, `scripts/ait-harvest.py`, `reference/artifact-harvesting.md` | -- |
+| 36 | `/compact` keeps the last reply word for word: after `/compact` the context holds a summary of the conversation, then "the most recent messages from before compaction, kept verbatim". Observed once: the part kept word for word was the last assistant reply (a handoff printed in the terminal); the prompt that asked for it came back only in the summary. The summary names the session transcript and says it "was written without seeing" the kept messages. How many messages are kept, and whether that varies: unknown. The `/handoff` skill (v2.0) depends on it: the handoff is the last reply before `/compact`. **Claude Code only**: other harnesses aitools supports (Cursor CLI, IDE, cloud agents) are not tested and may behave differently | unknown (first version not checked) | 2.1.325 (2026-11-15, macOS, CLI, session a9074793-c) | "Compaction and the Terminal Handoff" section below, `shared/skills/handoff/SKILL.md` | -- (not checked against the docs) |
 
 ### MEDIUM -- Affects developer experience or specific features
 
@@ -133,6 +134,8 @@ Notable changes in CC releases that may affect this registry.
 - **TaskStop**: the main session can stop a level-1 delegate. See item #32.
 - Changelog not read for this entry; the behaviour above was observed, not
   read from release notes.
+- **`/compact`** (observed 2026-11-15, macOS): keeps the last reply word
+  for word after its summary. See item #36.
 
 #### 2.1.289 (observed 2026-10-05)
 
@@ -273,6 +276,51 @@ the levels consistent (item #6; the earlier "more specific wins" was wrong).
 | `/resume` | Switch sessions from inside a running session |
 | `/rename <name>` | Name the current session for easy recall |
 | `claude --continue --fork-session` | Fork current session into a new one |
+| `/compact` | Summarise the conversation so far; the most recent messages are kept word for word after the summary (item #36) |
+
+### Compaction and the Terminal Handoff (#36)
+
+**Claude Code only.** This section records what the Claude Code harness
+did. aitools supports other harnesses (Cursor CLI, Cursor IDE, Cursor cloud
+agents); their compaction or summarisation has not been tested and may not
+behave the same. Test it there before relying on it.
+
+**Observed** (Claude Code 2.1.325, CLI, macOS, 2026-11-15, session
+a9074793-c):
+
+1. The commander asked for a handoff to read after compaction in the same
+   session, printed in the terminal, with no file. The agent printed it as
+   its last reply.
+2. The commander ran `/compact`.
+3. The context after compaction held, in order: a summary of the session
+   (nine sections; the commander's prompts listed, the agent's replies and
+   tool output condensed), with the transcript path ("If you need specific
+   details from before compaction (like exact code snippets, error
+   messages, or content you generated), read the full transcript at:
+   <path>"); the note "The messages after this summary are the most recent
+   messages from before compaction, kept verbatim. The summary was written
+   without seeing them, so something it says has not happened yet may
+   already have happened in them."; then the handoff reply, unchanged. The
+   prompt that asked for the handoff was not among the kept messages.
+4. The resumed agent extracted the handoff from the transcript
+   (`read-session.py --search` with a phrase unique to the handoff) and
+   compared it section by section with the copy in its context: identical.
+
+**What follows:**
+
+- Text that must survive word for word goes in the last reply before
+  `/compact`, with nothing after it.
+- Everything earlier comes back as summary: re-read it from the
+  transcript when an action depends on its exact words.
+- Where the summary and the kept messages disagree on what has happened,
+  the kept messages are newer.
+
+**Unknown:** how many recent messages are kept, and whether that depends
+on their size; whether auto-compaction keeps the same; Claude Code on
+Windows and Claude Code web (the same harness, not part of this test).
+
+Process: `/handoff` skill (v2.0: written by the session agent itself,
+printed in the terminal, not delegated).
 
 ### claude update Hook Cancellation
 
@@ -1145,6 +1193,7 @@ Before 2.1.84 there was no PowerShell tool and the `pwsh -File` pattern from Bas
 ## Cross-References
 
 - Tool-ops registry: `/tool-ops` skill
+- Handoff process (item #36): `/handoff` skill
 - Tool registry: `/tool-registry` skill
 - Incident registry: `/incident` skill
 - User repo spec: `reference/user-repo.md`

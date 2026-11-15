@@ -172,7 +172,12 @@ Check for and read (if they exist):
    `meta.updated` for staleness (>7 days = surface to commander).
 2. **Recent handoffs**: `.aitools/channel/handoffs/` or
    `plans/*/handoff-*.md` -- carry-forward context from prior
-   sessions. Read the most recent handoff first.
+   sessions. Read the most recent handoff first. Since `/handoff`
+   v2.0 a handoff is printed in the terminal and is a file only when
+   the commander asked for one: after `/compact` in the same session it
+   is the reply kept word for word after the summary (tested on Claude
+   Code; other harnesses not yet tested), and for an earlier session it
+   is in that session's transcript.
 3. **Harness DB**: `.aitools/harness.db` (if it exists) -- query
    the session index for recent sessions, check for active
    incidents, review KPI trends.

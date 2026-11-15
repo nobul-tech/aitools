@@ -24,9 +24,11 @@ A session's temporary files live in its session scratch directory,
 - every commit message (`git commit -F`);
 - every PR, issue or comment body (`gh ... --body-file`).
 
-Nothing that must carry forward lives there. Handoffs, plans, mission
-reports, decisions and versions for review go to a tracked path and are
-committed. Scratch never leaves the machine, and in a git worktree it is
+Nothing that must carry forward lives there. Handoff files, plans,
+mission reports, decisions and versions for review go to a tracked path
+and are committed. (By default `/handoff` prints the handoff in the
+terminal and writes no file: tested on Claude Code, other harnesses not
+yet tested.) Scratch never leaves the machine, and in a git worktree it is
 deleted with the worktree.
 
 Files go in with the Write tool, not with heredocs or `echo` redirects in

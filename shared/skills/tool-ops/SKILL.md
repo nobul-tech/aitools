@@ -102,6 +102,7 @@ these sources):
 | Version dependencies (CRITICAL to LOW) and release-notes watch | `reference/tool-ops-claude-code.md` "Version Dependencies" |
 | Sub-agent limits: cross-repo access (#24), SendMessage gap (#25, closed at 2.1.325), Markdown file-name block (#26), nesting depth (#27), `claude update` hook cancellation (#23) | `reference/tool-ops-claude-code.md` "Session Behavior" |
 | Session management commands, CLAUDE.md hierarchy, session storage | `reference/tool-ops-claude-code.md` "Session Behavior" |
+| Compaction: what `/compact` keeps word for word, the terminal handoff (#36; tested on Claude Code only, other harnesses not yet tested) | `reference/tool-ops-claude-code.md` "Compaction and the Terminal Handoff" |
 | Delegate identity and control: mission name -> agentId (`meta.json` `description`), transcript and `output_file` paths, a delegate's own id, TaskStop, SendMessage, hand-backs, background tasks (#31, #32) | `reference/tool-ops-claude-code.md` "Delegate Identity, Transcripts and Control" |
 | What a sub-agent receives at launch: CLAUDE.md, rules without `paths:`, project files from the session's directory, not its worktree (#5) | `reference/tool-ops-claude-code.md` "Version Dependencies" item #5 |
 | How Claude Code loads user-level rules (#28) and skills (#29) | `reference/tool-ops-claude-code.md` "Version Dependencies" |

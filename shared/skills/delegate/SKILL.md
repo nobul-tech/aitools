@@ -638,7 +638,9 @@ names so provenance survives the chain (`S4-A`, prefix `S4-A-`).
   `claude/rules/delegation.md`)
 - Detection hook: `delegation-duty-guard.sh` (aitools `shared/hooks/`)
 - Claude Code limits: `/tool-ops` skill
-- Handoff delegations: `/handoff` skill
+- Handoffs: `/handoff` skill (written by the session agent itself and
+  printed in the terminal, never delegated; tested on Claude Code, other
+  harnesses not yet tested)
 - Mission monitoring: `/mission-control` skill
 - Session strategy: `/planning` skill
 - Ephemeral files: `/scratch` skill

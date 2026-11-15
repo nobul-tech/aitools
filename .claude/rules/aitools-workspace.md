@@ -39,7 +39,7 @@ Project-scoped (`<repo>/.aitools/`, plus two directories at the repo root):
 | `<repo>/.scratch/` (repo root) | gitignored | Session-ephemeral working files; one `session-<id>/` per session, path in `.scratch/.current-session` (`scratch-init.sh`) |
 | `channel/session-*/` | gitignored | Session-ephemeral messages (SITREPs, SPOTREPs) |
 | `channel/running-estimate.json` | tracked | Carry-forward state between sessions and machines |
-| `channel/handoffs/` | tracked | Handoff prompts from completed sessions (see `/handoff` skill) |
+| `channel/handoffs/` | tracked | Handoff files, written when the commander asks for one; by default `/handoff` prints the handoff in the terminal and writes no file (tested on Claude Code, other harnesses not yet tested; see `/handoff` skill) |
 | `<repo>/harvesting/` (repo root) | tracked, except the manifest | Artifact lifecycle — candidates for harness promotion; manifest `harvest-manifest.json` (`ait-harvest.py`) is gitignored, machine-local (commander, 2026-11-13) |
 
 User-scoped (`~/.aitools/`):
