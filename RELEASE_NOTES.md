@@ -12,6 +12,43 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.77.20 -- standing-order-guard keeps blocking when its log directory cannot be written (2026-11-14)
+
+Not tagged. Branch `fix/m7-sog-log-failsafe`, mission M7-Hook under M7-Sweep (session 87795dc3). Commander, 2026-11-14: "25) launch mission go fix them, dont bother filing incidents, check to see if these were already fixed by the other running missions first, if not do it".
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 1 | High | `shared/hooks/standing-order-guard.sh` (PreToolUse, every Bash call) ran `mkdir -p "$LOG_DIR"` under `set -e` with no guard. When `~/.aitools/logs` could not be created (for example `~/.aitools` a regular file) the hook exited 1 on every call with `mkdir: cannot create directory ...`; Claude Code treats exit 1 as a non-blocking hook error, so a violating command such as `git status && git log` ran: the hook failed open. The observe-mode append in `violation()` was unguarded the same way (an unwritable log, or one that is a directory, turned an allow into exit 1; reached only in observe mode, and every check is at enforce today). Both writes are now fail-safe (`reference/logging.md` section 5): `mkdir -p "$LOG_DIR" 2>/dev/null \|\| true`, and the append in a `{ ...; } 2>/dev/null \|\| true` group, as `_aitlib_log_append` does. No mode variable, matching logic or message changed: exit 0 for a clean command and exit 2 with the same reason for a violation, whether the log directory is usable or not |
+| 2 | Low | The session telemetry append in `emit_hook_event` (`printf ... >> "$_SESSION_DIR/events.jsonl" 2>/dev/null \|\| true`) kept its exit code, but a redirection's own error is printed before a later `2>/dev/null` applies: when `events.jsonl` could not be written (for example a directory) the shell's `Is a directory` line went to stderr ahead of the block message, and a clean command that reached the final allow printed it too. It now uses the same group form, so stderr carries only the block message |
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 3 | `tests/hooks/test-hooks-smoke.sh`: 14 new standing-order-guard cases. With `~/.aitools` a regular file: a clean command exits 0 with no output; `&&` exits 2 with the usual reason and no mkdir error. With a temp copy switched to observe (`MODE_AND` only): a writable log gets the `[WOULD-BLOCK]` line and exits 0; a log path that is a directory, and an uncreatable log directory, exit 0 with no output. In a temp git repo whose `.scratch/.current-session` names a session dir: a writable `events.jsonl` gets the `hook_fire` event; with `events.jsonl` a directory a clean command exits 0 with no output and `&&` exits 2 with stderr exactly the block message. Against the old hook 8 of them fail |
+
+**Verified on:** Windows 11 (Git Bash 5.3): hook-rollout pre-deploy verification before and after (`bash -n`; clean exit 0; `&&` exit 2) with a writable HOME, with `~/.aitools` a file (before: exit 1 and 1; after: 0 and 2) and with an observe copy whose log path is a directory or uncreatable (before: exit 1; after: 0); with `events.jsonl` a directory the old hook printed `line 78: ... events.jsonl: Is a directory` before the block message, the new one only the message; the whole `tests/hooks` suite before and after (smoke 44 -> 58 passed, the other suites unchanged). Linux and macOS (bash 5 and `/bin/bash` 3.2): CI.
+
+---
+
+## v0.77.17 -- The menu rules state the EOF defaults the code takes (2026-11-14)
+
+Not tagged. Branch `docs/m7-eof-spec`, mission M7-Menus under M7-Sweep (session 87795dc3), item 4 of M7-Sweep. Commander, 2026-11-14 (RFI fa81-25): "launch mission go fix them, dont bother filing incidents, check to see if these were already fixed by the other running missions first, if not do it". No code change.
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 1 | `.claude/rules/interactive-menus.md` (and `.cursor/rules/interactive-menus.mdc`) "Non-interactive fallback": EOF at a prompt no longer reads as "auto-select `overwrite`" for every menu. It takes that prompt's documented default with a warning, as `read_menu_choice` / `Read-MenuChoice` do: `overwrite` at the text review menu (`prompt_diff_review` / `Prompt-DiffReview`) and at every JSON field prompt that offers `[o]verwrite` (`prompt_json_field_review` / `Prompt-JsonFieldReview`: a field in SOURCE, whether or not LOCAL has it, the settings.json sync included); `skip` at a JSON field only in LOCAL (`review_json_fields` / `Review-JsonFields` offer `[a/s/x]` there, no overwrite); `n` (reject) at the AI merge preview (`_invoke_ai_merge` / `Invoke-AiMerge`); empty feedback at the `[r]efine` feedback read (`read_tty_choice` / `Read-ConsoleChoice`), so the merge is refined once more (one more AI merge attempt), then EOF at the preview rejects it and EOF at the review menu overwrites. "No AI merge runs in a non-interactive run" now reads: no AI merge starts in a run with no terminal or `--force` (no menu is shown); EOF reaches the merge prompts only after an interactive `[m]` |
+| 2 | `.claude/rules/agentic-standards.md` (and `.cursor/rules/agentic-standards.mdc`) "Managed-file review choices and merge": the non-interactive bullet lists no terminal or `--force` (not EOF) and says no menu is shown, so no merge starts; "EOF is not a choice and takes overwrite" now names each prompt's EOF default and points to `interactive-menus.md` "Non-interactive fallback" |
+| 3 | `reference/framework-managed-file-deployment.md` "How We Adopted It": "`AITOOLS_FORCE`, non-terminal stdin and EOF at a prompt select overwrite" now reads: `AITOOLS_FORCE` and non-terminal stdin select overwrite with no menu (a JSON field only in LOCAL is kept); EOF at a prompt takes that prompt's default with a warning (pointer to `interactive-menus.md` "Non-interactive fallback") |
+
+**Verified on:** Windows (text read against `read_tty_choice`, `read_menu_choice`, `_invoke_ai_merge`, `prompt_diff_review`, `review_json_fields`, `prompt_json_field_review` in `scripts/aitools-lib.sh` and their twins in `scripts/aitools-lib.ps1`; `tests/menus/test-menu-choice.ps1`: 97 passed, 0 failed, including the EOF cases for a JSON field only in LOCAL, the settings sync and the refine feedback, where one refine makes two AI calls). No code change.
+
+---
+
 ## v0.77.16 -- Windows CI runs .ps1 test suites only; the .sh suites refuse Git Bash (2026-11-14)
 
 Not tagged. Branch `fix/38dc-13-windows-ci-ps1-only` (PR #166), missions 38dc-13 and 38dc-27 under M6-Polish / M6b-Finish (session 87795dc3). Commander, 2026-11-14: "unless a script is explicitly marked as cross-platform for good reasons, such as build-deploy.sh and all perl/python scripts, sh scripts and tests should only run on linux/mac and ps1 on windows"; "tests should be .ps1 here on windows and executed as powershell scripts, git bash scripts cause known issues."
@@ -31,6 +68,7 @@ Not tagged. Branch `fix/38dc-13-windows-ci-ps1-only` (PR #166), missions 38dc-13
 | # | Change |
 |---|--------|
 | 6 | `.claude/rules/cross-platform.md` (+ `.mdc`): "Test suites" guard patterns; exemption rows "Cross-platform test suites" and "Perl and Python scripts (commander, 2026-11-14)"; build-package approved; helper modules recorded (commander, 2026-11-14) |
+| 7 | `reference/cross-platform-detail.md` "Running tests on Windows": the 34 `.ps1` suites, the Perl cases run from the `.ps1` harnesses, and "What CI runs on Windows today" rewritten for the new windows job (45 suite steps: 34 `.ps1`, 2 Python, 9 cross-platform `.sh`) |
 
 **Verified on:** Windows 11 (pwsh 7.6.10): every `.ps1` suite above green locally, each case mutation-proofed; os-guards `.ps1` 68/0/0; `check-ci-suites.pl`: all suites in CI on their platforms. macOS and Linux: CI.
 
@@ -209,6 +247,22 @@ Not tagged. Branch `docs/38dc-08-subagent-transcripts`, mission 38dc-08-subagent
 | 3 | `/delegate` skill v2.2: "Environment limits" gains delegate identity and control; "Verifying what comes back" points to the delegate's transcript. `/tool-ops` skill: lookup row for the new section |
 
 **Verified on:** Windows 11 (Claude Code 2.1.325, Git Bash, pwsh 7): each fact observed in session 87795dc3 (probe delegates 2b10-01 and 2b10-02, the session's 42 `meta.json` files, the M6-Polish transcript); independent review by 2b10-03 (27 claims checked against the raw files; its five blocking findings fixed; its re-check finding on the repeat-hand-back counts fixed); `check-pre-commit.ps1` (no `-Fix`) and `check-pre-push.ps1`: 0 FAIL. macOS, Linux, Claude Code web, Cursor: not tested (documentation only).
+
+---
+
+## v0.77.6 -- How tests run on Windows: the .ps1 suites; Git Bash only for cross-platform scripts (2026-11-14)
+
+Not tagged. Branch `docs/38dc-12-windows-test-practice`, mission 38dc-12 (M6-Polish, session 87795dc3).
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 1 | `reference/cross-platform-detail.md` "Running tests on Windows" (new): the commander's rule (2026-11-14), quoted: `.sh` scripts and tests run only on macOS and Linux, `.ps1` only on Windows, unless a script is explicitly marked cross-platform (his examples: `build-deploy.sh`, all Perl and Python scripts; the marks are the `.claude/rules/cross-platform.md` "OS guard exemptions" table, whose unsettled rows he answered row by row in RFI 38dc-7, an answer main's table shows so far only for the relay prompt guards of PR #167); on Windows an agent runs the twelve `.ps1` suites with `pwsh -NoProfile -File` and the tests of explicitly cross-platform scripts, and leaves `.ps1` code that has only a `.sh` driver to the Windows CI job. Eight known Git Bash issues, each with its source, five re-checked by a probe on the commander's workstation: Git's `usr/bin` first on PATH (a bare `find` in a `.cmd` stub walked C: and hung a suite), `bash` resolving to Git's or to the WSL launcher, `chmod 000` on a directory not enforced, `grep` dropping the line-end CR, MSYS argument rewriting (`/c/...`, `--opt=/tmp/...`, `origin/main:.aitools/...`), GNU tools not BSD, slow pseudo-terminal runs, a faked `uname`. What the Windows CI job runs on main at 8bf15d9 (48 suite steps: 12 `.ps1`, 2 Python, 34 `.sh` in Git Bash, in three groups) and that the bash AI merge has no Windows runtime path (since PR #162 the bash entry point `scripts/aitools` forwards to `aitools.ps1` on Windows before it loads `aitools-lib.sh`); follow-up mission 38dc-13 is changing that layout. "Git Bash PATH shadowing": `find`, `bash` and `sort.exe` added to the shadowed tools |
+| 2 | `CLAUDE.md` tests line: on Windows, the `.ps1` suites, and `.sh` suites in Git Bash only for scripts explicitly marked cross-platform, with a pointer to the new section |
+| 3 | `/delegate` skill v2.3 ("In the aitools repo", "Checks"): on Windows the `.ps1` check twins (the `.sh` checks refuse Windows), the same test rule, the pointer to the new section, and no known pre-existing check failures (pre-commit step 6 and pre-push step 7, listed before, pass on main) |
+
+**Verified on:** Windows 11 (Git Bash 5.3.15, pwsh 7): the Git Bash probes cited in item 1; the CI step counts by a parse of `.github/workflows/check.yml`. Documentation only: no script or test changed.
 
 ---
 

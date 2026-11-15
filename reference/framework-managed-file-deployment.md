@@ -28,8 +28,10 @@ options, and track outcomes.
   outcome (`created`, `updated`, `verified`, `accept & adopt`, `skipped`,
   `failed`), recorded by the deploy tracker; `failed` is an ERROR row and
   the run continues
-- **Non-interactive fallback** → `AITOOLS_FORCE`, non-terminal stdin and
-  EOF at a prompt select overwrite (SOURCE wins)
+- **Non-interactive fallback** → `AITOOLS_FORCE` and non-terminal stdin
+  select overwrite with no menu (SOURCE wins; a JSON field only in LOCAL is
+  kept); EOF at a prompt takes that prompt's default with a warning
+  (`@.claude/rules/interactive-menus.md` "Non-interactive fallback")
 
 ## How It's Maintained
 
