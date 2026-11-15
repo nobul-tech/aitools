@@ -15,12 +15,14 @@
 #
 # Safe to re-run: everything runs under a temp dir removed on exit; the scripts
 # under test stop at their guard. Exit 1 if any check fails. Needs Git for
-# Windows (bash.exe; its perl when no perl is on PATH).
+# Windows (bash.exe) and perl on PATH: scripts/check-lib.ps1's Strawberry Perl
+# block runs first, as for the check scripts, and there is no fallback to Git
+# for Windows' bundled perl (without perl the suite FAILs before any case).
 #
 # Usage: pwsh -NoProfile -File tests/os-guards/test-os-guards.ps1 [-Help]
 
 param([switch]$Help)
-if ($Help) { Get-Content $PSCommandPath -TotalCount 20 | ForEach-Object { $_ -replace '^# ?', '' }; exit 0 }
+if ($Help) { Get-Content $PSCommandPath -TotalCount 22 |ForEach-Object { $_ -replace '^# ?', '' }; exit 0 }
 
 if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
     [Console]::Error.WriteLine("This script is for Windows. On macOS/Linux, run tests/os-guards/test-os-guards.sh with bash.")
@@ -41,16 +43,26 @@ try {
         Bad "Git for Windows bash.exe not found: the POSIX guards cannot be tested"
         throw "no Git Bash"
     }
-    # perl: the one on PATH, else Git for Windows' own (Git\usr\bin\perl.exe).
+    # Perl as the check scripts get it: scripts/check-lib.ps1 puts Strawberry
+    # Perl first on PATH when it is installed. Its top-level "if ($IsWindows)"
+    # block is loaded from that file's syntax tree and run here (as
+    # tests/check-post-push/test-menu-parity.ps1 does); a missing block FAILs.
+    $clErrors = $null
+    $clAst = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $root "scripts/check-lib.ps1"), [ref]$null, [ref]$clErrors)
+    if ($clErrors) { Bad "cannot parse scripts/check-lib.ps1"; throw "check-lib parse" }
+    $clPerlBlock = $clAst.Find({ param($n) $n -is [System.Management.Automation.Language.IfStatementAst] -and $n.Extent.Text.Contains('Strawberry') }, $false)
+    if (-not $clPerlBlock) { Bad "the Strawberry Perl PATH block of scripts/check-lib.ps1 was not found"; throw "check-lib perl block" }
+    . ([scriptblock]::Create($clPerlBlock.Extent.Text))
+    # perl: the one on PATH after that block. No fallback to Git for Windows'
+    # bundled perl (cross-platform.md "Git Bash PATH shadowing": "no fallback to
+    # bundled versions"; commander, 2026-11-15, RFI fa81-31): without perl on
+    # PATH the suite FAILs here, before any case runs.
     $perl = (Get-Command perl -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1).Source
     if (-not $perl) {
-        $gitPerl = Join-Path (Split-Path -Parent (Split-Path -Parent $gitBash)) "usr\bin\perl.exe"
-        if (Test-Path -LiteralPath $gitPerl -PathType Leaf) { $perl = $gitPerl }
-    }
-    if (-not $perl) {
-        Bad "perl not found (PATH, Git for Windows usr\bin): cannot classify"
+        Bad "perl not found on PATH (after check-lib's Strawberry Perl block): tests/os-guards/classify-guards.pl needs it. Fix: install the managed Strawberry Perl (aitools install), then re-run"
         throw "no perl"
     }
+    Write-Output "perl: $perl"
 
     # --- Classify every product script and test suite ---
     $files = Join-Path $work "files.txt"

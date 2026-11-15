@@ -116,7 +116,7 @@ na_checks() {
     check "$1: exit 0" "[ \"\$(cat '$C/rc')\" = 0 ]"
     check "$1: one summary row '$want'" "[ \"\$(perl -pe 's/\\r//' '$C/summary')\" = '$want' ]"
     check "$1: log says n/a on $TEST_PLATFORM, nothing changed" "grep -q 'n/a on $TEST_PLATFORM: pywinpty is Windows-only' '$C/logs/deploy.log'"
-    check "$1: nothing written under HOME" "[ -z \"\$(find '$C/home' -type f | head -n 1)\" ]"
+    check "$1: nothing written under HOME" "[ -z \"\$(find '$C/home' -type f | sed -n '1p')\" ]"
     if [ "$2" = yes ]; then
         check "$1: dry-run logged" "grep -q 'DRY RUN' '$C/logs/deploy.log'"
     fi
@@ -294,7 +294,7 @@ pin_case() {
     fi
     run_build "$COPY/scripts/build-deploy.sh"
     check "pin $name: build exit 1 ($(cat "$C/secs") s)" "[ \"\$(cat '$C/rc')\" = 1 ]"
-    check "pin $name: error 'Cannot embed the pywinpty pin: ... $want'" "grep -F 'Cannot embed the pywinpty pin: ' '$C/out' | grep -qF -- \"$want\""
+    check "pin $name: error 'Cannot embed the pywinpty pin: ... $want'" "grep -F 'Cannot embed the pywinpty pin: ' '$C/out' | grep -F -- \"$want\" >/dev/null"
     check "pin $name: fixture deploy/ unchanged" "diff -r '$C/pristine' '$D/deploy' > /dev/null"
 }
 
