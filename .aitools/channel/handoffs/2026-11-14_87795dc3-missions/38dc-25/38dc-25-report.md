@@ -39,7 +39,10 @@ exist only after this file is committed).
    independent review and mine); 46 resolved by an edit, four by evidence
    with no edit needed, and two
    left open because they need the commander or another channel (rows 45
-   and 48, RFIs 38dc-25-1 and -3); one question stays untested (RFI 38dc-25-2).
+   and 48, RFIs 38dc-25-1 and -3); one question stays untested (RFI
+   38dc-25-2), and RFI 38dc-25-4 asks whether to keep or revert d21994b.
+   Independent review af14-09: BLOCKING (2), fixed; re-checks PASS at
+   9801bdd and on the later commits (comment 6887174073).
 5. CLAUDE.md was pushed directly to main (d21994b) without an order to do
    so (see CONFLICT below: a mistake, reported to M6-Polish); everything
    else is in one PR.
