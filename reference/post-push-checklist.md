@@ -22,13 +22,24 @@ order, not modes.
 
 `git log --oneline origin/main -1` -- confirm the expected commit is on remote.
 
-### 2. Smoke-test deploy scripts
+### 2. Smoke-test deploy scripts (retired)
 
-`bash -n` on the generated deploy scripts -- catches build corruption or stale
-copies. Fast (<1s). The generated scripts live in `<userRepoPath>/deploy/` (the
-dotprofile build output); the script still checks the frozen aitools `deploy/`,
-as do steps 6 and 14, so these steps prove nothing about the dotprofile build
-(an open gap; check-pre-push step 7 is the check of the build, see step 7).
+Always SKIP (`retired: check-pre-push step 7 rebuilds into a temp dotprofile
+copy`). The step ran `bash -n` on the aitools `deploy/*.sh`, which is frozen:
+`build-deploy.sh` has written the generated scripts to `<userRepoPath>/deploy/`
+(the dotprofile build output) since 2c0fd32 (2026-06-14), so the step proved
+nothing about them. Before PR #154 it, and steps 6 and 14, still read the
+frozen tree (incident #176); no step reads it now
+(`tests/check-post-push/test-post-push-deploy-steps.sh`).
+
+What checks the generated scripts instead: check-pre-push step 7, on every
+push when a dotprofile is configured (it SKIPs without one and WARNs without
+node or Git Bash), rebuilds them into a temporary copy of the dotprofile under a temporary
+HOME. The build fails on a generated `.ps1` that does not parse (where pwsh is
+installed), and the step dry-runs the three resolver consumers
+(`setup-user-claude`, `-settings`, `-cursor`). It does not run `bash -n` on
+every generated `.sh` or audit their line endings: that is not covered, as it
+was not covered by the frozen-tree check either.
 
 ### 2b. Functional smoke test (when requested or after significant changes)
 
@@ -70,17 +81,19 @@ Run all Always items first, then:
 
 ### 6. Full script syntax validation
 
-`bash -n` on every `.sh` in `scripts/` and `deploy/`. On Windows, also
-`[Parser]::ParseFile` on every `.ps1`. On macOS, also validate `.ps1`
-files -- see `.claude/rules/cross-platform.md` Pre-validation convention for the
-full ParseFile command (pwsh is a managed tool).
+`bash -n` on every `.sh` in `scripts/` and `shared/hooks/`, and
+`[Parser]::ParseFile` on every `.ps1` in `scripts/` (on macOS and Linux
+through pwsh, a managed tool: FAIL when it is missing; see
+`.claude/rules/cross-platform.md` Pre-validation convention for the command).
+The source scripts only: the frozen aitools `deploy/` is not read (step 2).
 
 ### 7. deploy/ drift audit (retired)
 
 Always SKIP (`retired: check-pre-push step 7 rebuilds into a temp dotprofile
 copy`). The shared `aitools/deploy/` is frozen. Drift of the dotprofile
 `deploy/` is checked by pre-push step 7 (a rebuild into a temporary copy of the
-dotprofile under a temporary HOME), which runs on every push. Do not run
+dotprofile under a temporary HOME), which runs on every push when a dotprofile
+is configured (it SKIPs without one and WARNs without node or Git Bash). Do not run
 `build-deploy.sh` here: with the real HOME it replaces the real dotprofile
 `deploy/`. Until v0.77.2 both scripts ran `build-deploy.sh` with the caller's
 HOME and then `git diff deploy/` on the frozen aitools tree, so the step always
@@ -104,8 +117,8 @@ hardcoded in both scripts.
 
 ### 11. Cross-platform pairing
 
-Every `scripts/setup-*.sh` has a matching `.ps1` (and vice versa). Same for
-`deploy/`. Flag unpaired scripts.
+Every `scripts/setup-*.sh` has a matching `.ps1` (and vice versa). Flag
+unpaired scripts.
 
 ### 12. CLAUDE.md limits
 
@@ -119,8 +132,9 @@ Every `@reference/` import in `CLAUDE.md` points to a file that exists
 
 ### 14. Line ending audit
 
-All `.sh` files in the repo have LF line endings (not CRLF).
-`file scripts/*.sh deploy/*.sh shared/hooks/*.sh` -- none should report CRLF.
+Every `.sh` in `scripts/` and `shared/hooks/` has LF line endings (not CRLF);
+the frozen aitools `deploy/` is not read (step 2). By hand:
+`file scripts/*.sh shared/hooks/*.sh` -- none should report CRLF.
 
 ### 15. MCP config deploy
 
