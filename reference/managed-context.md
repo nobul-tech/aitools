@@ -20,6 +20,14 @@ review menu.
 Version 1.0, 2026-11-07, Session Commander f500b663-7. A version, not a
 draft (D-DEL5). Describes `main` at `ab3bc22`. Paths: `~` is `$HOME` on
 macOS/Linux and `%USERPROFILE%` on Windows; section 9 lists both forms.
+v1.1, 2026-11-15: warnings and errors named by the `aitools-lib` helpers of
+`@reference/logging.md` section 8 (legend below).
+
+Legend for the diagrams: `ERROR "<what>"` is one error, recorded with
+`write_error` (WHAT the failed step, REASON why it failed); `WARN "<text>"`
+is one warning (`write_warn`, or `log_warn`, which names the script);
+`WARN + ACTION` is one `write_action` (one warning and one ACTION). `OK`,
+`DETAIL` and `ACTION` rows are `write_summary` records.
 
 ## 1. What is managed, and for which tool
 
@@ -94,15 +102,19 @@ One thing, and it does not reach any agent today:
          rc 0  dotprofile found ............... USER_REPO_PATH set
          rc 1  no dotprofile .................. shared-only mode (expected)
          rc 3  resolver error ................. ERROR "claude.md" "not deployed:
-                                                dotprofile unresolved", exit 1
+                                                dotprofile unresolved" (REASON
+                                                the resolver's error line),
+                                                exit 1
                                                 (never falls back to the shared
                                                  template over a personal one)
       resolve_machine_profile / Resolve-MachineProfile
          rc 0  this machine's profile ......... name, company, alias, hostname
-         rc 1  no dotprofile .................. tokens stay unresolved (WARN row)
+         rc 1  no dotprofile .................. tokens stay unresolved (WARN)
          rc 3  no machine match ............... identity-level values only
-                                                (the resolver writes its own
-                                                 ERROR + ACTION rows)
+                                                (resolve_machine_profile
+                                                 records its own ERROR, REASON
+                                                 the resolver's error line,
+                                                 and one ACTION)
                                   |
   (2) PICK THE TEMPLATE ----------v-------------------------------------------
       <dotprofile>/claude/CLAUDE.md exists? --yes--> SOURCE = dotprofile template
@@ -132,9 +144,10 @@ One thing, and it does not reach any agent today:
   (5) VALIDATE (after created / updated / accept & adopt) --------------------
       non-empty; has "## Machine-Specific"; has a template body heading
       ("## Coaching", "## Code Style" or "## Tool...")  else ERROR
-      "validation failed"
+      "validation failed" (REASON the check that failed)
       rows: OK claude.md created | updated | verified | "accepted to profile";
-            WARN "skipped (user review)"; ERROR "deploy failed"
+            WARN "skipped (user review)"; ERROR "deploy failed" (REASON the
+            write, AI merge or adopt filter error)
 ```
 
 ### 3.1 Tokens, rendered per platform
@@ -247,7 +260,7 @@ Three different comparisons exist. Only the first is automatic.
   [m]erge & adopt        AI merge of SOURCE and LOCAL ->      (when offered) as left
                          LOCAL and -> filter -> template;
                          committed and pushed
-  [s]kip                 nothing written; WARN row;           the same
+  [s]kip                 nothing written; WARN;               the same
                          asked again next run
   [x]abort               nothing written; setup-user-claude   the same
                          exits 2 (the run continues with
@@ -310,8 +323,9 @@ the template's git diff; review the commit.
   no terminal (MDM, CI, piped)  -> overwrite, WARN "Diff in ... -- overwriting
                                    (non-interactive)"; no adopt, no AI merge
   EOF at the prompt             -> WARN, overwrite
-  aitools --force / -Force,     -> overwrite, WARN "... (--force)"
-  AITOOLS_FORCE=1
+  aitools --force / -Force,     -> overwrite, logged at info "... (--force)":
+  AITOOLS_FORCE=1                  a step the user asked for, not a warning
+                                   (@reference/logging.md 8.3)
   aitools --dry-run             -> no diff shown and nothing written: the log
                                    gives the template source, line counts and
                                    "Content unchanged" / "Content differs --
@@ -388,10 +402,12 @@ templates with tokens, and each endpoint renders its own
   no template / unreadable / empty   ERROR, exit 1, untouched
   interpolation failed               ERROR, exit 1, untouched
   write, AI merge or filter fails    the library restores every snapshot it took
-                                     (LOCAL and the adopt target), log_error,
-                                     ERROR "deploy failed"; nothing half-written
-  post-write validation fails        ERROR "validation failed" (the file stays,
-                                     the next run reviews it again)
+                                     (LOCAL and the adopt target); one ERROR
+                                     "deploy failed", REASON the write, merge
+                                     or filter error; nothing half-written
+  post-write validation fails        ERROR "validation failed", REASON the
+                                     check that failed (the file stays, the
+                                     next run reviews it again)
   a dangling symlink at the path     failed: never written through
   a live symlink at the path         read and written through (dotfile managers)
 ```
