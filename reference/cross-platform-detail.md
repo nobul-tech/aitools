@@ -373,13 +373,14 @@ So:
   relay-outbound.sh/.ps1 need os guards they are not exempt, the aitools
   dependency needs to be resolved (how to resolve it and resolving it need to be
   part of same mission), the aitools-json and validate should be recorded as
-  exempt for those reasons, [...]". On main (5f962b1) the table does not show
-  that answer yet: it has no Perl or Python rows, `build-package.sh` still reads
-  "(P-1, pending approval)", and the entry-point and helper-module rows still
-  read "rationale unrecorded, pending approval". Mission 38dc-13 (PR #166, open)
-  records the answer for `build-package.sh` and the helper modules and adds a
-  "Perl and Python scripts" row; mission 38dc-23 (PR #167, open) guards
-  `relay-outbound-prompt.sh/.ps1`.
+  exempt for those reasons, [...]". On main (8bf15d9) the table shows that
+  answer only for the relay prompt: PR #167 (mission 38dc-23) gave
+  `relay-outbound-prompt.sh/.ps1` OS guards and took them out of the exempt
+  scripts. The rest is not on main yet: the table has no Perl or Python rows,
+  `build-package.sh` still reads "(P-1, pending approval)", and the entry-point
+  and helper-module rows still read "rationale unrecorded, pending approval".
+  Mission 38dc-13 (PR #166, open) records the answer for `build-package.sh` and
+  the helper modules and adds a "Perl and Python scripts" row.
 - On a Windows machine an agent tests with the `.ps1` suites, run as PowerShell
   scripts, plus the tests of explicitly cross-platform scripts. It does not run
   any other `.sh` suite through Git Bash, and does not fake `uname` to make a
@@ -390,8 +391,8 @@ So:
 
 ### How to run the tests
 
-The `.ps1` suites (every tracked `tests/*/test-*.ps1` on main at 5f962b1, ten;
-the Windows CI job runs each of them):
+The `.ps1` suites (every tracked `tests/*/test-*.ps1` on main at 8bf15d9,
+twelve; the Windows CI job runs each of them):
 
 | Suite | Tests |
 |---|---|
@@ -399,11 +400,13 @@ the Windows CI job runs each of them):
 | `tests/aitools-entry/test-win-forwarder.ps1` | the bash entry point `scripts/aitools`, run in Git Bash, forwarding to `aitools.ps1` (arguments, exit codes, stdin, the dashboard call) |
 | `tests/bootstrap/test-bootstrap.ps1` | `bootstrap.ps1` under Windows PowerShell 5.1, launching the installer and `aitools.ps1` under pwsh 7 (stubs) |
 | `tests/check-lib/test-resolve-git-bash.ps1` | `ResolveGitBash` in `scripts/check-lib.ps1` |
+| `tests/check-no-git-bash/test-check-no-git-bash.ps1` | the `check-*.ps1` scripts call Git Bash only in `check-pre-push.ps1` step 7 (`build-deploy.sh`) |
 | `tests/logging/test-logging.ps1` | logging in `scripts/aitools-lib.ps1` |
 | `tests/managed-files/test-managed-files.ps1` | `Deploy-ManagedFile`, AI merge included |
 | `tests/managed-files/test-adopt-push.ps1` | dotprofile adopt, commit and push |
 | `tests/menus/test-menu-choice.ps1` | `Read-MenuChoice` and the real menus, AI-merge preview included |
 | `tests/pywinpty/test-setup-pywinpty.ps1` | `setup-pywinpty.ps1`, dev and MDM |
+| `tests/relay-outbound/test-relay-outbound.ps1` | the OS guards of `relay-outbound-prompt.ps1` and `.sh` on Windows (the `.ps1` loads, the `.sh` refuses), and the `scripts/aitools` hand-off before its relay source line |
 | `tests/setup-user-shell/test-setup-user-shell.ps1` | `setup-user-shell.ps1` PowerShell profile block |
 
 Run each one as a PowerShell script:
@@ -415,7 +418,8 @@ pwsh -NoProfile -File tests/menus/test-menu-choice.ps1
 Also native on Windows: the Python suites (`python tests/harness-db/test-delegation-score.py`,
 `python tests/harvest/test-ait-harvest.py`) and the check scripts
 (`pwsh -NoProfile -File scripts/check-pre-commit.ps1`, `scripts/check-pre-push.ps1`;
-their `.sh` twins refuse Windows by their OS guard). The Windows CI job's last step
+their `.sh` twins refuse Windows by their OS guard). Since PR #167 their only Git
+Bash call is `check-pre-push.ps1` step 7, which runs `build-deploy.sh`. The Windows CI job's last step
 runs one more check the same way, `scripts/check-script-compliance.ps1` (PR #160).
 
 From Claude Code:
@@ -464,9 +468,9 @@ Each was seen in aitools on Windows. The ones marked "probe" were re-checked on
    stubs, call Windows tools by their full path.
 2. **`bash` means different programs.** In a native pwsh, `bash` is the WSL
    launcher (`%LOCALAPPDATA%\Microsoft\WindowsApps\bash.exe`); in a pwsh started
-   from Git Bash, Git's `usr\bin\bash.exe` comes first (probe). The check
-   scripts use `ResolveGitBash` (`scripts/check-lib.ps1`) for this reason
-   (v0.77.2).
+   from Git Bash, Git's `usr\bin\bash.exe` comes first (probe). For this reason
+   the check scripts find Git Bash with `ResolveGitBash` (`scripts/check-lib.ps1`,
+   v0.77.2); since PR #167 only `check-pre-push.ps1` step 7 calls it.
 3. **NTFS permissions.** `chmod 000` on a file makes an append fail with
    "Permission denied", as on Linux. `chmod 000` on a directory blocks neither
    `cd` into it nor creating a file in it (probe). Mission M6-F saw the
@@ -508,8 +512,8 @@ Each was seen in aitools on Windows. The ones marked "probe" were re-checked on
 
 ### What CI runs on Windows today
 
-The windows job of `.github/workflows/check.yml` on main at 5f962b1 has 46
-test-suite steps, one suite each, so 46 suites: 10 `.ps1` suites run with
+The windows job of `.github/workflows/check.yml` on main at 8bf15d9 has 48
+test-suite steps, one suite each, so 48 suites: 12 `.ps1` suites run with
 `pwsh -NoProfile -File`, 2 Python suites, and 34 `.sh` suites run with
 `shell: bash` (Git Bash). Steps that run no suite file: one tests inline in pwsh
 ("Profile resolver (PowerShell, native machine id and hostname)"), the last runs

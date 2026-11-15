@@ -472,7 +472,7 @@ section travels with the skill).
   `.sh` checks refuse Windows). Tests on Windows: the `.ps1` suites, and
   `.sh` suites only for scripts explicitly marked cross-platform
   (`reference/cross-platform-detail.md` "Running tests on Windows"). Known
-  pre-existing failures to record, not block on: none on main at 5f962b1.
+  pre-existing failures to record, not block on: none on main at 8bf15d9.
   The two listed before both passed on 2026-11-14: pre-commit step 6 (no
   tracked `.sh` is at mode 100644 any more) and pre-push step 7 (it rebuilds
   the dotprofile `deploy/` into a temp copy on every push but no longer

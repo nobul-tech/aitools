@@ -10,8 +10,9 @@ NOT check.yml, tests or the exemptions table (missions 38dc-13 and 38dc-23).
 NOT the merge result (in the hand-back: it comes after this file is committed).
 **Audience**: M6-Polish, the independent reviewer, the commander.
 
-Version 1.2, 2026-11-14 (v1.0 at 731cbf9; v1.1 applies the independent
-review, v1.2 its re-check, "Review" below). PR: https://github.com/nobul-tech/aitools/pull/159
+Version 1.3, 2026-11-14 (v1.0 at 731cbf9; v1.1 applies the independent
+review, v1.2 its re-check, "Review" below; v1.3 main after #167, "After
+#167"). PR: https://github.com/nobul-tech/aitools/pull/159
 (branch `docs/38dc-12-windows-test-practice`), on top of M6-Polish's merge
 commit 0a5a0ae (origin/main 5f962b1 into the branch).
 
@@ -154,6 +155,37 @@ qq($^V $^O)'` printed `v5.42.3 cygwin`; in the PowerShell tool `perl` is
 - C: "Git Bash PATH shadowing": "Git's bundled perl (v5.38.2) instead of the
   managed Strawberry Perl (v5.42.0)" -> the 2026-11-14 probe values, with
   v5.38.2 kept as the value when the text was first written.
+
+Second re-check on 4e7de11: APPROVE-equivalent, no blocking findings
+(https://github.com/nobul-tech/aitools/pull/159#issuecomment-6886768291).
+CI on 4e7de11: CI run 43659432705 and CodeQL green.
+
+## After #167 (v1.3)
+
+M6-Polish set the merge order #167 before #159. #167 merged as 8bf15d9
+(2026-11-15T01:12:32Z); merged into the branch with `--no-ff` (no conflict;
+RELEASE_NOTES v0.77.13 lands at the top, v0.77.6 stays between v0.77.7 and
+v0.77.5). Re-derived with `win-suites.pl` on the merged check.yml: 60 steps,
+48 run a suite, one each (`ps1=12, py=2, sh=34`); the 34 `.sh` suites and
+their groups are unchanged. Text changes (old -> new):
+
+1. `.ps1` suites: ten (5f962b1) -> twelve (8bf15d9): +
+   `tests/check-no-git-bash/test-check-no-git-bash.ps1`,
+   `tests/relay-outbound/test-relay-outbound.ps1` (both #167).
+2. CI paragraph: 46 suite steps, 10 `.ps1` (5f962b1) -> 48, 12 (8bf15d9).
+3. Exemptions paragraph: "On main (5f962b1) the table does not show that
+   answer yet ... mission 38dc-23 (PR #167, open) guards
+   `relay-outbound-prompt.sh/.ps1`" -> main shows the answer only for the relay
+   prompt (PR #167 guarded it and took it out of the exempt scripts); the
+   other rows unchanged on main (`git grep` on origin/main).
+4. Checks: + "Since PR #167 their only Git Bash call is `check-pre-push.ps1`
+   step 7, which runs `build-deploy.sh`" (`scripts/check-lib.ps1`
+   `ResolveGitBash` comment; #167's `tests/check-no-git-bash`).
+5. Issue 2: "The check scripts use `ResolveGitBash` ... (v0.77.2)" -> the same,
+   "since PR #167 only `check-pre-push.ps1` step 7 calls it".
+6. RELEASE_NOTES v0.77.6: twelve; 48 / 12 / 2 / 34 at 8bf15d9; the table
+   shows the answer only for the relay guards.
+7. `/delegate` "Checks": "none on main at 5f962b1" -> 8bf15d9 (re-run below).
 
 ## Checks and merge
 
