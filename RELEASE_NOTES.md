@@ -53,6 +53,27 @@ Not tagged. Branch `fix/m7-pywinpty-arm64`, mission M7-Pty under M7-Sweep (sessi
 
 ---
 
+## v0.77.18 -- A private account address redacted from tracked text files (2026-11-14)
+
+Not tagged. Branch `docs/m7-redact-email`, mission M7-Priv under M7-Sweep (session 87795dc3), item 7 of M7-Sweep. Commander, 2026-11-14: "25) launch mission go fix them, dont bother filing incidents, check to see if these were already fixed by the other running missions first, if not do it".
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 1 | The commander's secondary Google account address is replaced with `<secondary Google account>`, and its path-sanitized form (in `~/.claude/projects/` directory names) with `<secondary-Google-account>`, in the five tracked text files that held it: `.aitools/channel/handoffs/2026-10-21_360aa8f3-8-missions/S2-Layout/inventory2.txt` (2), `harvesting/2026-03-22_6_40agent-human-messages.md` (2), `harvesting/2026-03-29_session-fbf7decb-9_1bc9fd30-full.md` (7), `harvesting/2026-03-29_session-fbf7decb-9_f078fb16-session.md` (2) and `plans/user-repo-and-session-hooks.md` (1). No other byte changes. Four archives and git history still hold it: `harvesting/2026-10-29_session-ma-fci_main.tar`, `..._ma106_main.tar`, `..._ma106_merged.tar` and `..._mg108_tree.tar` (the two other archives of that date, `..._rccode_main.tar` and `..._rccode_pr106.tar`, hold no occurrence); nothing is rewritten |
+| 2 | Decision memo for the commander: every location of the address (files, lines, the commits that added it, the `.tar` members), what remains after this change, what a history rewrite and a `.tar` replacement would involve (GitHub's procedure quoted from docs.github.com), a recommendation, and counts of other personal data in tracked files (not edited) |
+
+### Files created
+
+| File | Purpose |
+|------|---------|
+| `.aitools/channel/handoffs/2026-11-14_87795dc3-missions/M7-Sweep/M7-Sweep-email-memo.md` | The decision memo (v1.1) |
+
+**Verified on:** Windows 11: after the change `git grep -I -i` with the scan pattern finds no tracked text file holding the address in either form; a character-level `git diff --word-diff` shows only the 14 replaced tokens; line counts and line endings of the five files unchanged. `scripts/ait-harvest.py` keys harvested files by name and records no content hash, so the three edited harvested files are not re-harvested.
+
+---
+
 ## v0.77.17 -- The menu rules state the EOF defaults the code takes (2026-11-14)
 
 Not tagged. Branch `docs/m7-eof-spec`, mission M7-Menus under M7-Sweep (session 87795dc3), item 4 of M7-Sweep. Commander, 2026-11-14 (RFI fa81-25): "launch mission go fix them, dont bother filing incidents, check to see if these were already fixed by the other running missions first, if not do it". No code change.
