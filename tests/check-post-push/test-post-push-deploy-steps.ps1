@@ -11,12 +11,12 @@
 # and executed as powershell scripts, git bash scripts cause known issues"):
 # this harness runs on Windows only and tests the .ps1 twin,
 # scripts/check-post-push.ps1, with native pwsh. It runs no .sh check section or
-# script; the .ps1 twin's own step 6 runs `bash -n` on the fixture .sh files
-# with the Git Bash it resolves (check-lib ResolveGitBash; here the same
-# function, from tests/lib/platform-lib.ps1). The .sh twin is tested on macOS
-# and Linux by tests/check-post-push/test-post-push-deploy-steps.sh, which
-# expects the same records on the same fixtures (so the two twins report alike)
-# and runs the same static cases.
+# script, and the .ps1 twin runs no Git Bash (PR #167): its step 6 (.sh) is a
+# SKIP that leaves `bash -n` to CI and check-post-push.sh, even when a Git Bash
+# is passed in as $bashExe. The .sh twin is tested on macOS and Linux by
+# tests/check-post-push/test-post-push-deploy-steps.sh, which expects the same
+# records for steps 2, 6 (.ps1) and 14 on the same fixtures and runs the same
+# static cases.
 #
 # Cases:
 #   static   perl over the text of both twins (perl is cross-platform; the .sh
@@ -29,14 +29,14 @@
 #            source scripts are clean and whose deploy/ holds a .sh with a
 #            syntax error, a .ps1 with a parse error and a CRLF .sh;
 #            scripts/build-deploy.sh only writes a marker. Exactly: SKIP 2 with
-#            the retired text, PASS 6 (.sh), PASS 6 (.ps1), PASS 14; no marker
+#            the retired text, SKIP 6 (.sh), PASS 6 (.ps1), PASS 14; no marker
 #   sources  the same steps on a fake repo with a syntax error in scripts/*.sh,
-#            a parse error in scripts/*.ps1 and a CRLF shared/hooks/*.sh: FAIL 6
+#            a parse error in scripts/*.ps1 and a CRLF shared/hooks/*.sh: SKIP 6
 #            (.sh), FAIL 6 (.ps1) and FAIL 14, one file each (the steps still
 #            audit the sources)
 #   home     the temporary HOME is unchanged (every file, by checksum)
-# Without Git for Windows the .ps1 twin reports SKIP 6 (.sh) "Git Bash not
-# found", and the frozen and sources cases expect that SKIP.
+# SKIP 6 (.sh) carries the .ps1 twin's text "bash -n runs in CI (linux, macos)
+# and check-post-push.sh, not on Windows" on both fake repos.
 #
 # Override the script under test with POST_PUSH_PS1 (the .ps1 twin) and
 # POST_PUSH_SH (read by the static case only), absolute paths, e.g. to show
@@ -172,15 +172,13 @@ $homeDir = Join-Path $tmpRoot "home"
 New-Item -ItemType Directory -Path $homeDir -Force | Out-Null
 WriteText (Join-Path $homeDir "sentinel") "keep`n"
 
-# Expected results (the .sh harness expects the same records). Without Git for
-# Windows the .ps1 twin's .sh audit is a SKIP.
-if ($gitBash) {
-    $shFrozen = "PASS 6 Full syntax (.sh)|"
-    $shSources = "FAIL 6 Full syntax (.sh)|1 file(s) failed"
-} else {
-    $shFrozen = "SKIP 6 Full syntax (.sh)|Git Bash not found"
-    $shSources = $shFrozen
-}
+# Expected results (the .sh harness expects the same records for steps 2,
+# 6 (.ps1) and 14). Step 6 (.sh) of the .ps1 twin runs no Git Bash since PR
+# #167 (commander, 2026-11-14: "id like to avoid calling git bash on thowse ps1
+# scripts"): it is a SKIP on both fake repos, even with Git Bash installed and
+# passed in as $bashExe.
+$shFrozen = "SKIP 6 Full syntax (.sh)|bash -n runs in CI (linux, macos) and check-post-push.sh, not on Windows"
+$shSources = $shFrozen
 Write-Expect (Join-Path $tmpRoot "exp-frozen-ps1") @(
     "SKIP 2 Smoke-test deploy scripts|$RETIRED",
     $shFrozen,
@@ -204,7 +202,7 @@ function StepFail { param($n, $name, $d) Rec "FAIL" $n $name $d }
 function StepWarn { param($n, $name, $d) Rec "WARN" $n $name $d }
 function StepSkip { param($n, $name, $d) Rec "SKIP" $n $name $d }
 function InvokeGit { $out = & git @args 2>$null; $out }
-# The Git Bash the .ps1 twin's step 6 runs bash -n with (check-lib ResolveGitBash)
+# A Git Bash offered to the step: since PR #167 step 6 must not use it
 function ResolveGitBash { $env:DEPLOY_STEPS_BASH }
 $bashExe = ResolveGitBash
 $script:RepoRoot = $env:DEPLOY_STEPS_REPO

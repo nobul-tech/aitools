@@ -139,7 +139,9 @@ try {
         }
     }
     Check "callers: no check-*.ps1 runs a bare bash or resolves it with Get-Command bash" ($offenders.Count -eq 0) ($offenders -join "; ")
-    $users = @("check-pre-commit.ps1", "check-pre-push.ps1", "check-post-push.ps1")
+    # Only check-pre-push step 7 (build-deploy.sh) runs Git Bash since 2026-11-14
+    # (tests/check-no-git-bash checks that no other check-*.ps1 does)
+    $users = @("check-pre-push.ps1")
     foreach ($u in $users) {
         $text = [IO.File]::ReadAllText((Join-Path $scripts $u))
         Check "callers: $u calls ResolveGitBash" ($text -match '(?m)=\s*ResolveGitBash\s*$')

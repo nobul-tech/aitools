@@ -12,8 +12,8 @@
 # only and tests the .sh twin, scripts/check-post-push.sh, with bash. The .ps1
 # twin is tested on Windows with native pwsh by
 # tests/check-post-push/test-post-push-deploy-steps.ps1, which expects the same
-# records on the same fixtures (so the two twins report alike) and runs the
-# same static cases.
+# records for steps 2, 6 (.ps1) and 14 (the .ps1 twin SKIPs 6 (.sh): no Git
+# Bash, PR #167) and runs the same static cases.
 #
 # Cases:
 #   frozen   steps 2, 6 and 14 of check-post-push.sh (cut between their "# N."
@@ -148,7 +148,7 @@ printf '#!/usr/bin/env bash\necho deploy\n' > "$SOURCES/deploy/ok.sh"
 mkdir -p "$TMP_ROOT/home"
 printf 'keep\n' > "$TMP_ROOT/home/sentinel"
 
-# Expected results (the .ps1 harness expects the same records). The .sh twin's
+# Expected results (the .ps1 harness expects the same, except SKIP 6 (.sh)). The .sh twin's
 # .ps1 audit is the stub SKIP when pwsh is not installed.
 if [ "$SH_PWSH" = 1 ]; then
     SH_PS1_FROZEN="PASS 6 Full syntax (.ps1)|"
