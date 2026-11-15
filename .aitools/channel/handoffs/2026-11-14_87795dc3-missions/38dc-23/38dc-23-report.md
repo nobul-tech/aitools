@@ -9,7 +9,8 @@ open question. **Scope**: This mission's branch
 the `grep -q` pipefail race (38dc-24), or `build-deploy.sh` itself.
 **Audience**: The commander; M6-Polish (orchestrator, id ends 38dc).
 
-v1.1, 2026-11-14. Author: 38dc-23 (delegated by M6-Polish, session 87795dc3).
+v1.2, 2026-11-14. Author: 38dc-23 (delegated by M6-Polish, session 87795dc3).
+v1.2: shipped (section 11).
 v1.1: the independent review's blocking finding (the `.ps1` guard does not
 end a dot-sourcing caller) and its non-blocking findings are resolved (section
 10); the counts and the mutation results are updated.
@@ -181,3 +182,17 @@ Review: https://github.com/nobul-tech/aitools/pull/167#issuecomment-6886680027
 | 7: 126 scripts, not 125 | Corrected |
 | 8: `test-relay-outbound.ps1` runs Git Bash to prove the `.sh` refuses Windows | Kept: it is the `tests/os-guards` pattern (a `.ps1` suite runs only the product script under test in Git Bash); recorded for the #159 test-practice doc |
 | 9: overlap with PR #166 (check.yml, cross-platform.md/.mdc, test-resolve-git-bash.ps1) | Recorded in the PR follow-ups; whichever merges second keeps both sides |
+
+## 11. Shipping
+
+- PR: https://github.com/nobul-tech/aitools/pull/167 (head 267aefcb0ec4753585ade85e3d48bebd63ddb4d7).
+- CI on the head: run 43659348367; linux, macos and windows success;
+  CodeQL success; mergeStateStatus CLEAN.
+- Reviews: https://github.com/nobul-tech/aitools/pull/167#issuecomment-6886680027
+  (CHANGES NEEDED: 1 blocking) and the re-check
+  https://github.com/nobul-tech/aitools/pull/167#issuecomment-6887012598
+  (0 blocking).
+- Merged with a merge commit: 8bf15d9fd90af715d93db5662976f24b938660c8, on
+  top of origin/main 5f962b1, which did not move during the mission.
+- Main CI on the merge commit: run 43661984199 (CI), queued when this
+  version was written; the result is in the final report to the orchestrator.
