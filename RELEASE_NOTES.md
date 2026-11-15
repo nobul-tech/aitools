@@ -12,6 +12,38 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.77.25 -- No pipefail script, hook or test suite ends a pipeline in a reader that exits early; compliance step 7 fails on every such reader (2026-11-15)
+
+Not tagged. Branch `fix/fa81-02-tests-pipes`, mission fa81-02-tests-pipes (session 87795dc3). Commander, 2026-11-15: "24-2) sure 24-3) yes 27-1) yes the fallback should fail and it should be logged and work should stop right?"; RFI fa81-02-1 (the `head` sites are in `scripts/` and `shared/hooks/` too): "32) yes it should, and it should expand the scope of the tests to include this test case. do it in one PR".
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 1 | Medium | 136 pipelines under `pipefail` ended in a reader that stops before its input ends, so the writer could die of SIGPIPE (141) and the pipeline fail although the reader found its match: `grep -q` (81 sites in 16 test suites), `head` (40: 6 in suites, 30 in `scripts/`, 4 in `shared/hooks/`), perl `exit` in a `-n` loop (15: `aitools-lib.sh` 8, `build-deploy.sh` 2, `setup-user-config.sh` 1, the `test-lib` Git Bash driver 4). Fix forms, each reading to the end: `grep PATTERN >/dev/null`; `sed -n '1p'` / `'1,Np'`; perl `next if $done; if (/RE/) { print; $done = 1 }`, `END { exit($f ? 0 : 1) }` or `-0777`. Same output and status. On Git Bash, `seq 1 300000 \| head -n 1` exits 141 in 20 of 20 runs under `pipefail`; every fix form 0 of 20 |
+| 2 | High | `validate_ai_merge_output` (`aitools-lib.sh`): checks 2 (code fences) and 3 (refusal text) were `perl -ne 'exit 0 if /RE/; END { exit 1 }'`; perl runs `END` after `exit` and the `exit` inside `END` sets the status, so they never rejected anything. With the `END { exit($f ? 0 : 1) }` form they reject as `Test-AiMergeOutput` in `aitools-lib.ps1` does. On macOS and Linux an AI merge whose result has a line starting with three backticks is now rejected, as on Windows (RFI fa81-02-2). Check 1 reads its line with `perl -0777`; an empty first line is no longer "conversational" (the length check rejects empty output), as in the PS1 twin |
+| 3 | Low | `build-deploy.sh`: the payload-sha and `cursor.cli.model` checks passed an empty value (perl `-n` ran no line and exited 0); with `-0777` an empty value fails them |
+| 4 | Medium | `tests/os-guards/test-os-guards.ps1`: no fallback to Git for Windows' bundled perl. It runs `check-lib.ps1`'s Strawberry Perl PATH block, takes the perl on PATH, prints `perl: <path>`, and without perl writes one FAIL naming the tool and the fix and exits 1 before any case (cross-platform.md "Git Bash PATH shadowing": "no fallback to bundled versions"). `tests/profile/test-profile.ps1` keeps Git's perl on purpose: `aitools-json.pl` runs under Git Bash's perl in production (`build-deploy.sh`) |
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 5 | `check-script-compliance` step 7 fails on every early-exit reader -- `grep -q` / `-l` / `-L` / `-m` (and the long forms), `head`, perl `exit` / `last` outside `END` -- in `scripts/`, `scripts/githooks/`, `shared/hooks/` and now `tests/` (with `tests/lib/platform-lib.sh` and `tests/hooks/hook-test-lib.sh` as libraries), listing `file:line(reader)`. grep options are read word by word: `grep -- -q` and `grep -e -q` pass, `grep -q"a"` and `grep "-q" a` fail (PR #168 review note 4). The step 7 suite is excluded (it plants the bad forms) |
+| 6 | `tests/check-script-compliance/test-step7-grepq.sh`: a bad and a fixed case for each reader, in `scripts/` and `tests/` and a test library, the review-note edge cases, and case D running the sed and perl fix forms 20 times each (and the `head` race, info only) |
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 7 | `reference/script-standards-detail.md` "Pipelines into grep -q under pipefail": the readers table with a fix form for each, why `sed -n` for `head`, perl's `END`-after-`exit` rule, what is not affected, the widened step 7. The rule paragraph in `.claude/rules/script-standards.md` (and its Cursor twin) and post-push checklist step 23 name every reader |
+
+Left: `scripts/aitools` (no `pipefail`: the pipeline's status is the reader's) keeps 3 `grep -q`, 2 `head` and 1 perl `exit` reader.
+
+**Verified on:** Windows 11 (native pwsh 7.6, Git Bash 5.3): `bash -n` on every touched `.sh`; the pwsh parser on the two touched `.ps1`; `test-os-guards.ps1` 69/0 and its no-perl negative case; `test-lib.ps1` 201/0/1; the cross-platform suites `test-build-deploy-backup.sh` 24/0, `test-workflow-delegation-guard.sh` 74/0/1, `test-setup-pywinpty.sh` 31/0/2, `run-hook-tests.sh` (all four pass); hook smoke cases; `build-deploy.sh` under an isolated HOME into a copy of the dotprofile (25 generated scripts carry the library fixes); the step 7 scanner over the tree (no site) and a local emulation of its suite (59/0). macOS and Linux (bash 5 and `/bin/bash` 3.2): CI.
+
+---
+
 ## v0.77.24 -- The adversarial workflow-guard timing case gets the 250 ms hard limit on macOS (2026-11-15)
 
 Not tagged. Branch `fix/fa81-05-wdg-timing`, mission fa81-05-wdg under fa81-05-merge-queue (session 87795dc3). Commander, 2026-11-15, answering RFI fa81-55 (give the adversarial case the stress case's rule: WARN at 100 ms or more, FAIL only at the 250 ms hard limit): "55) yes".
