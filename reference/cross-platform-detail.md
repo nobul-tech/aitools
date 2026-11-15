@@ -357,11 +357,22 @@ So:
   The commander's examples: `build-deploy.sh` and all Perl and Python scripts.
   Such a script's tests run on Windows too: Python natively, a bash script in
   Git Bash, its Windows runtime.
-- Where the marks are recorded is not settled (open question to the commander,
-  2026-11-14). The unguarded scripts are listed in `.claude/rules/cross-platform.md`
-  "OS guard exemptions": hooks and the bash entry points are there because they
-  run in Git Bash on Windows. That table has no Perl or Python rows, and some of
-  its rows still say "pending approval" or "rationale unrecorded".
+- The marks are recorded in `.claude/rules/cross-platform.md` "OS guard
+  exemptions", the list of unguarded scripts (hooks and the bash entry points are
+  there because they run in Git Bash on Windows). RFI 38dc-7 (M6-Polish,
+  2026-11-14) put that table to the commander as the record of what is
+  explicitly cross-platform and asked him to approve or drop its unsettled rows.
+  He answered row by row, verbatim: "7) build-package.sh is approved,
+  relay-outbound.sh/.ps1 need os guards they are not exempt, the aitools
+  dependency needs to be resolved (how to resolve it and resolving it need to be
+  part of same mission), the aitools-json and validate should be recorded as
+  exempt for those reasons, [...]". On main (5f962b1) the table does not show
+  that answer yet: it has no Perl or Python rows, `build-package.sh` still reads
+  "(P-1, pending approval)", and the entry-point and helper-module rows still
+  read "rationale unrecorded, pending approval". Mission 38dc-13 (branch
+  `fix/38dc-13-windows-ci-ps1-only`, not merged) records the answer for
+  `build-package.sh` and the helper modules and adds a "Perl and Python scripts"
+  row; mission 38dc-23 guards `relay-outbound-prompt.sh/.ps1`.
 - On a Windows machine an agent tests with the `.ps1` suites, run as PowerShell
   scripts, plus the tests of explicitly cross-platform scripts. It does not run
   any other `.sh` suite through Git Bash, and does not fake `uname` to make a
@@ -372,11 +383,14 @@ So:
 
 ### How to run the tests
 
-The `.ps1` suites (every tracked `tests/*/test-*.ps1`, 2026-11-14):
+The `.ps1` suites (every tracked `tests/*/test-*.ps1` on main at 5f962b1, ten;
+the Windows CI job runs each of them):
 
 | Suite | Tests |
 |---|---|
 | `tests/aitools-entry/test-console-mode-guard.ps1` | `aitools.ps1` console input-mode guard |
+| `tests/aitools-entry/test-win-forwarder.ps1` | the bash entry point `scripts/aitools`, run in Git Bash, forwarding to `aitools.ps1` (arguments, exit codes, stdin, the dashboard call) |
+| `tests/bootstrap/test-bootstrap.ps1` | `bootstrap.ps1` under Windows PowerShell 5.1, launching the installer and `aitools.ps1` under pwsh 7 (stubs) |
 | `tests/check-lib/test-resolve-git-bash.ps1` | `ResolveGitBash` in `scripts/check-lib.ps1` |
 | `tests/logging/test-logging.ps1` | logging in `scripts/aitools-lib.ps1` |
 | `tests/managed-files/test-managed-files.ps1` | `Deploy-ManagedFile`, AI merge included |
@@ -394,7 +408,8 @@ pwsh -NoProfile -File tests/menus/test-menu-choice.ps1
 Also native on Windows: the Python suites (`python tests/harness-db/test-delegation-score.py`,
 `python tests/harvest/test-ait-harvest.py`) and the check scripts
 (`pwsh -NoProfile -File scripts/check-pre-commit.ps1`, `scripts/check-pre-push.ps1`;
-their `.sh` twins refuse Windows by their OS guard).
+their `.sh` twins refuse Windows by their OS guard). The Windows CI job's last step
+runs one more check the same way, `scripts/check-script-compliance.ps1` (PR #160).
 
 From Claude Code:
 
@@ -404,14 +419,14 @@ From Claude Code:
   output to a log in the session scratch directory (`.claude/rules/smoke-test-pattern.md`):
   `pwsh -NoProfile -File C:/Users/<you>/repos/aitools/tests/menus/test-menu-choice.ps1 > <scratch>/menus-ps1.log 2>&1`.
   This pwsh inherits Git Bash's PATH (issue 1 below).
-- Run the `.ps1` suites your change touches. The suites of hooks and of
-  `build-deploy.sh` (`tests/hooks/`, `tests/build-deploy/`, and
-  `tests/pywinpty/test-setup-pywinpty.sh`, which tests the MDM pin embed
-  through `build-deploy.sh`) test explicitly
-  cross-platform bash scripts (the hooks: "many .sh files are meant to run on
-  linux/mac AND windows, notably the hooks", commander, 2026-11-01,
-  `plans/ci-platform-targeting.md`) and may run in Git Bash:
-  `bash <absolute path>`.
+- Run the `.ps1` suites your change touches. The suites of hooks, of
+  `build-deploy.sh` and of `build-package.sh` (`tests/hooks/`,
+  `tests/build-deploy/`, `tests/pywinpty/test-setup-pywinpty.sh`, which tests
+  the MDM pin embed through `build-deploy.sh`, and `tests/build-package/`) test
+  explicitly cross-platform bash scripts (the hooks: "many .sh files are meant
+  to run on linux/mac AND windows, notably the hooks", commander, 2026-11-01,
+  `plans/ci-platform-targeting.md`; `build-package.sh`: "build-package.sh is
+  approved", RFI 38dc-7 above) and may run in Git Bash: `bash <absolute path>`.
   A suite of `.ps1` code that has only a `.sh` driver (the drivers in "What CI
   runs on Windows today" below) is not run locally: the Windows CI job runs it
   on the pushed branch, and the report lists it under "Not run".
@@ -480,16 +495,18 @@ Each was seen in aitools on Windows. The ones marked "probe" were re-checked on
 
 ### What CI runs on Windows today
 
-The windows job of `.github/workflows/check.yml` on 2026-11-14 (origin/main
-2ee68d9) has 42 test-suite steps: 8 `.ps1` suites run with `pwsh -NoProfile
--File`, 2 Python suites, and 32 `.sh` suites run with `shell: bash` (Git Bash).
-One more step tests inline in pwsh ("Profile resolver (PowerShell, native
-machine id and hostname)"). The 32 `.sh` suites:
+The windows job of `.github/workflows/check.yml` on main at 5f962b1 has 46
+test-suite steps, one suite each, so 46 suites: 10 `.ps1` suites run with
+`pwsh -NoProfile -File`, 2 Python suites, and 34 `.sh` suites run with
+`shell: bash` (Git Bash). Steps that run no suite file: one tests inline in pwsh
+("Profile resolver (PowerShell, native machine id and hostname)"), the last runs
+the check `scripts/check-script-compliance.ps1`, and the others set up the
+runner, check syntax, or build `deploy/`. The 34 `.sh` suites:
 
 | Group | `.sh` suites | What runs in Git Bash |
 |---|---|---|
-| `.sh` twins of a `.ps1` suite (4) | `tests/logging/test-logging.sh`, `tests/managed-files/test-managed-files.sh`, `tests/managed-files/test-adopt-push.sh`, `tests/menus/test-menu-choice.sh` | `scripts/aitools-lib.sh`. The suites have no OS guard, because the library is an exempt shared library that does run in Git Bash on Windows: the bash entry point `scripts/aitools` sources it and uses, for example, `read_menu_choice` and `read_tty_choice` in `aitools user init`. |
-| `.sh` drivers of `.ps1` code (18) | `tests/b8-consumers/`, `tests/claude-mdm/`, `tests/hookin/`, the five `tests/profile/` suites, `tests/fanout-lib/`, `tests/rules-fanout/`, `tests/rules-fanout-cursor/`, `tests/skills-fanout/`, `tests/skills-legacy/`, `tests/deploy-harness/`, `tests/deploy-harness-mdm/`, `tests/check-pre-push/test-pre-push-step7.sh`, `tests/check-post-push/test-post-push-step7.sh`, `tests/check-post-push/test-menu-parity.sh` | A bash driver that runs the `.ps1` under test in native pwsh; the suites with a `golden/` directory compare the result with the golden files (`tests/lib/platform-lib.sh`, `plans/ci-platform-targeting.md`). Some also run bash code in Git Bash: `tests/check-post-push/test-post-push-step7.sh` and `tests/check-post-push/test-menu-parity.sh` cut a step out of the POSIX-guarded `scripts/check-post-push.sh` and run it in bash (the cut skips the guard); `tests/claude-mdm/`, `tests/deploy-harness-mdm/` and `tests/skills-legacy/` run `build-deploy.sh`; `tests/profile/test-lib.sh` covers the Git Bash pwsh branch of `scripts/aitools-lib.sh`, and `tests/hookin/test-hookin.sh` the Windows branch of `scripts/aitools`. |
+| `.sh` twins of a `.ps1` suite (4) | `tests/logging/test-logging.sh`, `tests/managed-files/test-managed-files.sh`, `tests/managed-files/test-adopt-push.sh`, `tests/menus/test-menu-choice.sh` | `scripts/aitools-lib.sh`. The suites have no OS guard; the library is an exempt shared library. Until PR #162 the bash entry point `scripts/aitools` sourced it on Windows and used its menus (`read_menu_choice`, `read_tty_choice` in `aitools user init`). Since #162 `scripts/aitools` forwards every command to `aitools.ps1` before it sources the library, so `aitools` runs no library code on Windows, and the `scripts/aitools` cases of `tests/logging/test-logging.sh` run on macOS and Linux only. In Git Bash on Windows the library is still sourced by `aitools-install.sh` (before it forwards to `aitools-install.ps1`), `build-package.sh`, and a child of `build-deploy.sh` that runs `resolve_user_repo_path`. |
+| `.sh` drivers of `.ps1` code (20) | `tests/b8-consumers/`, `tests/claude-mdm/`, `tests/hookin/`, the five `tests/profile/` suites, `tests/fanout-lib/`, `tests/rules-fanout/`, `tests/rules-fanout-cursor/`, `tests/skills-fanout/`, `tests/skills-legacy/`, `tests/deploy-harness/`, `tests/deploy-harness-mdm/`, `tests/check-pre-push/test-pre-push-step7.sh`, `tests/check-pre-commit/test-pre-commit-steps3-10.sh`, `tests/check-post-push/test-post-push-step7.sh`, `tests/check-post-push/test-post-push-deploy-steps.sh`, `tests/check-post-push/test-menu-parity.sh` | A bash driver that runs the `.ps1` under test in native pwsh; the suites with a `golden/` directory compare the result with the golden files (`tests/lib/platform-lib.sh`, `plans/ci-platform-targeting.md`). Some also run bash code in Git Bash: `tests/check-pre-commit/test-pre-commit-steps3-10.sh` cuts steps out of the POSIX-guarded `scripts/check-pre-commit.sh`, and `tests/check-post-push/test-post-push-step7.sh`, `test-post-push-deploy-steps.sh` and `test-menu-parity.sh` out of the POSIX-guarded `scripts/check-post-push.sh`, and run them in bash (the cut skips the guard); `tests/claude-mdm/`, `tests/deploy-harness-mdm/` and `tests/skills-legacy/` run `build-deploy.sh`; `tests/profile/test-lib.sh` covers the Git Bash pwsh branch of `scripts/aitools-lib.sh`; `tests/hookin/test-hookin.sh` runs the Windows branch of `deploy_configs`, cut out of `scripts/aitools`, which since PR #162 is not reached when `scripts/aitools` runs on Windows (it forwards to `aitools.ps1` first). |
 | Bash code whose Windows runtime is Git Bash (10) | the six `tests/hooks/` suites, `tests/build-deploy/test-build-deploy-backup.sh`, `tests/build-package/test-cli.sh`, `tests/pywinpty/test-setup-pywinpty.sh` (the MDM pin embed, through `build-deploy.sh`), `tests/os-guards/test-os-guards.sh` (every POSIX-guarded `.sh` refuses Windows) | The scripts under test themselves. |
 
 The bash AI merge (`_invoke_ai_merge`, reached from the `[m]` choice of
@@ -497,7 +514,8 @@ The bash AI merge (`_invoke_ai_merge`, reached from the `[m]` choice of
 Its callers (`setup-user-claude.sh`, `setup-user-cursor.sh`, `setup-user-hooks.sh`,
 `setup-user-skills.sh`, `deploy-harness.sh`, and their generated dotprofile
 `deploy/` copies) carry the POSIX guard, and on Windows `scripts/aitools`
-dispatches the `.ps1` deploy scripts, whose merge is `Invoke-AiMerge`. On
+forwards to `aitools.ps1` (PR #162), which runs the `.ps1` deploy scripts, whose
+merge is `Invoke-AiMerge`. On
 Windows only the CI runs of `tests/menus/test-menu-choice.sh`,
 `tests/managed-files/test-managed-files.sh` and
 `tests/managed-files/test-adopt-push.sh` reach it.
