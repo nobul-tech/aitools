@@ -768,7 +768,8 @@ af14-09).
     38dc-25's SendMessage, `toolu_01DLwxSBqjArtfxYAdHAhjU3`). A run woken by
     the delegate's own background task has no `<tool-use-id>` (af14-01,
     af14-03, af14-06).
-- **A second hand-back is usually delivered, and was refused once.**
+- **A second hand-back (v1.0 counts: delivered 17 times, refused once; the
+  condition is in the next bullet).**
   Repeat SubagentHandback calls (the first hand-back not counted) were
   delivered 17 times: 13 after a background-task notification (M1-Ship 5,
   M3-Fixes 3, M6-A 4, M6-DE 1) and 4 after a SendMessage resume (M4-Winpty,
