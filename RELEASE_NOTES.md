@@ -40,6 +40,27 @@ Not tagged. Branch `docs/m7-precommit-sed`, mission M7-Ckl under M7-Sweep (sessi
 
 ---
 
+## v0.77.21 -- Incident #180: an orchestrator re-asked the commander an RFI he had already answered (2026-11-14)
+
+Not tagged. Branch `docs/38dc-28-rfi-repeat-rca`, mission 38dc-28 under M6-Polish (session 87795dc3). Commander, 2026-11-14: "launch a mission to 1) file this as incident 2) use the investigate skill and other skills to determine RCA of why you asked me when i had previously given answer." Documentation only; no harness behaviour changes.
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 1 | Incident #180 filed (`registries/incidents.json`, medium): M6-Polish relayed its delegate's RFI 38dc-19-1 to the commander as RFI 38dc-11 (Windows OS guards on `bootstrap.ps1` and `hh.ps1`), which his answer 1 ("ps1 on windows") had already decided; answers 5 and 7 had applied it to the same exemptions row. Root cause: the check-before-asking steps (CLAUDE.md "The process", prompt-turn checklist items 1 and 4) faded, and nothing records or enforces them. There is no ledger of the commander's answers, `/delegate` "Verifying what comes back" has no open-questions step, and no hook looks at RFI text. The same question had reached him earlier in RFI 38dc-7, and RFI 38dc-5 had the same shape |
+| 2 | GitHub issue #171 records the root cause, the timeline with transcript locations, the barrier analysis and the proposed preventive changes: prompt-turn checklist items 4-5, a `/delegate` open-questions step, a session RFI ledger, and an observe-mode Stop/SubagentStop RFI hook |
+
+### Files created
+
+| File | Purpose |
+|------|---------|
+| `.aitools/channel/handoffs/2026-11-14_87795dc3-missions/38dc-28/38dc-28-report.md` | The full RCA (v1.2): the commander's answers verbatim, timeline, 5 Whys, Swiss cheese analysis, other instances, preventive actions with a barrier replay |
+
+**Verified on:** Windows 11 (documentation only; `check-pre-commit.ps1` and `check-pre-push.ps1`).
+
+---
+
 ## v0.77.20 -- standing-order-guard keeps blocking when its log directory cannot be written (2026-11-14)
 
 Not tagged. Branch `fix/m7-sog-log-failsafe`, mission M7-Hook under M7-Sweep (session 87795dc3). Commander, 2026-11-14: "25) launch mission go fix them, dont bother filing incidents, check to see if these were already fixed by the other running missions first, if not do it".
