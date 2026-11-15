@@ -12,26 +12,6 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
-## v0.77.19 -- The pywinpty pin covers the Windows ARM64 (win_arm64) wheels (2026-11-14)
-
-Not tagged. Branch `fix/m7-pywinpty-arm64`, mission M7-Pty under M7-Sweep (session 87795dc3), item 9 of M7-Sweep. Commander, 2026-11-14, answering RFI fa81-21a ("No hashes for the Windows ARM (win_arm64) wheels ... Suggest: add the hashes when an ARM Windows machine appears"): "21a) add hashes".
-
-### Improvements
-
-| # | Change |
-|---|--------|
-| 1 | `scripts/requirements-pywinpty.txt` pins the sha256 of the 8 pywinpty 3.1.2 win_arm64 wheels (cp310, cp311, cp312, cp313, cp314, cp314t, cp315, cp315t) beside the 8 win_amd64 ones (16 hashes, was 8; the sdist stays unpinned), and its `# wheel-tags:` line lists the matching `cpXY[t]-win_arm64` tags, so `setup-pywinpty.ps1` installs on a Windows on ARM64 CPython instead of reporting WARN "no wheel for cp3XY-win_arm64". Every digest was read from the PyPI JSON API (https://pypi.org/pypi/pywinpty/3.1.2/json) in a browser on 2026-11-14 and compared with the pin digit by digit by script; the 8 win_amd64 hashes still match. No script changes: `setup-pywinpty.ps1` already accepted `win_arm64` tags and builds the interpreter tag from `sysconfig.get_platform()` (`win-arm64` on ARM64), and `build-deploy.sh` embeds the whole pin |
-
-### Documentation
-
-| # | Change |
-|---|--------|
-| 2 | `reference/evaluations/pywinpty-windows-2026-11-13.md` v1.4: the v1.4 changelog, section 6 "Pin coverage (v1.4)" (the 8 win_arm64 wheels, their sha256 and upload times, the comparison, what was and was not verified), unknown 5 (ARM64 runtime), the statements that said win_arm64 is not pinned |
-
-**Verified on:** Windows 11 x64 (pwsh 7.6, Git Bash 5.3.15): hashes from the PyPI JSON API read in a browser, 16 of 16 equal to the pin by script; `tests/pywinpty/test-setup-pywinpty.ps1` 54 passed, 0 failed, 0 skipped (a real cp314 win_amd64 install from the 16-hash pin, the MDM copy with the embedded pin, the uv-managed `--target` path); `tests/pywinpty/test-setup-pywinpty.sh` 31 passed, 0 failed, 2 skipped (the build embeds 16 hashes); a fake interpreter reporting `cp314-win_arm64` gets the hash-pinned pip command. **ARM64 not runtime-verified**: no ARM64 Windows machine; CI and the workstation are x64, so no win_arm64 wheel was downloaded, installed or imported.
-
----
-
 ## v0.77.20 -- standing-order-guard keeps blocking when its log directory cannot be written (2026-11-14)
 
 Not tagged. Branch `fix/m7-sog-log-failsafe`, mission M7-Hook under M7-Sweep (session 87795dc3). Commander, 2026-11-14: "25) launch mission go fix them, dont bother filing incidents, check to see if these were already fixed by the other running missions first, if not do it".
@@ -50,6 +30,26 @@ Not tagged. Branch `fix/m7-sog-log-failsafe`, mission M7-Hook under M7-Sweep (se
 | 3 | `tests/hooks/test-hooks-smoke.sh`: 14 new standing-order-guard cases. With `~/.aitools` a regular file: a clean command exits 0 with no output; `&&` exits 2 with the usual reason and no mkdir error. With a temp copy switched to observe (`MODE_AND` only): a writable log gets the `[WOULD-BLOCK]` line and exits 0; a log path that is a directory, and an uncreatable log directory, exit 0 with no output. In a temp git repo whose `.scratch/.current-session` names a session dir: a writable `events.jsonl` gets the `hook_fire` event; with `events.jsonl` a directory a clean command exits 0 with no output and `&&` exits 2 with stderr exactly the block message. Against the old hook 8 of them fail |
 
 **Verified on:** Windows 11 (Git Bash 5.3): hook-rollout pre-deploy verification before and after (`bash -n`; clean exit 0; `&&` exit 2) with a writable HOME, with `~/.aitools` a file (before: exit 1 and 1; after: 0 and 2) and with an observe copy whose log path is a directory or uncreatable (before: exit 1; after: 0); with `events.jsonl` a directory the old hook printed `line 78: ... events.jsonl: Is a directory` before the block message, the new one only the message; the whole `tests/hooks` suite before and after (smoke 44 -> 58 passed, the other suites unchanged). Linux and macOS (bash 5 and `/bin/bash` 3.2): CI.
+
+---
+
+## v0.77.19 -- The pywinpty pin covers the Windows ARM64 (win_arm64) wheels (2026-11-14)
+
+Not tagged. Branch `fix/m7-pywinpty-arm64`, mission M7-Pty under M7-Sweep (session 87795dc3), item 9 of M7-Sweep. Commander, 2026-11-14, answering RFI fa81-21a ("No hashes for the Windows ARM (win_arm64) wheels ... Suggest: add the hashes when an ARM Windows machine appears"): "21a) add hashes".
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 1 | `scripts/requirements-pywinpty.txt` pins the sha256 of the 8 pywinpty 3.1.2 win_arm64 wheels (cp310, cp311, cp312, cp313, cp314, cp314t, cp315, cp315t) beside the 8 win_amd64 ones (16 hashes, was 8; the sdist stays unpinned), and its `# wheel-tags:` line lists the matching `cpXY[t]-win_arm64` tags, so `setup-pywinpty.ps1` installs on a Windows on ARM64 CPython instead of reporting WARN "no wheel for cp3XY-win_arm64". Every digest was read from the PyPI JSON API (https://pypi.org/pypi/pywinpty/3.1.2/json) in a browser on 2026-11-14 and compared with the pin digit by digit by script; the 8 win_amd64 hashes still match. No script changes: `setup-pywinpty.ps1` already accepted `win_arm64` tags and builds the interpreter tag from `sysconfig.get_platform()` (`win-arm64` on ARM64), and `build-deploy.sh` embeds the whole pin |
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 2 | `reference/evaluations/pywinpty-windows-2026-11-13.md` v1.4: the v1.4 changelog, section 6 "Pin coverage (v1.4)" (the 8 win_arm64 wheels, their sha256 and upload times, the comparison, what was and was not verified), unknown 5 (ARM64 runtime), the statements that said win_arm64 is not pinned |
+
+**Verified on:** Windows 11 x64 (pwsh 7.6, Git Bash 5.3.15): hashes from the PyPI JSON API read in a browser, 16 of 16 equal to the pin by script; `tests/pywinpty/test-setup-pywinpty.ps1` 54 passed, 0 failed, 0 skipped (a real cp314 win_amd64 install from the 16-hash pin, the MDM copy with the embedded pin, the uv-managed `--target` path); `tests/pywinpty/test-setup-pywinpty.sh` 31 passed, 0 failed, 2 skipped (the build embeds 16 hashes); a fake interpreter reporting `cp314-win_arm64` gets the hash-pinned pip command. **ARM64 not runtime-verified**: no ARM64 Windows machine; CI and the workstation are x64, so no win_arm64 wheel was downloaded, installed or imported.
 
 ---
 
