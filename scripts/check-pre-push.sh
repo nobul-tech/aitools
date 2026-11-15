@@ -90,7 +90,7 @@ fi
 # 5. Release notes current
 # ---------------------------------------------------------------------------
 non_docs_push=$(echo "$PUSH_FILES" | grep -vE '\.(md|mdc)$' || true)
-rn_in_diff=$(echo "$PUSH_FILES" | grep -q 'RELEASE_NOTES.md' && echo "yes" || echo "no")
+rn_in_diff=$(echo "$PUSH_FILES" | grep 'RELEASE_NOTES.md' >/dev/null && echo "yes" || echo "no")
 if [ -z "$non_docs_push" ]; then
     step_skip "5" "Release notes current" "docs-only push"
 elif [ "$rn_in_diff" = "yes" ]; then
@@ -196,10 +196,10 @@ fs.writeFileSync(process.argv[2], JSON.stringify(c, null, 2) + "\n");
             done <<< "$d7_s_out"
             if [ "$d7_s_rc" -gt 1 ]; then
                 d7_smoke="$d7_smoke $d7_s(exit $d7_s_rc)"
-            elif printf '%s\n' "$d7_s_out" | grep -q 'resolver missing' || grep -q 'resolver missing' "$d7_sum"; then
+            elif printf '%s\n' "$d7_s_out" | grep 'resolver missing' >/dev/null || grep -q 'resolver missing' "$d7_sum"; then
                 d7_smoke="$d7_smoke $d7_s(resolver missing)"
             elif [ "$d7_s" = "setup-user-claude.sh" ] && [ -f "$d7_tmp/dot/profile.json" ] \
-                && ! printf '%s\n' "$d7_s_out" | grep -q 'Profile source: live'; then
+                && ! printf '%s\n' "$d7_s_out" | grep 'Profile source: live' >/dev/null; then
                 d7_smoke="$d7_smoke $d7_s(live profile not used)"
             fi
         done
@@ -219,7 +219,7 @@ fs.writeFileSync(process.argv[2], JSON.stringify(c, null, 2) + "\n");
             done <<< "$d7_s_out"
             if [ "$d7_s_rc" -gt 1 ]; then
                 d7_smoke="$d7_smoke endpoint:setup-user-claude.sh(exit $d7_s_rc)"
-            elif ! printf '%s\n' "$d7_s_out" | grep -q 'Profile source: embedded build-time snapshot'; then
+            elif ! printf '%s\n' "$d7_s_out" | grep 'Profile source: embedded build-time snapshot' >/dev/null; then
                 d7_smoke="$d7_smoke endpoint:setup-user-claude.sh(snapshot not used)"
             fi
         fi
