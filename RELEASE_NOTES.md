@@ -12,7 +12,7 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
-## v0.77.13 -- Claude Code ops reference reconciled: duplicate item numbers fixed, delegate probes answered, Windows shell and stale changelog facts corrected (2026-11-14)
+## v0.77.14 -- Claude Code ops reference reconciled: duplicate item numbers fixed, delegate probes answered, Windows shell and stale changelog facts corrected (2026-11-14)
 
 Not tagged. Branch `docs/38dc-25-tool-ops-registry`, mission 38dc-25 under M6-Polish (session 87795dc3). Commander, 2026-11-14, answering RFI 38dc-10: "yes, have that mission also update the /tool-registry and use its skill. find it resolve any and all conflicts it finds either directly or by running additional missions until all found issuess are resolved".
 
