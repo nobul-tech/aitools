@@ -18,6 +18,13 @@ dotprofile.
 Version 1.0, 2026-11-07, Session Commander f500b663-7. A version, not a
 draft (D-DEL5). Describes `main` at `ab3bc22`. Paths: `~` is `$HOME` on
 macOS/Linux and `%USERPROFILE%` on Windows; section 8 lists both forms.
+v1.1, 2026-11-15: warnings and errors named by the `aitools-lib` helpers of
+`@reference/logging.md` section 8 (legend below).
+
+Legend for the diagrams: `ERROR` is one error, recorded with `write_error`
+(WHAT the failed step, REASON why it failed); `WARN` is one warning
+(`write_warn`, or `log_warn`, which names the script). `OK`, `DETAIL` and
+`ACTION` rows are `write_summary` records.
 
 ## 1. At a glance
 
@@ -84,7 +91,7 @@ Every JSON writer follows `.claude/rules/config-file-safety.md`:
 ```
   read existing file
      |-- missing ............. start from {}
-     |-- invalid JSON ........ "corrupt": ERROR row, file untouched,
+     |-- invalid JSON ........ "corrupt": ERROR, file untouched,
      |                         unless --force (then rewritten, WARN)
      v
   merge ONLY the owned keys (everything else preserved, key order kept)
@@ -258,8 +265,9 @@ the two servers to `mcp.json`, is not recorded in the script or in
 ```
   profile.json cursor.cli  (dotprofile via the resolver)
      vimMode (bool, default false), model (default "auto")
-     resolver error -> merge SKIPPED (ERROR "not merged: dotprofile error"),
-                       never defaults written over the user's choices
+     resolver error -> merge SKIPPED (ERROR "not merged: dotprofile error",
+                       REASON the resolver's error line); never defaults
+                       written over the user's choices
      no dotprofile  -> defaults
         |
         v

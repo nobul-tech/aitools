@@ -25,6 +25,14 @@ draft (D-DEL5). Describes `main` at `ab3bc22` (PR #141: rules and skills
 from `shared/` only, R-8 / S-7). v1.1: reference and registry artifacts
 added (sections 1, 2, 6, 7, 8); commander order 2026-11-07 "update the md file
 you just created to also include reference and registry artifacts".
+v1.2, 2026-11-15: warnings and errors named by the `aitools-lib` helpers of
+`@reference/logging.md` section 8 (legend below).
+
+Legend for the diagrams: `ERROR` is one error, recorded with `write_error`
+(WHAT the failed step, REASON why it failed); `WARN` is one warning
+(`write_warn`, or `log_warn`, which names the script); `WARN + ACTION` is one
+`write_action` (one warning and one ACTION). `OK`, `DETAIL` and `ACTION`
+rows are `write_summary` records.
 
 ## 1. The three manifests at a glance
 
@@ -122,7 +130,7 @@ One planner and one writer serve both kinds: `harness_manifest_plan` and
                                               |   *.bak.*, hidden, nested-in-flat:
   (hooks: shared/hooks, then .claude/hooks;   |   skipped
    not part of either manifest)               |   same unit twice (case-insensitive):
-                                              |   first source wins, ERROR row
+                                              |   first source wins, one ERROR each
                                               v
                                       SEEN = winners   LISTED = sources that
                                       (kind, name,     were actually read this
@@ -185,13 +193,13 @@ Then, per action:
   ~/.aitools/<kind>/<name>      backup_file -> <name>.bak.TS   cp -R -> <name>.bak.<UTC>/
   exists?                       then rm                        diff -r -q (verified)
                                                                then rm -rf; keep newest 5
-                                failure: ERROR row, file kept  failure: ERROR row, dir kept,
+                                failure: ERROR, file kept      failure: ERROR, dir kept,
                                 (next run retries)             half copy removed (or renamed
                                                                <name>.bak.incomplete.<UTC>)
   [retire] only                 DETAIL row "retired: rules/<name>" / "retired: skills/<name>"
 
   finally   new manifest  ->  <manifest>.tmp  ->  mv  ->  <manifest>
-            (dry run: logged, nothing written; a directory at the path: ERROR row)
+            (dry run: logged, nothing written; a directory at the path: ERROR)
 ```
 
 The backups matter downstream: after a retirement the harness copy is gone,
@@ -229,7 +237,7 @@ line, or `header-bad`.
                                           skills: info log, no row (fallback owns it)
   manifest missing ...................... every entry fanned out, none retired,
                                           adopt not offered
-  manifest unreadable ................... ERROR row, every entry fanned out,
+  manifest unreadable ................... ERROR, every entry fanned out,
                                           none retired
   header-bad ............................ WARN + ACTION "Run aitools to rebuild ...",
                                           every entry fanned out, none retired
@@ -288,7 +296,7 @@ line, or `header-bad`.
      |                     (inside it, the tool would load the backup as a skill);
      |                     newest 5 kept
      |
-     +-- no ---> kept; WARN + one ACTION row
+     +-- no ---> kept; one WARN per copy, and one ACTION naming them all
                  "<Tool> still loads retired rules|skills in <dir>: <names>
                   -- delete them unless you wrote them"
 ```
@@ -324,7 +332,7 @@ line, or `header-bad`.
      |          every file must exist before any is deployed (else ERROR, exit 1)
      |       2. deploy_managed_file each -> ~/.claude/hooks/<file>   (chmod +x)
      |          adopt target: the shared/hooks (or scripts/) file, never the dotprofile
-     |          a dotprofile copy of a manifest hook: ignored, WARN row
+     |          a dotprofile copy of a manifest hook: ignored, WARN
      |       3. stale cleanup (HAND-MAINTAINED list STALE_HOOKS / $staleHooks):
      |          delete those files and their backups from ~/.claude/hooks
      |       4. settings.json merge (node; only the "hooks" key is managed):
