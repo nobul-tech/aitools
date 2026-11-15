@@ -487,7 +487,7 @@ done
 # newline) to "$_AITOOLS_EMBED_DIR/REL". REL is shell-quoted (printf %q).
 embed_file_bash() {
     local rel="$1" src="$2"
-    if perl -0777 -pe 's/\r\n/\n/g' "$src" | grep -qxF "$EMBED_EOF"; then
+    if perl -0777 -pe 's/\r\n/\n/g' "$src" | grep -xF "$EMBED_EOF" >/dev/null; then
         blog_error "Cannot embed $src: it contains the heredoc delimiter line $EMBED_EOF"
         exit 1
     fi

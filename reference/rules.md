@@ -33,6 +33,12 @@ references to the deleted `sources-of-truth.md` rule (its protected-file
 review gate is replaced by D-DEL5 review-after) and the deleted `/audit`
 skill (3cebd24); sections 3, 4, 7, 8 and 10 updated.
 
+v1.4 (2026-11-14, 38dc-11 for M6-Polish): the delegation rule ships as a
+shared rule, `shared/rules/delegation.md`, a byte-identical copy of the
+dotprofile `claude/rules/delegation.md` (commander, 2026-11-14: "it lives in
+dotprofile. make a copy and put it in shared/rule/delegation.md"); sections 4,
+5, 8 and 10 updated.
+
 v1.1 changes: R-2 superseded by R-6 (Cursor gets every rule minus retired);
 R-7 (skills deploy like rules); sections 5, 6.1 and 7 describe the fan-out
 as built by the FO batches; the Claude Code rule-loading facts are verified
@@ -73,8 +79,9 @@ architecture" (rules are "concise behavioral directives, ~40-100 lines";
 references are "implementation detail, unlimited length"; "one authoritative
 location per fact"); `@reference/framework-three-layer-governance.md`
 "Rule-skill governance" ("Rules govern and enforce process; skills implement
-it. Rules are always in context and contain trigger directives stating WHEN
-to invoke their corresponding skill.").
+it. Rules are always in context (governance rules carry no `paths:`
+frontmatter ...) and contain trigger directives stating WHEN to invoke their
+corresponding skill.").
 
 What a rule is not:
 
@@ -123,7 +130,8 @@ snapshots only drifted from their sources.
 Built from the approved exemplars: `@shared/rules/tool-lifecycle.md`,
 `@.claude/rules/frameworks.md`, `@.claude/rules/glossary.md`,
 `@shared/rules/scratch.md`, `@.claude/rules/hook-lifecycle.md`, and the user
-rule `delegation.md` (dotprofile `claude/rules/delegation.md`, deployed to
+rule `delegation.md` (aitools `shared/rules/delegation.md`, a copy of the
+dotprofile `claude/rules/delegation.md`, deployed to
 `~/.claude/rules/delegation.md`), which the mission names as the model of a
 user rule.
 
@@ -183,8 +191,8 @@ Scope modifiers compose with the base artifact `rule`
 | Scope | Where | What belongs there | Reaches Claude Code how |
 |-------|-------|--------------------|-------------------------|
 | project rule | `.claude/rules/*.md` in a repo | Conventions for that repo ("(this repo)") | Loaded by Claude Code from the repo directly; never deployed (R-8) |
-| shared rule | aitools `shared/rules/*.md` | Harness rules for every agent in every repo (`scratch.md`, `web-sources.md`) | deploy-harness -> `~/.aitools/rules` -> setup-user-claude fan-out (section 6) |
-| dotprofile rule | `<userRepoPath>/claude/rules/*.md` | The user's personal rules (`delegation.md`, `concurrent-agents.md`) | Not deployed by the harness (R-8); a rule meant for every repo goes in aitools `shared/rules/` |
+| shared rule | aitools `shared/rules/*.md` | Harness rules for every agent in every repo (`scratch.md`, `web-sources.md`, `delegation.md`) | deploy-harness -> `~/.aitools/rules` -> setup-user-claude fan-out (section 6) |
+| dotprofile rule | `<userRepoPath>/claude/rules/*.md` | The user's personal rules (`concurrent-agents.md`; `delegation.md` is also here, and its byte-identical copy in aitools `shared/rules/` is the one deployed, since 2026-11-14) | Not deployed by the harness (R-8); a rule meant for every repo goes in aitools `shared/rules/` |
 | user rule | `~/.claude/rules/*.md` | Deployed copy; active in every project on the machine | — (it is the target) |
 
 Cursor has its own scopes: project rules `.cursor/rules/*.mdc` (mirrors of
@@ -202,9 +210,13 @@ How the tools load rules:
   code.claude.com/docs/en/memory, verified with chrome-devtools on
   2026-10-27 against Claude Code 2.1.309 (`@reference/tool-ops-claude-code.md`
   item #28).
-- **Claude Code sub-agents** do not load project `.claude/rules/` or
-  `CLAUDE.md` (version dependency #5, issue #29423); delegation prompts must
-  carry the rules (user rule `delegation.md`, element 2).
+- **Claude Code sub-agents** may not receive every rule or `CLAUDE.md`:
+  at 2.1.325 general-purpose delegates launched with the Agent tool get the
+  CLAUDE.md files and the rules without `paths:` at launch and `paths:`
+  rules only after reading files, all from the session's working directory
+  (the main checkout), not the delegate's worktree; Explore, Plan and some
+  built-in types get less (version dependency #5, issue #29423). Delegation
+  prompts must carry the rules (user rule `delegation.md`, element 2).
 - **Cursor** loads `<dir>/.cursor/rules/**/*.mdc` for the workspace and every
   ancestor directory, so `~/.cursor/rules` reaches every workspace under
   `$HOME`; `.md` files are ignored and a `.mdc` needs frontmatter (header
@@ -325,8 +337,11 @@ project skills are `frameworks`, `glossary`, `governed-data` and
 2. Pick the scope (section 5). Repo conventions: project rule. Every agent in
    every repo: shared rule (`shared/rules/`). The user's own: dotprofile rule.
 3. Pick the file name: unique across `shared/rules`, `.claude/rules` and the
-   dotprofile `claude/rules` (a duplicate name is an ERROR on every
-   deploy-harness run, `@reference/harness.md` "Conflict handling"); not
+   dotprofile `claude/rules` (under R-1 a duplicate name was an ERROR on every
+   deploy-harness run, `@reference/harness.md` "Conflict handling"; since R-8
+   deploy-harness reads `shared/rules` only, so a duplicate is not a deploy
+   error but two copies to keep in step; the one deliberate duplicate is
+   `delegation.md`, commander 2026-11-14); not
    starting with `REPORT`, `SUMMARY`, `FINDINGS` or `ANALYSIS` if a delegate
    writes it (D-DEL1).
 4. Decide `paths:`. Without it the rule loads in every session, and under
@@ -388,4 +403,4 @@ Carried:
   fan-out plan: `@plans/skills-and-rules-fanout.md`
 - Skills: `@reference/skills.md`
 - Cursor: `@reference/cursor-practices.md`; `scripts/setup-user-cursor.sh` / `.ps1`
-- Model user rule: dotprofile `claude/rules/delegation.md`
+- Model user rule: `shared/rules/delegation.md` (copy of the dotprofile `claude/rules/delegation.md`)

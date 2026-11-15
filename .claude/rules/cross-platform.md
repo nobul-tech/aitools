@@ -102,6 +102,15 @@ esac
 ```
 
 Guards MUST use structured logging. Source `init-logging` before the guard.
+A script that runs with no aitools-lib beside it (`bootstrap.sh`, run from
+curl; `hh.sh`, installed alone as `~/.local/bin/hh`) cannot: its guard prints
+the structured line itself, to stderr:
+`printf '[%s] [<name>] [error] This script is for macOS/Linux. ...\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >&2`.
+So does a file sourced into another script (`relay-outbound-prompt.sh/.ps1`):
+loading init-logging there would re-initialize the caller's log. A sourced
+`.sh` guard returns 1 instead of exiting
+(`[ "${BASH_SOURCE[0]}" = "$0" ] || return 1`, then `exit 1`), so the refusal
+does not end the caller's shell.
 
 ### OS guard exemptions
 
@@ -113,10 +122,9 @@ Guards MUST use structured logging. Source `init-logging` before the guard.
 | Shell alias modules | `shared/shell/aliases.sh/.ps1` | Sourced into shell profiles |
 | Build scripts | `build-deploy.sh`, `build-package.sh` (P-1, pending approval) | Bash-only builders, run in Git Bash on Windows; see cross-language exceptions |
 | Scratch/test files | `.scratch/*.sh` | Temporary, not deployed |
-| Entry points sourced or run on any platform (rationale unrecorded, pending approval) | `bootstrap.sh/.ps1`, `hh.sh/.ps1`, `relay-outbound-prompt.sh/.ps1`, `init-hh-hooks.sh` | Bootstrap/shell helpers; each `.sh` also runs in Git Bash |
+| Entry points sourced or run on any platform (rationale unrecorded, pending approval) | `bootstrap.ps1`, `hh.ps1` | Bootstrap/shell helpers: `bootstrap.ps1` and `hh.ps1` are the Windows entry points (no guard yet). `bootstrap.sh`, `hh.sh`, `init-hh-hooks.sh` and `analyze-session.sh` carry the POSIX guard since 2026-11-14 (commander: "add an OS guard to all of them"); `relay-outbound-prompt.sh` the POSIX guard and `relay-outbound-prompt.ps1` the Windows guard (commander, 2026-11-14: "relay-outbound.sh/.ps1 need os guards they are not exempt") |
 | Helper modules (rationale unrecorded, pending approval) | `aitools-json.ps1`, `_validate-ps1.ps1` | Dot-sourced / called by other scripts, never a setup entry point |
-| Analysis tools (rationale unrecorded, pending approval) | `analyze-session.sh` | Read-only session analysis |
-| Entry points with Windows branches (2026-11-01, review-after) | `aitools-install.sh`, `aitools`, `scripts/githooks/pre-commit` | Run on every platform: on Windows (Git Bash) `aitools-install.sh` forwards to `aitools-install.ps1`, `aitools` (the extensionless bash entry point) dispatches the `.ps1` setup scripts, the git hook runs in Git Bash |
+| Entry points with Windows branches (2026-11-01, review-after; `aitools` reason 2026-11-14) | `aitools-install.sh`, `aitools`, `scripts/githooks/pre-commit` | Run on every platform: on Windows (Git Bash) `aitools-install.sh` forwards to `aitools-install.ps1`, `aitools` (the extensionless bash entry point) forwards to `aitools.ps1` (`pwsh -File`) before its library loads, so no bash library code runs on Windows (commander, 2026-11-14, RFI 38dc-3), the git hook runs in Git Bash |
 | Package launchers (2026-11-01, review-after) | `packaging/macos/*`, `packaging/linux/*`, `packaging/windows/*.ps1` | Run by the package installer on its one platform (design: `@plans/build-package/design.md`) |
 
 `tests/os-guards/test-os-guards.sh` enforces this table: on macOS and Linux
@@ -148,12 +156,13 @@ ask the user, get approval, document the exception.
 | Script | Why | Approved | Invocation |
 |--------|-----|----------|------------|
 | `build-deploy.sh` | Platform-independent output, result committed | 2026-02-17 | `& $bashExe "$path/build-deploy.sh"` |
+| Shared check helpers called from `check-*.ps1`: python `scripts/check-path-refs.py`, `check-skill-levels.py`, `check-hook-parity.py`; perl `scripts/check-menu-parity.pl` and the perl one-liners of the check steps | One implementation per check for both twins (no regex or sort-order drift between bash and PowerShell); perl and python are managed tools on every platform. A check step whose interpreter is missing reports SKIP or FAIL, never PASS | 2026-11-14 (commander, RFI fa81-16) | `& $python <script> ...` / `& perl <script> ...` |
 
 #### Unrecorded (in the code, approval pending)
 
 | Script | Why | Approved | Invocation |
 |--------|-----|----------|------------|
-| `check-pre-commit.ps1`, `check-post-push.ps1`, `check-pre-push.ps1` → Git Bash | They check `.sh` files (`bash -n`), the bash entry point's `--version`, and the bash-only `build-deploy.sh` | unrecorded (needs approval) | `& $bashExe ...` |
+| `check-pre-push.ps1` step 7 → Git Bash | Runs the bash-only `build-deploy.sh` (the approved row above) into a temporary dotprofile copy, then dry-runs the generated `.ps1` resolver consumers: the only check of the real dotprofile build from Windows. Since 2026-11-14 no other `check-*.ps1` runs Git Bash (commander: "id like to avoid calling git bash on thowse ps1 scripts"): pre-commit step 2 and post-push step 6 leave `bash -n` to CI and the `.sh` twins, post-push step 4 runs `aitools.ps1 --version` with pwsh (`tests/check-no-git-bash`) | pending (RFI 38dc-23-1) | `& $d7Bash "$script:RepoRoot/scripts/build-deploy.sh"` |
 
 ### PowerShell 7 baseline
 

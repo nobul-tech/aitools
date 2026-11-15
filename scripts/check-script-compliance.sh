@@ -2,8 +2,10 @@
 # check-script-compliance.sh -- Verify setup scripts follow script-standards.md
 # Usage: bash scripts/check-script-compliance.sh
 # Checks: log format, exit footers, write_summary coverage, counter tracking,
-#          raw echo/Write-Host, grep pipefail safety, OS guards, logging init,
-#          cross-platform pairing, SilentlyContinue result checks, summary categories.
+#          raw echo/Write-Host, grep pipefail safety (FAIL: a pipeline that ends
+#          in grep -q in a pipefail bash file; WARN: other pipeline greps without
+#          || true in setup scripts), OS guards, logging init, cross-platform
+#          pairing, SilentlyContinue result checks, summary categories.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -100,15 +102,15 @@ for f in "${SH_SCRIPTS[@]}"; do
         start=$((lineno > 10 ? lineno - 10 : 1))
         context=$(sed -n "${start},${lineno}p" "$f")
         # Skip if write_summary is present
-        if echo "$context" | grep -q 'write_summary' 2>/dev/null; then continue; fi
+        if echo "$context" | grep 'write_summary' >/dev/null 2>/dev/null; then continue; fi
         # Skip if this is the main exit footer (ERRORS check)
-        if echo "$context" | grep -q 'ERRORS' 2>/dev/null; then continue; fi
+        if echo "$context" | grep 'ERRORS' >/dev/null 2>/dev/null; then continue; fi
         # Skip OS guard exits (fire before summary is available)
-        if echo "$context" | grep -q 'MINGW\|MSYS\|CYGWIN' 2>/dev/null; then continue; fi
+        if echo "$context" | grep 'MINGW\|MSYS\|CYGWIN' >/dev/null 2>/dev/null; then continue; fi
         # Skip Windows forwarding blocks
-        if echo "$context" | grep -q 'ps1_installer\|PowerShell\|ps_args\|cygpath' 2>/dev/null; then continue; fi
+        if echo "$context" | grep 'ps1_installer\|PowerShell\|ps_args\|cygpath' >/dev/null 2>/dev/null; then continue; fi
         # Skip log_error exits in script body (error is tracked by counter)
-        if echo "$context" | grep -q 'log_error' 2>/dev/null; then continue; fi
+        if echo "$context" | grep 'log_error' >/dev/null 2>/dev/null; then continue; fi
         step3_fail=$((step3_fail + 1))
         step3_details="${step3_details} $(basename "$f"):${lineno}"
     done <<< "$exit_lines"
@@ -123,7 +125,7 @@ fi
 # ---------------------------------------------------------------------------
 # 4. Error counter tracking -- log_error increments ERRORS in lib
 # ---------------------------------------------------------------------------
-if grep -A2 'log_error' scripts/aitools-lib.sh 2>/dev/null | grep -q 'ERRORS='; then
+if grep -A2 'log_error' scripts/aitools-lib.sh 2>/dev/null | grep 'ERRORS=' >/dev/null; then
     step_pass "4" "Error counter tracking (bash)" "log_error increments ERRORS"
 else
     step_fail "4" "Error counter tracking (bash)" "log_error does not increment ERRORS"
@@ -132,7 +134,7 @@ fi
 # ---------------------------------------------------------------------------
 # 5. Warning counter tracking -- log_warn increments WARNINGS in lib
 # ---------------------------------------------------------------------------
-if grep -A2 'log_warn' scripts/aitools-lib.sh 2>/dev/null | grep -q 'WARNINGS='; then
+if grep -A2 'log_warn' scripts/aitools-lib.sh 2>/dev/null | grep 'WARNINGS=' >/dev/null; then
     step_pass "5" "Warning counter tracking (bash)" "log_warn increments WARNINGS"
 else
     step_fail "5" "Warning counter tracking (bash)" "log_warn does not increment WARNINGS"
@@ -162,8 +164,72 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 7. Grep pipefail safety -- grep without || true in pipefail scripts
+# 7. Grep pipefail safety
+#    (a) FAIL: a pipeline that ends in grep -q (q in any short-option bundle:
+#        -q, -qi, -qxF ...; or --quiet / --silent) in a bash file that runs
+#        under pipefail. grep -q exits at its first match without reading the
+#        rest of its input; the writer then gets SIGPIPE (exit 141), or, where
+#        SIGPIPE is ignored (the GitHub linux runner), exits non-zero on the
+#        write error, and under pipefail the pipeline fails, so a condition such as
+#        "if writer, piped to grep -q P" can be false although P matched (CI
+#        runs 43640967140 and 43642017937; PR #164). The fix is the same grep
+#        without q, stdout to /dev/null (grep P >/dev/null): GNU grep then
+#        drains its input before it exits, BSD grep reads it to EOF.
+#        Scan set: scripts/*.sh, every file in scripts/githooks/,
+#        shared/hooks/*.sh. A file qualifies when a non-comment line runs set
+#        with pipefail (set -euo pipefail, set -o pipefail, set -e -o pipefail,
+#        any set -<letters>o pipefail), or it is a library that pipefail
+#        scripts source (scripts/aitools-lib.sh, check-lib.sh, init-logging.sh).
+#        A non-comment line is flagged wherever the pipeline sits: if / elif /
+#        while conditions, after !, inside $(...), before && or ||; also when
+#        other option words come first (grep -i -q) and when the line starts
+#        with the pipe (a continued pipeline). Not flagged: grep -q reading a
+#        file with no pipe in front, a grep after || or &&, comment lines.
+#        Blind spots (a line-based perl regex, not a shell parser): heredoc
+#        bodies and multi-line quoted strings are scanned as plain lines (a
+#        pipe to grep -q inside one is flagged); a pipe at the end of one line
+#        followed by grep -q at the start of the next line without a leading
+#        pipe is missed, and so are |&, egrep / fgrep, a grep behind another
+#        word (command grep, LC_ALL=C grep), -q after the pattern (grep P -q)
+#        and -q after an option that takes an argument (grep -e P -q).
+#        The pattern is written with character classes ([|]) so this file's
+#        own source never matches it. A perl failure is a FAIL "(scan failed)",
+#        never a silent pass.
+#    (b) When (a) finds no site, the step reports the heuristic below (its
+#        logic unchanged): a grep in a pipeline without || true in a pipefail
+#        setup script is a WARN.
 # ---------------------------------------------------------------------------
+step7_scan_ok=true
+step7_sites=""
+if ! step7_sites=$(perl -e '
+    use strict; use warnings;
+    my %lib = map { $_ => 1 } qw(scripts/aitools-lib.sh scripts/check-lib.sh scripts/init-logging.sh);
+    my $pf = qr/\bset[ \t]+(?:-[A-Za-z]+[ \t]+(?:[a-z]+[ \t]+)*)*-[A-Za-z]*o[ \t]+pipefail\b/;
+    my $gq = qr/(?<![|])[|](?![|])[ \t]*grep(?:[ \t]+-[^ \t]+)*?[ \t]+(?:-[A-Za-z0-9]*q[A-Za-z0-9]*|--quiet|--silent)(?![^ \t\r\n;&|)])/;
+    for my $f (@ARGV) {
+        next unless -f $f;
+        open(my $fh, "<", $f) or die "step 7: cannot read $f: $!\n";
+        my $on = $lib{$f} ? 1 : 0;
+        my @hits;
+        while (my $l = <$fh>) {
+            next if $l =~ /^[ \t]*#/;
+            $on = 1 if $l =~ $pf;
+            push @hits, "$f:$." if $l =~ $gq;
+        }
+        close($fh) or die "step 7: cannot close $f: $!\n";
+        print "$_\n" for ($on ? @hits : ());
+    }
+' scripts/*.sh scripts/githooks/* shared/hooks/*.sh); then
+    step7_scan_ok=false
+fi
+step7_n=0
+step7_list=""
+while IFS= read -r step7_site; do
+    [ -n "$step7_site" ] || continue
+    step7_n=$((step7_n + 1))
+    step7_list="${step7_list} ${step7_site}"
+done <<< "$step7_sites"
+
 step7_fail=0
 step7_details=""
 for f in "${SH_SCRIPTS[@]}"; do
@@ -183,7 +249,11 @@ for f in "${SH_SCRIPTS[@]}"; do
     fi
 done
 
-if [ "$step7_fail" -eq 0 ]; then
+if ! $step7_scan_ok; then
+    step_fail "7" "Grep pipefail safety" "grep -q pipeline scan (scan failed)"
+elif [ "$step7_n" -gt 0 ]; then
+    step_fail "7" "Grep pipefail safety" "${step7_n} pipeline(s) end in grep -q under pipefail:${step7_list}"
+elif [ "$step7_fail" -eq 0 ]; then
     step_pass "7" "Grep pipefail safety" "no unsafe grep pipelines"
 else
     step_warn "7" "Grep pipefail safety" "${step7_fail} potential issues:${step7_details}"
@@ -271,15 +341,15 @@ for f in "${PS1_SCRIPTS[@]}"; do
         [ "$check_end" -gt "$total_lines" ] && check_end=$total_lines
         nearby=$(sed -n "${check_start},${check_end}p" "$f")
         # Look for result checks: -not, if, .Count, .Length, null, catch
-        if echo "$nearby" | grep -qE '\-not|\bif\b|\.Count|\.Length|null|catch' 2>/dev/null; then
+        if echo "$nearby" | grep -E '\-not|\bif\b|\.Count|\.Length|null|catch' >/dev/null 2>/dev/null; then
             continue
         fi
         # Exempt: command-existence checks (Get-Command with explicit fallback)
         preceding_start=$((lineno > 3 ? lineno - 3 : 1))
         preceding=$(sed -n "${preceding_start},${lineno}p" "$f")
-        if echo "$preceding" | grep -q 'Get-Command' 2>/dev/null; then continue; fi
+        if echo "$preceding" | grep 'Get-Command' >/dev/null 2>/dev/null; then continue; fi
         # Also exempt if same line has a result check comment
-        if echo "$sc_line" | grep -q 'checked on' 2>/dev/null; then continue; fi
+        if echo "$sc_line" | grep 'checked on' >/dev/null 2>/dev/null; then continue; fi
         step11_fail=$((step11_fail + 1))
         step11_details="${step11_details} $(basename "$f"):${lineno}"
     done <<< "$sc_lines"
@@ -331,11 +401,11 @@ fi
 # ---------------------------------------------------------------------------
 step13_ok=true
 ws_body_sh=$(perl -0777 -ne 'print $1 if /^write_summary\(\)\s*\{(.*?)^\}/sm' scripts/aitools-lib.sh)
-if [ -z "$ws_body_sh" ] || ! printf '%s' "$ws_body_sh" | grep -q 'WARNINGS'; then
+if [ -z "$ws_body_sh" ] || ! printf '%s' "$ws_body_sh" | grep 'WARNINGS' >/dev/null; then
     step13_ok=false
 fi
 ws_body_ps1=$(perl -0777 -ne 'print $1 if /^function Write-Summary.*?\{(.*?)^\}/sm' scripts/aitools-lib.ps1)
-if [ -z "$ws_body_ps1" ] || ! printf '%s' "$ws_body_ps1" | grep -q 'warnings'; then
+if [ -z "$ws_body_ps1" ] || ! printf '%s' "$ws_body_ps1" | grep 'warnings' >/dev/null; then
     step13_ok=false
 fi
 

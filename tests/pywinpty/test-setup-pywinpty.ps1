@@ -19,7 +19,8 @@
 #      --upgrade, no --user, "<ver> (installed, --target)"; user site disabled, or
 #      inside prefix / base_prefix -> WARN "managed python, no user site" + ACTION,
 #      no pip call; an older pywinpty-*.dist-info in the target replaced and removed
-#      ("Removed stale"), and a locked one -> ERROR "stale dist-info not removed";
+#      ("Removed stale"), and a locked one -> ERROR "stale dist-info not removed",
+#      as is a target this user may not list (ListDirectory denied with icacls);
 #      pip refusing --user (externally-managed-environment) -> one --target retry
 #      (OK; refused again -> WARN; no user site -> WARN, no retry); managed dry run
 #      -> "Would run:" with --target, no pip call. Each with its summary rows.
@@ -350,6 +351,23 @@ exit 3
     $lock = [IO.File]::Open($lockFile, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::None)
     try { $c = Run-Fake "f-em-locked" @{ FAKE_PY_EM = "True" } } finally { $lock.Dispose() }
     Check "f fake externally managed, stale dist-info locked: exit 1, one row 'ERROR|pywinpty|stale dist-info not removed', one pip call" ((Rc $c) -eq "1" -and (@(Rows $c) -join "`n") -ceq "ERROR|pywinpty|stale dist-info not removed" -and (PipCalls "f-em-locked") -eq 1 -and (LogText $c).Contains("Could not remove stale "))
+
+    # 4c. the target exists but this user may not list it (ListDirectory denied): the
+    # stale dist-info cannot be found, so the run fails instead of skipping the removal
+    $us = FakeSite "f-em-unlistable"
+    New-Item -ItemType Directory -Path (Join-Path $us "pywinpty-3.1.1.dist-info") -Force | Out-Null
+    $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+    $denyOut = (& icacls $us /deny "*${sid}:(RD)" 2>&1 | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0) {
+        Skip "f fake externally managed, target not listable" "icacls /deny failed (exit $LASTEXITCODE): $denyOut"
+    } else {
+        try { $c = Run-Fake "f-em-unlistable" @{ FAKE_PY_EM = "True" } }
+        finally {
+            $undoOut = (& icacls $us /remove:d "*$sid" 2>&1 | Out-String).Trim()
+            if ($LASTEXITCODE -ne 0) { Write-Output "warning: icacls /remove:d on $us failed (exit $LASTEXITCODE): $undoOut" }
+        }
+        Check "f fake externally managed, target not listable: exit 1, one row 'ERROR|pywinpty|stale dist-info not removed', one pip call, log 'Could not list <target>'" ((Rc $c) -eq "1" -and (@(Rows $c) -join "`n") -ceq "ERROR|pywinpty|stale dist-info not removed" -and (PipCalls "f-em-unlistable") -eq 1 -and (LogText $c).Contains("Could not list $us for stale pywinpty dist-info: "))
+    }
 
     # 7. managed dry run: the --target command is shown, not run
     $us = FakeSite "f-em-dryrun"

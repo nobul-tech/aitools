@@ -2,9 +2,26 @@
 #
 # Dot-source then: Invoke-RelayOutboundPrompt -RepoPath $repo
 # Used by scripts/aitools.ps1 and hh.ps1
-# ASCII only: hh.ps1 may load this into Windows PowerShell 5.1, which reads a
-# file without a BOM as ANSI, where the UTF-8 bytes of an em dash include a
-# quote character. Non-ASCII output text is built with [char] codes.
+# ASCII only: aitools.ps1 (no version requirement) may load this into Windows
+# PowerShell 5.1 (hh.ps1 is PowerShell 7 only), which reads a file without a BOM
+# as ANSI, where the UTF-8 bytes of an em dash include a quote character.
+# Non-ASCII output text is built with [char] codes.
+# Platform: Windows (OS guard below). macOS/Linux: relay-outbound-prompt.sh,
+# loaded by scripts/aitools and hh.sh.
+
+# OS guard (.claude/rules/cross-platform.md "OS guard patterns"; commander,
+# 2026-11-14: "relay-outbound.sh/.ps1 need os guards they are not exempt").
+# This file is dot-sourced into aitools.ps1 and hh.ps1, so the guard writes the
+# structured line itself, to stderr (dot-sourcing init-logging.ps1 here would
+# re-initialize the caller's log). Dot-sourced, exit 1 ends only this file: the
+# caller goes on with $LASTEXITCODE 1 and neither function defined, so its call
+# to Invoke-RelayOutboundPrompt fails (hh.ps1 runs under ErrorActionPreference
+# Stop and ends there; aitools.ps1 has its own Windows guard). Windows
+# PowerShell 5.1 runs only on Windows.
+if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
+    [Console]::Error.WriteLine("[" + [DateTime]::UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", [Globalization.CultureInfo]::InvariantCulture) + "] [relay-outbound-prompt] [error] This script is for Windows. On macOS/Linux, use relay-outbound-prompt.sh.")
+    exit 1
+}
 
 function Invoke-RelayOutboundPrompt {
     param(
@@ -37,7 +54,7 @@ function Invoke-RelayOutboundPrompt {
 
     if (-not $dirty -and $ahead -le 0) { return 0 }
 
-    # [char] codes, not `e or literal UTF-8: hh.ps1 may load this into Windows PowerShell 5.1
+    # [char] codes, not `e or literal UTF-8: this file may be loaded into Windows PowerShell 5.1
     $esc = [char]27
     $dash = [char]0x2014   # em dash
     $ell = [char]0x2026    # horizontal ellipsis

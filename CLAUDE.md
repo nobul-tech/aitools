@@ -38,7 +38,9 @@ When you're uncertain, ask — and suggest an answer with the question.
 
 ## How the harness is organized
 
-- `.claude/rules/` — behavioral rules, always in context. Check them before assuming.
+- `.claude/rules/` — behavioral rules: those without `paths:` frontmatter are in
+  context from session start, those with `paths:` load once a matching file is
+  read. Check them before assuming.
 - `shared/` — source for user-level configs (skills, hooks, rules, claude-shared) that
   `aitools install` deploys to `~/.aitools/` (deploy-harness). setup-user-claude and
   setup-user-cursor then fan rules and skills out from `~/.aitools/` into `~/.claude/`
@@ -53,7 +55,10 @@ When you're uncertain, ask — and suggest an answer with the question.
   scripts (hooks, Python, the bash entry points) run on all three. sh/ps1 parity is
   checked against committed golden files (`tests/lib/platform-lib.sh`), and
   `tests/os-guards` proves every guard refuses the wrong platform
-  (`plans/ci-platform-targeting.md`). Run the suites your change touches before pushing.
+  (`plans/ci-platform-targeting.md`). Run the suites your change touches before pushing;
+  on Windows, the `.ps1` suites with `pwsh -NoProfile -File`, and `.sh` suites in Git
+  Bash only for scripts explicitly marked cross-platform (commander, 2026-11-14;
+  `reference/cross-platform-detail.md` "Running tests on Windows").
 - `deploy/` — the frozen, historical shared baseline (no longer regenerated; `aitools`
   resets it to HEAD before each pull). `build-deploy.sh` writes each user's
   personalized MDM scripts to the dotprofile's `deploy/` (`aitools-<user>/deploy/`).

@@ -1,5 +1,5 @@
-# test-logging.ps1 -- unit tests for the shared logging framework (scripts/aitools-lib.ps1)
-# and for the PowerShell entry point's use of it (scripts/aitools.ps1).
+# test-logging.ps1 -- unit tests for the shared logging framework (scripts/aitools-lib.ps1),
+# the check-lib.ps1 / aitools-profile.ps1 log writers, and the entry point (scripts/aitools.ps1).
 #
 # Safe to re-run: every case uses its own temp log dir, removed on exit.
 # Platform: Windows, macOS, Linux (pwsh 7). Entry-point run cases need Windows
@@ -136,6 +136,132 @@ try {
     $ndRc = $LASTEXITCODE
     $env:AITOOLS_LOG_DIR = $null
     Check "lib: log dir cannot be created -- Initialize-Logging and LogWarn go on" (($ndRc -eq 0) -and ($ndOut -match '\[warn\] still-here') -and ($ndOut -match 'COUNTS=0/1') -and -not ($ndOut -match 'Exception|New-Item'))
+
+    # -----------------------------------------------------------------------
+    # scripts/check-lib.ps1 -- checks.log / checks.jsonl writers (incident #174)
+    # -----------------------------------------------------------------------
+    # Under $ErrorActionPreference = "Stop" and inside a try: a checks.log /
+    # checks.jsonl that cannot be written (a directory, a lock held by another
+    # process, a log dir that cannot be created) ends nothing, every step line
+    # still prints and every step counter still counts. A writable pair still gets
+    # every line, and the check lines never land in deploy.log (Write-CheckLogText
+    # points Add-AitLibLogText at the check file for one call only).
+    $checkLib = Join-Path $root "scripts" "check-lib.ps1"
+    $checkChild = Join-Path $tmpRoot "checklib-child.ps1"
+    [IO.File]::WriteAllText($checkChild, @'
+param([string]$CheckLib)
+. $CheckLib
+$ErrorActionPreference = "Stop"
+try {
+    CheckLogInit "probe"
+    StepPass "1" "pass-step"
+    StepFail "2" "fail-step" 'a "quoted" detail'
+    StepWarn "3" "warn-step"
+    StepSkip "4" "skip-step"
+    PrintSummary
+    Write-Output "COUNTS=$($script:PassCount)/$($script:FailCount)/$($script:WarnCount)/$($script:SkipCount)"
+    Write-Output "LOGFILE=$($script:logFile)"
+    Write-Output "REACHED-END"
+} catch { Write-Output "CAUGHT: $($_.Exception.Message)" }
+'@)
+    # Invoke-CheckLibCase LOGDIR [-Lock] -- @{ Out; Rc }; -Lock holds checks.log and
+    # checks.jsonl open with no sharing while the child runs
+    function Invoke-CheckLibCase([string]$LogDir, [switch]$Lock) {
+        $handles = @()
+        if ($Lock) {
+            foreach ($n in "checks.log", "checks.jsonl") { $handles += [IO.File]::Open((Join-Path $LogDir $n), 'Open', 'ReadWrite', 'None') }
+        }
+        $env:AITOOLS_LOG_DIR = $LogDir
+        try {
+            $o = & pwsh -NoProfile -NonInteractive -File $checkChild -CheckLib $checkLib *>&1 | Out-String
+            $c = $LASTEXITCODE
+        } finally {
+            foreach ($h in $handles) { $h.Dispose() }
+            $env:AITOOLS_LOG_DIR = $null
+        }
+        return @{ Out = $o; Rc = $c }
+    }
+    function Test-CheckLibRun([string]$What, [hashtable]$R) {
+        Check "check-lib: $What -- Stop run goes on (exit 0, no catch)" (($R.Rc -eq 0) -and ($R.Out -match 'REACHED-END') -and -not ($R.Out -match 'CAUGHT|Exception|Add-Content|being used by another process'))
+        Check "check-lib: $What -- step lines still printed" (($R.Out -match 'pass-step\s+\[PASS\]') -and ($R.Out -match 'fail-step\s+\[FAIL\]') -and ($R.Out -match 'warn-step\s+\[WARN\]') -and ($R.Out -match 'skip-step\s+\[SKIP\]') -and ($R.Out -match 'SUMMARY: 1 PASS, 1 SKIP, 1 WARN, 1 FAIL'))
+        Check "check-lib: $What -- step counters still count" ($R.Out -match 'COUNTS=1/1/1/1')
+    }
+
+    # Writable
+    $cwDir = Join-Path $tmpRoot "checks-written" "logs"
+    $r = Invoke-CheckLibCase $cwDir
+    Test-CheckLibRun "writable" $r
+    $cwLog = if (Test-Path (Join-Path $cwDir "checks.log")) { [IO.File]::ReadAllText((Join-Path $cwDir "checks.log")) } else { "" }
+    $cwLines = @($cwLog -split "`r?`n" | Where-Object { $_ -match 'RUN START|pass-step|fail-step.*a "quoted" detail|warn-step|skip-step|=== SUMMARY: 1 PASS, 1 SKIP, 1 WARN, 1 FAIL' })
+    Check "check-lib: writable -- checks.log has run start, the 4 steps and the summary" ($cwLines.Count -eq 6)
+    $cwJson = if (Test-Path (Join-Path $cwDir "checks.jsonl")) { @([IO.File]::ReadAllLines((Join-Path $cwDir "checks.jsonl")) | Where-Object { $_ }) } else { @() }
+    $cwBad = 0
+    foreach ($l in $cwJson) { try { $null = $l | ConvertFrom-Json -ErrorAction Stop } catch { $cwBad++ } }
+    Check "check-lib: writable -- checks.jsonl has 6 records, each valid JSON" (($cwJson.Count -eq 6) -and ($cwBad -eq 0))
+    $cwDeploy = if (Test-Path (Join-Path $cwDir "deploy.log")) { [IO.File]::ReadAllText((Join-Path $cwDir "deploy.log")) } else { "" }
+    Check "check-lib: writable -- no check line in deploy.log, the bridged log file is still deploy.log" ((-not ($cwDeploy -match 'pass-step|RUN START')) -and ($r.Out -match 'LOGFILE=.*deploy\.log'))
+
+    # checks.log and checks.jsonl are directories
+    $cdDir = Join-Path $tmpRoot "checks-dir" "logs"
+    New-Item -ItemType Directory -Path (Join-Path $cdDir "checks.log"), (Join-Path $cdDir "checks.jsonl") -Force | Out-Null
+    Test-CheckLibRun "checks.log/.jsonl are directories" (Invoke-CheckLibCase $cdDir)
+
+    # checks.log and checks.jsonl held open with no sharing by this process
+    # (another process's lock); Windows only
+    if ($IsWindows) {
+        $clDir = Join-Path $tmpRoot "checks-locked" "logs"
+        New-Item -ItemType Directory -Path $clDir -Force | Out-Null
+        foreach ($n in "checks.log", "checks.jsonl") { [IO.File]::WriteAllText((Join-Path $clDir $n), "") }
+        Test-CheckLibRun "checks.log/.jsonl locked" (Invoke-CheckLibCase $clDir -Lock)
+        Check "check-lib: checks.log/.jsonl locked -- nothing written to them (the lock held)" (((Get-Item (Join-Path $clDir "checks.log")).Length -eq 0) -and ((Get-Item (Join-Path $clDir "checks.jsonl")).Length -eq 0))
+    } else {
+        foreach ($n in @("Stop run goes on (exit 0, no catch)", "step lines still printed", "step counters still count", "nothing written to them (the lock held)")) {
+            Skip "check-lib: checks.log/.jsonl locked -- $n" "Windows file locks only"
+        }
+    }
+
+    # The log directory cannot be created (its parent is a file)
+    $cnFile = Join-Path $tmpRoot "checks-notadir"
+    [IO.File]::WriteAllText($cnFile, "")
+    Test-CheckLibRun "log dir cannot be created" (Invoke-CheckLibCase (Join-Path $cnFile "logs"))
+
+    # -----------------------------------------------------------------------
+    # scripts/aitools-profile.ps1 -- its Log override (incident #174)
+    # -----------------------------------------------------------------------
+    # deploy.log held open with no sharing by this process while the resolver
+    # runs; AITOOLS_ENVIRONMENT=bogus makes Initialize-Logging log a warning
+    # through the resolver's Log override. The resolver must still answer (exit 0,
+    # its data on stdout; before #174 its trap turned the write error into exit 2)
+    # and the warning must reach stderr. A directory in place of deploy.log and a
+    # writable one: tests/profile/test-profile.sh. Windows only (OS guard).
+    $profileScript = Join-Path $root "scripts" "aitools-profile.ps1"
+    if ($IsWindows) {
+        $plDir = Join-Path $tmpRoot "profile-locked"
+        New-Item -ItemType Directory -Path (Join-Path $plDir "logs"), (Join-Path $plDir "home") -Force | Out-Null
+        $plLog = Join-Path $plDir "logs" "deploy.log"
+        [IO.File]::WriteAllText($plLog, "")
+        $plErr = Join-Path $plDir "stderr.txt"
+        $savedHome = $env:HOME; $savedProfile = $env:USERPROFILE
+        $env:HOME = Join-Path $plDir "home"; $env:USERPROFILE = $env:HOME
+        $env:AITOOLS_LOG_DIR = Join-Path $plDir "logs"; $env:AITOOLS_ENVIRONMENT = "bogus"
+        $h = [IO.File]::Open($plLog, 'Open', 'ReadWrite', 'None')
+        try {
+            $plOut = & pwsh -NoProfile -NonInteractive -File $profileScript hostname --hostname-value probe-host 2> $plErr | Out-String
+            $plRc = $LASTEXITCODE
+        } finally {
+            $h.Dispose()
+            $env:HOME = $savedHome; $env:USERPROFILE = $savedProfile
+            $env:AITOOLS_LOG_DIR = $null; $env:AITOOLS_ENVIRONMENT = $null
+        }
+        $plErrText = if (Test-Path $plErr) { [IO.File]::ReadAllText($plErr) } else { "" }
+        Check "profile: locked deploy.log -- the resolver answers (exit 0, data on stdout)" (($plRc -eq 0) -and ($plOut.Trim() -eq "probe-host"))
+        Check "profile: locked deploy.log -- the warning reached stderr, no write error" (($plErrText -match "\[aitools-profile\] \[warn\] AITOOLS_ENVIRONMENT='bogus' ignored") -and -not ($plErrText -match 'Exception|AppendAllText|being used by another process'))
+        Check "profile: locked deploy.log -- nothing written to it (the lock held)" ((Get-Item $plLog).Length -eq 0)
+    } else {
+        foreach ($n in @("the resolver answers (exit 0, data on stdout)", "the warning reached stderr, no write error", "nothing written to it (the lock held)")) {
+            Skip "profile: locked deploy.log -- $n" "aitools-profile.ps1 runs on Windows only"
+        }
+    }
 
     # -----------------------------------------------------------------------
     # scripts/aitools.ps1 (entry point) -- uses the lib's logging, defines none of its own

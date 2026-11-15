@@ -1450,3 +1450,31 @@ agent commander, engineer:    No one session gets to claim the whole story — b
 - Which other Windows machines of the commander have a broken profile. Every one that ran `aitools install` twice since v0.70.0 does; the fix does not repair it (restore the newest `.bak.<UTC>` that parses).
 - Whether the same authoring gap hides bugs in the other scripts still marked "UNTESTED on Windows": `setup-user-settings.ps1`, `setup-user-hooks.ps1`, `harness_python` in `aitools-lib.ps1`.
 - `CLAUDE.md:100` still names `.claude/rules/relay-outbound.md`, which is gone from main (check-pre-commit step 20 FAIL). The dotprofile `deploy/` is stale for 47 generated files (check-pre-push step 7 FAIL). Neither touched.
+
+---
+
+### 740edb7d-a (2026-11-14T18:21Z)
+
+**State**: functional (Cursor agent, Claude Opus 5.5, Windows 11, Cursor IDE 3.30.14)
+**Context loaded**: `reference/prompt-turn-checklist.md` v1.19 in full (twice, from disk), the glossary, the frameworks registry, `delegation-duty-guard.sh` (how injected text is escaped), the commander profile, `reference/rules.md`, the `/intent-writing`, `/tool-ops`, `/scratch`, `/delegate` and `chrome-devtools` skills, the dotprofile `delegation.md`, `reference/tool-ops-cursor.md`, `registries/tool-ops.json`, Cursor docs (ignore-file, ignore-files help, agent security) read with chrome-devtools
+**Mission**: commander: condense checklist section 1 losslessly into a token-efficient, military pre-flight block for hook injection; then, answering RFIs f6ea-1 to f6ea-6, fill `shared/rules/prompt-turn.md` with all 12 items, update the reference, open `.scratch` to Cursor agents, record the Cursor knowledge, test it with a delegate, confirm the profile fix. PR #156
+
+#### What I learned
+
+- **Cursor's `.cursorignore` blocks the agent's file tools, not only indexing**, and the docs say so ("Cursor blocks access to files listed in `.cursorignore` from: Code accessible by Agent and Tab"). Each tool fails differently: Write `Read permission denied`, Read `Permission denied`, Grep `filtered out by .cursorignore`, Glob silently returns nothing. An empty Glob of an ignored path is therefore no evidence that a file is absent.
+- **`.gitignore` does not block Read or Write; it only filters Glob and Grep walks.** With `.scratch/`, `*.log` and `*.tmp` gone from `.cursorignore`, Read and Write work in `.scratch/` although `.gitignore` still lists all three (re-run independently by delegate V-CurIgn).
+- **Agents cannot edit `.cursorignore` with the file tools** (`Blocked by permissions configuration`): Cursor treats it as a configuration file that needs the user's approval. On the commander's explicit order I changed it with the shell and said so.
+- **Outside the workspace, only Grep applies a repo's `.cursorignore`, and it kept the version it first saw** after the file changed; Read and Write ignored it.
+- **Lossless condensation has a ceiling, and only measuring shows where it is.** Section 1 shrank 36% because its prose repeated itself; items 2-12 about 20% (29% counting the provenance kept in the reference). My first full draft saved 18% because I had let the telegraphic style of item 1 slip.
+- **In Cursor, the session id for RFI numbers is the chat's transcript id** (this one ends `f6ea`).
+
+#### CC defaults I caught
+
+- I concluded there was no `.scratch/.current-session` from a Glob on an ignored path. The shell showed the file was there.
+- My first tool-ops entry overstated two findings ("returns its .md files"; "`.cursorignore` lists no path an agent must read"). The delegate's independent run caught both before the commit.
+
+#### What I still don't know
+
+- Whether the commander's unsaved editor buffer for `shared/rules/prompt-turn.md` held a template other than the item-1 block: the file was 0 bytes on disk, so I used the block.
+- Whether dropping "reaches outside the session" from checklist item 4 is the reading he meant (RFI f6ea-7).
+- `.cursorignore` still blocks `harvesting/`, `.claude/worktrees/` and the full-session transcripts for Cursor agents (RFI f6ea-8). The `/scratch` skill still says scratch ids are 10 characters; `scratch-init.sh` uses the full session id since 2026-10-31 (RFI f6ea-9).

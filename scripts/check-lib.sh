@@ -39,7 +39,10 @@ check_log_init() {
     _CHECK_LOG_DIR="$AITOOLS_LOG_DIR"
     _CHECK_LOG="$_CHECK_LOG_DIR/checks.log"
     _CHECK_JSONL="$_CHECK_LOG_DIR/checks.jsonl"
-    mkdir -p "$_CHECK_LOG_DIR"
+    # Fail-safe (reference/logging.md section 5; incident #174): a log directory
+    # that cannot be created leaves every checks.log / checks.jsonl write failing,
+    # and _aitlib_log_append swallows each; the check run goes on
+    mkdir -p "$_CHECK_LOG_DIR" 2>/dev/null || true
     _rotate_log "$_CHECK_LOG"
     _rotate_log "$_CHECK_JSONL"
 
@@ -53,9 +56,11 @@ check_log_init() {
         *)       os_name="$(uname -s)" ;;
     esac
 
-    printf '[%s] [%s] === RUN START ===\n' "$ts" "$_CHECK_NAME" >> "$_CHECK_LOG"
-    printf '{"ts":"%s","check":"%s","event":"run_start","host":"%s","os":"%s"}\n' \
-        "$ts" "$_CHECK_NAME" "$host" "$os_name" >> "$_CHECK_JSONL"
+    # checks.log / checks.jsonl lines go through the lib's _aitlib_log_append: a
+    # failed write is swallowed (reference/logging.md section 5; incident #174)
+    _aitlib_log_append "$(printf '[%s] [%s] === RUN START ===' "$ts" "$_CHECK_NAME")" "$_CHECK_LOG"
+    _aitlib_log_append "$(printf '{"ts":"%s","check":"%s","event":"run_start","host":"%s","os":"%s"}' \
+        "$ts" "$_CHECK_NAME" "$host" "$os_name")" "$_CHECK_JSONL"
 
     # Bridge: initialize aitools-lib logging vars so lib functions
     # (log, ensure_tool_on_path, deploy_managed_file, etc.) work in check context.
@@ -67,20 +72,22 @@ check_log_init() {
     WARNINGS=0
 }
 
-# Internal: log one step result to both files
+# Internal: log one step result to both files. Each line goes through the lib's
+# _aitlib_log_append: a failed write is swallowed (reference/logging.md section 5;
+# incident #174), so the step's console line and counter are unaffected.
 _check_log_step() {
     [ -z "$_CHECK_LOG" ] && return 0
     local num="$1" label="$2" result="$3" detail="${4:-}"
-    local ts
+    local ts line
     ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-    printf '[%s] [%s] %3s. %-42s [%s]' "$ts" "$_CHECK_NAME" "$num" "$label" "$result" >> "$_CHECK_LOG"
-    [ -n "$detail" ] && printf ' %s' "$detail" >> "$_CHECK_LOG"
-    printf '\n' >> "$_CHECK_LOG"
+    line=$(printf '[%s] [%s] %3s. %-42s [%s]' "$ts" "$_CHECK_NAME" "$num" "$label" "$result")
+    if [ -n "$detail" ]; then line="$line $detail"; fi
+    _aitlib_log_append "$line" "$_CHECK_LOG"
     # Escape detail for JSON (backslashes and double quotes)
     local json_detail
     json_detail=$(printf '%s' "$detail" | sed 's/\\/\\\\/g; s/"/\\"/g')
-    printf '{"ts":"%s","check":"%s","step":"%s","label":"%s","result":"%s","detail":"%s"}\n' \
-        "$ts" "$_CHECK_NAME" "$num" "$label" "$result" "$json_detail" >> "$_CHECK_JSONL"
+    _aitlib_log_append "$(printf '{"ts":"%s","check":"%s","step":"%s","label":"%s","result":"%s","detail":"%s"}' \
+        "$ts" "$_CHECK_NAME" "$num" "$label" "$result" "$json_detail")" "$_CHECK_JSONL"
 }
 
 # ---------------------------------------------------------------------------
@@ -131,14 +138,14 @@ print_summary() {
     echo ""
     printf "=== SUMMARY: ${GREEN}%d PASS${RESET}, ${DIM}%d SKIP${RESET}, ${YELLOW}%d WARN${RESET}, ${RED}%d FAIL${RESET} ===\n" \
         "$PASS_COUNT" "$SKIP_COUNT" "$WARN_COUNT" "$FAIL_COUNT"
-    # Log summary to files
+    # Log summary to files (fail-safe: _aitlib_log_append, reference/logging.md section 5)
     if [ -n "$_CHECK_LOG" ]; then
         local ts
         ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-        printf '[%s] [%s] === SUMMARY: %d PASS, %d SKIP, %d WARN, %d FAIL ===\n' \
-            "$ts" "$_CHECK_NAME" "$PASS_COUNT" "$SKIP_COUNT" "$WARN_COUNT" "$FAIL_COUNT" >> "$_CHECK_LOG"
-        printf '{"ts":"%s","check":"%s","event":"run_end","pass":%d,"skip":%d,"warn":%d,"fail":%d}\n' \
-            "$ts" "$_CHECK_NAME" "$PASS_COUNT" "$SKIP_COUNT" "$WARN_COUNT" "$FAIL_COUNT" >> "$_CHECK_JSONL"
+        _aitlib_log_append "$(printf '[%s] [%s] === SUMMARY: %d PASS, %d SKIP, %d WARN, %d FAIL ===' \
+            "$ts" "$_CHECK_NAME" "$PASS_COUNT" "$SKIP_COUNT" "$WARN_COUNT" "$FAIL_COUNT")" "$_CHECK_LOG"
+        _aitlib_log_append "$(printf '{"ts":"%s","check":"%s","event":"run_end","pass":%d,"skip":%d,"warn":%d,"fail":%d}' \
+            "$ts" "$_CHECK_NAME" "$PASS_COUNT" "$SKIP_COUNT" "$WARN_COUNT" "$FAIL_COUNT")" "$_CHECK_JSONL"
     fi
 }
 

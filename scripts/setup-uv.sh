@@ -27,13 +27,13 @@ if command -v uv >/dev/null 2>&1; then
     if [[ "$uv_path" == /opt/homebrew/* ]] || [[ "$uv_path" == /usr/local/* ]]; then
         log "uv already installed via Homebrew -- upgrading..."
         UPGRADE_OUTPUT=$(brew upgrade uv 2>&1) || true
-        if printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'already installed\|up.to.date\|No available upgrade'; then
+        if printf '%s\n' "$UPGRADE_OUTPUT" | grep -i 'already installed\|up.to.date\|No available upgrade' >/dev/null; then
             log_ok "uv already up to date"
             UV_VERSION=$(uv --version 2>/dev/null || echo "version unknown")
             write_summary OK "uv" "$UV_VERSION"
         else
             printf '%s\n' "$UPGRADE_OUTPUT" | while IFS= read -r line; do log "$line"; done
-            if printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'error\|fatal'; then
+            if printf '%s\n' "$UPGRADE_OUTPUT" | grep -i 'error\|fatal' >/dev/null; then
                 log_error "brew upgrade uv failed (see log above)"
                 write_summary ERROR "uv" "brew upgrade failed"
             else

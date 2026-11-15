@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # check-pre-commit.sh -- automated pre-commit checklist for aitools
 # Usage: bash scripts/check-pre-commit.sh [--fix]
-# --fix: auto-fix line endings, exec bits, and build freshness
+# --fix: auto-fix line endings (step 4) and exec bits (step 6). Nothing in this
+#        script runs build-deploy.sh: steps 3 and 10 are retired; check-pre-push
+#        step 7 rebuilds into a temporary copy of the dotprofile (incident #136).
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -103,22 +105,17 @@ fi
 # ---------------------------------------------------------------------------
 # 3. Build freshness
 # ---------------------------------------------------------------------------
-build_needed=false
-if echo "$STAGED_FILES" | grep -E '^(scripts/|shared/)' | grep -qvE 'README\.md$'; then
-    build_needed=true
-fi
-
-if $build_needed; then
-    if $FIX_MODE; then
-        bash "$SCRIPT_DIR/build-deploy.sh" >/dev/null 2>&1
-        git add deploy/ 2>/dev/null
-        step_pass "3" "Build freshness" "(rebuilt + staged)"
-    else
-        step_warn "3" "Build freshness" "scripts/ or shared/ modified -- run with --fix"
-    fi
-else
-    step_skip "3" "Build freshness" "no scripts/ or shared/ changes"
-fi
+# Retired (incident #136). build-deploy.sh writes the dotprofile deploy/ it
+# resolves from $HOME/.aitools/config.json; the aitools deploy/ is frozen
+# (.claude/rules/git-safety.md, deploy-paths.md). With --fix this step ran
+# build-deploy.sh under the caller's HOME (rebuilding the real dotprofile
+# deploy/, output and exit code discarded), staged the frozen aitools deploy/
+# and reported PASS; without it, it advised --fix. check-pre-push step 7
+# rebuilds into a temporary copy of the dotprofile under a temporary HOME on
+# every push when a dotprofile is configured, checks the exit code and
+# dry-runs the result. Step number kept;
+# same SKIP text as check-post-push step 7 and the .ps1 twin.
+step_skip "3" "Build freshness" "retired: check-pre-push step 7 rebuilds into a temp dotprofile copy"
 
 # ---------------------------------------------------------------------------
 # 4. Line endings
@@ -138,7 +135,9 @@ else
         step_pass "4" "Line endings (.sh)"
     elif $FIX_MODE; then
         for f in $crlf_files; do
-            sed -i '' 's/\r$//' "$f"
+            # perl, not `sed -i ''`: GNU sed (Linux) reads '' as the script and
+            # exits 2, which ended the whole run under set -e
+            perl -pi -e 's/\r$//' "$f"
             git add "$f"
         done
         step_pass "4" "Line endings (.sh)" "(fixed CRLF)"
@@ -159,7 +158,10 @@ fi
 # ---------------------------------------------------------------------------
 # 6. Executable bit on .sh files
 # ---------------------------------------------------------------------------
-non_exec=$(git ls-files -s '*.sh' 2>/dev/null | grep -v '^100755' || true)
+# The frozen aitools deploy/ is excluded (':!deploy/'): nothing regenerates it,
+# --fix must never stage a change under it, and no check audits it (incidents
+# #136, #176; .claude/rules/git-safety.md). Same pathspec as the .ps1 twin.
+non_exec=$(git ls-files -s -- '*.sh' ':!deploy/' 2>/dev/null | grep -v '^100755' || true)
 if [ -z "$non_exec" ]; then
     step_pass "6" "Executable bit (.sh)"
 else
@@ -196,7 +198,7 @@ else
     # Check staged diffs for blind overwrite patterns
     overwrite_found=false
     diff_output=$(git diff --cached -- $setup_staged_all 2>/dev/null || true)
-    if echo "$diff_output" | grep -qE '^\+.*cat[[:space:]]*>|^\+.*WriteAllText.*ConvertTo-Json'; then
+    if echo "$diff_output" | grep -E '^\+.*cat[[:space:]]*>|^\+.*WriteAllText.*ConvertTo-Json' >/dev/null; then
         overwrite_found=true
     fi
     if $overwrite_found; then
@@ -211,7 +213,7 @@ fi
 # ---------------------------------------------------------------------------
 # Check if non-docs changes are staged (anything other than .md, .mdc files)
 non_docs=$(echo "$STAGED_FILES" | grep -vE '\.(md|mdc)$' || true)
-rn_staged=$(echo "$STAGED_FILES" | grep -q 'RELEASE_NOTES.md' && echo "yes" || echo "no")
+rn_staged=$(echo "$STAGED_FILES" | grep 'RELEASE_NOTES.md' >/dev/null && echo "yes" || echo "no")
 if [ -z "$non_docs" ]; then
     step_skip "9" "Release notes" "docs-only changes"
 elif [ "$rn_staged" = "yes" ]; then
@@ -223,16 +225,10 @@ fi
 # ---------------------------------------------------------------------------
 # 10. Deploy drift check
 # ---------------------------------------------------------------------------
-if $build_needed; then
-    deploy_diff=$(git diff deploy/ 2>/dev/null || true)
-    if [ -z "$deploy_diff" ]; then
-        step_pass "10" "Deploy drift"
-    else
-        step_fail "10" "Deploy drift" "unstaged deploy/ changes remain"
-    fi
-else
-    step_skip "10" "Deploy drift" "no build needed"
-fi
+# Retired with step 3 (incident #136): `git diff deploy/` read the frozen
+# aitools deploy/, which nothing regenerates, so it proved nothing about the
+# dotprofile build. check-pre-push step 7 is the check. Step number kept.
+step_skip "10" "Deploy drift" "retired: check-pre-push step 7 rebuilds into a temp dotprofile copy"
 
 # ---------------------------------------------------------------------------
 # 11. User repo changes
@@ -251,7 +247,7 @@ fi
 # ---------------------------------------------------------------------------
 # 12. Template sync
 # ---------------------------------------------------------------------------
-if echo "$STAGED_FILES" | grep -q 'shared/claude-shared.md'; then
+if echo "$STAGED_FILES" | grep 'shared/claude-shared.md' >/dev/null; then
     step_warn "12" "Template sync" "update user repo template (<userRepoPath>/claude/CLAUDE.md)"
 else
     step_skip "12" "Template sync" "shared/claude-shared.md not modified"
@@ -368,7 +364,7 @@ if [ -d "$hook_dir" ]; then
         name=$(basename "$hook")
         # Check for stat fallback chain: stat -f ... || stat -c ... on one line
         # This is ALWAYS wrong — see cross-platform.md "NEVER use the fallback chain"
-        if perl -ne 'print if /stat\s+-f.*\|\|.*stat\s+-c/ && !/^\s*#/' "$hook" 2>/dev/null | grep -q .; then
+        if perl -ne 'print if /stat\s+-f.*\|\|.*stat\s+-c/ && !/^\s*#/' "$hook" 2>/dev/null | grep . >/dev/null; then
             hook_issues="${hook_issues}  $name: stat fallback chain (NEVER use, see cross-platform.md)\n"
         fi
         # Check for stat -f NOT inside a uname -s guard (within 5 lines)
@@ -386,15 +382,15 @@ if [ -d "$hook_dir" ]; then
                 }
                 print "line " . ($i+1) . ": " . $lines[$i] unless $guarded;
             }
-        ' "$hook" 2>/dev/null | grep -q .; then
+        ' "$hook" 2>/dev/null | grep . >/dev/null; then
             hook_issues="${hook_issues}  $name: unguarded stat -f (use uname -s dispatch)\n"
         fi
         # Check for find -printf
-        if perl -ne 'print if /find\s.*-printf/ && !/^\s*#/' "$hook" 2>/dev/null | grep -q .; then
+        if perl -ne 'print if /find\s.*-printf/ && !/^\s*#/' "$hook" 2>/dev/null | grep . >/dev/null; then
             hook_issues="${hook_issues}  $name: find -printf (GNU-only, use find + stat loop)\n"
         fi
         # Check for grep -P
-        if perl -ne 'print if /grep\s+-[^\s]*P/ && !/^\s*#/' "$hook" 2>/dev/null | grep -q .; then
+        if perl -ne 'print if /grep\s+-[^\s]*P/ && !/^\s*#/' "$hook" 2>/dev/null | grep . >/dev/null; then
             hook_issues="${hook_issues}  $name: grep -P (use perl -ne or grep -E)\n"
         fi
         # Check for date -d NOT inside a uname -s guard (within 5 lines)
@@ -410,7 +406,7 @@ if [ -d "$hook_dir" ]; then
                 }
                 print "line " . ($i+1) . ": " . $lines[$i] unless $guarded;
             }
-        ' "$hook" 2>/dev/null | grep -q .; then
+        ' "$hook" 2>/dev/null | grep . >/dev/null; then
             hook_issues="${hook_issues}  $name: unguarded date -d (use uname -s dispatch)\n"
         fi
     done

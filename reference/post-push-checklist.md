@@ -22,13 +22,24 @@ order, not modes.
 
 `git log --oneline origin/main -1` -- confirm the expected commit is on remote.
 
-### 2. Smoke-test deploy scripts
+### 2. Smoke-test deploy scripts (retired)
 
-`bash -n` on the generated deploy scripts -- catches build corruption or stale
-copies. Fast (<1s). The generated scripts live in `<userRepoPath>/deploy/` (the
-dotprofile build output); the script still checks the frozen aitools `deploy/`,
-as do steps 6 and 14, so these steps prove nothing about the dotprofile build
-(an open gap; check-pre-push step 7 is the check of the build, see step 7).
+Always SKIP (`retired: check-pre-push step 7 rebuilds into a temp dotprofile
+copy`). The step ran `bash -n` on the aitools `deploy/*.sh`, which is frozen:
+`build-deploy.sh` has written the generated scripts to `<userRepoPath>/deploy/`
+(the dotprofile build output) since 2c0fd32 (2026-06-14), so the step proved
+nothing about them. Before PR #154 it, and steps 6 and 14, still read the
+frozen tree (incident #176); no step reads it now
+(`tests/check-post-push/test-post-push-deploy-steps.sh`).
+
+What checks the generated scripts instead: check-pre-push step 7, on every
+push when a dotprofile is configured (it SKIPs without one and WARNs without
+node or Git Bash), rebuilds them into a temporary copy of the dotprofile under a temporary
+HOME. The build fails on a generated `.ps1` that does not parse (where pwsh is
+installed), and the step dry-runs the three resolver consumers
+(`setup-user-claude`, `-settings`, `-cursor`). It does not run `bash -n` on
+every generated `.sh` or audit their line endings: that is not covered, as it
+was not covered by the frozen-tree check either.
 
 ### 2b. Functional smoke test (when requested or after significant changes)
 
@@ -48,7 +59,12 @@ If missing, flag for Extensive tier (#15) or manual fix -- do not run setup scri
 ### 4. CLI entry point + version consistency
 
 `bash scripts/aitools --version` -- confirms the self-update stamp and that
-the entry point parses.
+the entry point parses. On Windows `check-post-push.ps1` runs the Windows
+entry point instead, natively: `pwsh -NoProfile -NonInteractive -File
+scripts/aitools.ps1 --version`, and passes on exit 0 with an `aitools
+<version>` line (no Git Bash; commander, 2026-11-14). In Git Bash the bash
+entry only hands off to `aitools.ps1`; that hand-off is tested by
+`tests/aitools-entry/test-win-forwarder.ps1` in CI.
 
 Also verify version matches the latest tag:
 `git describe --tags --match "v*" --abbrev=0`. A `+N` suffix indicates
@@ -70,17 +86,23 @@ Run all Always items first, then:
 
 ### 6. Full script syntax validation
 
-`bash -n` on every `.sh` in `scripts/` and `deploy/`. On Windows, also
-`[Parser]::ParseFile` on every `.ps1`. On macOS, also validate `.ps1`
-files -- see `.claude/rules/cross-platform.md` Pre-validation convention for the
-full ParseFile command (pwsh is a managed tool).
+`bash -n` on every `.sh` in `scripts/` and `shared/hooks/`, and
+`[Parser]::ParseFile` on every `.ps1` in `scripts/` (on macOS and Linux
+through pwsh, a managed tool: FAIL when it is missing; see
+`.claude/rules/cross-platform.md` Pre-validation convention for the command).
+The source scripts only: the frozen aitools `deploy/` is not read (step 2).
+On Windows `check-post-push.ps1` reports the `.sh` half as SKIP (`bash -n
+runs in CI (linux, macos) and check-post-push.sh, not on Windows`): it calls
+no Git Bash (commander, 2026-11-14). The CI linux and macos jobs run `bash -n`
+on every tracked shell script on each push and pull request.
 
 ### 7. deploy/ drift audit (retired)
 
 Always SKIP (`retired: check-pre-push step 7 rebuilds into a temp dotprofile
 copy`). The shared `aitools/deploy/` is frozen. Drift of the dotprofile
 `deploy/` is checked by pre-push step 7 (a rebuild into a temporary copy of the
-dotprofile under a temporary HOME), which runs on every push. Do not run
+dotprofile under a temporary HOME), which runs on every push when a dotprofile
+is configured (it SKIPs without one and WARNs without node or Git Bash). Do not run
 `build-deploy.sh` here: with the real HOME it replaces the real dotprofile
 `deploy/`. Until v0.77.2 both scripts ran `build-deploy.sh` with the caller's
 HOME and then `git diff deploy/` on the frozen aitools tree, so the step always
@@ -104,8 +126,8 @@ hardcoded in both scripts.
 
 ### 11. Cross-platform pairing
 
-Every `scripts/setup-*.sh` has a matching `.ps1` (and vice versa). Same for
-`deploy/`. Flag unpaired scripts.
+Every `scripts/setup-*.sh` has a matching `.ps1` (and vice versa). Flag
+unpaired scripts.
 
 ### 12. CLAUDE.md limits
 
@@ -119,8 +141,9 @@ Every `@reference/` import in `CLAUDE.md` points to a file that exists
 
 ### 14. Line ending audit
 
-All `.sh` files in the repo have LF line endings (not CRLF).
-`file scripts/*.sh deploy/*.sh shared/hooks/*.sh` -- none should report CRLF.
+Every `.sh` in `scripts/` and `shared/hooks/` has LF line endings (not CRLF);
+the frozen aitools `deploy/` is not read (step 2). By hand:
+`file scripts/*.sh shared/hooks/*.sh` -- none should report CRLF.
 
 ### 15. MCP config deploy
 
@@ -195,8 +218,20 @@ settings.json is missing or node is unavailable.
 
 ### 23. Script standards compliance
 
-Runs `scripts/check-script-compliance.sh`; FAIL when any of its checks fails,
-SKIP when the script is missing.
+Runs `scripts/check-script-compliance.sh` (`.ps1` on Windows); FAIL when any
+of its checks fails, SKIP when the script is missing.
+
+CI also runs it before merge, on every PR and push to main
+(`.github/workflows/check.yml`): the `.sh` twin in the linux job, the `.ps1`
+twin in the windows job ("Script standards compliance"). A FAIL check fails the
+job; WARN checks (raw echo / Write-Host, the grep-without-`|| true` part of
+grep pipefail safety) do not. Until then nothing ran it before merge, so a
+FAIL line (an unchecked `-ErrorAction SilentlyContinue` in
+`setup-pywinpty.ps1`) reached main.
+
+Step 7 (grep pipefail safety) FAILs on a pipeline that ends in `grep -q` in a
+pipefail script (see `reference/script-standards-detail.md`
+"Pipelines into grep -q under pipefail").
 
 ### 24. Summary panel DETAIL support
 

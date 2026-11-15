@@ -71,11 +71,13 @@ if ($PSVersionTable.PSVersion.Major -lt 7) {
 . (Join-Path $PSScriptRoot "aitools-lib.ps1")
 # The success stream carries data: console log lines go to stderr (deploy.log unchanged).
 # Defined before Initialize-Logging, whose environment check may already log a warning.
+# The deploy.log line goes through the lib's Add-AitLibLogText: a failed write is
+# swallowed (reference/logging.md section 5; incident #174), so it no longer reaches
+# the trap below (exit 2) and the stderr line still prints.
 function Log($msg, $level = "info") {
     $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
     $line = "[$ts] [$scriptName] [$level] $msg"
-    $resolvedLog = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($logFile)
-    [IO.File]::AppendAllText($resolvedLog, "$line`n", [System.Text.UTF8Encoding]::new($false))
+    Add-AitLibLogText $line
     [Console]::Error.WriteLine($line)
 }
 Initialize-Logging "aitools-profile"

@@ -34,6 +34,19 @@ $script:CheckLog = ""
 $script:CheckJsonl = ""
 $script:CheckName = ""
 
+# Write-CheckLogText PATH TEXT -- append TEXT and a newline to a check log file
+# (checks.log or checks.jsonl) through the lib's Add-AitLibLogText: a failed write
+# (a locked, unwritable or missing file) is swallowed, also under
+# $ErrorActionPreference = "Stop" (reference/logging.md section 5; incident #174).
+# Add-AitLibLogText appends to $logFile, a name PowerShell looks up through the
+# caller's scopes, so the local $logFile below points it at PATH for this call
+# only; the bridged $script:logFile (deploy.log) is left unchanged. Parity:
+# _aitlib_log_append "$line" "$_CHECK_LOG" in check-lib.sh.
+function Write-CheckLogText([string]$Path, [string]$Text) {
+    $logFile = $Path
+    Add-AitLibLogText $Text
+}
+
 function CheckLogInit {
     param([string]$Name)
     $script:CheckName = $Name
@@ -41,7 +54,10 @@ function CheckLogInit {
     $script:CheckLog = Join-Path $script:CheckLogDir "checks.log"
     $script:CheckJsonl = Join-Path $script:CheckLogDir "checks.jsonl"
     if (-not (Test-Path $script:CheckLogDir)) {
-        New-Item -ItemType Directory -Path $script:CheckLogDir -Force | Out-Null
+        # Fail-safe (reference/logging.md section 5; incident #174): a log directory
+        # that cannot be created leaves every check log write failing, and
+        # Write-CheckLogText swallows each; the check run goes on
+        try { New-Item -ItemType Directory -Path $script:CheckLogDir -Force -ErrorAction Stop | Out-Null } catch { $null = $_ }
     }
     Rotate-Log $script:CheckLog
     Rotate-Log $script:CheckJsonl
@@ -50,8 +66,8 @@ function CheckLogInit {
     if (-not $hostName) { $hostName = hostname }
     # Record the real platform (pwsh also runs these checks on macOS and Linux).
     $osName = if ($IsWindows) { "Windows" } elseif ($IsMacOS) { "macOS" } elseif ($IsLinux) { "Linux" } else { "unknown" }
-    Add-Content -Path $script:CheckLog -Value "[$ts] [$Name] === RUN START ==="
-    Add-Content -Path $script:CheckJsonl -Value "{`"ts`":`"$ts`",`"check`":`"$Name`",`"event`":`"run_start`",`"host`":`"$hostName`",`"os`":`"$osName`"}"
+    Write-CheckLogText $script:CheckLog "[$ts] [$Name] === RUN START ==="
+    Write-CheckLogText $script:CheckJsonl "{`"ts`":`"$ts`",`"check`":`"$Name`",`"event`":`"run_start`",`"host`":`"$hostName`",`"os`":`"$osName`"}"
 
     # Bridge: initialize aitools-lib logging vars so lib functions
     # (Log, Ensure-ToolOnPath, Deploy-ManagedFile, etc.) work in check context.
@@ -70,10 +86,10 @@ function CheckLogStep {
     $padded = $Label.PadRight(42)
     $line = "[$ts] [$($script:CheckName)] $("{0,3}" -f $Num). $padded [$Result]"
     if ($Detail) { $line += " $Detail" }
-    Add-Content -Path $script:CheckLog -Value $line
+    Write-CheckLogText $script:CheckLog $line
     # Escape detail for JSON
     $jsonDetail = $Detail -replace '\\', '\\' -replace '"', '\"'
-    Add-Content -Path $script:CheckJsonl -Value "{`"ts`":`"$ts`",`"check`":`"$($script:CheckName)`",`"step`":`"$Num`",`"label`":`"$Label`",`"result`":`"$Result`",`"detail`":`"$jsonDetail`"}"
+    Write-CheckLogText $script:CheckJsonl "{`"ts`":`"$ts`",`"check`":`"$($script:CheckName)`",`"step`":`"$Num`",`"label`":`"$Label`",`"result`":`"$Result`",`"detail`":`"$jsonDetail`"}"
 }
 
 # ---------------------------------------------------------------------------
@@ -142,9 +158,9 @@ function PrintSummary {
     if ($script:CheckLog) {
         $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
         $summaryLine = "[$ts] [$($script:CheckName)] === SUMMARY: $($script:PassCount) PASS, $($script:SkipCount) SKIP, $($script:WarnCount) WARN, $($script:FailCount) FAIL ==="
-        Add-Content -Path $script:CheckLog -Value $summaryLine
+        Write-CheckLogText $script:CheckLog $summaryLine
         $jsonLine = "{`"ts`":`"$ts`",`"check`":`"$($script:CheckName)`",`"event`":`"run_end`",`"pass`":$($script:PassCount),`"skip`":$($script:SkipCount),`"warn`":$($script:WarnCount),`"fail`":$($script:FailCount)}"
-        Add-Content -Path $script:CheckJsonl -Value $jsonLine
+        Write-CheckLogText $script:CheckJsonl $jsonLine
     }
 }
 
@@ -219,9 +235,10 @@ function InvokeGit {
 # ---------------------------------------------------------------------------
 # ResolveGitBash -- the path of the managed Windows bash, Git Bash from Git for
 # Windows (.claude/rules/cross-platform.md "Windows: managed bash"), or $null.
-# Every check step that runs bash calls this (check-pre-commit steps 2 and 3,
-# check-pre-push step 7, check-post-push steps 2, 4 and 6), never
-# `Get-Command bash` or a bare `bash`: in a native pwsh the first bash on PATH
+# One check step runs bash: check-pre-push step 7, for build-deploy.sh (bash-only;
+# .claude/rules/cross-platform.md "Cross-language script calls"). It calls this,
+# never `Get-Command bash` or a bare `bash`; no other check-*.ps1 runs Git Bash
+# (commander, 2026-11-14; tests/check-no-git-bash). In a native pwsh the first bash on PATH
 # is the WSL launcher (%LOCALAPPDATA%\Microsoft\WindowsApps\bash.exe on the
 # commander's workstation, C:\Windows\System32\bash.exe on older Windows), not
 # Git Bash. Probes the Git for Windows install locations only (the list

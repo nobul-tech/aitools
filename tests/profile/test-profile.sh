@@ -1411,6 +1411,45 @@ printf '{ "version": \n' > "$H/a6bad.json"
 case_run a6-snap-invalid 2 snapshot --profile "$H/a6bad.json"
 a6_logged a6-snap-invalid "snapshot: $H/a6bad.json is invalid JSON"
 
+# --- Fail-safe log writes (reference/logging.md section 5; incident #174) -----------
+# A deploy.log that cannot be written must not end the resolver. AITOOLS_ENVIRONMENT
+# =bogus makes logging_init / Initialize-Logging log a warning through the
+# resolver's own log override before the command runs; the command must still
+# answer (exit 0, its data on stdout) and the warning must still reach stderr,
+# with no write error. Writable: the warning is also in deploy.log. A lock held by
+# another process (PowerShell): tests/logging/test-logging.ps1.
+# log_case NAME -- the hostname command with an injected name; the checks above
+log_case() {
+    CASE_ENV="AITOOLS_ENVIRONMENT=bogus"
+    NO_PARITY=1 case_run "$1" 0 hostname --hostname-value probe-host
+    CASE_ENV=""
+    if [ "$(perl -pe 's/\r//g' "$OUT")" = "probe-host" ]; then ok "$1: stdout is the data only"
+    else bad "$1: stdout '$(cat "$OUT")', want probe-host"; fi
+    if grep -qF -- "[aitools-profile] [warn] AITOOLS_ENVIRONMENT='bogus' ignored" "$OUT.err"; then ok "$1: the warning reached stderr"
+    else bad "$1: no warning on stderr"; sed 's/^/       /' "$OUT.err"; fi
+    if grep -Eq 'Exception|AppendAllText|Is a directory|Permission denied|cannot access' "$OUT.err"; then
+        bad "$1: a write error reached stderr"; sed 's/^/       /' "$OUT.err"
+    else ok "$1: no write error on stderr"; fi
+}
+fresh_home log-written
+log_case log-written
+if grep -qF -- "[aitools-profile] [warn] AITOOLS_ENVIRONMENT='bogus' ignored" "$H/.aitools/logs/deploy.log"; then ok "log-written: the warning is in deploy.log"
+else bad "log-written: the warning is not in deploy.log"; fi
+fresh_home log-blocked
+mkdir -p "$H/.aitools/logs/deploy.log"
+log_case log-blocked
+# POSIX permission case (bash, macOS/Linux): mode 000; root ignores the mode
+if [ "$LANG_RUN" != sh ]; then
+    skip "log-unwritable (POSIX permissions: macOS/Linux)"
+elif [ "$(id -u)" -eq 0 ]; then
+    skip "log-unwritable (running as root: mode 000 does not block the write)"
+else
+    fresh_home log-unwritable
+    mkdir -p "$H/.aitools/logs"; : > "$H/.aitools/logs/deploy.log"; chmod 000 "$H/.aitools/logs/deploy.log"
+    log_case log-unwritable
+    chmod 644 "$H/.aitools/logs/deploy.log"
+fi
+
 # --- usage ------------------------------------------------------------------------
 case_run usage-unknown 2 resolve --bogus
 NO_PARITY=1 case_run usage-nocmd 2   # help text names each platform's sources
