@@ -13,8 +13,12 @@ reviewer, the commander.
 Mission 38dc-25 (agent `ac189d584bdb1af14`, level 2, delegated by M6-Polish
 `a0c459c8f689338dc`, session 87795dc3-e). Claude Code 2.1.325 (`claude
 --version`), Windows 11 Pro for Workstations, local, 2026-11-14 23:15-23:59Z.
-Branch `docs/38dc-25-tool-ops-registry`; PR, review and merge: see "Shipping"
-(filled in after the merge, in the hand-back).
+Branch `docs/38dc-25-tool-ops-registry`, PR
+https://github.com/nobul-tech/aitools/pull/165, RELEASE_NOTES v0.77.14 (the
+version map set by the orchestrator). M6-Polish ran out of context during the
+merge wait; its successor M6b-Finish (`ac7f1cd3cfaa92f19`) set the merge order
+(#167 -> #159 -> #165 -> ...). Merge SHA and main CI: in the hand-back (they
+exist only after this file is committed).
 
 ## Summary
 
