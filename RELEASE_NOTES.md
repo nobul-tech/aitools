@@ -20,7 +20,7 @@ Not tagged. Branch `fix/fa81-05-wdg-timing`, mission fa81-05-wdg under fa81-05-m
 
 | # | Severity | Fix |
 |---|----------|-----|
-| 1 | Medium | `tests/hooks/test-workflow-delegation-guard.sh`: the timing case "adversarial 476 KB 'name prefix x.md' prompt" FAILed on the GitHub macOS runner at 103-107 ms (runs 43668923612 and 43674468619, `FAIL adversarial 476 KB 'name prefix x.md' prompt: 10x ms (>= 100)`), turning main and the queued PRs red. Its `timing` call now passes `250` as the hard limit, the one the stress case already has: on macOS 100-249 ms is a counted WARN and 250 ms or more still FAILs; on Linux and Windows Git Bash nothing changes (advisory). The comment above the call gives the observed times and the reason. The hook and its 100 ms budget (spec v1.1 section 9) are unchanged |
+| 1 | Medium | `tests/hooks/test-workflow-delegation-guard.sh`: the timing case "adversarial 476 KB 'name prefix x.md' prompt" FAILed on the GitHub macOS runner at 100-107 ms (run 43668923612: 100 ms; run 43674468619: 107 ms on `/bin/bash` 3.2, then 103 ms on bash 5 on the rerun; each `FAIL adversarial 476 KB 'name prefix x.md' prompt: <n> ms (>= 100)`), turning main and the queued PRs red. Its `timing` call now passes `250` as the hard limit, the one the stress case already has: on macOS 100-249 ms is a counted WARN and 250 ms or more still FAILs; on Linux and Windows Git Bash nothing changes (advisory). The comment above the call gives the observed times and the reason. The hook and its 100 ms budget (spec v1.1 section 9) are unchanged |
 
 **Verified on:** Windows 11 (Git Bash): `bash -n` on the test; the whole test suite in Git Bash; `scripts/check-pre-commit.ps1`. macOS and Linux (bash 5 and `/bin/bash` 3.2): CI.
 
