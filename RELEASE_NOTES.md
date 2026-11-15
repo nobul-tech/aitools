@@ -12,6 +12,27 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.77.18 -- A private account address redacted from tracked text files (2026-11-14)
+
+Not tagged. Branch `docs/m7-redact-email`, mission M7-Priv under M7-Sweep (session 87795dc3), item 7 of M7-Sweep. Commander, 2026-11-14: "25) launch mission go fix them, dont bother filing incidents, check to see if these were already fixed by the other running missions first, if not do it".
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 1 | The commander's secondary Google account address is replaced with `<secondary Google account>`, and its path-sanitized form (in `~/.claude/projects/` directory names) with `<secondary-Google-account>`, in the five tracked text files that held it: `.aitools/channel/handoffs/2026-10-21_360aa8f3-8-missions/S2-Layout/inventory2.txt` (2), `harvesting/2026-03-22_6_40agent-human-messages.md` (2), `harvesting/2026-03-29_session-fbf7decb-9_1bc9fd30-full.md` (7), `harvesting/2026-03-29_session-fbf7decb-9_f078fb16-session.md` (2) and `plans/user-repo-and-session-hooks.md` (1). No other byte changes. The four `harvesting/2026-10-29_session-*.tar` archives and git history still hold it: nothing is rewritten |
+| 2 | Decision memo for the commander: every location of the address (files, lines, the commits that added it, the `.tar` members), what remains after this change, what a history rewrite and a `.tar` replacement would involve (GitHub's procedure quoted from docs.github.com), a recommendation, and other personal data seen in the same files (not edited) |
+
+### Files created
+
+| File | Purpose |
+|------|---------|
+| `.aitools/channel/handoffs/2026-11-14_87795dc3-missions/M7-Sweep/M7-Sweep-email-memo.md` | The decision memo (v1.0) |
+
+**Verified on:** Windows 11: after the change `git grep -I -i` with the scan pattern finds no tracked text file holding the address in either form; a character-level `git diff --word-diff` shows only the 14 replaced tokens; line counts and line endings of the five files unchanged. `scripts/ait-harvest.py` keys harvested files by name and records no content hash, so the three edited harvested files are not re-harvested.
+
+---
+
 ## v0.77.12 -- On Windows the bash aitools hands off to aitools.ps1; OS guards on hh.sh, bootstrap.sh, init-hh-hooks.sh and analyze-session.sh (2026-11-14)
 
 Not tagged. Branch `fix/38dc-19-aitools-win-forwarder` (PR #162), mission 38dc-19 under M6-Polish (session 87795dc3). Commander, 2026-11-14, RFI 38dc-3 ("make the bash `aitools` a forwarder on Windows"): "agreed"; RFI 38dc-5: "add an OS guard to all of them".
