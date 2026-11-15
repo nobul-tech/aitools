@@ -72,13 +72,13 @@ case "$OS_NAME" in
                 log "Already installed via Homebrew — upgrading..."
                 upgrade_rc=0
                 UPGRADE_OUTPUT=$(brew upgrade vercel-cli 2>&1) || upgrade_rc=$?
-                if [ "$upgrade_rc" -eq 0 ] && printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'already installed\|up.to.date\|No available upgrade'; then
+                if [ "$upgrade_rc" -eq 0 ] && printf '%s\n' "$UPGRADE_OUTPUT" | grep -i 'already installed\|up.to.date\|No available upgrade' >/dev/null; then
                     log_ok "Vercel CLI already up to date"
                     write_summary OK "vercel cli" "$VERCEL_VERSION"
                 else
                     while IFS= read -r line; do log "$line"; done <<< "$UPGRADE_OUTPUT"
                     # Exit code first (C-F2); the output grep stays for brew upgrade (Standard 3).
-                    if [ "$upgrade_rc" -ne 0 ] || printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'error\|fatal'; then
+                    if [ "$upgrade_rc" -ne 0 ] || printf '%s\n' "$UPGRADE_OUTPUT" | grep -i 'error\|fatal' >/dev/null; then
                         log_error "brew upgrade vercel-cli failed (exit $upgrade_rc) -- see $(display_path "$LOG_FILE")"
                         write_summary ERROR "vercel cli" "brew upgrade failed (exit $upgrade_rc)"
                     else

@@ -167,7 +167,7 @@ if [ -f "$lib_file" ]; then
         prev_start=$((lineno - 3))
         if [ "$prev_start" -lt 1 ]; then prev_start=1; fi
         context=$(sed -n "${prev_start},${lineno}p" "$lib_file")
-        if printf '%s' "$context" | grep -q 'Verified\|UNVERIFIED'; then
+        if printf '%s' "$context" | grep 'Verified\|UNVERIFIED' >/dev/null; then
             verified_count=$((verified_count + 1))
         fi
     done <<< "$unverified"

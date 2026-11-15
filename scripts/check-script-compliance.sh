@@ -2,8 +2,10 @@
 # check-script-compliance.sh -- Verify setup scripts follow script-standards.md
 # Usage: bash scripts/check-script-compliance.sh
 # Checks: log format, exit footers, write_summary coverage, counter tracking,
-#          raw echo/Write-Host, grep pipefail safety, OS guards, logging init,
-#          cross-platform pairing, SilentlyContinue result checks, summary categories.
+#          raw echo/Write-Host, grep pipefail safety (FAIL: a pipeline that ends
+#          in grep -q in a pipefail bash file; WARN: other pipeline greps without
+#          || true in setup scripts), OS guards, logging init, cross-platform
+#          pairing, SilentlyContinue result checks, summary categories.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -162,8 +164,72 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 7. Grep pipefail safety -- grep without || true in pipefail scripts
+# 7. Grep pipefail safety
+#    (a) FAIL: a pipeline that ends in grep -q (q in any short-option bundle:
+#        -q, -qi, -qxF ...; or --quiet / --silent) in a bash file that runs
+#        under pipefail. grep -q exits at its first match without reading the
+#        rest of its input; the writer then gets SIGPIPE (exit 141), or, where
+#        SIGPIPE is ignored (the GitHub linux runner), exits non-zero on the
+#        write error, and under pipefail the pipeline fails, so a condition such as
+#        "if writer, piped to grep -q P" can be false although P matched (CI
+#        runs 43640967140 and 43642017937; PR #164). The fix is the same grep
+#        without q, stdout to /dev/null (grep P >/dev/null): GNU grep then
+#        drains its input before it exits, BSD grep reads it to EOF.
+#        Scan set: scripts/*.sh, every file in scripts/githooks/,
+#        shared/hooks/*.sh. A file qualifies when a non-comment line runs set
+#        with pipefail (set -euo pipefail, set -o pipefail, set -e -o pipefail,
+#        any set -<letters>o pipefail), or it is a library that pipefail
+#        scripts source (scripts/aitools-lib.sh, check-lib.sh, init-logging.sh).
+#        A non-comment line is flagged wherever the pipeline sits: if / elif /
+#        while conditions, after !, inside $(...), before && or ||; also when
+#        other option words come first (grep -i -q) and when the line starts
+#        with the pipe (a continued pipeline). Not flagged: grep -q reading a
+#        file with no pipe in front, a grep after || or &&, comment lines.
+#        Blind spots (a line-based perl regex, not a shell parser): heredoc
+#        bodies and multi-line quoted strings are scanned as plain lines (a
+#        pipe to grep -q inside one is flagged); a pipe at the end of one line
+#        followed by grep -q at the start of the next line without a leading
+#        pipe is missed, and so are |&, egrep / fgrep, a grep behind another
+#        word (command grep, LC_ALL=C grep), -q after the pattern (grep P -q)
+#        and -q after an option that takes an argument (grep -e P -q).
+#        The pattern is written with character classes ([|]) so this file's
+#        own source never matches it. A perl failure is a FAIL "(scan failed)",
+#        never a silent pass.
+#    (b) When (a) finds no site, the step reports the heuristic below (its
+#        logic unchanged): a grep in a pipeline without || true in a pipefail
+#        setup script is a WARN.
 # ---------------------------------------------------------------------------
+step7_scan_ok=true
+step7_sites=""
+if ! step7_sites=$(perl -e '
+    use strict; use warnings;
+    my %lib = map { $_ => 1 } qw(scripts/aitools-lib.sh scripts/check-lib.sh scripts/init-logging.sh);
+    my $pf = qr/\bset[ \t]+(?:-[A-Za-z]+[ \t]+(?:[a-z]+[ \t]+)*)*-[A-Za-z]*o[ \t]+pipefail\b/;
+    my $gq = qr/(?<![|])[|](?![|])[ \t]*grep(?:[ \t]+-[^ \t]+)*?[ \t]+(?:-[A-Za-z0-9]*q[A-Za-z0-9]*|--quiet|--silent)(?![^ \t\r\n;&|)])/;
+    for my $f (@ARGV) {
+        next unless -f $f;
+        open(my $fh, "<", $f) or die "step 7: cannot read $f: $!\n";
+        my $on = $lib{$f} ? 1 : 0;
+        my @hits;
+        while (my $l = <$fh>) {
+            next if $l =~ /^[ \t]*#/;
+            $on = 1 if $l =~ $pf;
+            push @hits, "$f:$." if $l =~ $gq;
+        }
+        close($fh) or die "step 7: cannot close $f: $!\n";
+        print "$_\n" for ($on ? @hits : ());
+    }
+' scripts/*.sh scripts/githooks/* shared/hooks/*.sh); then
+    step7_scan_ok=false
+fi
+step7_n=0
+step7_list=""
+while IFS= read -r step7_site; do
+    [ -n "$step7_site" ] || continue
+    step7_n=$((step7_n + 1))
+    step7_list="${step7_list} ${step7_site}"
+done <<< "$step7_sites"
+
 step7_fail=0
 step7_details=""
 for f in "${SH_SCRIPTS[@]}"; do
@@ -183,7 +249,11 @@ for f in "${SH_SCRIPTS[@]}"; do
     fi
 done
 
-if [ "$step7_fail" -eq 0 ]; then
+if ! $step7_scan_ok; then
+    step_fail "7" "Grep pipefail safety" "grep -q pipeline scan (scan failed)"
+elif [ "$step7_n" -gt 0 ]; then
+    step_fail "7" "Grep pipefail safety" "${step7_n} pipeline(s) end in grep -q under pipefail:${step7_list}"
+elif [ "$step7_fail" -eq 0 ]; then
     step_pass "7" "Grep pipefail safety" "no unsafe grep pipelines"
 else
     step_warn "7" "Grep pipefail safety" "${step7_fail} potential issues:${step7_details}"

@@ -198,7 +198,7 @@ else
     # Check staged diffs for blind overwrite patterns
     overwrite_found=false
     diff_output=$(git diff --cached -- $setup_staged_all 2>/dev/null || true)
-    if echo "$diff_output" | grep -qE '^\+.*cat[[:space:]]*>|^\+.*WriteAllText.*ConvertTo-Json'; then
+    if echo "$diff_output" | grep -E '^\+.*cat[[:space:]]*>|^\+.*WriteAllText.*ConvertTo-Json' >/dev/null; then
         overwrite_found=true
     fi
     if $overwrite_found; then
@@ -213,7 +213,7 @@ fi
 # ---------------------------------------------------------------------------
 # Check if non-docs changes are staged (anything other than .md, .mdc files)
 non_docs=$(echo "$STAGED_FILES" | grep -vE '\.(md|mdc)$' || true)
-rn_staged=$(echo "$STAGED_FILES" | grep -q 'RELEASE_NOTES.md' && echo "yes" || echo "no")
+rn_staged=$(echo "$STAGED_FILES" | grep 'RELEASE_NOTES.md' >/dev/null && echo "yes" || echo "no")
 if [ -z "$non_docs" ]; then
     step_skip "9" "Release notes" "docs-only changes"
 elif [ "$rn_staged" = "yes" ]; then
@@ -247,7 +247,7 @@ fi
 # ---------------------------------------------------------------------------
 # 12. Template sync
 # ---------------------------------------------------------------------------
-if echo "$STAGED_FILES" | grep -q 'shared/claude-shared.md'; then
+if echo "$STAGED_FILES" | grep 'shared/claude-shared.md' >/dev/null; then
     step_warn "12" "Template sync" "update user repo template (<userRepoPath>/claude/CLAUDE.md)"
 else
     step_skip "12" "Template sync" "shared/claude-shared.md not modified"
@@ -364,7 +364,7 @@ if [ -d "$hook_dir" ]; then
         name=$(basename "$hook")
         # Check for stat fallback chain: stat -f ... || stat -c ... on one line
         # This is ALWAYS wrong — see cross-platform.md "NEVER use the fallback chain"
-        if perl -ne 'print if /stat\s+-f.*\|\|.*stat\s+-c/ && !/^\s*#/' "$hook" 2>/dev/null | grep -q .; then
+        if perl -ne 'print if /stat\s+-f.*\|\|.*stat\s+-c/ && !/^\s*#/' "$hook" 2>/dev/null | grep . >/dev/null; then
             hook_issues="${hook_issues}  $name: stat fallback chain (NEVER use, see cross-platform.md)\n"
         fi
         # Check for stat -f NOT inside a uname -s guard (within 5 lines)
@@ -382,15 +382,15 @@ if [ -d "$hook_dir" ]; then
                 }
                 print "line " . ($i+1) . ": " . $lines[$i] unless $guarded;
             }
-        ' "$hook" 2>/dev/null | grep -q .; then
+        ' "$hook" 2>/dev/null | grep . >/dev/null; then
             hook_issues="${hook_issues}  $name: unguarded stat -f (use uname -s dispatch)\n"
         fi
         # Check for find -printf
-        if perl -ne 'print if /find\s.*-printf/ && !/^\s*#/' "$hook" 2>/dev/null | grep -q .; then
+        if perl -ne 'print if /find\s.*-printf/ && !/^\s*#/' "$hook" 2>/dev/null | grep . >/dev/null; then
             hook_issues="${hook_issues}  $name: find -printf (GNU-only, use find + stat loop)\n"
         fi
         # Check for grep -P
-        if perl -ne 'print if /grep\s+-[^\s]*P/ && !/^\s*#/' "$hook" 2>/dev/null | grep -q .; then
+        if perl -ne 'print if /grep\s+-[^\s]*P/ && !/^\s*#/' "$hook" 2>/dev/null | grep . >/dev/null; then
             hook_issues="${hook_issues}  $name: grep -P (use perl -ne or grep -E)\n"
         fi
         # Check for date -d NOT inside a uname -s guard (within 5 lines)
@@ -406,7 +406,7 @@ if [ -d "$hook_dir" ]; then
                 }
                 print "line " . ($i+1) . ": " . $lines[$i] unless $guarded;
             }
-        ' "$hook" 2>/dev/null | grep -q .; then
+        ' "$hook" 2>/dev/null | grep . >/dev/null; then
             hook_issues="${hook_issues}  $name: unguarded date -d (use uname -s dispatch)\n"
         fi
     done
