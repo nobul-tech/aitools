@@ -39,6 +39,40 @@ Not tagged. Branch `fix/38dc-24-pipefail-grepq`, mission 38dc-24 (M6-Polish, ses
 
 ---
 
+## v0.77.13 -- OS guards on the [RELAY] prompt scripts; the Windows checks call Git Bash only for build-deploy.sh (2026-11-14)
+
+Not tagged. Branch `fix/38dc-23-relay-guards-no-gitbash`, mission 38dc-23 under M6-Polish (session 87795dc3). Commander, 2026-11-14, answer to RFI 38dc-7: "relay-outbound.sh/.ps1 need os guards they are not exempt, the aitools dependency needs to be resolved (how to resolve it and resolving it need to be part of same mission) ... for the check-*.ps1 can youj explain this further? id like to avoid calling git bash on thowse ps1 scripts."
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 1 | `scripts/relay-outbound-prompt.sh` carries the POSIX OS guard and `scripts/relay-outbound-prompt.ps1` the Windows guard. Both are sourced into other scripts (`scripts/aitools` and `hh.sh`; `aitools.ps1` and `hh.ps1`), so each guard writes the structured `[<UTC>] [relay-outbound-prompt] [error]` line itself, to stderr, without loading init-logging (which would re-initialize the caller's log). The `.sh` guard returns 1 when sourced, so the refusal does not end the caller's shell, and exits 1 when run. The `.ps1` guard exits 1; dot-sourced, that ends only the guarded file, so the caller goes on with `$LASTEXITCODE` 1 and neither function defined (`hh.ps1`, under `$ErrorActionPreference = "Stop"`, then ends nonzero at its call; `aitools.ps1` has its own Windows guard). One run of a `~/.local/bin/aitools` installed before v0.77.12, started from Git Bash on Windows, now ends nonzero after its sync summary (it sources the guarded `.sh`, and `relay_outbound_prompt` is then undefined); the same run rewrites the installed copy, so the next run hands off to `aitools.ps1` |
+| 2 | The bash `aitools` dependency on `relay-outbound-prompt.sh` is resolved: since v0.77.12 `main()` hands off to `aitools.ps1` at its top on Windows (and returns 1 when it cannot), so the relay source line near its end is never reached there; now the `.sh` also refuses Windows if anything else sources it. `tests/relay-outbound/test-relay-outbound.ps1` checks that order in `scripts/aitools` |
+| 3 | `check-pre-commit.ps1` step 2 and `check-post-push.ps1` step 6 no longer run `bash -n` through Git Bash: the `.sh` half reports SKIP and names CI and the `.sh` twin. A `.sh` never runs on Windows; `check-pre-commit.sh` / `check-post-push.sh` check it on macOS and Linux |
+| 4 | `check-post-push.ps1` step 4 runs the Windows entry point natively (`pwsh -NoProfile -NonInteractive -File scripts/aitools.ps1 --version`) instead of the bash entry through Git Bash, which only hands off to `aitools.ps1` on Windows. It now fails on a nonzero exit or output without an `aitools <version>` line (before, any output passed, even an empty one) and when pwsh is missing |
+| 5 | CI: the linux and macos "Validate bash script syntax" steps run `bash -n` on every tracked shell script (each `*.sh` under `scripts/`, `shared/`, `packaging/`, `tests/` and `deploy/`, and the extensionless bash/sh scripts under `scripts/`, `shared/` and `packaging/`), not only `scripts/*.sh`, `shared/hooks/*.sh`, `deploy/*.sh` and the git hook: they now also cover `shared/shell/aliases.sh`, `packaging/` and `scripts/aitools` (126 files). The step fails when the list comes out empty. Not covered: the archived `.sh` files under `.aitools/channel/handoffs/` and `harvesting/`, which the old Windows step 2 checked when staged; they are never run, and all parsed when this shipped |
+| 6 | `check-pre-push.ps1` step 7 (`build-deploy.sh` into a temporary dotprofile copy) is the only Git Bash call left in the `check-*.ps1` scripts; whether to keep it is RFI 38dc-23-1. `ResolveGitBash` (check-lib) stays for it |
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 7 | `.claude/rules/cross-platform.md` (and `.cursor/rules/cross-platform.mdc`): the exemption row drops `relay-outbound-prompt.sh/.ps1` (guarded now); "OS guard patterns" records the guard of a sourced file; the "Unrecorded" cross-language row narrows from `check-pre-commit.ps1`, `check-post-push.ps1`, `check-pre-push.ps1` to `check-pre-push.ps1` step 7. `reference/pre-commit-checklist.md` (step 2), `reference/post-push-checklist.md` (steps 4, 6) and `reference/pre-push-checklist.md` (step 7) say what runs on Windows |
+| 8 | `tests/check-post-push/test-post-push-deploy-steps.sh` expects SKIP for step 6 (.sh) of the `.ps1` twin and leaves that line out of the twin comparison; `tests/check-lib/test-resolve-git-bash.ps1` expects `ResolveGitBash` in `check-pre-push.ps1` only |
+
+### Files created
+
+| File | Purpose |
+|------|---------|
+| `tests/relay-outbound/test-relay-outbound.ps1` | Windows (CI windows job): the `.ps1` loads and its guard has the classifier form; the `.sh` refuses Git Bash when run (exit 1, structured line, nothing written) and when sourced (source returns 1, the caller goes on); in `scripts/aitools` the Windows hand-off comes before the relay source line |
+| `tests/relay-outbound/test-relay-outbound.sh` | macOS/Linux (CI linux and macos jobs, macOS also /bin/bash 3.2): the `.sh` loads, runs and prints the CI hint below its guard; the `.ps1` refuses pwsh when run; dot-sourced, it leaves its functions undefined with `$LASTEXITCODE` 1, and a caller under `Stop` ends nonzero at the call |
+| `tests/check-no-git-bash/test-check-no-git-bash.ps1` | Windows (CI windows job): only `check-pre-push.ps1` calls `ResolveGitBash`, once, for `build-deploy.sh`; pre-commit step 2 and post-push step 6 report SKIP for a `.sh` with a syntax error; post-push step 4 passes the real `aitools.ps1` and fails a stub that exits 3, a stub without a version line, and a missing pwsh |
+
+**Verified on:** see the PR (filled in at merge).
+
+---
+
 ## v0.77.12 -- On Windows the bash aitools hands off to aitools.ps1; OS guards on hh.sh, bootstrap.sh, init-hh-hooks.sh and analyze-session.sh (2026-11-14)
 
 Not tagged. Branch `fix/38dc-19-aitools-win-forwarder` (PR #162), mission 38dc-19 under M6-Polish (session 87795dc3). Commander, 2026-11-14, RFI 38dc-3 ("make the bash `aitools` a forwarder on Windows"): "agreed"; RFI 38dc-5: "add an OS guard to all of them".

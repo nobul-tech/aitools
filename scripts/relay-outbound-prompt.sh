@@ -12,6 +12,23 @@
 #   AITOOLS_SKIP_RELAY_PROMPT=1  — skip (automation / CI)
 #   CI                           — non-interactive: one-line hint only
 #   RELAY_PROMPT_FORCE=1         — prompt even when CI is set (TTY only)
+#
+# Platform: macOS/Linux (OS guard below). Windows: relay-outbound-prompt.ps1,
+# loaded by aitools.ps1 and hh.ps1.
+
+# OS guard (.claude/rules/cross-platform.md "OS guard patterns"; commander,
+# 2026-11-14: "relay-outbound.sh/.ps1 need os guards they are not exempt").
+# On Windows the bash entry point scripts/aitools hands off to aitools.ps1
+# before it reaches the relay prompt, and hh.sh refuses Windows. This file is
+# sourced into scripts/aitools and hh.sh, so the guard writes the structured
+# line itself (sourcing init-logging here would re-initialize the caller's
+# log) and, when sourced, returns 1 instead of ending the caller's shell.
+case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*)
+        printf '[%s] [relay-outbound-prompt] [error] This script is for macOS/Linux. On Windows, use relay-outbound-prompt.ps1 (pwsh).\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >&2
+        [ "${BASH_SOURCE[0]}" = "$0" ] || return 1
+        exit 1 ;;
+esac
 
 relay_outbound_prompt() {
     local repo="${1:?relay_outbound_prompt: repo path required}"
