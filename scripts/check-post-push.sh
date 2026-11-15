@@ -48,21 +48,16 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 2. Smoke-test deploy scripts
+# 2. Smoke-test deploy scripts (retired)
 # ---------------------------------------------------------------------------
-deploy_errors=0
-for f in "$REPO_ROOT"/deploy/*.sh; do
-    [ -f "$f" ] || continue
-    if ! bash -n "$f" 2>/dev/null; then
-        echo "      FAIL: $(basename "$f")"
-        deploy_errors=$((deploy_errors + 1))
-    fi
-done
-if [ "$deploy_errors" -eq 0 ]; then
-    step_pass "2" "Smoke-test deploy scripts"
-else
-    step_fail "2" "Smoke-test deploy scripts" "$deploy_errors file(s) failed bash -n"
-fi
+# Retired (incident #176): the step ran bash -n on the aitools deploy/*.sh, which
+# is frozen (build-deploy.sh writes the dotprofile deploy/ since 2c0fd32), so it
+# proved nothing about the generated scripts. check-pre-push step 7 runs on every
+# push (commander, 2026-10-26): it rebuilds into a temporary copy of the
+# dotprofile under a temporary HOME (build-deploy parses every generated .ps1
+# when pwsh is installed) and dry-runs the resolver consumers. No step reads the
+# aitools deploy/; the number stays so outputs stay stable.
+step_skip "2" "Smoke-test deploy scripts" "retired: check-pre-push step 7 rebuilds into a temp dotprofile copy"
 
 # ---------------------------------------------------------------------------
 # 3. MCP config integrity
@@ -163,8 +158,11 @@ echo ""
 # ---------------------------------------------------------------------------
 # 6. Full script syntax validation
 # ---------------------------------------------------------------------------
+# Source scripts only: scripts/ and shared/hooks/. The aitools deploy/ is frozen
+# and no longer read (incident #176); check-pre-push step 7 builds the generated
+# scripts into a temporary dotprofile copy.
 sh_errors=0
-for f in "$REPO_ROOT"/scripts/*.sh "$REPO_ROOT"/deploy/*.sh "$REPO_ROOT"/shared/hooks/*.sh; do
+for f in "$REPO_ROOT"/scripts/*.sh "$REPO_ROOT"/shared/hooks/*.sh; do
     [ -f "$f" ] || continue
     if ! bash -n "$f" 2>/dev/null; then
         echo "      FAIL: $f"
@@ -180,7 +178,7 @@ fi
 # PS1 validation
 if require_pwsh "6" "Full syntax (.ps1)"; then
     ps1_errors=0
-    for f in "$REPO_ROOT"/scripts/*.ps1 "$REPO_ROOT"/deploy/*.ps1; do
+    for f in "$REPO_ROOT"/scripts/*.ps1; do
         [ -f "$f" ] || continue
         if ! pwsh -NoProfile -Command "
             \$e = \$null
@@ -309,8 +307,10 @@ fi
 # ---------------------------------------------------------------------------
 # 14. Line ending audit
 # ---------------------------------------------------------------------------
+# Source scripts only: scripts/ and shared/hooks/ (the frozen aitools deploy/ is
+# not read, incident #176).
 crlf_count=0
-for f in "$REPO_ROOT"/scripts/*.sh "$REPO_ROOT"/deploy/*.sh "$REPO_ROOT"/shared/hooks/*.sh; do
+for f in "$REPO_ROOT"/scripts/*.sh "$REPO_ROOT"/shared/hooks/*.sh; do
     [ -f "$f" ] || continue
     if grep -rl $'\r' "$f" >/dev/null 2>&1; then
         echo "      CRLF: $f"

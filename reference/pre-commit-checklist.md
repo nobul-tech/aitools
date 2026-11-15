@@ -1,8 +1,10 @@
 # Pre-Commit Checklist (this repo)
 
-> **Script**: On macOS: `bash scripts/check-pre-commit.sh` (or `--fix`).
+> **Script**: On macOS and Linux: `bash scripts/check-pre-commit.sh` (or `--fix`).
 > On Windows: `pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/check-pre-commit.ps1` (or `-Fix`).
 > Always use the platform-native variant. Never run the `.sh` version on Windows.
+> `--fix` / `-Fix` repairs line endings (step 4) and exec bits (step 6) of the
+> repo's files only; it never runs `build-deploy.sh` (incident #136, closed 2026-11-14).
 
 Before every commit, verify:
 
@@ -17,9 +19,19 @@ For every `.sh` or `.ps1` file being committed:
 - PS1: See `.claude/rules/cross-platform.md` Pre-validation convention for the full ParseFile command. Note: `$e` must be declared before `[ref]$e` -- undeclared variables cause `[ref]` to error.
 - If the other platform's scripts can't be validated locally, note in commit message: `(tested: macOS)` or `(tested: Windows)`
 
-## 3. Build freshness
+## 3. Build freshness (retired)
 
-**Build freshness (dotprofile)**: if `scripts/` or `shared/` changed, the dotprofile `deploy/` may be stale. Do not run `--fix` from an agent: it runs `build-deploy.sh` against the real HOME (the shared `aitools/deploy/` is frozen and is not rebuilt). Verify with pre-push step 7, which rebuilds into a temporary copy.
+Always SKIP (`retired: check-pre-push step 7 rebuilds into a temp dotprofile
+copy`). If `scripts/` or `shared/` changed, the dotprofile `deploy/` may be
+stale; pre-push step 7 rebuilds it into a temporary copy of the dotprofile
+under a temporary HOME on every push when a dotprofile is configured (it
+SKIPs without one and WARNs without node or Git Bash), checks the build's exit code and
+dry-runs the result. The shared `aitools/deploy/` is frozen. Until 2026-11-14,
+`--fix` / `-Fix` ran `build-deploy.sh` here with the caller's HOME (which
+rebuilt the real dotprofile `deploy/`), discarded its output and exit code,
+staged the frozen `aitools/deploy/` and reported PASS, and without the flag
+the step WARNed "run with --fix" (incident #136). Tests:
+`tests/check-pre-commit/test-pre-commit-steps3-10.sh`.
 
 ## 4. Line endings
 
@@ -31,7 +43,7 @@ If `.sh` or `.ps1` files are in the commit, end the commit message with `(tested
 
 ## 6. Executable bit on .sh files
 
-`git ls-files -s '*.sh' | grep -v '^100755'` must return nothing. Fix: `git update-index --chmod=+x <file>`. Especially important for files created on Windows (Windows doesn't set Unix executable bit).
+`git ls-files -s -- '*.sh' ':!deploy/' | grep -v '^100755'` must return nothing. Fix: `git update-index --chmod=+x <file>`. Especially important for files created on Windows (Windows doesn't set Unix executable bit). The frozen aitools `deploy/` is excluded: the step neither reports nor (with `--fix` / `-Fix`) stages a mode change under it (PR #154 review; incidents #136, #176).
 
 ## 7. Install command consistency
 
@@ -51,10 +63,11 @@ If the commit modifies a setup script that writes JSON config files
 
 If the commit includes new features, bug fixes, or behavioral changes, `RELEASE_NOTES.md` **must** have a version entry covering the changes. `aitools gitpull` will refuse to tag without one. Omit for docs-only, rule-only, or trivial changes that won't be tagged.
 
-## 10. Deploy drift check
+## 10. Deploy drift check (retired)
 
-Retired for aitools in practice (`aitools/deploy/` is frozen, so `git diff deploy/`
-there can only be empty); the script still runs it. The dotprofile `deploy/` is
+Always SKIP (same text as step 3). It ran `git diff deploy/` on the frozen
+`aitools/deploy/`, which nothing regenerates, so it proved nothing about the
+dotprofile build (retired with step 3, 2026-11-14). The dotprofile `deploy/` is
 checked by pre-push step 7.
 
 ## 11. User repo changes
