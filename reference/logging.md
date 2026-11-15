@@ -208,6 +208,9 @@ helper scripts, the extensionless ones included) writes log entries and run
 summary records only through the `aitools-lib.sh` / `.ps1` helpers (8.2). It
 defines no logging functions of its own, and appends to no log or run summary
 file directly. The only exceptions are the writers below.
+`check-script-compliance` (`scripts/check-script-compliance.sh` / `.ps1`)
+enforces this: its exception list matches this section and changes with it,
+in both twins.
 
 These writers keep their own logging until the unified-logging roadmap item
 (GitHub issue #187) is implemented:
