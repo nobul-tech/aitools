@@ -87,7 +87,7 @@ log "Step 1: ripgrep (rg)"
 
 if [ "$DRY_RUN" = "true" ]; then
     if command -v rg &>/dev/null; then
-        RG_VERSION=$(rg --version | head -1)
+        RG_VERSION=$(rg --version | sed -n '1p')
         log "[DRY RUN] ripgrep already installed: $RG_VERSION"
         STATUS_ripgrep="already installed ($RG_VERSION)"
     else
@@ -96,7 +96,7 @@ if [ "$DRY_RUN" = "true" ]; then
     fi
 else
     if command -v rg &>/dev/null; then
-        RG_VERSION=$(rg --version | head -1)
+        RG_VERSION=$(rg --version | sed -n '1p')
         log_ok "Already installed: $RG_VERSION"
         STATUS_ripgrep="already installed ($RG_VERSION)"
     else
@@ -112,7 +112,7 @@ else
                 STATUS_ripgrep="FAILED (exit $rg_rc)"
                 write_summary ERROR "cursor cli" "ripgrep install failed (exit $rg_rc)"
             elif command -v rg &>/dev/null; then
-                RG_VERSION=$(rg --version | head -1)
+                RG_VERSION=$(rg --version | sed -n '1p')
                 log_ok "Installed: $RG_VERSION"
                 STATUS_ripgrep="installed ($RG_VERSION)"
             else
