@@ -19,7 +19,9 @@
 #            a parse error in scripts/*.ps1 and a CRLF shared/hooks/*.sh: FAIL 6
 #            (.sh), FAIL 6 (.ps1) and FAIL 14, one file each (the steps still
 #            audit the sources)
-#   twins    the .sh and .ps1 results of both fake repos are identical
+#   twins    the .sh and .ps1 results of both fake repos are identical, except
+#            step 6 (.sh): the .ps1 twin runs no Git Bash, so it reports SKIP
+#            (bash -n runs in CI and in the .sh twin; tests/check-no-git-bash)
 #   static   no non-comment line of either twin reads the aitools deploy/
 #
 # Limits: on Windows the .sh twin's .ps1 audit (pwsh ParseFile on a POSIX path)
@@ -67,6 +69,8 @@ if $HAVE_PWSH && ! $IS_WINDOWS; then SH_PWSH=1; fi
 
 RETIRED='retired: check-pre-push step 7 rebuilds into a temp dotprofile copy'
 SH_PS1_STUB='not exercised by this test'
+# Step 6 (.sh) of the .ps1 twin: no bash -n on Windows (no Git Bash calls)
+PS1_SH_SKIP='SKIP 6 Full syntax (.sh)|bash -n runs in CI (linux, macos) and check-post-push.sh, not on Windows'
 
 check() {  # name, condition (eval'd)
     if eval "$2"; then
@@ -149,12 +153,12 @@ expect "$TMP_ROOT/exp-frozen-sh" \
     "PASS 14 Line ending audit|"
 expect "$TMP_ROOT/exp-frozen-ps1" \
     "SKIP 2 Smoke-test deploy scripts|$RETIRED" \
-    "PASS 6 Full syntax (.sh)|" \
+    "$PS1_SH_SKIP" \
     "PASS 6 Full syntax (.ps1)|" \
     "PASS 14 Line ending audit|"
 expect "$TMP_ROOT/exp-sources-ps1" \
     "SKIP 2 Smoke-test deploy scripts|$RETIRED" \
-    "FAIL 6 Full syntax (.sh)|1 file(s) failed" \
+    "$PS1_SH_SKIP" \
     "FAIL 6 Full syntax (.ps1)|1 file(s) failed" \
     "FAIL 14 Line ending audit|1 file(s) with CRLF"
 if $IS_WINDOWS; then
@@ -237,16 +241,11 @@ function StepFail { param($n, $name, $d) Rec "FAIL" $n $name $d }
 function StepWarn { param($n, $name, $d) Rec "WARN" $n $name $d }
 function StepSkip { param($n, $name, $d) Rec "SKIP" $n $name $d }
 function InvokeGit { $out = & git @args 2>$null; $out }
-# The bash the steps run bash -n with (the pre-fix step 2 also resolved it)
-function ResolveGitBash { $env:DEPLOY_STEPS_BASH }
-$bashExe = ResolveGitBash
 $script:RepoRoot = $env:DEPLOY_STEPS_REPO
 $scriptDir = Join-Path $script:RepoRoot "scripts"
 Set-Location $script:RepoRoot
 . $env:DEPLOY_STEPS_SECTION
 EOF
-    bash_native=$(command -v bash)
-    if $IS_WINDOWS; then bash_native=$(cygpath -w "$bash_native"); fi
     for fx in frozen sources; do
         repo="$TMP_ROOT/$fx"
         rm -f "$TMP_ROOT/marker-ps1-$fx" "$TMP_ROOT/rec-ps1-$fx"
@@ -254,7 +253,7 @@ EOF
         HOME="$TMP_ROOT/home" USERPROFILE="$(native "$TMP_ROOT/home")" \
             DEPLOY_STEPS_MARKER="$(native "$TMP_ROOT/marker-ps1-$fx")" \
             DEPLOY_STEPS_REC="$(native "$TMP_ROOT/rec-ps1-$fx")" DEPLOY_STEPS_REPO="$(native "$repo")" \
-            DEPLOY_STEPS_SECTION="$(native "$TMP_ROOT/steps.ps1")" DEPLOY_STEPS_BASH="$bash_native" \
+            DEPLOY_STEPS_SECTION="$(native "$TMP_ROOT/steps.ps1")" \
             pwsh -NoProfile -NonInteractive -File "$(native "$TMP_ROOT/run.ps1")" > "$TMP_ROOT/out" 2>&1 || RC=$?
         norm "$TMP_ROOT/rec-ps1-$fx" "$TMP_ROOT/got-ps1-$fx"
         check "ps1 $fx: exit 0" "[ $RC -eq 0 ]"
@@ -271,19 +270,24 @@ fi
 
 # --- Twins and HOME ------------------------------------------------------------
 if [ -f "$TMP_ROOT/got-sh-frozen" ] && [ -f "$TMP_ROOT/got-ps1-frozen" ]; then
+    # Step 6 (.sh) is left out of every comparison: the .ps1 twin runs no Git
+    # Bash and reports SKIP there (checked by the exact expectations above)
     if [ "$SH_PWSH" = 1 ]; then
         for fx in frozen sources; do
-            cp "$TMP_ROOT/got-ps1-$fx" "$TMP_ROOT/out"
-            check "twins $fx: .sh and .ps1 results are identical" "diff '$TMP_ROOT/got-sh-$fx' '$TMP_ROOT/got-ps1-$fx' > /dev/null"
+            for tw in sh ps1; do
+                perl -ne 'print unless /^\w+ 6 Full syntax \(\.sh\)/' "$TMP_ROOT/got-$tw-$fx" > "$TMP_ROOT/cmp-$tw-$fx"
+            done
+            cp "$TMP_ROOT/cmp-ps1-$fx" "$TMP_ROOT/out"
+            check "twins $fx: .sh and .ps1 results are identical (steps 2, 6 (.ps1), 14)" "diff '$TMP_ROOT/cmp-sh-$fx' '$TMP_ROOT/cmp-ps1-$fx' > /dev/null"
         done
     else
         # The .sh twin's .ps1 audit is stubbed here, and on Windows its step 14
         # cannot see CR: compare the results both twins really produced
-        cmp_label="steps 2, 6 (.sh), 14"
-        if $IS_WINDOWS; then cmp_label="steps 2, 6 (.sh)"; fi
+        cmp_label="steps 2, 14"
+        if $IS_WINDOWS; then cmp_label="step 2"; fi
         for fx in frozen sources; do
             for tw in sh ps1; do
-                DS_WIN="$IS_WINDOWS" perl -ne 'print unless /^\w+ 6 Full syntax \(\.ps1\)/ || ($ENV{DS_WIN} eq "true" && /^\w+ 14 /)' \
+                DS_WIN="$IS_WINDOWS" perl -ne 'print unless /^\w+ 6 Full syntax / || ($ENV{DS_WIN} eq "true" && /^\w+ 14 /)' \
                     "$TMP_ROOT/got-$tw-$fx" > "$TMP_ROOT/cmp-$tw-$fx"
             done
             cp "$TMP_ROOT/cmp-ps1-$fx" "$TMP_ROOT/out"
