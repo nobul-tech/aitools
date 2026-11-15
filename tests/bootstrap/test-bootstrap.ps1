@@ -43,6 +43,11 @@ if ($Help) {
     exit 0
 }
 
+if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
+    [Console]::Error.WriteLine("This script is for Windows (bootstrap.ps1 is Windows-only); it has no macOS/Linux twin.")
+    exit 1
+}
+
 $script:pass = 0
 $script:fail = 0
 $script:skip = 0
@@ -61,11 +66,6 @@ function Finish {
 $root = (Resolve-Path (Join-Path $PSScriptRoot ".." "..")).Path
 if (-not $Bootstrap) { $Bootstrap = Join-Path $root "scripts" "bootstrap.ps1" }
 $Bootstrap = (Resolve-Path $Bootstrap).Path
-
-if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
-    [Console]::Error.WriteLine("This script is for Windows (bootstrap.ps1 is Windows-only); it has no macOS/Linux twin.")
-    exit 1
-}
 
 $winPs = Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe"
 $pwshExe = (Get-Process -Id $PID).Path

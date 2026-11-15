@@ -116,11 +116,15 @@ does not end the caller's shell.
 on linux/mac and ps1 on windows"). Every `tests/<dir>/test-*.sh` carries the
 POSIX guard, every `tests/<dir>/test-*.ps1` the Windows guard, unless the suite
 is listed in the exemptions table below as cross-platform. A suite that tests a
-`.sh`/`.ps1` pair has two harnesses with the same cases and golden files: the
-`.sh` runs the `.sh` scripts on macOS and Linux, the `.ps1` runs the `.ps1`
-scripts on Windows with native pwsh (helpers: `@tests/lib/platform-lib.ps1`).
-Test harnesses have no logging library: the guard prints to stderr, first
-thing after `set` / `param`. The bash guard adds a second case on
+`.sh`/`.ps1` pair has two harnesses: the `.sh` runs the `.sh` scripts on macOS
+and Linux, the `.ps1` runs the `.ps1` scripts on Windows with native pwsh
+(helpers: `@tests/lib/platform-lib.ps1`). The harnesses ported in 2026-11
+(PR #166) have the same cases and compare against the same golden files; the
+older twins (managed-files, adopt-push, logging, menus, setup-user-shell,
+relay-outbound) do not yet (known gaps, different case counts, no golden
+files). Test harnesses have no logging library: the guard prints to stderr,
+first thing after `set` / `param` and, in a `.ps1`, its `-Help` handler (help
+is printed on every platform; anything else refuses). The bash guard adds a second case on
 `BASH_VERSINFO[5]`, bash's compiled-in machine type, which neither a `uname`
 shim on PATH nor an exported `OSTYPE` can change:
 
