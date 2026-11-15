@@ -109,7 +109,7 @@ old_step29() {
 # --- The current libraries ------------------------------------------------------
 run_check "$SH_LIB" "$PS1_LIB"
 check "lib: the current pair matches (exit 0)" "[ $RC -eq 0 ]"
-check "lib: summary names the menus and the prompts" "tail -n 1 '$TMP_ROOT/out' | grep -q '^menus a,m,o,s,x; prompts '"
+check "lib: summary names the menus and the prompts" "tail -n 1 '$TMP_ROOT/out' | grep '^menus a,m,o,s,x; prompts ' >/dev/null"
 check "lib: the AI-merge preview prompt [y]es/[r]efine/[n]o is extracted on both sides" \
     "grep -q '^  bash:[0-9]* n,r,y\$' '$TMP_ROOT/out' && grep -q '^  ps1:[0-9]* n,r,y\$' '$TMP_ROOT/out'"
 N_SH=$(grep -c '^  bash:' "$TMP_ROOT/out")
@@ -121,26 +121,26 @@ check "lib: the run-time prompt (choice [\$(...)]) counts as ?" "grep -q '^  bas
 if plant "$SH_LIB" "$TMP_ROOT/planted-prompt.sh" 's/\[n\]o reject: "/[q]uit reject: "/'; then
     run_check "$TMP_ROOT/planted-prompt.sh" "$PS1_LIB"
     check "planted: read_menu_choice prompt [n]o -> [q]uit (bash) fails, named" \
-        "[ $RC -eq 1 ] && tail -n 1 '$TMP_ROOT/out' | grep -q 'prompts only in bash: \[q,r,y\]' && tail -n 1 '$TMP_ROOT/out' | grep -q 'prompts only in PS1: \[n,r,y\]'"
+        "[ $RC -eq 1 ] && tail -n 1 '$TMP_ROOT/out' | grep 'prompts only in bash: \[q,r,y\]' >/dev/null && tail -n 1 '$TMP_ROOT/out' | grep 'prompts only in PS1: \[n,r,y\]' >/dev/null"
     check "planted: the pre-v0.77.2 extraction misses that mismatch (the gap closed)" \
         "[ \"\$(old_step29 '$TMP_ROOT/planted-prompt.sh' '$PS1_LIB')\" = match ]"
 fi
 if plant "$PS1_LIB" "$TMP_ROOT/planted-prompt.ps1" 's/-Prompt "  \[y\]es accept \/ \[r\]efine/-Prompt "  [y]es accept \/ [e]dit/'; then
     run_check "$SH_LIB" "$TMP_ROOT/planted-prompt.ps1"
     check "planted: Read-MenuChoice -Prompt [r]efine -> [e]dit (PowerShell) fails, named" \
-        "[ $RC -eq 1 ] && tail -n 1 '$TMP_ROOT/out' | grep -q 'prompts only in PS1: \[e,n,y\]'"
+        "[ $RC -eq 1 ] && tail -n 1 '$TMP_ROOT/out' | grep 'prompts only in PS1: \[e,n,y\]' >/dev/null"
     check "planted: the pre-v0.77.2 extraction misses that mismatch too" \
         "[ \"\$(old_step29 '$SH_LIB' '$TMP_ROOT/planted-prompt.ps1')\" = match ]"
 fi
 if plant "$SH_LIB" "$TMP_ROOT/planted-list.sh" 's/"  choice \[o\/a\/m\/s\/x\]: "/"  choice [o\/a\/s\/x]: "/'; then
     run_check "$TMP_ROOT/planted-list.sh" "$PS1_LIB"
     check "planted: [o/a/m/s/x] -> [o/a/s/x] in a bash prompt fails" \
-        "[ $RC -eq 1 ] && tail -n 1 '$TMP_ROOT/out' | grep -q 'prompts only in bash: \[a,o,s,x\]'"
+        "[ $RC -eq 1 ] && tail -n 1 '$TMP_ROOT/out' | grep 'prompts only in bash: \[a,o,s,x\]' >/dev/null"
 fi
 if plant "$SH_LIB" "$TMP_ROOT/planted-menu.sh" "s/printf '  \\[s\\]kip            :/printf '  [k]eep            :/"; then
     run_check "$TMP_ROOT/planted-menu.sh" "$PS1_LIB"
     check "planted: a printf menu line [s]kip -> [k]eep fails (menu letters)" \
-        "[ $RC -eq 1 ] && tail -n 1 '$TMP_ROOT/out' | grep -q '^menu letters: bash '"
+        "[ $RC -eq 1 ] && tail -n 1 '$TMP_ROOT/out' | grep '^menu letters: bash ' >/dev/null"
 fi
 
 # --- Fixtures ------------------------------------------------------------------------
@@ -169,7 +169,7 @@ check "fixture: commented-out calls and the trailing comment do not count (one c
     "[ \"\$(grep -c '^  bash:' '$TMP_ROOT/out')\" = 1 ] && [ \"\$(grep -c '^  ps1:' '$TMP_ROOT/out')\" = 1 ]"
 perl -pe 's/\[n\]o: /[c]ancel: /' "$TMP_ROOT/var.ps1" > "$TMP_ROOT/var2.ps1"
 run_check "$TMP_ROOT/var.sh" "$TMP_ROOT/var2.ps1"
-check "fixture: a mismatch through a variable fails" "[ $RC -eq 1 ] && tail -n 1 '$TMP_ROOT/out' | grep -q 'prompts only in PS1: \[c,y\]'"
+check "fixture: a mismatch through a variable fails" "[ $RC -eq 1 ] && tail -n 1 '$TMP_ROOT/out' | grep 'prompts only in PS1: \[c,y\]' >/dev/null"
 
 # --- Errors ------------------------------------------------------------------------
 : > "$TMP_ROOT/empty.sh"

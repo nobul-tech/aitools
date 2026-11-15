@@ -30,7 +30,7 @@ MIN_MINOR=0
 check_bash_version() {
     local bash_bin="${1:-bash}"
     local ver_line
-    ver_line=$("$bash_bin" --version 2>/dev/null | head -1) || return 1
+    ver_line=$("$bash_bin" --version 2>/dev/null | sed -n '1p') || return 1
     # Extract version like "5.2.37" from "GNU bash, version 5.2.37(1)-release ..."
     local ver
     ver=$(printf '%s' "$ver_line" | perl -ne 'print $1 if /version\s+(\d+\.\d+)/')
@@ -49,7 +49,7 @@ check_bash_version() {
 # --- Get version string ---
 get_bash_version() {
     local bash_bin="${1:-bash}"
-    "$bash_bin" --version 2>/dev/null | head -1 | perl -ne 'print $1 if /version\s+(\d+\.\d+\.\d+)/'
+    "$bash_bin" --version 2>/dev/null | sed -n '1p' | perl -ne 'print $1 if /version\s+(\d+\.\d+\.\d+)/'
 }
 
 # --- Install/verify ---

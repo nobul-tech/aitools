@@ -83,7 +83,7 @@ wip_commits=$(echo "$COMMITS" | grep -iE '^[a-f0-9]+ (WIP|fixup!|squash!|TODO)' 
 if [ -z "$wip_commits" ]; then
     step_pass "4" "No WIP commits"
 else
-    step_fail "4" "No WIP commits" "found: $(echo "$wip_commits" | head -3 | tr '\n' '; ')"
+    step_fail "4" "No WIP commits" "found: $(echo "$wip_commits" | sed -n '1,3p' | tr '\n' '; ')"
 fi
 
 # ---------------------------------------------------------------------------

@@ -1014,10 +1014,14 @@ This aligns with the user-level USO "Perl for string manipulation" -- use `perl`
 
 ### Pipelines into grep -q under pipefail
 
-In a script that runs under `set -o pipefail` (every reusable script runs
-`set -euo pipefail`), or a library sourced by one (`aitools-lib.sh`,
-`check-lib.sh`, `init-logging.sh`), never end a pipeline in `grep -q` (or
-`--quiet` / `--silent`).
+In a script or test suite that runs under `set -o pipefail` (every reusable
+script runs `set -euo pipefail`; most suites run `set -uo pipefail`), or a library
+sourced by one (`aitools-lib.sh`, `check-lib.sh`, `init-logging.sh`,
+`tests/lib/platform-lib.sh`, `tests/hooks/hook-test-lib.sh`), never end a
+pipeline in `grep -q` (or `--quiet` / `--silent`), or in any other reader that
+exits before its input ends ("Every reader that stops early" below). A check
+string a suite evaluates (`check NAME "cmd | grep -q P"`, run by `eval` in the
+suite's shell) is a pipeline in that shell.
 
 **Why it fails at random.** `grep -q` exits at its first match without reading
 the rest of its input. If the writer still has output to write, it is killed by
@@ -1059,17 +1063,65 @@ read the whole input in this form:
   source reading only, not reproduced).
 
 `grep -c` (count) also reads its whole input. A grep that reads a file
-(`grep -q P "$f"`) has no writer and is safe. A pipeline ending in `head -N` or
-`grep -m N` has the same SIGPIPE exposure; it is not checked yet.
+(`grep -q P "$f"`) has no writer and is safe.
+
+**Every reader that stops early.** `grep -q` is one of a class (38dc-24's report:
+"Readers that exit early (`grep -q`, `head`, `grep -m`, perl `exit`) are all the
+same race"). Each has a fix form that reads its input to the end and gives the
+same output and status:
+
+| Reader after a pipe | Stops at | Fix form |
+|---|---|---|
+| `grep -q`, `--quiet`, `--silent` | the first match | `grep PATTERN >/dev/null` (the same flags without `q`) |
+| `grep -l`, `-L`, `--files-with-matches`, `--files-without-match` | the first match (stdin is one "file") | `grep PATTERN >/dev/null`; for `-L`, `! ... grep PATTERN >/dev/null` |
+| `grep -m N`, `--max-count=N` | the Nth match | `grep PATTERN \| sed -n '1,Np'` |
+| `head -n N`, `head -N` | the Nth line | `sed -n '1,Np'` (`sed -n '1p'` for one line) |
+| perl `-n` / `-p` with `exit` or `last` in the loop | the line that runs it | keep reading: `perl -ne 'next if $done; if (/RE/) { print; $done = 1 }'`; a status: decide in `END`, `perl -ne '$f = 1 if /RE/; END { exit($f ? 0 : 1) }'`, or read everything first with `perl -0777 -ne 'exit(...)'` |
+
+Why `sed -n` for `head`: sed stops early only on its `q` command, so `sed -n`
+with a line range and no `q` reads every line. It is the form the hooks already
+use (`delegation-duty-guard.sh` reads its result lines with `sed -n '1p'`), and
+it is not perl: in Git Bash on Windows a Strawberry perl's `:crlf` layer can add
+CRs to captured output ("Strawberry Perl text mode" in
+`reference/cross-platform-detail.md`). Capturing first (`out=$(writer)`) also
+works but needs a second statement. Evidence (Windows Git Bash 5.3, GNU sed,
+perl 5.42.3, 2026-11-15): under `pipefail`, `seq 1 300000 | head -n 1` exited 141
+in 20 of 20 runs and `seq 1 300000 | grep -qx 1` in 20 of 20, while `sed -n '1p'`,
+`perl -ne 'next if $done; ...'` and `perl -ne '... END { exit(...) }'` exited 0
+in 20 of 20 each. BSD sed: not read and not reproduced here; case D of the step 7
+suite records the macOS runs, with the same caveat as for BSD grep above (a fix
+form that passes where the bad form also passes proves nothing).
+
+Perl's `END` and `exit`: perl runs `END` blocks after `exit`, and an `exit` inside
+`END` sets the final status. So `exit 0 if /RE/; END { exit 1 }` always exits 1;
+`validate_ai_merge_output` in `aitools-lib.sh` had two checks in that form that
+never rejected anything (fixed with the `END { exit($f ? 0 : 1) }` form).
+
+Not affected: a reader that reads a file, not a pipe (`grep -q P "$f"`,
+`head -n 1 "$f"`), `grep -c`, a here-string (`grep -q P <<< "$x"`: no writer
+process), `perl -0777` (it reads the whole input before the program runs), an
+`exit` inside perl's `END { }` (it runs after the last line), and a shell
+without `pipefail` (the pipeline's status is the reader's; `scripts/aitools`
+has no `pipefail` and keeps its `head` and `grep -q` readers).
 
 **Enforcement.** `check-script-compliance` step 7 ("Grep pipefail safety") fails on
-any line in `scripts/*.sh`, `scripts/githooks/*` or `shared/hooks/*.sh` (pipefail
-scripts and the three libraries above) where a single `|` feeds a `grep` whose
-options include `q`, `--quiet` or `--silent`. CI runs the check in the linux job;
-`tests/check-script-compliance/test-step7-grepq.sh` plants bad and fixed pipelines
-and checks that step 7 fails the bad ones and passes the fixed ones. Its case D
-also runs the fix form 20 times on the host grep; that run only demonstrates
-the fix on Linux, where the `-q` form fails.
+any line in `scripts/*.sh`, `scripts/githooks/*`, `shared/hooks/*.sh`,
+`tests/*.sh` or `tests/*/*.sh` (pipefail files and the five libraries above)
+where a single `|` feeds one of the readers in the table: a `grep` whose options
+include `q`, `l`, `L` or `m` (or the long forms), `head`, or a perl `-n` / `-p`
+whose quoted program has `exit` or `last` outside `END { }` (not with `-0777`).
+grep's options are read word by word up to the pattern, so `grep -- -q` and
+`grep -e -q` pass and `grep -q"a"` and `grep "-q" a` fail. Sites are listed as
+`file:line(reader)`. `tests/check-script-compliance/test-step7-grepq.sh` is not
+scanned: it plants the bad forms on purpose. Blind spots are listed in the
+step's header comment (heredoc bodies are scanned as code, a reader behind
+another word such as `LC_ALL=C grep` is missed, sed `q` and awk `exit` are not
+checked). CI runs the check in the linux job;
+`tests/check-script-compliance/test-step7-grepq.sh` plants a bad and a fixed
+pipeline for each reader, in `scripts/` and `tests/`, and checks that step 7
+fails the bad ones and passes the fixed ones. Its case D also runs the fix forms
+20 times each on the host; those runs only demonstrate the fix where the bad
+form fails.
 
 ## Post-write validation
 

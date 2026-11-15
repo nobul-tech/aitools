@@ -108,7 +108,7 @@ server_config_matches() {
     local name="$1" expected="$2"
     [ -n "$mcp_current_data" ] || return 1
     local line
-    line=$(printf '%s\n' "$mcp_current_data" | grep "^${name}=" | head -1 || true)
+    line=$(printf '%s\n' "$mcp_current_data" | grep "^${name}=" | sed -n '1p' || true)
     [ -n "$line" ] || return 1
     local current="${line#*=}"
     [ "$current" = "$expected" ]

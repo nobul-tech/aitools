@@ -229,8 +229,10 @@ grep pipefail safety) do not. Until then nothing ran it before merge, so a
 FAIL line (an unchecked `-ErrorAction SilentlyContinue` in
 `setup-pywinpty.ps1`) reached main.
 
-Step 7 (grep pipefail safety) FAILs on a pipeline that ends in `grep -q` in a
-pipefail script (see `reference/script-standards-detail.md`
+Step 7 (grep pipefail safety) FAILs on a pipeline that ends in a reader that
+exits early (`grep -q` / `-l` / `-m`, `head`, perl `exit` or `last`) in a
+pipefail script or test suite under `scripts/`, `shared/hooks/` or `tests/`
+(see `reference/script-standards-detail.md`
 "Pipelines into grep -q under pipefail").
 
 ### 24. Summary panel DETAIL support

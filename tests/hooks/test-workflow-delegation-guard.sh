@@ -322,9 +322,9 @@ printf '{"tool_name":"Bash","tool_input":{"command":"ls"}}' > "$WORK/p.json"
 (cd "$WORK/repo" && "$BASH_BIN" "$HOOK" < "$WORK/p.json" >/dev/null 2>&1)
 n="$(sed -n '$=' "$EV" 2>/dev/null || echo 0)"
 [ "$n" = "6" ] && ok "fallback: 1 event, no script: 1, no agent(: 1, Bash: none" || bad "event count after fallback/none/Bash=$n"
-sed -n '4p' "$EV" | grep -q '"score":1,.*"checked":1,"scope":"script","why":"unterminated template"}' && ok "fallback event: scope script, checked 1, why" || bad "fallback event: $(sed -n '4p' "$EV")"
-sed -n '5p' "$EV" | grep -q '"score":0,.*"checked":0,"scope":"script","why":"no script or scriptPath in the input"}' && ok "no-script event: checked 0, why" || bad "none event: $(sed -n '5p' "$EV")"
-sed -n '6p' "$EV" | grep -q '"checked":0,"scope":"script","why":"no agent() call in the script"}' && ok "no-agent( event: checked 0, why" || bad "no-agent event: $(sed -n '6p' "$EV")"
+sed -n '4p' "$EV" | grep '"score":1,.*"checked":1,"scope":"script","why":"unterminated template"}' >/dev/null && ok "fallback event: scope script, checked 1, why" || bad "fallback event: $(sed -n '4p' "$EV")"
+sed -n '5p' "$EV" | grep '"score":0,.*"checked":0,"scope":"script","why":"no script or scriptPath in the input"}' >/dev/null && ok "no-script event: checked 0, why" || bad "none event: $(sed -n '5p' "$EV")"
+sed -n '6p' "$EV" | grep '"checked":0,"scope":"script","why":"no agent() call in the script"}' >/dev/null && ok "no-agent( event: checked 0, why" || bad "no-agent event: $(sed -n '6p' "$EV")"
 if $HAVE_PY; then
     python3 -c 'import json,sys; [json.loads(l) for l in open(sys.argv[1])]' "$EV" && ok "events are valid JSON" || bad "events not valid JSON"
 else

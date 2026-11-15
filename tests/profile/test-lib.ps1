@@ -265,9 +265,9 @@ case "$CALL" in
         _aitlib_profile_run "${run_args[@]}" || rc=$?
         printf 'rc=%s profrc=%s\n' "$rc" "$AITLIB_PROFILE_RC"
         v=$(_aitlib_profile_tag result); if [ -z "$v" ]; then v=$(_aitlib_profile_tag via); fi
-        if [ -z "$v" ]; then v=$(printf '%s\n' "$AITLIB_PROFILE_OUT" | perl -ne 'print, exit if /^[^\t]+$/'); fi
+        if [ -z "$v" ]; then v=$(printf '%s\n' "$AITLIB_PROFILE_OUT" | perl -ne 'next if $done; if (/^[^\t]+$/) { print; $done = 1 }'); fi
         printf 'out=%s\n' "$v"
-        printf 'err=%s\n' "$(_aitlib_profile_lines error | perl -ne 'print, exit if /\S/')"
+        printf 'err=%s\n' "$(_aitlib_profile_lines error | perl -ne 'next if $done; if (/\S/) { print; $done = 1 }')"
         a=$(_aitlib_profile_lines arg | perl -pe 's/\n/ /' | perl -pe 's/ $//')
         if [ -n "$a" ]; then printf 'args=%s\n' "$a"; fi
         printf 'warnings=%s errors=%s\n' "$WARNINGS" "$ERRORS"

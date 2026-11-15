@@ -204,7 +204,7 @@ check "first run: six directories exist" \
     "[ -d '$(A)/reference' ] && [ -d '$(A)/registries' ] && [ -d '$(A)/hooks' ] && [ -d '$(A)/rules' ] && [ -d '$(A)/skills' ] && [ -d '$(A)/bin' ]"
 check "first run: one OK row, 14 added" "row 'OK|harness files|14 added'"
 check "first run: no ERROR row" "! grep -q '^ERROR|' '$C/summary'"
-check "first run: config writer called without flags" "perl -pe 's/\r//' '$H/writer-calls' | grep -qx 'called '"
+check "first run: config writer called without flags" "perl -pe 's/\r//' '$H/writer-calls' | grep -x 'called ' >/dev/null"
 check "first run: reference tree kept (nested path)" "cmp -s '$R/reference/evaluations/e.md' '$(A)/reference/evaluations/e.md'"
 check "first run: registries deployed (JSON)" "cmp -s '$R/registries/r.json' '$(A)/registries/r.json'"
 check "first run: untracked file not deployed" "[ ! -e '$(A)/reference/untracked.md' ]"
@@ -255,7 +255,7 @@ check "read-only copies: OK row (no warning), logged as read-only" \
 # Interactive (pty): adopt, skip, abort, --force
 # ---------------------------------------------------------------------------
 # no_menu: the console output shows no review menu (ANSI sequences removed)
-no_menu() { ! perl -pe 's/\e\[[0-9;?]*[A-Za-z]//g' "$C/out" | grep -q 'choice \['; }
+no_menu() { ! perl -pe 's/\e\[[0-9;?]*[A-Za-z]//g' "$C/out" | grep 'choice \[' >/dev/null; }
 if $HAVE_PTY; then
     setup_case adopt
     run_dh "" --
@@ -329,7 +329,7 @@ check "conflict: ERROR row per duplicate (hooks), none for .claude/ or dotprofil
 check "conflict: log_error names both sources" "grep -q '\[error\] Duplicate hooks name: h1.sh in .claude/hooks .* kept h1.sh from shared/hooks' '$LOG'"
 check "conflict: first source wins (hooks); shared rules and skills deployed" \
     "cmp -s '$R/shared/hooks/h1.sh' '$(A)/hooks/h1.sh' && cmp -s '$R/shared/rules/scratch.md' '$(A)/rules/scratch.md' && cmp -s '$R/shared/rules/hook-lifecycle.md' '$(A)/rules/hook-lifecycle.md' && cmp -s '$R/shared/skills/s1/SKILL.md' '$(A)/skills/s1/SKILL.md'"
-check "conflict: case-insensitive duplicate not deployed" "grep -q '\"hooks\"' '$(A)/hooks/hooks-manifest.json' && ! ls '$(A)/hooks' | grep -qx 'Hooks-Manifest.json' && ! ls '$(A)/rules' | grep -qx 'Hook-Lifecycle.md'"
+check "conflict: case-insensitive duplicate not deployed" "grep -q '\"hooks\"' '$(A)/hooks/hooks-manifest.json' && ! ls '$(A)/hooks' | grep -x 'Hooks-Manifest.json' >/dev/null && ! ls '$(A)/rules' | grep -x 'Hook-Lifecycle.md' >/dev/null"
 check "conflict: other files still deployed" "[ -f '$(A)/skills/s2/SKILL.md' ] && [ -f '$(A)/skills/s1/tests/t.md' ]"
 
 # ---------------------------------------------------------------------------
@@ -340,7 +340,7 @@ run_dh "" -- --dry-run
 check "dry run: exit 0, counts" "[ \"\$(rc)\" = 0 ] && row 'OK|harness files|dry-run: 14 create, 0 update'"
 check "dry run: no harness directory created" \
     "[ ! -e '$(A)/reference' ] && [ ! -e '$(A)/rules' ] && [ ! -e '$(A)/bin' ]"
-check "dry run: config writer called with --dry-run" "perl -pe 's/\r//' '$H/writer-calls' | grep -qx 'called --dry-run'"
+check "dry run: config writer called with --dry-run" "perl -pe 's/\r//' '$H/writer-calls' | grep -x 'called --dry-run' >/dev/null"
 run_dh "" --
 printf 'local edit\n' > "$(A)/rules/hook-lifecycle.md"
 EXTRA_ENV="AITOOLS_DRY_RUN=1" run_dh "" --
@@ -397,12 +397,12 @@ printf 'backup copy\n' > "$R/shared/rules/x.bak.1.md"
 gitc -C "$R" add -A; gitc -C "$R" commit -q -m bak
 run_dh "" --
 check "manifest: first run writes it (header, sorted, winning sources)" "[ \"\$(rc)\" = 0 ] && mf_is \"\${FIRST_MF[@]}\""
-check "manifest: LF, no BOM" "! grep -q \$'\\r' '$(M)' && head -c 3 '$(M)' | grep -q '^# a'"
+check "manifest: LF, no BOM" "! grep -q \$'\\r' '$(M)' && head -c 3 '$(M)' | grep '^# a' >/dev/null"
 check "manifest: first run (no previous manifest) retires nothing" \
     "[ -f '$(A)/rules/old.md' ] && grep -q 'Preserved: .*rules/old.md' '$LOG' && ! grep -q 'Retired rule' '$LOG'"
 check "manifest: *.bak.* never listed, manifest itself not preserved" \
     "! grep -q 'bak' '$(M)' && ! grep -q 'Preserved: .*aitools-rules-manifest' '$LOG' && [ ! -e '$(M).tmp' ]"
-check "manifest: no .md extension (consumers copying *.md skip it)" "[ -f '$(M)' ] && ! ls '$(A)/rules' | grep -q 'manifest.*\\.md'"
+check "manifest: no .md extension (consumers copying *.md skip it)" "[ -f '$(M)' ] && ! ls '$(A)/rules' | grep 'manifest.*\\.md' >/dev/null"
 
 gitc -C "$R" rm -q shared/rules/scratch.md; gitc -C "$R" commit -q -m retire
 fresh_log
@@ -448,7 +448,7 @@ run_dh "" --
 check "withdrawn sources: aitools and dotprofile names retired (backed up, removed), DETAIL rows" \
     "[ \"\$(rc)\" = 0 ] && mf_is 'hook-lifecycle.md${T}shared' 'p1.md${T}retired' 'p2.md${T}retired' 'scratch.md${T}shared' 'user1.md${T}retired' && [ ! -e '$(A)/rules/p1.md' ] && [ ! -e '$(A)/rules/p2.md' ] && [ ! -e '$(A)/rules/user1.md' ] && ls '$(A)/rules/'user1.md.bak.* >/dev/null 2>&1 && ls '$(A)/rules/'p1.md.bak.* >/dev/null 2>&1 && row 'DETAIL|harness files|retired: rules/p1.md' && row 'DETAIL|harness files|retired: rules/user1.md' && grep -q 'Retired rule: user1.md (was dotprofile' '$LOG' && grep -q 'Retired rule: p1.md (was aitools' '$LOG'"
 check "withdrawn sources: shared rules untouched" \
-    "[ -f '$(A)/rules/scratch.md' ] && [ -f '$(A)/rules/hook-lifecycle.md' ] && ! ls '$(A)/rules/' | grep -q '^hook-lifecycle.md.bak'"
+    "[ -f '$(A)/rules/scratch.md' ] && [ -f '$(A)/rules/hook-lifecycle.md' ] && ! ls '$(A)/rules/' | grep '^hook-lifecycle.md.bak' >/dev/null"
 seed_withdrawn_rules
 write_config "$C/no-such-dotprofile"
 fresh_log
@@ -474,7 +474,7 @@ printf 'not a manifest\nold.md\tshared\n' > "$(M)"
 fresh_log
 run_dh "" --
 check "unknown header: warning, nothing retired, rewritten" \
-    "[ -f '$(A)/rules/old.md' ] && grep -q '\[warn\] Rules manifest .*the first line is not' '$LOG' && head -n 1 '$(M)' | grep -qx '# aitools rules manifest v1' && ! grep -q '^old.md' '$(M)'"
+    "[ -f '$(A)/rules/old.md' ] && grep -q '\[warn\] Rules manifest .*the first line is not' '$LOG' && head -n 1 '$(M)' | grep -x '# aitools rules manifest v1' >/dev/null && ! grep -q '^old.md' '$(M)'"
 printf '# aitools rules manifest v1\n../evil.md\tshared\nnotes.txt\tshared\nz.md\tbogus\n' > "$(M)"
 printf 'keep me\n' > "$(A)/evil.md"    # where rules/../evil.md resolves
 fresh_log
@@ -499,7 +499,7 @@ run_dh_plain
 gitc -C "$R" rm -q 'shared/rules/a[1].md'; gitc -C "$R" commit -q -m bracket-gone
 fresh_log; run_dh_plain
 check "$lang: retired name with [ ] is backed up before removal" \
-    "[ ! -e '$(A)/rules/a[1].md' ] && ls '$(A)/rules' | grep -qF 'a[1].md.bak.' && grep -qxF 'a[1].md${T}retired' '$(M)'"
+    "[ ! -e '$(A)/rules/a[1].md' ] && ls '$(A)/rules' | grep -F 'a[1].md.bak.' >/dev/null && grep -qxF 'a[1].md${T}retired' '$(M)'"
 if $HAVE_READONLY; then
     gitc -C "$R" rm -q shared/rules/hook-lifecycle.md; gitc -C "$R" commit -q -m hl-gone
     chmod 555 "$(A)/rules"
@@ -641,7 +641,7 @@ check "$lang skills: invalid lines ignored (5 warnings); a file named like a ret
 printf 'not a manifest\nd2\tdotprofile\n' > "$(SM)"
 run_sk; trace header
 check "$lang skills: unknown header -- warning, nothing retired, rewritten" \
-    "[ \"\$(rc)\" = 0 ] && grep -q '\[warn\] Skills manifest .*the first line is not' '$LOG' && head -n 1 '$(SM)' | grep -qx '# aitools skills manifest v1' && ! grep -q 'retired' '$(SM)'"
+    "[ \"\$(rc)\" = 0 ] && grep -q '\[warn\] Skills manifest .*the first line is not' '$LOG' && head -n 1 '$(SM)' | grep -x '# aitools skills manifest v1' >/dev/null && ! grep -q 'retired' '$(SM)'"
 
 # A directory at the manifest paths (skills and rules): ERROR, exit 1, nothing moved into it
 rm -f "$(SM)" "$(M)"
@@ -717,7 +717,7 @@ fi
 # ---------------------------------------------------------------------------
 # lsx NAME -- NAME is in ~/.aitools/rules with exactly this case (macOS and
 # Windows file systems are case-insensitive, so [ -f ] alone cannot tell X.MD from x.md)
-lsx() { ls "$(A)/rules" | grep -qxF "$1"; }
+lsx() { ls "$(A)/rules" | grep -xF "$1" >/dev/null; }
 no_warn_rows() { ! grep -qE '^(WARN|ACTION)\|' "$C/summary"; }
 setup_case upper
 printf 'upper rule\n' > "$R/shared/rules/X.MD"
@@ -730,7 +730,7 @@ check "$lang upper: X.MD and Mixed.Md deployed as named, exit 0, no WARN/ACTION 
 check "$lang upper: listed in the manifest with their source" \
     "grep -qxF 'X.MD${T}shared' '$(M)' && grep -qxF 'Mixed.Md${T}shared' '$(M)'"
 check "$lang upper: .BAK. name (any case) neither deployed nor listed" \
-    "! ls '$(A)/rules' | grep -qi '^old\\.bak' && ! grep -qi '^old\\.bak' '$(M)'"
+    "! ls '$(A)/rules' | grep -i '^old\\.bak' >/dev/null && ! grep -qi '^old\\.bak' '$(M)'"
 
 fresh_log; run_dh_plain
 check "$lang upper: rerun -- manifest lines accepted (no 'line ignored', no WARN/ACTION), verified" \
@@ -754,7 +754,7 @@ gitc -C "$R" rm -q shared/rules/X.MD; gitc -C "$R" commit -q -m retire-upper
 gitc -C "$R" rm -q shared/rules/Mixed.Md; gitc -C "$R" commit -q -m retire-mixed
 fresh_log; run_dh_plain
 check "$lang upper: source removed -- retired (backup kept, file removed), DETAIL rows, no WARN" \
-    "[ \"\$(rc)\" = 0 ] && grep -qxF 'X.MD${T}retired' '$(M)' && grep -qxF 'Mixed.Md${T}retired' '$(M)' && ! ls '$(A)/rules' | grep -qix 'x.md' && ! ls '$(A)/rules' | grep -qix 'mixed.md' && ls '$(A)/rules' | grep -q '^X\\.MD\\.bak\\.' && ls '$(A)/rules' | grep -q '^Mixed\\.Md\\.bak\\.' && row 'DETAIL|harness files|retired: rules/X.MD' && row 'DETAIL|harness files|retired: rules/Mixed.Md' && ! grep -q 'line ignored' '$LOG' && no_warn_rows"
+    "[ \"\$(rc)\" = 0 ] && grep -qxF 'X.MD${T}retired' '$(M)' && grep -qxF 'Mixed.Md${T}retired' '$(M)' && ! ls '$(A)/rules' | grep -ix 'x.md' >/dev/null && ! ls '$(A)/rules' | grep -ix 'mixed.md' >/dev/null && ls '$(A)/rules' | grep '^X\\.MD\\.bak\\.' >/dev/null && ls '$(A)/rules' | grep '^Mixed\\.Md\\.bak\\.' >/dev/null && row 'DETAIL|harness files|retired: rules/X.MD' && row 'DETAIL|harness files|retired: rules/Mixed.Md' && ! grep -q 'line ignored' '$LOG' && no_warn_rows"
 
 # The lib's manifest reader (read_harness_manifest; Read-HarnessManifest in the
 # .ps1 harness), as setup-user-cursor and setup-user-claude call it: upper- and

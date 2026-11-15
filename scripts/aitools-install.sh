@@ -414,7 +414,7 @@ read_config_key() {
     [ -f "$file" ] || return 1
     local val
     val=$(tr -d '\357\273\277' < "$file" \
-        | grep -o "\"$key\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" | head -1 | cut -d'"' -f4 || true)
+        | grep -o "\"$key\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" | sed -n '1p' | cut -d'"' -f4 || true)
     [ -n "$val" ] || return 1
     # Unescape JSON backslashes: \\ -> \
     printf '%b' "$val"
@@ -700,8 +700,8 @@ fi
 log "Step 9: Claude Code CLI"
 
 if command -v claude &>/dev/null; then
-    log_ok "Claude Code already installed ($(claude --version 2>/dev/null | head -1))"
-    write_summary OK "claude code" "$(claude --version 2>/dev/null | head -1)"
+    log_ok "Claude Code already installed ($(claude --version 2>/dev/null | sed -n '1p'))"
+    write_summary OK "claude code" "$(claude --version 2>/dev/null | sed -n '1p')"
     log "Running claude update..."
     # Exit code decides (C-F2); every output line is logged.
     update_rc=0
@@ -724,8 +724,8 @@ else
         write_summary ERROR "claude code" "install failed"
     fi
     if command -v claude &>/dev/null; then
-        log_ok "Claude Code installed ($(claude --version 2>/dev/null | head -1))"
-        write_summary OK "claude code" "$(claude --version 2>/dev/null | head -1)"
+        log_ok "Claude Code installed ($(claude --version 2>/dev/null | sed -n '1p'))"
+        write_summary OK "claude code" "$(claude --version 2>/dev/null | sed -n '1p')"
     else
         log_error "Claude Code install failed"
         write_summary ERROR "claude code" "install failed"

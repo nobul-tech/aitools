@@ -202,7 +202,7 @@ fix_rerun() { fix_fresh; cp "$WORK/c1-fresh.json" "$CFG"; }
 case_run c2-verified 0 fix_rerun
 has_row "OK|aitools config|verified"
 if cmp -s "$RAWJ" "$WORK/c1-fresh.json"; then ok "c2-verified: file unchanged"; else bad "c2-verified: file changed"; fi
-if ls "$H/.aitools/" | grep -q 'config.json.bak'; then bad "c2-verified: a backup was written"; else ok "c2-verified: no backup (no write)"; fi
+if ls "$H/.aitools/" | grep 'config.json.bak' >/dev/null; then bad "c2-verified: a backup was written"; else ok "c2-verified: no backup (no write)"; fi
 
 # C3 existing v2 config: extra keys kept in place, stale alias re-derived, version 3
 fix_v2() {
@@ -226,7 +226,7 @@ has_row "DETAIL|aitools config|machineAlias updated"
 has_row "DETAIL|aitools config|machineId updated"
 has_json '"custom": \{\n    "keep": true\n  \},\n  "googleDrives": \[\n    \{\n      "path": "\/gd"'
 has_json '"machineAlias": "nobul-mac",\n  "githubUser": "nobul-jose",\n  "machineId": "'"$KEY_MAC"'",\n  "meta"'
-if ls "$H/.aitools/" | grep -q 'config.json.bak'; then ok "c3-upgrade: backup written"; else bad "c3-upgrade: no backup"; fi
+if ls "$H/.aitools/" | grep 'config.json.bak' >/dev/null; then ok "c3-upgrade: backup written"; else bad "c3-upgrade: no backup"; fi
 
 # C4 corrupt config: rebuilt with salvaged keys, WARN
 fix_corrupt() {
@@ -542,7 +542,7 @@ has_row "ERROR|aitools config|merge failed"
 out_has 'key "MachineId" differs only in case from the managed key "machineId": rename or remove it'
 has_json '"MachineId": "hand-written"'
 if grep -q '"version": 2' "$RAWJ"; then ok "c24-case-twin: config untouched"; else bad "c24-case-twin: config changed"; fi
-if ls "$H/.aitools/" | grep -q 'config.json.tmp'; then bad "c24-case-twin: temp file left"; else ok "c24-case-twin: no temp file left"; fi
+if ls "$H/.aitools/" | grep 'config.json.tmp' >/dev/null; then bad "c24-case-twin: temp file left"; else ok "c24-case-twin: no temp file left"; fi
 
 # C25 audit A-11 (.sh writer only: PowerShell removes with Remove-Item; the Windows
 # harness reports it as a skip): removals are checked. A failing rm (stub on PATH) on
@@ -674,7 +674,7 @@ reset_home
 inst_run run repos "$H/repos/aitools"
 counts=$(inst_counts)
 if [ "${counts% *}" = "1" ]; then ok "$L step5: failed writer = 1 error"; else bad "$L step5: failed writer counts '$counts'"; perl -pe 's/^/       /' "$WORK/inst.out"; fi
-if perl -pe 's/\r//g' "$H/summary.txt" | grep -qxF "ERROR|aitools config|bad arguments"; then ok "$L step5: writer ERROR row kept"; else bad "$L step5: no writer ERROR row"; fi
+if perl -pe 's/\r//g' "$H/summary.txt" | grep -xF "ERROR|aitools config|bad arguments" >/dev/null; then ok "$L step5: writer ERROR row kept"; else bad "$L step5: no writer ERROR row"; fi
 
 printf '\n%s passed, %s failed, %s skipped (%s: %s writer)\n' "$PASS" "$FAIL" "$SKIP" "$TEST_PLATFORM" "$LANG_RUN"
 if [ "$FAIL" -gt 0 ]; then exit 1; fi

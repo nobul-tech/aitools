@@ -161,7 +161,7 @@ if (dryRun) {
 " "$mcp_json" "$DRY_RUN" "$FORCE" "$CHROME_MCP_ARGS_JSON")
 
 MCP_CHANGED=false
-MERGE_STATUS=$(echo "$MERGE_RESULT" | head -1)
+MERGE_STATUS=$(echo "$MERGE_RESULT" | sed -n '1p')
 case "$MERGE_STATUS" in
     ok)
         MCP_CHANGED=true

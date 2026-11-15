@@ -3,8 +3,10 @@
 # Usage: bash scripts/check-script-compliance.sh
 # Checks: log format, exit footers, write_summary coverage, counter tracking,
 #          raw echo/Write-Host, grep pipefail safety (FAIL: a pipeline that ends
-#          in grep -q in a pipefail bash file; WARN: other pipeline greps without
-#          || true in setup scripts), OS guards, logging init, cross-platform
+#          in a reader that exits early -- grep -q / -l / -m, head, perl exit --
+#          in a pipefail bash file under scripts/, shared/hooks/ or tests/; WARN:
+#          other pipeline greps without || true in setup scripts), OS guards,
+#          logging init, cross-platform
 #          pairing, SilentlyContinue result checks, summary categories.
 set -euo pipefail
 
@@ -165,36 +167,58 @@ fi
 
 # ---------------------------------------------------------------------------
 # 7. Grep pipefail safety
-#    (a) FAIL: a pipeline that ends in grep -q (q in any short-option bundle:
-#        -q, -qi, -qxF ...; or --quiet / --silent) in a bash file that runs
-#        under pipefail. grep -q exits at its first match without reading the
-#        rest of its input; the writer then gets SIGPIPE (exit 141), or, where
-#        SIGPIPE is ignored (the GitHub linux runner), exits non-zero on the
-#        write error, and under pipefail the pipeline fails, so a condition such as
-#        "if writer, piped to grep -q P" can be false although P matched (CI
-#        runs 43640967140 and 43642017937; PR #164). The fix is the same grep
-#        without q, stdout to /dev/null (grep P >/dev/null): GNU grep then
-#        drains its input before it exits, BSD grep reads it to EOF.
+#    (a) FAIL: a pipeline that ends in a reader that exits before its input
+#        ends, in a bash file that runs under pipefail. The readers: grep -q
+#        (q in any short-option bundle: -q, -qi, -qxF ...; or --quiet /
+#        --silent), grep -l / -L (--files-with-matches /
+#        --files-without-match), grep -m N (--max-count), head, and a perl
+#        -n / -p program that runs exit or last outside its END block. Such a
+#        reader stops reading early; the writer then gets SIGPIPE (exit 141),
+#        or, where SIGPIPE is ignored (the GitHub linux runner), exits
+#        non-zero on the write error, and under pipefail the pipeline fails,
+#        so a condition such as "if writer, piped to grep -q P" can be false
+#        although P matched (CI runs 43640967140 and 43642017937; PR #164).
+#        The fix forms read their input to the end (reference
+#        script-standards-detail.md "Pipelines into grep -q under pipefail"):
+#        grep P >/dev/null for grep -q / -l / -L; perl -ne 'print if $. <= N'
+#        for head -n N and after grep -m N; next if $done / END { exit } for
+#        perl. GNU grep with stdout /dev/null drains its input before it
+#        exits, BSD grep reads it to EOF.
 #        Scan set: scripts/*.sh, every file in scripts/githooks/,
-#        shared/hooks/*.sh. A file qualifies when a non-comment line runs set
-#        with pipefail (set -euo pipefail, set -o pipefail, set -e -o pipefail,
-#        any set -<letters>o pipefail), or it is a library that pipefail
-#        scripts source (scripts/aitools-lib.sh, check-lib.sh, init-logging.sh).
-#        A non-comment line is flagged wherever the pipeline sits: if / elif /
-#        while conditions, after !, inside $(...), before && or ||; also when
-#        other option words come first (grep -i -q) and when the line starts
-#        with the pipe (a continued pipeline). Not flagged: grep -q reading a
-#        file with no pipe in front, a grep after || or &&, comment lines.
+#        shared/hooks/*.sh, tests/*.sh and tests/*/*.sh, except
+#        tests/check-script-compliance/test-step7-grepq.sh (it plants the
+#        bad forms on purpose). A file qualifies when a non-comment line runs
+#        set with pipefail (set -euo pipefail, set -o pipefail, set -e -o
+#        pipefail, any set -<letters>o pipefail), or it is a library that
+#        pipefail scripts source (scripts/aitools-lib.sh, check-lib.sh,
+#        init-logging.sh, tests/lib/platform-lib.sh,
+#        tests/hooks/hook-test-lib.sh). A non-comment line is flagged wherever
+#        the pipeline sits: if / elif / while conditions, after !, inside
+#        $(...), before && or ||, inside an eval'd check string; also when
+#        the line starts with the pipe (a continued pipeline). A site is
+#        listed as file:line(reader).
+#        grep options are read word by word up to the pattern: "--" and the
+#        argument of -e / -f / -A / -B / -C / -d / -D end or skip them (so
+#        grep -- -q and grep -e -q are not flagged), a quoted option word
+#        ("-q") and a pattern glued to the options (-q"a") are read as
+#        options.
+#        Not flagged: a reader that reads a file, not a pipe (grep -q P "$f",
+#        head -n 1 "$f"), a reader after || or &&, grep -c, perl -0777 (it
+#        reads the whole input first), exit inside perl's END { }, comment
+#        lines, and a file that does not run under pipefail.
 #        Blind spots (a line-based perl regex, not a shell parser): heredoc
 #        bodies and multi-line quoted strings are scanned as plain lines (a
-#        pipe to grep -q inside one is flagged); a pipe at the end of one line
-#        followed by grep -q at the start of the next line without a leading
-#        pipe is missed, and so are |&, egrep / fgrep, a grep behind another
-#        word (command grep, LC_ALL=C grep), -q after the pattern (grep P -q)
-#        and -q after an option that takes an argument (grep -e P -q).
-#        The pattern is written with character classes ([|]) so this file's
-#        own source never matches it. A perl failure is a FAIL "(scan failed)",
-#        never a silent pass.
+#        pipe to a reader inside one is flagged); a pipe at the end of one
+#        line followed by the reader at the start of the next line without a
+#        leading pipe is missed, and so are |&, egrep / fgrep, a reader
+#        behind another word (command grep, LC_ALL=C grep), options after
+#        the pattern (grep P -q), a perl program in double quotes or one
+#        whose exit is on a later line, sed q and awk exit (the repo uses
+#        perl, not sed or awk, for this), and bash embedded in a .ps1 (the
+#        Git Bash driver of tests/profile/test-lib.ps1).
+#        The patterns are written with character classes ([|], gre[p]) so this
+#        file's own source never matches them. A perl failure is a FAIL "(scan
+#        failed)", never a silent pass.
 #    (b) When (a) finds no site, the step reports the heuristic below (its
 #        logic unchanged): a grep in a pipeline without || true in a pipefail
 #        setup script is a WARN.
@@ -203,23 +227,68 @@ step7_scan_ok=true
 step7_sites=""
 if ! step7_sites=$(perl -e '
     use strict; use warnings;
-    my %lib = map { $_ => 1 } qw(scripts/aitools-lib.sh scripts/check-lib.sh scripts/init-logging.sh);
+    my %lib = map { $_ => 1 } qw(scripts/aitools-lib.sh scripts/check-lib.sh scripts/init-logging.sh tests/lib/platform-lib.sh tests/hooks/hook-test-lib.sh);
+    my %fixture = map { $_ => 1 } qw(tests/check-script-compliance/test-step7-grepq.sh);
     my $pf = qr/\bset[ \t]+(?:-[A-Za-z]+[ \t]+(?:[a-z]+[ \t]+)*)*-[A-Za-z]*o[ \t]+pipefail\b/;
-    my $gq = qr/(?<![|])[|](?![|])[ \t]*grep(?:[ \t]+-[^ \t]+)*?[ \t]+(?:-[A-Za-z0-9]*q[A-Za-z0-9]*|--quiet|--silent)(?![^ \t\r\n;&|)])/;
+    # grep_reader REST: the early-exit option among the words after grep, or ""
+    sub grep_reader {
+        my ($rest) = @_;
+        my $arg = 0;
+        while ($rest =~ /\G[ \t]+([^ \t\r\n]+)/gc) {
+            my $w = $1;
+            if ($arg) { $arg = 0; next; }
+            last if $w =~ /^[<>;&)]/ || $w =~ /^[0-9]+>/ || $w =~ /^[|]/;
+            (my $o = $w) =~ s/^(["\x27])(.*)\1$/$2/;
+            $o =~ s/["\x27].*//s;
+            last unless $o =~ /^-/;
+            last if $o eq "--";
+            if ($o =~ /^--/) {
+                return "grep-q" if $o =~ /^--(?:quiet|silent)$/;
+                return "grep-l" if $o =~ /^--files-with(?:out)?-match(?:es)?$/;
+                return "grep-m" if $o =~ /^--max-count\b/;
+                $arg = 1 if $o =~ /^--(?:regexp|file|context|before-context|after-context|devices|directories|binary-files|label)$/;
+                next;
+            }
+            my @c = split //, substr($o, 1);
+            for my $i (0 .. $#c) {
+                return "grep-q" if $c[$i] eq "q";
+                return "grep-l" if $c[$i] eq "l" || $c[$i] eq "L";
+                return "grep-m" if $c[$i] eq "m";
+                if ($c[$i] =~ /^[efABCdD]$/) { $arg = 1 if $i == $#c; last; }
+            }
+        }
+        return "";
+    }
+    # perl_reader REST: "perl-exit" when a -n / -p program runs exit or last
+    # outside END { }, else ""
+    sub perl_reader {
+        my ($rest) = @_;
+        my ($opts, $prog) = $rest =~ /^((?:[ \t]+-[^ \t\x27]*)*)[ \t]+\x27([^\x27]*)/ or return "";
+        return "" if $opts =~ /-0777/;
+        return "" unless $opts =~ /(?:^|[ \t])-[A-Za-z0-9]*[np]/;
+        $prog =~ s/\bEND[ \t]*\{[^}]*\}//g;
+        return $prog =~ /\b(?:exit|last)\b/ ? "perl-exit" : "";
+    }
     for my $f (@ARGV) {
         next unless -f $f;
+        next if $fixture{$f};
         open(my $fh, "<", $f) or die "step 7: cannot read $f: $!\n";
         my $on = $lib{$f} ? 1 : 0;
         my @hits;
         while (my $l = <$fh>) {
             next if $l =~ /^[ \t]*#/;
             $on = 1 if $l =~ $pf;
-            push @hits, "$f:$." if $l =~ $gq;
+            while ($l =~ /(?<![|])[|](?![|])[ \t]*(gre[p]|hea[d]|per[l])\b/g) {
+                my $cmd = $1;
+                my $rest = substr($l, pos($l));
+                my $r = $cmd eq "head" ? "head" : $cmd eq "grep" ? grep_reader($rest) : perl_reader($rest);
+                push @hits, "$f:$.($r)" if $r;
+            }
         }
         close($fh) or die "step 7: cannot close $f: $!\n";
         print "$_\n" for ($on ? @hits : ());
     }
-' scripts/*.sh scripts/githooks/* shared/hooks/*.sh); then
+' scripts/*.sh scripts/githooks/* shared/hooks/*.sh tests/*.sh tests/*/*.sh); then
     step7_scan_ok=false
 fi
 step7_n=0
@@ -250,9 +319,9 @@ for f in "${SH_SCRIPTS[@]}"; do
 done
 
 if ! $step7_scan_ok; then
-    step_fail "7" "Grep pipefail safety" "grep -q pipeline scan (scan failed)"
+    step_fail "7" "Grep pipefail safety" "early-exit reader scan (scan failed)"
 elif [ "$step7_n" -gt 0 ]; then
-    step_fail "7" "Grep pipefail safety" "${step7_n} pipeline(s) end in grep -q under pipefail:${step7_list}"
+    step_fail "7" "Grep pipefail safety" "${step7_n} pipeline(s) end in a reader that exits early (grep -q / -l / -m, head, perl exit) under pipefail:${step7_list}"
 elif [ "$step7_fail" -eq 0 ]; then
     step_pass "7" "Grep pipefail safety" "no unsafe grep pipelines"
 else

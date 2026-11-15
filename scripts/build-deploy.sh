@@ -307,7 +307,9 @@ if [ -f "$PROFILE_JSON" ]; then
         }
         # The value becomes code (a JS and a PowerShell string literal): only a
         # plain model id is embedded.
-        if printf '%s' "$_pj_model" | perl -ne 'exit(/\A[A-Za-z0-9._-]+\z/ ? 0 : 1)'; then
+        # perl -0777: the whole value is read before the test (pipe-safe; an
+        # empty value is not a model id)
+        if printf '%s' "$_pj_model" | perl -0777 -ne 'exit(/\A[A-Za-z0-9._-]+\z/ ? 0 : 1)'; then
             CURSOR_CLI_MODEL="$_pj_model"
         else
             blog_warn "cursor.cli.model in $PROFILE_JSON is not a plain model id (letters, digits, . _ -) -- the deploy fallback stays 'auto'"
@@ -2086,7 +2088,9 @@ blog "Writing deploy/deploy-harness.payload (harness snapshot, read by deploy-ha
 if ! MDM_PAYLOAD_SHA=$(mdm_write_payload "$MDM_MANIFEST" "$DEPLOY_DIR/deploy-harness.payload"); then
     exit 1
 fi
-if ! printf '%s' "$MDM_PAYLOAD_SHA" | perl -ne 'exit(/\A[0-9a-f]{64}\z/ ? 0 : 1)'; then
+# perl -0777: the whole value is read before the test (pipe-safe); an empty
+# value now fails here (perl -n ran no line on empty input and exited 0)
+if ! printf '%s' "$MDM_PAYLOAD_SHA" | perl -0777 -ne 'exit(/\A[0-9a-f]{64}\z/ ? 0 : 1)'; then
     blog_error "Harness snapshot: no sha256 for deploy/deploy-harness.payload"
     exit 1
 fi

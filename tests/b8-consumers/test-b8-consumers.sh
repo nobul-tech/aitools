@@ -92,8 +92,8 @@ run_script() {
 
 rc() { cat "$C/rc"; }
 rows() { grep -v '^DETAIL' "$C/summary" | perl -pe 's/\r//' | LC_ALL=C sort; }  # summary rows, order-free
-has_row() { perl -pe 's/\r//' "$C/summary" | grep -qxF "$1"; }
-in_log() { perl -pe 's/\e\[[0-9;]*m//g; s/\r//' "$C/out" "$C/logs/deploy.log" 2>/dev/null | grep -qF -- "$1"; }
+has_row() { perl -pe 's/\r//' "$C/summary" | grep -xF "$1" >/dev/null; }
+in_log() { perl -pe 's/\e\[[0-9;]*m//g; s/\r//' "$C/out" "$C/logs/deploy.log" 2>/dev/null | grep -F -- "$1" >/dev/null; }
 nowhere() { printf 'AITOOLS_USER_REPO_PATH=%s/nowhere' "$C"; }
 
 lang=sh
@@ -167,11 +167,11 @@ for mode in rc3 rc1; do
     check "check-lib $lang $mode: exit 0" "[ \"\$(rc)\" = 0 ]"
     if [ "$mode" = rc3 ]; then
         check "check-lib $lang rc3: WARN step on console" "perl -pe 's/\e\[[0-9;]*m//g; s/\r//' '$C/out' | grep -E '^ +0\. Dotprofile resolution +\[WARN\] resolver error \(rc 3, see deploy.log\)' >/dev/null"
-        check "check-lib $lang rc3: summary counts it" "perl -pe 's/\e\[[0-9;]*m//g' '$C/out' | grep -qF '=== SUMMARY: 1 PASS, 0 SKIP, 1 WARN, 0 FAIL ==='"
+        check "check-lib $lang rc3: summary counts it" "perl -pe 's/\e\[[0-9;]*m//g' '$C/out' | grep -F '=== SUMMARY: 1 PASS, 0 SKIP, 1 WARN, 0 FAIL ===' >/dev/null"
         check "check-lib $lang rc3: WARN step in checks.jsonl" "grep -q '\"label\":\"Dotprofile resolution\",\"result\":\"WARN\"' '$C/logs/checks.jsonl'"
     else
         check "check-lib $lang rc1: no dotprofile step" "! grep -q 'Dotprofile resolution' '$C/out'"
-        check "check-lib $lang rc1: clean summary" "perl -pe 's/\e\[[0-9;]*m//g' '$C/out' | grep -qF '=== SUMMARY: 1 PASS, 0 SKIP, 0 WARN, 0 FAIL ==='"
+        check "check-lib $lang rc1: clean summary" "perl -pe 's/\e\[[0-9;]*m//g' '$C/out' | grep -F '=== SUMMARY: 1 PASS, 0 SKIP, 0 WARN, 0 FAIL ===' >/dev/null"
     fi
 done
 

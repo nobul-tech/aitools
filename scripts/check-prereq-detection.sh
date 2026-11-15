@@ -156,7 +156,7 @@ fi
 lib_file="$SCRIPT_DIR/aitools-lib.sh"
 if [ -f "$lib_file" ]; then
     # Check that ensure_tool_on_path calls in check_build_prereqs have nearby comments
-    unverified=$(grep -n 'ensure_tool_on_path' "$lib_file" | head -5)
+    unverified=$(grep -n 'ensure_tool_on_path' "$lib_file" | sed -n '1,5p')
     verified_count=0
     total_count=0
     while IFS= read -r line; do
