@@ -43,23 +43,30 @@
 # same bash). TEST_KEEP_TMP=1 keeps the temp dir. Safe to re-run. Needs perl
 # and seq (case D is skipped without seq). Exit 1 if any case fails.
 # Platform: Linux (bash 5), macOS (bash 5 and /bin/bash 3.2); CI: linux and
-# macos jobs. On Windows the .sh check refuses to run (OS guard), so the suite
-# reports SKIP and exits 0.
+# macos jobs. Windows refuses it (OS guard, exit 1): the .sh check it tests
+# refuses Windows too, and it has no Windows twin.
 # Usage: bash tests/check-script-compliance/test-step7-grepq.sh [--help]
 
 set -euo pipefail
+
+# OS guard: macOS/Linux only. BASH_VERSINFO[5] is bash's compiled-in machine
+# type (read-only, never taken from the environment), so neither a uname shim
+# on PATH nor an exported OSTYPE hides Git Bash.
+case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*)
+        printf 'This script is for macOS/Linux. It has no Windows twin: the CI linux and macos jobs run it.\n' >&2
+        exit 1 ;;
+esac
+case "${BASH_VERSINFO[5]:-}" in
+    *-msys*|*-cygwin*|*-mingw*)
+        printf 'This script is for macOS/Linux. It has no Windows twin: the CI linux and macos jobs run it.\n' >&2
+        exit 1 ;;
+esac
 
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
     perl -ne 'exit 0 if $. > 1 && !/^#/; print if $. > 1' "$0"
     exit 0
 fi
-
-case "$(uname -s)" in
-    MINGW*|MSYS*|CYGWIN*)
-        printf 'SKIP all cases: check-script-compliance.sh refuses Windows (OS guard); CI runs this suite on macOS and Linux\n'
-        printf '\n0 passed, 0 failed, 1 skipped\n'
-        exit 0 ;;
-esac
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 TB="${AITOOLS_TEST_BASH:-bash}"

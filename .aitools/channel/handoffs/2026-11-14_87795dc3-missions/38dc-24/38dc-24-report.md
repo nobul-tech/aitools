@@ -1,4 +1,6 @@
-# 38dc-24-report (v1.0): pipefail grep -q race removed; compliance step 7 fails on it
+# 38dc-24-report (v1.1): pipefail grep -q race removed; compliance step 7 fails on it
+
+v1.1: reviewer 9b19-2 notes 1 and 6 applied (the suite refuses Windows with the POSIX OS guard; the macOS claim is a source reading, not a reproduction); review https://github.com/nobul-tech/aitools/pull/168#issuecomment-6887022744 (PASS with notes).
 
 **Intent**: **Purpose**: record what mission 38dc-24-pipefail-grepq-fix did, how it was verified, and what is still open. **Scope**: PR #168 (branch `fix/38dc-24-pipefail-grepq`). NOT the merge result (in the hand-back to M6-Polish). **Audience**: M6-Polish, the commander.
 
@@ -41,7 +43,7 @@ Not changed: `scripts/aitools` 2158, 2179, 2190 (no pipefail).
 
 - GNU grep 3.11 `src/grep.c`: stdout `/dev/null` -> `dev_null_output` -> `done_on_match`; `finalize_input` -> `drain_input` reads the pipe to EOF (38dc-22, PR #164 comment 6884555109).
 - BSD grep, Apple `text_cmds` `grep/util.c` `procfile()` (read in a browser 2026-11-14, raw.githubusercontent.com/apple-oss-distributions/text_cmds/main/grep/util.c): `for (lines = 0; lines == 0 || !(lflag || qflag); )` and `procmatches()` stops only for `-m`; `grep/grep.c` has no `/dev/null` handling. So without `-q`/`-l`/`-L`/`-m` it reads to EOF.
-- CI run 43658571751 case D: linux GNU grep 3.11, `seq 1 300000 | grep -x 1 >/dev/null` 20/20 exit 0, `grep -qx 1` 20/20 exit 1 (SIGPIPE ignored on the runner, seq exits on EPIPE); macOS BSD grep 2.6.0-FreeBSD, bash 5.3 and 3.2: fix form 20/20 exit 0, `-q` form 0/20 failures.
+- CI run 43658571751 case D: linux GNU grep 3.11, `seq 1 300000 | grep -x 1 >/dev/null` 20/20 exit 0, `grep -qx 1` 20/20 exit 1 (SIGPIPE ignored on the runner, seq exits on EPIPE); macOS BSD grep 2.6.0-FreeBSD, bash 5.3 and 3.2: fix form 20/20 exit 0, `-q` form 0/20 failures. Because the `-q` form never failed on macOS, that run proves nothing about BSD grep: the BSD evidence is the source reading above, not a reproduction (reviewer 9b19-2, note 6).
 
 ## Verification
 
@@ -54,7 +56,7 @@ Not changed: `scripts/aitools` 2158, 2179, 2190 (no pipefail).
 ## Delegates
 
 - 9b19-1-step7-grepq: step 7, the suite, CI steps. Verified by reading its full diff and the suite, re-running its self-test, and CI output.
-- 9b19-2-review-pr168: independent review (verdict as a PR comment).
+- 9b19-2-review-pr168: independent review, PASS with notes (comment 6887022744); notes 1, 2 and 6 fixed, notes 3-5 optional and left as follow-ups.
 
 ## Deviations
 

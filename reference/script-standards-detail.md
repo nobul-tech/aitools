@@ -1031,8 +1031,10 @@ and fail. CI runs 43640967140 and 43642017937 (check-script-compliance steps 4
 and 5, fixed in v0.77.11) failed this way. On the linux runner (GNU grep
 3.11) `seq 1 300000 | grep -qx 1` under `pipefail` failed 20 runs of 20 with
 status 1 (`tests/check-script-compliance/test-step7-grepq.sh` case D, CI run
-43658571751); the fix form passed 20 of 20 there and on macOS (BSD grep
-2.6.0-FreeBSD).
+43658571751), and the fix form passed 20 of 20. On the macOS runner (BSD grep
+2.6.0-FreeBSD) the `-q` form never failed (0 of 20), so a passing fix form
+there proves nothing about BSD grep; the BSD evidence below is a reading of the
+source, not a reproduction.
 
 **The fix.** Keep the pattern and the other flags, drop `q`, and send the output to
 `/dev/null`:
@@ -1053,7 +1055,8 @@ read the whole input in this form:
   `drain_input` on a pipe).
 - **BSD grep** (macOS): it has no `/dev/null` special case; without `-q`, `-l`,
   `-L` or `-m` its read loop runs to end of input (Apple `text_cmds`
-  `grep/util.c`, `procfile()`: `for (lines = 0; lines == 0 || !(lflag || qflag); )`).
+  `grep/util.c`, `procfile()`: `for (lines = 0; lines == 0 || !(lflag || qflag); )`;
+  source reading only, not reproduced).
 
 `grep -c` (count) also reads its whole input. A grep that reads a file
 (`grep -q P "$f"`) has no writer and is safe. A pipeline ending in `head -N` or
@@ -1064,7 +1067,9 @@ any line in `scripts/*.sh`, `scripts/githooks/*` or `shared/hooks/*.sh` (pipefai
 scripts and the three libraries above) where a single `|` feeds a `grep` whose
 options include `q`, `--quiet` or `--silent`. CI runs the check in the linux job;
 `tests/check-script-compliance/test-step7-grepq.sh` plants bad and fixed pipelines
-and checks that both greps drain their input.
+and checks that step 7 fails the bad ones and passes the fixed ones. Its case D
+also runs the fix form 20 times on the host grep; that run only demonstrates
+the fix on Linux, where the `-q` form fails.
 
 ## Post-write validation
 
