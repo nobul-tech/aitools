@@ -13,6 +13,9 @@ NOT the tool-ops resolution/verification model (`/tool-ops`). NOT tool
 install methods (`/tool-registry` skill). **Audience**: Every agent or
 operator reasoning about why a managed tool resolves the way it does.
 
+v1.2 (2026-11-15): the managed block's Go line always adds
+`${GOPATH:-$HOME/go}/bin` (GitHub issue #185); zsh recorded as not managed.
+
 v1.1 (2026-11-13, M3-Fixes-A): `setup-user-shell` is the single owner of
 the profile and rc lines (incidents #172, #173): Windows integration block,
 repair, damage reporting, legacy migration; installer Step 7 only runs it.
@@ -55,9 +58,19 @@ elif [ -x /usr/local/bin/brew ]; then
 fi
 export PATH="$HOME/.local/bin:$PATH"
 [ -d "$HOME/.cargo/bin" ] && export PATH="$PATH:$HOME/.cargo/bin"
-[ -d "$HOME/go/bin" ] && export PATH="$PATH:$HOME/go/bin"
+export PATH="$PATH:${GOPATH:-$HOME/go}/bin"
 # <<< aitools managed <<<
 ```
+
+Go's bin directory is added with no existence check, unlike cargo's
+(GitHub issue #185). It does not exist until something is installed with
+`go install`; a `PATH` entry for a missing directory is harmless, and
+binaries installed later are found without a new shell. The line names the
+same directory `setup-go.sh` checks, `${GOPATH:-$HOME/go}/bin`, so
+`setup-go.sh` never asks the user to edit a profile: when the directory is
+not on the current `PATH`, it logs at info that new login shells get it from
+this block. On Windows, `setup-go.ps1` writes Go's bin directory to the
+persistent user `PATH` (`Ensure-GopathBinOnPath`).
 
 ### Marker convention
 
@@ -156,9 +169,11 @@ profile, not the rc. `aitools-install` Step 7 only runs `setup-user-shell`.
 | macOS/Linux (bash) | `~/.bash_profile` | `~/.bashrc` (created if absent), `~/.zshrc` (only if it exists) — all three written by `setup-user-shell.sh` |
 | Windows (PowerShell) | `$PROFILE` | `$PROFILE` (shell integration block) |
 
-zsh is not handled: a zsh login shell (macOS default) does not read
-`~/.bash_profile`, so the managed block does not apply there; the harness's
-own non-interactive contexts use `harness_python` (below). (Gap, not decided.)
+aitools does not manage zsh (commander, 2026-11-15: "we dont manage zsh so
+just leave as is"). A zsh login shell (the macOS default) does not read
+`~/.bash_profile` itself, so it gets the managed block only where the user's
+own `~/.zprofile` sources `~/.bash_profile`; aitools writes no zsh profile.
+The harness's own non-interactive contexts use `harness_python` (below).
 
 On Windows there is no brew; the managed block prepends `$HOME\.local\bin`
 (the aitools/uv bin dir) for the session. The macOS/Linux login shell is
