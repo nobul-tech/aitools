@@ -1,29 +1,45 @@
 #!/usr/bin/env bash
-# test-config.sh -- tests for scripts/setup-user-config.sh and .ps1 (the config.json writer)
+# test-config.sh -- tests for scripts/setup-user-config.sh (the config.json writer;
+# the .ps1 writer: tests/profile/test-config.ps1)
 #
 # Each case builds an isolated HOME (fake dotprofile + config.json) and runs the
 # writer with an injected machine id and hostname (AITOOLS_PROFILE_TEST_MACHINE_ID /
 # _HOSTNAME). Asserts exit codes, the written config.json and the summary rows.
 #
-# Platform targeting (plans/ci-platform-targeting.md): each writer runs only where
-# its OS guard allows. macOS/Linux run setup-user-config.sh; Windows (Git Bash)
-# runs setup-user-config.ps1 with native pwsh (paths handed to it are native, in
-# their long form, not 8.3; HOME and USERPROFILE both set). No NAME.windows golden
-# is needed: both writers give the same results once paths are normalized. Parity between the two writers is checked against
-# committed golden results, one per case: exit code, summary rows and config.json
-# (temp root as <TMP>, path separators as /), tests/profile/golden/config-*.txt
+# Platform targeting (plans/ci-platform-targeting.md; commander 2026-11-14:
+# "sh scripts and tests should only run on linux/mac and ps1 on windows"):
+# this harness runs setup-user-config.sh on macOS/Linux and refuses Windows;
+# setup-user-config.ps1 is tested on Windows by tests/profile/test-config.ps1.
+# No NAME.windows golden is needed: both writers give the same results once paths
+# are normalized. Parity between the two writers is checked against committed
+# golden results, one per case: exit code, summary rows and config.json (temp root
+# as <TMP>, path separators as /), tests/profile/golden/config-*.txt
 # (tests/lib/platform-lib.sh golden_match). AITOOLS_TEST_UPDATE_GOLDEN=1 on
 # macOS/Linux rewrites them from the .sh run. The installer Step 3/5 helpers (the
 # "install log helpers" block of aitools-install.sh/.ps1) run the same way: the .sh
-# block on macOS/Linux, the .ps1 block on Windows.
+# block here, the .ps1 block in tests/profile/test-config.ps1.
 #
 # Safe to re-run: every case runs under a temp HOME (removed on exit); the real
 # HOME is never read or written. Exit 1 on failure.
 # Usage: bash tests/profile/test-config.sh [--bash-only] [--help]
-#   --bash-only  accepted for compatibility: macOS/Linux always run only the .sh writer
+#   --bash-only  accepted for compatibility: the harness always runs only the .sh writer
 #   AITOOLS_TEST_BASH=/bin/bash runs the .sh writer under another bash (e.g. macOS 3.2)
 
 set -euo pipefail
+
+# OS guard: macOS/Linux only. BASH_VERSINFO[5] is bash's compiled-in machine
+# type (read-only, never taken from the environment), so neither a uname shim
+# on PATH nor an exported OSTYPE hides Git Bash.
+case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*)
+        printf 'This script is for macOS/Linux. On Windows, run tests/profile/test-config.ps1 with pwsh.\n' >&2
+        exit 1 ;;
+esac
+case "${BASH_VERSINFO[5]:-}" in
+    *-msys*|*-cygwin*|*-mingw*)
+        printf 'This script is for macOS/Linux. On Windows, run tests/profile/test-config.ps1 with pwsh.\n' >&2
+        exit 1 ;;
+esac
 
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
     perl -ne 'last unless /^#/; print if $. > 1' "$0"
@@ -34,14 +50,13 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # shellcheck source=../lib/platform-lib.sh
 . "$REPO/tests/lib/platform-lib.sh"
 SH="$REPO/scripts/setup-user-config.sh"
-PS="$REPO/scripts/setup-user-config.ps1"
 WORK="$(mktemp -d)"
 cleanup() { rm -rf "$WORK"; }
 trap cleanup EXIT
 BASH_BIN="${AITOOLS_TEST_BASH:-bash}"
 GOLDEN_DIR="$REPO/tests/profile/golden"
 GOLDEN_TMP="$WORK"
-LANG_RUN="$TEST_LANG"   # sh on macOS/Linux, ps1 on Windows
+LANG_RUN=sh   # the writer under test (the .ps1 writer: tests/profile/test-config.ps1)
 
 PASS=0
 FAIL=0
@@ -49,33 +64,13 @@ SKIP=0
 ok()  { PASS=$((PASS + 1)); printf '  ok   %s\n' "$1"; }
 bad() { FAIL=$((FAIL + 1)); printf '  FAIL %s\n' "$1"; }
 
-if [ "$LANG_RUN" = ps1 ] && ! command -v pwsh >/dev/null 2>&1; then
-    printf '  FAIL pwsh is not on PATH: setup-user-config.ps1 cannot be tested on Windows\n'
-    exit 1
-fi
-
 ID_MAC="3D4DF2A5-7D91-5AF9-9944-4FEEBAAE3CF5"        # as macOS reports it (upper case)
 KEY_MAC="3d4df2a5-7d91-5af9-9944-4feebaae3cf5"       # the profiles key (lower-cased id)
+# H / DP: the case HOME and the dotprofile in it. Every path written into a fixture
+# or passed as an argument uses them.
 H="$WORK/home"
 DP="$H/repos/aitools-nobul-jose"
 CFG="$H/.aitools/config.json"
-# NWORK: the temp root as the writer under test reads it. On Windows its long form
-# (cygpath -m -l): the runner's TEMP is the 8.3 short C:\Users\RUNNER~1\..., which
-# cygpath -m keeps, while pwsh spells some paths long (Get-Location in Step 3; the
-# resolver's dotprofile scan, Get-ChildItem .FullName in aitools-profile.ps1), so one
-# directory appeared under two names (PR #139 run 41265193554, 9 FAILs). Unchanged
-# off Windows.
-NWORK="$WORK"
-if [ "$TEST_PLATFORM" = windows ]; then
-    if ! NWORK="$(cygpath -m -l "$WORK")" || [ -z "$NWORK" ]; then
-        printf '  FAIL cannot get the long Windows form of %s (cygpath -m -l)\n' "$WORK"
-        exit 1
-    fi
-fi
-# NH / NDP: H and DP as the writer under test reads them. Every path written into a
-# fixture or passed as an argument uses them.
-NH="$NWORK/home"
-NDP="$NH/repos/aitools-nobul-jose"
 CASE_ENV=""
 
 # write_profile MAC_KEY MAC_ALIAS_LINE MAC_ID MAC_HOST -- profile.json, revision 2.2
@@ -125,54 +120,21 @@ profile_legacy() { write_profile nobul-mac "" "$ID_MAC" nobul-mac; }
 
 reset_home() { rm -rf "$H"; mkdir -p "$H/repos" "$H/.aitools"; }
 
-# map_args -- translate bash-style options to the PowerShell parameters (PS_ARGS)
-map_args() {
-    PS_ARGS=()
-    while [ $# -gt 0 ]; do
-        case "$1" in
-            --repos-path)     PS_ARGS+=(-ReposPath "$2"); shift 2 ;;
-            --repo-path)      PS_ARGS+=(-RepoPath "$2"); shift 2 ;;
-            --drives-json)    PS_ARGS+=(-DrivesJson "$2"); shift 2 ;;
-            --github-user)    PS_ARGS+=(-GithubUser "$2"); shift 2 ;;
-            --user-repo-path) PS_ARGS+=(-UserRepoPath "$2"); shift 2 ;;
-            --machine-id)     PS_ARGS+=(-MachineId "$2"); shift 2 ;;
-            --machine-alias)  PS_ARGS+=(-MachineAlias "$2"); shift 2 ;;
-            --no-machine)     PS_ARGS+=(-NoMachine); shift ;;
-            --dry-run)        PS_ARGS+=(-DryRun); shift ;;
-            *)                PS_ARGS+=("$1"); shift ;;
-        esac
-    done
-}
-
-# run_writer ARGS... -- run the writer of the language under test (bash-style
-# options; mapped for the .ps1); sets RC; summary rows in $H/summary.txt.
-# MSYS_NO_PATHCONV=1: Git Bash passes the arguments to native pwsh unchanged (the
-# paths are native already; a --drives-json value must not be rewritten).
+# run_writer ARGS... -- run the .sh writer; sets RC; summary rows in $H/summary.txt.
 run_writer() {
     : > "$H/summary.txt"
     RC=0
-    if [ "$LANG_RUN" = sh ]; then
-        # shellcheck disable=SC2086  # CASE_ENV is a list of VAR=value words
-        env HOME="$H" AITOOLS_LOG_DIR="$H/.aitools/logs" AITOOLS_SUMMARY_FILE="$H/summary.txt" \
-            AITOOLS_PROFILE_TEST_MACHINE_ID="$ID_MAC" AITOOLS_PROFILE_TEST_HOSTNAME=nobul-mac $CASE_ENV \
-            "$BASH_BIN" "$SH" "$@" < /dev/null > "$WORK/out.txt" 2>&1 || RC=$?
-    else
-        map_args "$@"
-        # shellcheck disable=SC2086
-        env HOME="$NH" USERPROFILE="$NH" AITOOLS_LOG_DIR="$NH/.aitools/logs" AITOOLS_SUMMARY_FILE="$NH/summary.txt" \
-            AITOOLS_PROFILE_TEST_MACHINE_ID="$ID_MAC" AITOOLS_PROFILE_TEST_HOSTNAME=nobul-mac MSYS_NO_PATHCONV=1 $CASE_ENV \
-            pwsh -NoProfile -NonInteractive -File "$(native_path "$PS")" ${PS_ARGS[@]+"${PS_ARGS[@]}"} \
-            < /dev/null > "$WORK/out.txt" 2>&1 || RC=$?
-    fi
+    # shellcheck disable=SC2086  # CASE_ENV is a list of VAR=value words
+    env HOME="$H" AITOOLS_LOG_DIR="$H/.aitools/logs" AITOOLS_SUMMARY_FILE="$H/summary.txt" \
+        AITOOLS_PROFILE_TEST_MACHINE_ID="$ID_MAC" AITOOLS_PROFILE_TEST_HOSTNAME=nobul-mac $CASE_ENV \
+        "$BASH_BIN" "$SH" "$@" < /dev/null > "$WORK/out.txt" 2>&1 || RC=$?
 }
 
 # norm_json FILE -- config.json as compared: CR removed, JSON-escaped backslashes
-# (Windows path separators, "C:\\Users\\...") turned into slashes, and NWORK (the
-# long Windows form, which platform-lib's golden normalization does not know;
-# letter case ignored) replaced by <TMP>. platform-lib handles single backslashes
-# and the cygpath -m form of GOLDEN_TMP only.
+# turned into slashes, and WORK (letter case ignored) replaced by <TMP>. The same
+# rule as norm_json in tests/profile/test-config.ps1, the Windows harness.
 norm_json() {
-    NW="$NWORK" perl -pe 's/\r//g; s{\\\\}{/}g; s/\Q$ENV{NW}\E/<TMP>/gi' "$1"
+    NW="$WORK" perl -pe 's/\r//g; s{\\\\}{/}g; s/\Q$ENV{NW}\E/<TMP>/gi' "$1"
 }
 
 # case_run NAME RC SETUP ARGS... -- SETUP builds the fixture; one writer run.
@@ -225,7 +187,7 @@ log_has() {  # log_has TEXT -- deploy.log (of the last writer run) contains TEXT
 }
 
 printf 'setup-user-config tests (%s: %s writer)\n' "$TEST_PLATFORM" "$LANG_RUN"
-BOOT=(--repos-path "$NH/repos" --repo-path "$NH/repos/aitools")
+BOOT=(--repos-path "$H/repos" --repo-path "$H/repos/aitools")
 
 # C1 fresh machine with a dotprofile: created, derived values, meta
 fix_fresh() { reset_home; profile_with_id; }
@@ -248,11 +210,11 @@ fix_v2() {
     cat > "$CFG" <<JSON
 {
   "version": 2,
-  "reposPath": "$NH/repos",
-  "repoPath": "$NH/repos/aitools",
+  "reposPath": "$H/repos",
+  "repoPath": "$H/repos/aitools",
   "custom": { "keep": true },
   "googleDrives": [ { "path": "/gd", "account": "a@b.c", "label": "" } ],
-  "userRepoPath": "$NDP",
+  "userRepoPath": "$DP",
   "machineAlias": "new-mac"
 }
 JSON
@@ -269,7 +231,7 @@ if ls "$H/.aitools/" | grep -q 'config.json.bak'; then ok "c3-upgrade: backup wr
 # C4 corrupt config: rebuilt with salvaged keys, WARN
 fix_corrupt() {
     reset_home; profile_with_id
-    printf '{ "reposPath": "%s", "repoPath": "%s", "machineAlias": "laptop", oops\n' "$NH/repos" "$NH/repos/aitools" > "$CFG"
+    printf '{ "reposPath": "%s", "repoPath": "%s", "machineAlias": "laptop", oops\n' "$H/repos" "$H/repos/aitools" > "$CFG"
 }
 case_run c4-corrupt 0 fix_corrupt
 has_row "WARN|aitools config|rebuilt (was invalid)"
@@ -307,8 +269,8 @@ has_row "OK|aitools config|dry-run: would update"
 if grep -q '"version": 2' "$RAWJ"; then ok "c8-dry-run: config untouched"; else bad "c8-dry-run: config changed"; fi
 
 # C8b dry run writes nothing under ~/.aitools, not even a temp file: it succeeds
-# with ~/.aitools read-only (logs go to the writable logs/ below it). On Windows
-# chmod does not make the directory read-only: the case still checks the dry run.
+# with ~/.aitools read-only (logs go to the writable logs/ below it). The Windows
+# harness has no chmod: it checks the dry run with a writable directory.
 fix_dry_ro() {
     if [ -d "$H/.aitools" ]; then chmod 755 "$H/.aitools"; fi
     fix_v2
@@ -352,8 +314,8 @@ has_json '"machineAlias": "new-mac"'
 
 # C11 AITOOLS_USER_REPO_PATH: used for the run, not saved
 fix_env() { reset_home; profile_with_id; cp -R "$DP" "$H/envdp"; fix_v2_cfg_only; }
-fix_v2_cfg_only() { printf '{ "version": 3, "reposPath": "%s", "repoPath": "%s" }\n' "$NH/repos" "$NH/repos/aitools" > "$CFG"; }
-CASE_ENV="AITOOLS_USER_REPO_PATH=$NH/envdp"
+fix_v2_cfg_only() { printf '{ "version": 3, "reposPath": "%s", "repoPath": "%s" }\n' "$H/repos" "$H/repos/aitools" > "$CFG"; }
+CASE_ENV="AITOOLS_USER_REPO_PATH=$H/envdp"
 case_run c11-env 0 fix_env
 CASE_ENV=""
 if grep -q '"userRepoPath"' "$RAWJ"; then bad "c11-env: userRepoPath saved from the env override"; else ok "c11-env: userRepoPath not saved"; fi
@@ -411,7 +373,7 @@ log_has "machineAlias=nobul-mac via=config"
 fix_stale_mid() {
     reset_home; profile_legacy
     printf '{ "version": 3, "reposPath": "%s", "repoPath": "%s", "machineId": "%s", "machineAlias": "nobul-mac" }\n' \
-        "$NH/repos" "$NH/repos/aitools" "$KEY_OTHER" > "$CFG"
+        "$H/repos" "$H/repos/aitools" "$KEY_OTHER" > "$CFG"
 }
 case_run c20-stale-machine-id 0 fix_stale_mid
 has_row "OK|aitools config|updated"
@@ -424,7 +386,7 @@ out_has "cached machineId \"$KEY_OTHER\" removed"
 # machineId is derived: the salvaged value is the one written)
 fix_corrupt_mid() {
     reset_home; profile_with_id
-    printf '{ "reposPath": "%s", "repoPath": "%s", "machineId": "%s", oops\n' "$NH/repos" "$NH/repos/aitools" "$KEY_MAC" > "$CFG"
+    printf '{ "reposPath": "%s", "repoPath": "%s", "machineId": "%s", oops\n' "$H/repos" "$H/repos/aitools" "$KEY_MAC" > "$CFG"
 }
 CASE_ENV="AITOOLS_PROFILE_TEST_MACHINE_ID=none"
 case_run c21-salvage-machine-id 0 fix_corrupt_mid
@@ -512,28 +474,22 @@ rows_n 0 "ERROR"
 rows_n 0 "ACTION"
 if grep -q '"version": 2' "$RAWJ"; then ok "c22l-no-machine-dry-run: config untouched"; else bad "c22l-no-machine-dry-run: config changed"; fi
 
-# C22j the help text names the flag (--no-machine / -NoMachine)
+# C22j the help text names the flag (--no-machine)
 CASE="c22j-help"
 reset_home
 RC=0
-if [ "$LANG_RUN" = sh ]; then
-    flag="--no-machine"
-    env HOME="$H" AITOOLS_LOG_DIR="$H/.aitools/logs" "$BASH_BIN" "$SH" --help < /dev/null > "$WORK/help.out" 2>&1 || RC=$?
-else
-    flag="-NoMachine"
-    env HOME="$NH" USERPROFILE="$NH" AITOOLS_LOG_DIR="$NH/.aitools/logs" \
-        pwsh -NoProfile -NonInteractive -File "$(native_path "$PS")" -Help < /dev/null > "$WORK/help.out" 2>&1 || RC=$?
-fi
+flag="--no-machine"
+env HOME="$H" AITOOLS_LOG_DIR="$H/.aitools/logs" "$BASH_BIN" "$SH" --help < /dev/null > "$WORK/help.out" 2>&1 || RC=$?
 if [ "$RC" -eq 0 ] && grep -qF -- "$flag" "$WORK/help.out"; then ok "c22j-help: $LANG_RUN help names $flag"
 else bad "c22j-help: $LANG_RUN help (exit $RC) lacks $flag"; perl -pe 's/^/       /' "$WORK/help.out"; fi
 
 # C14 relative bootstrap path: bad arguments, nothing written
-case_run c14-relative 1 fix_nodp --repos-path repos --repo-path "$NH/repos/aitools"
+case_run c14-relative 1 fix_nodp --repos-path repos --repo-path "$H/repos/aitools"
 has_row "ERROR|aitools config|bad arguments"
 if [ ! -s "$RAWJ" ]; then ok "c14-relative: no config written"; else bad "c14-relative: config written"; fi
 
 # C15 double slash in a path value: validation failed, existing file untouched
-case_run c15-double-slash 1 fix_v2 --repos-path "$NH/repos//x"
+case_run c15-double-slash 1 fix_v2 --repos-path "$H/repos//x"
 has_row "ERROR|aitools config|validation failed"
 if grep -q '"version": 2' "$RAWJ"; then ok "c15-double-slash: config untouched"; else bad "c15-double-slash: config changed"; fi
 
@@ -588,35 +544,31 @@ has_json '"MachineId": "hand-written"'
 if grep -q '"version": 2' "$RAWJ"; then ok "c24-case-twin: config untouched"; else bad "c24-case-twin: config changed"; fi
 if ls "$H/.aitools/" | grep -q 'config.json.tmp'; then bad "c24-case-twin: temp file left"; else ok "c24-case-twin: no temp file left"; fi
 
-# C25 audit A-11 (.sh writer only: PowerShell removes with Remove-Item): removals are
-# checked. A failing rm (stub on PATH) on the validation-failure path (C15 fixture):
-# the temp file is a counted warning before the footer, the EXIT trap's failures go
-# to detail
+# C25 audit A-11 (.sh writer only: PowerShell removes with Remove-Item; the Windows
+# harness reports it as a skip): removals are checked. A failing rm (stub on PATH) on
+# the validation-failure path (C15 fixture): the temp file is a counted warning before
+# the footer, the EXIT trap's failures go to detail
 CASE="c25-rm-fails"
-if [ "$LANG_RUN" = sh ]; then
-    STUB="$WORK/stub-bin"
-    mkdir -p "$STUB"
-    printf '#!/bin/sh\nexit 1\n' > "$STUB/rm"
-    chmod +x "$STUB/rm"
-    fix_v2
-    # CASE_ENV is split on spaces: a short PATH (stub, then the dirs of bash and perl)
-    BASH_DIR=$(dirname "$(command -v "$BASH_BIN")")
-    PERL_DIR=$(dirname "$(command -v perl)")
-    CASE_ENV="PATH=$STUB:$BASH_DIR:$PERL_DIR:/usr/bin:/bin:/usr/sbin:/sbin"
-    run_writer --repos-path "$H/repos//x"
-    CASE_ENV=""
-    if [ "$RC" -eq 1 ]; then ok "$CASE: sh exit 1"; else bad "$CASE: sh exit $RC, want 1"; perl -pe 's/^/       /' "$WORK/out.txt"; fi
-    if grep -qF "[warn] Could not remove temp file $CFG.tmp." "$WORK/out.txt"; then ok "$CASE: failed temp-file removal is a warning"
-    else bad "$CASE: no temp-file warning"; perl -pe 's/^/       /' "$WORK/out.txt"; fi
-    log_has "[detail] cleanup: could not remove temp directory "
-    log_has "[detail] cleanup: could not remove temp file $CFG.tmp."
-    # the writer's temp directory (mktemp -d; macOS ignores TMPDIR) is left behind: remove it
-    LEFT=$(perl -ne 'print "$1\n" if /cleanup: could not remove temp directory (\S+)/' "$H/.aitools/logs/deploy.log" | tail -n 1)
-    if [ -n "$LEFT" ] && [ -d "$LEFT" ]; then rm -rf "$LEFT"; fi
-    reset_home
-else
-    printf '  skip %s: .sh writer only (the .ps1 removes with Remove-Item)\n' "$CASE"; SKIP=$((SKIP + 1))
-fi
+STUB="$WORK/stub-bin"
+mkdir -p "$STUB"
+printf '#!/bin/sh\nexit 1\n' > "$STUB/rm"
+chmod +x "$STUB/rm"
+fix_v2
+# CASE_ENV is split on spaces: a short PATH (stub, then the dirs of bash and perl)
+BASH_DIR=$(dirname "$(command -v "$BASH_BIN")")
+PERL_DIR=$(dirname "$(command -v perl)")
+CASE_ENV="PATH=$STUB:$BASH_DIR:$PERL_DIR:/usr/bin:/bin:/usr/sbin:/sbin"
+run_writer --repos-path "$H/repos//x"
+CASE_ENV=""
+if [ "$RC" -eq 1 ]; then ok "$CASE: sh exit 1"; else bad "$CASE: sh exit $RC, want 1"; perl -pe 's/^/       /' "$WORK/out.txt"; fi
+if grep -qF "[warn] Could not remove temp file $CFG.tmp." "$WORK/out.txt"; then ok "$CASE: failed temp-file removal is a warning"
+else bad "$CASE: no temp-file warning"; perl -pe 's/^/       /' "$WORK/out.txt"; fi
+log_has "[detail] cleanup: could not remove temp directory "
+log_has "[detail] cleanup: could not remove temp file $CFG.tmp."
+# the writer's temp directory (mktemp -d; macOS ignores TMPDIR) is left behind: remove it
+LEFT=$(perl -ne 'print "$1\n" if /cleanup: could not remove temp directory (\S+)/' "$H/.aitools/logs/deploy.log" | tail -n 1)
+if [ -n "$LEFT" ] && [ -d "$LEFT" ]; then rm -rf "$LEFT"; fi
+reset_home
 
 # C12 bad arguments
 case_run c12-bad-arg 1 fix_nodp --bogus
@@ -624,9 +576,8 @@ has_row "ERROR|aitools config|bad arguments"
 
 # --- Installer Step 3/5 helpers (aitools-install.sh/.ps1 "install log helpers" block) ---
 # The full installer cannot run here (incident #89); its helper block is extracted
-# and run against the real writer under the isolated HOME: the .sh block and
-# setup-user-config.sh on macOS/Linux, the .ps1 block and setup-user-config.ps1 on
-# Windows.
+# and run against the real writer (setup-user-config.sh) under the isolated HOME. The
+# .ps1 block and setup-user-config.ps1: tests/profile/test-config.ps1 (Windows).
 cat > "$WORK/inst-harness.sh" <<'HARNESS'
 set -euo pipefail
 repo="$1"; mode="$2"; shift 2
@@ -643,52 +594,26 @@ case "$mode" in
          printf 'COUNTS errors=%s warnings=%s\n' "$ERRORS" "$WARNINGS" ;;
 esac
 HARNESS
-cat > "$WORK/inst-harness.ps1" <<'HARNESS'
-param([string]$Repo, [string]$Mode, [string]$ReposPath = "", [string]$RepoPath = "")
-. (Join-Path $Repo "scripts/aitools-lib.ps1")
-Initialize-Logging "aitools-install"
-$logJsonl = Join-Path $logDir "deploy.jsonl"; $runId = "test01"; $hostName = "testhost"; $osName = "Windows"
-$text = [IO.File]::ReadAllText((Join-Path $Repo "scripts/aitools-install.ps1"))
-$m = [regex]::Match($text, '(?ms)^# --- BEGIN install log helpers[^\n]*\n(.*?)^# --- END install log helpers ---')
-if (-not $m.Success) { Write-Output "no helper block"; exit 3 }
-Invoke-Expression $m.Groups[1].Value
-if ($Mode -eq "abs") { Write-Output (Get-AbsoluteReposPath $ReposPath); exit 0 }
-if ($Mode -eq "jsonl") { Write-JsonlRecord "2026-01-01T00:00:00Z" "t" "info" "q`"b\t`tn`nc$([char]1)e$([char]27)[31mr`rz"; exit 0 }
-Invoke-ConfigWriter (Join-Path $Repo "scripts/setup-user-config.ps1") @{ ReposPath = $ReposPath; RepoPath = $RepoPath }
-Write-Output "COUNTS errors=$($script:errors) warnings=$($script:warnings)"
-HARNESS
 
-# inst_run MODE [REPOS_PATH REPO_PATH] -- run the extracted helpers of the language
-# under test (abs: REPOS_PATH only; jsonl: none; run: both); output in $WORK/inst.out
-# (CR and colours removed). INST_CWD: the current directory of the run (default $H).
+# inst_run MODE [REPOS_PATH REPO_PATH] -- run the extracted helpers (abs: REPOS_PATH
+# only; jsonl: none; run: both); output in $WORK/inst.out (CR and colours removed).
+# INST_CWD: the current directory of the run (default $H).
 inst_run() {
     local mode="$1"; shift
     RC=0
     : > "$H/summary.txt"
-    if [ "$LANG_RUN" = sh ]; then
-        local a=()
-        case "$mode" in abs) a=("$1") ;; run) a=(--repos-path "$1" --repo-path "$2") ;; esac
-        (cd "${INST_CWD:-$H}" && env HOME="$H" AITOOLS_LOG_DIR="$H/.aitools/logs" AITOOLS_SUMMARY_FILE="$H/summary.txt" \
-            AITOOLS_PROFILE_TEST_MACHINE_ID="$ID_MAC" AITOOLS_PROFILE_TEST_HOSTNAME=nobul-mac \
-            "$BASH_BIN" "$WORK/inst-harness.sh" "$REPO" "$mode" ${a[@]+"${a[@]}"} < /dev/null) > "$WORK/inst.out" 2>&1 || RC=$?
-    else
-        local a=()
-        case "$mode" in abs) a=(-ReposPath "$1") ;; run) a=(-ReposPath "$1" -RepoPath "$2") ;; esac
-        (cd "${INST_CWD:-$H}" && env HOME="$NH" USERPROFILE="$NH" AITOOLS_LOG_DIR="$NH/.aitools/logs" AITOOLS_SUMMARY_FILE="$NH/summary.txt" \
-            AITOOLS_PROFILE_TEST_MACHINE_ID="$ID_MAC" AITOOLS_PROFILE_TEST_HOSTNAME=nobul-mac MSYS_NO_PATHCONV=1 \
-            pwsh -NoProfile -NonInteractive -File "$(native_path "$WORK/inst-harness.ps1")" -Repo "$(native_path "$REPO")" -Mode "$mode" \
-            ${a[@]+"${a[@]}"} < /dev/null) > "$WORK/inst.out" 2>&1 || RC=$?
-    fi
+    local a=()
+    case "$mode" in abs) a=("$1") ;; run) a=(--repos-path "$1" --repo-path "$2") ;; esac
+    (cd "${INST_CWD:-$H}" && env HOME="$H" AITOOLS_LOG_DIR="$H/.aitools/logs" AITOOLS_SUMMARY_FILE="$H/summary.txt" \
+        AITOOLS_PROFILE_TEST_MACHINE_ID="$ID_MAC" AITOOLS_PROFILE_TEST_HOSTNAME=nobul-mac \
+        "$BASH_BIN" "$WORK/inst-harness.sh" "$REPO" "$mode" ${a[@]+"${a[@]}"} < /dev/null) > "$WORK/inst.out" 2>&1 || RC=$?
     perl -pi -e 's/\e\[[0-9;]*m//g; s/\r//g' "$WORK/inst.out"
 }
 inst_counts() { perl -ne 'print "$1 $2" if /^COUNTS errors=(\d+) warnings=(\d+)/' "$WORK/inst.out"; }
 inst_got() { perl -ne 'print if /\S/' "$WORK/inst.out"; }
-# same_path GOT WANT -- the same path for the language under test: exact for .sh;
-# for .ps1 (Windows) separators and letter case are not significant
-same_path() {
-    if [ "$LANG_RUN" = sh ]; then [ "$1" = "$2" ]; return; fi
-    [ "$(printf '%s' "$1" | tr '\\A-Z' '/a-z')" = "$(printf '%s' "$2" | tr '\\A-Z' '/a-z')" ]
-}
+# same_path GOT WANT -- the same path, exactly (the Windows harness compares without
+# regard to separators and letter case)
+same_path() { [ "$1" = "$2" ]; }
 jsonl_check() {  # jsonl_check -- every deploy.jsonl line is valid JSON; writes the writer's counts to jsonl.res
     local j="$H/.aitools/logs/deploy.jsonl"
     if perl -MJSON::PP -ne 'BEGIN { $n = 0; $s = 0 } $r = decode_json($_); $n++ if $r->{script} eq "setup-user-config" && $r->{level} eq "warn" && $r->{msg} !~ /^(COMPLETED|FAILED) with /; $s++ if $r->{script} eq "setup-user-config"; $f = $1 if $r->{script} eq "setup-user-config" && $r->{msg} =~ /^COMPLETED with (\d+) warning/; END { print "$s $n ", (defined $f ? $f : 0) }' "$j" > "$WORK/jsonl.res" 2> "$WORK/jsonl.err"; then
@@ -701,15 +626,9 @@ jsonl_check() {  # jsonl_check -- every deploy.jsonl line is valid JSON; writes 
 L="$LANG_RUN"
 CASE="$L step3"
 # Step 3: a relative answer becomes absolute (relative to the current directory)
-if [ "$L" = sh ]; then
-    want="$(cd "$H" && pwd -P)/repos"; want_l="$H/repos"
-    abs_in="/abs/repos"
-    root_tmp="/tmp"
-else
-    want="$NH/repos"; want_l="$want"
-    abs_in="C:/abs/repos"   # a Windows user answers with a drive path
-    root_tmp="$(native_path /)"; root_tmp="${root_tmp%/}/tmp"   # Git Bash "/" is the Git install directory
-fi
+want="$(cd "$H" && pwd -P)/repos"; want_l="$H/repos"
+abs_in="/abs/repos"
+root_tmp="/tmp"
 inst_run abs repos
 got=$(inst_got)
 REL_GOT="$got"
@@ -739,7 +658,7 @@ else bad "$L jsonl: invalid record"; perl -pe 's/^/       /' "$H/.aitools/logs/d
 # is gone (Step 3's absolute path is accepted and config.json is written)
 fix_unreg
 rm -f "$CFG"
-inst_run run "$REL_GOT" "$NH/repos/aitools"   # REL_GOT: Step 3's answer for the relative 'repos'
+inst_run run "$REL_GOT" "$H/repos/aitools"   # REL_GOT: Step 3's answer for the relative 'repos'
 counts=$(inst_counts)
 if [ "$RC" -eq 0 ] && [ -s "$CFG" ]; then ok "$L step5: config.json written"; else bad "$L step5: rc=$RC, config missing"; perl -pe 's/^/       /' "$WORK/inst.out"; fi
 jsonl_check
@@ -752,7 +671,7 @@ if grep -q '\[setup-user-config\] \[warn\]' "$WORK/inst.out"; then ok "$L step5:
 
 # A failing writer (relative path reaching it) is one installer error
 reset_home
-inst_run run repos "$NH/repos/aitools"
+inst_run run repos "$H/repos/aitools"
 counts=$(inst_counts)
 if [ "${counts% *}" = "1" ]; then ok "$L step5: failed writer = 1 error"; else bad "$L step5: failed writer counts '$counts'"; perl -pe 's/^/       /' "$WORK/inst.out"; fi
 if perl -pe 's/\r//g' "$H/summary.txt" | grep -qxF "ERROR|aitools config|bad arguments"; then ok "$L step5: writer ERROR row kept"; else bad "$L step5: no writer ERROR row"; fi

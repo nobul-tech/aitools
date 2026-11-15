@@ -5,9 +5,12 @@
 #
 # Safe to re-run: every case uses its own temp dir (HOME, USERPROFILE and
 # AITOOLS_LOG_DIR point into it), removed on exit.
-# Platform: Windows, macOS, Linux (pwsh 7). The P/Invoke type cases need Windows
-# and are reported as SKIP elsewhere; the console case needs this suite's stdin to
-# be a console and is SKIP otherwise (CI, Claude Code). Exit 1 if any case fails.
+# Platform: Windows only (pwsh 7; OS guard below). Commander, 2026-11-14: "sh
+# scripts and tests should only run on linux/mac and ps1 on windows". The bash
+# twins are tested on macOS/Linux by tests/menus/test-menu-choice.sh
+# (read_tty_choice, the AI-merge spinner) and tests/logging/test-logging.sh
+# (_ai_log). The console case needs this suite's stdin to be a console and is
+# SKIP otherwise (CI, Claude Code). Exit 1 if any case fails.
 # What it checks: with a pipe for stdin the helpers are a no-op, never throw and
 # compile nothing; Read-ConsoleChoice returns the piped line, or "" and a warn at
 # EOF; the C# type has Get/Set/EnterCooked; Read-ConsoleChoice enters cooked mode
@@ -28,8 +31,13 @@
 param([switch]$Help)
 
 if ($Help) {
-    Get-Content $PSCommandPath | Select-Object -Skip 1 -First 25
+    Get-Content $PSCommandPath | Select-Object -Skip 1 -First 28
     exit 0
+}
+
+if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
+    [Console]::Error.WriteLine("This script is for Windows. On macOS/Linux, the bash twins of these helpers are tested by tests/menus/test-menu-choice.sh and tests/logging/test-logging.sh with bash.")
+    exit 1
 }
 
 $root = (Resolve-Path (Join-Path $PSScriptRoot ".." "..")).Path
@@ -71,17 +79,15 @@ switch ($Mode) {
         "READ [$r]"
         "EOFFLAG $script:ReadConsoleEof"
         "LOADED-AFTER-READ $([bool]('AitConsoleInput' -as [type]))"
-        if ($IsWindows) {
-            # Compile the type from the lib's own source (no console needed to compile)
-            $ast = [System.Management.Automation.Language.Parser]::ParseFile($Lib, [ref]$null, [ref]$null)
-            $init = $ast.Find({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq "Initialize-AitConsoleInput" }, $true)
-            $src = $init.Find({ param($n) $n -is [System.Management.Automation.Language.StringConstantExpressionAst] -and $n.Value -match 'class AitConsoleInput' }, $true)
-            Add-Type -TypeDefinition $src.Value -ErrorAction Stop
-            $methods = @([AitConsoleInput].GetMethods() | ForEach-Object { $_.Name }) | Sort-Object -Unique
-            "METHODS $($methods -join ',')"
-            $ec = [AitConsoleInput]::EnterCooked()
-            "TYPE get=$([AitConsoleInput]::Get()) set=$([AitConsoleInput]::Set(503)) setneg=$([AitConsoleInput]::Set(-1)) cooked=$ec lasterror=$([AitConsoleInput]::LastError)"
-        }
+        # Compile the type from the lib's own source (no console needed to compile)
+        $ast = [System.Management.Automation.Language.Parser]::ParseFile($Lib, [ref]$null, [ref]$null)
+        $init = $ast.Find({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq "Initialize-AitConsoleInput" }, $true)
+        $src = $init.Find({ param($n) $n -is [System.Management.Automation.Language.StringConstantExpressionAst] -and $n.Value -match 'class AitConsoleInput' }, $true)
+        Add-Type -TypeDefinition $src.Value -ErrorAction Stop
+        $methods = @([AitConsoleInput].GetMethods() | ForEach-Object { $_.Name }) | Sort-Object -Unique
+        "METHODS $($methods -join ',')"
+        $ec = [AitConsoleInput]::EnterCooked()
+        "TYPE get=$([AitConsoleInput]::Get()) set=$([AitConsoleInput]::Set(503)) setneg=$([AitConsoleInput]::Set(-1)) cooked=$ec lasterror=$([AitConsoleInput]::LastError)"
     }
     "piped" {
         $script:ReadConsoleEof = $true   # a stale flag must be cleared by the next read
@@ -278,7 +284,7 @@ try {
     $out = $r.Out
     Check "no console: child ran without error (exit 0)" ($r.Rc -eq 0) $out.Trim()
     Check "no console: stdin of the child is a pipe" ($out -match 'REDIRECTED True') $out.Trim()
-    $expectReason = if ($IsWindows) { "not a console" } else { "not Windows" }
+    $expectReason = "not a console"
     Check "no console: Save-ConsoleInputMode returns mode -1, '$expectReason'" ($out -match "SAVE mode=-1 reason=$expectReason") $out.Trim()
     Check "no console: Restore-ConsoleInputMode returns '$expectReason' (nothing to restore)" ($out -match "RESTORE $expectReason") $out.Trim()
     Check "no console: Restore-ConsoleInputMode with nothing saved returns 'not saved'" ($out -match 'RESTORE-NULL not saved') $out.Trim()
@@ -289,25 +295,15 @@ try {
     Check "EOF: one warning counted, no error" ($out -match 'END errors=0 warnings=1') $out.Trim()
     Check "EOF: Read-ConsoleChoice sets `$script:ReadConsoleEof (Read-MenuChoice contract)" ($out -match 'EOFFLAG True') $out.Trim()
     Check "no console: AitConsoleInput is not loaded by Save/Restore or the read" (($out -match 'LOADED-AFTER-SAVE False') -and ($out -match 'LOADED-AFTER-READ False')) $out.Trim()
-    if ($IsWindows) {
-        $want = @("EnterCooked", "Get", "Set")
-        $got = if ($out -match 'METHODS (\S+)') { $Matches[1] -split ',' } else { @() }
-        $missing = @($want | Where-Object { $_ -notin $got })
-        Check "type: AitConsoleInput compiles and exposes Get, Set, EnterCooked" ($missing.Count -eq 0) "methods: $($got -join ',')"
-        # Without a console: Get() and EnterCooked() are -1, Set() returns a Win32 error, never an exception
-        Check "type: Get() is -1 without a console" ($out -match 'TYPE get=-1 ') $out.Trim()
-        Check "type: Set() without a console returns a Win32 error code" ($out -match 'TYPE get=-1 set=[1-9]\d* ') $out.Trim()
-        Check "type: Set(-1) is refused (87)" ($out -match 'setneg=87 ') $out.Trim()
-        Check "type: EnterCooked() without a console returns -1 and a Win32 error" ($out -match 'cooked=-1 lasterror=[1-9]\d*') $out.Trim()
-    } else {
-        foreach ($n in @("type: AitConsoleInput compiles and exposes Get, Set, EnterCooked",
-                         "type: Get() is -1 without a console",
-                         "type: Set() without a console returns a Win32 error code",
-                         "type: Set(-1) is refused (87)",
-                         "type: EnterCooked() without a console returns -1 and a Win32 error")) {
-            Skip $n "kernel32 console API is Windows only"
-        }
-    }
+    $want = @("EnterCooked", "Get", "Set")
+    $got = if ($out -match 'METHODS (\S+)') { $Matches[1] -split ',' } else { @() }
+    $missing = @($want | Where-Object { $_ -notin $got })
+    Check "type: AitConsoleInput compiles and exposes Get, Set, EnterCooked" ($missing.Count -eq 0) "methods: $($got -join ',')"
+    # Without a console: Get() and EnterCooked() are -1, Set() returns a Win32 error, never an exception
+    Check "type: Get() is -1 without a console" ($out -match 'TYPE get=-1 ') $out.Trim()
+    Check "type: Set() without a console returns a Win32 error code" ($out -match 'TYPE get=-1 set=[1-9]\d* ') $out.Trim()
+    Check "type: Set(-1) is refused (87)" ($out -match 'setneg=87 ') $out.Trim()
+    Check "type: EnterCooked() without a console returns -1 and a Win32 error" ($out -match 'cooked=-1 lasterror=[1-9]\d*') $out.Trim()
 
     # -----------------------------------------------------------------------
     # Read-ConsoleChoice with a piped line
@@ -324,9 +320,7 @@ try {
     # -----------------------------------------------------------------------
     $consoleNames = @("console: Initialize-AitConsoleInput compiles the type", "console: EnterCooked turns line input and echo on, VT input off",
                       "console: Set(previous) puts the mode back")
-    if (-not $IsWindows) {
-        foreach ($n in $consoleNames) { Skip $n "kernel32 console API is Windows only" }
-    } elseif ([Console]::IsInputRedirected) {
+    if ([Console]::IsInputRedirected) {
         foreach ($n in $consoleNames) { Skip $n "this suite's stdin is not a console" }
     } else {
         $r = Run-Child "console" "console" "console"
