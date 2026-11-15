@@ -23,11 +23,16 @@ complete.
 | Audit | After push, in CI, and on demand | `scripts/check-post-push.sh`, CI (`.github/workflows/check.yml`), `/incident` skill | What slipped through both layers |
 
 **Rule-skill governance**: Rules govern and enforce process; skills
-implement it. Rules are always in context and contain trigger directives
+implement it. Rules are always in context (governance rules carry no
+`paths:` frontmatter; a rule with `paths:` loads only once a matching file
+is read, `@reference/tool-ops-claude-code.md` item #28) and contain trigger directives
 stating WHEN to invoke their corresponding skill. The skill provides
 the governed process (loaded on demand). This is the primary enforcement
-mechanism in the prevention layer. Hook stderr messages reference skills
-to close the detection-to-prevention remediation loop.
+mechanism in the prevention layer. Hook messages reference skills to close
+the detection-to-prevention remediation loop: a blocking hook (exit 2)
+sends them on stderr, an observe-mode hook (exit 0) as stdout JSON
+`hookSpecificOutput.additionalContext`, because Claude never sees stderr
+from a hook that exits 0 (`@reference/tool-ops-claude-code.md` item #34).
 
 A rule without a trigger directive for its skill is a governance gap.
 A skill without a corresponding rule trigger is ungoverned process —
@@ -78,7 +83,9 @@ purpose, scope, and audience fields.
 
 **Skill** — loads the JSON on demand and presents it with its process
 (`/incident`, `/frameworks`, `/glossary`, `/tool-registry`, `/tool-ops`).
-Subagents do not inherit skills or rules; delegation prompts name them
+Sub-agents may not receive every skill or rule (they get what Claude Code
+loads from the session's working directory, not their worktree:
+`@reference/tool-ops-claude-code.md` item #5); delegation prompts name them
 (user rule `delegation.md`). Each registry skill both reads and writes.
 
 **Per-entry reference files** (`reference/<concept>-*.md`) — when

@@ -278,7 +278,7 @@ is_port_in_use() {
     if command -v lsof >/dev/null 2>&1; then
         lsof -iTCP:"$port" -sTCP:LISTEN -t >/dev/null 2>&1
     elif command -v ss >/dev/null 2>&1; then
-        ss -tlnp 2>/dev/null | grep -q ":${port} " 2>/dev/null
+        ss -tlnp 2>/dev/null | grep ":${port} " >/dev/null 2>/dev/null
     else
         return 1
     fi
@@ -354,7 +354,7 @@ else:
                 details="${details:+$details, }estimate JSON parse error"
             elif [ "$check_result" = "CHECK_FAILED" ]; then
                 details="${details:+$details, }field check unavailable"
-            elif printf '%s' "$check_result" | grep -q "^MISSING:"; then
+            elif printf '%s' "$check_result" | grep "^MISSING:" >/dev/null; then
                 healthy=false
                 local missing_fields=""
                 missing_fields=$(printf '%s' "$check_result" | perl -pe 's/^MISSING:([^|]+)\|.*/$1/')
@@ -367,7 +367,7 @@ else:
                 local thread_count=""
                 thread_count=$(printf '%s' "$counts" | cut -d'|' -f3)
                 details="${details:+$details, }missing fields: $missing_fields ($del_count delegations, $find_count findings, $thread_count threads)"
-            elif printf '%s' "$check_result" | grep -q "^OK|"; then
+            elif printf '%s' "$check_result" | grep "^OK|" >/dev/null; then
                 local counts=""
                 counts=$(printf '%s' "$check_result" | perl -pe 's/^OK\|//')
                 local del_count=""

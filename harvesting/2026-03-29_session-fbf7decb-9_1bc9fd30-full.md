@@ -2169,7 +2169,7 @@ drwxr-xr-x@  30 pepe  staff   960 Mar 27 18:46 -Users-pepe-repos-qr-contact
 drwx------@  18 pepe  staff   576 Mar 27 11:35 -Users-pepe-repos-marse
 drwx------@ 142 pepe  staff  4544 Mar 26 21:31 -Users-pepe-repos-aitools
 drwxr-xr-x@  65 pepe  staff  2080 Mar 26 18:17 -Users-pepe-repos-ai-tooling
-drwx------@   6 pepe  staff   192 Mar 26 15:59 -Users-pepe-Library-CloudStorage-GoogleDrive-jose-strat-accs-com-My-Drive-Employment-Case
+drwx------@   6 pepe  staff   192 Mar 26 15:59 -Users-pepe-Library-CloudStorage-GoogleDrive-<secondary-Google-account>-My-Drive-Employment-Case
 drwx------@  14 pepe  staff   448 Mar 25 16:28 -Users-pepe-
 ... [2791 chars total]
 
@@ -2434,7 +2434,7 @@ First NameComplete this field.
 
 [02:55:22] TOOL: Bash
   INPUT: {
-  "command": "python3 /Users/pepe/repos/aitools/scripts/read-session.py /Users/pepe/.claude/projects/-Users-pepe-Library-CloudStorage-GoogleDrive-jose-strat-accs-com-My-Drive-Employment-Case/c2b5fcf0-3eb8-4ea5-ae74-05f56de2fd9e.jsonl 2>/dev/null | tail -100",
+  "command": "python3 /Users/pepe/repos/aitools/scripts/read-session.py /Users/pepe/.claude/projects/-Users-pepe-Library-CloudStorage-GoogleDrive-<secondary-Google-account>-My-Drive-Employment-Case/c2b5fcf0-3eb8-4ea5-ae74-05f56de2fd9e.jsonl 2>/dev/null | tail -100",
   "description": "Read latest Employment Case session"
 }
 
@@ -2442,20 +2442,20 @@ First NameComplete this field.
 
 [02:55:25] TOOL: Bash
   INPUT: {
-  "command": "ls -lt ~/.claude/projects/-Users-pepe-Library-CloudStorage-GoogleDrive-jose-strat-accs-com-My-Drive-Employment-Case/*.jsonl 2>/dev/null",
+  "command": "ls -lt ~/.claude/projects/-Users-pepe-Library-CloudStorage-GoogleDrive-<secondary-Google-account>-My-Drive-Employment-Case/*.jsonl 2>/dev/null",
   "description": "List employment case sessions"
 }
 
-[02:55:25] RESULT: -rw-------@ 1 pepe  staff  731027 Feb 25 14:49 /Users/pepe/.claude/projects/-Users-pepe-Library-CloudStorage-GoogleDrive-jose-strat-accs-com-My-Drive-Employment-Case/e890e103-d558-4092-b46c-94cad6d8ae9c.jsonl
+[02:55:25] RESULT: -rw-------@ 1 pepe  staff  731027 Feb 25 14:49 /Users/pepe/.claude/projects/-Users-pepe-Library-CloudStorage-GoogleDrive-<secondary-Google-account>-My-Drive-Employment-Case/e890e103-d558-4092-b46c-94cad6d8ae9c.jsonl
 
 [02:55:33] TOOL: Bash
   INPUT: {
-  "command": "ls -lt ~/.claude/projects/-Users-pepe-Library-CloudStorage-GoogleDrive-jose-strat-accs-com-My-Drive-Employment-Case-agentic-ingest/*.jsonl 2>/dev/null",
+  "command": "ls -lt ~/.claude/projects/-Users-pepe-Library-CloudStorage-GoogleDrive-<secondary-Google-account>-My-Drive-Employment-Case-agentic-ingest/*.jsonl 2>/dev/null",
   "description": "List agentic ingest sessions"
 }
 
-[02:55:33] RESULT: -rw-------@ 1 pepe  staff   10512 Mar  8 22:33 /Users/pepe/.claude/projects/-Users-pepe-Library-CloudStorage-GoogleDrive-jose-strat-accs-com-My-Drive-Employment-Case-agentic-ingest/3c39e79d-62ce-4440-9cff-c324f6906247.jsonl
--rw-------@ 1 pepe  staff  118012 Mar  8 21:33 /Users/pepe/.claude/projects/-Users-pepe-Library-CloudStorage-GoogleDrive-jose-strat-accs-com-My-Drive-Employment-Case-agentic-ingest/450fc88e-4ccf-4015-b8c0-159eb1b119a8.jsonl
+[02:55:33] RESULT: -rw-------@ 1 pepe  staff   10512 Mar  8 22:33 /Users/pepe/.claude/projects/-Users-pepe-Library-CloudStorage-GoogleDrive-<secondary-Google-account>-My-Drive-Employment-Case-agentic-ingest/3c39e79d-62ce-4440-9cff-c324f6906247.jsonl
+-rw-------@ 1 pepe  staff  118012 Mar  8 21:33 /Users/pepe/.claude/projects/-Users-pepe-Library-CloudStorage-GoogleDrive-<secondary-Google-account>-My-Drive-Employment-Case-agentic-ingest/450fc88e-4ccf-4015-b8c0-159eb1b119a8.jsonl
 
 [02:55:37] AGENT: Let me look at the nobul-ops recent work — you said to read that CLAUDE.md and it mentions vcard as the "source code seed for nobul-auth":
 

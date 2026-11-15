@@ -26,7 +26,7 @@ pepe@Joses-MBP ~ % aitools install
 [2026-03-17T11:45:19Z] [aitools-install] [ok] Repos directory: /Users/pepe/repos
 [2026-03-17T11:45:19Z] [aitools-install] [info] Step 4: Google Drive detection
 [2026-03-17T11:45:19Z] [aitools-install] [ok] Detected Google Drive: jose@nobul.tech → /Users/pepe/Library/CloudStorage/GoogleDrive-jose@nobul.tech/My Drive
-[2026-03-17T11:45:19Z] [aitools-install] [ok] Detected Google Drive: jose@strat-accs.com → /Users/pepe/Library/CloudStorage/GoogleDrive-jose@strat-accs.com/My Drive
+[2026-03-17T11:45:19Z] [aitools-install] [ok] Detected Google Drive: <secondary Google account> → /Users/pepe/Library/CloudStorage/GoogleDrive-<secondary Google account>/My Drive
 [2026-03-17T11:45:19Z] [aitools-install] [info] Step 5: Writing config
 [2026-03-17T11:45:19Z] [aitools-install] [ok] Config written to /Users/pepe/.aitools/config.json
 [2026-03-17T11:45:19Z] [aitools-install] [info] Step 6: Install aitools command

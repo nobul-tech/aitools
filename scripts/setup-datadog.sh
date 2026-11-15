@@ -54,11 +54,11 @@ if [ -n "$PUP_PATH" ]; then
         log "Pup already installed via Homebrew ($PUP_VERSION) -- upgrading..."
         # brew upgrade exits non-zero when already up-to-date on some versions
         UPGRADE_OUTPUT=$(brew upgrade datadog-labs/pack/pup 2>&1) || true
-        if printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'already installed\|up.to.date\|No available upgrade'; then
+        if printf '%s\n' "$UPGRADE_OUTPUT" | grep -i 'already installed\|up.to.date\|No available upgrade' >/dev/null; then
             log_ok "Pup already up to date"
         else
             printf '%s\n' "$UPGRADE_OUTPUT" | while IFS= read -r line; do log "$line"; done
-            if printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'error\|fatal'; then
+            if printf '%s\n' "$UPGRADE_OUTPUT" | grep -i 'error\|fatal' >/dev/null; then
                 log_error "brew upgrade datadog-labs/pack/pup failed (see log above)"
                 write_summary ERROR "datadog cli" "brew upgrade failed"
             else
@@ -182,7 +182,7 @@ if [ -z "${DD_SITE:-}" ]; then
 fi
 if command -v pup >/dev/null 2>&1 && [ "$ERRORS" -eq 0 ]; then
     AUTH_OUTPUT=$(pup auth status 2>&1) || true
-    if printf '%s\n' "$AUTH_OUTPUT" | grep -qi 'not authenticated'; then
+    if printf '%s\n' "$AUTH_OUTPUT" | grep -i 'not authenticated' >/dev/null; then
         log_warn "Not authenticated: run 'pup auth login' (one-time OAuth)"
         write_summary WARN "datadog cli" "not authenticated"
         write_summary ACTION "" "pup auth login -- authenticate Datadog CLI"

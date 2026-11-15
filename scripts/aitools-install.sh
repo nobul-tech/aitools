@@ -711,7 +711,7 @@ if command -v claude &>/dev/null; then
     done <<< "$UPDATE_OUTPUT"
     if [ "$update_rc" -ne 0 ]; then
         log_warn "claude update failed (exit $update_rc) -- see $(display_path "$LOG_FILE")"
-    elif printf '%s\n' "$UPDATE_OUTPUT" | grep -qi 'already.*up.to.date\|no update'; then
+    elif printf '%s\n' "$UPDATE_OUTPUT" | grep -i 'already.*up.to.date\|no update' >/dev/null; then
         log_ok "Already up to date"
     else
         log_ok "claude update finished"

@@ -1,38 +1,48 @@
 #!/usr/bin/env bash
-# test-profile.sh -- unit and parity tests for scripts/aitools-profile.sh and .ps1
-# (and the JSON engines scripts/aitools-json.pl and .ps1)
+# test-profile.sh -- unit and parity tests for scripts/aitools-profile.sh (and the
+# perl JSON engine scripts/aitools-json.pl). The macOS/Linux harness of this suite;
+# tests/profile/test-profile.ps1 is the Windows harness of the same cases for
+# aitools-profile.ps1 and aitools-json.ps1.
 #
-# Every case runs the resolver of this platform with injected machine ids and
-# hostnames, in an isolated HOME, and asserts expected values and exit codes.
+# Every case runs the resolver with injected machine ids and hostnames, in an
+# isolated HOME, and asserts expected values and exit codes.
 #
-# Platform targeting (plans/ci-platform-targeting.md): each resolver runs only
-# where its OS guard allows, with the guard intact. macOS/Linux run
-# aitools-profile.sh (and the perl JSON engine); Windows (Git Bash) runs
-# aitools-profile.ps1 (and aitools-json.ps1) with native pwsh: -NonInteractive,
-# every path in Windows form (cygpath -m: the script, $WORK paths in arguments,
-# environment values and fixture files), HOME and USERPROFILE both set, MSYS
-# argument conversion off. The native spellings of the temp root in pwsh output
-# are mapped back to the POSIX path (from_native), so one set of expectations
-# serves both. Parity between the two resolvers (they must print byte-identical
-# output and write byte-identical files) is checked against committed golden
-# files in tests/profile/golden/profile-* (tests/lib/platform-lib.sh
-# golden_match): the .sh run on macOS/Linux and the .ps1 run on Windows must
-# both equal them. Invalid-JSON parser messages are cut after "is invalid JSON"
-# (each engine words them differently); a written profile's own os and arch
-# become <OS> and <ARCH>. AITOOLS_TEST_UPDATE_GOLDEN=1 on macOS/Linux rewrites
-# the golden files. Cases with no PowerShell partner (claude-code-web: Linux
-# only, PowerShell never branches on the environment; help text; rev-m3-numbers,
-# a perl-engine guarantee) have no golden file; POSIX permission cases (chmod)
-# run on macOS/Linux only.
+# Platform targeting (plans/ci-platform-targeting.md; commander 2026-11-14: "sh
+# scripts and tests should only run on linux/mac and ps1 on windows"): this
+# harness runs aitools-profile.sh (and the perl JSON engine) on macOS and Linux
+# only, and refuses Windows (OS guard below). Parity between the two resolvers
+# (they must print byte-identical output and write byte-identical files) is
+# checked against committed golden files in tests/profile/golden/profile-*
+# (tests/lib/platform-lib.sh golden_match): this run and the .ps1 run on Windows
+# must both equal them. Invalid-JSON parser messages are cut after "is invalid
+# JSON" (each engine words them differently); a written profile's own os and arch
+# become <OS> and <ARCH>. AITOOLS_TEST_UPDATE_GOLDEN=1 rewrites the golden files.
+# Cases with no PowerShell partner (claude-code-web: Linux only, PowerShell never
+# branches on the environment; help text; rev-m3-numbers, a perl-engine
+# guarantee) have no golden file; POSIX permission cases (chmod) run here only.
 # Safe to re-run: an isolated HOME under a temp dir (removed on exit).
 # Usage: bash tests/profile/test-profile.sh [--bash-only] [--help]
-#   --bash-only  accepted for compatibility: macOS/Linux always run only bash
+#   --bash-only  accepted for compatibility: this harness always runs only bash
 #   AITOOLS_TEST_BASH=/bin/bash runs the resolver under another bash (e.g. macOS 3.2)
 
 set -euo pipefail
 
+# OS guard: macOS/Linux only. BASH_VERSINFO[5] is bash's compiled-in machine
+# type (read-only, never taken from the environment), so neither a uname shim
+# on PATH nor an exported OSTYPE hides Git Bash.
+case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*)
+        printf 'This script is for macOS/Linux. On Windows, run tests/profile/test-profile.ps1 with pwsh.\n' >&2
+        exit 1 ;;
+esac
+case "${BASH_VERSINFO[5]:-}" in
+    *-msys*|*-cygwin*|*-mingw*)
+        printf 'This script is for macOS/Linux. On Windows, run tests/profile/test-profile.ps1 with pwsh.\n' >&2
+        exit 1 ;;
+esac
+
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
-    perl -ne 'print if $. >= 2 && $. <= 30' "$0"
+    perl -ne 'print if $. >= 2 && $. <= 26' "$0"
     exit 0
 fi
 
@@ -40,23 +50,20 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # shellcheck source=../lib/platform-lib.sh
 . "$REPO/tests/lib/platform-lib.sh"
 SH="$REPO/scripts/aitools-profile.sh"
-PS="$REPO/scripts/aitools-profile.ps1"
 WORK="$(mktemp -d)"
 cleanup() { rm -rf "$WORK"; }
 trap cleanup EXIT
 
 BASH_BIN="${AITOOLS_TEST_BASH:-bash}"
-LANG_RUN="$TEST_LANG"   # sh on macOS/Linux, ps1 on Windows
+LANG_RUN=sh   # the Windows harness (test-profile.ps1) prints ps1 here
 GOLDEN_DIR="$REPO/tests/profile/golden"
 GOLDEN_TMP="$WORK"
 PLATFORM_LINUX=false
 if [ "$TEST_PLATFORM" = linux ]; then PLATFORM_LINUX=true; fi
-NWORK="$(native_path "$WORK")"   # Windows form of $WORK (unchanged elsewhere)
-NREPO="$(native_path "$REPO")"
-# The os and arch values register writes for this machine (both resolvers):
-# os darwin|linux|win32, arch x64|arm64
+# The os and arch values register writes for this machine: os darwin|linux,
+# arch x64|arm64
 ARCH=$(uname -m); case "$ARCH" in x86_64|amd64) ARCH=x64 ;; arm64|aarch64) ARCH=arm64 ;; esac
-case "$TEST_PLATFORM" in windows) OSNAME=win32 ;; linux) OSNAME=linux ;; *) OSNAME=darwin ;; esac
+case "$TEST_PLATFORM" in linux) OSNAME=linux ;; *) OSNAME=darwin ;; esac
 
 PASS=0
 FAIL=0
@@ -64,60 +71,12 @@ ok()   { PASS=$((PASS + 1)); printf '  ok   %s\n' "$1"; }
 bad()  { FAIL=$((FAIL + 1)); printf '  FAIL %s\n' "$1"; }
 skip() { printf '  skip %s\n' "$1"; }
 
-if [ "$LANG_RUN" = ps1 ] && ! command -v pwsh >/dev/null 2>&1; then
-    printf '  FAIL pwsh is not on PATH: aitools-profile.ps1 cannot be tested on Windows\n'
-    exit 1
-fi
-
-# WORK_SPELLINGS -- Windows: every spelling of $WORK a native program may print,
-# one per line: cygpath's default form, its long form and its 8.3 short form.
-# The CI temp root is both C:/Users/RUNNER~1/... and C:/Users/runneradmin/...;
-# pwsh prints whichever its API returns (CI run 41265193554). Empty elsewhere.
-WORK_SPELLINGS=""
-if [ "$TEST_PLATFORM" = windows ]; then
-    for ws_opt in "" -l -s; do
-        # shellcheck disable=SC2086  # ws_opt is empty or one option
-        if ws="$(cygpath -m $ws_opt "$WORK")" && [ -n "$ws" ]; then WORK_SPELLINGS="$WORK_SPELLINGS$ws"$'\n'
-        else printf '  note: cygpath -m %s gave no spelling of %s (that spelling is not mapped back)\n' "$ws_opt" "$WORK"; fi
-    done
-fi
-
-# from_native FILE -- Windows: rewrite, in place, every spelling of $WORK that
-# native pwsh prints (each of WORK_SPELLINGS as C:/..., C:\..., JSON-escaped
-# C:\\... and /c/...) back to $WORK, with the separators after it turned into
-# slashes, and remove CRs. A no-op elsewhere.
-from_native() {
-    [ "$TEST_PLATFORM" = windows ] || return 0
-    FN_POSIX="$WORK" FN_NATIVES="$WORK_SPELLINGS" perl -pi -e '
-        BEGIN {
-            my %seen;
-            for my $n (grep { length } split /\n/, $ENV{FN_NATIVES}) {
-                (my $bs = $n) =~ s{/}{\\}g; (my $js = $bs) =~ s{\\}{\\\\}g;
-                my $us = $n; $us =~ s{^([A-Za-z]):}{"/" . lc($1)}e;
-                $seen{$_} = 1 for grep { length } ($js, $bs, $n, $us);
-            }
-            @fn_re = map { qr/\Q$_\E/i } sort { length($b) <=> length($a) } keys %seen;
-        }
-        s/\r//g;
-        for my $re (@fn_re) { s{$re([^\s"\x27|()]*)}{my $r = $1; $r =~ s{\\\\}{/}g; $r =~ tr{\\}{/}; "$ENV{FN_POSIX}$r"}ge; }
-    ' "$1"
-}
-# to_native WORD -- WORD with every $WORK and $REPO in Windows form (arguments and
-# VAR=value words handed to native pwsh); unchanged off Windows
-to_native() {
-    local s="$1"
-    if [ "$TEST_PLATFORM" = windows ]; then s="${s//"$WORK"/$NWORK}"; s="${s//"$REPO"/$NREPO}"; fi
-    printf '%s' "$s"
-}
-
 ID_MAC="3D4DF2A5-7D91-5AF9-9944-4FEEBAAE3CF5"
 ID_OTHER="0B1C2D3E-0000-1111-2222-333344445555"
 
-# fresh_home NAME -- isolated HOME with ~/repos and ~/.aitools; sets H, and HN (H
-# as the resolver of this platform reads it: for paths inside fixture files)
+# fresh_home NAME -- isolated HOME with ~/repos and ~/.aitools; sets H
 fresh_home() {
     H="$WORK/$1/home"
-    HN="$(to_native "$H")"
     mkdir -p "$H/repos" "$H/.aitools"
 }
 
@@ -167,30 +126,13 @@ base_profile() {
 JSON
 }
 
-# run_impl OUTFILE ARGS... -- run the resolver of this platform in the isolated
-# HOME: aitools-profile.sh (macOS/Linux) or aitools-profile.ps1 under native pwsh
-# (Windows); sets RC. Environment for the case comes from CASE_ENV (KEY=VALUE
-# words). On Windows the output and stderr pass through from_native.
+# run_impl OUTFILE ARGS... -- run aitools-profile.sh in the isolated HOME; sets
+# RC. Environment for the case comes from CASE_ENV (KEY=VALUE words).
 run_impl() {
     local out="$1"; shift
     RC=0
-    if [ "$LANG_RUN" = sh ]; then
-        # shellcheck disable=SC2086  # CASE_ENV is a list of VAR=value words
-        env HOME="$H" AITOOLS_LOG_DIR="$H/.aitools/logs" $CASE_ENV "$BASH_BIN" "$SH" "$@" > "$out" 2>"$out.err" || RC=$?
-    else
-        local a nargs=() nenv hn
-        for a in "$@"; do nargs+=("$(to_native "$a")"); done
-        nenv="$(to_native "$CASE_ENV")"
-        # The case HOME comes from H here, never from a saved HN: a block that
-        # switches H and back (dc-host) left HN on the other home (CI run
-        # 41265193554: exc-set-same .. exc-set-nopush ran against dc-host)
-        hn="$(to_native "$H")"
-        # shellcheck disable=SC2086  # nenv is a list of VAR=value words
-        env HOME="$hn" USERPROFILE="$hn" AITOOLS_LOG_DIR="$hn/.aitools/logs" $nenv MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' \
-            pwsh -NoProfile -NonInteractive -File "$(native_path "$PS")" ${nargs[@]+"${nargs[@]}"} > "$out" 2>"$out.err" || RC=$?
-        from_native "$out"
-        from_native "$out.err"
-    fi
+    # shellcheck disable=SC2086  # CASE_ENV is a list of VAR=value words
+    env HOME="$H" AITOOLS_LOG_DIR="$H/.aitools/logs" $CASE_ENV "$BASH_BIN" "$SH" "$@" > "$out" 2>"$out.err" || RC=$?
 }
 
 normalize() { perl -pe 's/( is invalid JSON).*/$1/' "$1"; }
@@ -268,13 +210,13 @@ expect expected "$H/repos/aitools-someone"
 
 fresh_home urp-config
 base_profile | write_profile "$H/elsewhere/dp"
-printf '{ "userRepoPath": "%s" }\n' "$HN/elsewhere/dp/" > "$H/.aitools/config.json"
+printf '{ "userRepoPath": "%s" }\n' "$H/elsewhere/dp/" > "$H/.aitools/config.json"
 case_run urp-config 0 user-repo-path
 expect path "$H/elsewhere/dp"; expect via config
 
 fresh_home urp-config-stale
 base_profile | write_profile "$H/repos/aitools-nobul-jose"
-printf '{ "userRepoPath": "%s", "githubUser": "nobul-jose" }\n' "$HN/gone" > "$H/.aitools/config.json"
+printf '{ "userRepoPath": "%s", "githubUser": "nobul-jose" }\n' "$H/gone" > "$H/.aitools/config.json"
 case_run urp-config-stale 0 user-repo-path
 expect via convention; expect_line '^warn\tconfig.json userRepoPath does not exist'
 
@@ -318,7 +260,7 @@ expect via convention; expect path "$H/repos/aitools-nobul-jose"
 # (S3-M3-B8c parity finding: PowerShell used to decode it, perl could not)
 fresh_home urp-utf16
 base_profile | write_profile "$H/repos/aitools-nobul-jose"
-perl -e 'use Encode; print "\xff\xfe", Encode::encode("UTF-16LE", qq({ "userRepoPath": "$ARGV[0]" }\n))' "$HN/repos/aitools-nobul-jose" > "$H/.aitools/config.json"
+perl -e 'use Encode; print "\xff\xfe", Encode::encode("UTF-16LE", qq({ "userRepoPath": "$ARGV[0]" }\n))' "$H/repos/aitools-nobul-jose" > "$H/.aitools/config.json"
 case_run urp-utf16 0 user-repo-path
 expect via scan
 expect_line '^warn\t.*/\.aitools/config\.json is UTF-16 encoded, not UTF-8 -- save it as UTF-8 -- resolving without it$'
@@ -458,7 +400,7 @@ expect_line '^\{"alias":"laptop","via":"override",.*"warnings":\["profile \\"lap
 # --- derive-config -------------------------------------------------------------
 fresh_home dc
 base_profile | write_profile "$H/repos/aitools-nobul-jose"
-printf '{ "reposPath": "%s" }\n' "$HN/repos" > "$H/.aitools/config.json"
+printf '{ "reposPath": "%s" }\n' "$H/repos" > "$H/.aitools/config.json"
 case_run dc 0 derive-config "${M[@]}" --github-user nobul-jose --alias nobul-mac
 expect derived.githubUser nobul-jose; expect derived.userRepoPath "$H/repos/aitools-nobul-jose"
 expect derived.machineAlias nobul-mac; expect via override; expect aliases "laptop, nobul-mac, workstation"
@@ -818,7 +760,6 @@ case_run dc-hostname-not-saved 0 derive-config "${M[@]}"
 expect via hostname; expect derived.machineAlias ""
 expect_line '^warn\tmachine alias "nobul-mac" matched by hostname only -- not saved to config.json$'
 H="$EXC_H"
-HN="$(to_native "$H")"
 
 # Without --decided-at: an identical re-keep is unchanged; a changed one gets a new time
 SET_NOW=(exception-set --slug go --platform macos --method pkg-installer --path /usr/local/bin/go --version 1.22.5 --by setup-go)
@@ -1139,15 +1080,12 @@ write_profile "$H/m3" <<'JSON'
 }
 JSON
 # Number literals kept byte for byte: a perl-engine guarantee (aitools-profile.ps1
-# documents that non-integer literals are re-formatted), so macOS/Linux only
-if [ "$LANG_RUN" = sh ]; then
-    NO_PARITY=1 case_run rev-m3-numbers 0 register --profile "$H/m3/profile.json" --alias a --out "$H/m3.out" "${M[@]}"
-    if perl -0ne 'exit(/"a": 0\.30000000000000004,\n      "b": 0\.3333333333333333,\n      "c": 12345678901234567890\n/ ? 0 : 1)' "$H/m3.out"; then
-        ok "rev-m3-numbers: number literals kept byte for byte (bash)"
-    else bad "rev-m3-numbers: numbers changed"; sed 's/^/       /' "$H/m3.out"; fi
-else
-    skip "rev-m3-numbers (number literals byte for byte: the perl engine's guarantee, macOS/Linux)"
-fi
+# documents that non-integer literals are re-formatted), so macOS/Linux only (the
+# Windows harness prints a skip line here)
+NO_PARITY=1 case_run rev-m3-numbers 0 register --profile "$H/m3/profile.json" --alias a --out "$H/m3.out" "${M[@]}"
+if perl -0ne 'exit(/"a": 0\.30000000000000004,\n      "b": 0\.3333333333333333,\n      "c": 12345678901234567890\n/ ? 0 : 1)' "$H/m3.out"; then
+    ok "rev-m3-numbers: number literals kept byte for byte (bash)"
+else bad "rev-m3-numbers: numbers changed"; sed 's/^/       /' "$H/m3.out"; fi
 
 NO_PARITY=1 case_run rev-help 0 --help   # help text names each platform's sources
 expect_line '^aitools-profile\.(sh|ps1) -- dotprofile and machine-profile resolver'
@@ -1173,57 +1111,28 @@ expect alias workstation; expect via hostname
 # --- JSON engines: rename (re-key design batch 1) ------------------------------------
 # The perl edit op "rename<TAB>NEW<TAB>SEG..." and Rename-JKey in aitools-json.ps1
 # must keep the key's position and every other byte, and write identical bytes.
-# Each engine runs where its resolver runs: perl (aitools-profile.sh's engine) on
-# macOS/Linux, aitools-json.ps1 on Windows; their results share golden files.
-# aitools-json.pl also serves as the read-only checker below (check, keys, get)
-# on every platform: perl ships with Git for Windows.
+# Each engine runs where its resolver runs: perl (aitools-profile.sh's engine) here,
+# aitools-json.ps1 in the Windows harness (test-profile.ps1, its driver.ps1); their
+# results share golden files. aitools-json.pl also serves as the read-only checker
+# below (check, keys, get), here and in the Windows harness.
 JPL="$REPO/scripts/aitools-json.pl"
-JPS1="$REPO/scripts/aitools-json.ps1"
 JW="$WORK/jrename"
 mkdir -p "$JW"
-cat > "$JW/driver.ps1" <<'PS1'
-# Test driver: IN OUT OP... ; each OP is "|"-separated:
-#   rename|NEW|SEG...   set|STRING-VALUE|SEG...
-. $env:AITOOLS_TEST_JSON_PS1
-$r = Read-JsonFile $args[0]
-if ($r.State -ne "valid") { [Console]::Error.WriteLine($r.Message); exit 2 }
-try {
-    for ($i = 2; $i -lt $args.Count; $i++) {
-        $f = ([string]$args[$i]).Split("|")
-        $segs = [string[]]@()
-        if ($f.Count -gt 2) { $segs = [string[]]$f[2..($f.Count - 1)] }
-        if ($f[0] -eq "rename") { Rename-JKey $r.Value $f[1] $segs }
-        elseif ($f[0] -eq "set") { Set-JValue $r.Value $f[1] $segs }
-        else { throw "driver: unknown op $($f[0])" }
-    }
-} catch { [Console]::Error.WriteLine($_.Exception.Message); exit 2 }
-[IO.File]::WriteAllText($args[1], (ConvertTo-NodeJson $r.Value) + "`n", $script:Utf8NoBom)
-exit 0
-PS1
 # The register fixture above (as written, before os/arch were made this machine's):
 # escapes, unicode, nested arrays, a fraction, empty containers, a date string. Add
 # a profile before and after the one to rename.
 perl -0pe 's/("profiles": \{\n)/$1    "first": {\n      "machine": {\n        "os": "linux"\n      }\n    },\n/; s/(\n  \}\n\}\n)\z/,\n    "last": {\n      "list": [\n        "a"\n      ]\n    }$1/' "$WORK/reg-template.json" > "$JW/in.json"
 if perl "$JPL" check "$JW/in.json"; then ok "jr-fixture: valid JSON"; else bad "jr-fixture: invalid"; sed 's/^/       /' "$JW/in.json"; fi
 
-# jr_case NAME WANT_RC "PERL_OPS" PS_OP... -- run this platform's engine on in.json
-# (perl: PERL_OPS on stdin; aitools-json.ps1: the PS_OP arguments to driver.ps1);
-# sets JOUT (the written file) and JERR (its stderr)
+# jr_case NAME WANT_RC "PERL_OPS" -- run the perl engine on in.json (PERL_OPS on
+# stdin); sets JOUT (the written file) and JERR (its stderr)
 jr_case() {
-    local name="$1" want="$2" ops="$3" eng; shift 3
+    local name="$1" want="$2" ops="$3" eng
     CASE="$name"
     RC=0
     local in="${JR_IN:-$JW/in.json}"
-    if [ "$LANG_RUN" = sh ]; then
-        eng=perl; JOUT="$JW/$name.pl.json"; JERR="$JW/$name.pl.err"
-        printf '%b' "$ops" | perl "$JPL" edit "$in" "$JOUT" > "$JERR" 2>&1 || RC=$?
-    else
-        eng=pwsh; JOUT="$JW/$name.ps.json"; JERR="$JW/$name.ps.err"
-        env AITOOLS_TEST_JSON_PS1="$(native_path "$JPS1")" MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' \
-            pwsh -NoProfile -NonInteractive -File "$(native_path "$JW/driver.ps1")" "$(native_path "$in")" "$(native_path "$JOUT")" "$@" \
-            > "$JERR" 2>&1 || RC=$?
-        from_native "$JERR"
-    fi
+    eng=perl; JOUT="$JW/$name.pl.json"; JERR="$JW/$name.pl.err"
+    printf '%b' "$ops" | perl "$JPL" edit "$in" "$JOUT" > "$JERR" 2>&1 || RC=$?
     if [ "$RC" -eq "$want" ]; then ok "$name: $eng exit $RC"
     else bad "$name: $eng exit $RC, want $want"; sed 's/^/       /' "$JERR"; fi
     if [ "$want" -ne 0 ]; then
@@ -1246,7 +1155,7 @@ jr_msg() {
 }
 
 ID_MAC_LC=$(printf '%s' "$ID_MAC" | tr 'A-Z' 'a-z')
-jr_case jr-middle 0 "rename\t$ID_MAC_LC\tprofiles\tnobul-mac\n" "rename|$ID_MAC_LC|profiles|nobul-mac"
+jr_case jr-middle 0 "rename\t$ID_MAC_LC\tprofiles\tnobul-mac\n"
 jr_keys "first,$ID_MAC_LC,last" profiles
 if [ "$(perl "$JPL" get "$JOUT" profiles "$ID_MAC_LC" machine hostname)" = "nobul-mac" ]; then ok "jr-middle: value moved with the key"
 else bad "jr-middle: value lost"; fi
@@ -1255,85 +1164,80 @@ if perl -ne '$n++ if /^[<>]/; $k++ if /^> +"\Q'"$ID_MAC_LC"'\E": \{$/; END { exi
     ok "jr-middle: only the key line changed (other bytes kept)"
 else bad "jr-middle: unexpected changes"; sed 's/^/       /' "$JW/jr-middle.diff"; fi
 
-jr_case jr-first 0 "rename\tfirst-renamed\tprofiles\tfirst\n" "rename|first-renamed|profiles|first"
+jr_case jr-first 0 "rename\tfirst-renamed\tprofiles\tfirst\n"
 jr_keys "first-renamed,nobul-mac,last" profiles
-jr_case jr-last 0 "rename\tz\tprofiles\tlast\n" "rename|z|profiles|last"
+jr_case jr-last 0 "rename\tz\tprofiles\tlast\n"
 jr_keys "first,nobul-mac,z" profiles
-jr_case jr-top 0 "rename\tident\tidentity\n" "rename|ident|identity"
+jr_case jr-top 0 "rename\tident\tidentity\n"
 jr_keys "version,ident,claude,profiles"
-jr_case jr-then-set 0 "rename\tnew-key\tprofiles\tnobul-mac\nset\tstring\tnobul-mac\tprofiles\tnew-key\talias\n" \
-    "rename|new-key|profiles|nobul-mac" "set|nobul-mac|profiles|new-key|alias"
+jr_case jr-then-set 0 "rename\tnew-key\tprofiles\tnobul-mac\nset\tstring\tnobul-mac\tprofiles\tnew-key\talias\n"
 jr_keys "name,company,machine,alias" profiles new-key
-jr_case jr-case-only 0 "rename\tNOBUL-MAC\tprofiles\tnobul-mac\n" "rename|NOBUL-MAC|profiles|nobul-mac"
+jr_case jr-case-only 0 "rename\tNOBUL-MAC\tprofiles\tnobul-mac\n"
 jr_keys "first,NOBUL-MAC,last" profiles
-jr_case jr-same 0 "rename\tnobul-mac\tprofiles\tnobul-mac\n" "rename|nobul-mac|profiles|nobul-mac"
+jr_case jr-same 0 "rename\tnobul-mac\tprofiles\tnobul-mac\n"
 if cmp -s "$JW/in.json" "$JOUT"; then ok "jr-same: no-op, bytes unchanged"; else bad "jr-same: file changed"; fi
 
-jr_case jr-missing 2 "rename\tx\tprofiles\tnope\n" "rename|x|profiles|nope"
+jr_case jr-missing 2 "rename\tx\tprofiles\tnope\n"
 jr_msg "rename: 'nope' not found"
-jr_case jr-exists 2 "rename\tlast\tprofiles\tfirst\n" "rename|last|profiles|first"
+jr_case jr-exists 2 "rename\tlast\tprofiles\tfirst\n"
 jr_msg "rename: 'last' already exists"
-jr_case jr-exists-case 2 "rename\tLAST\tprofiles\tfirst\n" "rename|LAST|profiles|first"
+jr_case jr-exists-case 2 "rename\tLAST\tprofiles\tfirst\n"
 jr_msg "rename: 'LAST' already exists"
-jr_case jr-old-case 2 "rename\tx\tprofiles\tNOBUL-MAC\n" "rename|x|profiles|NOBUL-MAC"
+jr_case jr-old-case 2 "rename\tx\tprofiles\tNOBUL-MAC\n"
 jr_msg "rename: 'NOBUL-MAC' not found"
-jr_case jr-path-missing 2 "rename\tx\tnope\tnobul-mac\n" "rename|x|nope|nobul-mac"
+jr_case jr-path-missing 2 "rename\tx\tnope\tnobul-mac\n"
 jr_msg "rename: 'nope' not found"
-jr_case jr-not-object 2 "rename\tx\tversion\ty\n" "rename|x|version|y"
+jr_case jr-not-object 2 "rename\tx\tversion\ty\n"
 jr_msg "rename: 'version' is not an object"
-jr_case jr-no-key 2 "rename\tx\n" "rename|x"
+jr_case jr-no-key 2 "rename\tx\n"
 jr_msg "rename: no key given"
-jr_case jr-empty-new 2 "rename\t\tprofiles\tfirst\n" "rename||profiles|first"
+jr_case jr-empty-new 2 "rename\t\tprofiles\tfirst\n"
 jr_msg "rename: new key is empty"
 
 # Scalar and array values two levels down (review S3-M3-JsonRename-Review, nit 2)
-jr_case jr-deep-scalar 0 "rename\tp2\tclaude\tsettings\tpath\n" "rename|p2|claude|settings|path"
+jr_case jr-deep-scalar 0 "rename\tp2\tclaude\tsettings\tpath\n"
 jr_keys "z,p2,tab,emoji,when" claude settings
-jr_case jr-deep-array 0 "rename\tzz\tclaude\tsettings\tz\n" "rename|zz|claude|settings|z"
+jr_case jr-deep-array 0 "rename\tzz\tclaude\tsettings\tz\n"
 jr_keys "zz,path,tab,emoji,when" claude settings
 
 # Null, empty-array, single-item-array and object values three levels deep; non-ASCII keys
 printf '%s\n' '{' '  "a": {' '    "b": {' '      "n": null,' '      "e": [],' '      "one": [' '        1' '      ],' \
     '      "Été": {},' '      "k": true' '    }' '  }' '}' > "$JW/uni.json"
 JR_IN="$JW/uni.json"
-jr_case jr-null 0 "rename\tnn\ta\tb\tn\n" "rename|nn|a|b|n"
+jr_case jr-null 0 "rename\tnn\ta\tb\tn\n"
 jr_keys "nn,e,one,Été,k" a b
-jr_case jr-empty-array 0 "rename\tee\ta\tb\te\n" "rename|ee|a|b|e"
-jr_case jr-one-array 0 "rename\too\ta\tb\tone\n" "rename|oo|a|b|one"
-jr_case jr-unicode-key 0 "rename\tété2\ta\tb\tÉté\n" "rename|été2|a|b|Été"
+jr_case jr-empty-array 0 "rename\tee\ta\tb\te\n"
+jr_case jr-one-array 0 "rename\too\ta\tb\tone\n"
+jr_case jr-unicode-key 0 "rename\tété2\ta\tb\tÉté\n"
 jr_keys "n,e,one,été2,k" a b
 # Another key equal ignoring Unicode case: refused by both (PowerShell could not read the result)
-jr_case jr-unicode-exists 2 "rename\tété\ta\tb\tk\n" "rename|été|a|b|k"
+jr_case jr-unicode-exists 2 "rename\tété\ta\tb\tk\n"
 jr_msg "rename: 'été' already exists"
 JR_IN=""
 
 # A failed rename leaves an existing output file untouched (perl writes only on
-# success): the perl engine's own guarantee, macOS/Linux
-if [ "$LANG_RUN" = sh ]; then
-    printf 'sentinel\n' > "$JW/keep.json"
-    RC=0
-    printf 'rename\tx\tprofiles\tnope\n' | perl "$JPL" edit "$JW/in.json" "$JW/keep.json" 2>/dev/null || RC=$?  # rc checked below
-    if [ "$RC" -eq 2 ] && [ "$(cat "$JW/keep.json")" = "sentinel" ]; then ok "jr-keep-out: existing OUT untouched on failure"
-    else bad "jr-keep-out: rc $RC, OUT '$(cat "$JW/keep.json")'"; fi
-else
-    skip "jr-keep-out (the perl engine's edit command: macOS/Linux)"
-fi
+# success): the perl engine's own guarantee (the Windows harness prints a skip line)
+printf 'sentinel\n' > "$JW/keep.json"
+RC=0
+printf 'rename\tx\tprofiles\tnope\n' | perl "$JPL" edit "$JW/in.json" "$JW/keep.json" 2>/dev/null || RC=$?  # rc checked below
+if [ "$RC" -eq 2 ] && [ "$(cat "$JW/keep.json")" = "sentinel" ]; then ok "jr-keep-out: existing OUT untouched on failure"
+else bad "jr-keep-out: rc $RC, OUT '$(cat "$JW/keep.json")'"; fi
 
 # --- S3-MF-Audit A-6..A-9: write failures, key case, detail logging ------------------
 # JSON engines: a set whose new segment equals an existing key ignoring case is
 # refused by both, with one message (A-9; perl used to add a sibling key that
 # ConvertFrom-Json cannot read, PowerShell overwrote the other key)
-jr_case jr-set-case-last 2 "set\tstring\tv\tprofiles\tNOBUL-MAC\n" "set|v|profiles|NOBUL-MAC"
+jr_case jr-set-case-last 2 "set\tstring\tv\tprofiles\tNOBUL-MAC\n"
 jr_msg "set: 'NOBUL-MAC' differs only in case from existing key 'nobul-mac'"
-jr_case jr-set-case-mid 2 "set\tstring\tv\tprofiles\tNOBUL-MAC\talias\n" "set|v|profiles|NOBUL-MAC|alias"
+jr_case jr-set-case-mid 2 "set\tstring\tv\tprofiles\tNOBUL-MAC\talias\n"
 jr_msg "set: 'NOBUL-MAC' differs only in case from existing key 'nobul-mac'"
-jr_case jr-set-case-top 2 "set\tstring\tv\tProfiles\n" "set|v|Profiles"
+jr_case jr-set-case-top 2 "set\tstring\tv\tProfiles\n"
 jr_msg "set: 'Profiles' differs only in case from existing key 'profiles'"
-jr_case jr-set-exact 0 "set\tstring\tv\tprofiles\tnobul-mac\tbrand-new\n" "set|v|profiles|nobul-mac|brand-new"
+jr_case jr-set-exact 0 "set\tstring\tv\tprofiles\tnobul-mac\tbrand-new\n"
 if [ "$(perl "$JPL" get "$JOUT" profiles nobul-mac brand-new)" = "v" ]; then ok "jr-set-exact: new key written"
 else bad "jr-set-exact: new key missing"; fi
 JR_IN="$JW/uni.json"
-jr_case jr-set-case-unicode 2 "set\tstring\tv\ta\tb\tété\n" "set|v|a|b|été"
+jr_case jr-set-case-unicode 2 "set\tstring\tv\ta\tb\tété\n"
 jr_msg "set: 'été' differs only in case from existing key 'Été'"
 JR_IN=""
 
@@ -1358,49 +1262,40 @@ else bad "a9-exc-case: profile.json changed"; fi
 
 # A temp file that cannot be written: same message in both (A-8), no temp file left (A-7).
 # A read-only directory (chmod 555) is POSIX: on Windows chmod does not stop a file
-# being created in a directory, so these cases run on macOS/Linux only.
-if [ "$LANG_RUN" = sh ]; then
-    setup_a69_ro() { writable "$EXC_DIR"; setup_exc_plain; chmod 555 "$EXC_DIR"; }
-    NORM_TMP=1 case_fresh a78-exc-ro 2 setup_a69_ro "${SET_ARGS[@]}" "${M[@]}"
-    writable "$EXC_DIR"
-    expect result failed
-    expect_line "^error\\texception-set failed: cannot write $EXC_PF\\.tmp\\.<pid>: Permission denied$"
-    if [ -z "$(find "$EXC_DIR" -name 'profile.json.tmp.*')" ]; then ok "a78-exc-ro: no temp file left"
-    else bad "a78-exc-ro: temp file left"; fi
-    if cmp -s "$WORK/a78-exc-ro.profile.json" <(exc_profile); then ok "a78-exc-ro: profile.json untouched"
-    else bad "a78-exc-ro: profile.json changed"; fi
-    setup_a69_mig_ro() { writable "$EXC_DIR"; setup_mig_plain; chmod 555 "$EXC_DIR"; }
-    NORM_TMP=1 case_fresh a8-mig-ro 2 setup_a69_mig_ro migrate
-    writable "$EXC_DIR"
-    expect result failed
-    expect_line "^error\\tmigrate failed: cannot write $EXC_PF\\.tmp\\.<pid>: Permission denied$"
-else
-    skip "a78-exc-ro, a8-mig-ro (a read-only directory needs POSIX permissions: macOS/Linux)"
-fi
+# being created in a directory, so these cases run here only (the Windows harness
+# prints skip lines).
+setup_a69_ro() { writable "$EXC_DIR"; setup_exc_plain; chmod 555 "$EXC_DIR"; }
+NORM_TMP=1 case_fresh a78-exc-ro 2 setup_a69_ro "${SET_ARGS[@]}" "${M[@]}"
+writable "$EXC_DIR"
+expect result failed
+expect_line "^error\\texception-set failed: cannot write $EXC_PF\\.tmp\\.<pid>: Permission denied$"
+if [ -z "$(find "$EXC_DIR" -name 'profile.json.tmp.*')" ]; then ok "a78-exc-ro: no temp file left"
+else bad "a78-exc-ro: temp file left"; fi
+if cmp -s "$WORK/a78-exc-ro.profile.json" <(exc_profile); then ok "a78-exc-ro: profile.json untouched"
+else bad "a78-exc-ro: profile.json changed"; fi
+setup_a69_mig_ro() { writable "$EXC_DIR"; setup_mig_plain; chmod 555 "$EXC_DIR"; }
+NORM_TMP=1 case_fresh a8-mig-ro 2 setup_a69_mig_ro migrate
+writable "$EXC_DIR"
+expect result failed
+expect_line "^error\\tmigrate failed: cannot write $EXC_PF\\.tmp\\.<pid>: Permission denied$"
 # register --out that cannot be written (read-only directory, missing directory)
 exc_profile | write_profile "$H/a8reg"
-if [ "$LANG_RUN" = sh ]; then
-    mkdir -p "$H/a8ro"
-    chmod 555 "$H/a8ro"
-    case_run a8-reg-ro 2 register --profile "$H/a8reg/profile.json" --alias nobul-mac --out "$H/a8ro/out.json" "${M[@]}"
-    chmod u+w "$H/a8ro"
-    expect result failed
-    expect_line "^error\\tregister failed: cannot write $H/a8ro/out.json: Permission denied$"
-else
-    skip "a8-reg-ro (a read-only directory needs POSIX permissions: macOS/Linux)"
-fi
+mkdir -p "$H/a8ro"
+chmod 555 "$H/a8ro"
+case_run a8-reg-ro 2 register --profile "$H/a8reg/profile.json" --alias nobul-mac --out "$H/a8ro/out.json" "${M[@]}"
+chmod u+w "$H/a8ro"
+expect result failed
+expect_line "^error\\tregister failed: cannot write $H/a8ro/out.json: Permission denied$"
 case_run a8-reg-nodir 2 register --profile "$H/a8reg/profile.json" --alias nobul-mac --out "$H/a8none/sub/out.json" "${M[@]}"
 expect_line "^error\\tregister failed: cannot write $H/a8none/sub/out.json: No such file or directory$"
 
 # snapshot failures reach deploy.log at detail, not only stderr (A-6): one line for
 # the one resolver run
 A6_RUNS=1
-# a6_logged NAME TEXT -- deploy.log has TEXT on A6_RUNS detail lines (Windows: the
-# log's native paths read back as $WORK paths)
+# a6_logged NAME TEXT -- deploy.log has TEXT on A6_RUNS detail lines
 a6_logged() {
     local n
     cp "$H/.aitools/logs/deploy.log" "$WORK/a6-deploy.log"
-    from_native "$WORK/a6-deploy.log"
     n=$(grep -cF "[detail] $2" "$WORK/a6-deploy.log" || true)  # grep -c exits 1 on 0 matches; count checked below
     if [ "$n" = "$A6_RUNS" ]; then ok "$1: logged at detail ($n)"
     else bad "$1: $n detail lines in deploy.log, want $A6_RUNS"; fi
@@ -1439,9 +1334,7 @@ fresh_home log-blocked
 mkdir -p "$H/.aitools/logs/deploy.log"
 log_case log-blocked
 # POSIX permission case (bash, macOS/Linux): mode 000; root ignores the mode
-if [ "$LANG_RUN" != sh ]; then
-    skip "log-unwritable (POSIX permissions: macOS/Linux)"
-elif [ "$(id -u)" -eq 0 ]; then
+if [ "$(id -u)" -eq 0 ]; then
     skip "log-unwritable (running as root: mode 000 does not block the write)"
 else
     fresh_home log-unwritable

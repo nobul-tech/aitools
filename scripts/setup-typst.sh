@@ -42,7 +42,7 @@ if command -v cargo &>/dev/null; then
     if [ "$cargo_list_rc" -ne 0 ]; then
         log_detail "cargo-install-list: $cargo_list"
         log_warn "cargo install --list failed (exit $cargo_list_rc) -- skipping cargo typst-cli cleanup"
-    elif printf '%s\n' "$cargo_list" | grep -q '^typst-cli '; then
+    elif printf '%s\n' "$cargo_list" | grep '^typst-cli ' >/dev/null; then
         remove_package "cargo uninstall typst-cli" cargo uninstall typst-cli
     fi
 fi
@@ -59,13 +59,13 @@ if command -v typst &>/dev/null; then
         log "Already installed via Homebrew -- upgrading..."
         upgrade_rc=0
         UPGRADE_OUTPUT=$(brew upgrade typst 2>&1) || upgrade_rc=$?
-        if [ "$upgrade_rc" -eq 0 ] && printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'already installed\|up.to.date\|No available upgrade'; then
+        if [ "$upgrade_rc" -eq 0 ] && printf '%s\n' "$UPGRADE_OUTPUT" | grep -i 'already installed\|up.to.date\|No available upgrade' >/dev/null; then
             log_ok "Typst already up to date"
             write_summary OK "typst" "$(typst --version)"
         else
             while IFS= read -r line; do log "$line"; done <<< "$UPGRADE_OUTPUT"
             # Exit code first (C-F2); the output grep stays for brew upgrade (Standard 3).
-            if [ "$upgrade_rc" -ne 0 ] || printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'error\|fatal'; then
+            if [ "$upgrade_rc" -ne 0 ] || printf '%s\n' "$UPGRADE_OUTPUT" | grep -i 'error\|fatal' >/dev/null; then
                 log_error "brew upgrade typst failed (exit $upgrade_rc) -- see $(display_path "$LOG_FILE")"
                 write_summary ERROR "typst" "brew upgrade failed (exit $upgrade_rc)"
             else

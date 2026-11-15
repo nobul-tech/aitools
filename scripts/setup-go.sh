@@ -48,13 +48,13 @@ if [ "$PROVENANCE" = "homebrew" ]; then
     log "Go already installed via Homebrew ($GO_VERSION) -- upgrading..."
     # brew upgrade exits non-zero when already up-to-date on some versions
     UPGRADE_OUTPUT=$(brew upgrade go 2>&1) || true
-    if printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'already installed\|up.to.date\|No available upgrade'; then
+    if printf '%s\n' "$UPGRADE_OUTPUT" | grep -i 'already installed\|up.to.date\|No available upgrade' >/dev/null; then
         log_ok "Go already up to date"
         GO_VERSION=$(go version 2>/dev/null || echo "version unknown")
         write_summary OK "go" "$GO_VERSION"
     else
         printf '%s\n' "$UPGRADE_OUTPUT" | while IFS= read -r line; do log "$line"; done
-        if printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'error\|fatal'; then
+        if printf '%s\n' "$UPGRADE_OUTPUT" | grep -i 'error\|fatal' >/dev/null; then
             log_error "brew upgrade go failed (see log above)"
             write_summary ERROR "go" "brew upgrade failed"
         else

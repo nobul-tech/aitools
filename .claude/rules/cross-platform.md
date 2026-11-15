@@ -106,6 +106,54 @@ A script that runs with no aitools-lib beside it (`bootstrap.sh`, run from
 curl; `hh.sh`, installed alone as `~/.local/bin/hh`) cannot: its guard prints
 the structured line itself, to stderr:
 `printf '[%s] [<name>] [error] This script is for macOS/Linux. ...\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >&2`.
+So does a file sourced into another script (`relay-outbound-prompt.sh/.ps1`):
+loading init-logging there would re-initialize the caller's log. A sourced
+`.sh` guard returns 1 instead of exiting
+(`[ "${BASH_SOURCE[0]}" = "$0" ] || return 1`, then `exit 1`), so the refusal
+does not end the caller's shell.
+
+**Test suites** (commander, 2026-11-14: "sh scripts and tests should only run
+on linux/mac and ps1 on windows"). Every `tests/<dir>/test-*.sh` carries the
+POSIX guard, every `tests/<dir>/test-*.ps1` the Windows guard, unless the suite
+is listed in the exemptions table below as cross-platform. A suite that tests a
+`.sh`/`.ps1` pair has two harnesses: the `.sh` runs the `.sh` scripts on macOS
+and Linux, the `.ps1` runs the `.ps1` scripts on Windows with native pwsh
+(helpers: `@tests/lib/platform-lib.ps1`). The harnesses ported in 2026-11
+(PR #166) have the same shared cases, plus platform-only cases on each side
+(e.g. the Windows locked-file and ACL cases); the script-suite ports also compare against
+the same golden files, while the check-suite ports (check-pre-push,
+check-post-push, check-pre-commit) write the same expectations in each
+harness (golden files are a follow-up). The older twins (managed-files,
+adopt-push, logging, menus, setup-user-shell, relay-outbound) do not yet
+share cases (known gaps, different case counts, no golden files). Test harnesses have no logging library: the guard prints to stderr,
+first thing after `set` / `param` and, in a `.ps1`, its `-Help` handler (help
+is printed on every platform; anything else refuses). The bash guard adds a second case on
+`BASH_VERSINFO[5]`, bash's compiled-in machine type, which neither a `uname`
+shim on PATH nor an exported `OSTYPE` can change:
+
+```bash
+case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*)
+        printf 'This script is for macOS/Linux. On Windows, run tests/<dir>/test-<name>.ps1 with pwsh.\n' >&2
+        exit 1 ;;
+esac
+case "${BASH_VERSINFO[5]:-}" in
+    *-msys*|*-cygwin*|*-mingw*)
+        printf 'This script is for macOS/Linux. On Windows, run tests/<dir>/test-<name>.ps1 with pwsh.\n' >&2
+        exit 1 ;;
+esac
+```
+
+```powershell
+if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
+    [Console]::Error.WriteLine("This script is for Windows. On macOS/Linux, run tests/<dir>/test-<name>.sh with bash.")
+    exit 1
+}
+```
+
+On Windows, agents run only `.ps1` suites (and the cross-platform suites in
+the table below); a `.sh` suite is never run past its guard, and `uname`,
+`OSTYPE` or `BASH_VERSINFO` are never spoofed.
 
 ### OS guard exemptions
 
@@ -115,18 +163,27 @@ the structured line itself, to stderr:
 | Init libraries | `init-logging.sh/.ps1` | Sourced for initialization |
 | Hooks | `shared/hooks/*.sh` | CC hooks run bash on all platforms |
 | Shell alias modules | `shared/shell/aliases.sh/.ps1` | Sourced into shell profiles |
-| Build scripts | `build-deploy.sh`, `build-package.sh` (P-1, pending approval) | Bash-only builders, run in Git Bash on Windows; see cross-language exceptions |
+| Build scripts | `build-deploy.sh`, `build-package.sh` (approved, commander 2026-11-14) | Bash-only builders, run in Git Bash on Windows; see cross-language exceptions |
 | Scratch/test files | `.scratch/*.sh` | Temporary, not deployed |
-| Entry points sourced or run on any platform (rationale unrecorded, pending approval) | `bootstrap.ps1`, `hh.ps1`, `relay-outbound-prompt.sh/.ps1` | Bootstrap/shell helpers: `bootstrap.ps1` and `hh.ps1` are the Windows entry points (no guard yet); `relay-outbound-prompt.sh` is sourced by `scripts/aitools` and `hh.sh`, so it runs on macOS/Linux only (2026-11-14), and `.ps1` by `aitools.ps1` and `hh.ps1`. `bootstrap.sh`, `hh.sh`, `init-hh-hooks.sh` and `analyze-session.sh` carry the POSIX guard since 2026-11-14 (commander: "add an OS guard to all of them") |
-| Helper modules (rationale unrecorded, pending approval) | `aitools-json.ps1`, `_validate-ps1.ps1` | Dot-sourced / called by other scripts, never a setup entry point |
+| Entry points sourced or run on any platform (rationale unrecorded, pending approval) | `bootstrap.ps1`, `hh.ps1` | Bootstrap/shell helpers: `bootstrap.ps1` and `hh.ps1` are the Windows entry points (no guard yet). `bootstrap.sh`, `hh.sh`, `init-hh-hooks.sh` and `analyze-session.sh` carry the POSIX guard since 2026-11-14 (commander: "add an OS guard to all of them"); `relay-outbound-prompt.sh` the POSIX guard and `relay-outbound-prompt.ps1` the Windows guard (commander, 2026-11-14: "relay-outbound.sh/.ps1 need os guards they are not exempt") |
+| Helper modules (commander, 2026-11-14) | `aitools-json.ps1`, `_validate-ps1.ps1` | Dot-sourced / called by other scripts, never a setup entry point |
 | Entry points with Windows branches (2026-11-01, review-after; `aitools` reason 2026-11-14) | `aitools-install.sh`, `aitools`, `scripts/githooks/pre-commit` | Run on every platform: on Windows (Git Bash) `aitools-install.sh` forwards to `aitools-install.ps1`, `aitools` (the extensionless bash entry point) forwards to `aitools.ps1` (`pwsh -File`) before its library loads, so no bash library code runs on Windows (commander, 2026-11-14, RFI 38dc-3), the git hook runs in Git Bash |
 | Package launchers (2026-11-01, review-after) | `packaging/macos/*`, `packaging/linux/*`, `packaging/windows/*.ps1` | Run by the package installer on its one platform (design: `@plans/build-package/design.md`) |
+| Cross-platform test suites (2026-11-14, review-after) | `tests/hooks/test-*.sh`, `test-build-deploy-backup.sh`, `tests/build-package/test-cli.sh`, `tests/pywinpty/test-setup-pywinpty.sh` | They test bash code that runs in Git Bash on Windows, so they run in all three CI jobs: the hooks (Claude Code runs hooks in bash on every platform), `build-deploy.sh` (approved cross-language exception) and `build-package.sh`; the pywinpty suite's Windows cases test `build-deploy.sh`'s pin embed |
+| Perl and Python scripts (2026-11-14, commander) | `scripts/*.pl`, `scripts/*.py`, `tests/os-guards/classify-guards.pl`, `tests/*/test-*.py` | The commander, verbatim: "unless a script is explicitly marked as cross-platform for good reasons, such as build-deploy.sh and all perl/python scripts, sh scripts and tests should only run on linux/mac and ps1 on windows". They run on every platform (Perl ships with Git for Windows; Python suites run natively in all three CI jobs) and carry no OS guard |
 
-`tests/os-guards/test-os-guards.sh` enforces this table: on macOS and Linux
-every Windows-guarded `.ps1` must refuse to run (exit 1, guard message, only
-logs written), on Windows every POSIX-guarded `.sh` must refuse, and a script
-with no guard that this table does not list fails the suite. There is no
-guard override: a test runs a script only on the platforms its guard allows.
+`tests/os-guards/test-os-guards.sh` (macOS, Linux) and
+`tests/os-guards/test-os-guards.ps1` (Windows) enforce this table, with one
+classifier (`tests/os-guards/classify-guards.pl`) over every product script
+and every test suite: on macOS and Linux every Windows-guarded `.ps1` must
+refuse to run (exit 1, guard message, only logs written), on Windows every
+POSIX-guarded `.sh` must refuse, a test suite's POSIX guard must have the
+`BASH_VERSINFO[5]` case, and a script or suite with no guard that this table
+does not list fails the suite. There is no guard override: a test runs a
+script only on the platforms its guard allows. `scripts/check-ci-suites.pl`
+(CI step "Every test suite is in CI") checks the other side: a `.ps1` suite
+runs in the windows job only, a POSIX-guarded `.sh` suite in the macos and
+linux jobs only, an unguarded (cross-platform) `.sh` suite in all three.
 
 ### Dead code from platform guards
 
@@ -157,7 +214,7 @@ ask the user, get approval, document the exception.
 
 | Script | Why | Approved | Invocation |
 |--------|-----|----------|------------|
-| `check-pre-commit.ps1`, `check-post-push.ps1`, `check-pre-push.ps1` → Git Bash | They check `.sh` files (`bash -n`), the bash entry point's `--version`, and the bash-only `build-deploy.sh` | unrecorded (needs approval) | `& $bashExe ...` |
+| `check-pre-push.ps1` step 7 → Git Bash | Runs the bash-only `build-deploy.sh` (the approved row above) into a temporary dotprofile copy, then dry-runs the generated `.ps1` resolver consumers: the only check of the real dotprofile build from Windows. Since 2026-11-14 no other `check-*.ps1` runs Git Bash (commander: "id like to avoid calling git bash on thowse ps1 scripts"): pre-commit step 2 and post-push step 6 leave `bash -n` to CI and the `.sh` twins, post-push step 4 runs `aitools.ps1 --version` with pwsh (`tests/check-no-git-bash`) | pending (RFI 38dc-23-1) | `& $d7Bash "$script:RepoRoot/scripts/build-deploy.sh"` |
 
 ### PowerShell 7 baseline
 

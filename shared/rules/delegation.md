@@ -94,7 +94,8 @@ agents, manually started sessions) rely on this rule and the skill alone.
 - Everything about writing, shipping and verifying delegations: `/delegate`
   skill
 - Handoff delegations: `/handoff` skill
-- Claude Code limits behind the elements: `/aitool-ops` skill
+- Claude Code limits behind the elements: `/tool-ops` skill (the
+  `/aitool-ops` card is retired)
 - Mission monitoring: `/mission-control` skill
 - Governed terms (delegate, delegating agent, delegation duty): `/glossary`
   skill (aitools repo)

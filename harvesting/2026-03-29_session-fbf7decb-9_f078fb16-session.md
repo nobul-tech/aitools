@@ -2835,7 +2835,7 @@ ls: /Users/pepe/repos/aitools/.claude/hooks/: No such file or directory
 4	  "repoPath": "/Users/pepe/repos/aitools",
 5	  "userRepoPath": "/Users/pepe/repos/aitools-nobul-jose",
 6	  "machineAlias": "laptop",
-7	  "googleDrives": [{"path":"/Users/pepe/Library/CloudStorage/GoogleDrive-jose@nobul.tech/My Drive","account":"jose@nobul.tech","label":""},{"path":"/Users/pepe/Library/CloudStorage/GoogleDrive-jose@strat-accs.com/My Drive","account":"jose@strat-accs.com","label":""}]
+7	  "googleDrives": [{"path":"/Users/pepe/Library/CloudStorage/GoogleDrive-jose@nobul.tech/My Drive","account":"jose@nobul.tech","label":""},{"path":"/Users/pepe/Library/CloudStorage/GoogleDrive-<secondary Google account>/My Drive","account":"<secondary Google account>","label":""}]
 8	}
 9	
 

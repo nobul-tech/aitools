@@ -103,7 +103,11 @@ these sources):
 | Sub-agent limits: cross-repo access (#24), SendMessage gap (#25, closed at 2.1.325), Markdown file-name block (#26), nesting depth (#27), `claude update` hook cancellation (#23) | `reference/tool-ops-claude-code.md` "Session Behavior" |
 | Session management commands, CLAUDE.md hierarchy, session storage | `reference/tool-ops-claude-code.md` "Session Behavior" |
 | Delegate identity and control: mission name -> agentId (`meta.json` `description`), transcript and `output_file` paths, a delegate's own id, TaskStop, SendMessage, hand-backs, background tasks (#31, #32) | `reference/tool-ops-claude-code.md` "Delegate Identity, Transcripts and Control" |
-| Windows shell limitations and PowerShell-from-Bash workarounds | `reference/tool-ops-claude-code.md` "Windows Shell Limitations" |
+| What a sub-agent receives at launch: CLAUDE.md, rules without `paths:`, project files from the session's directory, not its worktree (#5) | `reference/tool-ops-claude-code.md` "Version Dependencies" item #5 |
+| How Claude Code loads user-level rules (#28) and skills (#29) | `reference/tool-ops-claude-code.md` "Version Dependencies" |
+| Hook output channel: stderr on exit 0 never reaches Claude, observe-mode hooks use stdout `additionalContext` (#34, was #29 until 2026-11-14); Workflow hook event shape (#30) | `reference/tool-ops-claude-code.md` "Version Dependencies" |
+| Auto mode and allow rules for `gh pr merge` (#33, was #28 until 2026-11-14) | `reference/tool-ops-claude-code.md` "Auto Mode and Allow Rules for PR Merges" |
+| Windows shell: the Bash tool (Git Bash) and the PowerShell tool (#1), PowerShell-from-Bash workarounds | `reference/tool-ops-claude-code.md` "Windows Shell Limitations" |
 | Every hook the harness deploys (event, matcher, script) | `shared/hooks/hooks-manifest.json` |
 | Hook portability (BSD vs GNU command divergences) | `.claude/rules/cross-platform.md` "Hook portability" |
 
