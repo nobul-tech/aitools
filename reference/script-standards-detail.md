@@ -378,10 +378,11 @@ Every file write in a setup script must distinguish one of three outcomes:
 
 ### Summary detail text rules
 
-These rules apply to the text of OK and DETAIL records: a tool's status and the items of
-its outcome. Warning and error text is not held to them: it says what is wrong, or what
-failed and why, and the panel cuts yellow and red lines at 70 characters
-(`@reference/logging.md` 8.5).
+These rules apply to the status text of OK records. DETAIL text (an item of the outcome,
+such as `key: old -> new`) is not held to the 30-character limit and is not cut
+(`@reference/logging.md` 8.5). Warning and error text is not held to them either: it says
+what is wrong, or what failed and why, and the panel cuts yellow and red lines at 70
+characters (`@reference/logging.md` 8.5).
 
 - Max 30 characters
 - No file paths (those go in log lines)

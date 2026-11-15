@@ -216,7 +216,7 @@ table, the severity decision guide and platform-specific patterns.
 Setup scripts that write config files, .md files, hooks, or skills must follow the
 three-outcome pattern (unchanged/updated/failed) with file-type-specific change logging;
 a failed write is `write_error` with the write error as its reason.
-The text of OK and DETAIL records is max 30 chars; warning and error text is not held
+The status text of OK records is max 30 chars; DETAIL, warning and error text is not held
 to that limit (the panel cuts yellow and red lines at 70: `@reference/logging.md` 8.5).
 JSON configs log changed keys and emit DETAIL summary lines; text files log diffs to deploy.log.
 See `@reference/script-standards-detail.md` for patterns and examples.
