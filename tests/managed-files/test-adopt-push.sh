@@ -204,7 +204,7 @@ if $HAVE_PTY; then
     check "accept & adopt into the dotprofile: result accept & adopt, committed-pushed" "[ \"\$(result)\" = 'accept & adopt' ] && [ \"\$(push_state)\" = committed-pushed ]"
     check "accept & adopt: remote has LOCAL, commit is that file only" "remote_has claude/rules/r.md 'local edit' && [ \"\$(committed_files)\" = 'claude/rules/r.md ' ] && [ \"\$(head_msg)\" = 'Adopt r.md from the deployed copy' ]"
     check "accept & adopt: unrelated change not committed, no 'Uncommitted change' line" "[ -n \"\$(git -C '$DP' diff --name-only -- notes.md)\" ] && ! grep -q 'Uncommitted change in' '$LOG'"
-    check "accept & adopt: the backup file is not committed" "! git -C '$REMOTE' ls-tree -r --name-only main | grep -q 'bak'"
+    check "accept & adopt: the backup file is not committed" "! git -C '$REMOTE' ls-tree -r --name-only main | grep 'bak' >/dev/null"
 
     setup_case merge-dotprofile
     printf '#!/usr/bin/env bash\ncat > /dev/null\nprintf "# Title\\nmerged line\\n"\n' > "$C/bin/claude"; chmod +x "$C/bin/claude"
