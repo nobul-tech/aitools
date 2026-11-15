@@ -64,8 +64,10 @@ State machine: `@reference/managed-file-deployment.md`.
 There is no ancestor and no deploy state: the only comparison is SOURCE
 against LOCAL.
 - LOCAL equals SOURCE: verified, nothing written.
-- LOCAL differs, non-interactive run (no terminal, EOF, or `--force`):
-  SOURCE written to LOCAL. No merge runs.
+- LOCAL differs, non-interactive run (no terminal, or `--force`):
+  SOURCE written to LOCAL. No menu is shown, so no merge starts. EOF at a
+  prompt takes that prompt's default (`.claude/rules/interactive-menus.md`
+  "Non-interactive fallback").
 - LOCAL differs, interactive run: the review menu.
 
 **Text files** (markdown, shell): one review per file, with the full menu,
