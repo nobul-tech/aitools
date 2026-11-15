@@ -60,35 +60,108 @@ level.
 - When a delegate returns and you are about to rely on its output
 - When the user says `/delegate`
 
-## The eight outbound elements
+## Naming conventions for missions, delegates, their directories and artifacts
+
+Mission/Delegate Name = `<commanderid>-<sequentialMissionNumber>-<slug>` = <commanderId> last 4 hex of
+**your own** session/subagent id + <sequentialMissionNumber> a sequentially
+asigned number incremented once for each mission you've launched + <slug> a short,
+incomplete sentence as short as a single word that describes the main objective of
+the mission.
+
+**Example**: 03af-1-Audit-codebase
+-commanderid=0eaf
+-sequentialMissionNumber=1
+-slug=Audit-codebase
+
+Name the mission `<commanderid>-<sequentialMissionNumber>-<slug>` and carry that name into every artifact:
+- Mission / delegate name: `<commanderid>-<sequentialMissionNumber>-<slug>`
+- Launch-call description: starts with `<commanderid>-<sequentialMissionNumber>-<slug>`
+- Branch: `<type>/<commanderid>-<sequentialMissionNumber>-<slug>`
+- Scratch dir: `.scratch/session-<commanderid>-<sequentialMissionNumber>-<slug>`
+- Delegate's Markdown files: prefix `<commanderid>-<sequentialMissionNumber>-<slug>-`
+- PR and the delegate's report state the full `<commanderid>-<sequentialMissionNumber>-<slug>` name
+- Prompt and description to delegate should include all of the above names/locations in its body
+
+## The mission briefing and delegate prompt elements
+
+An agent launching a subagent by any tool call or other means has the duty to fulfill all of its delegation duties, which include the elements listed below used to compose the prompt and briefing of a delegate's mission
 
 | # | Element | What the prompt must contain |
 |---|---------|------------------------------|
-| 1 | Identity | Name and role: `You are S2-Audit, ...`, who delegated it, and the parallel missions it must not overlap. Pick the name first; the prefix derives from it |
-| 2 | Rules and CLAUDE.md files | An explicit instruction to read IN FULL, before other work, every user-scope and project-scope CLAUDE.md and rule, listed by absolute path (`~/.claude/CLAUDE.md`, every `~/.claude/rules/*.md`, `<repo>/CLAUDE.md`, every `<repo>/.claude/rules/*.md`, nested CLAUDE.md files in the directories it works in), plus mission-specific references; the critical rules restated in the prompt |
+| 1 | Identity | Name and role: `You are 03af-Audit, ...`, who delegated it, and the parallel missions it must not overlap. The delegation prompt should include the name of the identity field. |
+| 2 | Rules and CLAUDE.md files | An explicit instruction to read IN FULL, before other work, every user-scope and project-scope CLAUDE.md and rule, listed by absolute path (`~/.claude/CLAUDE.md`, every user scope rule, `<repo>/CLAUDE.md`, every repo-scope rule, nested CLAUDE.md files in the directories it works in), plus mission-specific references; the critical rules restated in the prompt |
 | 3 | Skills | `/delegate` first, always, with the instruction to load it before launching any delegate of its own and to pass the same instruction down (the duty recurses); then the task skills by name, what to do if one will not load, and each skill's conflicts with the prompt pre-resolved (allowed or overridden) |
 | 4 | Operational learning | Carry-forward items relevant to the task, each with its source, including the environment limits below and what worked or failed in earlier missions |
-| 5 | Conflict priority (D-DEL6) | The resolution order: 1) the commander's own words, newest first; 2) this prompt; 3) skills; the `CONFLICT:` report line; never drop a mandated skill or rule silently |
-| 6 | `WRITE_BLOCKED` | The exact signal format and "do not retry or route around a denial" |
-| 7 | Access | Absolute paths to every file and directory the delegate needs, read-only or writable, and where its scratch lives |
-| 8 | Name prefix (D-DEL1) | The prefix verbatim (`S2-Audit-` or a stated short form `S2-`), required on every `*.md` file the delegate creates |
+| 5 | Instructions on where to find and how to read the session file of its parent agent or subagent: directories/paths/databases/tools/naming conventions.  When an agent has a question it should look in these sessions first for an answer, use disciplined initiative to infer an answer, or if it can't, surface the question to the commanding user or agent to fulfill surfacing duty
+| 6 | Conflict priority | The resolution order: 1) the user/ommander's own words, newest first; 2) its delegation prompt and briefing; 3) session and subagent transcripts, newest first 4) skills, rules, reference files and other harness artifacts; the `CONFLICT:` report line; never drop a mandated skill or rule silently |
+| 7 | Permissions handling | The exact signal format and "do not retry or route around a denial" |
+| 8 | Mission manifest | Absolute paths to every file and directory the delegate needs, read-only or writable, and where its scratch lives |
+| 9 | Naming conventionis | The prefix verbatim (`03af-Audit-`), required on every `*.md` file the delegate creates |
+| 10 | Mission Brief | A structured briefing of all mission objects, citing source of user/commander/agent directives verbatim and their source
 
-The delegate owes back: the `WRITE_BLOCKED` signal, output at the designated
+The delegate owes back: the `PERMISSION_DENIED` signal on permissions handling, output at the designated
 path with prefixed Markdown names, `INCIDENT:` markers, `CONFLICT:` lines,
 scope adherence, sources for every claim, and, for a code change, its pushed
 branch and PR URL (D-DEL4). Its documents are versions, not drafts (D-DEL5).
 
+## Duties to brief into the delegate
+
+1. **Self commit, test, verify, push and remediate .** The delegate writes
+   and runs its own tests for the work product it is producing, commits its
+   own changes, pushes its own changes, verifies its own changes,
+   watches the remote repo CI pipeline for errors, does not return until
+   all errors are resolved.
+2. **Review before merge.** The delegate launches its own independent reviewer
+   before it self-merges.  Skip this on changes to documentation and release notes.
+3. **Use Disciplined Initiative.** delegate should fix issues found directly or
+   delegate found issues to a new mission if the fix is rational and does not
+   heavily depend on user input.  Ambituities should be resolved using disciplined
+   initiative and using proactive actions, such as running tests and searching
+   session transcripts for commanding agent or users intent.
+4. **Parent transcripts and chain of command.** Give the delegate the path to
+   your transcript and the paths to any and all transcripts of your parent's
+   transcript and so on for the entire chain of command for the currently running
+   missions. ie: sessionMission->subagentMission->subsubagentMission.
+   In this example, subsubagentMission has two parents, and the first level
+   subagent would need to give the paths of its session and its parent session to
+   the second level subagent.
+5. **Broad Scope.** The delegate finds the facts. The operational learning,
+   delegate prompt, mission briefing, and all other artifacts passed to the delegate
+   are a starting set, not the ceiling — it extends them by testing and
+   exploring. It delivers the primary target you name, may change other files
+   on its own judgment, and reports what it changed.
+6. **No delegate budget.** No cap on the number of delegates.
+7. **Release note.** The delegate adds its own version entry to the release
+   notes.
+
+## Claude Code specifics (substitute your harness's equivalents)
+These instructions were written for the **Claude Code** harness (with the
+aitools layer); the tool, id and path names here are Claude Code's. On Claude
+Code web, Cursor CLI, Cursor cloud or another harness, map each one to that
+harness's equivalent for your operating environment.
+- **Commander id.** `<commanderid>` is your **session id** if you are a
+  top-level session, or your **agent id** if you are yourself a subagent. In
+  Claude Code a subagent learns its own id from either:
+  - a `TaskStop` error (`Task … is owned by …; agent <my id> cannot stop it`)
+  - from its parent session transcript by searching for the pattern "agentId":"…","description":"<missionName>
+  Each agent is responsible for finding and knowing its own session or agent id.
+- **Launch call.** Claude Code's `Agent` tool or dynamic workflow tool. Its `description` equals the
+  `.meta.json` `description` and is the only link from the mission name to the
+  delegate's agentId — so the description must start with the mission name.
+- **Delegate transcript.** `~/.claude/projects/<project-dir>/<parent-session-id>/subagents/agent-<delegateAgentId>.jsonl`, with a `.meta.json` beside it. Nested delegates land flat in the same `subagents/` directory. A background launch returns the agentId and an `output_file` at `…/tasks/<agentId>.output`; no session id is returned.
+- **Own/Parent Transcripts**  For session agents, `~/.claude/projects/<project-dir>/<parent-session-id>.
+  For subagents, `~/.claude/projects/<project-dir>/<parent-session-id>/subagents/agent-<agentId>.jsonl
+- **Parent reader.** `read-session.py` / `read-session-full.py` read a Claude
+  Code session JSONL — give the delegate the parent-transcript path plus the
+  reader its harness provides.
+- **Scratch limit.** aitools caps the scratch short name at 10 characters;
+  truncate `<slug>` so `session-<agentid>-<slug>` fits (e.g.
+  `session-38dc-subtx`).
+
 ## Writing the prompt
 
-1. **Load this skill, then name the delegate.** `<role>-<word>` (`S2-Audit`,
-   `S3-Build`, `Verifier-Handoff`). Check the name does not start with
-   `REPORT`, `SUMMARY`, `FINDINGS` or `ANALYSIS`. Avoid `log`, `output` and
-   `dump` in the name: the aitools harvester treats any `.md` file whose name
-   contains them as ephemeral and does not harvest it. In a chain, compose
-   names so provenance survives (`S3-Merge-Verify`).
-2. **Decide the prefix.** The full name plus a hyphen, or a short form you
-   state explicitly. Write it verbatim into the prompt.
-3. **State intent.** Purpose, scope (with NOT exclusions), audience.
+1. **Decide the slug and Name the delegate.** Follow naming convention guidelines and fulfill delegation duty.
+3. **State intent.** Purpose, main objective, audience.  use intent-writing skill
 4. **Instruct the delegate to read every rule and CLAUDE.md file.** Tell it
    explicitly to read, in full and before other work, every user-scope and
    project-scope CLAUDE.md and rule that is not already in its context. Do
@@ -106,8 +179,8 @@ branch and PR URL (D-DEL4). Its documents are versions, not drafts (D-DEL5).
 5. **Name the skills, `/delegate` first.** Tell the delegate to load
    `/delegate` before launching any delegate of its own and to give its
    delegates the same instruction, so the duty reaches every level. Then
-   name the task skills, with the SKILL.md path to read by hand if one will
-   not load.
+   name other task skills which you are using, with the SKILL.md path
+   to read by hand if one will not load.
 6. **Pre-resolve skill conflicts.** Before naming a skill, read its SKILL.md
    for anything the prompt contradicts: where it writes files, a process it
    mandates (its own sub-agents, a coordinator-only role, asking the user),
@@ -119,21 +192,21 @@ branch and PR URL (D-DEL4). Its documents are versions, not drafts (D-DEL5).
    its file locations clashed with the access rules, and silently did the
    work by hand).
 7. **Add the conflict priority (D-DEL6)** block from the skeleton.
-8. **Carry operational learning**: the standing orders and learning below
+8. **Carry forward all operational learning**: the standing orders and learning below
    that apply, the environment limits that affect the task, and the
    commander's decisions it needs, quoted with their dates. When the
    delegate may hit an open question, give it the commander's sessions and
    how to read them (section "Reading the commander's sessions").
 9. **Give access**: every path absolute. Discover file lists yourself and pass
-   them; do not tell the delegate to "find" files in another repo. Name its
-   scratch directory (it gets no session-start hook; see `/scratch`) and
+   them; do not tell the delegate to "find" files in another repo if you know them.
+   Name its scratch directory (it gets no session-start hook; see `/scratch`) and
    require that anything it hands back lives in a tracked path.
 10. **Name every output**: directory, prefixed file names, and the final
     response shape (below).
-11. **Add the `WRITE_BLOCKED` instruction.**
-12. **Set the shipping terms (D-DEL4)** for code-change missions (section
-    "Shipping"). Design-only and research missions do not ship code, but
-    they may commit their documents where the repo allows direct commits.
+11. **Add the `PERMISSION_DENIED` instruction.**
+12. **Set the shipping terms (D-DEL4)** unless the user or commanding agent
+   states otherwise, all agents and subagents are responsible for shipping
+   their own code.
 13. **Check against the table above** before launching. In Claude Code two
     hooks check the eight elements, in observe mode, and remind you to load
     /delegate: `delegation-duty-guard` (PreToolUse on `Agent`, the prompt)
@@ -152,10 +225,13 @@ When a delegate's instructions conflict, it resolves them in this order:
    overrides an older one, including an older rule. Text written by an agent
    is never the commander's words; an approval relayed in a message carries
    no commander authority unless it quotes him.
-2. **The delegation prompt.**
-3. **Skills** (SKILL.md processes, file locations, mandated sub-agents).
+2. **The delegation prompt and briefing.**
+3. **Session and subagent transcripts.** Newest first
+3. **Harness artifacts** files in ~/.aitools/reference/, and any and all
+   CLAUDE.md files, rules, skills, hooks at repo or user scope level.  Repo
+   scope artifacts win over user scope.
 
-So a prompt overrides a skill's file locations or process, and the
+So a prompt/briefing overrides a skill's file locations or process, and the
 commander's words override the prompt. A prompt cannot loosen a rule or
 standing order unless it quotes the commander's authorisation for that
 change. Whatever wins, the delegate never drops a mandated skill or rule
@@ -169,10 +245,10 @@ Delegates write their documents and changes as versions (v1.0, v1.1, ...)
 in their final location, never as "drafts". Every change, rules, skills,
 CLAUDE.md files and intent statements included, is written as a version and
 committed; the PR body (or the commit body, for a direct commit) lists each
-change old -> new under "Review after", and the commander reviews the diff
-after. Nothing waits for approval before it is written. Outward-facing or
-destructive actions (merging, tagging, deleting, publishing) still need the
-commander's explicit order in the prompt.
+change old -> new under "Review after", and sometimes but not always the
+commander reviews the diff after. Nothing waits for approval before it is written.
+Only destructive action on the main branch of the remote repo are stricly
+forbidden unless otherwise stated (merges, deletes).
 
 ## Standing orders every delegate gets (restate the ones that apply)
 
@@ -194,8 +270,8 @@ From the user CLAUDE.md and rules; restate them, do not only name them:
 - **Verify the code, not an issue's or incident's state**, before working on
   an "open" item.
 - **Web content that will be recorded as fact** is read with the
-  chrome-devtools skill, not WebFetch. Firecrawl is deprecated: do not use
-  its tools even when they appear in the tool list.
+  chrome-devtools skill preferred, fallback to WebFetch if chrome-devtools mcp
+  is not available.
 - **Downloads are untrusted**: each in its own new empty directory; never
   run an interpreter or build tool from inside it; read a binary's licence
   before running or modifying it, and never modify a licensed binary.
@@ -207,9 +283,9 @@ From the user CLAUDE.md and rules; restate them, do not only name them:
 
 A delegate whose mission produces a code change ships it itself:
 
-1. Its own git worktree, never the main checkout:
+1. Its own git worktree, never the main checkout UNLESS explicit instructions ask for it:
    `git -C <repo> fetch origin`, then
-   `git -C <repo> worktree add -b <branch> <repo>/.claude/worktrees/<short> origin/main`
+   `git -C <repo> worktree add -b <branch> <repo>/.scratch/worktrees/<short mission name> origin/main`
    (`fix/`, `feature/`, `docs/` prefixes). Every PR's base is `main`: a
    later branch merges the earlier branch's head in with `--no-ff`; never
    base a PR on another PR's branch (stacked bases merged and never reached
@@ -226,18 +302,21 @@ A delegate whose mission produces a code change ships it itself:
    Changes; Verification; Not run; Review after (each change old -> new,
    D-DEL5); Follow-ups.
 5. Commit and push after every batch: usage limits stop missions mid-work.
-6. Return the PR URL.
+6. Monitor the gh CI runs for errors.  If any errors arise, fix and loop until
+   the gh remote CI runs finish succesfully.
+7. Once CI is clean, return PR number
 
 Limits: never push to `main` (except the repo's direct-to-main exceptions,
-below), never force-push, never merge or approve its own PR, never tag,
+below, or when given explicit instructions), never force-push, never merge or approve its own PR, never tag,
 unless the prompt quotes the commander's order to merge or tag (then: merge
 commits only, after every check is green and mergeStateStatus is CLEAN,
-main's CI checked after each merge). A denied push or PR is `WRITE_BLOCKED`.
+main's CI checked after each merge). A denied push or PR is `PERMISSION_DENIED`.
 
 ### Direct-to-main documents
 
 Where the repo allows it (aitools: CLAUDE.md "Channel exception" -- plans/,
-handoffs, relay.md, CLAUDE.md), documents go straight to main. From a
+handoffs, relay.md, CLAUDE.md, reference/, registries/, shared/rules/,
+shared/skills/), documents go straight to main. From a
 checkout other missions share, do not push their unpushed commits: commit
 onto `origin/main` through a temporary index (`GIT_INDEX_FILE=<tmp> git
 read-tree origin/main`, `git update-index --add --cacheinfo`, `git write-tree`,
@@ -266,10 +345,10 @@ verified. Cite sources; say "unknown" rather than guess.
 
 Give this to any delegate that may need the commander's decisions:
 
-- Transcripts: `~/.claude/projects/<project-dir>/<session-id>.jsonl` (live;
-  very large -- never load one whole) and the user repo's archive (aitools:
-  the dotprofile `sessions/`).
-- Read them with the harness readers (`read-session.py --help`,
+- Transcripts for Claude Code: `~/.claude/projects/<project-dir>/<session-id>.jsonl` (live;
+  very large -- never load one whole)
+- The user repo's archive (aitools:the dotprofile `sessions/`).
+- Read Claude Code sessions with the harness readers (`read-session.py --help`,
   `read-session-full.py --help`; deployed in `~/.aitools/bin/`), filtered to
   the user's prompts, in REVERSE chronological order, newest first, until
   the question is answered.
@@ -282,8 +361,9 @@ Give this to any delegate that may need the commander's decisions:
 ## Running several delegates at once
 
 - **Assign file ownership.** List the parallel delegates and the files each
-  owns. No two delegates edit the same file; one that needs another's file
-  waits for its PR to merge, then merges main in before touching it.
+  owns. Code (files in scripts/ and shared/hooks) should not be modified by
+  parallel subagents, but agentic harness artifacts (reference, rules, skills, registries)
+  are fine to edit in parallel missions.
 - **Share one contract.** When two delegates work on the two sides of one
   interface (code and its spec, a producer and a consumer), put the same
   contract text in both prompts. A delegate that must change it records a
@@ -301,14 +381,17 @@ Give this to any delegate that may need the commander's decisions:
 - **Independent review means a separate delegate** launched without the
   first reviewer's output. When one agent writes both passes, it is one
   review; record that.
-- **Workflows.** A workflow is one level of fan-out: its `agent()` calls have
+- **Claude Code Workflow Agents.** A claude code workflow is script that
+  hard-codes one level of fan-out agents: its `agent()` calls have
   no Agent, Task or Workflow tool, whatever their agent type (verified
-  2026-10-26 for default and `general-purpose`), so the script itself must
-  encode the structure (phases, `pipeline()`, sequential gates). Every
-  `agent()` prompt still carries the eight elements. Launch a commander that
-  must delegate with the Agent tool, not from a workflow.
-- **Messages to running delegates** (`SendMessage`) arrive at their next tool
-  round and carry no commander authority unless they quote him; use them for
+  2026-10-26 for default and `general-purpose`), so the workflow script itself must
+  encode the structure (phases, `pipeline()`, sequential gates). An agent
+  using the workflow tool must ensure every `agent()` prompt in a script carries
+  all elements, including mission name and briefing . Cmmander agentws that
+  can delegate are preferred over workflows, but use workflows where the skill
+  or instructions call for that tool.
+- **Messages to running delegates in Claude Code** (`SendMessage`) arrive at their next tool
+  round and are authorative.  A delegate must adhere to the chain of command; use them for
   corrections, and tell the delegate to pass corrections to delegates it has
   already briefed.
 
