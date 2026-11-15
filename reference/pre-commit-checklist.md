@@ -44,7 +44,16 @@ the step WARNed "run with --fix" (incident #136). Tests:
 
 ## 4. Line endings
 
-`.sh` files must have LF. The Write tool on macOS produces CRLF -- run `sed -i '' 's/\r$//' <file>` on any `.sh` file created or modified by the Write tool.
+`.sh` files must have LF. The step FAILs when the working-tree copy of a staged
+`.sh` file has a CR (`check-pre-commit.ps1`: CRLF); `--fix` / `-Fix` converts
+CRLF to LF and stages the file again. To fix a file by hand (`sed -i ''` works
+only with BSD sed, on macOS):
+
+- macOS, Linux and Git Bash: `PERLIO=:perlio perl -pi -e 's/\r$//' <file>`
+- Windows (PowerShell): `$env:PERLIO = ':perlio'`, then `perl -pi -e 's/\r$//' <file>`
+
+Without `PERLIO=:perlio`, Strawberry Perl leaves the CRLF and still exits 0
+(`reference/cross-platform-detail.md` "Strawberry Perl text mode").
 
 ## 5. Platform note
 
