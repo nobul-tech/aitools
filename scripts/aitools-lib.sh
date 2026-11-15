@@ -6,15 +6,19 @@
 # is_local_environment, write_environment_skip), display_path, read_config_key,
 # resolve_user_repo_path, resolve_machine_profile, tool_exception_get,
 # tool_exception_record,
-# logging_init, log/log_ok/log_error/log_warn/log_detail, invoke_ai,
-# write_summary, show_summary, SORT_KEYS_JS, normalize_json.
+# logging_init, log/log_ok/log_error/log_warn/log_detail,
+# write_warn/write_action/write_error, error_reason, invoke_ai, write_summary,
+# summary_begin/summary_end, show_summary, run_child_relayed, run_relay_sync,
+# SORT_KEYS_JS, normalize_json.
 #
 # Usage:
 #   source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/aitools-lib.sh"
 #   logging_init "script-name"
 #
-# Entry points (aitools, aitools-install) override log functions after sourcing
-# for specialized logging (file-only, JSONL, etc.).
+# Logging, warnings and errors follow reference/logging.md section 8. No script
+# overrides a logging function: one that needs other behaviour sets a library
+# option after logging_init (see logging_init: AITLIB_OPT_JSONL,
+# AITLIB_OPT_CONSOLE_STDERR, AITLIB_OPT_COLOR_AUTO).
 
 # ---------------------------------------------------------------------------
 # Platform and environment detection (.claude/rules/cross-platform.md
@@ -76,6 +80,21 @@ AITOOLS_LOG_DIR="${AITOOLS_LOG_DIR:-$HOME/.aitools/logs}"
 # ---------------------------------------------------------------------------
 ERRORS=0
 WARNINGS=0
+
+# Library options (documented at logging_init). Reset when the library is
+# sourced, so a parent's value never reaches a child script.
+AITLIB_OPT_JSONL=false
+AITLIB_OPT_CONSOLE_STDERR=false
+AITLIB_OPT_COLOR_AUTO=false
+# Migration switch (plan summary-warn-reporting step I1; removed in step I5):
+# false = log_warn / log_error log and count but write no run summary record
+# (a script not yet migrated still writes its own legacy write_summary WARN /
+# ERROR, so each warning or error is recorded once); true = they record
+# WARN|<script>|TEXT and ERROR|<script>|TEXT| (reference/logging.md 8.2).
+# Inherited from the environment, so a relayed child records like its parent.
+AITLIB_RECORD_LOG_CALLS="${AITLIB_RECORD_LOG_CALLS:-false}"
+# summary_begin: true when this process created the run summary file
+AITLIB_SUMMARY_OWNER=false
 
 # ---------------------------------------------------------------------------
 # Display-friendly path (native Windows on MSYS, no-op elsewhere)
@@ -150,8 +169,8 @@ read_config_key() {
 
 # _aitlib_rm_tmp FILE [WHO] -- remove a temp file of the lib (the runner's stderr
 # capture, the relay's exit-code file); a failure is a detail line naming WHO
-# (default "aitools-profile") -- never silent; not a warning, which would promote
-# the caller's OK rows
+# (default "aitools-profile") -- never silent; not a warning: a leftover temp
+# file is nothing the user must act on (reference/logging.md 8.3)
 _aitlib_rm_tmp() {
     if [ -e "$1" ] && ! rm -f "$1"; then log_detail "${2:-aitools-profile}: could not remove temp file $1"; fi
     return 0
@@ -298,29 +317,39 @@ _aitlib_exit_note() {
     esac
 }
 
-# _aitlib_action_once TEXT -- write ACTION row TEXT unless the run summary already
-# holds it (several setup scripts in one run hit the same failure; show_summary
-# does not dedupe)
+# _aitlib_action_once TEXT -- write the ACTION record TEXT unless the run summary
+# already holds it (several setup scripts in one run hit the same failure). The
+# same de-duplication as write_action's ACTION (_aitlib_action_record).
 _aitlib_action_once() {
-    if [ -n "${AITOOLS_SUMMARY_FILE:-}" ] && [ -f "$AITOOLS_SUMMARY_FILE" ] \
-        && grep -qxF -- "ACTION||$1" "$AITOOLS_SUMMARY_FILE"; then
-        log_detail "ACTION already in the run summary: $1"
-        return 0
-    fi
-    write_summary ACTION "" "$1"
+    _aitlib_action_record "$1"
+}
+
+# _aitlib_resolver_error TOOL WHAT -- one error for a failed resolver call
+# (reference/logging.md 8.2, 8.3): the first "error" line of AITLIB_PROFILE_OUT
+# (with its exit note) is the REASON, the other error lines are detail lines;
+# with none, the reason is "resolver failed (exit N)".
+_aitlib_resolver_error() {
+    local tool="$1" what="$2" note w first=""
+    note=$(_aitlib_exit_note "$AITLIB_PROFILE_RC")
+    while IFS= read -r w; do
+        [ -n "$w" ] || continue
+        if [ -z "$first" ]; then first="$w$note"; else log_detail "$tool: $w$note"; fi
+    done <<< "$(_aitlib_profile_lines error)"
+    if [ -z "$first" ]; then first="resolver failed${note:- (exit $AITLIB_PROFILE_RC)}"; fi
+    write_error "$tool" "$what" "$first"
 }
 
 # resolve_user_repo_path -- sets AITLIB_USER_REPO_PATH (bash path form) and
 # AITLIB_USER_REPO_VIA (env|argument|config|convention|scan|none). Returns 0
 # found, 1 no dotprofile (shared-only mode; not an error), 3 resolver error or
-# refusal (logged: log_error + ERROR row "dotprofile" + one ACTION per run,
-# "see deploy.log -- the dotprofile could not be resolved").
+# refusal (one write_error "dotprofile" with the resolver's first error line as
+# the reason + one ACTION per run, "see deploy.log -- the dotprofile could not
+# be resolved").
 resolve_user_repo_path() {
     AITLIB_USER_REPO_PATH=""; AITLIB_USER_REPO_VIA="none"
-    local w note
+    local w
     if ! _aitlib_profile_run user-repo-path; then
-        log_error "dotprofile: resolver aitools-profile not found next to aitools-lib.sh"
-        write_summary ERROR "dotprofile" "resolver missing"
+        _aitlib_resolver_error "dotprofile" "resolver missing"
         _aitlib_action_once "see deploy.log -- the dotprofile could not be resolved"
         return 3
     fi
@@ -335,10 +364,7 @@ resolve_user_repo_path() {
             log_detail "dotprofile: none found (shared-only mode)"
             return 1 ;;
     esac
-    note=$(_aitlib_exit_note "$AITLIB_PROFILE_RC")
-    while IFS= read -r w; do if [ -n "$w" ]; then log_error "dotprofile: $w$note"; fi; done <<< "$(_aitlib_profile_lines error)"
-    if [ -z "$(_aitlib_profile_lines error)" ]; then log_error "dotprofile: resolver failed${note:- (exit $AITLIB_PROFILE_RC)}"; fi
-    write_summary ERROR "dotprofile" "resolver failed"
+    _aitlib_resolver_error "dotprofile" "resolver failed"
     _aitlib_action_once "see deploy.log -- the dotprofile could not be resolved"
     return 3
 }
@@ -358,8 +384,9 @@ resolve_user_repo_path() {
 # Logs one detail line ("machine profile: alias=.. via=.. key=.. owner=..").
 # Resolver warnings are detail lines here: setup-user-config, the first script
 # of every run, reports them once (a successful step stays OK, D-TS12).
-# Returns 0 resolved, 1 no dotprofile (shared-only), 3 no match or error
-# (log_error + ERROR row "machine profile" + one ACTION per run; callers must not
+# Returns 0 resolved, 1 no dotprofile (shared-only), 3 no match or error (one
+# write_error "machine profile", WHAT "no machine match", REASON the resolver's
+# first error line; one ACTION per run; callers must not
 # substitute another machine's values; the AITLIB_PROFILE_/AITLIB_IDENTITY_
 # values then hold the identity-level, machine-independent values only).
 resolve_machine_profile() {
@@ -367,10 +394,9 @@ resolve_machine_profile() {
     AITLIB_PROFILE_NAME=""; AITLIB_PROFILE_COMPANY=""
     AITLIB_IDENTITY_GIT_NAME=""; AITLIB_IDENTITY_GIT_EMAIL=""; AITLIB_IDENTITY_GITHUB=""
     AITLIB_MACHINE_KEY=""; AITLIB_MACHINE_OWNER="absent"; AITLIB_MACHINE_LEGACY=false; AITLIB_MACHINE_HOSTNAME=""
-    local w v note
+    local w v
     if ! _aitlib_profile_run resolve --environment "$AITOOLS_ENVIRONMENT"; then
-        log_error "machine profile: resolver aitools-profile not found next to aitools-lib.sh"
-        write_summary ERROR "machine profile" "resolver missing"
+        _aitlib_resolver_error "machine profile" "resolver missing"
         # Same text as resolve_user_repo_path's: one ACTION per run for a missing resolver
         _aitlib_action_once "see deploy.log -- the dotprofile could not be resolved"
         return 3
@@ -393,11 +419,8 @@ resolve_machine_profile() {
         0) if [ -n "$AITLIB_MACHINE_ALIAS" ]; then return 0; fi ;;
         1) log_detail "machine profile: no dotprofile -- shared-only mode"; return 1 ;;
     esac
-    note=$(_aitlib_exit_note "$AITLIB_PROFILE_RC")
-    while IFS= read -r w; do if [ -n "$w" ]; then log_error "machine profile: $w$note"; fi; done <<< "$(_aitlib_profile_lines error)"
-    if [ -z "$(_aitlib_profile_lines error)" ]; then log_error "machine profile: resolver failed${note:- (exit $AITLIB_PROFILE_RC)}"; fi
-    log_error "machine profile: unresolved -- no other machine's values are used"
-    write_summary ERROR "machine profile" "no machine match"
+    _aitlib_resolver_error "machine profile" "no machine match"
+    log "machine profile: unresolved -- no other machine's values are used"
     _aitlib_action_once "Run: aitools user init (pick or register this machine's profile)"
     return 3
 }
@@ -406,9 +429,9 @@ resolve_machine_profile() {
 # 8 Reader; call only at T5). Sets AITLIB_TOOL_EXC_FOUND (true/false),
 # AITLIB_TOOL_EXC_PLATFORM, AITLIB_TOOL_EXC_METHOD, AITLIB_TOOL_EXC_PATH,
 # AITLIB_TOOL_EXC_DECIDED_AT. Returns 0 looked up (found or not), 1 store
-# unavailable (one log_warn; treated as no exception; no summary row -- the
-# warning promotes the caller's OK row to WARN). Resolver warnings are detail
-# lines, so a kept tool's OK row is not promoted.
+# unavailable (one log_warn, recorded under the calling script's name when the
+# recording switch is on; treated as no exception). Resolver warnings are
+# detail lines: a kept tool is fine, so they are no warning of the run.
 tool_exception_get() {
     AITLIB_TOOL_EXC_FOUND=false; AITLIB_TOOL_EXC_PLATFORM=""; AITLIB_TOOL_EXC_METHOD=""
     AITLIB_TOOL_EXC_PATH=""; AITLIB_TOOL_EXC_DECIDED_AT=""
@@ -442,14 +465,15 @@ tool_exception_get() {
 # Sets AITLIB_TOOL_EXC_RESULT (created|updated|unchanged|dry-run|refused|failed;
 # never empty after the call) and AITLIB_TOOL_EXC_PUSHED (true/false).
 # Returns 0 written or nothing to write (created/updated: a failed commit or
-# push is a log_warn + ACTION "run git push in <dotprofile>",
+# push is one write_action, ACTION "run git push in <dotprofile>",
 # AITLIB_TOOL_EXC_PUSHED=false; unchanged and dry-run write nothing, so they
 # need no push and get no warning), 1 failed, 3 refused (no dotprofile, or the
-# machine profile matched by hostname only or not at all). 3 is log_warn +
+# machine profile matched by hostname only or not at all). 3 is write_action,
 # ACTION "run aitools user init to remember tool choices"; 1 (resolver missing,
-# usage error, crash) is log_warn + ACTION "see deploy.log -- a tool choice
-# (tool exception) was not saved". The tool itself is fine, so no ERROR row
-# (D-TS12).
+# usage error, crash) is write_action, ACTION "see deploy.log -- a tool choice
+# (tool exception) was not saved". Each warning is recorded under the calling
+# script's name (the slug is not a tool name). The tool itself is fine, so no
+# error (D-TS12).
 tool_exception_record() {
     AITLIB_TOOL_EXC_PUSHED=false; AITLIB_TOOL_EXC_RESULT=""
     local slug="$1" method="$2" path="$3" version="$4" reason="${5:-}" w msg
@@ -458,8 +482,7 @@ tool_exception_record() {
     if [ -n "$reason" ]; then args+=(--reason "$reason"); fi
     if ! _aitlib_profile_run "${args[@]}"; then
         AITLIB_TOOL_EXC_RESULT=failed
-        log_warn "tool exception for $slug not saved (resolver missing)"
-        _aitlib_action_once "see deploy.log -- a tool choice (tool exception) was not saved"
+        write_action "" "tool exception for $slug not saved (resolver missing)" "see deploy.log -- a tool choice (tool exception) was not saved"
         return 1
     fi
     AITLIB_TOOL_EXC_RESULT=$(_aitlib_profile_tag result)
@@ -475,25 +498,22 @@ tool_exception_record() {
                         log_detail "tool exceptions: $slug $AITLIB_TOOL_EXC_RESULT -- nothing written, nothing to push" ;;
                     *)
                         msg=$(_aitlib_profile_lines warn | perl -ne 'next if $done; if (/commit|push|git repository/) { print; $done = 1 }')
-                        log_warn "tool exception for $slug saved but not pushed (${msg:-see deploy.log})"
                         w=$(_aitlib_profile_tag profileFile)
                         if [ -n "$w" ]; then w=$(dirname "$(_aitlib_bash_path "$w")"); else w="your dotprofile"; fi
-                        _aitlib_action_once "run git push in $w" ;;
+                        write_action "" "tool exception for $slug saved but not pushed (${msg:-see deploy.log})" "run git push in $w" ;;
                 esac
             fi
             return 0 ;;
         3)
             AITLIB_TOOL_EXC_RESULT=refused
             msg=$(_aitlib_profile_lines error | perl -ne 'next if $done; if (/\S/) { print; $done = 1 }')
-            log_warn "tool exception for $slug not saved (${msg:-refused})$(_aitlib_exit_note 3)"
-            _aitlib_action_once "run aitools user init to remember tool choices"
+            write_action "" "tool exception for $slug not saved (${msg:-refused})$(_aitlib_exit_note 3)" "run aitools user init to remember tool choices"
             return 3 ;;
     esac
     # 2 (error), 4 (not a result of exception-set) and any other code: failed
     AITLIB_TOOL_EXC_RESULT=failed
     msg=$(_aitlib_profile_lines error | perl -ne 'next if $done; if (/\S/) { print; $done = 1 }')
-    log_warn "tool exception for $slug not saved (${msg:-resolver failed})$(_aitlib_exit_note "$AITLIB_PROFILE_RC")"
-    _aitlib_action_once "see deploy.log -- a tool choice (tool exception) was not saved"
+    write_action "" "tool exception for $slug not saved (${msg:-resolver failed})$(_aitlib_exit_note "$AITLIB_PROFILE_RC")" "see deploy.log -- a tool choice (tool exception) was not saved"
     return 1
 }
 
@@ -507,24 +527,39 @@ tool_exception_record() {
 # and errors.
 #   jsonl_record TS SCRIPT LEVEL MSG   append one deploy.jsonl record
 #   relay_child_log TEXT               relay captured child output (all lines)
-#   run_child_relayed [--summary-tool TOOL] LABEL CMD ARGS
+#   run_child_relayed [OPTIONS] LABEL CMD ARGS
 #                                      run CMD ARGS, relay each line as it comes
+# The rules are reference/logging.md 8.3 ("Children"):
+# - A child's warn and error lines are counted in AITLIB_CHILD_WARNINGS /
+#   AITLIB_CHILD_ERRORS only; a child's warnings are never added to the
+#   parent's WARNINGS (each script counts its own).
+# - The child records its own warnings and errors (recorded at the source).
+# - A failed child (non-zero exit, or its own error lines with exit 0) is one
+#   error of the parent (ERRORS +1). The relay records it (write_error: name
+#   = the summary tool, else the base name of the first argument ending in
+#   .sh / .ps1, else LABEL; WHAT "<label> failed (exit N)"; REASON
+#   error_reason over the child's last 20 stderr lines, else over its last
+#   stdout line) only when the child wrote no ERROR record while it ran;
+#   otherwise the error is logged and counted, not recorded again.
+# - A user abort (exit 2) is recorded once, by the innermost relay: only when
+#   the child wrote no WARN or ERROR record while it ran. With --abort-warn it
+#   is WARN|<name>|aborted by user and one parent warning (deploy-harness);
+#   without, ERROR|<name>|<label> failed (exit 2)|aborted by user and one
+#   parent error.
 # Results (set by relay_child_log and run_child_relayed, read after the call):
 #   AITLIB_CHILD_WARNINGS  the child's warn lines (the exit footer
 #                          "COMPLETED with N warning(s)" is relayed, not counted)
-#   AITLIB_CHILD_ERRORS    the child's error lines ("FAILED with ..." not counted)
+#   AITLIB_CHILD_ERRORS    the child's own error lines ("FAILED with ..." not
+#                          counted): lines whose [script] is the script of the
+#                          child's last structured line. A middle script that
+#                          relays a grandchild re-prints the grandchild's lines;
+#                          those name the grandchild and are not the middle
+#                          script's own, so a middle script that handled them
+#                          and exited 0 is not "failed (exit 0)". (A middle
+#                          script whose last structured line is a grandchild's
+#                          -- it logs nothing after the relay -- is judged by
+#                          the grandchild's lines.)
 #   AITLIB_CHILD_RC        run_child_relayed only: the child's exit code
-# Every counted warning also increments WARNINGS (it promotes the parent's OK
-# rows, as the child's own rows are). Errors are not added to ERRORS line by
-# line: run_child_relayed logs one log_error for a failed child.
-# Summary rows: the child writes its own. With --summary-tool TOOL, a failed
-# child (non-zero exit, or error lines with exit 0, or not run at all) that
-# wrote no ERROR row of its own -- it died before its write_summary (a set -e
-# abort, exit 127, a crash) -- gets one: "ERROR|TOOL|script failed (exit N)",
-# "aborted (exit 2)" (D-TS13), "logged errors (exit 0)", or "not run (...)".
-# A child that wrote an ERROR row (any tool) gets no second one -- also when it
-# crashed after writing it: the panel then shows the child's row, and the crash
-# is the relay's log_error in deploy.log.
 # Private caches (JSON-escaped): AITLIB_RUN_ID, AITLIB_JSONL_HOST, AITLIB_JSONL_OS.
 # ---------------------------------------------------------------------------
 
@@ -572,11 +607,15 @@ _aitlib_jsonl_init() {
 # per process. Logging must not break the run it records (logging.md section 5):
 # the first failed write is one log_warn (audit A-16: the run goes on, and the
 # warning says why its records are missing); later calls write nothing
-# (AITLIB_JSONL_FAILED=true, set before the warning so an installer whose log()
-# calls jsonl_record does not recurse). Returns 0.
+# (AITLIB_JSONL_FAILED=true, set before the warning so a log() that calls
+# jsonl_record (the jsonl option) does not recurse). Inside a relayed process
+# (AITLIB_RELAYED=1, exported by every relay) it writes nothing: the outermost
+# relay mirrors every structured line it prints, so each line is one record.
+# Returns 0.
 jsonl_record() {
     local f="${LOG_DIR:-$AITOOLS_LOG_DIR}/deploy.jsonl" ts sc lv msg
     if [ "${AITLIB_JSONL_FAILED:-false}" = "true" ]; then return 0; fi
+    if [ "${AITLIB_RELAYED:-}" = "1" ]; then return 0; fi
     _aitlib_jsonl_init
     _aitlib_json_esc ts "$1"; _aitlib_json_esc sc "$2"; _aitlib_json_esc lv "$3"; _aitlib_json_esc msg "$4"
     # 2>/dev/null: the shell's own "cannot open" message; the failure is reported by
@@ -589,63 +628,106 @@ jsonl_record() {
     return 0
 }
 
-# _aitlib_relay_line LINE -- print one child console line, mirror it to
-# deploy.jsonl when it is a structured log line, count its warn/error level
+# _aitlib_relay_reset QUIET MIRROR -- start relaying one child: zero the child
+# counts and the relay state (_AITLIB_RELAY_*: the options, the last line, the
+# script name of the last structured line, the script names of the error lines)
+_aitlib_relay_reset() {
+    AITLIB_CHILD_WARNINGS=0; AITLIB_CHILD_ERRORS=0
+    _AITLIB_RELAY_QUIET="${1:-false}"; _AITLIB_RELAY_MIRROR="${2:-true}"
+    _AITLIB_RELAY_LAST=""; _AITLIB_RELAY_LAST_SCRIPT=""; _AITLIB_RELAY_ERR_SCRIPTS=""
+}
+
+# _aitlib_relay_line LINE -- print one child console line (with --quiet only its
+# warn and error lines), mirror it to deploy.jsonl when it is a structured log
+# line (unless --no-mirror), count its warn/error level in the child counts
+# (never in the parent's WARNINGS / ERRORS), and keep it as the child's last
+# stdout line
 _aitlib_relay_line() {
-    local line="$1" clean esc=$'\033'
+    local line="$1" clean esc=$'\033' f_ts f_script f_level f_msg
     local re='^\[([^]]+)\] \[([^]]+)\] \[([a-z]+)\] (.*)$'
     if [ -z "$line" ]; then return 0; fi
-    printf '%s\n' "$line"
     clean="${line//$'\r'/}"
+    _AITLIB_RELAY_LAST="$clean"
     clean="${clean//"${esc}[31m"/}"
     clean="${clean//"${esc}[33m"/}"
     clean="${clean//"${esc}[0m"/}"
     if [[ "$clean" =~ $re ]]; then
-        jsonl_record "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}" "${BASH_REMATCH[3]}" "${BASH_REMATCH[4]}"
-        case "${BASH_REMATCH[4]}" in
+        f_ts="${BASH_REMATCH[1]}"; f_script="${BASH_REMATCH[2]}"; f_level="${BASH_REMATCH[3]}"; f_msg="${BASH_REMATCH[4]}"
+        if [ "${_AITLIB_RELAY_QUIET:-false}" != "true" ] || [ "$f_level" = "warn" ] || [ "$f_level" = "error" ]; then
+            printf '%s\n' "$line"
+        fi
+        if [ "${_AITLIB_RELAY_MIRROR:-true}" = "true" ]; then
+            jsonl_record "$f_ts" "$f_script" "$f_level" "$f_msg"
+        fi
+        _AITLIB_RELAY_LAST_SCRIPT="$f_script"
+        case "$f_msg" in
             "COMPLETED with "*|"FAILED with "*) return 0 ;;   # the exit footer restates the counts
         esac
-        case "${BASH_REMATCH[3]}" in
-            warn)  AITLIB_CHILD_WARNINGS=$((AITLIB_CHILD_WARNINGS + 1)); WARNINGS=$((WARNINGS + 1)) ;;
-            error) AITLIB_CHILD_ERRORS=$((AITLIB_CHILD_ERRORS + 1)) ;;
+        case "$f_level" in
+            warn)  AITLIB_CHILD_WARNINGS=$((AITLIB_CHILD_WARNINGS + 1)) ;;
+            error) _AITLIB_RELAY_ERR_SCRIPTS="${_AITLIB_RELAY_ERR_SCRIPTS}${f_script}"$'\n' ;;
         esac
+    elif [ "${_AITLIB_RELAY_QUIET:-false}" != "true" ]; then
+        printf '%s\n' "$line"
     fi
     return 0
 }
 
+# _aitlib_relay_finish -- set AITLIB_CHILD_ERRORS to the child's own error lines:
+# those whose [script] is the script of its last structured line (see the
+# section comment)
+_aitlib_relay_finish() {
+    local s n=0
+    while IFS= read -r s; do
+        if [ -n "$s" ] && [ "$s" = "$_AITLIB_RELAY_LAST_SCRIPT" ]; then n=$((n + 1)); fi
+    done <<< "$_AITLIB_RELAY_ERR_SCRIPTS"
+    AITLIB_CHILD_ERRORS=$n
+}
+
 # relay_child_log TEXT -- relay the captured console output of a child script,
 # line by line (see the section comment). Sets AITLIB_CHILD_WARNINGS and
-# AITLIB_CHILD_ERRORS. Returns 0.
+# AITLIB_CHILD_ERRORS. No failure decision, no record: the caller decides.
+# Returns 0.
 relay_child_log() {
     local line
-    AITLIB_CHILD_WARNINGS=0; AITLIB_CHILD_ERRORS=0
+    _aitlib_relay_reset false true
     while IFS= read -r line || [ -n "$line" ]; do
         _aitlib_relay_line "$line"
     done <<< "$1"
+    _aitlib_relay_finish
     return 0
 }
 
-# _aitlib_summary_errors VAR -- set VAR to the number of ERROR rows in the run
-# summary (AITOOLS_SUMMARY_FILE; 0 without one). An unreadable summary counts 0
-# and is a detail line. VAR must not be one of this function's locals
-# (_aitlib_se_*): printf -v would set the local, not the caller's variable.
-_aitlib_summary_errors() {
-    local _aitlib_se_n=0 _aitlib_se_l _aitlib_se_f="${AITOOLS_SUMMARY_FILE:-}"
+# _aitlib_summary_count VAR KIND -- set VAR to the number of KIND records (WARN,
+# ERROR, ...) in the run summary (AITOOLS_SUMMARY_FILE; 0 without one). An
+# unreadable summary counts 0 and is a detail line. VAR must not be one of this
+# function's locals (_aitlib_se_*): printf -v would set the local, not the
+# caller's variable.
+_aitlib_summary_count() {
+    local _aitlib_se_n=0 _aitlib_se_l _aitlib_se_f="${AITOOLS_SUMMARY_FILE:-}" _aitlib_se_k="$2|"
     if [ -n "$_aitlib_se_f" ] && [ -f "$_aitlib_se_f" ]; then
         if [ -r "$_aitlib_se_f" ]; then
             while IFS= read -r _aitlib_se_l || [ -n "$_aitlib_se_l" ]; do
-                case "$_aitlib_se_l" in "ERROR|"*) _aitlib_se_n=$((_aitlib_se_n + 1)) ;; esac
+                case "$_aitlib_se_l" in "$_aitlib_se_k"*) _aitlib_se_n=$((_aitlib_se_n + 1)) ;; esac
             done < "$_aitlib_se_f"
         else
-            log_detail "run summary unreadable ($_aitlib_se_f) -- its ERROR rows are not counted"
+            log_detail "run summary unreadable ($_aitlib_se_f) -- its $2 records are not counted"
         fi
     fi
     printf -v "$1" '%s' "$_aitlib_se_n"
 }
 
-# _aitlib_child_row TOOL BEFORE DETAIL -- for a failed child: write the row
-# "ERROR|TOOL|DETAIL" unless TOOL is "" or the child wrote an ERROR row of its own
-# (the run summary now holds more than BEFORE ERROR rows)
+# _aitlib_summary_errors VAR -- set VAR to the number of ERROR records in the run
+# summary (_aitlib_summary_count VAR ERROR; kept for scripts/aitools)
+_aitlib_summary_errors() {
+    _aitlib_summary_count "$1" ERROR
+}
+
+# _aitlib_child_row TOOL BEFORE DETAIL -- legacy, kept for scripts/aitools until
+# it relays its children through run_child_relayed (plan step G1): for a failed
+# child, write the legacy record "ERROR|TOOL|DETAIL" unless TOOL is "" or the
+# child wrote an ERROR record of its own (the run summary now holds more than
+# BEFORE ERROR records). The library's own relay does not use it.
 _aitlib_child_row() {
     local _aitlib_cr_now=0
     if [ -z "$1" ]; then return 0; fi
@@ -657,52 +739,142 @@ _aitlib_child_row() {
     write_summary ERROR "$1" "$3"
 }
 
-# run_child_relayed [--summary-tool TOOL] LABEL CMD [ARGS...] -- run a child
-# script (e.g. run_child_relayed --summary-tool "aitools config"
+# _aitlib_error_norecord TEXT -- the library-internal non-recording error path
+# (reference/logging.md 8.2): an error-level line, counted in ERRORS, no record.
+# Used only by the relay (a failed child whose error the child already recorded,
+# or an abort it recorded) and by _managed_abort.
+_aitlib_error_norecord() {
+    log "$1" "error"
+    ERRORS=$((ERRORS + 1))
+}
+
+# _aitlib_warn_norecord TEXT -- the same for a warning: the relay's
+# --abort-warn abort that the child already recorded (logged, counted, not
+# recorded again). Used only by the relay.
+_aitlib_warn_norecord() {
+    log "$1" "warn"
+    WARNINGS=$((WARNINGS + 1))
+}
+
+# _aitlib_relay_name TOOL LABEL [CMD ARGS...] -- the record name of a relayed
+# child (reference/logging.md 8.3 "Its name"): TOOL; else the base name, without
+# extension, of the first argument ending in .sh or .ps1; else LABEL (pure)
+_aitlib_relay_name() {
+    local tool="$1" label="$2" a b
+    shift 2
+    if [ -n "$tool" ]; then printf '%s' "$tool"; return 0; fi
+    for a in "$@"; do
+        case "$a" in
+            *.sh|*.ps1)
+                b="${a##*/}"; b="${b##*\\}"; b="${b%.*}"
+                if [ -n "$b" ]; then printf '%s' "$b"; return 0; fi ;;
+        esac
+    done
+    printf '%s' "$label"
+}
+
+# _aitlib_relay_exec RCF ERRF CMD [ARGS...] -- the relay's child process (run in a
+# process substitution, so in a subshell): CMD's stdout goes to this subshell's
+# stdout (the relay reads it), its stderr is teed to ERRF while it still reaches
+# the console, AITLIB_RELAYED=1 is exported to it (only the outermost relay
+# mirrors to deploy.jsonl), and its exit code is written to RCF once CMD and the
+# tee have both ended. stdin is the caller's. bash 3.2 safe: a pipeline, not a
+# second process substitution, so the tee has finished when RCF is written.
+_aitlib_relay_exec() {
+    local rcf="$1" errf="$2" rc=0
+    shift 2
+    # the subshell's own errexit / pipefail must not end it before RCF is written
+    set +e
+    export AITLIB_RELAYED=1
+    { "$@" 2>&1 1>&3 3>&- | tee "$errf" >&2 3>&-; rc=${PIPESTATUS[0]}; } 3>&1
+    printf '%s\n' "$rc" > "$rcf"
+}
+
+# run_child_relayed [--summary-tool TOOL] [--abort-warn] [--no-mirror] [--quiet]
+#                   LABEL CMD [ARGS...]
+# Run a child script (e.g. run_child_relayed --summary-tool "aitools config"
 # "Step 5: setup-user-config.sh" "${BASH:-bash}" "$writer" ...) and relay its
-# stdout line by line as it arrives (not captured until the end). A prompt the
-# child writes to /dev/tty can still overtake its last few lines when it follows
-# them with no work in between (review B n-1). Only complete lines are relayed: a
-# child whose prompt goes to stdout without a newline (e.g. pwsh [Console]::Write
-# under Git Bash) must not be relayed while it prompts. stdin and stderr are the
-# caller's. CMD runs in a
-# subshell: it must be a separate process (a script), not a function that
-# changes the caller's variables. The child writes its own summary rows; TOOL
-# names the row for a failed child that wrote none (see the section comment).
-# Sets AITLIB_CHILD_RC, AITLIB_CHILD_WARNINGS, AITLIB_CHILD_ERRORS. Returns 0 when
-# the child exited 0 with no error line; otherwise 1 after one log_error naming
-# LABEL (call it as: run_child_relayed ... || rc=$?). No CMD (e.g. an empty
-# array) is a failure, not a no-op. It returns when every process holding the
-# child's stdout has closed it (a background grandchild keeps it waiting).
+# stdout line by line as it arrives (not captured until the end). The rules are
+# the section comment's (reference/logging.md 8.3). Options, in any order before
+# LABEL:
+#   --summary-tool TOOL  the record name of a failed or aborted child
+#   --abort-warn         record a user abort (exit 2) as one warning,
+#                        WARN|<name>|aborted by user, counted as one parent
+#                        warning and no error (the runner's request for
+#                        deploy-harness); without it an abort is a failed child
+#   --no-mirror          do not mirror the child's structured lines to
+#                        deploy.jsonl (the child writes its own records)
+#   --quiet              print only the child's warn and error lines (every
+#                        line is still parsed, mirrored and counted)
+# The child's stderr is teed to a temp file while it still reaches the console
+# (its last 20 lines give a failed child's reason); a child's stderr is
+# therefore not a terminal (plan 5.5 limit 5). Prompts go to /dev/tty and are
+# unaffected. A prompt the child writes to /dev/tty can still overtake its last
+# few lines when it follows them with no work in between (review B n-1). Only
+# complete lines are relayed: a child whose prompt goes to stdout without a
+# newline (e.g. pwsh [Console]::Write under Git Bash) must not be relayed while
+# it prompts. stdin is the caller's. CMD runs in a subshell: it must be a
+# separate process (a script), not a function that changes the caller's
+# variables. Every relay exports AITLIB_RELAYED=1 to its child: inside a relayed
+# process the relays do not mirror and jsonl_record writes nothing, so the
+# outermost relay mirrors each structured line once.
+# Not run at all (no CMD, a temp file not created): one write_error <name>
+# "<label> not run" <cause>, return 1.
+# Sets AITLIB_CHILD_RC, AITLIB_CHILD_WARNINGS, AITLIB_CHILD_ERRORS. Returns 0
+# when the child exited 0 with no error line of its own; 1 otherwise (a failed
+# child, an abort -- also with --abort-warn: AITLIB_CHILD_RC=2 tells the runner
+# to stop -- or not run). Call it as: run_child_relayed ... || rc=$?
+# It returns when every process holding the child's stdout and stderr has
+# closed them (a background grandchild keeps it waiting).
 run_child_relayed() {
-    local tool="" label line rcf="" rc="" errs0=0 detail
+    local tool="" label line rcf="" errf="" rc="" name what reason tail_err="" err=""
+    local abort_warn=false quiet=false mirror=true w0=0 e0=0 w1=0 e1=0
     AITLIB_CHILD_RC=0; AITLIB_CHILD_WARNINGS=0; AITLIB_CHILD_ERRORS=0
-    if [ "${1:-}" = "--summary-tool" ]; then
-        if [ "$#" -lt 2 ]; then
-            AITLIB_CHILD_RC=1
-            log_error "run_child_relayed: --summary-tool needs a value"
-            return 1
-        fi
-        tool="$2"; shift 2
-    fi
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+            --summary-tool)
+                if [ "$#" -lt 2 ]; then
+                    AITLIB_CHILD_RC=1
+                    write_error "" "run_child_relayed not run" "--summary-tool needs a value (caller bug)"
+                    return 1
+                fi
+                tool="$2"; shift 2 ;;
+            --abort-warn) abort_warn=true; shift ;;
+            --no-mirror)  mirror=false; shift ;;
+            --quiet)      quiet=true; shift ;;
+            *) break ;;
+        esac
+    done
     label="${1:-child script}"
     if [ "$#" -gt 0 ]; then shift; fi
+    name=$(_aitlib_relay_name "$tool" "$label" "$@")
     if [ "$#" -eq 0 ]; then
         AITLIB_CHILD_RC=1
-        log_error "$label: not run (no command given)"
-        if [ -n "$tool" ]; then write_summary ERROR "$tool" "not run (no command)"; fi
+        write_error "$name" "$label not run" "no command given"
         return 1
     fi
-    if ! rcf="$(mktemp)"; then
+    if ! err=$(mktemp 2>&1); then
         AITLIB_CHILD_RC=1
-        log_error "$label: not run (mktemp failed)"
-        if [ -n "$tool" ]; then write_summary ERROR "$tool" "not run (mktemp failed)"; fi
+        write_error "$name" "$label not run" "mktemp failed: $err"
         return 1
     fi
-    _aitlib_summary_errors errs0
+    rcf="$err"
+    if ! err=$(mktemp 2>&1); then
+        _aitlib_rm_tmp "$rcf" "$label"
+        AITLIB_CHILD_RC=1
+        write_error "$name" "$label not run" "mktemp failed: $err"
+        return 1
+    fi
+    errf="$err"
+    # Inside a relayed process the relays do not mirror (only the outermost does)
+    if [ "${AITLIB_RELAYED:-}" = "1" ]; then mirror=false; fi
+    _aitlib_summary_count w0 WARN
+    _aitlib_summary_count e0 ERROR
+    _aitlib_relay_reset "$quiet" "$mirror"
     while IFS= read -r line || [ -n "$line" ]; do
         _aitlib_relay_line "$line"
-    done < <(_aitlib_rc=0; "$@" || _aitlib_rc=$?; printf '%s\n' "$_aitlib_rc" > "$rcf")
+    done < <(_aitlib_relay_exec "$rcf" "$errf" "$@")
+    _aitlib_relay_finish
     # a failed read leaves rc empty: the case below counts it as a failure
     rc="$(cat "$rcf")" || rc=""
     _aitlib_rm_tmp "$rcf" "$label"
@@ -710,25 +882,74 @@ run_child_relayed() {
         ''|*[!0-9]*) log_detail "$label: exit code not recorded -- counted as a failure"; rc=1 ;;
     esac
     AITLIB_CHILD_RC="$rc"
-    if [ "$rc" -ne 0 ]; then
-        if [ "$rc" -eq 2 ]; then detail="aborted (exit 2)"; else detail="script failed (exit $rc)"; fi
-        log_error "$label ${detail#script } -- see $(display_path "$LOG_FILE")"
-        _aitlib_child_row "$tool" "$errs0" "$detail"
+    if [ "$rc" -eq 0 ] && [ "$AITLIB_CHILD_ERRORS" -eq 0 ]; then
+        _aitlib_rm_tmp "$errf" "$label"
+        return 0
+    fi
+    # The child's last 20 stderr lines (stderr reached the console already)
+    if [ -s "$errf" ]; then
+        tail_err=$(tail -n 20 "$errf") || tail_err=""
+    fi
+    _aitlib_rm_tmp "$errf" "$label"
+    _aitlib_summary_count w1 WARN
+    _aitlib_summary_count e1 ERROR
+    if [ "$rc" -eq 2 ]; then
+        # A user abort (D-TS13): recorded once, by the innermost relay
+        log_detail "$label: exited 2 (user abort)"
+        if [ "$w1" -gt "$w0" ] || [ "$e1" -gt "$e0" ]; then
+            if $abort_warn; then
+                _aitlib_warn_norecord "$label aborted by user -- the child recorded it"
+            else
+                _aitlib_error_norecord "$label failed (exit 2): aborted by user -- the child recorded it"
+            fi
+        elif $abort_warn; then
+            write_warn "$name" "aborted by user"
+        else
+            write_error "$name" "$label failed (exit 2)" "aborted by user"
+        fi
         return 1
     fi
-    if [ "$AITLIB_CHILD_ERRORS" -gt 0 ]; then
-        log_error "$label logged $AITLIB_CHILD_ERRORS error(s) but exited 0 -- see $(display_path "$LOG_FILE")"
-        _aitlib_child_row "$tool" "$errs0" "logged errors (exit 0)"
-        return 1
+    what="$label failed (exit $rc)"
+    case "$tail_err" in
+        *[![:space:]]*) reason=$(error_reason "$tail_err" "$rc") ;;
+        *) reason=$(error_reason "$_AITLIB_RELAY_LAST" "$rc") ;;
+    esac
+    if [ "$e1" -gt "$e0" ]; then
+        _aitlib_error_norecord "$what: $reason -- the child recorded its error"
+    else
+        write_error "$name" "$what" "$reason"
     fi
-    return 0
+    return 1
 }
 
 # ---------------------------------------------------------------------------
 # Logging init
 # ---------------------------------------------------------------------------
 # Sets SCRIPT_NAME, LOG_DIR, LOG_FILE; resets ERRORS, WARNINGS; creates log dir.
+# The run summary file (AITOOLS_SUMMARY_FILE) is untouched (reference/logging.md
+# 8.6).
 # Usage: logging_init "setup-foo"
+#
+# Library options (reference/logging.md sections 3, 5, 7, 8.2). Every option is
+# off when the library is sourced (a parent's value never reaches a child) and
+# is set by the script once, after sourcing the library: after logging_init, or
+# before it when logging_init's own environment warning must already follow it
+# (the resolver's stderr console). No script overrides a logging function.
+#   AITLIB_OPT_JSONL=true          log / log_ok / log_warn / log_error (and
+#                                  write_warn / write_action / write_error) also
+#                                  write one deploy.jsonl record per line
+#                                  (jsonl_record; the installers). Inside a
+#                                  relayed process it writes nothing: the
+#                                  outermost relay mirrors the line.
+#   AITLIB_OPT_CONSOLE_STDERR=true console lines go to stderr, so stdout carries
+#                                  only data; and recording is off: the helpers
+#                                  log and count but write no run summary record
+#                                  (a library-style tool, logging.md section 7:
+#                                  aitools-profile)
+#   AITLIB_OPT_COLOR_AUTO=true     warn and error console lines are coloured only
+#                                  when the console stream in use (stdout, or
+#                                  stderr with the option above) is a terminal
+#                                  (build-deploy)
 # ---------------------------------------------------------------------------
 # Log rotation (reference/logging.md §4): size-based, 5 MB x 5 backups.
 # Fail-safe -- a broken rotate must never break the operation it records (§5).
@@ -796,23 +1017,202 @@ _aitlib_log_append() {
     { printf '%s\n' "$1" >> "$2"; } 2>/dev/null || true
 }
 
-log() {
-    local level="${2:-info}"
-    local ts; ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-    local line="[$ts] [$SCRIPT_NAME] [$level] $1"
-    _aitlib_log_append "$line" "$LOG_FILE"
-    case "$level" in
-        error) printf '\033[31m%s\033[0m\n' "$line" ;;
-        warn)  printf '\033[33m%s\033[0m\n' "$line" ;;
-        *)     printf '%s\n' "$line" ;;
+# _aitlib_console LEVEL LINE -- print one console line: stdout, or stderr with
+# AITLIB_OPT_CONSOLE_STDERR; warn yellow, error red, unless AITLIB_OPT_COLOR_AUTO
+# is set and that stream is not a terminal
+_aitlib_console() {
+    local fd=1 colour=""
+    if [ "$AITLIB_OPT_CONSOLE_STDERR" = "true" ]; then fd=2; fi
+    case "$1" in
+        error) colour="31" ;;
+        warn)  colour="33" ;;
     esac
+    if [ -n "$colour" ] && [ "$AITLIB_OPT_COLOR_AUTO" = "true" ] && [ ! -t "$fd" ]; then colour=""; fi
+    if [ "$fd" = "2" ]; then
+        if [ -n "$colour" ]; then printf '\033[%sm%s\033[0m\n' "$colour" "$2" >&2; else printf '%s\n' "$2" >&2; fi
+    else
+        if [ -n "$colour" ]; then printf '\033[%sm%s\033[0m\n' "$colour" "$2"; else printf '%s\n' "$2"; fi
+    fi
+}
+
+log() {
+    local level="${2:-info}" ts line
+    ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    line="[$ts] [${SCRIPT_NAME:-unknown}] [$level] $1"
+    _aitlib_log_append "$line" "${LOG_FILE:-}"
+    _aitlib_console "$level" "$line"
+    if [ "$AITLIB_OPT_JSONL" = "true" ]; then jsonl_record "$ts" "${SCRIPT_NAME:-unknown}" "$level" "$1"; fi
 }
 log_ok()    { log "$1" "ok"; }
-log_error() { log "$1" "error"; ERRORS=$((ERRORS + 1)); }
-log_warn()  { log "$1" "warn"; WARNINGS=$((WARNINGS + 1)); }
 log_detail() {
     local ts; ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-    _aitlib_log_append "[$ts] [$SCRIPT_NAME] [detail] $1" "$LOG_FILE"
+    _aitlib_log_append "[$ts] [${SCRIPT_NAME:-unknown}] [detail] $1" "${LOG_FILE:-}"
+}
+
+# ---------------------------------------------------------------------------
+# Warnings, errors and run summary records (reference/logging.md 8.2-8.4)
+#   log_warn TEXT                   [warn] TEXT; WARNINGS +1; WARN|<script>|TEXT
+#                                   (only with AITLIB_RECORD_LOG_CALLS=true)
+#   log_error TEXT                  [error] TEXT; ERRORS +1; ERROR|<script>|TEXT|
+#                                   (only with AITLIB_RECORD_LOG_CALLS=true). Only
+#                                   for an error whose TEXT states its cause
+#   write_warn TOOL TEXT            [warn] TEXT; WARNINGS +1; WARN|TOOL|TEXT
+#   write_action TOOL TEXT ACTION   write_warn TOOL TEXT, then ACTION||ACTION
+#                                   (an identical ACTION already in the file is
+#                                   a detail line, not written again)
+#   write_error TOOL WHAT REASON    [error] WHAT: REASON (WHAT alone when REASON
+#                                   is empty); ERRORS +1; ERROR|TOOL|WHAT|REASON
+#   error_reason OUTPUT EXIT_CODE   prints one REASON (8.3); OUTPUT -> detail lines
+#   write_summary OK|DETAIL|ACTION TOOL TEXT   the record as written
+# An empty TOOL is the logging script's name (SCRIPT_NAME). Every record goes
+# through _aitlib_record: CR and LF become a space in every field, "|" becomes
+# "/" in every field except an ACTION's instruction; nothing is written outside
+# a run (no AITOOLS_SUMMARY_FILE) or with AITLIB_OPT_CONSOLE_STDERR; a record
+# that cannot be written is ignored (8.3 Fail-safe).
+# ---------------------------------------------------------------------------
+
+# _aitlib_record KIND FIELD... -- append one record to the run summary file.
+# KIND ACTION takes "" and the instruction: ACTION||<instruction>.
+_aitlib_record() {
+    local f="${AITOOLS_SUMMARY_FILE:-}" kind="${1:-}" rec v
+    if [ -z "$f" ] || [ "$AITLIB_OPT_CONSOLE_STDERR" = "true" ]; then return 0; fi
+    shift
+    if [ "$kind" = "ACTION" ]; then
+        v="${2:-}"
+        v="${v//$'\r'/ }"; v="${v//$'\n'/ }"
+        rec="ACTION||$v"
+    else
+        rec="$kind"
+        for v in "$@"; do
+            v="${v//$'\r'/ }"; v="${v//$'\n'/ }"; v="${v//|//}"
+            rec="$rec|$v"
+        done
+    fi
+    # Fail-safe (reference/logging.md 8.3): the shell's own message is dropped and
+    # the failure ignored, as a failed log line is (section 5)
+    { printf '%s\n' "$rec" >> "$f"; } 2>/dev/null || true
+}
+
+# _aitlib_action_record TEXT -- ACTION||TEXT unless the run summary already holds
+# that exact record (CR and LF compared as written: a space)
+_aitlib_action_record() {
+    local f="${AITOOLS_SUMMARY_FILE:-}" t="${1:-}" rc=0
+    t="${t//$'\r'/ }"; t="${t//$'\n'/ }"
+    if [ -n "$f" ] && [ -f "$f" ]; then
+        # 2>/dev/null: an unreadable file is grep exit 2, checked below
+        grep -qxF -- "ACTION||$t" "$f" 2>/dev/null || rc=$?
+        if [ "$rc" -eq 0 ]; then
+            log_detail "ACTION already in the run summary: $t"
+            return 0
+        fi
+        if [ "$rc" -gt 1 ]; then log_detail "run summary unreadable ($f) -- ACTION written without the duplicate check"; fi
+    fi
+    _aitlib_record ACTION "" "$t"
+}
+
+log_warn() {
+    log "$1" "warn"
+    WARNINGS=$((WARNINGS + 1))
+    if [ "$AITLIB_RECORD_LOG_CALLS" = "true" ]; then _aitlib_record WARN "${SCRIPT_NAME:-unknown}" "$1"; fi
+}
+log_error() {
+    log "$1" "error"
+    ERRORS=$((ERRORS + 1))
+    if [ "$AITLIB_RECORD_LOG_CALLS" = "true" ]; then _aitlib_record ERROR "${SCRIPT_NAME:-unknown}" "$1" ""; fi
+}
+write_warn() {
+    local name="${1:-}"
+    if [ -z "$name" ]; then name="${SCRIPT_NAME:-unknown}"; fi
+    log "${2:-}" "warn"
+    WARNINGS=$((WARNINGS + 1))
+    _aitlib_record WARN "$name" "${2:-}"
+}
+write_action() {
+    write_warn "${1:-}" "${2:-}"
+    _aitlib_action_record "${3:-}"
+}
+write_error() {
+    local name="${1:-}" what="${2:-}" reason="${3:-}"
+    if [ -z "$name" ]; then name="${SCRIPT_NAME:-unknown}"; fi
+    if [ -n "$reason" ]; then log "$what: $reason" "error"; else log "$what" "error"; fi
+    ERRORS=$((ERRORS + 1))
+    _aitlib_record ERROR "$name" "$what" "$reason"
+}
+
+# Build-failure signatures (reference/logging.md 8.3 rule 1; script-standards
+# "Build prerequisite validation"): one table, the same in aitools-lib.ps1
+# ($script:BuildFailureSignatures: same names, patterns and remedies, same
+# order; the first match wins). Patterns are case-insensitive regular
+# expressions valid in Perl and .NET. Entries are NAME<TAB>PATTERN<TAB>REMEDY.
+# Add new entries here and in aitools-lib.ps1 when new build failures are
+# discovered (remedies from official tool documentation: tool-lifecycle.md).
+AITLIB_BUILD_SIGNATURES="NASM	NASM command not found	brew install nasm / apt-get install nasm / winget install NASM.NASM
+Linker	linker.*not found|link\\.exe.*not found	Install Xcode CLI tools (macOS), build-essential (Linux) or MSVC Build Tools with C++ workload (Windows)
+CMake	cmake.*not found|Could not find cmake	brew install cmake / uv tool install cmake (see cmake.org/download)
+pkg-config	pkg-config.*not found	brew install pkg-config / apt-get install pkg-config
+Python headers	Python\\.h.*not found|python[0-9.]*-dev(el)?\\b	Install python3-dev or python3-devel (Python development headers)
+C compiler	C compiler.*not found|\\bcc\\b.*not found	Install a C compiler (MSVC/gcc/clang)
+OpenSSL	openssl.*not found|OPENSSL_DIR	brew install openssl / apt-get install libssl-dev, or set OPENSSL_DIR"
+
+# error_reason OUTPUT EXIT_CODE -- print the REASON for a failed external command
+# (reference/logging.md 8.3 "Every error has a reason"), for write_error:
+#   write_error "pandoc" "brew install failed" "$(error_reason "$out" "$rc")"
+# The first that applies:
+#   1. a known build-failure signature (AITLIB_BUILD_SIGNATURES), as
+#      "<NAME>: <REMEDY>";
+#   2. (PowerShell only: the exception message)
+#   3. the first line matching an error marker: a word that ends in "error:",
+#      any case (letters, digits, - and _), at the start of the line or after a
+#      space; "fatal:", any case, at the start or after a space; "E: " at the
+#      start; "syntax error", any case, anywhere;
+#   4. the last non-empty line;
+#   5. "no output (exit <EXIT_CODE>)".
+# Before matching, CR, ANSI CSI sequences and a leading "[<time>] [<script>]
+# [<level>] " are removed from each line; whitespace-only lines are empty; the
+# reason printed is that line with its leading and trailing blanks trimmed.
+# OUTPUT is logged to deploy.log as detail lines ("output: <line>", CR and ANSI
+# removed, empty lines skipped), so a caller does not log it as well (8.2). One
+# perl process; no grep -P, no early-exit pipeline (bash 3.2 safe). Returns 0.
+error_reason() {
+    local ts
+    ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    printf '%s' "${1:-}" | AITLIB_ER_CODE="${2:-}" AITLIB_ER_SIGS="$AITLIB_BUILD_SIGNATURES" \
+        AITLIB_ER_LOG="${LOG_FILE:-}" AITLIB_ER_PREFIX="[$ts] [${SCRIPT_NAME:-unknown}] [detail] output: " perl -e '
+        my $in = do { local $/; <STDIN> };
+        $in = "" unless defined $in;
+        my (@raw, @clean);
+        for my $l (split /\n/, $in, -1) {
+            $l =~ s/\r//g;
+            $l =~ s/\e\[[\x30-\x3f]*[\x20-\x2f]*[\x40-\x7e]//g;
+            push @raw, $l;
+            (my $c = $l) =~ s/^\[[^\]]*\] \[[^\]]*\] \[[a-z]+\] //;
+            push @clean, $c;
+        }
+        # The full output, as detail lines (fail-safe: a log that cannot be
+        # opened is skipped, as the library skips a failed log write)
+        if ($ENV{AITLIB_ER_LOG} ne "" && open(my $fh, ">>", $ENV{AITLIB_ER_LOG})) {
+            print $fh $ENV{AITLIB_ER_PREFIX}, $_, "\n" for grep { /\S/ } @raw;
+            close $fh;
+        }
+        sub trim { my $s = shift; $s =~ s/^\s+//; $s =~ s/\s+\z//; return $s }
+        my $out;
+        for my $sig (split /\n/, $ENV{AITLIB_ER_SIGS}) {
+            my ($name, $pat, $remedy) = split /\t/, $sig, 3;
+            next unless defined $remedy;
+            if ($in =~ /$pat/i) { $out = "$name: $remedy"; last }
+        }
+        if (!defined $out) {
+            for my $c (@clean) {
+                if ($c =~ /(?:^| )[A-Za-z0-9_-]*error:/i || $c =~ /(?:^| )fatal:/i
+                    || $c =~ /^E: / || $c =~ /syntax error/i) { $out = trim($c); last }
+            }
+        }
+        if (!defined $out) {
+            for my $c (reverse @clean) { if ($c =~ /\S/) { $out = trim($c); last } }
+        }
+        $out = "no output (exit $ENV{AITLIB_ER_CODE})" unless defined $out;
+        print $out, "\n";
+    '
 }
 
 # ---------------------------------------------------------------------------
@@ -972,17 +1372,56 @@ invoke_ai() {
 }
 
 # ---------------------------------------------------------------------------
-# Summary writer (3-arg: category, tool, detail)
+# Summary writer: write_summary OK|DETAIL|ACTION TOOL TEXT (reference/logging.md
+# 8.4). The record is written as given; the category is never changed (a
+# warning or error never recolours a tool's OK record: 8.3). ACTION writes
+# ACTION||TEXT (TOOL ignored), not de-duplicated (write_action and
+# _aitlib_action_once de-duplicate). Legacy, until plan step I5:
+# write_summary WARN|ERROR TOOL TEXT writes the 3-field WARN|TOOL|TEXT /
+# ERROR|TOOL|TEXT (the reader gives a 3-field ERROR an empty reason) -- a
+# migrated script uses write_warn / write_action / write_error instead.
 # ---------------------------------------------------------------------------
 write_summary() {
-    if [ -n "${AITOOLS_SUMMARY_FILE:-}" ]; then
-        local cat="$1"
-        # Auto-promote OK to WARN when warnings have been logged
-        if [ "$cat" = "OK" ] && [ "${WARNINGS:-0}" -gt 0 ]; then
-            cat="WARN"
-        fi
-        printf '%s|%s|%s\n' "$cat" "$2" "$3" >> "$AITOOLS_SUMMARY_FILE"
+    local cat="${1:-}"
+    if [ "$cat" = "ACTION" ]; then
+        _aitlib_record ACTION "" "${3:-}"
+    else
+        _aitlib_record "$cat" "${2:-}" "${3:-}"
     fi
+}
+
+# ---------------------------------------------------------------------------
+# Run summary file lifecycle (reference/logging.md 8.4, 8.5), for the entry
+# points:
+#   summary_begin  AITOOLS_SUMMARY_FILE unset: create an empty temp file, export
+#                  its path, AITLIB_SUMMARY_OWNER=true (this process draws the
+#                  panel). Already set: nothing (not the owner; a parent draws it).
+#                  A temp file that cannot be created is one log_warn, and the
+#                  run goes on without a panel.
+#   summary_end    when this process owns the file: show_summary (draw, keep
+#                  last-summary.txt with AITOOLS_PRESERVE_SUMMARY=1, delete);
+#                  else nothing. AITLIB_SUMMARY_OWNER becomes false and
+#                  AITOOLS_SUMMARY_FILE is unset (nothing is recorded after the
+#                  panel: a write would create the deleted file again).
+# Parity: Start-AitSummary / Complete-AitSummary in aitools-lib.ps1.
+# ---------------------------------------------------------------------------
+summary_begin() {
+    local f=""
+    AITLIB_SUMMARY_OWNER=false
+    if [ -n "${AITOOLS_SUMMARY_FILE:-}" ]; then return 0; fi
+    if ! f=$(mktemp "${TMPDIR:-/tmp}/aitools-summary.XXXXXX" 2>&1); then
+        log_warn "run summary: cannot create a temp file ($f) -- no end-of-run panel this run"
+        return 0
+    fi
+    AITOOLS_SUMMARY_FILE="$f"
+    export AITOOLS_SUMMARY_FILE
+    AITLIB_SUMMARY_OWNER=true
+}
+summary_end() {
+    if [ "${AITLIB_SUMMARY_OWNER:-false}" != "true" ]; then return 0; fi
+    AITLIB_SUMMARY_OWNER=false
+    show_summary
+    unset AITOOLS_SUMMARY_FILE
 }
 
 # ---------------------------------------------------------------------------
@@ -1164,9 +1603,11 @@ backup_dir() {
 
 # [x]abort: log, then exit 2 (a bare exit 2 means user abort; commander
 # decision 2026-10-21, D-TS13 reversed: no marker file). One helper for every
-# review prompt. Parity: Invoke-ManagedAbort in aitools-lib.ps1.
+# review prompt. The line is logged at error level and counted through the
+# non-recording path (reference/logging.md 8.2): the relay that ran this script
+# records the abort once (8.3 "A user abort"). Parity: Invoke-ManagedAbort.
 _managed_abort() {
-    log_error "Aborted by user"
+    _aitlib_error_norecord "Aborted by user"
     exit 2
 }
 
@@ -4287,91 +4728,155 @@ ensure_gopath_bin_on_path() {
 }
 
 # ---------------------------------------------------------------------------
-# Summary panel renderer
+# Summary panel renderer (reference/logging.md 8.4 reader rules, 8.5 panel)
 # ---------------------------------------------------------------------------
-# Reads AITOOLS_SUMMARY_FILE, displays colored panel, cleans up.
-# Silent no-op if file unset, missing, or empty.
+# show_summary [--keep] [FILE] -- draw the end-of-run panel from FILE (default
+# AITOOLS_SUMMARY_FILE): green (one line per tool with an OK record and no WARN
+# or ERROR record under its name; its first OK record's status), yellow (every
+# WARN record, file order), red (every ERROR record), the ACTION block; a
+# U+2500 rule above and below. Identical yellow / red records collapse into the
+# first, followed by "(xN)"; at most 20 yellow and 20 red lines, then
+# "+N more in deploy.log"; DETAIL lines follow their tool's first panel line in
+# its colour (not shown when that line is beyond the cap or does not exist);
+# identical ACTION lines are shown once. Yellow text is cut at 70 code points,
+# red what/reason by the 8.5 algorithm; the name column is padded to 16 code
+# points, never cut. Lengths count code points in every locale (perl -CSD).
+# A record of an unknown kind, or one other than ACTION with an empty name, is
+# skipped and logged at detail, quoted verbatim. Nothing is drawn when FILE is
+# unset, missing or empty.
+# Without --keep (the entry points' end of run, summary_end) it then keeps a
+# copy as last-summary.txt in the log directory when AITOOLS_PRESERVE_SUMMARY=1
+# and deletes FILE. With --keep FILE is left as it is.
+# Parity: Show-Summary in aitools-lib.ps1 (rule "-" x 60; colours by name).
 show_summary() {
-    local sfile="${AITOOLS_SUMMARY_FILE:-}"
+    local keep=false sfile ts
+    if [ "${1:-}" = "--keep" ]; then keep=true; shift; fi
+    sfile="${1:-${AITOOLS_SUMMARY_FILE:-}}"
     [ -n "$sfile" ] || return 0
     [ -f "$sfile" ] || return 0
-    [ -s "$sfile" ] || { rm -f "$sfile"; return 0; }
-
-    # Dedup by tool name: highest severity wins (ERROR > WARN > OK).
-    # ACTIONs (empty tool name) are never deduped. DETAIL lines collected separately.
-    # Output is pre-sorted: OK+details, WARN+details, ERROR+details, ACTIONs.
-    local deduped
-    deduped=$(perl -F'\|' -lane '
-        BEGIN { %rank = (OK => 1, WARN => 2, ERROR => 3); }
-        $cat = $F[0]; $tool = $F[1]; $det = join("|", @F[2..$#F]);
-        if ($cat eq "DETAIL") {
-            push @{$details{$tool}}, $det; next;
-        }
-        if ($cat eq "ACTION" || $tool eq "") {
-            push @actions, $_; next;
-        }
-        $r = $rank{$cat} // 0;
-        if (!exists $best{$tool}) {
-            push @order, $tool;
-            $best{$tool} = $cat; $detail{$tool} = $det;
-        } elsif ($r > ($rank{$best{$tool}} // 0)) {
-            $best{$tool} = $cat; $detail{$tool} = $det;
-        }
-        END {
-            my (@ok, @warn, @err);
-            for my $t (@order) {
-                my @g = ("$best{$t}|$t|$detail{$t}",
-                         map { "DETAIL|$t|$_" } @{$details{$t} // []});
-                if    ($best{$t} eq "OK")    { push @ok,   @g }
-                elsif ($best{$t} eq "WARN")  { push @warn, @g }
-                elsif ($best{$t} eq "ERROR") { push @err,  @g }
+    if [ -s "$sfile" ]; then
+        ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        if ! AITLIB_SS_LOG="${LOG_FILE:-}" AITLIB_SS_PREFIX="[$ts] [${SCRIPT_NAME:-unknown}] [detail] run summary: skipped record: " \
+            perl -CSD -e '
+            use strict; use warnings;
+            my $file = shift;
+            open(my $in, "<", $file) or die "cannot read $file: $!\n";
+            my (@ok_order, %ok_status, %bad, @warn, @err, %det, @actions, %act_seen, @skipped);
+            while (my $line = <$in>) {
+                $line =~ s/\r?\n\z//;
+                next if $line eq "";
+                my ($kind) = $line =~ /\A([^|]*)/;
+                if ($kind eq "ACTION") {
+                    my ($instr) = $line =~ /\A[^|]*\|[^|]*\|(.*)\z/s;
+                    if (!defined $instr || $instr eq "") { push @skipped, $line; next }
+                    push @actions, $instr unless $act_seen{$instr}++;
+                    next;
+                }
+                my @f = split /\|/, $line, -1;
+                shift @f;
+                my $nf = $kind eq "ERROR" ? 3 : 2;
+                push @f, "" while @f < $nf;
+                if (@f > $nf) { my @rest = splice(@f, $nf - 1); push @f, join("/", @rest) }
+                if ($kind !~ /\A(?:OK|DETAIL|WARN|ERROR)\z/ || $f[0] eq "") { push @skipped, $line; next }
+                my $name = $f[0];
+                if ($kind eq "OK") {
+                    next if exists $ok_status{$name};
+                    $ok_status{$name} = $f[1];
+                    push @ok_order, $name;
+                } elsif ($kind eq "DETAIL") {
+                    push @{ $det{$name} }, $f[1];
+                } elsif ($kind eq "WARN") {
+                    $bad{$name} = 1;
+                    push @warn, [$name, $f[1]];
+                } else {
+                    $bad{$name} = 1;
+                    push @err, [$name, $f[1], $f[2]];
+                }
             }
-            print for @ok, @warn, @err, @actions;
-        }
-    ' "$sfile")
-
-    # Single-pass display: Perl output is pre-sorted by severity.
-    # DETAIL lines inherit the color of their preceding parent entry.
-    echo ""
-    echo "────────────────────────────────────────────────────────"
-    local last_color="" first_action=true
-    while IFS='|' read -r cat tool detail; do
-        case "$cat" in
-            OK)
-                last_color='\033[32m'
-                printf '\033[32m  [ok]  %-16s %s\033[0m\n' "$tool" "$detail"
-                ;;
-            WARN)
-                last_color='\033[33m'
-                printf '\033[33m  [!]   %-16s %s\033[0m\n' "$tool" "$detail"
-                ;;
-            ERROR)
-                last_color='\033[31m'
-                printf '\033[31m  [ERR] %-16s %s\033[0m\n' "$tool" "$detail"
-                ;;
-            DETAIL)
-                printf '%b                          %s\033[0m\n' "$last_color" "$detail"
-                ;;
-            ACTION)
-                if [ "$first_action" = true ]; then
-                    echo ""
-                    printf '\033[1;35m  ACTION REQUIRED -- run before tools are ready:\033[0m\n'
-                    first_action=false
-                fi
-                printf '\033[1;35m  >>  %s\033[0m\n' "$detail"
-                ;;
-        esac
-    done <<< "$deduped"
-    echo "────────────────────────────────────────────────────────"
-
-    # Preserve summary for log compliance checks
-    if [ "${AITOOLS_PRESERVE_SUMMARY:-}" = "1" ]; then
-        # cp may fail if log dir was cleaned up; non-blocking (summary already displayed)
-        if ! cp "$sfile" "$LOG_DIR/last-summary.txt" 2>/dev/null; then
-            printf 'warning: could not preserve summary file\n' >&2
+            close $in;
+            if (@skipped && $ENV{AITLIB_SS_LOG} ne "" && open(my $lf, ">>", $ENV{AITLIB_SS_LOG})) {
+                print $lf $ENV{AITLIB_SS_PREFIX}, $_, "\n" for @skipped;
+                close $lf;
+            }
+            sub cut { my ($s, $n) = @_; return length($s) <= $n ? $s : substr($s, 0, $n - 3) . "..." }
+            sub pad { my ($s, $n) = @_; return length($s) >= $n ? $s : $s . (" " x ($n - length($s))) }
+            sub collapse {
+                my ($list, $keyf) = @_;
+                my (@out, %at);
+                for my $r (@$list) {
+                    my $k = $keyf->($r);
+                    if (exists $at{$k}) { $out[$at{$k}][1]++ }
+                    else { $at{$k} = scalar @out; push @out, [$r, 1] }
+                }
+                return @out;
+            }
+            my @yl = collapse(\@warn, sub { join("\0", @{ $_[0] }) });
+            my @rl = collapse(\@err,  sub { join("\0", @{ $_[0] }) });
+            # The first panel line of a tool: its green line, else its first
+            # yellow, else its first red line (index into the collapsed list)
+            my (%first_y, %first_r);
+            for my $i (0 .. $#yl) { my $n = $yl[$i][0][0]; $first_y{$n} = $i unless exists $first_y{$n} }
+            for my $i (0 .. $#rl) { my $n = $rl[$i][0][0]; $first_r{$n} = $i unless exists $first_r{$n} }
+            my %c = (green => "\e[32m", yellow => "\e[33m", red => "\e[31m", magenta => "\e[1;35m");
+            my $rst = "\e[0m";
+            my $cap = 20;
+            my @out = ("", "\x{2500}" x 56);
+            my $details = sub {
+                my ($name, $col) = @_;
+                push @out, $c{$col} . (" " x 26) . $_ . $rst for @{ $det{$name} || [] };
+            };
+            for my $n (@ok_order) {
+                next if $bad{$n};
+                push @out, $c{green} . "  [ok]  " . pad($n, 16) . " " . $ok_status{$n} . $rst;
+                $details->($n, "green");
+            }
+            for my $i (0 .. $#yl) {
+                last if $i >= $cap;
+                my ($r, $cnt) = @{ $yl[$i] };
+                my $t = cut($r->[1], 70) . ($cnt > 1 ? " (x$cnt)" : "");
+                push @out, $c{yellow} . "  [!]   " . pad($r->[0], 16) . " " . $t . $rst;
+                $details->($r->[0], "yellow") if $first_y{$r->[0]} == $i;
+            }
+            push @out, $c{yellow} . (" " x 8) . "+" . (@yl - $cap) . " more in deploy.log" . $rst if @yl > $cap;
+            for my $i (0 .. $#rl) {
+                last if $i >= $cap;
+                my ($r, $cnt) = @{ $rl[$i] };
+                my ($w, $why) = ($r->[1], $r->[2]);
+                my $body;
+                if ($why eq "") {
+                    $body = cut($w, 70);
+                } elsif (length($w) + 2 + length($why) <= 70) {
+                    $body = "$w: $why";
+                } else {
+                    my $max = 70 - 2 - length($why);
+                    $max = 20 if $max < 20;
+                    my $w2 = cut($w, $max);
+                    $body = $w2 . ": " . cut($why, 70 - 2 - length($w2));
+                }
+                $body .= " (x$cnt)" if $cnt > 1;
+                push @out, $c{red} . "  [ERR] " . pad($r->[0], 16) . " " . $body . $rst;
+                $details->($r->[0], "red") if !exists $first_y{$r->[0]} && $first_r{$r->[0]} == $i;
+            }
+            push @out, $c{red} . (" " x 8) . "+" . (@rl - $cap) . " more in deploy.log" . $rst if @rl > $cap;
+            if (@actions) {
+                push @out, "", $c{magenta} . "  ACTION REQUIRED -- run before tools are ready:" . $rst;
+                push @out, $c{magenta} . "  >>  " . $_ . $rst for @actions;
+            }
+            push @out, "\x{2500}" x 56;
+            print "$_\n" for @out;
+        ' "$sfile"; then
+            log_detail "run summary: the panel could not be drawn from $sfile"
         fi
     fi
-    # Cleanup summary file (already displayed; rm -f ignores nonexistent files)
+    if $keep; then return 0; fi
+    # Preserve summary for log compliance checks
+    if [ "${AITOOLS_PRESERVE_SUMMARY:-}" = "1" ]; then
+        # 2>/dev/null: the failure is the detail line below (the panel is already drawn)
+        if ! cp "$sfile" "${LOG_DIR:-$AITOOLS_LOG_DIR}/last-summary.txt" 2>/dev/null; then
+            log_detail "run summary: could not keep a copy as last-summary.txt in ${LOG_DIR:-$AITOOLS_LOG_DIR}"
+        fi
+    fi
+    # The panel is drawn: the file is removed (rm -f ignores a missing file)
     rm -f "$sfile"
 }
 
@@ -4484,31 +4989,23 @@ check_build_prereqs() {
 # Build failure diagnosis
 # ---------------------------------------------------------------------------
 
-# Scan build output for known failure signatures.
+# Scan build output for known failure signatures (AITLIB_BUILD_SIGNATURES, the
+# table error_reason uses; first match wins, case-insensitive).
 # Usage: diagnose_build_failure "$output"
-#   Prints "NAME|REMEDY" if a known signature is found.
-#   Returns 0 if found, 1 if no match.
+#   Prints "NAME|REMEDY" if a known signature is found (error_reason gives the
+#   same match as "<NAME>: <REMEDY>").
+#   Returns 0 if found, 1 if no match. Parity: Diagnose-BuildFailure.
 diagnose_build_failure() {
-    local output="$1"
-
-    # Table of known failure patterns -> remediation
-    # Add new entries here when new build failures are discovered.
-    local -a patterns=(
-        "NASM command not found|NASM|brew install nasm / apt-get install nasm"
-        "linker.*not found|Linker|Install build-essential (Linux) or Xcode CLI tools (macOS)"
-        "cmake.*not found|CMake|brew install cmake / uv tool install cmake (see cmake.org/download)"
-        "pkg-config.*not found|pkg-config|brew install pkg-config / apt-get install pkg-config"
-        "Python\.h.*not found|Python headers|Install python3-dev or python3-devel"
-        "openssl.*not found|OpenSSL|brew install openssl / apt-get install libssl-dev"
-    )
-
-    for entry in "${patterns[@]}"; do
-        local pattern="${entry%%|*}"
-        local rest="${entry#*|}"
-        if printf '%s\n' "$output" | grep -iE "$pattern" >/dev/null; then
-            echo "$rest"
-            return 0
-        fi
-    done
-    return 1
+    printf '%s' "${1:-}" | AITLIB_ER_SIGS="$AITLIB_BUILD_SIGNATURES" perl -e '
+        my $in = do { local $/; <STDIN> };
+        $in = "" unless defined $in;
+        my $hit;
+        for my $sig (split /\n/, $ENV{AITLIB_ER_SIGS}) {
+            my ($name, $pat, $remedy) = split /\t/, $sig, 3;
+            next unless defined $remedy;
+            if ($in =~ /$pat/i) { $hit = "$name|$remedy"; last }
+        }
+        if (defined $hit) { print $hit, "\n"; exit 0 }
+        exit 1;
+    '
 }

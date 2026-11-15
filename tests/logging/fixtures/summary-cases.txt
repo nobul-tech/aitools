@@ -2,6 +2,8 @@
 # summary-warn-reporting section 13): for each case, its input and its expected
 # run summary records, counts, deploy.log lines and panel lines.
 #
+# v1.1 (2026-11-15): L18c's first line no longer matches the 8.3 v2.1 marker
+# rule; L19 expects the aligned build-signature table (one expectation).
 # v1.0 (2026-11-15). Read by tests/logging/test-logging.sh (macOS, Linux) and
 # tests/logging/test-logging.ps1 (Windows). One file, so the bash and PowerShell
 # expectations cannot drift apart. Every expected value is derived from
@@ -597,9 +599,9 @@ expect reason ERROR: z
 
 case L18c
 plan L18
-title "E: " only at the start of a line; "error:" not inside a word
+title "E: " only at the start of a line; a word ending in "error" without a colon is no marker
 spec 8.3 rule 3
-call error_reason|xerror: nope\n  E: indented\nE: Unable to locate package fx\nlast|100
+call error_reason|note: xerror nope\n  E: indented\nE: Unable to locate package fx\nlast|100
 expect reason E: Unable to locate package fx
 note an addition to plan L18
 
@@ -616,9 +618,8 @@ plan L19
 title a known build-failure signature comes first, as <NAME>: <REMEDY>, before a marker line
 spec 8.3 rule 1
 call error_reason|   Compiling fx v0.1.0\nerror: linker `cc` not found\n  = note: No such file or directory (os error 2)\nerror: could not compile `fx`|101
-@sh expect reason Linker: Install build-essential (Linux) or Xcode CLI tools (macOS)
-@ps1 expect reason MSVC linker: Install MSVC Build Tools with C++ workload
-note the signature tables differ by platform (diagnose_build_failure in aitools-lib.sh, $script:BuildFailureSignatures in aitools-lib.ps1); a change to either table changes this case
+expect reason Linker: Install Xcode CLI tools (macOS), build-essential (Linux) or MSVC Build Tools with C++ workload (Windows)
+note one signature table in both libraries (diagnose_build_failure in aitools-lib.sh, $script:BuildFailureSignatures in aitools-lib.ps1; aligned in plan step I1); "Linker" is the first match in both, before "C compiler"; a change to the table changes this case
 
 case L20
 plan L20
