@@ -59,7 +59,10 @@ These rules apply to ALL code you write or modify:
 3. Every `|| true` MUST have a comment explaining why AND a result check
 4. Every try/catch MUST have a catch that logs or re-throws; empty catch {} is NEVER OK
 5. Exception: command-existence checks (Get-Command, command -v) with explicit fallback
-6. Every log_error/LogError for a file write MUST pair with write_summary ERROR
+6. Every error is logged with write_error/Write-AitError TOOL WHAT REASON, the
+   reason taken from error_reason/Get-AitErrorReason over the captured output;
+   log_error/LogError only when its text already states the cause. Never
+   write_summary WARN or ERROR (reference/logging.md section 8)
 7. Prefer `-ErrorAction Stop` with try/catch over `-ErrorAction SilentlyContinue`
 8. `rm -f` in bash is OK for cleanup (ignores nonexistent; targeted, not blanket)
 
@@ -83,7 +86,9 @@ Before approving any plan code block, verify each line against:
 | `2>/dev/null` | Comment + result check | Is there a `#` comment AND an if/test? |
 | `\|\| true` | Comment + result check | Is there a `#` comment AND a subsequent check? |
 | `try { } catch { }` | Catch body non-empty | Does catch log or re-throw? |
-| `log_error` / `LogError` | Paired write_summary | Is there a `write_summary ERROR` nearby? |
+| `log_error` / `LogError` | A reason | Should it be `write_error` / `Write-AitError` with a reason? Kept only when its text already states the cause |
+| `write_error` / `Write-AitError` | Non-empty reason | Is REASON derived (`error_reason` / `Get-AitErrorReason` over the captured output, or the exception), not empty? |
+| `write_summary WARN` / `ERROR` | None (retired) | Replaced by `write_warn`, `write_action` or `write_error` (`reference/logging.md` 8.2)? |
 | `Get-Content` (no -ErrorAction) | Error handling present | Is this in a try/catch or have -ErrorAction? |
 | `cp` / `Copy-Item` | Failure handling | What happens if the copy fails? |
 
