@@ -348,6 +348,15 @@ jobs:
         if: ${{ !cancelled() }}
         run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/check-script-compliance/test-step7-grepq.sh
 
+      # check-script-compliance steps 3, 12, 13, 14: reference/logging.md section 8 (summary rules, log writers)
+      - name: check-script-compliance logging.md section 8 tests (bash 5)
+        if: ${{ !cancelled() }}
+        run: bash tests/check-script-compliance/test-logging-spec.sh
+
+      - name: check-script-compliance logging.md section 8 tests (macOS /bin/bash 3.2)
+        if: ${{ !cancelled() }}
+        run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/check-script-compliance/test-logging-spec.sh
+
       - name: setup-user-shell login profile + rc tests (bash 5)
         if: ${{ !cancelled() }}
         run: bash tests/setup-user-shell/test-setup-user-shell.sh
@@ -724,6 +733,11 @@ jobs:
         if: ${{ !cancelled() }}
         run: bash tests/check-script-compliance/test-step7-grepq.sh
 
+      # check-script-compliance steps 3, 12, 13, 14: reference/logging.md section 8 (summary rules, log writers)
+      - name: check-script-compliance logging.md section 8 tests
+        if: ${{ !cancelled() }}
+        run: bash tests/check-script-compliance/test-logging-spec.sh
+
       # Script standards compliance, the .sh twin (check-post-push step 23 runs it,
       # but only after a push): fails the job on a FAIL check (an unchecked
       # -ErrorAction SilentlyContinue, an exit 1 without write_summary, a missing
@@ -995,6 +1009,11 @@ jobs:
         if: ${{ !cancelled() }}
         shell: pwsh
         run: pwsh -NoProfile -File tests/check-pre-commit/test-pre-commit-steps3-10.ps1
+
+      - name: check-script-compliance logging.md section 8 tests (.ps1 twin, steps 3, 12, 13, 14, PowerShell, native)
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: pwsh -NoProfile -File tests/check-script-compliance/test-logging-spec.ps1
 
       - name: Profile resolver tests (PowerShell, native)
         if: ${{ !cancelled() }}
