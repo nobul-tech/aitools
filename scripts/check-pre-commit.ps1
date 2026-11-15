@@ -3,6 +3,8 @@
 # -Fix: auto-fix line endings (step 4) and exec bits (step 6). Nothing in this
 #       script runs build-deploy.sh: steps 3 and 10 are retired; check-pre-push
 #       step 7 rebuilds into a temporary copy of the dotprofile (incident #136).
+#       Nothing in this script runs Git Bash: step 2 leaves the .sh syntax check
+#       to CI and check-pre-commit.sh.
 # Platform: Windows (PS 5.1 compatible)
 param([switch]$Fix)
 
@@ -24,11 +26,6 @@ ResolveConfig
 CheckLogInit "pre-commit"
 
 Set-Location $script:RepoRoot
-
-# The managed Git Bash for step 2 (bash -n on staged .sh files): never the WSL
-# launcher a bare `bash` resolves to in a native pwsh (check-lib ResolveGitBash)
-$gitBash = ResolveGitBash
-if ($gitBash) { LogDetail "Git Bash: $gitBash" } else { LogDetail "Git Bash: not found (Git for Windows locations)" }
 
 Write-Host ""
 Write-Host "=== PRE-COMMIT CHECKLIST ===" -ForegroundColor White
@@ -60,23 +57,14 @@ if ($stagedSh.Count -eq 0 -and $stagedPs1.Count -eq 0) {
     StepSkip "2" "Script syntax (.sh)" "no scripts staged"
     StepSkip "2" "Script syntax (.ps1)" "no scripts staged"
 } else {
-    # Bash validation
-    if ($stagedSh.Count -gt 0 -and -not $gitBash) {
-        StepWarn "2" "Script syntax (.sh)" "Git Bash not found -- $($stagedSh.Count) .sh file(s) not checked"
-    } elseif ($stagedSh.Count -gt 0) {
-        $shErrors = 0
-        foreach ($f in $stagedSh) {
-            $result = & $gitBash -n $f 2>&1
-            if ($LASTEXITCODE -ne 0) {
-                Write-Host "      FAIL: $f"
-                $shErrors++
-            }
-        }
-        if ($shErrors -eq 0) {
-            StepPass "2" "Script syntax (.sh)"
-        } else {
-            StepFail "2" "Script syntax (.sh)" "$shErrors file(s) failed"
-        }
+    # Bash validation: not run on Windows. bash -n needs Git Bash, and the Windows
+    # checks call no Git Bash (commander, 2026-11-14: "id like to avoid calling
+    # git bash on thowse ps1 scripts"); a .sh never runs on Windows. CI runs
+    # bash -n on every tracked shell script on each push and pull request (the
+    # linux and macos jobs, "Validate bash script syntax"), and
+    # check-pre-commit.sh step 2 runs it on macOS/Linux.
+    if ($stagedSh.Count -gt 0) {
+        StepSkip "2" "Script syntax (.sh)" "$($stagedSh.Count) .sh staged: bash -n runs in CI (linux, macos) and check-pre-commit.sh, not on Windows"
     } else {
         StepSkip "2" "Script syntax (.sh)" "no .sh staged"
     }
