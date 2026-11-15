@@ -1,0 +1,15 @@
+Plan: CI platform targeting v1.1 status (PR #139 green on all three jobs)
+
+plans/ci-platform-targeting.md (protected, direct to main per CLAUDE.md
+"Channel exception"; review-after):
+- header: "Version 1.0 (2026-11-01)" -> "Version 1.1 (2026-11-01; v1.0
+  same day)".
+- Status: old "| B1-B7 | not started |" -> a v1.1 paragraph (PR #139 green,
+  run 41270206290 on b6d993d: linux 348 s, macOS 1,242 s, windows 1,595 s,
+  no warning annotations; not merged) and one row per batch, B1-B7 done.
+  B7 records a deviation: cross-platform.md got exemption rows and an
+  enforcement paragraph instead of a test matrix; the matrix is the plan's
+  own "Platform targets" table. A1/A2 still open; follow-ups point at the
+  PR #139 "Follow-ups" section.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

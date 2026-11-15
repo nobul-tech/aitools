@@ -11,21 +11,29 @@ aitools repo, every session.
 
 ## What aitools is
 
-aitools is the commander's hub for AI tooling — one place to install, configure, and
-keep aligned the tools he leverages across every repo, machine and environment it
+aitools is an open-source, cross-platform hub for AI tooling; one place to install, configure, and
+keep aligned AI tools leveraged across every repo, machine and environment it
 supports (`reference/cross-platform-detail.md` "Supported platforms and environments"):
-CLI tools, Claude Code, Cursor, MCP servers, hooks, skills, and the rules that govern
-them. `aitools install` deploys that configuration to a machine; the harness keeps it
-consistent so a session in any repo, on any supported machine or environment, inherits
-the same capabilities. A parallel package path (`scripts/build-package.sh`;
-scaffolding v1.0: `--dry-run` works, `stage`/`pkg`/`intune`/`deb` are stubs until
+CLI tools, Claude Code, Cursor, MCP servers.
+
+aitools is also a collection of user-scope hooks, skills, rules, reference files and
+registries that together comprise the aitools harness.
+
+aitools supports both MDM deployment and dev installation and it uses platform-native .sh/.ps1 scripts respectively.
+
+The collection of cross-platform setup and configure scripts can be found in scripts/.
+
+`aitools install` installs and/or updates the CLI tools, deploys the harness artifacts, and deploys the managed configs.
+A parallel package path (`scripts/build-package.sh`; scaffolding v1.0: `--dry-run` works, `stage`/`pkg`/`intune`/`deb` are stubs until
 batches B2/B8–B10 of `plans/build-package/implementation-plan.md`; design
 `plans/build-package/design.md`) will deliver it to a fleet as installable packages.
 
 Under the hood it is a self-learning, provenance-aware system: each session can feed
-operational learning back into the harness (via the relay) so the next session starts
-sharper. Tokens are cheap; the commander's time is the scarce resource. Use your
+operational learning back into the harness so the next session starts
+sharper. Tokens are cheap; the user's time is the scarce resource. Use your
 context fully.
+
+Load @reference/aitools.md for an ascii map of what aitools is
 
 ## Your commander
 
@@ -39,7 +47,7 @@ When you're uncertain, ask — and suggest an answer with the question.
 ## How the harness is organized
 
 - `.claude/rules/` — behavioral rules, always in context. Check them before assuming.
-- `shared/` — source for user-level configs (skills, hooks, rules, claude-shared) that
+- `shared/` — source for the aitoolsl harness artifacts (skills, hooks, rules, claude-shared) that
   `aitools install` deploys to `~/.aitools/` (deploy-harness). setup-user-claude and
   setup-user-cursor then fan rules and skills out from `~/.aitools/` into `~/.claude/`
   and `~/.cursor/`; setup-user-skills is the fallback when `~/.aitools/skills` is absent.
@@ -65,7 +73,7 @@ When you're uncertain, ask — and suggest an answer with the question.
 - `harvesting/` — harvested session artifacts (`/harvest` skill).
 - `packaging/` — package-path payload scripts (macOS, Windows, Linux).
 - `rfcs/` — design RFCs.
-- `.aitools/channel/` — the relay and carry-forward operational learning.
+- `.aitools/channel/` — directory for agent to agent communication via file artifacts 
 
 When you delegate, load the `/delegate` skill first (user rule `delegation.md`,
 D-DEL7): eight prompt elements, including conflict priority (D-DEL6) and D-DEL1 —
@@ -84,20 +92,6 @@ the delegate names every `*.md` file it writes with its own name as a prefix
 
 Disciplined initiative means deviating from process to accomplish the mission — not
 appearing to know what you don't know.
-
-## Leave something behind
-
-Before your session ends, append an entry to the relay: `.aitools/channel/relay.md` —
-what you learned, what you observed, what you still don't know. The next agent reads
-it. Every entry adds leverage.
-
-### Relay outbound (git)
-
-`relay.md` lives in this repo — not a managed deploy file under `~/.claude/`. After
-`aitools` or `hh -n`, the harness may show `[RELAY]` if `relay.md` is uncommitted or
-your branch is ahead of `origin/main`. Scripts: `scripts/relay-outbound-prompt.sh`
-and `.ps1`. Skip with `AITOOLS_SKIP_RELAY_PROMPT=1`. See
-`.claude/rules/relay-outbound.md`.
 
 ### Channel exception (direct to main)
 

@@ -1,0 +1,26 @@
+Document shared-only harness rules and skills (R-8, S-7), revise intents
+
+What:
+- reference/rules.md v1.2: decision R-8 (rules from shared/rules only)
+  supersedes R-1, R-3, R-4 and the sources of R-6; scope table, pipeline
+  (6.1) and section 7 updated; intent statement revised to name R-8
+  instead of the superseded R-4
+- reference/skills.md v1.1: decision S-7 (skills from shared/skills only)
+  supersedes S-1, S-2 and the source order of S-3; placement (5.3),
+  pipeline (6.1), built table (6.2) and section 7 updated; intent
+  statement revised to name S-7 instead of the superseded S-1
+- reference/harness.md: sources table, conflict handling, manifest
+  formats, new "Withdrawn sources retire" rule
+- reference/user-repo.md, reference/managed-file-deployment.md,
+  reference/framework-governed-vocabulary.md: dotprofile and project
+  rules/skills are not deployed
+- Rules and their Cursor twins: managed-file-deployment, deploy-paths,
+  documentation-standards ("Skill placement"), hook-rollout
+  (hook-lifecycle.md is now project scope), aitools-workspace
+- RELEASE_NOTES.md: v0.76.0
+
+Why: commander orders 2026-11-06 (roll back to shared/ only) and
+2026-11-07 ("please fix the intent blocks on rules.md and skills.md").
+The intents are protected; written as a version for review after (D-DEL5).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

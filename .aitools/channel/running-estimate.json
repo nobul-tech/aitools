@@ -1,16 +1,16 @@
 {
   "meta": {
-    "sessionId": "d5b52bf2-82ec-4447-b66b-1a89852f1e3f",
+    "sessionId": "7ad4f838-da5d-49c3-a97b-6a2c49a9967e",
     "priorSession": null,
     "schwerpunkt": "unspecified",
     "acceptingSchwerpunkt": null,
     "currentState": null,
-    "startedAt": "2026-03-26T22:48:43Z",
-    "updatedAt": "2026-03-27T01:23:13Z",
-    "endedAt": "2026-03-27T01:23:13Z",
+    "startedAt": "2026-11-12T01:50:48Z",
+    "updatedAt": "2026-11-13T00:25:40Z",
+    "endedAt": "2026-11-13T00:25:40Z",
     "version": 1.0,
     "platform": "darwin",
-    "agentIdentity": null
+    "agentIdentity": "Session Commander 7ad4f838-d"
   },
   "openThreads": [],
   "delegationLog": [],
@@ -18,7 +18,16 @@
   "sitreps": [],
   "decisions": [],
   "assumptions": [],
-  "observations": [],
+  "observations": [
+    {
+      "category": "finding",
+      "text": "intelligence-stop.py has no entry for claude-fable-5-2 in MODEL_CONTEXT_SIZES and falls back to 200,000. In session 7ad4f838 its events.jsonl telemetry reports context_pct from 78.1 to 241.2 while /context shows a 1m window. The context warning is inert, so the effect is wrong telemetry only. Observed 2026-11-12 on Claude Code 2.1.322.",
+      "status": "verified",
+      "evidence": null,
+      "severity": null,
+      "createdAt": "2026-11-12T03:13:45Z"
+    }
+  ],
   "completedWork": [],
   "hardRequirements": [],
   "deviations": [],

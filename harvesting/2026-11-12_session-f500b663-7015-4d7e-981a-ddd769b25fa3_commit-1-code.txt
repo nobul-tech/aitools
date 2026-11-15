@@ -1,0 +1,49 @@
+Deploy harness rules and skills from shared/ only; retire the rest
+
+What: scripts/deploy-harness.sh and .ps1 now read rules from shared/rules
+and skills from shared/skills only. The aitools .claude/rules,
+.claude/skills and the dotprofile claude/rules, claude/skills are no longer
+harness sources, and section 2 (the dotprofile lookup) is replaced by an
+empty "source setup" span. Hooks keep both sources (shared/hooks, then
+.claude/hooks).
+
+Migration: the manifest planner treats "aitools" and "dotprofile" as
+withdrawn sources. A previous manifest line with either source is retired
+on the next run when no source has the name, although neither source is
+listed and whether or not a dotprofile is configured. Without this, every
+rule and skill already deployed from those sources would be kept forever
+("source not listed") and keep reaching ~/.claude and ~/.cursor. Retired
+files and directories are backed up and removed from ~/.aitools; the
+setup-user-claude and setup-user-cursor fan-outs then back up and remove
+their own copies. A name that moved into shared/ is claimed and stays.
+
+scripts/build-deploy.sh: extracts around the renamed "source setup"
+markers, no longer stages a dotprofile directory for the MDM snapshot, so
+deploy-harness.payload embeds nothing from the dotprofile.
+
+Tests:
+- tests/deploy-harness: fixture rules and skills in .claude/ and the
+  dotprofile must never deploy; withdrawn-source retirement for rules and
+  skills (dry run, no dotprofile configured, case-insensitive claim);
+  duplicate cases moved to hooks; skills golden traces regenerated
+- tests/deploy-harness-mdm: probes are shared/rules/scratch.md and
+  tool-ops.md; payload must hold no dotprofile or .claude rules/skills
+  record; the dotprofile/project conflict case becomes "not a source";
+  golden dup.rows removed
+- tests/skills-fanout: real-harness case expects shared skills only
+- tests/hookin: fixture rule moved to shared/rules, duplicate is a hook
+
+Why: commander order 2026-11-06, "we need to roll that back so that only
+the skills/rules in the shared/ directory get copied over" (dotprofile
+included: "shared/ only"). Decisions R-8 / S-7.
+
+Verification (macOS, sh): deploy-harness 106/106, deploy-harness-mdm
+59/59, hookin 31/31, skills-fanout 124/124, build-deploy 24/24,
+skills-legacy 39/39, claude-mdm 33/33, rules-fanout 67/67,
+rules-fanout-cursor 160/160, fanout-lib 127/127; check-pre-commit clean.
+The .ps1 matched the same goldens (105/105) in a local scratch copy with
+its OS guard stripped (not committed); Windows CI is the real ps1 check.
+
+(tested: macOS)
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

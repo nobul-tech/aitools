@@ -8,6 +8,7 @@ through their skills, not listed here.
 
 | File | Topic |
 |------|-------|
+| `aitools.md` | Start here: one-page ASCII map of aitools (big picture, learning loop, repo map) |
 | `harness.md` | Harness definition: the components and how they relate |
 | `rules.md` | Rules: what a rule governs, the rule / skill / reference / registry layering, scopes, deployment to user scope |
 | `skills.md` | Skills: what a skill is, the layering, anatomy, scopes, deployment to user scope and its cost |

@@ -1,0 +1,10 @@
+BEGIN RECORD 214d6f2c-1
+commit ebdfd1d "Glossary: English governed terms, German kept as provenance"
+German military doctrine (Auftragstaktik): Auftrag (mission order)
+German military doctrine (Bundeswehr): Lagebeurteilung (situation assessment)
+German military doctrine: Mitdenken (thinking along)
+Military theory (Clausewitz, Vom Kriege): Reibung (friction)
+German military doctrine (Clausewitz, Bundeswehr): Schwerpunkt (main effort)
+pre-commit: 8 PASS, 12 SKIP, 1 WARN, 1 FAIL (step 20, 46 dead path references)
+post-push: 24 PASS, 3 SKIP, 7 WARN, 0 FAIL
+END RECORD 214d6f2c-1

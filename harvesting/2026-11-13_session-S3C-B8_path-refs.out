@@ -1,0 +1,19 @@
+.claude/rules/incident-governance.md:102: .claude/rules/sources-of-truth.md
+reference/cursor-practices.md:177: .claude/rules/relay-outbound.md
+reference/cursor-practices.md:177: .cursor/rules/relay-outbound.mdc
+reference/cursor-practices.md:180: .claude/rules/sources-of-truth.md
+reference/cursor-practices.md:180: .cursor/rules/sources-of-truth.mdc
+reference/framework-incident-governance.md:46: shared/skills/incident/SKILL.md
+reference/framework-incident-governance.md:47: .claude/skills/audit/SKILL.md
+shared/skills/delegate/SKILL.md:157: .claude/rules/sources-of-truth.md
+shared/skills/delegate/SKILL.md:434: .claude/rules/sources-of-truth.md
+shared/skills/harvest/SKILL.md:17: shared/rules/artifact-harvesting.md
+shared/skills/harvest/SKILL.md:19: reference/framework-artifact-harvesting.md
+shared/skills/harvest/SKILL.md:160: shared/rules/artifact-harvesting.md
+shared/skills/harvest/SKILL.md:162: reference/framework-artifact-harvesting.md
+shared/skills/intent-audit/SKILL.md:207: .claude/rules/sources-of-truth.md
+shared/skills/intent-writing/SKILL.md:19: .claude/rules/sources-of-truth.md
+shared/skills/intent-writing/SKILL.md:247: .claude/rules/sources-of-truth.md
+shared/skills/investigate/SKILL.md:237: shared/skills/incident/SKILL.md
+shared/skills/tool-registry/SKILL.md:87: .claude/rules/sources-of-truth.md
+dead path references: 18
