@@ -30,7 +30,7 @@ through their skills, not listed here.
 | `framework-tool-ops.md` | Tool operations: SRE-grounded per-tool ops metadata |
 | `harness-db-schema.sql` | SQLite schema for the session and harness databases |
 | `incident-020-process-discipline.md` | Incident #20 discovery context (process discipline) |
-| `prompt-turn-checklist.md` | The checklist every agent runs at each prompt turn; spec for the prompt-turn hook |
+| `prompt-turn-checklist.md` | The checklist every agent runs at each prompt turn: full spec of the shared rule `shared/rules/prompt-turn.md` (the condensed form agents load) and of the prompt-turn hook |
 
 ## Scripts and deployment
 
