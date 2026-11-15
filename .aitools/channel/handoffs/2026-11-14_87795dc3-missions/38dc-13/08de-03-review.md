@@ -1,8 +1,8 @@
-# 08de-03 review of PR #166 (v1.0)
+# 08de-03 review of PR #166 (v1.1)
 
 **Intent**: **Purpose**: the independent review verdict on PR #166 (nobul-tech/aitools, "Windows CI runs .ps1 test suites only"), with blocking and non-blocking findings, each with file:line and evidence. **Scope**: the PR diff against origin/main at head `cc60a59dcad5915a793eef1fd8a18fac04020f15`: check.yml, check-ci-suites.pl, tests/ci-suites, tests/os-guards, cross-platform.md/.mdc, RELEASE_NOTES, the five check-suite ports, and a sample of the other ports. NOT fixes (the reviewer edited no repo file). NOT an approval or a request for changes through `gh pr review`. **Audience**: 38dc-27 (the author's orchestrator), then the commander.
 
-Version 1.0, 2026-11-14. Reviewer: 08de-03-review-pr166, delegated by 38dc-27-windows-ci-finish (M6b-Finish, Session Commander 87795dc3). PR comment: https://github.com/nobul-tech/aitools/pull/166#issuecomment-6887485252
+Version 1.1, 2026-11-14 (v1.0 same day, at cc60a59; v1.1 adds "Re-check at 87f0d31"). Reviewer: 08de-03-review-pr166, delegated by 38dc-27-windows-ci-finish (M6b-Finish, Session Commander 87795dc3). PR comment: https://github.com/nobul-tech/aitools/pull/166#issuecomment-6887485252
 
 ## Verdict
 
@@ -106,6 +106,33 @@ All commands ran from the worktree W, with scripts in `W/.scratch/session-08de-0
 - A mutation test of menu parity (its harness has no override variable for check-post-push.ps1; its planted-mismatch cases already show that the check can fail).
 - Checking the commander quotes against the transcript.
 - Reading the author's mission reports: not needed to check the claims in the PR body.
+
+## Re-check at 87f0d31 (v1.1)
+
+At 38dc-27's request (PR comment 6887511088), I re-checked B1 and B2 only, on `git diff cc60a59 87f0d31`. Head verified with `gh pr view 166 --json headRefOid` = 87f0d3121c2f756ca8cbe97d6103ced5e341530a. Follow-up PR comment: https://github.com/nobul-tech/aitools/pull/166#issuecomment-6887526163
+
+**Updated verdict: CHANGES NEEDED (1 blocking).** B1 is resolved and B2 is partly resolved.
+
+### B1: resolved
+
+- The rule now reads "first thing after `set` / `param` and, in a `.ps1`, its `-Help` handler" (`.claude/rules/cross-platform.md:126`, `.cursor/rules/cross-platform.mdc:68`).
+- `tests/bootstrap/test-bootstrap.ps1` now refuses before its setup: the guard is at :46-49, directly after the help handler at :41-44.
+- `.scratch/session-08de-03/pre-guard.pl` scanned all 34 tracked `tests/*/test-*.ps1` for statements between `param(` and the guard, outside the `if ($Help) {...}` block. It found none.
+- On Windows (pwsh 7.6.10): `test-bootstrap.ps1` 26/0/0 and `test-os-guards.ps1` 68/0/0. The exemption table still classifies after the rule edit.
+
+### B2: partly resolved, still blocking
+
+- The older twins are now named correctly ("do not yet").
+- The new sentence overclaims for the five check-suite ports:
+  - `.claude/rules/cross-platform.md:121-123`: "The harnesses ported in 2026-11 (PR #166) have the same cases and compare against the same golden files".
+  - `.cursor/rules/cross-platform.mdc:69-70`: "the 2026-11 ports share cases and golden files".
+- Evidence: `git grep -l -i golden -- tests/check-pre-push tests/check-post-push tests/check-pre-commit` finds nothing. Golden files exist only in the 15 script-suite ports: b8-consumers, claude-mdm, hookin, profile ×5, fanout-lib, rules-fanout, rules-fanout-cursor, skills-fanout, skills-legacy, deploy-harness, deploy-harness-mdm.
+- The check-suite ports hold their expectations in each harness instead (N1).
+- Fix: limit the golden-file claim to the script-suite ports, and say the check-suite ports have the same cases with expectations written in each harness (golden files as a follow-up). Make the same change in the `.mdc`.
+
+Non-blocking N1-N7 are unchanged; I did not re-check them.
+
+Note: 87f0d31 also committed this report at v1.0. This v1.1 is a working-tree change only, not committed (as briefed).
 
 ## Signals
 

@@ -119,10 +119,12 @@ is listed in the exemptions table below as cross-platform. A suite that tests a
 `.sh`/`.ps1` pair has two harnesses: the `.sh` runs the `.sh` scripts on macOS
 and Linux, the `.ps1` runs the `.ps1` scripts on Windows with native pwsh
 (helpers: `@tests/lib/platform-lib.ps1`). The harnesses ported in 2026-11
-(PR #166) have the same cases and compare against the same golden files; the
-older twins (managed-files, adopt-push, logging, menus, setup-user-shell,
-relay-outbound) do not yet (known gaps, different case counts, no golden
-files). Test harnesses have no logging library: the guard prints to stderr,
+(PR #166) have the same cases; the script-suite ports also compare against
+the same golden files, while the check-suite ports (check-pre-push,
+check-post-push, check-pre-commit) write the same expectations in each
+harness (golden files are a follow-up). The older twins (managed-files,
+adopt-push, logging, menus, setup-user-shell, relay-outbound) do not yet
+share cases (known gaps, different case counts, no golden files). Test harnesses have no logging library: the guard prints to stderr,
 first thing after `set` / `param` and, in a `.ps1`, its `-Help` handler (help
 is printed on every platform; anything else refuses). The bash guard adds a second case on
 `BASH_VERSINFO[5]`, bash's compiled-in machine type, which neither a `uname`
