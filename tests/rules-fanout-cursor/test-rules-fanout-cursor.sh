@@ -260,7 +260,7 @@ check "first: scoped.md -> anchored globs list, alwaysApply false" "grep -qx 'gl
 check "first: scoped body kept (table ---)" "grep -qxF '|---|---|' '$R/scoped.mdc'"
 check "first: native.mdc source not fanned out (contract: *.md only)" "[ ! -e '$R/native.mdc' ] && grep -q 'Ignoring non-rule file in harness rules: native.mdc' '$C/out'"
 check "first: notes.txt not fanned out" "[ ! -e '$R/notes.txt' ] && grep -q 'Ignoring non-rule file in harness rules: notes.txt' '$C/out'"
-check "first: *.bak.* backups skipped" "! ls '$R' | grep -q '^plain\.md\.bak\.' && [ ! -e '$R/odd.bak.2026.mdc' ] && ! grep -q 'odd.bak' '$C/out'"
+check "first: *.bak.* backups skipped" "! ls '$R' | grep '^plain\.md\.bak\.' >/dev/null && [ ! -e '$R/odd.bak.2026.mdc' ] && ! grep -q 'odd.bak' '$C/out'"
 check "first: no .md left in target" "[ ! -e '$R/plain.md' ] && [ ! -e '$R/scoped.md' ]"
 check "first: hidden file not deployed" "[ ! -e '$R/.hidden.mdc' ] && [ ! -e '$R/.hidden.md' ]"
 check "first: subdirectory not deployed" "[ ! -e '$R/subdir' ] && grep -q 'Ignoring non-rule file in harness rules: subdir' '$C/out'"
@@ -270,15 +270,15 @@ check "first: OK row 2 added" "grep -qxF 'OK|cursor rules|2 added' '$C/summary'"
 run_script
 check "rerun: exit 0" "[ \"\$(rc)\" = 0 ]"
 check "rerun: OK row 2 verified" "grep -qxF 'OK|cursor rules|2 verified' '$C/summary'"
-check "rerun: no backups (nothing written)" "! ls '$R' | grep -q '\.bak\.'"
+check "rerun: no backups (nothing written)" "! ls '$R' | grep '\.bak\.' >/dev/null"
 
 printf 'local edit\n' >> "$R/plain.mdc"
 run_script
 check "edited: exit 0" "[ \"\$(rc)\" = 0 ]"
 check "edited: non-interactive overwrite" "grep -q 'plain.mdc -- overwriting (non-interactive)' '$C/out'"
 check "edited: source content restored" "! grep -q 'local edit' '$R/plain.mdc'"
-check "edited: backup kept, not loadable by Cursor" "ls '$R' | grep -q '^plain\.mdc\.bak\.' && ! ls '$R' | grep '\.bak\.' | grep -q '\.mdc$'"
-check "edited: row reports 1 updated" "row | grep -q '|cursor rules|1 updated, 1 verified'"
+check "edited: backup kept, not loadable by Cursor" "ls '$R' | grep '^plain\.mdc\.bak\.' >/dev/null && ! ls '$R' | grep '\.bak\.' | grep '\.mdc$' >/dev/null"
+check "edited: row reports 1 updated" "row | grep '|cursor rules|1 updated, 1 verified' >/dev/null"
 check "edited: backup not reported as preserved" "! grep -q 'Preserved unmanaged rule: plain.mdc.bak' '$C/out'"
 
 printf 'local edit 2\n' >> "$R/scoped.mdc"
@@ -444,13 +444,13 @@ check "users: aitools rule PR #110 pruned is re-added" "grep -qxF 'DETAIL|cursor
 check "users: aitools rule already fanned out is verified" "! grep -q '|cursor rules|.*: q.mdc' '$C/summary' && grep -qF '${MARK}q.md;' '$R/q.mdc'"
 check "users: row 3 added, 1 updated, 1 removed, 1 verified (WARN: a kept file still loads)" "grep -qxF 'WARN|cursor rules|3 added, 1 updated, 1 removed, 1 verified' '$C/summary'"
 check "users: ACTION row lists the kept retired file" "grep -qxF 'ACTION||Cursor still loads retired rules in ~/.cursor/rules: old.mdc -- delete them unless you wrote them' '$C/summary'"
-check "users: retired rule with the marker removed, backup kept" "[ ! -e '$R/gone.mdc' ] && ls '$R' | grep -q '^gone\.mdc\.bak\.' && grep -q 'Removed gone.mdc (retired rule; aitools-fanout marker' '$C/out'"
+check "users: retired rule with the marker removed, backup kept" "[ ! -e '$R/gone.mdc' ] && ls '$R' | grep '^gone\.mdc\.bak\.' >/dev/null && grep -q 'Removed gone.mdc (retired rule; aitools-fanout marker' '$C/out'"
 check "users: removal is a tracker DETAIL row" "grep -qxF 'DETAIL|cursor rules|removed: gone.mdc' '$C/summary'"
-check "users: user file at an aitools rule's name now the fan-out's (backup kept)" "grep -qF '${MARK}u.md;' '$R/u.mdc' && ls '$R' | grep -q '^u\.mdc\.bak\.' && grep -qxF 'DETAIL|cursor rules|updated: u.mdc' '$C/summary'"
+check "users: user file at an aitools rule's name now the fan-out's (backup kept)" "grep -qF '${MARK}u.md;' '$R/u.mdc' && ls '$R' | grep '^u\.mdc\.bak\.' >/dev/null && grep -qxF 'DETAIL|cursor rules|updated: u.mdc' '$C/summary'"
 check "users: user file with a retired rule's name kept" "grep -q 'my own old' '$R/old.mdc' && grep -q 'Kept old.mdc: the rules manifest retires old.md' '$C/out'"
 check "users: unrelated user rule kept" "grep -q 'mine' '$R/mine.mdc' && grep -q 'Preserved unmanaged rule: mine.mdc' '$C/out'"
 check "users: retired names logged as not fanned out only when present" "! grep -q 'Not fanned out: gone.md' '$C/out'"
-check "users: *.bak.* source skipped silently" "! ls '$R' | grep -q '^s\.md\.bak' && ! grep -q 's.md.bak' '$C/out'"
+check "users: *.bak.* source skipped silently" "! ls '$R' | grep '^s\.md\.bak' >/dev/null && ! grep -q 's.md.bak' '$C/out'"
 check "users: manifest ignored silently" "! grep -q 'aitools-rules-manifest' '$C/out' && [ ! -e '$R/.aitools-rules-manifest' ]"
 parity users
 BAKS=$(ls "$R" | grep -c '\.bak\.')
@@ -548,7 +548,7 @@ seed_onlyremove
 run_script
 check "onlyremove: exit 0" "[ \"\$(rc)\" = 0 ]"
 check "onlyremove: OK row 1 removed" "grep -qxF 'OK|cursor rules|1 removed' '$C/summary'"
-check "onlyremove: p.mdc removed, backup with the same text kept" "[ ! -e '$H/.cursor/rules/p.mdc' ] && ls '$H/.cursor/rules' | grep -q '^p\.mdc\.bak\.' && grep -q 'Removed p.mdc (retired rule; same content as the conversion of p.md.bak.2026-10-22T010203Z; backup kept)' '$C/out'"
+check "onlyremove: p.mdc removed, backup with the same text kept" "[ ! -e '$H/.cursor/rules/p.mdc' ] && ls '$H/.cursor/rules' | grep '^p\.mdc\.bak\.' >/dev/null && grep -q 'Removed p.mdc (retired rule; same content as the conversion of p.md.bak.2026-10-22T010203Z; backup kept)' '$C/out'"
 parity onlyremove
 
 # E1: an aitools rule is no longer pruned (PR #110 removed it; FD-2)
@@ -562,7 +562,7 @@ setup_case aitools
 seed_aitools
 run_script
 check "aitools: exit 0" "[ \"\$(rc)\" = 0 ]"
-check "aitools: p.mdc kept and verified, nothing removed" "[ -f '$H/.cursor/rules/p.mdc' ] && grep -qxF 'OK|cursor rules|1 verified' '$C/summary' && ! ls '$H/.cursor/rules' | grep -q '\.bak\.'"
+check "aitools: p.mdc kept and verified, nothing removed" "[ -f '$H/.cursor/rules/p.mdc' ] && grep -qxF 'OK|cursor rules|1 verified' '$C/summary' && ! ls '$H/.cursor/rules' | grep '\.bak\.' >/dev/null"
 parity aitools
 
 # E2: a name with [ ] is backed up before removal (Backup-File -LiteralPath)
@@ -576,7 +576,7 @@ setup_case bracket
 seed_bracket
 run_script
 check "bracket: exit 0" "[ \"\$(rc)\" = 0 ]"
-check "bracket: removed with a backup" "[ ! -e '$H/.cursor/rules/br[1].mdc' ] && ls '$H/.cursor/rules' | grep -qF 'br[1].mdc.bak.' && grep -qxF 'OK|cursor rules|1 removed' '$C/summary'"
+check "bracket: removed with a backup" "[ ! -e '$H/.cursor/rules/br[1].mdc' ] && ls '$H/.cursor/rules' | grep -F 'br[1].mdc.bak.' >/dev/null && grep -qxF 'OK|cursor rules|1 removed' '$C/summary'"
 parity bracket
 
 # E3 (review finding 1): #87 files of rules edited before they were retired
@@ -733,7 +733,7 @@ if [ -r "$H/.aitools/rules/s.md" ]; then
 else
     run_script
     check "unreadsrc: exit 1, ERROR 1 failed, the other rule deployed" "[ \"\$(rc)\" = 1 ] && [ \"\$(row)\" = 'ERROR|cursor rules|1 failed' ] && [ -f '$H/.cursor/rules/t.mdc' ]"
-    check "unreadsrc: the reason is in the log line, no raw shell error" "grep -q '\[error\] Failed: s.md: cannot read .* -- permission denied' '$C/out' && ! perl -pe 's/\e\[[0-9;]*m//g' '$C/out' | grep -v '^\[' | grep -qi 'permission denied'"
+    check "unreadsrc: the reason is in the log line, no raw shell error" "grep -q '\[error\] Failed: s.md: cannot read .* -- permission denied' '$C/out' && ! perl -pe 's/\e\[[0-9;]*m//g' '$C/out' | grep -v '^\[' | grep -i 'permission denied' >/dev/null"
     parity unreadsrc
     chmod 644 "$C/home/.aitools/rules/s.md"
 fi
@@ -773,7 +773,7 @@ if $HAVE_PTY; then
     check "pty $lang: the review menu prompted" "grep -q '\[s\]kip' '$C/pty-$lang.out'"
     check "pty $lang: [s]kip keeps the local edit, row WARN 1 skipped" "grep -qx 'my edit' '$PR/s.mdc' && [ \"\$(grep -F '|cursor rules|' '$C/summary-$lang' | grep -v '^DETAIL' | tail -n 1)\" = 'WARN|cursor rules|1 skipped (user review)' ]"
     run_pty 'x\n'
-    check "pty $lang: [x]abort exits 2, no cursor rules row, local file kept" "[ \"\$(cat '$C/rc-$lang')\" = 2 ] && ! grep -F '|cursor rules|' '$C/summary-$lang' | grep -qv '^DETAIL' && grep -qx 'my edit' '$PR/s.mdc'"
+    check "pty $lang: [x]abort exits 2, no cursor rules row, local file kept" "[ \"\$(cat '$C/rc-$lang')\" = 2 ] && ! grep -F '|cursor rules|' '$C/summary-$lang' | grep -v '^DETAIL' >/dev/null && grep -qx 'my edit' '$PR/s.mdc'"
 else
     printf 'SKIP pty review menu and abort (python3 not found; on Windows also pywinpty)\n'; SKIP=$((SKIP + 1))
 fi

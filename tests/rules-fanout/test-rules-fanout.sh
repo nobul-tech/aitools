@@ -192,7 +192,7 @@ nondetail() { grep -F '|claude rules|' "$C/$L.summary" | grep -v '^DETAIL' | tai
 R() { printf '%s' "$C/$L/.claude/rules"; }                  # the deployed rules dir
 # logged TEXT: TEXT in the run's log files (none: no match). TEXT holds no
 # path: paths are checked with adopt_is.
-logged() { cat "$C/$L/logs/"*.log 2>/dev/null | perl -pe 's/\r//' | grep -qF "$1"; }
+logged() { cat "$C/$L/logs/"*.log 2>/dev/null | perl -pe 's/\r//' | grep -F "$1" >/dev/null; }
 # adopt_is RULE SOURCE WANT: the run logged "claude rules: RULE source=SOURCE
 # adopt=<path>" and <path> is WANT (a path, or "none"). Prints what was logged
 # on a mismatch. (The Windows harness compares the paths as locations: pwsh can
@@ -266,7 +266,7 @@ check "lib parity: summary text and kinds match golden" "golden_match lib.kinds 
 seed_missing() { deployed mine.md 'mine'; }
 case_run missing seed_missing
 check "missing: exit 0, row n/a (no harness rules)" "[ \"\$(rc)\" = 0 ] && [ \"\$(nondetail)\" = 'OK|claude rules|n/a (no harness rules)' ]"
-check "missing: ~/.claude/rules untouched, no directory backup" "grep -qx mine '$(R)/mine.md' && [ \"\$(ls '$(R)')\" = mine.md ] && ! ls '$C/$L/.claude' | grep -q 'rules.bak'"
+check "missing: ~/.claude/rules untouched, no directory backup" "grep -qx mine '$(R)/mine.md' && [ \"\$(ls '$(R)')\" = mine.md ] && ! ls '$C/$L/.claude' | grep 'rules.bak' >/dev/null"
 check "missing: the dotprofile's claude/rules is not deployed" "[ ! -e '$(R)/d.md' ] && [ ! -e '$(R)/only-dp.md' ]"
 parity missing
 
@@ -297,11 +297,11 @@ check "fanout: unmanaged rule preserved" "grep -qx mine '$(R)/mine.md' && grep -
 check "fanout: dotprofile-only rule not deployed (not in ~/.aitools/rules)" "[ ! -e '$(R)/only-dp.md' ]"
 parity fanout
 rerun
-check "fanout rerun: row 4 verified, nothing written" "[ \"\$(nondetail)\" = 'OK|claude rules|4 verified' ] && ! ls '$(R)' | grep -q '\.bak\.'"
+check "fanout rerun: row 4 verified, nothing written" "[ \"\$(nondetail)\" = 'OK|claude rules|4 verified' ] && ! ls '$(R)' | grep '\.bak\.' >/dev/null"
 parity fanout-rerun
 printf '## shared s\nlocal edit\n' > "$(R)/s.md"
 rerun
-check "fanout edited, non-interactive: overwritten, backup kept, WARN row" "[ \"\$(nondetail)\" = 'WARN|claude rules|1 updated, 3 verified' ] && grep -qx '## shared s' '$(R)/s.md' && ls '$(R)' | grep -q '^s\.md\.bak\.'"
+check "fanout edited, non-interactive: overwritten, backup kept, WARN row" "[ \"\$(nondetail)\" = 'WARN|claude rules|1 updated, 3 verified' ] && grep -qx '## shared s' '$(R)/s.md' && ls '$(R)' | grep '^s\.md\.bak\.' >/dev/null"
 parity fanout-edited
 printf '## shared s\nlocal edit 2\n' > "$(R)/s.md"
 # The edited run's backup is checked above; removed so the tree holds one backup
@@ -323,7 +323,7 @@ seed_retired() {
 }
 case_run retired seed_retired
 check "retired: exit 0, row 1 added, 2 removed (WARN: a kept file still loads)" "[ \"\$(rc)\" = 0 ] && [ \"\$(nondetail)\" = 'WARN|claude rules|1 added, 2 removed' ]"
-check "retired: copies removed, backups kept" "[ ! -e '$(R)/gone.md' ] && [ ! -e '$(R)/old.md' ] && ls '$(R)' | grep -q '^gone\.md\.bak\.' && ls '$(R)' | grep -q '^old\.md\.bak\.'"
+check "retired: copies removed, backups kept" "[ ! -e '$(R)/gone.md' ] && [ ! -e '$(R)/old.md' ] && ls '$(R)' | grep '^gone\.md\.bak\.' >/dev/null && ls '$(R)' | grep '^old\.md\.bak\.' >/dev/null"
 check "retired: removals in DETAIL rows" "row 'DETAIL|claude rules|removed: gone.md' && row 'DETAIL|claude rules|removed: old.md'"
 check "retired: a retired rule still in ~/.aitools/rules is not fanned out" "grep -q 'Not fanned out: old.md (retired in the rules manifest)' '$C/$L.out' && ! row 'DETAIL|claude rules|added: old.md'"
 check "retired: user file with a retired name kept, ACTION row" "grep -qx 'my own' '$(R)/mine2.md' && row 'ACTION||Claude Code still loads retired rules in ~/.claude/rules: mine2.md -- delete them unless you wrote them'"
@@ -341,7 +341,7 @@ seed_retired_bracket() {
     deployed '[r].md' 'r rule'
 }
 case_run retired-bracket seed_retired_bracket
-check "retired [r].md: removed, backup kept" "[ \"\$(rc)\" = 0 ] && [ \"\$(nondetail)\" = 'OK|claude rules|1 added, 1 removed' ] && [ ! -e '$(R)/[r].md' ] && ls '$(R)' | grep -q '^\[r\]\.md\.bak\.'"
+check "retired [r].md: removed, backup kept" "[ \"\$(rc)\" = 0 ] && [ \"\$(nondetail)\" = 'OK|claude rules|1 added, 1 removed' ] && [ ! -e '$(R)/[r].md' ] && ls '$(R)' | grep '^\[r\]\.md\.bak\.' >/dev/null"
 parity retired-bracket
 
 # A retired name whose copy differs only in case (Gone.md for gone.md)
@@ -352,7 +352,7 @@ seed_retired_case() {
     deployed Gone.md 'gone rule'
 }
 case_run retired-case seed_retired_case
-check "retired, case differs: the copy found and removed under its own name" "[ \"\$(rc)\" = 0 ] && [ \"\$(nondetail)\" = 'OK|claude rules|1 added, 1 removed' ] && [ ! -e '$(R)/Gone.md' ] && row 'DETAIL|claude rules|removed: Gone.md' && ls '$(R)' | grep -q '^Gone\.md\.bak\.'"
+check "retired, case differs: the copy found and removed under its own name" "[ \"\$(rc)\" = 0 ] && [ \"\$(nondetail)\" = 'OK|claude rules|1 added, 1 removed' ] && [ ! -e '$(R)/Gone.md' ] && row 'DETAIL|claude rules|removed: Gone.md' && ls '$(R)' | grep '^Gone\.md\.bak\.' >/dev/null"
 parity retired-case
 
 # ---------------------------------------------------------------------------
@@ -397,8 +397,8 @@ if $HAVE_PTY; then
     printf '## dot d\nmy edit %s\n' "$L" > "$C/$L/.claude/rules/d.md"
     printf '## project p\nmy edit %s\n' "$L" > "$C/$L/.claude/rules/p.md"
     run_pty 'a\na\n'
-    check "adopt $L: dotprofile rule written to the dotprofile and committed" "perl -pe 's/\r//' '$DP/claude/rules/d.md' | grep -qx 'my edit $L' && git -C '$DP' log -1 --format=%s | grep -q 'd.md'"
-    check "adopt $L: aitools rule written to the aitools working tree" "perl -pe 's/\r//' '$A/.claude/rules/p.md' | grep -qx 'my edit $L'"
+    check "adopt $L: dotprofile rule written to the dotprofile and committed" "perl -pe 's/\r//' '$DP/claude/rules/d.md' | grep -x 'my edit $L' >/dev/null && git -C '$DP' log -1 --format=%s | grep 'd.md' >/dev/null"
+    check "adopt $L: aitools rule written to the aitools working tree" "perl -pe 's/\r//' '$A/.claude/rules/p.md' | grep -x 'my edit $L' >/dev/null"
     check "adopt $L: DETAIL rows" "row 'DETAIL|claude rules|accept & adopt: d.md' && row 'DETAIL|claude rules|accept & adopt: p.md'"
     # abort: exit 2 from the library, no claude rules row, the local file kept
     printf '## shared s\nlocal %s\n' "$L" > "$C/$L/.claude/rules/s.md"

@@ -241,8 +241,8 @@ lognorm() {
         ' "$f"
     done
 }
-logged() { lognorm "${2:-$L}" | grep -qF -- "$1"; }      # in the run's log files (none: no match)
-logged_re() { lognorm "${2:-$L}" | grep -qE -- "$1"; }   # the same, an extended regex
+logged() { lognorm "${2:-$L}" | grep -F -- "$1" >/dev/null; }      # in the run's log files (none: no match)
+logged_re() { lognorm "${2:-$L}" | grep -E -- "$1" >/dev/null; }   # the same, an extended regex
 bakdirs() { ls "$C/${1:-$L}/.claude" | grep -c '^skills\.bak\.'; }  # backup dirs beside ~/.claude/skills
 DPN='<TMP>/aitools-tess'   # the fixture dotprofile as lognorm prints it
 
@@ -348,7 +348,7 @@ check "fanout rerun: row 6 verified, nothing written" "[ \"\$(nondetail)\" = 'OK
 parity fanout-rerun
 printf '## shared s1\nlocal edit\n' > "$(S)/s1/SKILL.md"
 rerun
-check "fanout edited, non-interactive: overwritten, backup kept, WARN row" "[ \"\$(nondetail)\" = 'WARN|claude skills|1 updated, 5 verified' ] && grep -qx '## shared s1' '$(S)/s1/SKILL.md' && ls '$(S)/s1' | grep -q '^SKILL\.md\.bak\.'"
+check "fanout edited, non-interactive: overwritten, backup kept, WARN row" "[ \"\$(nondetail)\" = 'WARN|claude skills|1 updated, 5 verified' ] && grep -qx '## shared s1' '$(S)/s1/SKILL.md' && ls '$(S)/s1' | grep '^SKILL\.md\.bak\.' >/dev/null"
 parity fanout-edited
 printf '## shared s1\nlocal edit 2\n' > "$(S)/s1/SKILL.md"
 rerun --force
@@ -513,7 +513,7 @@ if $HAVE_PTY; then
         printf '## dot d1\nmy edit %s\n' "$lang" > "$C/$lang/.claude/skills/d1/SKILL.md"
         printf '## project p1\nmy edit %s\n' "$lang" > "$C/$lang/.claude/skills/p1/SKILL.md"
         run_pty 'a\na\n'
-        check "adopt $lang: dotprofile skill written to the dotprofile and committed" "grep -qx 'my edit $lang' '$DP/claude/skills/d1/SKILL.md' && git -C '$DP' log -1 --name-only --format= | grep -qx 'claude/skills/d1/SKILL.md' && git -C '$DP' diff --quiet -- claude/skills/d1/SKILL.md"
+        check "adopt $lang: dotprofile skill written to the dotprofile and committed" "grep -qx 'my edit $lang' '$DP/claude/skills/d1/SKILL.md' && git -C '$DP' log -1 --name-only --format= | grep -x 'claude/skills/d1/SKILL.md' >/dev/null && git -C '$DP' diff --quiet -- claude/skills/d1/SKILL.md"
         check "adopt $lang: aitools skill written to the aitools working tree" "grep -qx 'my edit $lang' '$A/.claude/skills/p1/SKILL.md'"
         check "adopt $lang: DETAIL rows" "row 'DETAIL|claude skills|accept & adopt: d1/SKILL.md' $lang && row 'DETAIL|claude skills|accept & adopt: p1/SKILL.md' $lang"
         # abort: exit 2 from the library, no claude skills row, the local file kept
@@ -567,7 +567,7 @@ rerun
 check "binary rerun: row 3 verified" "[ \"\$(nondetail)\" = 'OK|claude skills|3 verified' ]"
 printf 'changed\000\n' > "$(S)/b/img.bin"
 rerun
-check "binary edited: overwritten byte for byte, backup kept" "[ \"\$(nondetail)\" = 'OK|claude skills|1 updated, 2 verified' ] && cmp -s '$C/$L/.aitools/skills/b/img.bin' '$(S)/b/img.bin' && ls '$(S)/b' | grep -q '^img\.bin\.bak\.' && ! ls '$(S)/b' | grep -q 'aitools-tmp'"
+check "binary edited: overwritten byte for byte, backup kept" "[ \"\$(nondetail)\" = 'OK|claude skills|1 updated, 2 verified' ] && cmp -s '$C/$L/.aitools/skills/b/img.bin' '$(S)/b/img.bin' && ls '$(S)/b' | grep '^img\.bin\.bak\.' >/dev/null && ! ls '$(S)/b' | grep 'aitools-tmp' >/dev/null"
 parity binary-edited
 
 # Strict UTF-8 in both languages (review R1): each of these is binary in sh and
@@ -667,17 +667,17 @@ seed_real() {
     echo $? > "$C/dh.rc"
 }
 case_run real seed_real
-check "real harness: deploy-harness wrote the skills manifest" "[ \"\$(cat '$C/dh.rc')\" = 0 ] && head -n 1 '$C/$L/.aitools/skills/.aitools-skills-manifest' | grep -qx '# aitools skills manifest v1' || { tail -n 20 '$C/dh.out'; false; }"
+check "real harness: deploy-harness wrote the skills manifest" "[ \"\$(cat '$C/dh.rc')\" = 0 ] && head -n 1 '$C/$L/.aitools/skills/.aitools-skills-manifest' | grep -x '# aitools skills manifest v1' >/dev/null || { tail -n 20 '$C/dh.out'; false; }"
 perl -ne 'next if $. == 1; s/\r?\n\z//; my ($n, $s) = split /\t/; print "$n\n" if $s ne "retired"' "$C/$L/.aitools/skills/.aitools-skills-manifest" > "$C/names"
-check "real harness: every listed skill fanned out with its SKILL.md" "[ -s '$C/names' ] && ! while IFS= read -r n; do [ -f '$(S)/'\"\$n\"/SKILL.md ] || { echo \"missing: \$n\"; exit 0; }; done < '$C/names' | grep -q missing"
+check "real harness: every listed skill fanned out with its SKILL.md" "[ -s '$C/names' ] && ! while IFS= read -r n; do [ -f '$(S)/'\"\$n\"/SKILL.md ] || { echo \"missing: \$n\"; exit 0; }; done < '$C/names' | grep missing >/dev/null"
 check "real harness: manifest lists shared skills only" \
     "perl -ne 'next if \$. == 1; \$bad = 1 unless /\\tshared\\r?\$/; END { exit(\$bad ? 1 : 0) }' '$C/$L/.aitools/skills/.aitools-skills-manifest'"
 check "real harness: the dotprofile skill is neither listed nor deployed" "! grep -qx d1 '$C/names' && [ ! -e '$(S)/d1' ] && [ ! -e '$C/$L/.aitools/skills/d1' ]"
-check "real harness: exit 0, OK row" "[ \"\$(rc)\" = 0 ] && nondetail | grep -qE '^OK\|claude skills\|[0-9]+ added$'"
+check "real harness: exit 0, OK row" "[ \"\$(rc)\" = 0 ] && nondetail | grep -E '^OK\|claude skills\|[0-9]+ added$' >/dev/null"
 # No golden record: the tree is this checkout's own skills (it changes with every
 # skill edit); the checks above run on every platform
 rerun
-check "real harness rerun: verified" "nondetail | grep -qE '^OK\|claude skills\|[0-9]+ verified$'"
+check "real harness rerun: verified" "nondetail | grep -E '^OK\|claude skills\|[0-9]+ verified$' >/dev/null"
 
 # ---------------------------------------------------------------------------
 # Cursor (FO-5): setup-user-cursor step 5 runs the same fan-out into
@@ -741,7 +741,7 @@ check "cursor: nothing written to ~/.claude/skills" "[ ! -e '$C/$L/.claude/skill
 for lang in $L; do
     check "cursor $lang: adopt=none for every source" "logged 'cursor skills: s1/SKILL.md source=shared adopt=none' $lang && logged 'cursor skills: p1/SKILL.md source=aitools adopt=none' $lang && logged 'cursor skills: d1/SKILL.md source=dotprofile adopt=none' $lang"
 done
-check "cursor: retired copy removed, backed up beside ~/.cursor/skills" "[ ! -e '$(CS)/gone' ] && b=\$(ls -d '$C/$L/.cursor/'skills.bak.* | head -n 1) && grep -qx gone \"\$b/gone/SKILL.md\" && grep -qxF 'DETAIL|cursor skills|removed: gone' '$C/$L.summary'"
+check "cursor: retired copy removed, backed up beside ~/.cursor/skills" "[ ! -e '$(CS)/gone' ] && b=\$(ls -d '$C/$L/.cursor/'skills.bak.* | sed -n '1p') && grep -qx gone \"\$b/gone/SKILL.md\" && grep -qxF 'DETAIL|cursor skills|removed: gone' '$C/$L.summary'"
 check "cursor: user skill at a retired name kept, ACTION row" "grep -qx 'my own' '$(CS)/mine2/SKILL.md' && grep -qxF 'ACTION||Cursor still loads retired skills in ~/.cursor/skills: mine2 -- delete them unless you wrote them' '$C/$L.summary'"
 check "cursor: a user's own skill kept" "grep -qx mine '$(CS)/mine/SKILL.md' && grep -q 'Preserved unmanaged skill: mine' '$C/$L.out'"
 check "cursor: firecrawl symlink preserved, never followed" "[ -L '$(CS)/firecrawl' ] && [ \"\$(readlink '$(CS)/firecrawl')\" = ../../.agents/skills/firecrawl ] && [ \"\$(ls '$C/$L/.agents/skills/firecrawl')\" = SKILL.md ]"
