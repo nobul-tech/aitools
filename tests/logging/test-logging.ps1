@@ -8,15 +8,21 @@
 # scripts/aitools).
 # Exit 1 if any case fails.
 # Spec: .claude/rules/script-standards.md (log line format, levels, counters,
-# end-of-run summary), reference/logging.md (incl. section 5, fail-safe writes), reference/script-standards-detail.md
-# "Logging overrides".
+# end-of-run summary), reference/logging.md (section 5, fail-safe writes;
+# section 8, warnings and errors across scripts: records, the relay, the panel).
+# Cases: every PowerShell case (lang both|ps1) of the shared fixture
+# tests/logging/fixtures/summary-cases.txt (L1-L32; run by
+# tests/logging/fixture-runner.ps1, shared with scratch harnesses), then this
+# suite's own cases: the library's log writers, options and counters, the
+# summary file lifecycle, the relay options, Invoke-RelaySync, check-lib.ps1,
+# aitools-profile.ps1 and the entry point.
 #
 # Usage: pwsh -NoProfile -File tests/logging/test-logging.ps1 [-Help]
 
 param([switch]$Help)
 
 if ($Help) {
-    Get-Content $PSCommandPath | Select-Object -Skip 1 -First 13
+    Get-Content $PSCommandPath | Select-Object -Skip 1 -First 19
     exit 0
 }
 if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
@@ -87,10 +93,158 @@ try {
     Check "lib: Write-Summary writes CAT|tool|detail" ($rows -contains "ERROR|tool|it failed")
     Check "lib: Write-Summary OK stays OK with no warnings" ($rows -contains "OK|tool2|v1")
 
+    # The promotion is gone (logging.md 8.3: an OK record is never recoloured)
     $sum2 = Join-Path $tmpRoot "summary2.txt"
     $r = Invoke-LibCase "promote" 'LogWarn w; Write-Summary "OK" "tool" "v1"' $sum2
     $rows = if (Test-Path $sum2) { Get-Content $sum2 } else { @() }
-    Check "lib: Write-Summary promotes OK to WARN after a warning" ($rows -contains "WARN|tool|v1")
+    Check "lib: Write-Summary keeps OK after a warning (no promotion)" (($rows -ccontains "OK|tool|v1") -and -not ($rows -ccontains "WARN|tool|v1"))
+
+    # -----------------------------------------------------------------------
+    # The shared fixture (logging.md section 8): every lang both|ps1 case
+    # -----------------------------------------------------------------------
+    . (Join-Path $PSScriptRoot "fixture-runner.ps1")
+    $fxRoot = Join-Path $tmpRoot "fixture"
+    New-Item -ItemType Directory -Path $fxRoot | Out-Null
+    $fx = Invoke-LoggingFixture -Path (Join-Path $PSScriptRoot "fixtures" "summary-cases.txt") -Lib $lib -TmpRoot $fxRoot
+    $script:pass += $fx.Pass; $script:fail += $fx.Fail; $script:skip += $fx.Skip
+
+    # -----------------------------------------------------------------------
+    # aitools-lib.ps1: options, the summary file lifecycle, relay options,
+    # Invoke-RelaySync, Repair-UvToolEnv (the I1 contract and its addendum)
+    # -----------------------------------------------------------------------
+    $pwsh = (Get-Process -Id $PID).Path
+    # Invoke-LibScript CASE BODY [SUMMARY] [-Files @{ name = text }] -- run BODY
+    # (a script, after the lib and Initialize-Logging "t") in a fresh pwsh with
+    # stdin closed; extra files are written into the case dir first ({DIR} and
+    # {LIB} in them, and in BODY, are replaced). Returns @{ Out; Err; Rc; Log;
+    # Jsonl; Summary (lines); Dir }.
+    function Invoke-LibScript([string]$Case, [string]$Body, [string]$SummaryFile = "", [hashtable]$Files = @{}) {
+        $dir = Join-Path $tmpRoot $Case
+        New-Item -ItemType Directory -Path (Join-Path $dir "logs") -Force | Out-Null
+        foreach ($k in $Files.Keys) {
+            [IO.File]::WriteAllText((Join-Path $dir $k), $Files[$k].Replace('{DIR}', $dir).Replace('{LIB}', $lib).Replace('{PWSH}', $pwsh), [Text.UTF8Encoding]::new($false))
+        }
+        $script_ = Join-Path $dir "case.ps1"
+        $text = ". '$lib'`nInitialize-Logging 't'`n" + $Body.Replace('{DIR}', $dir).Replace('{LIB}', $lib).Replace('{PWSH}', $pwsh)
+        [IO.File]::WriteAllText($script_, $text, [Text.UTF8Encoding]::new($false))
+        $psi = [System.Diagnostics.ProcessStartInfo]::new($pwsh)
+        foreach ($x in @("-NoProfile", "-NonInteractive", "-File", $script_)) { $psi.ArgumentList.Add($x) }
+        $psi.UseShellExecute = $false
+        $psi.RedirectStandardInput = $true; $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true
+        $psi.StandardOutputEncoding = [Text.UTF8Encoding]::new($false); $psi.StandardErrorEncoding = [Text.UTF8Encoding]::new($false)
+        foreach ($n in @("AITOOLS_SUMMARY_FILE", "AITOOLS_FORCE", "AITLIB_RELAYED", "AITOOLS_PRESERVE_SUMMARY", "AITOOLS_RUN_ID")) { [void]$psi.Environment.Remove($n) }
+        $psi.Environment["AITOOLS_LOG_DIR"] = Join-Path $dir "logs"
+        if ($SummaryFile) { $psi.Environment["AITOOLS_SUMMARY_FILE"] = $SummaryFile }
+        $p = [System.Diagnostics.Process]::Start($psi)
+        $p.StandardInput.Close()
+        $errTask = $p.StandardError.ReadToEndAsync()
+        $out = $p.StandardOutput.ReadToEnd()
+        $p.WaitForExit()
+        $res = @{ Out = $out; Err = $errTask.Result; Rc = $p.ExitCode; Dir = $dir }
+        $p.Dispose()
+        $lp = Join-Path $dir "logs" "deploy.log"
+        $jp = Join-Path $dir "logs" "deploy.jsonl"
+        $res.Log = if (Test-Path $lp) { [IO.File]::ReadAllText($lp) } else { "" }
+        $res.Jsonl = @(if (Test-Path $jp) { [IO.File]::ReadAllLines($jp) | Where-Object { $_ } | ForEach-Object { $_ | ConvertFrom-Json } })
+        $res.Summary = @(if ($SummaryFile -and (Test-Path $SummaryFile)) { [IO.File]::ReadAllLines($SummaryFile, [Text.UTF8Encoding]::new($false)) | Where-Object { $_ } })
+        return $res
+    }
+
+    # Options: stderr console (recording off), jsonl, the migration switch
+    $s = Join-Path $tmpRoot "opt-stderr.txt"; [IO.File]::WriteAllText($s, "")
+    $r = Invoke-LibScript "opt-stderr" '$script:AitLibOptConsoleStderr = $true; $script:AitLibRecordLogCalls = $true; LogWarn "w2"; Write-AitWarn "t" "w3"; Write-Output "COUNTS=$($script:errors)/$($script:warnings)"' $s
+    Check "lib: stderr console option -- console lines on stderr, none on stdout" (($r.Err -match '\[warn\] w2') -and ($r.Err -match '\[warn\] w3') -and -not ($r.Out -match '\[warn\]'))
+    Check "lib: stderr console option -- recording off, counts still count" (($r.Summary.Count -eq 0) -and ($r.Out -match 'COUNTS=0/2'))
+    $r = Invoke-LibScript "opt-jsonl" '$script:AitLibOptJsonl = $true; Log "j-line"; LogDetail "j-detail"'
+    Check "lib: jsonl option -- Log writes one deploy.jsonl record, LogDetail none" ((@($r.Jsonl | Where-Object { $_.msg -ceq 'j-line' -and $_.script -ceq 't' -and $_.level -ceq 'info' }).Count -eq 1) -and (@($r.Jsonl | Where-Object { $_.msg -ceq 'j-detail' }).Count -eq 0))
+    $s = Join-Path $tmpRoot "opt-switch.txt"; [IO.File]::WriteAllText($s, "")
+    $r = Invoke-LibScript "opt-switch" 'LogWarn "lw"; LogError "le"; Write-AitWarn "tool" "ww"' $s
+    Check "lib: migration switch off (default) -- LogWarn / LogError record nothing, Write-AitWarn records" (($r.Summary.Count -eq 1) -and ($r.Summary[0] -ceq 'WARN|tool|ww'))
+
+    # Summary file lifecycle (addendum 1)
+    $r = Invoke-LibScript "life-owner" 'Start-AitSummary; $f = $env:AITOOLS_SUMMARY_FILE; Write-AitWarn "tool" "w"; Write-Output "OWNER=$($script:AitLibSummaryOwner)"; Complete-AitSummary; Write-Output "GONE=$(-not (Test-Path -LiteralPath $f)) ENV=[$env:AITOOLS_SUMMARY_FILE]"'
+    Check "lib: Start-AitSummary with no file -- creates and owns it" ($r.Out -match 'OWNER=True')
+    Check "lib: Complete-AitSummary as the owner -- draws the panel, deletes the file, unsets it" (($r.Out -match '\[!\]\s+tool\s+w') -and ($r.Out -match 'GONE=True ENV=\[\]'))
+    $s = Join-Path $tmpRoot "life-other.txt"; [IO.File]::WriteAllText($s, "")
+    $r = Invoke-LibScript "life-other" 'Start-AitSummary; Write-AitWarn "tool" "w"; Write-Output "OWNER=$($script:AitLibSummaryOwner)"; Complete-AitSummary' $s
+    Check "lib: Start-AitSummary with a file set -- not the owner; Complete-AitSummary draws nothing, the file stays" (($r.Out -match 'OWNER=False') -and -not ($r.Out -match '\[!\]') -and ($r.Summary -ccontains 'WARN|tool|w'))
+    $s = Join-Path $tmpRoot "life-keep.txt"; [IO.File]::WriteAllText($s, "")
+    $r = Invoke-LibScript "life-keep" 'Write-AitWarn "tool" "w"; Show-Summary -Keep; Write-Output "KEPT=$(Test-Path -LiteralPath $env:AITOOLS_SUMMARY_FILE)"' $s
+    Check "lib: Show-Summary -Keep draws and keeps the file" (($r.Out -match '\[!\]\s+tool\s+w') -and ($r.Out -match 'KEPT=True'))
+    $s = Join-Path $tmpRoot "life-path.txt"; [IO.File]::WriteAllText($s, "OK|alt|1.0`n")
+    $r = Invoke-LibScript "life-path" "Show-Summary -Path '$s'; Write-Output ""GONE=`$(-not (Test-Path -LiteralPath '$s'))"""
+    Check "lib: Show-Summary -Path draws that file, then deletes it" (($r.Out -match '\[ok\]\s+alt\s+1\.0') -and ($r.Out -match 'GONE=True'))
+
+    # Relay options and decisions not in the fixture
+    $child = @'
+. '{LIB}'
+Initialize-Logging "rchild"
+Log "child-info"
+LogWarn "child-warn"
+exit 0
+'@
+    $r = Invoke-LibScript "relay-quiet" ('$rc = Invoke-ChildRelayed "q" "{DIR}/rchild.ps1" @{} "" -Quiet; Write-Output "RC=$rc"') "" @{ "rchild.ps1" = $child }
+    Check "relay: -Quiet prints the child's warn line, not its info line" (($r.Out -match '\[rchild\] \[warn\] child-warn') -and -not ($r.Out -match 'child-info') -and ($r.Out -match 'RC=0'))
+    $r = Invoke-LibScript "relay-mirror" '$rc = Invoke-ChildRelayed "m" "{DIR}/rchild.ps1" @{} ""' "" @{ "rchild.ps1" = $child }
+    Check "relay: mirrors each structured child line to deploy.jsonl once" ((@($r.Jsonl | Where-Object { $_.msg -ceq 'child-info' }).Count -eq 1) -and (@($r.Jsonl | Where-Object { $_.msg -ceq 'child-warn' }).Count -eq 1))
+    $r = Invoke-LibScript "relay-nomirror" '$rc = Invoke-ChildRelayed "m" "{DIR}/rchild.ps1" @{} "" -NoMirror' "" @{ "rchild.ps1" = $child }
+    Check "relay: -NoMirror writes no deploy.jsonl record" (@($r.Jsonl | Where-Object { $_.msg -like 'child-*' }).Count -eq 0)
+
+    # Only the outermost relay mirrors (addendum 6): a native child with the
+    # jsonl option on relays a grandchild in-process
+    $mid = @'
+. '{LIB}'
+Initialize-Logging "mid"
+$script:AitLibOptJsonl = $true
+Log "mid-line"
+$rc = Invoke-ChildRelayed "gc" "{DIR}/gc.ps1" @{} ""
+exit $rc
+'@
+    $gc = @'
+. '{LIB}'
+Initialize-Logging "gc"
+Log "gc-line"
+exit 0
+'@
+    $r = Invoke-LibScript "relay-nested" '$rc = Invoke-NativeRelayed -Label "mid" -FilePath "{PWSH}" -ArgumentList @("-NoProfile", "-NonInteractive", "-File", "{DIR}/mid.ps1"); Write-Output "RC=$rc"' "" @{ "mid.ps1" = $mid; "gc.ps1" = $gc }
+    Check "relay: nested relays -- each structured line in deploy.jsonl exactly once" ((@($r.Jsonl | Where-Object { $_.msg -ceq 'mid-line' }).Count -eq 1) -and (@($r.Jsonl | Where-Object { $_.msg -ceq 'gc-line' }).Count -eq 1) -and ($r.Out -match 'RC=0'))
+
+    # An abort is recorded only when the child recorded no WARN or ERROR record
+    $ab = @'
+. '{LIB}'
+Initialize-Logging "abchild"
+Write-AitWarn "ab tool" "first a warning"
+Invoke-ManagedAbort
+'@
+    $s = Join-Path $tmpRoot "relay-abort.txt"; [IO.File]::WriteAllText($s, "")
+    $r = Invoke-LibScript "relay-abort" '$rc = Invoke-ChildRelayed "ab" "{DIR}/abchild.ps1" @{} "ab tool"; Write-Output "RC=$rc CHILD=$($script:AitLibChildRc) COUNTS=$($script:errors)/$($script:warnings)"' $s @{ "abchild.ps1" = $ab }
+    Check "relay: an abort after the child recorded a warning -- not recorded again, one parent error" ((($r.Summary -join '//') -ceq 'WARN|ab tool|first a warning') -and ($r.Out -match 'RC=1 CHILD=2 COUNTS=1/0'))
+
+    # Not run: a native command that does not exist
+    $s = Join-Path $tmpRoot "relay-notrun.txt"; [IO.File]::WriteAllText($s, "")
+    $r = Invoke-LibScript "relay-notrun" '$rc = Invoke-NativeRelayed -Label "nr" -FilePath "{DIR}/no-such-command" -SummaryTool "nr tool"; Write-Output "RC=$rc COUNTS=$($script:errors)"' $s
+    Check "relay: a command that cannot be found -- one recorded error, '<label> not run'" ((@($r.Summary | Where-Object { $_ -like 'ERROR|nr tool|nr not run|command not found: *' }).Count -eq 1) -and ($r.Out -match 'RC=1 COUNTS=1'))
+
+    # Native child stderr: teed (still on the console) and the failure reason
+    $errChild = @'
+[Console]::Error.WriteLine("boom on stderr")
+exit 4
+'@
+    $s = Join-Path $tmpRoot "relay-stderr.txt"; [IO.File]::WriteAllText($s, "")
+    $r = Invoke-LibScript "relay-stderr" '$rc = Invoke-NativeRelayed -Label "se" -FilePath "{PWSH}" -ArgumentList @("-NoProfile", "-NonInteractive", "-File", "{DIR}/errchild.ps1"); Write-Output "RC=$rc"' $s @{ "errchild.ps1" = $errChild }
+    Check "relay: native stderr is teed to the console and is the reason" (($r.Err -match 'boom on stderr') -and (($r.Summary -join '//') -ceq 'ERROR|errchild|se failed (exit 4)|boom on stderr') -and ($r.Out -match 'RC=1'))
+
+    # Invoke-RelaySync (addendum 2)
+    $s = Join-Path $tmpRoot "sync-ok.txt"; [IO.File]::WriteAllText($s, "")
+    $r = Invoke-LibScript "sync-ok" '$rc = Invoke-RelaySync "{PWSH}" @("-NoProfile", "-NonInteractive", "-Command", "Write-Output synced-line"); Write-Output "RC=$rc"' $s
+    Check "lib: Invoke-RelaySync success -- output at detail, exit 0, no record" (($r.Out -match 'RC=0') -and ($r.Log -match '\[detail\] relay sync: synced-line') -and ($r.Summary.Count -eq 0))
+    $s = Join-Path $tmpRoot "sync-fail.txt"; [IO.File]::WriteAllText($s, "")
+    $r = Invoke-LibScript "sync-fail" '$rc = Invoke-RelaySync "{PWSH}" @("-NoProfile", "-NonInteractive", "-Command", "Write-Output ''error: sync broke''; exit 3"); Write-Output "RC=$rc COUNTS=$($script:warnings)"' $s
+    Check "lib: Invoke-RelaySync failure -- one warning 'relay sync' with the reason" ((($r.Summary -join '//') -ceq 'WARN|relay sync|relay -> AGENTS.md sync failed (exit 3, non-fatal): error: sync broke') -and ($r.Out -match 'RC=3 COUNTS=1'))
+
+    # Repair-UvToolEnv: not applicable returns 1 and logs nothing
+    $r = Invoke-LibScript "uv-na" '$rc = Repair-UvToolEnv -ToolName "modal" -UpgradeOutput "some other failure" -Tool "modal cli"; Write-Output "RC=$rc COUNTS=$($script:errors)/$($script:warnings)"'
+    Check "lib: Repair-UvToolEnv on other output -- returns 1, nothing logged" ($r.Out -match 'RC=1 COUNTS=0/0')
 
     $rotDir = Join-Path $tmpRoot "rotate" "logs"
     New-Item -ItemType Directory -Path $rotDir -Force | Out-Null
