@@ -79,6 +79,8 @@ machine profile
 managed tool
 merge-conflict menu
 observation
+operational learning
+OL
 orchestration
 platform
 preserved

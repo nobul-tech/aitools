@@ -32,6 +32,27 @@ Not tagged. Branch `fix/m7-pywinpty-arm64`, mission M7-Pty under M7-Sweep (sessi
 
 ---
 
+## v0.77.20 -- standing-order-guard keeps blocking when its log directory cannot be written (2026-11-14)
+
+Not tagged. Branch `fix/m7-sog-log-failsafe`, mission M7-Hook under M7-Sweep (session 87795dc3). Commander, 2026-11-14: "25) launch mission go fix them, dont bother filing incidents, check to see if these were already fixed by the other running missions first, if not do it".
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 1 | High | `shared/hooks/standing-order-guard.sh` (PreToolUse, every Bash call) ran `mkdir -p "$LOG_DIR"` under `set -e` with no guard. When `~/.aitools/logs` could not be created (for example `~/.aitools` a regular file) the hook exited 1 on every call with `mkdir: cannot create directory ...`; Claude Code treats exit 1 as a non-blocking hook error, so a violating command such as `git status && git log` ran: the hook failed open. The observe-mode append in `violation()` was unguarded the same way (an unwritable log, or one that is a directory, turned an allow into exit 1; reached only in observe mode, and every check is at enforce today). Both writes are now fail-safe (`reference/logging.md` section 5): `mkdir -p "$LOG_DIR" 2>/dev/null \|\| true`, and the append in a `{ ...; } 2>/dev/null \|\| true` group, as `_aitlib_log_append` does. No mode variable, matching logic or message changed: exit 0 for a clean command and exit 2 with the same reason for a violation, whether the log directory is usable or not |
+| 2 | Low | The session telemetry append in `emit_hook_event` (`printf ... >> "$_SESSION_DIR/events.jsonl" 2>/dev/null \|\| true`) kept its exit code, but a redirection's own error is printed before a later `2>/dev/null` applies: when `events.jsonl` could not be written (for example a directory) the shell's `Is a directory` line went to stderr ahead of the block message, and a clean command that reached the final allow printed it too. It now uses the same group form, so stderr carries only the block message |
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 3 | `tests/hooks/test-hooks-smoke.sh`: 14 new standing-order-guard cases. With `~/.aitools` a regular file: a clean command exits 0 with no output; `&&` exits 2 with the usual reason and no mkdir error. With a temp copy switched to observe (`MODE_AND` only): a writable log gets the `[WOULD-BLOCK]` line and exits 0; a log path that is a directory, and an uncreatable log directory, exit 0 with no output. In a temp git repo whose `.scratch/.current-session` names a session dir: a writable `events.jsonl` gets the `hook_fire` event; with `events.jsonl` a directory a clean command exits 0 with no output and `&&` exits 2 with stderr exactly the block message. Against the old hook 8 of them fail |
+
+**Verified on:** Windows 11 (Git Bash 5.3): hook-rollout pre-deploy verification before and after (`bash -n`; clean exit 0; `&&` exit 2) with a writable HOME, with `~/.aitools` a file (before: exit 1 and 1; after: 0 and 2) and with an observe copy whose log path is a directory or uncreatable (before: exit 1; after: 0); with `events.jsonl` a directory the old hook printed `line 78: ... events.jsonl: Is a directory` before the block message, the new one only the message; the whole `tests/hooks` suite before and after (smoke 44 -> 58 passed, the other suites unchanged). Linux and macOS (bash 5 and `/bin/bash` 3.2): CI.
+
+---
+
 ## v0.77.17 -- The menu rules state the EOF defaults the code takes (2026-11-14)
 
 Not tagged. Branch `docs/m7-eof-spec`, mission M7-Menus under M7-Sweep (session 87795dc3), item 4 of M7-Sweep. Commander, 2026-11-14 (RFI fa81-25): "launch mission go fix them, dont bother filing incidents, check to see if these were already fixed by the other running missions first, if not do it". No code change.
