@@ -74,10 +74,15 @@ These apply equally regardless of file type:
    JSON: valid parse + required keys. Markdown: non-empty + required
    sections. Shell: non-empty + executable bit.
 4. **Outcome tracking**: every deployment must resolve to a governed
-   outcome and report via `write_summary`.
-   `deploy_managed_file` results (created, updated, verified, accept &
-   adopt, skipped, failed) are recorded with the deploy tracker; `failed`
-   is an ERROR row and the run continues with the next file. A fan-out
+   outcome and report it through the `aitools-lib` helpers
+   (`@reference/logging.md` section 8): the tool's status as an OK record
+   (`write_summary OK`), and each warning and each error once, by the
+   helper that logs it. `deploy_managed_file` results (created, updated,
+   verified, accept & adopt, skipped, failed) are recorded with the deploy
+   tracker, which writes the OK status record and the DETAIL records. On
+   `failed` the library has already recorded the error (`write_error`,
+   with the write, merge or validation error as its reason), and on
+   `skipped` the warning; the run continues with the next file. A fan-out
    consumer that backs up and deletes its copy of a retired rule or skill
    records `removed`; an outcome the tracker does not know is logged and
    counted as `failed`.
