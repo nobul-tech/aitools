@@ -58,8 +58,8 @@ State machine: `@reference/managed-file-deployment.md`.
 There is no ancestor and no deploy state: the only comparison is SOURCE
 against LOCAL.
 - LOCAL equals SOURCE: verified, nothing written.
-- LOCAL differs, non-interactive run (no terminal, EOF, or `--force`):
-  SOURCE written to LOCAL. No merge runs.
+- LOCAL differs, non-interactive run (no terminal, or `--force`):
+  SOURCE written to LOCAL. No menu is shown, so no merge starts.
 - LOCAL differs, read-only copy (deploy-harness `reference/`, `registries/`;
   `MANAGED_NO_REVIEW=true` / `-NoReview`): SOURCE written to LOCAL, no menu,
   no adopt, in every run.
@@ -95,8 +95,11 @@ merge.
 | anything else (bare Enter, a word, a letter not offered) | unchanged | unchanged; the menu asks again |
 
 Only an offered letter is a choice (commander, 2026-11-13: "no default or
-other characters should re-ask"); EOF is not a choice and takes overwrite,
-as above. Every answer is logged at `detail` (`read_menu_choice` /
+other characters should re-ask"); EOF is not a choice and takes the
+prompt's default with a warning: overwrite at the review menu and at any
+JSON field that offers overwrite, skip at a JSON field only in LOCAL (no
+overwrite offered), reject at the merge preview (detail: `@.claude/rules/interactive-menus.md` "Non-interactive
+fallback"). Every answer is logged at `detail` (`read_menu_choice` /
 `Read-MenuChoice`, `@.claude/rules/interactive-menus.md` "Answers").
 
 **Failure handling.** Before any write, back up every file the step will
