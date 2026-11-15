@@ -53,7 +53,9 @@ Form the path using each language's native idiom; never hardcode a separator:
 - **Python**: `pathlib.Path.home() / ".aitools" / "logs"` — native per OS.
 
 **Exception**: when a path is written **into a bash command string** (e.g. a
-hook `command` in `settings.json`, which always runs in bash on every platform),
+hook `command` in `settings.json`, `bash "<path>"`, which Claude Code hands to
+`sh -c` on macOS and Linux and to Git Bash on Windows:
+`reference/tool-ops-claude-code.md` item #8),
 use forward slashes regardless of host OS.
 
 ### 3. Granularity — per-component log files

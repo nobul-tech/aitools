@@ -209,12 +209,15 @@ with `-File` and through `Invoke-Expression`).
 ## Git Bash PATH shadowing (Windows)
 
 Git for Windows bundles tools in its `usr/bin/` directory (notably `perl`).
-When Claude Code (Git Bash) spawns `pwsh`, the child process inherits Git
+When Claude Code's Bash tool (Git Bash) spawns `pwsh`, the child process inherits Git
 Bash's PATH where `usr/bin/` may appear before managed tool install
 directories (e.g., `C:\Strawberry\perl\bin`).
 
 **Consequence**: `perl --version` from pwsh-spawned-by-Git-Bash may return
-Git's bundled perl (v5.38.2) instead of the managed Strawberry Perl (v5.42.0).
+Git's bundled perl instead of the managed Strawberry Perl. Probe of 2026-11-14:
+in Git Bash, `perl` printed `v5.42.3 cygwin`; in a native pwsh,
+`C:\Strawberry\perl\bin\perl.exe` printed `v5.42.0 MSWin32` (Git's perl was
+v5.38.2 when this was first written).
 
 **Resolution in check scripts**: `check-lib.ps1` explicitly prepends the
 managed Strawberry Perl install path on Windows, ensuring it takes priority
@@ -224,7 +227,10 @@ is not installed, the script fails — no fallback to Git's bundled version.
 **Resolution in other contexts**: Use `Refresh-Path` (aitools-lib.ps1) or
 read the Windows system PATH from the registry directly.
 
-**Currently shadowed tools**: Only `perl` confirmed.
+**Currently shadowed tools**: `perl` (the managed Strawberry Perl) confirmed.
+The same PATH order also shadows Windows' own programs: `find` and `sort.exe`
+(System32) and `bash` (the WSL launcher) confirmed (probes of 2026-11-14;
+"Running tests on Windows" issue 1).
 
 ## Strawberry Perl text mode (Windows)
 
@@ -324,3 +330,249 @@ line lands in the spinner's row. `Invoke-AI` telemetry is therefore file-only:
 `Write-AiLog`, the twin of bash `_ai_log` (same line format, same log file, no
 counters). The user-facing line `>> AI merge: <backend> (balanced)` is printed
 by `Invoke-AiMerge` before the spinner starts.
+
+## Running tests on Windows
+
+### The rule
+
+The commander, 2026-11-14, verbatim:
+
+> "For ai-merge, are you testing the shell script? we only need to test the ps1
+> here on windows. [...] tests should be .ps1 here on windows and executed as
+> powershell scripts, git bash scripts cause known issues."
+
+> "1) yes, unless a script is explicitly marked as cross-platform for good
+> reasons, such as build-deploy.sh and all perl/python scripts, sh scripts and
+> tests should only run on linux/mac and ps1 on windows. launch followup mission
+> to add a guard to those .sh scripts that should not run on windows or remove
+> them from the CI through other means. windows ci tests should have the
+> equivalent mac/linux .sh script in ps1. [...] 2) yes, same mission as 1 to
+> remediate."
+
+The questions those two answers reply to, in mission M6-Polish's wording (not
+the commander's): 1) should the Windows CI job stop running `.sh` suites
+through Git Bash; 2) may merges rely on CI for the `.sh` halves and on `.ps1`
+runs for local Windows evidence.
+
+So:
+
+- `.sh` scripts and their tests run only on macOS and Linux; `.ps1` scripts and
+  their tests run only on Windows.
+- The exception is a script explicitly marked cross-platform for a good reason.
+  The commander's examples: `build-deploy.sh` and all Perl and Python scripts.
+  Such a script's tests run on Windows too: the Python suites natively, the
+  suites of a bash script in Git Bash (its Windows runtime), and the Perl cases
+  from the `.ps1` harness with the perl `scripts/check-lib.ps1` puts first on
+  PATH (Strawberry Perl; no fallback to Git's bundled perl, issue 1 below).
+- The marks are recorded in `.claude/rules/cross-platform.md` "OS guard
+  exemptions", the list of unguarded scripts (hooks and the bash entry points are
+  there because they run in Git Bash on Windows). RFI 38dc-7 (M6-Polish,
+  2026-11-14) put that table to the commander as the record of what is
+  explicitly cross-platform and asked him to approve or drop its unsettled rows.
+  He answered row by row, verbatim: "7) build-package.sh is approved,
+  relay-outbound.sh/.ps1 need os guards they are not exempt, the aitools
+  dependency needs to be resolved (how to resolve it and resolving it need to be
+  part of same mission), the aitools-json and validate should be recorded as
+  exempt for those reasons, [...]". PR #167 (mission 38dc-23) gave
+  `relay-outbound-prompt.sh/.ps1` OS guards and took them out of the exempt
+  scripts. PR #166 (missions 38dc-13 and 38dc-27) records the answer for
+  `build-package.sh` ("approved, commander 2026-11-14") and the helper modules
+  ("commander, 2026-11-14"), and adds the rows "Cross-platform test suites" and
+  "Perl and Python scripts". The entry-point row for `bootstrap.ps1` and
+  `hh.ps1` still reads "rationale unrecorded, pending approval".
+- On a Windows machine an agent tests with the `.ps1` suites, run as PowerShell
+  scripts, plus the tests of explicitly cross-platform scripts. It does not run
+  any other `.sh` suite through Git Bash, and does not fake `uname` to make a
+  suite's bash half run there.
+- Local Windows evidence is the `.ps1` runs and the runs of explicitly
+  cross-platform scripts' tests. The `.sh` halves are tested by the
+  macOS and Linux CI jobs, and a merge relies on CI for them (answer 2 above).
+
+### How to run the tests
+
+The `.ps1` suites: every tracked `tests/*/test-*.ps1`, 34 since PR #166; the
+Windows CI job runs each of them, and `scripts/check-ci-suites.pl` fails CI
+when one is missing from the windows job or runs in another. The twelve that
+were on main before PR #166:
+
+| Suite | Tests |
+|---|---|
+| `tests/aitools-entry/test-console-mode-guard.ps1` | `aitools.ps1` console input-mode guard |
+| `tests/aitools-entry/test-win-forwarder.ps1` | the bash entry point `scripts/aitools`, run in Git Bash, forwarding to `aitools.ps1` (arguments, exit codes, stdin, the dashboard call) |
+| `tests/bootstrap/test-bootstrap.ps1` | `bootstrap.ps1` under Windows PowerShell 5.1, launching the installer and `aitools.ps1` under pwsh 7 (stubs) |
+| `tests/check-lib/test-resolve-git-bash.ps1` | `ResolveGitBash` in `scripts/check-lib.ps1` |
+| `tests/check-no-git-bash/test-check-no-git-bash.ps1` | the `check-*.ps1` scripts call Git Bash only in `check-pre-push.ps1` step 7 (`build-deploy.sh`) |
+| `tests/logging/test-logging.ps1` | logging in `scripts/aitools-lib.ps1` |
+| `tests/managed-files/test-managed-files.ps1` | `Deploy-ManagedFile`, AI merge included |
+| `tests/managed-files/test-adopt-push.ps1` | dotprofile adopt, commit and push |
+| `tests/menus/test-menu-choice.ps1` | `Read-MenuChoice` and the real menus, AI-merge preview included |
+| `tests/pywinpty/test-setup-pywinpty.ps1` | `setup-pywinpty.ps1`, dev and MDM |
+| `tests/relay-outbound/test-relay-outbound.ps1` | the OS guards of `relay-outbound-prompt.ps1` and `.sh` on Windows (the `.ps1` loads, the `.sh` refuses), and the `scripts/aitools` hand-off before its relay source line |
+| `tests/setup-user-shell/test-setup-user-shell.ps1` | `setup-user-shell.ps1` PowerShell profile block |
+
+The 22 added by PR #166 are the native harnesses of the suites whose `.sh`
+drove `.ps1` code from Git Bash, plus two helpers' tests: the fifteen
+script-suite ports (`tests/b8-consumers/`, `tests/claude-mdm/`,
+`tests/hookin/`, the five `tests/profile/` suites, `tests/fanout-lib/`,
+`tests/rules-fanout/`, `tests/rules-fanout-cursor/`, `tests/skills-fanout/`,
+`tests/skills-legacy/`, `tests/deploy-harness/`, `tests/deploy-harness-mdm/`),
+the five check-suite ports (`tests/check-pre-push/test-pre-push-step7.ps1`,
+`tests/check-post-push/test-post-push-step7.ps1`,
+`test-post-push-deploy-steps.ps1`, `test-menu-parity.ps1`,
+`tests/check-pre-commit/test-pre-commit-steps3-10.ps1`),
+`tests/lib/test-platform-lib.ps1` (the harness helpers) and
+`tests/os-guards/test-os-guards.ps1` (every POSIX-guarded `.sh` refuses Git
+Bash).
+
+Run each one as a PowerShell script:
+
+```powershell
+pwsh -NoProfile -File tests/menus/test-menu-choice.ps1
+```
+
+Also native on Windows: the Python suites (`python tests/harness-db/test-delegation-score.py`,
+`python tests/harvest/test-ait-harvest.py`) and the check scripts
+(`pwsh -NoProfile -File scripts/check-pre-commit.ps1`, `scripts/check-pre-push.ps1`;
+their `.sh` twins refuse Windows by their OS guard). Since PR #167 their only Git
+Bash call is `check-pre-push.ps1` step 7, which runs `build-deploy.sh`. The Windows CI job's last step
+runs one more check the same way, `scripts/check-script-compliance.ps1` (PR #160).
+
+From Claude Code:
+
+- Use the PowerShell tool where the session has one. Its pwsh gets the Windows
+  PATH.
+- From the Bash tool (Git Bash), give the suite's absolute path and redirect the
+  output to a log in the session scratch directory (`.claude/rules/smoke-test-pattern.md`):
+  `pwsh -NoProfile -File C:/Users/<you>/repos/aitools/tests/menus/test-menu-choice.ps1 > <scratch>/menus-ps1.log 2>&1`.
+  This pwsh inherits Git Bash's PATH (issue 1 below).
+- Run the `.ps1` suites your change touches. The suites of hooks, of
+  `build-deploy.sh` and of `build-package.sh` (`tests/hooks/`,
+  `tests/build-deploy/`, `tests/pywinpty/test-setup-pywinpty.sh`, which tests
+  the MDM pin embed through `build-deploy.sh`, and `tests/build-package/`) test
+  explicitly cross-platform bash scripts (the hooks: "many .sh files are meant
+  to run on linux/mac AND windows, notably the hooks", commander, 2026-11-01,
+  `plans/ci-platform-targeting.md`; `build-package.sh`: "build-package.sh is
+  approved", RFI 38dc-7 above) and may run in Git Bash: `bash <absolute path>`.
+  Every other `.sh` suite carries the POSIX guard and refuses Git Bash; its
+  Windows half is its `.ps1` harness. The Perl cases of
+  `scripts/check-menu-parity.pl` and `scripts/aitools-json.pl` run from
+  `tests/check-post-push/test-menu-parity.ps1` and
+  `tests/profile/test-profile.ps1`.
+
+### Why not Git Bash: the known issues
+
+Each was seen in aitools on Windows. The ones marked "probe" were re-checked on
+2026-11-14 on the commander's workstation (Windows 11, Git Bash 5.3.15, pwsh 7).
+
+1. **Git's Unix tools come first on PATH.** Git Bash puts Git's `usr/bin` ahead
+   of `C:\WINDOWS\system32` and the managed tools, and every program it starts
+   inherits that PATH, pwsh included. In a pwsh started from Git Bash,
+   `Get-Command find -All` lists `C:\Program Files\Git\usr\bin\find.exe` before
+   `C:\WINDOWS\system32\find.exe`; in the PowerShell tool's pwsh, only the
+   System32 one (probe). A `.cmd` stub in `tests/menus/test-menu-choice.ps1` that
+   counted lines with a bare `find`, run from a Git Bash script, got the Unix
+   `find`, which walked the whole C: drive and hung the suite (mission
+   M6-Polish; since PR #155 the stub calls `%SystemRoot%\System32\find.exe`).
+   `perl`, `bash` and `sort.exe` are shadowed the same way ("Git Bash PATH
+   shadowing" above; in pwsh itself a bare `sort` is still the `Sort-Object`
+   alias, so the `sort` case hits `.cmd` stubs and `.exe` lookups). In test
+   stubs, call Windows tools by their full path.
+2. **`bash` means different programs.** In a native pwsh, `bash` is the WSL
+   launcher (`%LOCALAPPDATA%\Microsoft\WindowsApps\bash.exe`); in a pwsh started
+   from Git Bash, Git's `usr\bin\bash.exe` comes first (probe). For this reason
+   the check scripts find Git Bash with `ResolveGitBash` (`scripts/check-lib.ps1`,
+   v0.77.2); since PR #167 only `check-pre-push.ps1` step 7 calls it.
+3. **NTFS permissions.** `chmod 000` on a file makes an append fail with
+   "Permission denied", as on Linux. `chmod 000` on a directory blocks neither
+   `cd` into it nor creating a file in it (probe). Mission M6-F saw the
+   `step3-unresolvable` cases (a `chmod 000` directory) fail under Git Bash for
+   this reason. A permission case written for macOS and Linux does not test the
+   same thing in Git Bash.
+4. **`grep` and CR.** Git for Windows `grep` drops the CR at the end of each
+   input line before matching, and a pattern that is only a CR behaves like an
+   empty pattern and matches every line: on a file whose only CR ends line 1,
+   `grep -c $'\r'` counted 2 lines (probe), and `grep 'a$'` matches the line
+   `a<CR>` (review probe, PR #159). `grep` cannot detect CRLF there; use
+   `perl -ne '$c = 1 if /\r/; END { exit($c ? 0 : 1) }'`.
+5. **MSYS rewrites arguments.** When Git Bash starts a native program (pwsh,
+   `git.exe`, python), it rewrites arguments that look like POSIX paths:
+   `/c/Users/x` arrives as `C:/Users/x`, and `--opt=/tmp/x` as
+   `--opt=C:/Users/<you>/AppData/Local/Temp/x` (probe). A git revision with a
+   `/` in the ref and a path that starts with a dot directory is rewritten too,
+   as a Windows path list (the `:` read as its separator):
+   `origin/main:.aitools/channel/relay.md` reaches `git.exe` as
+   `origin\main;.aitools\channel\relay.md` and the lookup fails, while `origin/main:reference/x.md` and
+   `HEAD:.aitools/x.md` pass unchanged (probe). `MSYS_NO_PATHCONV=1` turns the
+   rewriting off (`tests/profile/test-config.sh` sets it so a `--drives-json`
+   value is not rewritten), and then a `/c/Users/...` path reaches the program
+   unconverted: `git.exe` fails with "cannot change to '/c/Users/...'" (mission
+   38dc-09). The program under test sees arguments a user's shell would not
+   pass.
+6. **GNU tools, not BSD.** Git Bash runs GNU `grep`, `sed`, `stat`, `date` and
+   `find`; macOS runs the BSD ones (`.claude/rules/cross-platform.md` "Hook
+   portability"). A `.sh` suite that passes in Git Bash proves nothing about
+   macOS, and on MSYS it does not prove Linux either.
+7. **Pseudo-terminal runs are slow.** One menu suite, 2026-11-14 (mission
+   M6-Polish): `test-menu-choice.ps1` took 31 s; `test-menu-choice.sh` through
+   Git Bash with the pywinpty ConPTY took 62 s on the branch and 171-173 s
+   against a mutant.
+8. **A faked `uname` is not a Linux run.** Mission M6-F ran bash halves in Git
+   Bash with `uname -s` exported as a function that prints `Linux`; the NTFS
+   cases (issue 3) failed there and nowhere else. Such a run is not evidence for
+   Linux; CI runs the bash halves on Linux.
+
+### What CI runs on Windows today
+
+Since PR #166, the windows job of `.github/workflows/check.yml` has 45
+test-suite steps, one suite each: 34 `.ps1` suites run with
+`pwsh -NoProfile -File`, 2 Python suites, and 9 `.sh` suites run with
+`shell: bash` (Git Bash). Before PR #166 (main at 8bf15d9) it had 48: 12
+`.ps1`, 2 Python and 34 `.sh`. Steps that run no suite file: one tests inline
+in pwsh ("Profile resolver (PowerShell, native machine id and hostname)"), the
+last runs the check `scripts/check-script-compliance.ps1`, and the others set
+up and probe the runner (git line endings, checkout, Python, pywinpty, the
+runner probe, the Git Bash version), check script syntax, build `deploy/` and
+check its drift. `scripts/check-ci-suites.pl` (linux job, "Every test suite is
+in CI") enforces the split: a `.ps1` suite runs in the windows job only, a
+POSIX-guarded `.sh` suite in the macos and linux jobs only, an unguarded
+(cross-platform) `.sh` suite in all three.
+
+The 9 `.sh` suites left are the cross-platform suites of
+`.claude/rules/cross-platform.md` "OS guard exemptions": bash code whose
+Windows runtime is Git Bash.
+
+| `.sh` suites | What runs in Git Bash |
+|---|---|
+| the six `tests/hooks/` suites | the hooks (Claude Code runs hooks in bash on every platform) |
+| `tests/build-deploy/test-build-deploy-backup.sh` | `build-deploy.sh` (approved cross-language exception) |
+| `tests/build-package/test-cli.sh` | `build-package.sh` (approved, commander 2026-11-14) |
+| `tests/pywinpty/test-setup-pywinpty.sh` | the MDM pin embed, through `build-deploy.sh` |
+
+What moved out of Git Bash in PR #166:
+
+- The 20 `.sh` drivers of `.ps1` code became native `.ps1` harnesses (the
+  fifteen script-suite ports and the five check-suite ports listed under "How
+  to run the tests"). Their `.sh` halves carry the POSIX guard and test only the
+  `.sh` scripts on macOS and Linux. The script-suite ports compare both halves
+  with the same golden files (`tests/lib/platform-lib.sh` /
+  `platform-lib.ps1`); the check-suite ports write the same expectations in
+  each harness. Bash code that runs on Windows is still run from these
+  harnesses in Git Bash where it is the subject: `build-deploy.sh` (claude-mdm,
+  deploy-harness-mdm, skills-legacy, check-pre-push step 7), the Windows branch
+  of `scripts/aitools` (hookin) and the Git Bash pwsh branch of
+  `scripts/aitools-lib.sh` (profile test-lib).
+- The `.sh` twins of `.ps1` suites (logging, managed-files x2, menus) and
+  `tests/os-guards/test-os-guards.sh` carry the POSIX guard; their `.ps1`
+  suites run on Windows. `tests/os-guards/test-os-guards.ps1` runs every
+  POSIX-guarded `.sh` in Git Bash and checks that it refuses.
+
+The bash AI merge (`_invoke_ai_merge`, reached from the `[m]` choice of
+`deploy_managed_file` in `scripts/aitools-lib.sh`) has no Windows runtime path.
+Its callers (`setup-user-claude.sh`, `setup-user-cursor.sh`, `setup-user-hooks.sh`,
+`setup-user-skills.sh`, `deploy-harness.sh`, and their generated dotprofile
+`deploy/` copies) carry the POSIX guard, and on Windows `scripts/aitools`
+forwards to `aitools.ps1` (PR #162), which runs the `.ps1` deploy scripts, whose
+merge is `Invoke-AiMerge`. Since PR #166 no Windows CI step reaches it: the
+`.sh` suites that did (`tests/menus/test-menu-choice.sh`,
+`tests/managed-files/test-managed-files.sh`,
+`tests/managed-files/test-adopt-push.sh`) refuse Git Bash.

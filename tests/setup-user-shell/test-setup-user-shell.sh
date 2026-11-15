@@ -3,9 +3,10 @@
 # block in ~/.bash_profile and the shell integration lines in ~/.bashrc / ~/.zshrc.
 #
 # Safe to re-run: every case uses its own temp profile dir, HOME, log dir and summary
-# file, removed on exit. Platform: macOS/Linux (setup-user-shell.sh has a POSIX OS
-# guard); on Windows (Git Bash) every case is reported as SKIP and the suite exits 0.
-# The .ps1 twin is tested by test-setup-user-shell.ps1. Exit 1 if any case fails.
+# file, removed on exit. Platform: macOS/Linux only (OS guard below; setup-user-shell.sh
+# has a POSIX OS guard). Commander, 2026-11-14: "sh scripts and tests should only run
+# on linux/mac and ps1 on windows". On Windows, test-setup-user-shell.ps1 tests the
+# .ps1 twin with pwsh. Exit 1 if any case fails.
 # Covers: blocks added to a new profile and .bashrc; re-run unchanged (no write, no
 # backup); user lines around a stale block kept; duplicate blocks collapsed; stray
 # block lines and a profile failing bash -n reported as WARN + ACTION with the
@@ -17,17 +18,24 @@
 
 set -euo pipefail
 
-if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
-    perl -ne 'print if $. > 1 && $. <= 17' "$0"
-    exit 0
-fi
-
+# OS guard: macOS/Linux only. BASH_VERSINFO[5] is bash's compiled-in machine
+# type (read-only, never taken from the environment), so neither a uname shim
+# on PATH nor an exported OSTYPE hides Git Bash.
 case "$(uname -s)" in
     MINGW*|MSYS*|CYGWIN*)
-        printf 'SKIP all cases (setup-user-shell.sh runs on macOS/Linux only; Windows runs test-setup-user-shell.ps1)\n'
-        printf '\n0 passed, 0 failed, 1 skipped\n'
-        exit 0 ;;
+        printf 'This script is for macOS/Linux. On Windows, run tests/setup-user-shell/test-setup-user-shell.ps1 with pwsh.\n' >&2
+        exit 1 ;;
 esac
+case "${BASH_VERSINFO[5]:-}" in
+    *-msys*|*-cygwin*|*-mingw*)
+        printf 'This script is for macOS/Linux. On Windows, run tests/setup-user-shell/test-setup-user-shell.ps1 with pwsh.\n' >&2
+        exit 1 ;;
+esac
+
+if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
+    perl -ne 'print if $. > 1 && $. <= 18' "$0"
+    exit 0
+fi
 
 BASH_BIN="${AITOOLS_TEST_BASH:-bash}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"

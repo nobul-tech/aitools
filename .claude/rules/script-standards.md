@@ -121,6 +121,13 @@ Never use `grep -P` (Perl regex) in bash scripts -- macOS BSD `grep` doesn't sup
 Use `perl -ne` for Perl regex, `grep -E` for extended regex, or `grep -F` for literals.
 See `@reference/script-standards-detail.md` for the full portability table.
 
+Never end a pipeline in `grep -q` in a script that runs under `pipefail` (or a
+library sourced by one): `grep -q` exits at its first match, the writer dies of
+SIGPIPE (or, where SIGPIPE is ignored, exits non-zero on the write error) and
+the pipeline fails although the pattern matched. End it in
+`grep PATTERN >/dev/null` instead. `check-script-compliance` step 7 fails on it.
+Detail: `@reference/script-standards-detail.md` "Pipelines into grep -q under pipefail".
+
 ### Standalone build logging
 
 `build-deploy.sh` defines its own `blog`/`blog_ok`/`blog_error` (doesn't source aitools-lib.sh).

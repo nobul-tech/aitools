@@ -422,7 +422,7 @@ for f in "$REPO_ROOT"/scripts/setup-*.sh "$REPO_ROOT"/scripts/setup-*.ps1; do
     if grep -qE 'cat[[:space:]]*>' "$f" 2>/dev/null; then
         fname=$(basename "$f")
         # Skip if header says "sole owner" (check first 15 lines, matching PS1 TotalCount 15)
-        if ! head -15 "$f" | grep -qi 'sole owner'; then
+        if ! head -15 "$f" | grep -i 'sole owner' >/dev/null; then
             echo "      potential blind overwrite: $fname"
             overwrite_count=$((overwrite_count + 1))
         fi
@@ -441,7 +441,7 @@ cc_version=$(claude --version 2>/dev/null | head -1 || echo "unknown")
 registry_version=$(grep -E 'Current version' "$REPO_ROOT/reference/tool-ops-claude-code.md" 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || echo "unknown")
 if [ "$cc_version" = "unknown" ]; then
     step_skip "20" "CC version-dep review" "claude CLI not found"
-elif echo "$cc_version" | grep -q "$registry_version"; then
+elif echo "$cc_version" | grep "$registry_version" >/dev/null; then
     step_pass "20" "CC version-dep review" "v$registry_version"
 else
     step_warn "20" "CC version-dep review" "CLI: $cc_version vs registry: $registry_version"
@@ -578,13 +578,13 @@ fi
 step22b_fail=0
 # Bash: check exit section calls show_cloud_mcp_status
 mcp_exit_bash=$(sed -n '/BEGIN exit/,/END exit/p' "$REPO_ROOT/scripts/setup-user-mcp.sh")
-if ! echo "$mcp_exit_bash" | grep -q 'show_cloud_mcp_status'; then
+if ! echo "$mcp_exit_bash" | grep 'show_cloud_mcp_status' >/dev/null; then
     step22b_fail=1
     echo "      FAIL: scripts/setup-user-mcp.sh missing show_cloud_mcp_status in exit section"
 fi
 # PS1: check exit section calls Show-CloudMcpStatus
 mcp_exit_ps1=$(sed -n '/BEGIN exit/,/END exit/p' "$REPO_ROOT/scripts/setup-user-mcp.ps1")
-if ! echo "$mcp_exit_ps1" | grep -q 'Show-CloudMcpStatus'; then
+if ! echo "$mcp_exit_ps1" | grep 'Show-CloudMcpStatus' >/dev/null; then
     step22b_fail=1
     echo "      FAIL: scripts/setup-user-mcp.ps1 missing Show-CloudMcpStatus in exit section"
 fi
@@ -662,7 +662,7 @@ else
     missing=""
     while IFS= read -r cmd; do
         [ -z "$cmd" ] && continue
-        if ! echo "$shared_cmds" | grep -qxF "$cmd"; then
+        if ! echo "$shared_cmds" | grep -xF "$cmd" >/dev/null; then
             missing="$missing $cmd"
         fi
     done <<< "$registry_cmds"
@@ -695,10 +695,10 @@ else
         while IFS= read -r base; do
             [ -z "$base" ] && continue
             # Check if the base name appears in CLAUDE.md (full name or abbreviated -suffix)
-            if ! echo "$claude_deploy" | grep -qF "$base"; then
+            if ! echo "$claude_deploy" | grep -F "$base" >/dev/null; then
                 short=$(echo "$base" | perl -pe 's/^setup-user-//; s/^setup-//')
-                if ! echo "$claude_deploy" | grep -qF -- "-$short"; then
-                    if ! echo "$claude_deploy" | grep -qF "$short"; then
+                if ! echo "$claude_deploy" | grep -F -- "-$short" >/dev/null; then
+                    if ! echo "$claude_deploy" | grep -F "$short" >/dev/null; then
                         missing_deploy="$missing_deploy $base"
                     fi
                 fi

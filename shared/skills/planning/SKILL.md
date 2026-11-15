@@ -93,17 +93,20 @@ unless explicitly reopened.
 
 ### When NOT to use subagents
 
-- Writing code in projects with cross-cutting rules (subagents don't inherit rules)
+- Writing code in projects with cross-cutting rules, unless the delegation
+  prompt carries them (subagents may not receive every rule; see below)
 - Tasks that need the full conversation context
 - Simple, directed searches (use Grep/Glob directly)
 
 ### Subagent context gap
 
 What a sub-agent receives varies by type, launch path and version:
-general-purpose Agent-tool delegates receive the CLAUDE.md files;
-Explore, Plan, some built-in types and Workflow `agent()` calls may omit
-them; project rules may attach only when the delegate reads files under
-the repo; skills loaded in the parent are not inherited. There is no
+general-purpose Agent-tool delegates receive the CLAUDE.md files and the
+rules without `paths:` frontmatter at launch, and `paths:` rules only after
+they read files (Claude Code 2.1.325), all from the session's working
+directory, not the delegate's worktree; Explore, Plan, some built-in types
+and Workflow `agent()` calls may omit them; skills loaded in the parent are
+not inherited (aitools `reference/tool-ops-claude-code.md` item #5). There is no
 SubagentStart injection hook. Mitigation: the delegation prompt lists
 every CLAUDE.md and rule to read in full and restates the critical ones
 (`/delegate` element 2).

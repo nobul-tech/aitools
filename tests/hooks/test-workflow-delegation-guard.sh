@@ -484,9 +484,12 @@ wf_payload "$WORK/one.js" > "$WORK/one.json"
 timing "500 KB script, one 486 KB prompt" "$WORK/one.json" "$(summary 1 1 0)"
 # Adversarial: under the 512 KB cap (so the template closes and the prompt is
 # scored per agent), with ".md" hits so the bounded md-prefix loop runs.
+# 100-107 ms on the GitHub macOS runner (runs 43668923612, 43674468619), so it
+# gets the stress case's 250 ms hard limit (RFI fa81-55); the 100 ms budget is
+# unchanged: on macOS 100-249 ms is a counted WARN, 250 ms or more FAILs.
 perl -e 'print "agent(`", "name prefix x.md " x 28000, "`)\n"' > "$WORK/adv.js"
 wf_payload "$WORK/adv.js" > "$WORK/adv.json"
-timing "adversarial 476 KB 'name prefix x.md' prompt" "$WORK/adv.json" "$(summary 1 0 0)"
+timing "adversarial 476 KB 'name prefix x.md' prompt" "$WORK/adv.json" "$(summary 1 0 0)" 250
 
 echo
 printf 'workflow-delegation-guard: %d passed, %d failed, %d skipped, %d warnings (bash: %s)\n' "$PASS" "$FAIL" "$SKIP" "$WARN" "$("$BASH_BIN" -c 'echo $BASH_VERSION')"
