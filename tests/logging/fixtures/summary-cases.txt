@@ -77,9 +77,15 @@
 #                  {CASEDIR} in an ARG is the case directory (native form);
 #                  {RESULT} is the last deploy_managed_file result
 # child NAME ACTION [REST]   one line of a child script NAME (below)
-# relay LABEL|TOOL|CHILD          run child CHILD through the relay
-# relay-native LABEL|TOOL|CHILD   run child CHILD as a separate process
-#                  An empty TOOL means no summary tool is given.
+# relay LABEL|TOOL|CHILD[|abort-warn]          run child CHILD through the relay
+# relay-native LABEL|TOOL|CHILD[|abort-warn]   run child CHILD as a separate process
+#                  An empty TOOL means no summary tool is given. The optional
+#                  4th field "abort-warn" is the runner's request that a user
+#                  abort (exit 2) of this child be recorded by the relay as one
+#                  warning under TOOL, "aborted by user" (deploy-harness):
+#                  one warning of the parent and no error. Without it, an
+#                  abort is a failed child: one error. The relay records an
+#                  abort; the runner never records it as well.
 # render           draw the panel from the run summary file
 #
 # Helpers (the notation uses the bash names):
@@ -109,6 +115,8 @@
 #   relay-native           (as relay)                Invoke-NativeRelayed: LABEL, TOOL and the command
 #                                                    pwsh -NoProfile -File {CASEDIR}/CHILD.ps1
 #                                                    (argument order as I1 defines it)
+#   abort-warn             the relay's option for the runner's abort-as-warning
+#                          request, in both languages, as I1 names it
 #
 # Child scripts. The harness writes {CASEDIR}/CHILD.sh or CHILD.ps1: the
 # library loaded, logging_init CHILD / Initialize-Logging CHILD (so the
@@ -764,7 +772,7 @@ panel red   [ERR] legacy-tool      script failed (exit 1)
 panel red   [ERR] t5               a: b/c
 panel rule
 expect logsub detail INFO|x|y
-note logging.md 8.4 does not say what the detail line contains; the fixture requires the skipped record, verbatim (open point for the lead)
+note the detail line quotes the skipped record verbatim (lead decision 2026-11-15, added to 8.4 by S1b)
 
 case L25
 plan L25
@@ -821,11 +829,13 @@ panel rule
 
 case L28a
 plan L28
-title deploy-harness aborts (exit 2): one yellow "harness files" line; no record from the child
+title deploy-harness aborts (exit 2): the relay records one warning, "harness files" / "aborted by user"; no record from the child
 spec 8.3 A user abort (exit 2); 8.6 A child aborts
 child deploy-harness call managed_abort
-relay deploy-harness|harness files|deploy-harness
+relay deploy-harness|harness files|deploy-harness|abort-warn
 expect record WARN|harness files|aborted by user
+expect count warnings 1
+expect count errors 0
 expect child-rc 2
 render
 panel blank
@@ -833,8 +843,7 @@ panel rule
 panel yellow   [!]   harness files    aborted by user
 panel rule
 note "the run stops with exit 2" is the entry point's step (G1), not the relay's: the fixture checks the record and the child's exit code
-note 8.3 lists this outcome under the relay's rules; the branch's .claude/rules/interactive-menus.md "Abort" says the runner records it (write_warn "harness files" "aborted by user"). Either way the run holds exactly this one record: if I1 puts it in the runner, the harness runs that runner step after the relay and the expectation is unchanged (open point for the lead)
-note 8.3 does not say whether this abort counts as a parent warning or error, so no count is checked (open point for the lead)
+note the relay records the abort and the runner never records it as well; the runner's request (abort-warn) makes it one warning of the parent and no error (lead decision 2026-11-15, written into 8.3 and 8.6 by S1b)
 
 case L28b
 plan L28
@@ -892,7 +901,7 @@ panel rule
 expect logsub detail WARN||orphan warning
 expect logsub detail ERROR||what|why
 expect logsub detail OK||v1
-note as L24: the detail line is required to contain the skipped record, verbatim (open point for the lead)
+note as L24: the detail line quotes the skipped record verbatim (8.4, S1b)
 
 case L31
 plan L31
