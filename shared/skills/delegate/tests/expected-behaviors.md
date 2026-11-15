@@ -15,8 +15,11 @@ Should NOT auto-load for:
 - Normal coding tasks with no delegate
 
 ## Prompt content
-- Every drafted prompt contains all seven elements: identity, rules,
-  skills, operational learning, WRITE_BLOCKED, access, name prefix
+- Every drafted prompt contains all ten elements of the skill's table:
+  identity, rules and CLAUDE.md files, skills (with /delegate first),
+  operational learning, where to find and how to read the parent session
+  files, conflict priority, permissions handling (`PERMISSION_DENIED`),
+  mission manifest, naming conventions (the name prefix), mission brief
 - The prefix appears verbatim and every named .md output starts with it
 - No delegate name starts with REPORT, SUMMARY, FINDINGS or ANALYSIS
 - Paths are absolute; no "find the file" instructions across repos
@@ -28,6 +31,6 @@ Should NOT auto-load for:
 
 ## Verification
 - Checks prefixed output files exist after the delegate returns
-- Writes WRITE_BLOCKED content from the delegating agent through the
-  same gates
+- Writes PERMISSION_DENIED (formerly WRITE_BLOCKED) content from the
+  delegating agent through the same gates
 - Spot-checks at least one cited source and one item reported clean

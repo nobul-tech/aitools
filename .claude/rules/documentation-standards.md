@@ -99,8 +99,12 @@ same holds for rules: only `shared/rules/` reaches `~/.claude/rules/` and
 - **Project** (`.claude/skills/` in the aitools repo): skills meaningful
   solely inside the aitools working tree (they edit or audit aitools
   source). Not deployed: Claude Code loads them only in sessions inside
-  the aitools repo, from the checkout, so a branch that edits a project
-  skill runs its own copy. The `frameworks`, `glossary` and `incident`
+  the aitools repo, from the session's working directory: a delegate of a
+  session started in the main checkout runs the main checkout's copy even
+  while it works in its own worktree (observed 2.1.325,
+  `@reference/tool-ops-claude-code.md` item #5). A session started in a
+  worktree of a branch that edits a project skill should run that branch's
+  copy (inferred from the skills docs, item #29; not observed). The `frameworks`, `glossary` and `incident`
   skills are project skills since 2026-11-13 (S-8 in `@reference/skills.md`).
 - **Dotprofile** (`<userRepoPath>/claude/skills/`): not a harness source;
   deploy-harness does not read it.

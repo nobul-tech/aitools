@@ -194,7 +194,7 @@ Add `userRepoPath` key. The installer (`aitools-install.sh/.ps1`) should detect 
 {
   "repoPath": "/Users/pepe/repos/aitools",
   "userRepoPath": "/Users/pepe/repos/aitools-nobul-jose",
-  "googleDrives": ["/Users/pepe/Library/CloudStorage/GoogleDrive-jose@strat-accs.com"]
+  "googleDrives": ["/Users/pepe/Library/CloudStorage/GoogleDrive-<secondary Google account>"]
 }
 ```
 

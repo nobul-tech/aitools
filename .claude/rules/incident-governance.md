@@ -221,8 +221,11 @@ Implemented:
 
 Designed, not implemented (no script, not in the manifest):
 - **SubagentStart** context injector (pre-built skill cache + governance
-  duty + scratch namespace). Until it exists, subagents get governance only
-  through the delegation prompt (`/delegate` skill); they are sensors, not
+  duty + scratch namespace). Until it exists, general-purpose subagents get
+  the rules Claude Code loads at launch (those without `paths:`, from the
+  session's working directory; Explore and Plan skip CLAUDE.md:
+  `@reference/tool-ops-claude-code.md` item #5) and the
+  rest only through the delegation prompt (`/delegate` skill); they are sensors, not
   filers — they report `INCIDENT:` findings and the delegating agent files them.
 - **PreToolUse on incidents.json** (agent): field, enum and sequential-ID validation.
 - **PreToolUse on protected files**: cross-reference reminder.
@@ -230,4 +233,7 @@ Designed, not implemented (no script, not in the manifest):
 - **PreToolUse on Bash git commands**: checklist reminder.
 - **Stop**: surfacing-duty reminder and incident-acknowledgment detection.
   NOTE: Claude Code `type: "prompt"` hooks require a static `prompt` string;
-  a dynamic Stop hook must be `type: "command"` with stderr output.
+  a dynamic Stop hook must be `type: "command"`. Its stderr reaches Claude
+  only when it exits 2, which also keeps Claude from stopping (hooks docs,
+  read 2026-11-14), never on exit 0 (`@reference/tool-ops-claude-code.md`
+  item #34).

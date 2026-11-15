@@ -19,6 +19,15 @@ For every `.sh` or `.ps1` file being committed:
 - PS1: See `.claude/rules/cross-platform.md` Pre-validation convention for the full ParseFile command. Note: `$e` must be declared before `[ref]$e` -- undeclared variables cause `[ref]` to error.
 - If the other platform's scripts can't be validated locally, note in commit message: `(tested: macOS)` or `(tested: Windows)`
 
+`check-pre-commit.ps1` (Windows) does not run `bash -n`: it calls no Git Bash
+(commander, 2026-11-14: "id like to avoid calling git bash on thowse ps1
+scripts"), and a `.sh` never runs on Windows. With a `.sh` staged it reports
+SKIP (`N .sh staged: bash -n runs in CI (linux, macos) and check-pre-commit.sh,
+not on Windows`). The CI linux and macos jobs ("Validate bash script syntax")
+run `bash -n` on every tracked shell script on each push and pull request;
+`check-pre-commit.sh` runs it on macOS and Linux. Tests:
+`tests/check-no-git-bash/test-check-no-git-bash.ps1`.
+
 ## 3. Build freshness (retired)
 
 Always SKIP (`retired: check-pre-push step 7 rebuilds into a temp dotprofile
@@ -35,7 +44,16 @@ the step WARNed "run with --fix" (incident #136). Tests:
 
 ## 4. Line endings
 
-`.sh` files must have LF. The Write tool on macOS produces CRLF -- run `sed -i '' 's/\r$//' <file>` on any `.sh` file created or modified by the Write tool.
+`.sh` files must have LF. The step FAILs when the working-tree copy of a staged
+`.sh` file has a CR (`check-pre-commit.ps1`: CRLF); `--fix` / `-Fix` converts
+CRLF to LF and stages the file again. To fix a file by hand (`sed -i ''` works
+only with BSD sed, on macOS):
+
+- macOS, Linux and Git Bash: `PERLIO=:perlio perl -pi -e 's/\r$//' <file>`
+- Windows (PowerShell): `$env:PERLIO = ':perlio'`, then `perl -pi -e 's/\r$//' <file>`
+
+Without `PERLIO=:perlio`, Strawberry Perl leaves the CRLF and still exits 0
+(`reference/cross-platform-detail.md` "Strawberry Perl text mode").
 
 ## 5. Platform note
 

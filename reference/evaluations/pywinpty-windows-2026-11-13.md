@@ -1,10 +1,24 @@
 # Evaluation: pywinpty as a local Windows test dependency — Windows 11 workstation — 2026-11-13
 
-Version 1.3 (2026-11-14). Authors: v1.0 M3-Fixes-D (delegate of M3-Fixes, Session
+Version 1.4 (2026-11-14). Authors: v1.0 M3-Fixes-D (delegate of M3-Fixes, Session
 Commander 87795dc3-e); v1.1 M3-Fixes; v1.2 M4-Winpty (written by its delegate
-M4-F-Registry); v1.3 M4-Winpty. Phase 2 gate: **approved** by the commander on 2026-11-14 (RFI fa81-7:
+M4-F-Registry); v1.3 M4-Winpty; v1.4 M7-Pty (delegate of M7-Sweep). Phase 2 gate: **approved** by the commander on 2026-11-14 (RFI fa81-7:
 "yes, i stated i approved it"); pywinpty 3.1.2 installed on this workstation the same day
 (section 6, "Phase 2 result").
+
+v1.4 (M7-Pty for M7-Sweep, 2026-11-14): the pin also covers the Windows ARM64 wheels --
+commander, answering RFI fa81-21a ("No hashes for the Windows ARM (win_arm64) wheels ...
+Suggest: add the hashes when an ARM Windows machine appears"): "21a) add hashes".
+`scripts/requirements-pywinpty.txt` now carries the sha256 of all 16 wheels of 3.1.2
+(win_amd64 and win_arm64, cp310-cp315 incl. free-threaded; the sdist stays unpinned) and
+its `# wheel-tags:` line lists the 8 `cpXY[t]-win_arm64` tags as well. Every digest was
+read from the PyPI JSON API in a browser on 2026-11-14 and compared digit by digit with
+the pin by script; the 8 win_amd64 hashes still match (section 6, "Pin coverage (v1.4)").
+**win_arm64 is not runtime-verified**: no ARM64 Windows machine is available; CI and this
+workstation are x64. What was checked on x64: `setup-pywinpty.ps1` accepts the new tags
+(its tag check `^cp\d+t?-win_(amd64|arm64)$`; the interpreter tag comes from
+`sysconfig.get_platform()`, which returns `win-arm64` on 64-bit Windows on ARM64 per the
+CPython 3.14 stdlib source), and pip installs from the 16-hash pin on x64.
 
 v1.3 (M4-Winpty, 2026-11-14): the PEP 668 question (section 4 "Finding", section 8
 unknown 4) is decided -- commander, RFI fa81-9: "fix pep, add it to same branch commit,
@@ -295,7 +309,8 @@ cp314 (and the other win_amd64/arm64 wheels) to `tests/managed-files/requirement
 `pty-run.py`'s error message works on every supported interpreter; after that change the
 local command becomes
 `python -m pip install --user --require-hashes -r tests/managed-files/requirements-windows.txt`.
-(v1.1 added the win_amd64 hashes only; win_arm64 is still not pinned.)
+(v1.1 added the win_amd64 hashes only; v1.4 added the win_arm64 hashes, commander "21a)
+add hashes", not runtime-verified on ARM64.)
 
 ### Install command (pwsh, from the aitools checkout root; approved and run 2026-11-14)
 
@@ -355,8 +370,9 @@ Approved by the commander (RFI fa81-7: "yes, i stated i approved it"). Run from
 - Pin re-check: the hash -> file mapping re-read from
   https://pypi.org/pypi/pywinpty/3.1.2/json (raw JSON via python urllib, 2026-11-14): the
   8 pinned hashes are exactly the win_amd64 wheels cp310, cp311, cp312, cp313, cp314,
-  cp314t, cp315, cp315t; the 8 win_arm64 wheels and the sdist are not pinned; latest
-  version 3.1.2.
+  cp314t, cp315, cp315t; the 8 win_arm64 wheels and the sdist are not pinned (then; the
+  win_arm64 wheels are pinned since v1.4, "Pin coverage (v1.4)" below); latest version
+  3.1.2.
 
 The pass criteria above hold for the import, the probe and the SKIP lines; the suites'
 exit codes are not in the M4-Winpty brief (0 failed in both).
@@ -377,6 +393,39 @@ exit codes are not in the M4-Winpty brief (0 failed in both).
   package, the `build-package.sh` payload `scripts/` -> `aitools-install.ps1` -> Step 15b.
   CI's windows job installs through `setup-pywinpty.ps1`.
 - Tests: `tests/pywinpty/`.
+
+### Pin coverage (v1.4, M7-Pty, 2026-11-14)
+
+Commander, 2026-11-14: "21a) add hashes". The pin covers every wheel of 3.1.2: the 8
+win_amd64 wheels (since v1.1) and the 8 win_arm64 wheels (since v1.4); the sdist is not
+pinned (`--only-binary=:all:`). Source: https://pypi.org/pypi/pywinpty/3.1.2/json, read in
+the browser (chrome-devtools MCP, `document.body.innerText`) on 2026-11-14: 17 files, none
+yanked. A script compared every `--hash=sha256:` line of the pin with that saved text
+character by character: 16 of 16 equal (64/64 digits each), every wheel pinned, the
+`# wheel-tags:` line equal to the tags of the pinned wheels. The 8 win_amd64 hashes are
+unchanged and still match.
+
+| Wheel (added in v1.4) | sha256 | Uploaded (PyPI) |
+|---|---|---|
+| `pywinpty-3.1.2-cp310-cp310-win_arm64.whl` | `6b351d5853e0899179f1e82a53c5ebd0d6ea8dca023f1b7f7082f2837002018a` | 2026-10-28T22:52:34.676168Z |
+| `pywinpty-3.1.2-cp311-cp311-win_arm64.whl` | `0cd10bc1a08dbb92c8d951f042c93510394862e08a7d1e5d5a3514f798cfdb0e` | 2026-10-28T22:54:26.745805Z |
+| `pywinpty-3.1.2-cp312-cp312-win_arm64.whl` | `50e6504a1d616542036221e3ae38363600b6839f958142c1950a661c938b3a1e` | 2026-10-28T22:53:35.606628Z |
+| `pywinpty-3.1.2-cp313-cp313-win_arm64.whl` | `804e90d912ba17a246972209c6ae0358ef7c9fe958c2e5388183521113e9131e` | 2026-10-28T22:52:07.044359Z |
+| `pywinpty-3.1.2-cp314-cp314-win_arm64.whl` | `81d83678211cc6f8cd2954e98a8a18d8e5de1e0666900a1df8da70f33572d34d` | 2026-10-28T22:50:42.715781Z |
+| `pywinpty-3.1.2-cp314-cp314t-win_arm64.whl` | `30235f396856fbc03c9bb181b4e27bf50f7b355e432e5731729063d920a09867` | 2026-10-28T22:52:56.057292Z |
+| `pywinpty-3.1.2-cp315-cp315-win_arm64.whl` | `7af19f25e769f0c70f5920ce0964c508abdfe01e676cf05d5ed935848d8c782e` | 2026-10-28T22:54:06.899436Z |
+| `pywinpty-3.1.2-cp315-cp315t-win_arm64.whl` | `0a40537712279ed74d5884b1af9037add1ed4b2e2339e9152268b582abad3a57` | 2026-10-28T22:56:12.712771Z |
+
+**Not runtime-verified on ARM64**: no ARM64 Windows machine is available; CI and this
+workstation are x64, so no win_arm64 wheel was downloaded, installed or imported. Checked
+on x64 (Windows 11, 2026-11-14): `setup-pywinpty.ps1` accepts the new tags (pin check
+`^cp\d+t?-win_(amd64|arm64)$`); its interpreter tag is built from
+`sysconfig.get_platform()`, which returns `win-arm64` on 64-bit Windows on ARM64 (CPython
+3.14 stdlib `sysconfig.get_platform`, read on this workstation), giving
+`cp3XY[t]-win_arm64`; a fake interpreter reporting `cp314-win_arm64` got the hash-pinned
+pip command; `tests/pywinpty/test-setup-pywinpty.ps1` (54 passed, 0 failed, 0 skipped,
+real cp314 win_amd64 install from the 16-hash pin) and `test-setup-pywinpty.sh` (31 passed,
+0 failed, 2 skipped; the build embeds 16 hashes) pass.
 
 ### Rollback
 
@@ -427,6 +476,10 @@ Updated in v1.2.
 4. New (v1.2): how an endpoint whose only CPython is the aitools/uv-managed one gets
    pywinpty (section 4, "Finding"). Answered in v1.3: `pip --target <its user site>`
    (commander, RFI fa81-9, 2026-11-14).
+5. New (v1.4): whether the pinned win_arm64 wheels install and work (ConPTY probe, pty
+   suites) on Windows on ARM64. **Unknown**: no ARM64 Windows machine; CI and this
+   workstation are x64. The hashes are pinned from the PyPI JSON API (section 6, "Pin
+   coverage (v1.4)").
 
 ## Sources
 
@@ -438,4 +491,5 @@ Updated in v1.2.
 - `gh api repos/andfoy/pywinpty` (+ `/releases`, `/commits`, `/contributors`, `/license`, `/security-advisories`, `/contents/SECURITY.md`, `/issues/564`); `gh api advisories?ecosystem=pip&affects=pywinpty`
 - `gh issue view 72 --repo nobul-tech/aitools`; `gh pr view 139 --repo nobul-tech/aitools`
 - v1.2: https://pypi.org/pypi/pywinpty/3.1.2/json (raw JSON via python urllib, 2026-11-14, M4-Winpty); M4-Winpty brief and message to M4-F-Registry (install, probe, suite and CI results; the uv-managed python3 finding), 2026-11-14; `scripts/requirements-pywinpty.txt`
+- v1.4: https://pypi.org/pypi/pywinpty/3.1.2/json (browser, chrome-devtools MCP, 2026-11-14, M7-Pty; the saved text compared with the pin by script); CPython 3.14 stdlib `sysconfig.get_platform` (this workstation, `pythoncore-3.14-64`); `tests/pywinpty/` runs on Windows x64, 2026-11-14
 - Repo (v1.1): `tests/managed-files/requirements-windows.txt` (then), `pty-run.py`, `winpty-probe.py`, `test-managed-files.sh`, `test-managed-files.ps1`; `.github/workflows/check.yml` (windows job); `plans/ci-platform-targeting.md`; `RELEASE_NOTES.md`
