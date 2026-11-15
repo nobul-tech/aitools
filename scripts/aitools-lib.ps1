@@ -5,16 +5,20 @@
 # $AitoolsEnvironment, Test-ClaudeCodeWeb, Test-LocalEnvironment,
 # Write-EnvironmentSkip), ReadConfigKey, Resolve-UserRepoPath,
 # Resolve-MachineProfile, Get-ToolException, Set-ToolException, Initialize-Logging,
-# Log/LogOk/LogError/LogWarn/LogDetail, Invoke-AI (Write-AiLog), Write-Summary, Show-Summary,
-# Refresh-Path, Log-WingetOutput, Repair-UvToolEnv, Remove-OrphanedPythonDirs,
-# Normalize-JsonForComparison.
+# Log/LogOk/LogError/LogWarn/LogDetail, Write-AitWarn/Write-AitAction/Write-AitError,
+# Get-AitErrorReason, Invoke-AI (Write-AiLog), Write-Summary, Start-AitSummary,
+# Complete-AitSummary, Show-Summary, Invoke-ChildRelayed, Invoke-NativeRelayed,
+# Send-ChildLog, Invoke-RelaySync, Refresh-Path, Log-WingetOutput, Repair-UvToolEnv,
+# Remove-OrphanedPythonDirs, Normalize-JsonForComparison.
 #
 # Usage:
 #   . (Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) "aitools-lib.ps1")
 #   Initialize-Logging "script-name"
 #
-# Entry points (aitools.ps1, aitools-install.ps1) override log functions after
-# sourcing for specialized logging (file-only, JSONL, etc.).
+# Logging, records and the panel: reference/logging.md section 8. No script
+# overrides a log function: a script that needs other behaviour sets a library
+# option after Initialize-Logging (the jsonl, stderr console and colour options;
+# see Initialize-Logging).
 #
 # Platform detection builds on the PS 7+ built-ins $IsWindows/$IsMacOS/$IsLinux.
 
@@ -109,8 +113,8 @@ function ReadConfigKey {
 # assignment (a top-level assignment would run in the caller's scope at
 # dot-source time). Read them only after the call; callers copy what they need
 # right after it, e.g.:  $rc = Resolve-UserRepoPath; $userRepoPath = $script:AitLibUserRepoPath
-# ACTION rows: the wrapper emits the one ACTION for its failure (once per run:
-# Write-AitLibActionOnce skips a row the run summary already holds); callers do
+# ACTION records: the wrapper emits the one ACTION for its failure (once per run:
+# Write-AitLibActionOnce skips a record the run summary already holds); callers do
 # not add their own ACTION for the same failure.
 #
 # Resolver exit codes -> wrapper return codes (re-key batch 3). The resolver
@@ -210,16 +214,18 @@ function Get-AitLibExitNote([int]$Rc) {
     }
 }
 
-# Write-AitLibActionOnce TEXT -- write ACTION row TEXT unless the run summary
-# already holds it (several setup scripts in one run hit the same failure;
-# Show-Summary does not dedupe)
+# Write-AitLibActionOnce TEXT -- write the record ACTION||TEXT unless the run
+# summary already holds it (several setup scripts in one run hit the same
+# failure); logged at detail when it does. Used by Write-AitAction. Parity:
+# _aitlib_action_once.
 function Write-AitLibActionOnce([string]$Text) {
     if ($env:AITOOLS_SUMMARY_FILE) {
         $sf = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($env:AITOOLS_SUMMARY_FILE)
         if (Test-Path -LiteralPath $sf -PathType Leaf) {
             $have = $false
+            $want = "ACTION||" + (ConvertTo-AitLibRecordField $Text -KeepBar)
             try {
-                $have = @([IO.File]::ReadAllLines($sf, [System.Text.UTF8Encoding]::new($false)) | Where-Object { $_ -ceq "ACTION||$Text" }).Count -gt 0
+                $have = @([IO.File]::ReadAllLines($sf, [System.Text.UTF8Encoding]::new($false)) | Where-Object { $_ -ceq $want }).Count -gt 0
             } catch {
                 LogDetail "run summary unreadable ($($_.Exception.Message)) -- ACTION written without the duplicate check"
             }
@@ -232,13 +238,13 @@ function Write-AitLibActionOnce([string]$Text) {
 # Resolve-UserRepoPath -- sets $script:AitLibUserRepoPath and
 # $script:AitLibUserRepoVia (env|argument|config|convention|scan|none). Returns 0
 # found, 1 no dotprofile (shared-only mode; not an error), 3 resolver error or
-# refusal (LogError + ERROR row "dotprofile" + one ACTION per run, "see
+# refusal (one Write-AitError "dotprofile" "resolver failed" whose reason is the
+# resolver's first error line, the others at detail, + one ACTION per run, "see
 # deploy.log -- the dotprofile could not be resolved").
 function Resolve-UserRepoPath {
     $script:AitLibUserRepoPath = ""; $script:AitLibUserRepoVia = "none"
     if (-not (Invoke-AitLibProfile @("user-repo-path"))) {
-        LogError "dotprofile: resolver aitools-profile.ps1 not found next to aitools-lib.ps1"
-        Write-Summary "ERROR" "dotprofile" "resolver missing"
+        Write-AitError "dotprofile" "resolver missing" "aitools-profile.ps1 not found next to aitools-lib.ps1"
         Write-AitLibActionOnce "see deploy.log -- the dotprofile could not be resolved"
         return 3
     }
@@ -250,16 +256,22 @@ function Resolve-UserRepoPath {
         return 0
     }
     if ($script:AitLibProfileRc -eq 1) { LogDetail "dotprofile: none found (shared-only mode)"; return 1 }
-    $note = Get-AitLibExitNote $script:AitLibProfileRc
-    $errs = @(Get-AitLibProfileLines "error")
-    foreach ($e in $errs) { LogError "dotprofile: $e$note" }
-    if ($errs.Count -eq 0) {
-        $why = if ($note) { $note } else { " (exit $($script:AitLibProfileRc))" }
-        LogError "dotprofile: resolver failed$why"
-    }
-    Write-Summary "ERROR" "dotprofile" "resolver failed"
+    Write-AitError "dotprofile" "resolver failed" (Get-AitLibResolverReason)
     Write-AitLibActionOnce "see deploy.log -- the dotprofile could not be resolved"
     return 3
+}
+
+# Get-AitLibResolverReason -- the REASON of a failed resolver call (lead
+# decision: one error per failure): its first "error" line with the exit note,
+# the other error lines at detail; with none, "resolver exit N" with its
+# meaning. Parity: _aitlib_resolver_reason.
+function Get-AitLibResolverReason {
+    $note = Get-AitLibExitNote $script:AitLibProfileRc
+    $errs = @(Get-AitLibProfileLines "error")
+    for ($i = 1; $i -lt $errs.Count; $i++) { LogDetail "resolver error: $($errs[$i])" }
+    if ($errs.Count -gt 0) { return "$($errs[0])$note" }
+    if ($note) { return $note.Trim().TrimStart('(').TrimEnd(')') }
+    return "resolver exit $($script:AitLibProfileRc)"
 }
 
 # Resolve-MachineProfile -- sets $script:AitLibMachineAlias, AitLibMachineVia,
@@ -277,7 +289,8 @@ function Resolve-UserRepoPath {
 # Logs one detail line. Resolver warnings are detail lines here: setup-user-config, the
 # first script of every run, reports them once (a successful step stays OK,
 # D-TS12). Returns 0 resolved, 1 no dotprofile (shared-only), 3 no match or
-# error (LogError + ERROR row "machine profile" + one ACTION per run; the
+# error (one Write-AitError "machine profile" "no machine match" whose reason is
+# the resolver's first error line + one ACTION per run; the
 # AitLibProfile*/AitLibIdentity* values then hold identity-level values only).
 function Resolve-MachineProfile {
     $script:AitLibMachineAlias = ""; $script:AitLibMachineVia = "none"; $script:AitLibProfileFile = ""
@@ -286,8 +299,7 @@ function Resolve-MachineProfile {
     $script:AitLibMachineKey = ""; $script:AitLibMachineOwner = "absent"; $script:AitLibMachineLegacy = $false
     $script:AitLibMachineHostname = ""
     if (-not (Invoke-AitLibProfile @("resolve", "--environment", $script:AitoolsEnvironment))) {
-        LogError "machine profile: resolver aitools-profile.ps1 not found next to aitools-lib.ps1"
-        Write-Summary "ERROR" "machine profile" "resolver missing"
+        Write-AitError "machine profile" "resolver missing" "aitools-profile.ps1 not found next to aitools-lib.ps1"
         # Same text as Resolve-UserRepoPath's: one ACTION per run for a missing resolver
         Write-AitLibActionOnce "see deploy.log -- the dotprofile could not be resolved"
         return 3
@@ -312,15 +324,8 @@ function Resolve-MachineProfile {
     LogDetail "machine profile: alias=$aliasShown via=$($script:AitLibMachineVia) key=$keyShown owner=$($script:AitLibMachineOwner) legacy=$legacyShown company=$($script:AitLibProfileCompany) host=$($script:AitLibMachineHostname) id=$(Get-AitLibProfileTag 'machineId')"
     if ($script:AitLibProfileRc -eq 0 -and $script:AitLibMachineAlias) { return 0 }
     if ($script:AitLibProfileRc -eq 1) { LogDetail "machine profile: no dotprofile -- shared-only mode"; return 1 }
-    $note = Get-AitLibExitNote $script:AitLibProfileRc
-    $errs = @(Get-AitLibProfileLines "error")
-    foreach ($e in $errs) { LogError "machine profile: $e$note" }
-    if ($errs.Count -eq 0) {
-        $why = if ($note) { $note } else { " (exit $($script:AitLibProfileRc))" }
-        LogError "machine profile: resolver failed$why"
-    }
-    LogError "machine profile: unresolved -- no other machine's values are used"
-    Write-Summary "ERROR" "machine profile" "no machine match"
+    Write-AitError "machine profile" "no machine match" (Get-AitLibResolverReason)
+    LogDetail "machine profile: unresolved -- no other machine's values are used"
     Write-AitLibActionOnce "Run: aitools user init (pick or register this machine's profile)"
     return 3
 }
@@ -328,8 +333,9 @@ function Resolve-MachineProfile {
 # Get-ToolException SLUG -- this machine's recorded tool exception (tree section
 # 8 Reader; call only at T5). Returns @{ Found; Platform; Method; Path;
 # DecidedAt }, or $null when the store is unavailable (one LogWarn; treated as
-# no exception; no summary row -- the warning promotes the caller's OK row to
-# WARN). Sets no result variable. Resolver warnings are detail lines.
+# no exception; recorded as a warning under the script name; the caller's own
+# OK record is never changed). Sets no result variable. Resolver warnings are
+# detail lines.
 function Get-ToolException([string]$Slug) {
     if (-not (Invoke-AitLibProfile @("exception-get", "--slug", $Slug, "--environment", $script:AitoolsEnvironment))) {
         LogWarn "tool exceptions unavailable (resolver missing)"
@@ -361,12 +367,12 @@ function Get-ToolException([string]$Slug) {
 # and commits and pushes it (N-Q2). Sets $script:AitLibToolExcResult
 # (created|updated|unchanged|dry-run|refused|failed; never empty after the
 # call) and $script:AitLibToolExcPushed. Returns 0 written or nothing to
-# write (created/updated: a failed commit or push is a LogWarn + ACTION "run git
+# write (created/updated: a failed commit or push is a Write-AitAction "run git
 # push in <dotprofile>"; unchanged and dry-run write nothing, so they need no
 # push and get no warning), 1 failed, 3 refused (no dotprofile, or the machine
-# profile matched by hostname only or not at all). 3 is LogWarn + ACTION "run
+# profile matched by hostname only or not at all). 3 is Write-AitAction "run
 # aitools user init to remember tool choices"; 1 (resolver missing, usage
-# error, crash) is LogWarn + ACTION "see deploy.log -- a tool choice (tool
+# error, crash) is Write-AitAction "see deploy.log -- a tool choice (tool
 # exception) was not saved". The tool itself is fine, so no ERROR row (D-TS12).
 function Set-ToolException([string]$Slug, [string]$Method, [string]$Path, [string]$Version, [string]$Reason = "") {
     $script:AitLibToolExcPushed = $false; $script:AitLibToolExcResult = ""
@@ -376,8 +382,7 @@ function Set-ToolException([string]$Slug, [string]$Method, [string]$Path, [strin
     if ($Reason) { $a += @("--reason", $Reason) }
     if (-not (Invoke-AitLibProfile $a)) {
         $script:AitLibToolExcResult = "failed"
-        LogWarn "tool exception for $Slug not saved (resolver missing)"
-        Write-AitLibActionOnce "see deploy.log -- a tool choice (tool exception) was not saved"
+        Write-AitAction "" "tool exception for $Slug not saved (resolver missing)" "see deploy.log -- a tool choice (tool exception) was not saved"
         return 1
     }
     $script:AitLibToolExcResult = Get-AitLibProfileTag "result"
@@ -391,10 +396,9 @@ function Set-ToolException([string]$Slug, [string]$Method, [string]$Path, [strin
         } else {
             $msg = @(Get-AitLibProfileLines "warn" | Where-Object { $_ -match 'commit|push|git repository' }) | Select-Object -First 1
             if (-not $msg) { $msg = "see deploy.log" }
-            LogWarn "tool exception for $Slug saved but not pushed ($msg)"
             $pf = Get-AitLibProfileTag "profileFile"
             $dpDir = if ($pf) { Split-Path -Parent $pf } else { "your dotprofile" }
-            Write-AitLibActionOnce "run git push in $dpDir"
+            Write-AitAction "" "tool exception for $Slug saved but not pushed ($msg)" "run git push in $dpDir"
         }
         return 0
     }
@@ -402,48 +406,85 @@ function Set-ToolException([string]$Slug, [string]$Method, [string]$Path, [strin
     if ($script:AitLibProfileRc -eq 3) {
         $script:AitLibToolExcResult = "refused"
         if (-not $msg) { $msg = "refused" }
-        LogWarn "tool exception for $Slug not saved ($msg)$(Get-AitLibExitNote 3)"
-        Write-AitLibActionOnce "run aitools user init to remember tool choices"
+        Write-AitAction "" "tool exception for $Slug not saved ($msg)$(Get-AitLibExitNote 3)" "run aitools user init to remember tool choices"
         return 3
     }
     # 2 (error), 4 (not a result of exception-set) and any other code: failed
     $script:AitLibToolExcResult = "failed"
     if (-not $msg) { $msg = "resolver failed" }
-    LogWarn "tool exception for $Slug not saved ($msg)$(Get-AitLibExitNote $script:AitLibProfileRc)"
-    Write-AitLibActionOnce "see deploy.log -- a tool choice (tool exception) was not saved"
+    Write-AitAction "" "tool exception for $Slug not saved ($msg)$(Get-AitLibExitNote $script:AitLibProfileRc)" "see deploy.log -- a tool choice (tool exception) was not saved"
     return 1
 }
 
 # ---------------------------------------------------------------------------
-# Child-script log relay to deploy.jsonl (moved from the installers' "install
-# log helpers", PR #89, so installers and deploy-harness share one copy)
-# A parent that runs a child setup script (one that logs through aitools-lib)
-# shows the child's console lines, mirrors each structured line
-# ("[ts] [script] [level] msg") to deploy.jsonl -- the child already wrote it to
-# deploy.log, the lib's Log writes no JSONL -- and counts the child's warnings
-# and errors. Parity: the bash section of the same name.
-#   Write-JsonlRecord TS SCRIPT LEVEL MSG          append one deploy.jsonl record
-#   Send-ChildLog LINES                            relay captured child output
-#   Invoke-ChildRelayed LABEL SCRIPT [ARGS] [TOOL] run SCRIPT in-process, relay
-#                                                  each line as it comes
-# Results (set by Send-ChildLog and Invoke-ChildRelayed, read after the call):
-#   $script:AitLibChildWarnings  the child's warn lines (the exit footer
-#                                "COMPLETED with N warning(s)" is relayed, not counted)
-#   $script:AitLibChildErrors    the child's error lines ("FAILED with ..." not counted)
-#   $script:AitLibChildRc        Invoke-ChildRelayed only: the child's exit code
-# Every counted warning also increments $script:warnings (it promotes the
-# parent's OK rows, as the child's own rows are). Errors are not added to
-# $script:errors line by line: Invoke-ChildRelayed logs one LogError for a
-# failed child.
-# Summary rows: the child writes its own. With TOOL, a failed child (non-zero
-# exit, a throw or parse error, error lines with exit 0, or not run at all)
-# that wrote no ERROR row of its own gets one: "ERROR|TOOL|script failed
-# (exit N)", "aborted (exit 2)" (D-TS13), "script failed (exception)", "logged
-# errors (exit 0)", or "not run (no command)". A child that wrote an ERROR row
-# (any tool) gets no second one -- also when it crashed after writing it: the
-# panel then shows the child's row, and the crash is the relay's LogError in
-# deploy.log. Parity: run_child_relayed --summary-tool.
-# Private caches: $script:AitLibRunId, AitLibJsonlHost, AitLibJsonlOs.
+# Child-script relay (reference/logging.md 8.0 "Relay", 8.3 "Children").
+# A parent that runs a child script shows the child's console lines, mirrors
+# each structured line ("[ts] [script] [level] msg") to deploy.jsonl (the child
+# already wrote it to deploy.log), counts the child's warn and error lines and
+# decides whether the child failed. Parity: the bash section of the same name.
+#   Write-JsonlRecord TS SCRIPT LEVEL MSG    append one deploy.jsonl record
+#   Send-ChildLog LINES                      relay captured child output (counts
+#                                            only; the caller decides failure)
+#   Invoke-ChildRelayed LABEL SCRIPT [ARGS] [SUMMARYTOOL] [-AbortAsWarning]
+#                       [-NoMirror] [-Quiet]
+#                                            run a .ps1 in-process; relay its
+#                                            output (streams 1 and 6) line by line
+#                                            as it comes; capture its error
+#                                            records (stream 2, 2>&1)
+#   Invoke-NativeRelayed -Label L -FilePath EXE [-ArgumentList A] [-SummaryTool T]
+#                        [-AbortAsWarning] [-NoMirror] [-Quiet]
+#                                            run a native command (bash.exe
+#                                            build-deploy.sh, pwsh -File ...); relay
+#                                            its stdout line by line as it comes;
+#                                            tee its stderr (kept, and still
+#                                            written to this console's stderr)
+#   Invoke-RelaySync EXE ARGS                installer Step 22 (relay -> AGENTS.md)
+# Results (read after the call):
+#   $script:AitLibChildWarnings / $script:AitLibChildErrors: the child's own
+#     warn / error lines (the exit footer "COMPLETED with ..." / "FAILED with ..."
+#     is relayed, not counted). "Own": when the child's script name is known
+#     (the base name of the first .ps1 / .sh among the command and its
+#     arguments: every aitools script passes that name to Initialize-Logging),
+#     only lines whose [script] field is that name count. Lines the child relayed
+#     from its own children are shown and mirrored, not counted again: a middle
+#     script's own exit code and own error lines decide its outcome (nested
+#     relays). Name unknown: every structured line counts.
+#   $script:AitLibChildRc: the child's exit code (1 for a throw, or a command
+#     that could not start).
+# Counts and records (8.3): a child's warnings are never added to the parent's
+# $script:warnings. A failed child (non-zero exit, a throw, or error lines with
+# exit 0) is one error of the parent ($script:errors +1), logged at error level
+# as "<WHAT>: <REASON>". It is recorded, ERROR|<name>|<WHAT>|<REASON>, only when
+# the child wrote no ERROR record while it ran; otherwise it is logged and
+# counted, not recorded (the non-recording path, 8.2).
+#   <name>   the summary tool; else the base name of the first .sh / .ps1 among
+#            the command and its arguments; else LABEL
+#   <WHAT>   "<label> failed (exit N)" (N may be 0: error lines with exit 0), or
+#            "<label> failed (exception)" when an in-process child threw
+#   <REASON> the exception message; else Get-AitErrorReason over the child's
+#            error records (in-process) or its last 20 stderr lines (native);
+#            else over its last stdout line (the exit footer excluded)
+# A user abort (exit 2) is recorded once, and only when the child recorded no
+# WARN or ERROR record while it ran (an abort inside a relayed installer is
+# recorded by the innermost relay). With -AbortAsWarning (the runner's request,
+# for deploy-harness): WARN|<name>|aborted by user and one parent warning, no
+# error. Without it: ERROR|<name>|<label> failed (exit 2)|aborted by user and one
+# parent error. Not recorded: logged at its level and counted all the same.
+# Not run (no command, or the command cannot start): Write-AitError <name>
+# "<label> not run" <cause> (one parent error, recorded).
+# Only the outermost relay mirrors (logging.md 8.3): each relay marks its child
+# as relayed ($env:AITLIB_RELAYED = "1": in the native child's environment, or
+# set for the in-process child's run and restored afterwards); inside a relay,
+# the relays print and count but do not mirror, and the jsonl option writes
+# nothing (Test-AitLibRelayed).
+# Options: -NoMirror: no deploy.jsonl mirror (the child writes its own jsonl
+# records: a relayed installer). -Quiet: only the child's warn and error lines
+# (and its error records) reach the console; every line is still parsed,
+# mirrored and counted.
+# Return value: 0 when the child exited 0 with no own error line; otherwise 1.
+# Private caches: $script:AitLibRunId, AitLibJsonlHost, AitLibJsonlOs; relay
+# state $script:AitLibRelayName, AitLibRelayNoMirror, AitLibRelayQuiet,
+# AitLibRelayLastOut (set by each relay call).
 # ---------------------------------------------------------------------------
 
 # Initialize-AitLibJsonl -- the host, os and run id fields, computed once
@@ -499,119 +540,384 @@ function Write-JsonlRecord($Ts, $ScriptLabel, $Level, $Msg) {
     }
 }
 
-# Send-AitLibChildLine RECORD -- print one child console line (a Write-Host record
-# redirected with 6>&1, or an output line), mirror it to deploy.jsonl when it is a
-# structured log line, count its warn/error level
+# Send-AitLibChildLine RECORD -- one child console line (a Write-Host record
+# redirected with 6>&1, an output line, or a native stdout line): print it
+# (with -Quiet only a warn or error line), mirror it to deploy.jsonl when it is
+# a structured log line (not with -NoMirror), and count its warn / error level
+# when it is the child's own line (see the section comment). Remembers the last
+# non-footer line ($script:AitLibRelayLastOut) for the failure reason.
 function Send-AitLibChildLine($Record) {
     $line = [string]$Record
     if (-not $line) { return }
     $clean = $line -creplace "`r", '' -creplace "$([char]27)\[(31|33|0)m", ''
     $m = [regex]::Match($clean, '^\[([^\]]+)\] \[([^\]]+)\] \[([a-z]+)\] (.*)$')
-    if (-not $m.Success) { Write-Host $line; return }
+    if (-not $m.Success) {
+        if (-not $script:AitLibRelayQuiet) { Write-Host $line }
+        if ($clean.Trim()) { $script:AitLibRelayLastOut = $clean }
+        return
+    }
     $level = $m.Groups[3].Value
     if ($level -ceq "error") { Write-Host $clean -ForegroundColor Red }
     elseif ($level -ceq "warn") { Write-Host $clean -ForegroundColor Yellow }
-    else { Write-Host $clean }
-    Write-JsonlRecord $m.Groups[1].Value $m.Groups[2].Value $level $m.Groups[4].Value
+    elseif (-not $script:AitLibRelayQuiet) { Write-Host $clean }
+    if (-not $script:AitLibRelayNoMirror) {
+        Write-JsonlRecord $m.Groups[1].Value $m.Groups[2].Value $level $m.Groups[4].Value
+    }
     $text = $m.Groups[4].Value
     # The exit footer restates the counts: relayed, not counted
     if ($text.StartsWith("COMPLETED with ") -or $text.StartsWith("FAILED with ")) { return }
-    if ($level -ceq "warn") { $script:AitLibChildWarnings++; $script:warnings++ }
+    $script:AitLibRelayLastOut = $clean
+    # A line the child relayed from its own child: shown, not counted again
+    if ($script:AitLibRelayName -and $m.Groups[2].Value -cne $script:AitLibRelayName) { return }
+    if ($level -ceq "warn") { $script:AitLibChildWarnings++ }
     elseif ($level -ceq "error") { $script:AitLibChildErrors++ }
 }
 
+# Test-AitLibRelayed -- $true when this process (or this in-process script) runs
+# inside a relay ($env:AITLIB_RELAYED = "1", set by the relay that runs it):
+# then its relays print and count but do not mirror to deploy.jsonl, and the
+# jsonl option writes nothing; the outermost relay mirrors every structured line
+# it prints, including the lines of nested children (logging.md 8.3; addendum 6)
+function Test-AitLibRelayed { return ($env:AITLIB_RELAYED -eq "1") }
+
+# Set-AitLibRelayState NAME NOMIRROR QUIET -- the relay state one relay call
+# uses (see the section comment). Called before the relay marks its child as
+# relayed, so a relay mirrors unless -NoMirror or it runs inside a relay itself.
+function Set-AitLibRelayState([string]$Name, [bool]$NoMirror, [bool]$Quiet) {
+    $script:AitLibRelayName = $Name
+    $script:AitLibRelayNoMirror = ($NoMirror -or (Test-AitLibRelayed))
+    $script:AitLibRelayQuiet = $Quiet
+    $script:AitLibRelayLastOut = ""
+}
+
 # Send-ChildLog LINES -- relay the captured console output of a child script, line
-# by line (see the section comment). Sets $script:AitLibChildWarnings and
-# $script:AitLibChildErrors. Returns nothing.
+# by line (see the section comment): printed, mirrored, every structured line
+# counted (the child's name is not known here). Sets $script:AitLibChildWarnings
+# and $script:AitLibChildErrors. Records nothing; the caller decides whether the
+# child failed. Returns nothing.
 function Send-ChildLog([object[]]$Lines) {
     $script:AitLibChildWarnings = 0; $script:AitLibChildErrors = 0
+    Set-AitLibRelayState "" $false $false
     foreach ($l in @($Lines)) {
         foreach ($part in (([string]$l) -split "`n")) { Send-AitLibChildLine $part }
     }
 }
 
-# Get-AitLibSummaryErrorCount -- the number of ERROR rows in the run summary
-# ($env:AITOOLS_SUMMARY_FILE; 0 without one). An unreadable summary counts 0 and
-# is a detail line. Parity: _aitlib_summary_errors.
-function Get-AitLibSummaryErrorCount {
+# Get-AitLibSummaryCount KINDS -- the number of run summary records whose kind
+# is one of KINDS (e.g. "ERROR", or "WARN","ERROR"); 0 outside a run. An
+# unreadable summary counts 0 and is a detail line. Parity: _aitlib_summary_count.
+function Get-AitLibSummaryCount([string[]]$Kinds) {
     if (-not $env:AITOOLS_SUMMARY_FILE) { return 0 }
     $sf = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($env:AITOOLS_SUMMARY_FILE)
     if (-not (Test-Path -LiteralPath $sf -PathType Leaf)) { return 0 }
     try {
-        return @([IO.File]::ReadAllLines($sf, [System.Text.UTF8Encoding]::new($false)) | Where-Object { $_.StartsWith("ERROR|", [StringComparison]::Ordinal) }).Count
+        return @([IO.File]::ReadAllLines($sf, [System.Text.UTF8Encoding]::new($false)) | Where-Object {
+            $k = ($_ -split '\|', 2)[0]; $Kinds -ccontains $k
+        }).Count
     } catch {
-        LogDetail "run summary unreadable ($($_.Exception.Message)) -- its ERROR rows are not counted"
+        LogDetail "run summary unreadable ($($_.Exception.Message)) -- its records are not counted"
         return 0
     }
 }
+# Get-AitLibSummaryErrorCount -- the number of ERROR records (kept for callers)
+function Get-AitLibSummaryErrorCount { return (Get-AitLibSummaryCount @("ERROR")) }
 
-# Write-AitLibChildRow TOOL BEFORE DETAIL -- for a failed child: write the row
-# "ERROR|TOOL|DETAIL" unless TOOL is "" or the child wrote an ERROR row of its own
-# (the run summary now holds more than BEFORE ERROR rows). Parity: _aitlib_child_row.
-function Write-AitLibChildRow([string]$Tool, [int]$Before, [string]$Detail) {
-    if (-not $Tool) { return }
-    if ((Get-AitLibSummaryErrorCount) -gt $Before) {
-        LogDetail "${Tool}: the child wrote its own ERROR row -- none added"
+# Write-AitLibChildRow NAME BEFORE WHAT REASON -- a failed child: one parent
+# error, logged "WHAT: REASON" at error level through the non-recording path,
+# and recorded ERROR|NAME|WHAT|REASON unless the child wrote an ERROR record of
+# its own while it ran (the run summary now holds more than BEFORE ERROR
+# records). Parity: _aitlib_child_row.
+function Write-AitLibChildRow([string]$Name, [int]$Before, [string]$What, [string]$Reason) {
+    Write-AitLibUnrecordedError "${What}: $Reason"
+    if ((Get-AitLibSummaryCount @("ERROR")) -gt $Before) {
+        LogDetail "${Name}: the child recorded its own error -- the relay records none"
         return
     }
-    Write-Summary "ERROR" $Tool $Detail
+    Write-AitLibRecord "ERROR" $Name $What $Reason
 }
 
-# Invoke-ChildRelayed LABEL SCRIPT [ARGS] [SUMMARYTOOL] -- run a child .ps1
-# in-process (e.g. Invoke-ChildRelayed "Step 5: setup-user-config.ps1" $writer
-# $writerArgs "aitools config"), its Write-Host output redirected with 6>&1 and
-# relayed line by line as it arrives. The child writes its own summary rows;
-# SUMMARYTOOL names the row for a failed child that wrote none (see the section
-# comment). A throw (or a parse error) is one LogError. Sets
-# $script:AitLibChildRc, AitLibChildWarnings, AitLibChildErrors. Returns 0 when
-# the child exited 0 with no error line; otherwise 1 after one LogError naming LABEL.
-# No SCRIPT ("") is a failure, not a no-op (parity: run_child_relayed).
+# Complete-AitLibChildRun -- the relay's decision after a child ran (see the
+# section comment). Reads $script:AitLibChildRc and AitLibChildErrors; returns 0
+# (success) or 1.
+function Complete-AitLibChildRun {
+    param(
+        [string]$Label, [string]$Name, [int]$ErrBefore, [int]$AnyBefore,
+        [bool]$Threw, [string]$Exception, [object[]]$ReasonLines, [bool]$AbortAsWarning
+    )
+    $rc = $script:AitLibChildRc
+    if ($Threw) {
+        $why = ("$Exception" -replace '\s*\r?\n\s*', ' ').Trim()
+        if (-not $why) { $why = "no message" }
+        Write-AitLibChildRow $Name $ErrBefore "$Label failed (exception)" $why
+        return 1
+    }
+    if ($rc -eq 2) {
+        # A user abort (8.3): recorded once, only when the child recorded no WARN
+        # or ERROR record while it ran
+        $recorded = (Get-AitLibSummaryCount @("WARN", "ERROR")) -gt $AnyBefore
+        if ($AbortAsWarning) {
+            Log "${Label}: aborted by user" "warn"; $script:warnings++
+            if ($recorded) { LogDetail "${Name}: the child recorded a warning or error -- the abort is not recorded again" }
+            else { Write-AitLibRecord "WARN" $Name "aborted by user" }
+        } else {
+            $what = "$Label failed (exit 2)"
+            Write-AitLibUnrecordedError "${what}: aborted by user"
+            if ($recorded) { LogDetail "${Name}: the child recorded a warning or error -- the abort is not recorded again" }
+            else { Write-AitLibRecord "ERROR" $Name $what "aborted by user" }
+        }
+        return 1
+    }
+    if ($rc -ne 0 -or $script:AitLibChildErrors -gt 0) {
+        $lines = @($ReasonLines | Where-Object { "$_".Trim() })
+        $reason = if ($lines.Count -gt 0) {
+            Get-AitErrorReason -Output $lines -ExitCode $rc
+        } elseif ($script:AitLibRelayLastOut) {
+            Get-AitErrorReason -Output $script:AitLibRelayLastOut -ExitCode $rc
+        } else {
+            "no output (exit $rc)"
+        }
+        Write-AitLibChildRow $Name $ErrBefore "$Label failed (exit $rc)" $reason
+        return 1
+    }
+    return 0
+}
+
+# Get-AitLibChildName WORDS -- the base name (no extension) of the first word
+# ending in .sh or .ps1, "" when none
+function Get-AitLibChildName([string[]]$Words) {
+    foreach ($w in @($Words)) {
+        if ($w -match '\.(sh|ps1)$') { return [IO.Path]::GetFileNameWithoutExtension($w) }
+    }
+    return ""
+}
+
+# Invoke-ChildRelayed LABEL SCRIPT [ARGS] [SUMMARYTOOL] [-AbortAsWarning]
+# [-NoMirror] [-Quiet] -- run a child .ps1 in-process (e.g.
+# Invoke-ChildRelayed "Step 5: setup-user-config.ps1" $writer $writerArgs
+# "aitools config"), relayed and decided as the section comment says. Its
+# Write-Host output (stream 6) and output (stream 1) are relayed line by line
+# as they arrive; its error records (stream 2, Write-Error) are captured, printed
+# in red, and are the reason of a failure. A throw (or a parse error) is
+# "<label> failed (exception)" with the exception message. No SCRIPT ("") is a
+# "not run" error, not a no-op. Sets $script:AitLibChildRc,
+# AitLibChildWarnings, AitLibChildErrors. Returns 0 or 1.
 # The child must end with an explicit `exit N` (the standard exit footer): a
 # .ps1 that just ends reports the exit code of the last native command it ran.
 # The parameters and locals carry the lib prefix because the in-process child
 # can read this function's variables through dynamic scope (an unset $Label in
-# the child would otherwise see ours).
-function Invoke-ChildRelayed([string]$AitLibLabel, [string]$AitLibChildScript, [hashtable]$AitLibChildArgs = @{}, [string]$AitLibSummaryTool = "") {
+# the child would otherwise see ours); the switches keep their contract names
+# as aliases.
+function Invoke-ChildRelayed(
+    [string]$AitLibLabel, [string]$AitLibChildScript, [hashtable]$AitLibChildArgs = @{}, [string]$AitLibSummaryTool = "",
+    [Alias("AbortAsWarning")][switch]$AitLibAbortAsWarning,
+    [Alias("NoMirror")][switch]$AitLibNoMirror,
+    [Alias("Quiet")][switch]$AitLibQuiet
+) {
     $script:AitLibChildRc = 0; $script:AitLibChildWarnings = 0; $script:AitLibChildErrors = 0
+    $AitLibOwn = Get-AitLibChildName @($AitLibChildScript)
+    $AitLibName = if ($AitLibSummaryTool) { $AitLibSummaryTool } elseif ($AitLibOwn) { $AitLibOwn } else { $AitLibLabel }
     if (-not $AitLibChildScript) {
         $script:AitLibChildRc = 1
-        LogError "${AitLibLabel}: not run (no command given)"
-        if ($AitLibSummaryTool) { Write-Summary "ERROR" $AitLibSummaryTool "not run (no command)" }
+        Write-AitError $AitLibName "$AitLibLabel not run" "no command given"
         return 1
     }
-    $AitLibErrRows = Get-AitLibSummaryErrorCount
+    $AitLibErrBefore = Get-AitLibSummaryCount @("ERROR")
+    $AitLibAnyBefore = Get-AitLibSummaryCount @("WARN", "ERROR")
+    Set-AitLibRelayState $AitLibOwn ([bool]$AitLibNoMirror) ([bool]$AitLibQuiet)
+    $AitLibErrRecs = [System.Collections.Generic.List[string]]::new()
+    $AitLibThrew = $false; $AitLibExc = ""
+    # The child runs inside a relay (Test-AitLibRelayed); restored afterwards
+    $AitLibRelayedBefore = $env:AITLIB_RELAYED
+    $env:AITLIB_RELAYED = "1"
     $global:LASTEXITCODE = 0
     try {
-        & $AitLibChildScript @AitLibChildArgs 6>&1 | ForEach-Object { Send-AitLibChildLine $_ }
+        & $AitLibChildScript @AitLibChildArgs 2>&1 6>&1 | ForEach-Object {
+            if ($_ -is [System.Management.Automation.ErrorRecord]) {
+                $AitLibMsg = "$($_.Exception.Message)"
+                $AitLibErrRecs.Add($AitLibMsg)
+                Write-Host $AitLibMsg -ForegroundColor Red
+            } else {
+                Send-AitLibChildLine $_
+            }
+        }
         $script:AitLibChildRc = if ($null -eq $LASTEXITCODE) { 0 } else { [int]$LASTEXITCODE }
     } catch {
+        $AitLibThrew = $true
+        $AitLibExc = $_.Exception.Message
         $script:AitLibChildRc = 1
-        LogError "${AitLibLabel} failed: $($_.Exception.Message)"
-        Write-AitLibChildRow $AitLibSummaryTool $AitLibErrRows "script failed (exception)"
+    } finally {
+        $env:AITLIB_RELAYED = $AitLibRelayedBefore
+    }
+    return (Complete-AitLibChildRun -Label $AitLibLabel -Name $AitLibName -ErrBefore $AitLibErrBefore `
+        -AnyBefore $AitLibAnyBefore -Threw $AitLibThrew -Exception $AitLibExc `
+        -ReasonLines @($AitLibErrRecs) -AbortAsWarning ([bool]$AitLibAbortAsWarning))
+}
+
+# Invoke-NativeRelayed -Label L -FilePath EXE [-ArgumentList A] [-SummaryTool T]
+# [-AbortAsWarning] [-NoMirror] [-Quiet] -- run a native command (e.g. bash.exe
+# with build-deploy.sh, or pwsh -NoProfile -File child.ps1), relayed and
+# decided as the section comment says. Its stdout is read as UTF-8 and relayed
+# line by line as it arrives (Send-AitLibChildLine); its stderr is read as UTF-8
+# on a second runspace, written to this process's stderr as it arrives, and its
+# last 20 lines are kept for the failure reason (the tee). stdin is inherited.
+# EXE is resolved on PATH (an application) or as a file; one that cannot be
+# found or started is a "not run" error. Sets $script:AitLibChildRc,
+# AitLibChildWarnings, AitLibChildErrors. Returns 0 or 1.
+# Limits: the child's stdout and stderr are pipes, not the console (logging.md
+# 8.3, plan 5.5 limit 5): colour and progress drawn there disappear, and a
+# prompt written to stdout without a newline shows only when its line ends. A
+# pwsh child writes its stdout in its own console encoding (on Windows the OEM
+# code page unless it sets UTF-8); bash writes UTF-8.
+function Invoke-NativeRelayed {
+    param(
+        [Parameter(Mandatory)][string]$Label,
+        [Parameter(Mandatory)][string]$FilePath,
+        [string[]]$ArgumentList = @(),
+        [string]$SummaryTool = "",
+        [switch]$AbortAsWarning,
+        [switch]$NoMirror,
+        [switch]$Quiet
+    )
+    $script:AitLibChildRc = 0; $script:AitLibChildWarnings = 0; $script:AitLibChildErrors = 0
+    $own = Get-AitLibChildName (@($FilePath) + @($ArgumentList))
+    $name = if ($SummaryTool) { $SummaryTool } elseif ($own) { $own } else { $Label }
+    # Get-Command exempt: command-existence check; the else branch is the fallback
+    $app = Get-Command -Name $FilePath -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    $exe = if ($app) { $app.Source } elseif (Test-Path -LiteralPath $FilePath -PathType Leaf) { $FilePath } else { "" }
+    if (-not $exe) {
+        $script:AitLibChildRc = 1
+        Write-AitError $name "$Label not run" "command not found: $FilePath"
         return 1
     }
-    if ($script:AitLibChildRc -ne 0) {
-        $AitLibDetail = if ($script:AitLibChildRc -eq 2) { "aborted (exit 2)" } else { "script failed (exit $($script:AitLibChildRc))" }
-        LogError "$AitLibLabel $($AitLibDetail -replace '^script ', '') -- see $logFile"
-        Write-AitLibChildRow $AitLibSummaryTool $AitLibErrRows $AitLibDetail
+    $errBefore = Get-AitLibSummaryCount @("ERROR")
+    $anyBefore = Get-AitLibSummaryCount @("WARN", "ERROR")
+    Set-AitLibRelayState $own ([bool]$NoMirror) ([bool]$Quiet)
+    $psi = [System.Diagnostics.ProcessStartInfo]::new($exe)
+    foreach ($a in @($ArgumentList)) { $psi.ArgumentList.Add([string]$a) }
+    $psi.UseShellExecute = $false
+    $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError = $true
+    $psi.StandardOutputEncoding = [System.Text.UTF8Encoding]::new($false)
+    $psi.StandardErrorEncoding = [System.Text.UTF8Encoding]::new($false)
+    $psi.WorkingDirectory = (Get-Location -PSProvider FileSystem).ProviderPath
+    # The child runs inside a relay (Test-AitLibRelayed): only its environment
+    $psi.Environment["AITLIB_RELAYED"] = "1"
+    $proc = $null
+    try {
+        $proc = [System.Diagnostics.Process]::Start($psi)
+    } catch {
+        $script:AitLibChildRc = 1
+        Write-AitError $name "$Label not run" ($_.Exception.Message -replace '\s*\r?\n\s*', ' ')
         return 1
     }
-    if ($script:AitLibChildErrors -gt 0) {
-        LogError "$AitLibLabel logged $($script:AitLibChildErrors) error(s) but exited 0 -- see $logFile"
-        Write-AitLibChildRow $AitLibSummaryTool $AitLibErrRows "logged errors (exit 0)"
-        return 1
+    $errQueue = [System.Collections.Concurrent.ConcurrentQueue[string]]::new()
+    $rs = $null; $pump = $null
+    try {
+        # stderr pump on its own runspace: echo each line to this console's
+        # stderr and keep it (the tee), while this thread relays stdout
+        $rs = [runspacefactory]::CreateRunspace()
+        $rs.Open()
+        $pump = [powershell]::Create()
+        $pump.Runspace = $rs
+        [void]$pump.AddScript({
+            param($Reader, $Queue)
+            while ($null -ne ($l = $Reader.ReadLine())) {
+                [Console]::Error.WriteLine($l)
+                $Queue.Enqueue($l)
+            }
+        })
+        [void]$pump.AddArgument($proc.StandardError)
+        [void]$pump.AddArgument($errQueue)
+        $pumpHandle = $pump.BeginInvoke()
+        while ($null -ne ($line = $proc.StandardOutput.ReadLine())) { Send-AitLibChildLine $line }
+        $proc.WaitForExit()
+        [void]$pump.EndInvoke($pumpHandle)
+        $script:AitLibChildRc = $proc.ExitCode
+    } catch {
+        LogDetail "${Label}: relay error: $($_.Exception.Message -replace '\s*\r?\n\s*', ' ')"
+        if (-not $proc.HasExited) {
+            try { $proc.Kill($true) } catch { LogDetail "${Label}: cannot stop the child: $($_.Exception.Message)" }
+            $proc.WaitForExit()
+        }
+        $script:AitLibChildRc = if ($proc.ExitCode -ne 0) { $proc.ExitCode } else { 1 }
+    } finally {
+        if ($pump) { $pump.Dispose() }
+        if ($rs) { $rs.Dispose() }
+        $proc.Dispose()
     }
-    return 0
+    $tail = @($errQueue.ToArray())
+    if ($tail.Count -gt 20) { $tail = $tail[($tail.Count - 20)..($tail.Count - 1)] }
+    return (Complete-AitLibChildRun -Label $Label -Name $name -ErrBefore $errBefore -AnyBefore $anyBefore `
+        -Threw $false -Exception "" -ReasonLines $tail -AbortAsWarning ([bool]$AbortAsWarning))
+}
+
+# Invoke-RelaySync EXE ARGS -- installer Step 22: run the relay -> Cursor
+# AGENTS.md sync (EXE ARGS = the python command, the sync script and its
+# options). Its output (stdout and stderr) is logged as detail lines
+# (fail-safe: an unwritable deploy.log ends nothing, logging.md section 5). A
+# failure is one warning, Write-AitWarn "relay sync" "relay -> AGENTS.md sync
+# failed (exit N, non-fatal): REASON" (REASON from Get-AitErrorReason over the
+# output); EXE not found is "relay -> AGENTS.md sync not run (non-fatal): EXE
+# not found". The caller adds no warning of its own. Returns the sync's exit
+# code (127 when EXE is not found). Parity: run_relay_sync in aitools-lib.sh.
+function Invoke-RelaySync([string]$Exe, [string[]]$SyncArgs) {
+    # Get-Command exempt: command-existence check; the branch is the fallback
+    if (-not (Get-Command $Exe -ErrorAction SilentlyContinue)) {
+        Write-AitWarn "relay sync" "relay -> AGENTS.md sync not run (non-fatal): $Exe not found"
+        return 127
+    }
+    $global:LASTEXITCODE = 0
+    $out = @(& $Exe @SyncArgs 2>&1)
+    $rc = if ($null -eq $LASTEXITCODE) { 0 } else { [int]$LASTEXITCODE }
+    if ($rc -eq 0) {
+        foreach ($o in $out) {
+            $t = if ($o -is [System.Management.Automation.ErrorRecord]) { $o.Exception.Message } else { "$o" }
+            if ($t) { LogDetail "relay sync: $t" }
+        }
+        return 0
+    }
+    $reason = Get-AitErrorReason -Output $out -ExitCode $rc
+    Write-AitWarn "relay sync" "relay -> AGENTS.md sync failed (exit $rc, non-fatal): $reason"
+    return $rc
 }
 
 # ---------------------------------------------------------------------------
 # Logging init
 # ---------------------------------------------------------------------------
 # Sets $script:scriptName, $script:logDir, $script:logFile; resets
-# $script:errors, $script:warnings. Creates log directory.
+# $script:errors, $script:warnings. Creates log directory. The run summary file
+# ($env:AITOOLS_SUMMARY_FILE) is untouched (reference/logging.md 8.6).
 # Usage: Initialize-Logging "setup-foo"
 # Log rotation (reference/logging.md §4): size-based, 5 MB x 5 backups.
 # Fail-safe -- a broken rotate must never break the operation it records (§5).
+#
+# Options (reference/logging.md sections 3, 5, 7 and 8.2). Set once, after
+# Initialize-Logging; default off; script-scoped, so never passed to a child.
+# Parity: AITLIB_OPT_* in aitools-lib.sh.
+#   $script:AitLibOptJsonl = $true         Log (and LogOk/LogWarn/LogError and the
+#                                          Write-Ait* helpers) also writes each line
+#                                          to deploy.jsonl (Write-JsonlRecord): the
+#                                          installers' option
+#   $script:AitLibOptConsoleStderr = $true console lines go to stderr, and recording
+#                                          is off: the helpers log and count but
+#                                          write no run summary record (a
+#                                          library-style tool, logging.md 7: the
+#                                          profile resolver)
+#   $script:AitLibOptColorAuto = $true     warn/error console lines are coloured only
+#                                          when the console stream in use is not
+#                                          redirected ([Console]::IsOutputRedirected /
+#                                          IsErrorRedirected)
+# Migration switch (plan summary-warn-reporting 5.2; removed in I5):
+#   $script:AitLibRecordLogCalls = $false  LogWarn / LogError log and count but
+#                                          record nothing; legacy Write-Summary WARN /
+#                                          ERROR write their 3-field record.
+#   $script:AitLibRecordLogCalls = $true   LogWarn records WARN|<script>|TEXT,
+#                                          LogError records ERROR|<script>|TEXT|.
+#   The Write-Ait* helpers always record (logging.md 8.2).
+if ($null -eq (Get-Variable -Name AitLibOptJsonl -Scope Script -ErrorAction SilentlyContinue)) { $script:AitLibOptJsonl = $false }
+if ($null -eq (Get-Variable -Name AitLibOptConsoleStderr -Scope Script -ErrorAction SilentlyContinue)) { $script:AitLibOptConsoleStderr = $false }
+if ($null -eq (Get-Variable -Name AitLibOptColorAuto -Scope Script -ErrorAction SilentlyContinue)) { $script:AitLibOptColorAuto = $false }
+if ($null -eq (Get-Variable -Name AitLibRecordLogCalls -Scope Script -ErrorAction SilentlyContinue)) { $script:AitLibRecordLogCalls = $false }
 $script:LogMaxBytes = 5242880   # 5 MB
 $script:LogBackupCount = 5
 function Rotate-Log {
@@ -683,18 +989,175 @@ function Log($msg, $level = "info") {
     $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
     $line = "[$ts] [$scriptName] [$level] $msg"
     Add-AitLibLogText $line
-    switch ($level) {
-        "error" { Write-Host $line -ForegroundColor Red }
-        "warn"  { Write-Host $line -ForegroundColor Yellow }
-        default { Write-Host $line }
+    $colour = switch ($level) { "error" { "Red" } "warn" { "Yellow" } default { "" } }
+    if ($script:AitLibOptConsoleStderr) {
+        # Library-style tool (logging.md 7): the console line goes to stderr
+        if ($colour -and -not ($script:AitLibOptColorAuto -and [Console]::IsErrorRedirected)) {
+            $code = if ($colour -eq "Red") { "31" } else { "33" }
+            [Console]::Error.WriteLine("$([char]27)[${code}m$line$([char]27)[0m")
+        } else {
+            [Console]::Error.WriteLine($line)
+        }
+    } elseif ($colour -and -not ($script:AitLibOptColorAuto -and [Console]::IsOutputRedirected)) {
+        Write-Host $line -ForegroundColor $colour
+    } else {
+        Write-Host $line
     }
+    # Inside a relay the outermost relay mirrors this line (Test-AitLibRelayed)
+    if ($script:AitLibOptJsonl -and -not (Test-AitLibRelayed)) { Write-JsonlRecord $ts $scriptName $level $msg }
 }
 function LogOk($msg)    { Log $msg "ok" }
-function LogError($msg) { Log $msg "error"; $script:errors++ }
-function LogWarn($msg)  { Log $msg "warn"; $script:warnings++ }
+# LogError / LogWarn: logged and counted; recorded (ERROR|<script>|TEXT| /
+# WARN|<script>|TEXT) only when the migration switch is on (see Initialize-Logging)
+function LogError($msg) {
+    Log $msg "error"; $script:errors++
+    if ($script:AitLibRecordLogCalls) { Write-AitLibRecord "ERROR" $script:scriptName "$msg" "" }
+}
+function LogWarn($msg)  {
+    Log $msg "warn"; $script:warnings++
+    if ($script:AitLibRecordLogCalls) { Write-AitLibRecord "WARN" $script:scriptName "$msg" }
+}
 function LogDetail($msg) {
     $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
     Add-AitLibLogText "[$ts] [$scriptName] [detail] $msg"
+}
+
+# Write-AitLibUnrecordedError TEXT -- the non-recording path (logging.md 8.2):
+# logged at error level and counted, never recorded. Only the abort path
+# (Invoke-ManagedAbort) and the relay (a failed child it does not record, 8.3)
+# use it.
+function Write-AitLibUnrecordedError($msg) {
+    Log $msg "error"; $script:errors++
+}
+
+# ---------------------------------------------------------------------------
+# Run summary records (reference/logging.md 8.4). One writer for every helper.
+#   Write-AitLibRecord KIND NAME FIELD...  append "KIND|NAME|FIELD|..." to
+#     $env:AITOOLS_SUMMARY_FILE. CR and LF in every field become a space; "|"
+#     becomes "/" in every field except an ACTION's instruction. Outside a run
+#     (no AITOOLS_SUMMARY_FILE), or with the stderr console option (a
+#     library-style tool records nothing, logging.md 7), nothing is written.
+#     Fail-safe (8.3): a record that cannot be written is ignored; the reason
+#     is one detail line.
+# Parity: _aitlib_record in aitools-lib.sh.
+# ---------------------------------------------------------------------------
+function ConvertTo-AitLibRecordField([string]$Value, [switch]$KeepBar) {
+    $v = "$Value" -replace "`r|`n", " "
+    if (-not $KeepBar) { $v = $v -replace '\|', '/' }
+    return $v
+}
+function Write-AitLibRecord {
+    param([string]$Kind, [string]$Name, [Parameter(ValueFromRemainingArguments)][string[]]$Fields)
+    if (-not $env:AITOOLS_SUMMARY_FILE -or $script:AitLibOptConsoleStderr) { return }
+    $parts = [System.Collections.Generic.List[string]]::new()
+    $parts.Add($Kind)
+    if ($Kind -ceq "ACTION") {
+        $parts.Add("")
+        $parts.Add((ConvertTo-AitLibRecordField (@($Fields) -join "|") -KeepBar))
+    } else {
+        $parts.Add((ConvertTo-AitLibRecordField $Name))
+        foreach ($f in @($Fields)) { $parts.Add((ConvertTo-AitLibRecordField $f)) }
+    }
+    try {
+        $sf = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($env:AITOOLS_SUMMARY_FILE)
+        [IO.File]::AppendAllText($sf, (($parts -join "|") + "`n"), [System.Text.UTF8Encoding]::new($false))
+    } catch {
+        LogDetail "run summary record not written ($($_.Exception.Message -replace '\s*\r?\n\s*', ' ')): $($parts -join '|')"
+    }
+}
+
+# ---------------------------------------------------------------------------
+# Warning and error helpers (reference/logging.md 8.2; when to use which:
+# .claude/rules/script-standards.md "Required logging helpers"). One call logs,
+# counts and records once. An empty TOOL is the script name. Parity:
+# write_warn, write_action, write_error in aitools-lib.sh.
+#   Write-AitWarn TOOL TEXT          [warn] TEXT; warnings +1; WARN|TOOL|TEXT
+#   Write-AitAction TOOL TEXT ACTION as Write-AitWarn, plus ACTION||ACTION (an
+#                                    identical ACTION already in the run summary is
+#                                    logged at detail and not written again)
+#   Write-AitError TOOL WHAT REASON  [error] WHAT: REASON (WHAT alone when REASON is
+#                                    empty); errors +1; ERROR|TOOL|WHAT|REASON
+# ---------------------------------------------------------------------------
+function Write-AitWarn([string]$Tool, [string]$Text) {
+    if (-not $Tool) { $Tool = $script:scriptName }
+    Log $Text "warn"; $script:warnings++
+    Write-AitLibRecord "WARN" $Tool $Text
+}
+function Write-AitAction([string]$Tool, [string]$Text, [string]$Action) {
+    Write-AitWarn $Tool $Text
+    Write-AitLibActionOnce $Action
+}
+function Write-AitError([string]$Tool, [string]$What, [string]$Reason) {
+    if (-not $Tool) { $Tool = $script:scriptName }
+    $msg = if ($Reason) { "${What}: $Reason" } else { $What }
+    Log $msg "error"; $script:errors++
+    Write-AitLibRecord "ERROR" $Tool $What $Reason
+}
+
+# ---------------------------------------------------------------------------
+# Get-AitErrorReason -Output OUT -ExitCode N [-ErrorRecord ER] -- one reason
+# line for a failed command (reference/logging.md 8.3 "Every error has a
+# reason"), the first that applies:
+#   1. a known build-failure signature (Diagnose-BuildFailure): "<NAME>: <REMEDY>"
+#   2. the exception message of -ErrorRecord
+#   3. the first output line with an error marker: a word that ends in "error:"
+#      ("error:", "Error:", "ERROR:", "SyntaxError:", "Write-Error:"; the word may
+#      hold letters, digits, - and _) or "fatal:", any case, at the start of the
+#      line or after whitespace; "E: " at the start of the line; "syntax error"
+#      anywhere, any case
+#   4. the last non-empty output line
+#   5. "no output (exit N)"
+# Before matching, CR, ANSI CSI sequences and a leading "[ts] [script] [level] "
+# prefix are removed from each line; the reason returned is trimmed, and a
+# line of only whitespace counts as empty. OUTPUT (a string, or the items of a
+# captured stream: strings, ErrorRecords, objects) is logged as detail lines;
+# the caller does not log it again. Writes nothing to the output stream but the
+# reason. Parity: error_reason in aitools-lib.sh.
+# ---------------------------------------------------------------------------
+function ConvertTo-AitLibReasonLine([string]$Line) {
+    $l = $Line -replace "`r", ''
+    $l = $l -replace "$([char]27)\[[0-?]*[ -/]*[@-~]", ''
+    return ($l -replace '^\[[^\]]*\] \[[^\]]*\] \[[^\]]*\] ', '')
+}
+function Get-AitErrorReason {
+    param(
+        [AllowNull()][object]$Output,
+        [int]$ExitCode = 0,
+        [System.Management.Automation.ErrorRecord]$ErrorRecord = $null
+    )
+    $items = @(if ($null -ne $Output) { $Output })
+    $text = (@($items | ForEach-Object {
+        if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.Exception.Message } else { "$_" }
+    }) -join "`n")
+    $lines = @($text -split "`n")
+    if ($text) {
+        foreach ($l in $lines) { LogDetail "output: $(ConvertTo-AitLibReasonLine $l)" }
+    }
+    $clean = @($lines | ForEach-Object { ConvertTo-AitLibReasonLine $_ })
+    $joined = $clean -join "`n"
+    if ($joined.Trim()) {
+        $sig = Diagnose-BuildFailure -Output $joined
+        if ($sig) { return "$($sig.Name): $($sig.Remedy)" }
+    }
+    if ($ErrorRecord) {
+        $m = ($ErrorRecord.Exception.Message -replace '\s*\r?\n\s*', ' ').Trim()
+        if ($m) { return $m }
+    }
+    $markers = @(
+        '(?<![^\s])[A-Za-z0-9_-]*(?i:error):'
+        '(?<![^\s])(?i:fatal):'
+        '^E: '
+        '(?i)syntax error'
+    )
+    foreach ($l in $clean) {
+        foreach ($re in $markers) {
+            if ($l -cmatch $re) { return $l.Trim() }
+        }
+    }
+    for ($i = $clean.Count - 1; $i -ge 0; $i--) {
+        if ($clean[$i].Trim()) { return $clean[$i].Trim() }
+    }
+    return "no output (exit $ExitCode)"
 }
 
 # ---------------------------------------------------------------------------
@@ -850,16 +1313,23 @@ function Invoke-AI {
 }
 
 # ---------------------------------------------------------------------------
-# Summary writer (3-arg: category, tool, detail)
+# Write-Summary CAT TOOL TEXT -- one run summary record, written as given
+# (reference/logging.md 8.4): OK|TOOL|STATUS, DETAIL|TOOL|DETAIL, or
+# ACTION||INSTRUCTION (TOOL is ignored for ACTION). It never changes the
+# category. Legacy, until plan step I5: "WARN" / "ERROR" write the old 3-field
+# record (WARN|TOOL|TEXT, ERROR|TOOL|TEXT), which the reader accepts; they log
+# and count nothing (use Write-AitWarn / Write-AitError). Any other CAT is a
+# caller bug: one detail line, nothing written. Fail-safe and outside a run as
+# Write-AitLibRecord. Parity: write_summary in aitools-lib.sh.
 # ---------------------------------------------------------------------------
 function Write-Summary($cat, $tool, $detail) {
-    if ($env:AITOOLS_SUMMARY_FILE) {
-        # Auto-promote OK to WARN when warnings have been logged
-        if ($cat -eq "OK" -and $script:warnings -gt 0) {
-            $cat = "WARN"
-        }
-        $resolvedSummary = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($env:AITOOLS_SUMMARY_FILE)
-        [IO.File]::AppendAllText($resolvedSummary, "${cat}|${tool}|${detail}`n", [System.Text.UTF8Encoding]::new($false))
+    switch -CaseSensitive ("$cat") {
+        "OK"     { Write-AitLibRecord "OK" "$tool" "$detail" }
+        "DETAIL" { Write-AitLibRecord "DETAIL" "$tool" "$detail" }
+        "ACTION" { Write-AitLibRecord "ACTION" "" "$detail" }
+        "WARN"   { Write-AitLibRecord "WARN" "$tool" "$detail" }
+        "ERROR"  { Write-AitLibRecord "ERROR" "$tool" "$detail" }
+        default  { LogDetail "Write-Summary: unknown category '$cat' for ${tool}: $detail -- not written" }
     }
 }
 
@@ -1080,9 +1550,11 @@ function Backup-Dir {
 
 # [x]abort: log, then exit 2 (a bare exit 2 means user abort; commander
 # decision 2026-10-21, D-TS13 reversed: no marker file). One helper for every
-# review prompt. Parity: _managed_abort in aitools-lib.sh.
+# review prompt. The line is logged and counted, not recorded (the
+# non-recording path, logging.md 8.2): the relay that ran this script records
+# the abort once (8.3 "A user abort"). Parity: _managed_abort in aitools-lib.sh.
 function Invoke-ManagedAbort {
-    LogError "Aborted by user"
+    Write-AitLibUnrecordedError "Aborted by user"
     exit 2
 }
 
@@ -1106,6 +1578,7 @@ function Write-ManagedStateNotice {
 # aitools-lib.sh.
 #   -File     absolute path of a file this run wrote
 #   -Message  commit message
+#   -Tool     the record name of its warnings ("" = dotprofile)
 # "In the dotprofile" is decided by git, not by the path string: FILE's git top
 # level equals the dotprofile's git top level. The dotprofile is
 # $script:AitLibUserRepoPath when the caller already ran Resolve-UserRepoPath
@@ -1119,8 +1592,8 @@ function Write-ManagedStateNotice {
 # Sets $script:AitLibDotprofilePush (never empty after the call):
 #   committed-pushed  committed and pushed (LogOk)
 #   unchanged         FILE matches HEAD: nothing committed, no push, no warning
-#   commit-failed     LogWarn + ACTION "commit and push <file> in <dotprofile>"
-#   push-failed       committed, not pushed: LogWarn + ACTION "git pull --rebase,
+#   commit-failed     Write-AitAction "commit and push <file> in <dotprofile>"
+#   push-failed       committed, not pushed: Write-AitAction "git pull --rebase,
 #                     then git push in <dotprofile>" (remote has newer commits)
 #                     or "run git push in <dotprofile>" (any other failure)
 #   not-dotprofile    FILE is not in the dotprofile, or there is none: nothing done
@@ -1129,8 +1602,10 @@ function Write-ManagedStateNotice {
 # caller's own outcome (e.g. "accept & adopt") is unchanged and the run continues.
 # ---------------------------------------------------------------------------
 function Invoke-DotprofileCommitPush {
-    param([string]$File, [string]$Message)
+    param([string]$File, [string]$Message, [string]$Tool = "")
     $script:AitLibDotprofilePush = "not-dotprofile"
+    # The record name of the warnings below (lead decision: fallback dotprofile)
+    $dpTool = if ($Tool) { $Tool } else { "dotprofile" }
     $dir = Split-Path -Parent $File
     $base = Split-Path -Leaf $File
     if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
@@ -1160,8 +1635,7 @@ function Invoke-DotprofileCommitPush {
         $fileFull = [IO.Path]::GetFullPath($File)
         if ($fileFull.StartsWith($dpFull + [IO.Path]::DirectorySeparatorChar) -or $fileFull.StartsWith($dpFull + '/')) {
             $script:AitLibDotprofilePush = "commit-failed"
-            LogWarn "dotprofile $dp is not a git repository -- $base written but not committed"
-            Write-AitLibActionOnce "commit and push $base in $dp"
+            Write-AitAction $dpTool "dotprofile $dp is not a git repository -- $base written but not committed" "commit and push $base in $dp"
         } else {
             LogDetail "dotprofile commit: $dp is not a git repository; $File is outside it"
         }
@@ -1191,8 +1665,7 @@ function Invoke-DotprofileCommitPush {
     if ($out) { LogDetail "git commit in ${dp}: $out" }
     if ($rc -ne 0) {
         $script:AitLibDotprofilePush = "commit-failed"
-        LogWarn "dotprofile commit failed (exit $rc) -- commit and push $rel in $dp by hand"
-        Write-AitLibActionOnce "commit and push $rel in $dp"
+        Write-AitAction $dpTool "dotprofile commit failed (exit $rc) -- commit and push $rel in $dp by hand" "commit and push $rel in $dp"
         return
     }
     $prevPrompt = $env:GIT_TERMINAL_PROMPT
@@ -1210,11 +1683,9 @@ function Invoke-DotprofileCommitPush {
     if ($rc -ne 0) {
         $script:AitLibDotprofilePush = "push-failed"
         if ($out -match 'rejected|non-fast-forward|fetch first') {
-            LogWarn "dotprofile push rejected (exit $rc): the remote has newer commits -- run git pull --rebase, then git push in $dp"
-            Write-AitLibActionOnce "git pull --rebase, then git push in $dp"
+            Write-AitAction $dpTool "dotprofile push rejected (exit $rc): the remote has newer commits -- run git pull --rebase, then git push in $dp" "git pull --rebase, then git push in $dp"
         } else {
-            LogWarn "dotprofile push failed (exit $rc) -- run git push in $dp"
-            Write-AitLibActionOnce "run git push in $dp"
+            Write-AitAction $dpTool "dotprofile push failed (exit $rc) -- run git push in $dp" "run git push in $dp"
         }
         return
     }
@@ -1228,8 +1699,8 @@ function Invoke-DotprofileCommitPush {
 # uncommitted change to review (it is reviewed at commit, D-DEL5). Parity:
 # _managed_adopt_notice.
 function Write-ManagedAdoptNotice {
-    param([string]$Target)
-    Invoke-DotprofileCommitPush -File $Target -Message "Adopt $(Split-Path -Leaf $Target) from the deployed copy"
+    param([string]$Target, [string]$Tool = "")
+    Invoke-DotprofileCommitPush -File $Target -Message "Adopt $(Split-Path -Leaf $Target) from the deployed copy" -Tool $Tool
     if ($script:AitLibDotprofilePush -ne "not-dotprofile") { return }
     $dir = Split-Path -Parent $Target
     if (-not $dir -or -not (Test-Path -LiteralPath $dir)) { return }
@@ -2160,16 +2631,21 @@ function Prompt-DiffReview {
     )
 
     $script:MergedContent = $null
+    # The record name of this review's warnings: the tool Deploy-ManagedFile
+    # was given ($script:PdrToolName), else the script name
+    $pdrTool = "$($script:PdrToolName)"
 
-    # -Force or AITOOLS_FORCE: auto-overwrite
+    # -Force or AITOOLS_FORCE: auto-overwrite. The user asked for it in this run
+    # and it completes as asked: info, not a warning (logging.md 8.3 "What is a
+    # warning"). Same text as the bash twin.
     if ($env:AITOOLS_FORCE -eq "1" -or $Force) {
-        LogWarn "Diff in $FilePath -- overwriting (-Force)"
+        Log "Diff in $FilePath -- overwriting (--force)"
         return "overwrite"
     }
 
-    # Non-interactive: auto-overwrite
+    # Non-interactive: auto-overwrite; local edits are lost, so a warning
     if (-not (Test-InteractiveConsole)) {
-        LogWarn "Diff in $FilePath -- overwriting (non-interactive)"
+        Write-AitWarn $pdrTool "Diff in $FilePath -- overwriting (non-interactive)"
         return "overwrite"
     }
 
@@ -2178,7 +2654,7 @@ function Prompt-DiffReview {
         try {
             $CurrentContent = Get-Content $FilePath -Raw -ErrorAction Stop
         } catch {
-            LogWarn "Cannot read $FilePath for diff: $_"
+            Write-AitWarn $pdrTool "Cannot read $FilePath for diff: $_"
             return "overwrite"
         }
     }
@@ -2218,7 +2694,7 @@ function Prompt-DiffReview {
     [Console]::WriteLine("")
     $leafName = Split-Path -Leaf $FilePath
     if (-not (Get-ReviewDiff -LocalContent $CurrentContent -SourceContent $NewContent -LocalLabel $FilePath -SourceLabel $srcLabel)) {
-        LogWarn "Review diff unavailable for ${FilePath}: $($script:ReviewDiffError)"
+        Write-AitWarn $pdrTool "Review diff unavailable for ${FilePath}: $($script:ReviewDiffError)"
         [Console]::WriteLine("  (diff unavailable -- see deploy log)")
     } elseif ($script:ReviewDiffLines.Count -eq 0) {
         [Console]::WriteLine("  (whitespace-only differences)")
@@ -2312,9 +2788,15 @@ function Prompt-DiffReview {
 #                 JSON is written whole, not reviewed field by field.
 #
 # Returns "created", "updated", "verified", "accept & adopt", "skipped" or
-# "failed". On "failed" nothing is left half-written (snapshots restored) and
-# the reason is logged with LogError; the caller records the outcome
-# (Record-DeployOutcome, or its own ERROR row). Exits 2 on [x]abort.
+# "failed". The library records at the source (reference/logging.md 8.3
+# "Managed files"), under -ToolName (empty: the script name): on "failed"
+# nothing is left half-written (snapshots restored) and the error is recorded
+# once (Write-AitError TOOL "Failed: <item>" <the write, AI merge, adopt filter
+# or validation error>); on "skipped" the warning is recorded once
+# (Write-AitWarn); a differing LOCAL overwritten in a non-interactive run is a
+# warning, under --force it is logged at info. The caller records the outcome
+# with the deploy tracker (Record-DeployOutcome: DETAIL records and the OK
+# status) and writes no second WARN or ERROR record. Exits 2 on [x]abort.
 # Honors $DryRun (reports, writes nothing).
 # ---------------------------------------------------------------------------
 function Deploy-ManagedFile {
@@ -2353,7 +2835,7 @@ function Deploy-ManagedFile {
             $dangling = $true
         }
         if ($dangling) {
-            LogError "Failed: ${ItemName}: $DestPath is a dangling symlink -- not written through it"
+            Write-AitError $ToolName "Failed: $ItemName" "$DestPath is a dangling symlink -- not written through it"
             return "failed"
         }
     }
@@ -2364,7 +2846,7 @@ function Deploy-ManagedFile {
             try {
                 $existing = Get-Content -LiteralPath $DestPath -Raw -ErrorAction Stop
             } catch {
-                LogWarn "Cannot read $DestPath for the dry-run comparison: $_"
+                Write-AitWarn $ToolName "Cannot read $DestPath for the dry-run comparison: $_"
                 $existing = ""
             }
             $existing = "$existing" -replace '[\r\n]+$', ''
@@ -2386,14 +2868,14 @@ function Deploy-ManagedFile {
             $srcTmp = [IO.Path]::GetTempFileName()
             [IO.File]::WriteAllText($srcTmp, "$Content`n", [System.Text.UTF8Encoding]::new($false))
         } catch {
-            LogError "Failed: ${ItemName}: could not write a temp file for the JSON review: $_"
+            Write-AitError $ToolName "Failed: $ItemName" "could not write a temp file for the JSON review: $_"
             if ($srcTmp) {
                 Remove-Item -LiteralPath $srcTmp -Force -ErrorAction SilentlyContinue
                 # ErrorAction exempt: temp file cleanup; the failure is already reported
             }
             return "failed"
         }
-        $jsonResult = Review-JsonFields -SourceFile $srcTmp -DestPath $DestPath -AdoptPath $AdoptPath -ItemName $ItemName
+        $jsonResult = Review-JsonFields -SourceFile $srcTmp -DestPath $DestPath -AdoptPath $AdoptPath -ItemName $ItemName -ToolName $ToolName
         Remove-Item -LiteralPath $srcTmp -Force -ErrorAction SilentlyContinue
         # ErrorAction exempt: temp file cleanup; nothing depends on it
         return $jsonResult
@@ -2405,14 +2887,14 @@ function Deploy-ManagedFile {
             LogOk "Created: $ItemName -> $DestPath"
             return "created"
         }
-        LogError "Failed: ${ItemName}: $($script:ManagedWriteError)"
+        Write-AitError $ToolName "Failed: $ItemName" "$($script:ManagedWriteError)"
         return "failed"
     }
 
     try {
         $existing = Get-Content -LiteralPath $DestPath -Raw -ErrorAction Stop
     } catch {
-        LogError "Failed: ${ItemName}: cannot read ${DestPath}: $_"
+        Write-AitError $ToolName "Failed: $ItemName" "cannot read ${DestPath}: $_"
         return "failed"
     }
     $existing = "$existing" -replace '[\r\n]+$', ''
@@ -2426,23 +2908,25 @@ function Deploy-ManagedFile {
             LogOk "Updated: $ItemName -> $DestPath (read-only copy: source wins, backup kept)"
             return "updated"
         }
-        LogError "Failed: ${ItemName}: $($script:ManagedWriteError) (files restored)"
+        Write-AitError $ToolName "Failed: $ItemName" "$($script:ManagedWriteError) (files restored)"
         return "failed"
     }
 
     # LOCAL differs from SOURCE: review (non-interactive / EOF / -Force -> overwrite)
     $script:PdrAdoptTarget = $AdoptPath
+    $script:PdrToolName = $ToolName
     $choice = Prompt-DiffReview -FilePath $DestPath -NewContent $Content `
         -AdoptOffered ([bool]$AdoptPath) -CurrentContent $existing
     $script:PdrAdoptTarget = ""
+    $script:PdrToolName = ""
 
     if ($choice -eq "skip") {
-        LogWarn "Skipped: $ItemName (local differs from source; reviewed again next run)"
+        Write-AitWarn $ToolName "Skipped: $ItemName (local differs from source; reviewed again next run)"
         return "skipped"
     }
     if ($choice -eq "failed") {
         $mergeReason = if ($script:ManagedMergeError) { $script:ManagedMergeError } else { "AI merge failed" }
-        LogError "Failed: ${ItemName}: $mergeReason -- nothing written"
+        Write-AitError $ToolName "Failed: $ItemName" "$mergeReason -- nothing written"
         return "failed"
     }
 
@@ -2466,24 +2950,24 @@ function Deploy-ManagedFile {
         try {
             $filtered = (& $AdoptFilter $repoContent) -join "`n"
         } catch {
-            LogError "Failed: ${ItemName}: adopt filter failed -- nothing written: $_"
+            Write-AitError $ToolName "Failed: $ItemName" "adopt filter failed -- nothing written: $_"
             return "failed"
         }
         if ([string]::IsNullOrEmpty($filtered)) {
-            LogError "Failed: ${ItemName}: adopt filter returned nothing -- nothing written"
+            Write-AitError $ToolName "Failed: $ItemName" "adopt filter returned nothing -- nothing written"
             return "failed"
         }
         $repoContent = $filtered -replace '[\r\n]+$', ''
     }
 
     if (-not (Write-ManagedFiles -LocalPath $localPath -LocalContent $localOut -AdoptPath $repoPath -AdoptContent $repoContent)) {
-        LogError "Failed: ${ItemName}: $($script:ManagedWriteError) (files restored)"
+        Write-AitError $ToolName "Failed: $ItemName" "$($script:ManagedWriteError) (files restored)"
         return "failed"
     }
 
     if ($repoPath) {
         LogOk "Accept & adopt: $ItemName -> $repoPath"
-        Write-ManagedAdoptNotice -Target $repoPath
+        Write-ManagedAdoptNotice -Target $repoPath -Tool $ToolName
         return "accept & adopt"
     }
     LogOk "Updated: $ItemName -> $DestPath"
@@ -2495,10 +2979,12 @@ function Deploy-ManagedFile {
 # Parity: review_json_fields in aitools-lib.sh (same embedded node script).
 #
 # Params: -SourceFile (file holding the SOURCE JSON), -DestPath (LOCAL JSON),
-# -AdoptPath (repo JSON file that is the source of truth; "" = no adopt).
+# -AdoptPath (repo JSON file that is the source of truth; "" = no adopt),
+# -ItemName (the review header's name), -ToolName (the record name of its
+# warning and errors; "" = the script name: Write-AitWarn / Write-AitError).
 # Returns one result per file by precedence failed > accept & adopt > skipped
 # > updated > verified: "created" (LOCAL was missing), "failed" (files
-# restored, LogError), "accept & adopt" (a field was adopted into AdoptPath;
+# restored, Write-AitError), "accept & adopt" (a field was adopted into AdoptPath;
 # overwrites chosen in the same run are written too), "skipped" (a field was
 # left differing), "updated" (fields overwritten from SOURCE), "verified"
 # (nothing written). Requires node. Exits 2 on [x]abort.
@@ -2708,7 +3194,8 @@ function Review-JsonFields {
         [string]$SourceFile,
         [string]$DestPath,
         [string]$AdoptPath = "",
-        [string]$ItemName = ""
+        [string]$ItemName = "",
+        [string]$ToolName = ""
     )
     $item = Split-Path -Leaf $DestPath
     # The review header names the file (the caller's item name, else the file name)
@@ -2716,7 +3203,7 @@ function Review-JsonFields {
 
     # Get-Command exempt: command-existence check with explicit failure branch
     if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
-        LogError "Failed: ${item}: node is required for the JSON field review"
+        Write-AitError $ToolName "Failed: $item" "node is required for the JSON field review"
         return "failed"
     }
 
@@ -2726,7 +3213,7 @@ function Review-JsonFields {
         $js = Join-Path $work "review.js"
         [IO.File]::WriteAllText($js, $script:ReviewJsonNode, [System.Text.UTF8Encoding]::new($false))
     } catch {
-        LogError "Failed: ${item}: could not create a work directory for the JSON review: $_"
+        Write-AitError $ToolName "Failed: $item" "could not create a work directory for the JSON review: $_"
         return "failed"
     }
     $destResolved = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($DestPath)
@@ -2742,7 +3229,7 @@ function Review-JsonFields {
             $srcJson = [IO.File]::ReadAllText($SourceFile, [Text.Encoding]::UTF8) -replace '[\r\n]+$', ''
             $reqKeys = [IO.File]::ReadAllText($keysFile, [Text.Encoding]::UTF8).Trim()
         } catch {
-            LogError "Failed: ${item}: cannot read the source JSON: $_"
+            Write-AitError $ToolName "Failed: $item" "cannot read the source JSON: $_"
             Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
             # ErrorAction exempt: work directory cleanup; the failure is already reported
             return "failed"
@@ -2753,14 +3240,14 @@ function Review-JsonFields {
             LogOk "Created: $fileLabel -> $DestPath"
             return "created"
         }
-        LogError "Failed: ${item}: $($script:ManagedWriteError)"
+        Write-AitError $ToolName "Failed: $item" "$($script:ManagedWriteError)"
         return "failed"
     }
 
     $planFile = Join-Path $work "plan.tsv"
     $nodeErr = & node $js plan $SourceFile $destResolved $planFile 2>&1
     if ($LASTEXITCODE -ne 0) {
-        LogError "Failed: ${item}: field comparison failed (node exit $LASTEXITCODE): $nodeErr"
+        Write-AitError $ToolName "Failed: $item" "field comparison failed (node exit $LASTEXITCODE): $nodeErr"
         Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
         # ErrorAction exempt: work directory cleanup; the failure is already reported
         return "failed"
@@ -2805,7 +3292,7 @@ function Review-JsonFields {
     try {
         [IO.File]::WriteAllText($choicesFile, (($choices -join "`n") + "`n"), [System.Text.UTF8Encoding]::new($false))
     } catch {
-        LogError "Failed: ${item}: could not record the field choices: $_"
+        Write-AitError $ToolName "Failed: $item" "could not record the field choices: $_"
         Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
         # ErrorAction exempt: work directory cleanup; the failure is already reported
         return "failed"
@@ -2815,7 +3302,7 @@ function Review-JsonFields {
     $adoptArg = if ($AdoptPath) { $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($AdoptPath) } else { "-" }
     $nodeErr = & node $js apply $SourceFile $destResolved $adoptArg $choicesFile $localOutFile $adoptOutFile $resultFile $reqLocalFile $reqAdoptFile 2>&1
     if ($LASTEXITCODE -ne 0) {
-        LogError "Failed: ${item}: applying the field choices failed (node exit $LASTEXITCODE): $nodeErr"
+        Write-AitError $ToolName "Failed: $item" "applying the field choices failed (node exit $LASTEXITCODE): $nodeErr"
         Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
         # ErrorAction exempt: work directory cleanup; the failure is already reported
         return "failed"
@@ -2827,7 +3314,7 @@ function Review-JsonFields {
         $rLocal = [IO.File]::ReadAllText($reqLocalFile, [Text.Encoding]::UTF8).Trim()
         $rAdopt = [IO.File]::ReadAllText($reqAdoptFile, [Text.Encoding]::UTF8).Trim()
     } catch {
-        LogError "Failed: ${item}: could not read the field review result: $_"
+        Write-AitError $ToolName "Failed: $item" "could not read the field review result: $_"
         Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
         # ErrorAction exempt: work directory cleanup; the failure is already reported
         return "failed"
@@ -2845,7 +3332,7 @@ function Review-JsonFields {
     if ($pLocal -or $pAdopt) {
         if (-not (Write-ManagedFiles -LocalPath $pLocal -LocalContent $cLocal -AdoptPath $pAdopt -AdoptContent $cAdopt `
                 -LocalRequiredKeys $rLocal -AdoptRequiredKeys $rAdopt)) {
-            LogError "Failed: ${item}: $($script:ManagedWriteError) (files restored)"
+            Write-AitError $ToolName "Failed: $item" "$($script:ManagedWriteError) (files restored)"
             return "failed"
         }
     }
@@ -2854,10 +3341,10 @@ function Review-JsonFields {
     }
     if ($nAdopt -gt 0) {
         LogOk "Accept & adopt: $fileLabel -> $AdoptPath ($nAdopt field(s))"
-        Write-ManagedAdoptNotice -Target $AdoptPath
+        Write-ManagedAdoptNotice -Target $AdoptPath -Tool $ToolName
     }
     if ($nSkip -gt 0) {
-        LogWarn "Skipped: $fileLabel ($nSkip field(s) differ from source; reviewed again next run)"
+        Write-AitWarn $ToolName "Skipped: $fileLabel ($nSkip field(s) differ from source; reviewed again next run)"
     }
     if ($nAdopt -gt 0) { return "accept & adopt" }
     if ($nSkip -gt 0) { return "skipped" }
@@ -2879,16 +3366,18 @@ function Review-JsonFields {
 # adopted content over it. Empty/null targets are skipped so callers may pass an
 # optional path without branching.
 #
+# -Tool: the record name of its errors ("" = the script name; Write-AitError).
 # Returns the count of targets written.
 # ---------------------------------------------------------------------------
 function Adopt-ManagedFile {
     param(
         [Parameter(Mandatory)][string]$SourceFile,
-        [string[]]$Targets
+        [string[]]$Targets,
+        [string]$Tool = ""
     )
 
     if (-not (Test-Path $SourceFile)) {
-        LogError "Adopt-ManagedFile: adopted source not found: $SourceFile"
+        Write-AitError $Tool "adopt failed" "adopted source not found: $SourceFile"
         return 0
     }
 
@@ -2905,7 +3394,7 @@ function Adopt-ManagedFile {
             LogOk "Adopted -> $target"
             $written++
         } catch {
-            LogError "Adopt-ManagedFile: failed to write ${target}: $_"
+            Write-AitError $Tool "adopt to $target failed" "$_"
         }
     }
 
@@ -2954,8 +3443,11 @@ function Record-DeployOutcome {
     }
 }
 
-# Write aggregate summary for a deploy loop. Uses non-zero counts.
-# ERROR when any file failed, WARN when any was skipped, else OK.
+# Write the deploy loop's status: one OK record with the non-zero counts
+# (reference/logging.md 8.3 "Managed files": the failures and skips are
+# recorded at the source, by Deploy-ManagedFile, so the tracker writes the OK
+# status record and the DETAIL records only; the tool's line is still yellow or
+# red in the panel when an item warned or failed under its name).
 function Write-DeployTrackerSummary {
     param([string]$ToolName)
     $parts = @()
@@ -2964,19 +3456,14 @@ function Write-DeployTrackerSummary {
     if ($script:dtAccepted -gt 0)  { $parts += "$($script:dtAccepted) accepted" }
     if ($script:dtRemoved -gt 0)   { $parts += "$($script:dtRemoved) removed" }
     if ($script:dtVerified -gt 0)  { $parts += "$($script:dtVerified) verified" }
+    if ($script:dtSkipped -gt 0)   { $parts += "$($script:dtSkipped) skipped" }
     if ($script:dtFailed -gt 0)    { $parts += "$($script:dtFailed) failed" }
-    # Every count 0 (nothing recorded, or only skipped/preserved items): not
+    # Every count 0 (nothing recorded, or only preserved items): not
     # "verified", which would claim a check that never ran
     $text = if ($parts.Count -gt 0) { $parts -join ", " } else { "n/a (nothing to deploy)" }
     $script:deployTrackerText = $text
 
-    if ($script:dtFailed -gt 0) {
-        Write-Summary "ERROR" $ToolName "$($script:dtFailed) failed"
-    } elseif ($script:dtSkipped -gt 0) {
-        Write-Summary "WARN" $ToolName "$($script:dtSkipped) skipped (user review)"
-    } else {
-        Write-Summary "OK" $ToolName $text
-    }
+    Write-Summary "OK" $ToolName $text
 }
 
 # ---------------------------------------------------------------------------
@@ -3235,9 +3722,10 @@ function Test-FanoutBinary([string]$Path) {
 # non-interactive run). Equal bytes -> "verified". Otherwise an existing Dest
 # is backed up (Backup-File; no backup -> "failed", nothing written), Source is
 # copied to a temp file beside Dest, compared, and moved over Dest. Returns
-# created / updated / verified / failed (failed: LogError with the reason).
+# created / updated / verified / failed (failed: Write-AitError under
+# -ToolName, "" = the script name, with the reason).
 # Honors $DryRun. Parity: _fanout_copy_binary in aitools-lib.sh.
-function Copy-FanoutBinary([string]$Source, [string]$Dest, [string]$ItemName) {
+function Copy-FanoutBinary([string]$Source, [string]$Dest, [string]$ItemName, [string]$ToolName = "") {
     $srcBytes = [System.IO.File]::ReadAllBytes($Source)
     $exists = [System.IO.File]::Exists($Dest)
     if ($exists) {
@@ -3256,13 +3744,13 @@ function Copy-FanoutBinary([string]$Source, [string]$Dest, [string]$ItemName) {
     try {
         [System.IO.Directory]::CreateDirectory([System.IO.Path]::GetDirectoryName($Dest)) | Out-Null
     } catch {
-        LogError "Failed: ${ItemName}: cannot create the directory of ${Dest}: $($_.Exception.Message)"
+        Write-AitError $ToolName "Failed: $ItemName" "cannot create the directory of ${Dest}: $($_.Exception.Message)"
         return "failed"
     }
     if ($exists) {
         Backup-File -FilePath $Dest
         if (-not $script:BackupFileOk) {
-            LogError "Failed: ${ItemName}: backup of $Dest failed -- nothing written"
+            Write-AitError $ToolName "Failed: $ItemName" "backup of $Dest failed -- nothing written"
             return "failed"
         }
     }
@@ -3276,7 +3764,7 @@ function Copy-FanoutBinary([string]$Source, [string]$Dest, [string]$ItemName) {
         if ([System.IO.File]::Exists($tmp)) {
             try { [System.IO.File]::Delete($tmp) } catch { LogDetail "Copy-FanoutBinary: cannot remove ${tmp}: $($_.Exception.Message)" }
         }
-        LogError "Failed: ${ItemName}: cannot write $Dest (binary): $($_.Exception.Message)"
+        Write-AitError $ToolName "Failed: $ItemName" "cannot write $Dest (binary): $($_.Exception.Message)"
         return "failed"
     }
     if ($exists) {
@@ -3383,8 +3871,9 @@ function Remove-FanoutOldDestBackups([string]$DestDir, [int]$Keep) {
 # The names synced and anthropic-skills* belong to Claude Code: a harness
 # skill of that name is a failed item, never written, and is never removed
 # from DestDir. No .aitools\skills: info log only, no row (setup-user-skills,
-# the fallback, owns the ToolName rows then). $DryRun writes nothing. Returns nothing (failures are LogError + an ERROR
-# row, counted in $errors for the caller's exit footer); [x]abort at a review
+# the fallback, owns the ToolName rows then). $DryRun writes nothing. Returns nothing (each failure is one
+# Write-AitError under ToolName, counted in $errors for the caller's exit footer; each warning one
+# Write-AitWarn; the tracker writes the OK status record); [x]abort at a review
 # exits 2 from the library. .NET IO for every name (no wildcard paths: a
 # name with [ ] * ? works). Parity: fanout_harness_skills in aitools-lib.sh.
 # ---------------------------------------------------------------------------
@@ -3395,9 +3884,8 @@ function Invoke-HarnessSkillsFanout {
     $fsSrc = Join-Path (Join-Path $homeDir ".aitools") "skills"
     $fsManifest = Join-Path $fsSrc ".aitools-skills-manifest"
     if (-not $ToolName -or -not $DestDir) {
-        LogError "Invoke-HarnessSkillsFanout: -ToolName and -DestDir are required (caller bug)"
         $shownTool = if ($ToolName) { $ToolName } else { "skills" }
-        Write-Summary "ERROR" $shownTool "fan-out not run (caller bug)"
+        Write-AitError $shownTool "fan-out not run" "Invoke-HarnessSkillsFanout: -ToolName and -DestDir are required (caller bug)"
         return
     }
     if ($DestDir.Length -gt 1) { $DestDir = $DestDir.TrimEnd('/', '\') }
@@ -3422,8 +3910,7 @@ function Invoke-HarnessSkillsFanout {
     try {
         $entries = Get-FanoutSortedNames $fsSrc
     } catch {
-        LogError "Cannot list $fsSrc ($($_.Exception.Message))"
-        Write-Summary "ERROR" $ToolName "cannot read harness skills"
+        Write-AitError $ToolName "cannot read harness skills" "cannot list ${fsSrc}: $($_.Exception.Message)"
         return
     }
 
@@ -3441,17 +3928,15 @@ function Invoke-HarnessSkillsFanout {
         try {
             $manifest = Read-HarnessManifest -Path $fsManifest -Kind "skills"
         } catch {
-            LogError "Cannot read the skills manifest ${fsManifest}: $($_.Exception.Message) -- every skill fanned out, none retired"
-            Write-Summary "ERROR" $ToolName "cannot read skills manifest"
+            Write-AitError $ToolName "cannot read skills manifest" "${fsManifest}: $($_.Exception.Message) -- every skill fanned out, none retired"
             $mFailed = $true
         }
         if ($manifest -and $manifest.Status -eq "header-bad") {
-            LogWarn "Skills manifest ${fsManifest}: the first line is not `"$skillsManifestHeader`" -- every skill fanned out, none retired, adopt not offered -- Run aitools to rebuild ~/.aitools/skills and its manifest"
-            Write-Summary "ACTION" "" "Run aitools to rebuild ~/.aitools/skills and its manifest"
+            Write-AitAction $ToolName "Skills manifest ${fsManifest}: the first line is not `"$skillsManifestHeader`" -- every skill fanned out, none retired, adopt not offered -- Run aitools to rebuild ~/.aitools/skills and its manifest" "Run aitools to rebuild ~/.aitools/skills and its manifest"
         } elseif ($manifest) {
             $mOk = $true
-            foreach ($bad in $manifest.Invalid) { LogWarn "Skills manifest ${fsManifest}: line ignored: $bad -- Run aitools to rebuild ~/.aitools/skills and its manifest" }
-            if ($manifest.Invalid.Count -gt 0) { Write-Summary "ACTION" "" "Run aitools to rebuild ~/.aitools/skills and its manifest" }
+            # One warning per ignored line; the ACTION once (Write-AitAction de-duplicates it)
+            foreach ($bad in $manifest.Invalid) { Write-AitAction $ToolName "Skills manifest ${fsManifest}: line ignored: $bad -- Run aitools to rebuild ~/.aitools/skills and its manifest" "Run aitools to rebuild ~/.aitools/skills and its manifest" }
             foreach ($r in $manifest.Rules) {
                 if ($r.Source -ceq "retired") {
                     $retired.Add($r.Name); [void]$retiredSet.Add($r.Name)
@@ -3488,15 +3973,14 @@ function Invoke-HarnessSkillsFanout {
 
     if ($skills.Count -eq 0 -and $broken.Count -eq 0 -and $retired.Count -eq 0) {
         Log "No skills in $fsSrc -- skipping"
-        # An unreadable manifest already wrote this tool's ERROR row
+        # An unreadable manifest already recorded this tool's error
         if (-not $mFailed) { Write-Summary "OK" $ToolName "n/a (no harness skills)" }
         return
     }
     if ($DryRun) {
         # The dry run predicts the real run's outcome for a DestDir that is not a directory
         if ((Test-Path -LiteralPath $DestDir) -and -not (Test-Path -LiteralPath $DestDir -PathType Container)) {
-            LogError "Cannot create $DestDir (a file is in the way) [DRY RUN]"
-            Write-Summary "ERROR" $ToolName "cannot create skills dir"
+            Write-AitError $ToolName "cannot create skills dir" "$DestDir (a file is in the way) [DRY RUN]"
             return
         }
     } else {
@@ -3511,8 +3995,7 @@ function Invoke-HarnessSkillsFanout {
             # Re-check: a file in the way (parity with mkdir -p in the .sh)
             if (-not (Test-Path -LiteralPath $DestDir -PathType Container)) {
                 if (-not $mkdirError) { $mkdirError = "not a directory" }
-                LogError "Cannot create $DestDir ($mkdirError)"
-                Write-Summary "ERROR" $ToolName "cannot create skills dir"
+                Write-AitError $ToolName "cannot create skills dir" "${DestDir}: $mkdirError"
                 return
             }
         }
@@ -3524,7 +4007,7 @@ function Invoke-HarnessSkillsFanout {
         Record-DeployOutcome -Outcome "failed" -ToolName $ToolName -ItemName ".aitools-skills-manifest"
     }
     foreach ($b in $broken) {
-        LogError "Failed: ${b}: dangling symlink in $fsSrc"
+        Write-AitError $ToolName "Failed: $b" "dangling symlink in $fsSrc"
         Record-DeployOutcome -Outcome "failed" -ToolName $ToolName -ItemName $b
     }
 
@@ -3535,14 +4018,14 @@ function Invoke-HarnessSkillsFanout {
     foreach ($ent in $skills) {
         # A name Claude Code owns in its skills directory: never written
         if (Test-FanoutSkillReserved $ent) {
-            LogError "Not fanned out: $ent (a reserved skills directory name: synced and anthropic-skills* belong to Claude Code) -- rename the harness skill"
+            Write-AitError $ToolName "Not fanned out: $ent" "a reserved skills directory name (synced and anthropic-skills* belong to Claude Code) -- rename the harness skill"
             Record-DeployOutcome -Outcome "failed" -ToolName $ToolName -ItemName $ent
             continue
         }
         # Two harness skills whose names differ only in case (possible on a
         # case-sensitive file system) map to one directory here: the first wins
         if ($owned.Contains($ent)) {
-            LogError "Skipped duplicate: $ent (a harness skill whose name differs only in case was already fanned out)"
+            Write-AitError $ToolName "Skipped duplicate: $ent" "a harness skill whose name differs only in case was already fanned out"
             Record-DeployOutcome -Outcome "failed" -ToolName $ToolName -ItemName $ent
             continue
         }
@@ -3551,7 +4034,7 @@ function Invoke-HarnessSkillsFanout {
         # A symlink (dangling too: LinkTarget is set) or a file (not a directory)
         $destIsLink = $null -ne ([System.IO.FileInfo]::new($destEnt)).LinkTarget
         if ($destIsLink -or [System.IO.File]::Exists($destEnt)) {
-            LogWarn "Kept ${ent}: not a directory this fan-out owns ($destEnt is a symlink or a file) -- the harness copy is not deployed; move it aside to get the aitools copy"
+            Write-AitWarn $ToolName "Kept ${ent}: not a directory this fan-out owns ($destEnt is a symlink or a file) -- the harness copy is not deployed; move it aside to get the aitools copy"
             Record-DeployOutcome -Outcome "preserved" -ToolName $ToolName -ItemName $ent
             $kept.Add($ent)
             continue
@@ -3587,7 +4070,7 @@ function Invoke-HarnessSkillsFanout {
             }
         }
         if ($walkError) {
-            LogError "Failed: ${ent}: $walkError"
+            Write-AitError $ToolName "Failed: $ent" "$walkError"
             Record-DeployOutcome -Outcome "failed" -ToolName $ToolName -ItemName $ent
             continue
         }
@@ -3635,15 +4118,15 @@ function Invoke-HarnessSkillsFanout {
             $isBinary = Test-FanoutBinary $srcFile
             $content = if ($isBinary) { "" } else { [System.IO.File]::ReadAllText($srcFile, [System.Text.UTF8Encoding]::new($false)) }
         } catch {
-            LogError "Cannot read harness skill file ${srcFile}: $($_.Exception.Message)"
+            Write-AitError $ToolName "Cannot read harness skill file $srcFile" "$($_.Exception.Message)"
             Record-DeployOutcome -Outcome "failed" -ToolName $ToolName -ItemName $itemName
             continue
         }
         if ($isBinary) {
             try {
-                $res = Copy-FanoutBinary $srcFile $destFile $itemName
+                $res = Copy-FanoutBinary $srcFile $destFile $itemName $ToolName
             } catch {
-                LogError "Failed: ${itemName}: $($_.Exception.Message)"
+                Write-AitError $ToolName "Failed: $itemName" "$($_.Exception.Message)"
                 $res = "failed"
             }
         } else {
@@ -3659,7 +4142,7 @@ function Invoke-HarnessSkillsFanout {
             $res = Deploy-ManagedFile -Content $content -DestPath $destFile -ToolName $ToolName -ItemName $itemName -AdoptPath $adopt
         }
         if ($res -notin @("created", "updated", "verified", "accept & adopt", "skipped", "failed")) {
-            LogError "Unexpected deploy result for ${itemName}: $res"
+            Write-AitError $ToolName "Unexpected deploy result for $itemName" "$res"
             $res = "failed"
         }
         # The executable bit follows the harness copy (a skill may ship scripts);
@@ -3679,7 +4162,7 @@ function Invoke-HarnessSkillsFanout {
                     [System.IO.File]::SetUnixFileMode($destFile, [System.IO.UnixFileMode]([int]$destMode -band (-bnot [int]$xBits)))
                 }
             } catch {
-                LogError "Failed: ${itemName}: cannot $xVerb the executable bit on ${destFile}: $($_.Exception.Message)"
+                Write-AitError $ToolName "Failed: $itemName" "cannot $xVerb the executable bit on ${destFile}: $($_.Exception.Message)"
                 $res = "failed"
             }
         }
@@ -3703,7 +4186,7 @@ function Invoke-HarnessSkillsFanout {
         try {
             $dList = Get-FanoutSortedNames $DestDir
         } catch {
-            LogWarn "Cannot list $DestDir for the retired skills -- $($_.Exception.Message) -- check its permissions"
+            Write-AitWarn $ToolName "Cannot list $DestDir for the retired skills -- $($_.Exception.Message) -- check its permissions"
             $dList = @()
             $unlisted = $true
         }
@@ -3731,7 +4214,7 @@ function Invoke-HarnessSkillsFanout {
                 if ($n.StartsWith("$rm.bak.", [StringComparison]::Ordinal)) { $cands.Add((Join-Path $fsSrc $n)) }
             }
         } catch {
-            LogWarn "Cannot list the backups of $rm in ${fsSrc}: $($_.Exception.Message)"
+            Write-AitWarn $ToolName "Cannot list the backups of $rm in ${fsSrc}: $($_.Exception.Message)"
         }
         $why = ""
         foreach ($cand in $cands) {
@@ -3742,10 +4225,10 @@ function Invoke-HarnessSkillsFanout {
                 $why = "same files as $([System.IO.Path]::GetFileName($cand))"
                 break
             }
-            if ($rc -ne 1) { LogWarn "Cannot compare $rmPath with $cand" }
+            if ($rc -ne 1) { Write-AitWarn $ToolName "Cannot compare $rmPath with $cand" }
         }
         if (-not $why) {
-            LogWarn "Kept ${rmDir}: the skills manifest retires $rm, but this directory matches no harness copy (it may be your own) -- $who still loads it; delete it if it is an old fan-out copy"
+            Write-AitWarn $ToolName "Kept ${rmDir}: the skills manifest retires $rm, but this directory matches no harness copy (it may be your own) -- $who still loads it; delete it if it is an old fan-out copy"
             $rmKept.Add($rmDir)
             continue
         }
@@ -3764,7 +4247,7 @@ function Invoke-HarnessSkillsFanout {
                 [System.IO.Directory]::CreateDirectory($bakRoot) | Out-Null
                 $bakMade = $true
             } catch {
-                LogWarn "Cannot create the backup directory ${bakRoot}: $($_.Exception.Message)"
+                Write-AitWarn $ToolName "Cannot create the backup directory ${bakRoot}: $($_.Exception.Message)"
             }
             # Keep the newest 5 DestDir.bak.<UTC> directories (this one included)
             if ($bakMade) { Remove-FanoutOldDestBackups $DestDir 5 }
@@ -3793,7 +4276,7 @@ function Invoke-HarnessSkillsFanout {
             }
         }
         if (-not $backed) {
-            LogError "Not removed: $rmDir (retired skill): backup to $bakRoot failed: $bakWhy"
+            Write-AitError $ToolName "Not removed: $rmDir (retired skill)" "backup to $bakRoot failed: $bakWhy"
             Record-DeployOutcome -Outcome "failed" -ToolName $ToolName -ItemName $rmDir
             continue
         }
@@ -3805,7 +4288,7 @@ function Invoke-HarnessSkillsFanout {
         }
         if ($rmWhy -or (Test-Path -LiteralPath $rmPath)) {
             if (-not $rmWhy) { $rmWhy = "still present" }
-            LogError "Cannot remove $rmPath (retired skill; it may be partly removed; backup in ${bakDir}): $rmWhy"
+            Write-AitError $ToolName "Cannot remove $rmPath (retired skill; it may be partly removed; backup in $bakDir)" "$rmWhy"
             Record-DeployOutcome -Outcome "failed" -ToolName $ToolName -ItemName $rmDir
             continue
         }
@@ -3820,11 +4303,9 @@ function Invoke-HarnessSkillsFanout {
         if ($unlisted) {
             Write-Summary "ACTION" "" "$who skills in $shown cannot be listed: retired skills not checked -- check its permissions"
         }
-        if ($script:dtFailed -gt 0) {
-            Write-Summary "ERROR" $ToolName "$($script:dtFailed) failed (dry run)"
-        } else {
-            Write-Summary "OK" $ToolName "dry run (no files written)"
-        }
+        # The failures were recorded at the source; the status is one OK record
+        $dryText = if ($script:dtFailed -gt 0) { "dry run (no files written), $($script:dtFailed) failed" } else { "dry run (no files written)" }
+        Write-Summary "OK" $ToolName $dryText
         return
     }
 
@@ -3834,7 +4315,7 @@ function Invoke-HarnessSkillsFanout {
     try {
         $destNames = Get-FanoutSortedNames $DestDir
     } catch {
-        LogWarn "Cannot list $DestDir for the preserved report -- $($_.Exception.Message) -- check its permissions"
+        Write-AitWarn $ToolName "Cannot list $DestDir for the preserved report -- $($_.Exception.Message) -- check its permissions"
         $unlisted = $true
     }
     if ($unlisted) {
@@ -3856,20 +4337,18 @@ function Invoke-HarnessSkillsFanout {
     # deploy failed is already reported; the library left it as it was)
     foreach ($f in $deployed) {
         if ((Test-Path -LiteralPath $f -PathType Leaf) -and (Get-Item -LiteralPath $f).Length -eq 0) {
-            LogError "Validation failed: $f is empty after deploy"
+            Write-AitError $ToolName "Validation failed" "$f is empty after deploy"
         }
     }
 
     $pres = if ($unlisted) { "preserved count unknown (cannot list)" } else { "$($script:dtPreserved) preserved" }
-    if ($script:dtFailed -gt 0) {
-        # Write-DeployTrackerSummary writes the ERROR row ("N failed")
-        Write-DeployTrackerSummary -ToolName $ToolName
+    # The OK status record; every failure (an item, or a validation error) was
+    # recorded at its source under $ToolName, so the panel shows the tool red
+    Write-DeployTrackerSummary -ToolName $ToolName
+    if ($script:dtFailed -gt 0 -or $script:errors -ne $errorsBefore) {
         Log "Skills (${ToolName}): $($script:deployTrackerText), $pres in $DestDir"
-    } elseif ($script:errors -eq $errorsBefore) {
-        Write-DeployTrackerSummary -ToolName $ToolName
-        LogOk "Skills (${ToolName}): $($script:deployTrackerText), $pres in $DestDir"
     } else {
-        Write-Summary "ERROR" $ToolName "validation failed"
+        LogOk "Skills (${ToolName}): $($script:deployTrackerText), $pres in $DestDir"
     }
 }
 
@@ -3998,6 +4477,8 @@ function Prompt-JsonFieldReview {
 # preserve key order. Both files backed up before write and validated after.
 #
 # Sets $script:SyncManagedJsonResult to "unchanged"/"updated"/"created".
+# -Tool: the record name of its warnings and errors ("" = the script name): a
+# skipped leaf is one Write-AitWarn, a failure one Write-AitError.
 # Requires node. Honors $DryRun. Exits 2 on user abort.
 # ---------------------------------------------------------------------------
 $script:SyncManagedJsonResult = ""
@@ -4007,13 +4488,15 @@ function Sync-ManagedJson {
         [string]$ProfileFile,
         [string]$SubPath,
         [string]$ExcludeKeys = "hooks",
-        [string]$DeprecatedRules = ""
+        [string]$DeprecatedRules = "",
+        [string]$Tool = ""
     )
 
     $script:SyncManagedJsonResult = "unchanged"
 
+    # Get-Command exempt: command-existence check; the branch is the fallback
     if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
-        LogError "Sync-ManagedJson: node required for JSON sync"
+        Write-AitError $Tool "settings sync not run" "node is required for the JSON sync"
         return
     }
 
@@ -4161,7 +4644,7 @@ if (mode === 'plan') {
     if ($planStderr) { $planStderr = $planStderr.Trim() }
     Remove-Item $errFile -ErrorAction SilentlyContinue
     if ($LASTEXITCODE -ne 0) {
-        LogError "Sync-ManagedJson: plan pass failed: $planStderr"
+        Write-AitError $Tool "settings sync failed" "plan pass: $planStderr"
         Remove-Item $ns, $planJson, $choicesTsv -ErrorAction SilentlyContinue
         return
     }
@@ -4196,6 +4679,8 @@ if (mode === 'plan') {
         $id = $cols[0]; $cur = $cols[2]; $prop = $cols[3]; $adoptf = $cols[4]
         if ($liveExisted) {
             $action = Prompt-JsonFieldReview -Leaf $id -Current $cur -Proposed $prop -SourceLabel "profile.json" -AdoptAllowed $adoptf
+            # A skipped leaf stays different: one warning (logging.md 8.3)
+            if ($action -eq "skip") { Write-AitWarn $Tool "Skipped: $id in $LiveFile (differs from profile.json; reviewed again next run)" }
         } else {
             $action = "overwrite"
         }
@@ -4208,9 +4693,10 @@ if (mode === 'plan') {
     if (Test-Path $ProfileFile) { Backup-File -FilePath $ProfileFile }
 
     # --- Apply pass ---
-    $applyOut = & node $ns apply $LiveFile $ProfileFile $SubPath $ExcludeKeys $DeprecatedRules $planJson $choicesTsv
-    if ($LASTEXITCODE -ne 0) {
-        LogError "Sync-ManagedJson: apply pass failed"
+    $applyOut = @(& node $ns apply $LiveFile $ProfileFile $SubPath $ExcludeKeys $DeprecatedRules $planJson $choicesTsv 2>&1)
+    $applyRc = $LASTEXITCODE
+    if ($applyRc -ne 0) {
+        Write-AitError $Tool "settings sync failed" "apply pass: $(Get-AitErrorReason -Output $applyOut -ExitCode $applyRc)"
         Remove-Item $ns, $planJson, $choicesTsv -ErrorAction SilentlyContinue
         return
     }
@@ -4218,7 +4704,7 @@ if (mode === 'plan') {
     # --- Post-write validation ---
     if (Test-Path $LiveFile) {
         try { Get-Content $LiveFile -Raw | ConvertFrom-Json | Out-Null }
-        catch { LogError "Sync-ManagedJson: $LiveFile is not valid JSON after write -- $_" ; Remove-Item $ns, $planJson, $choicesTsv -ErrorAction SilentlyContinue; return }
+        catch { Write-AitError $Tool "settings sync failed" "$LiveFile is not valid JSON after write -- $_" ; Remove-Item $ns, $planJson, $choicesTsv -ErrorAction SilentlyContinue; return }
     }
 
     if ($applyOut -match 'live-changed') {
@@ -4278,16 +4764,26 @@ function Log-WingetOutput([string]$Output) {
 # When `uv tool upgrade <tool>` fails with "missing a valid environment",
 # find a working Python via `uv python find` (fallback: system python/python3)
 # and reinstall with --force --python <path>.
-# Returns $true if repaired, $false if not applicable or failed.
+# -ToolName: the uv tool (package) name, e.g. modal. -Tool: the record name of
+# its warning and error (a tool name from the tool name table, e.g. "modal
+# cli"; "" = the script name).
+# Returns (identical in repair_uv_tool_env):
+#   0  repaired (the broken environment is one warning, recorded)
+#   1  not applicable (the output does not show a broken environment): nothing
+#      logged, the caller handles its own failure
+#   3  the repair failed and the library has recorded it (one warning for the
+#      broken environment, one Write-AitError with its reason): the caller
+#      records nothing more
 function Repair-UvToolEnv {
     param(
         [Parameter(Mandatory)][string]$ToolName,
-        [string]$UpgradeOutput = ""
+        [string]$UpgradeOutput = "",
+        [string]$Tool = ""
     )
 
-    if ($UpgradeOutput -notmatch 'missing a valid environment') { return $false }
+    if ($UpgradeOutput -notmatch 'missing a valid environment') { return 1 }
 
-    LogWarn "$ToolName uv environment is broken (Python removed?) -- repairing..."
+    Write-AitWarn $Tool "$ToolName uv environment is broken (Python removed?) -- repairing..."
 
     # Find a working Python -- uv's own Pythons first, then system
     # Get-Command exempt: command-existence check with fallback chain
@@ -4302,23 +4798,23 @@ function Repair-UvToolEnv {
     }
 
     if (-not $workingPython) {
-        LogError "Cannot repair $ToolName -- no working Python found"
-        return $false
+        Write-AitError $Tool "$ToolName uv environment repair failed" "no working Python found"
+        return 3
     }
 
     Log "Repairing with: uv tool install --force --python $workingPython $ToolName"
-    $repairOutput = & uv tool install --force --python $workingPython $ToolName 2>&1 | Out-String
-    $repairOutput.Trim().Split("`n") | ForEach-Object {
-        $l = $_.TrimEnd(); if ($l.Trim()) { Log $l }
+    $global:LASTEXITCODE = 0
+    $repairOutput = @(& uv tool install --force --python $workingPython $ToolName 2>&1)
+    $repairRc = $LASTEXITCODE
+
+    if ($repairRc -ne 0) {
+        Write-AitError $Tool "$ToolName uv environment repair failed (uv exit $repairRc)" (Get-AitErrorReason -Output $repairOutput -ExitCode $repairRc)
+        return 3
     }
 
-    if ($LASTEXITCODE -ne 0) {
-        LogError "$ToolName environment repair failed (exit $LASTEXITCODE)"
-        return $false
-    }
-
+    foreach ($l in $repairOutput) { $t = "$l".TrimEnd(); if ($t.Trim()) { LogDetail "uv: $t" } }
     LogOk "Repaired $ToolName uv environment"
-    return $true
+    return 0
 }
 
 # ---------------------------------------------------------------------------
@@ -4503,114 +4999,219 @@ function Ensure-GopathBinOnPath {
 }
 
 # ---------------------------------------------------------------------------
-# Summary panel renderer
+# Run summary file lifecycle (reference/logging.md 8.4, 8.5). Parity:
+# summary_begin / summary_end in aitools-lib.sh.
+#   Start-AitSummary     when $env:AITOOLS_SUMMARY_FILE is unset: create an empty
+#                        temp file, export its path, and own it
+#                        ($script:AitLibSummaryOwner = $true); when it is set:
+#                        nothing (not the owner). A file that cannot be created
+#                        leaves it unset (one detail line): nothing is recorded.
+#   Complete-AitSummary  when this script owns the file: draw the panel
+#                        (Show-Summary: draw, keep last-summary.txt when
+#                        AITOOLS_PRESERVE_SUMMARY=1, delete) and unset the
+#                        variable; otherwise nothing.
 # ---------------------------------------------------------------------------
-# Reads AITOOLS_SUMMARY_FILE, displays colored panel, cleans up.
-# Silent no-op if file unset, missing, or empty.
+function Start-AitSummary {
+    $script:AitLibSummaryOwner = $false
+    if ($env:AITOOLS_SUMMARY_FILE) { return }
+    try {
+        $f = Join-Path ([IO.Path]::GetTempPath()) ("aitools-summary-" + [guid]::NewGuid().ToString("N") + ".txt")
+        [IO.File]::WriteAllText($f, "")
+        $env:AITOOLS_SUMMARY_FILE = $f
+        $script:AitLibSummaryOwner = $true
+    } catch {
+        LogDetail "run summary file not created ($($_.Exception.Message)) -- nothing is recorded in this run"
+    }
+}
+function Complete-AitSummary {
+    if (-not $script:AitLibSummaryOwner) { return }
+    Show-Summary
+    $env:AITOOLS_SUMMARY_FILE = $null
+    $script:AitLibSummaryOwner = $false
+}
+
+# ---------------------------------------------------------------------------
+# Show-Summary [-Path FILE] [-Keep] -- draw the end-of-run panel from a run
+# summary file (default $env:AITOOLS_SUMMARY_FILE), exactly as
+# reference/logging.md 8.5 specifies; the record format and the reader rules
+# are 8.4. Without -Keep it then keeps a copy as last-summary.txt in the log
+# directory when AITOOLS_PRESERVE_SUMMARY=1, and deletes the file. Draws
+# nothing when the file is missing or empty. When to draw, and who draws, is
+# the entry points' job (Complete-AitSummary). Parity: show_summary.
+#   Reader: ACTION -> everything after the second "|" is the instruction; other
+#   kinds -> a missing trailing field is empty, extra fields are joined back
+#   with "/"; an unknown kind, or a record other than ACTION with an empty name,
+#   is skipped and logged at detail with the record quoted verbatim.
+#   Panel: blank, rule ("-" x 60), green (one line per tool with an OK record
+#   and no WARN or ERROR record under its name, at its first OK record, with
+#   that record's status), yellow (WARN records), red (ERROR records), an
+#   ACTION block (identical instructions once), rule. Identical yellow / red
+#   records collapse into the first with " (xN)"; then at most 20 lines per
+#   section and "+N more in deploy.log". A tool's DETAIL lines follow its first
+#   panel line in that line's colour, and are not shown when that line is
+#   beyond the cap or does not exist. Lengths, padding and cuts count Unicode
+#   code points (runes), not UTF-16 units. Colours: Green, Yellow, Red, Magenta.
+# ---------------------------------------------------------------------------
+function Get-AitLibRuneCount([string]$Text) {
+    $n = 0
+    foreach ($r in $Text.EnumerateRunes()) { $n++ }
+    return $n
+}
+# Get-AitLibCut TEXT N -- TEXT when at most N code points long, else its first
+# N-3 code points and "..." (logging.md 8.5 cut)
+function Get-AitLibCut([string]$Text, [int]$Max) {
+    $runes = @($Text.EnumerateRunes())
+    if ($runes.Count -le $Max) { return $Text }
+    $keep = [Math]::Max(0, $Max - 3)
+    $sb = [System.Text.StringBuilder]::new()
+    for ($i = 0; $i -lt $keep; $i++) { [void]$sb.Append($runes[$i].ToString()) }
+    return $sb.ToString() + "..."
+}
+# Get-AitLibPad TEXT N -- TEXT padded with spaces to N code points, never cut
+function Get-AitLibPad([string]$Text, [int]$Width) {
+    $n = Get-AitLibRuneCount $Text
+    if ($n -ge $Width) { return $Text }
+    return $Text + (' ' * ($Width - $n))
+}
+# Get-AitLibRedBody WHAT REASON -- the text of a red line (8.5 "A red line")
+function Get-AitLibRedBody([string]$What, [string]$Reason) {
+    if (-not $Reason) { return (Get-AitLibCut $What 70) }
+    $w = Get-AitLibRuneCount $What
+    $r = Get-AitLibRuneCount $Reason
+    if ($w + 2 + $r -le 70) { return "${What}: $Reason" }
+    $what2 = Get-AitLibCut $What ([Math]::Max(20, 70 - 2 - $r))
+    $w2 = Get-AitLibRuneCount $what2
+    $reason2 = Get-AitLibCut $Reason (70 - 2 - $w2)
+    return "${what2}: $reason2"
+}
+
 function Show-Summary {
-    $sfile = $env:AITOOLS_SUMMARY_FILE
-    if (-not $sfile -or -not (Test-Path $sfile)) { return }
-    # Read summary file; -ErrorAction SilentlyContinue checked on next line
-    $lines = Get-Content $sfile -ErrorAction SilentlyContinue
-    if (-not $lines) {
-        # Summary file empty or unreadable; clean up and return
-        try { Remove-Item $sfile -Force -ErrorAction Stop }
-        catch { Write-Host "  note: could not remove empty summary file" -ForegroundColor Gray }
+    param([string]$Path = "", [switch]$Keep)
+    $sfile = if ($Path) { $Path } else { $env:AITOOLS_SUMMARY_FILE }
+    if (-not $sfile) { return }
+    $sfile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($sfile)
+    if (-not (Test-Path -LiteralPath $sfile -PathType Leaf)) { return }
+    $raw = ""
+    try {
+        $raw = [IO.File]::ReadAllText($sfile, [System.Text.UTF8Encoding]::new($false))
+    } catch {
+        LogDetail "run summary unreadable ($($_.Exception.Message)) -- no panel"
+        return
+    }
+    $records = @($raw -split "`n" | ForEach-Object { $_ -replace "`r$", '' } | Where-Object { $_ -ne '' })
+    if ($records.Count -eq 0) {
+        if (-not $Keep) {
+            try { Remove-Item -LiteralPath $sfile -Force -ErrorAction Stop }
+            catch { LogDetail "run summary file not removed: $($_.Exception.Message)" }
+        }
         return
     }
 
-    # Dedup by tool name: highest severity wins (ERROR > WARN > OK).
-    # ACTIONs (empty tool name) are never deduped. DETAIL lines collected separately.
-    $rank = @{ 'OK' = 1; 'WARN' = 2; 'ERROR' = 3 }
-    $order = [System.Collections.Generic.List[string]]::new()
-    $best = @{}
-    $bestDetail = @{}
-    $detailMap = @{}
+    # Read (8.4)
+    $okFirst = [ordered]@{}                      # tool -> first OK status, in file order
+    $warnOrErr = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    $details = @{}                               # tool -> list of DETAIL texts
+    $yellow = [System.Collections.Generic.List[object]]::new()
+    $red = [System.Collections.Generic.List[object]]::new()
     $actions = [System.Collections.Generic.List[string]]::new()
-
-    foreach ($line in $lines) {
-        $parts = $line -split '\|', 3
-        $cat = $parts[0]
-        $tool = $parts[1]
-        $det = $parts[2]
-        if ($cat -eq 'DETAIL') {
-            if (-not $detailMap.ContainsKey($tool)) { $detailMap[$tool] = [System.Collections.Generic.List[string]]::new() }
-            $detailMap[$tool].Add($det)
+    $actionSeen = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach ($rec in $records) {
+        $kind = ($rec -split '\|', 2)[0]
+        if ($kind -ceq "ACTION") {
+            $parts = $rec -split '\|', 3
+            $instr = if ($parts.Count -ge 3) { $parts[2] } else { "" }
+            if ($actionSeen.Add($instr)) { $actions.Add($instr) }
             continue
         }
-        if ($cat -eq 'ACTION' -or $tool -eq '') {
-            $actions.Add($line)
+        $f = @($rec -split '\|')
+        $name = if ($f.Count -ge 2) { $f[1] } else { "" }
+        if ($kind -cnotin @("OK", "DETAIL", "WARN", "ERROR") -or -not $name) {
+            LogDetail "summary record skipped: $rec"
             continue
         }
-        $r = if ($rank.ContainsKey($cat)) { $rank[$cat] } else { 0 }
-        if (-not $best.ContainsKey($tool)) {
-            $order.Add($tool)
-            $best[$tool] = $cat
-            $bestDetail[$tool] = $det
-        } elseif ($r -gt $rank[$best[$tool]]) {
-            $best[$tool] = $cat
-            $bestDetail[$tool] = $det
-        }
-    }
-
-    # Build deduped lines, pre-sorted: OK+details, WARN+details, ERROR+details, ACTIONs
-    $deduped = [System.Collections.Generic.List[string]]::new()
-    foreach ($sev in @('OK', 'WARN', 'ERROR')) {
-        foreach ($t in $order) {
-            if ($best[$t] -ne $sev) { continue }
-            $deduped.Add("$sev|$t|$($bestDetail[$t])")
-            if ($detailMap.ContainsKey($t)) {
-                foreach ($d in $detailMap[$t]) { $deduped.Add("DETAIL|$t|$d") }
+        switch -CaseSensitive ($kind) {
+            "OK" {
+                $status = if ($f.Count -ge 3) { $f[2..($f.Count - 1)] -join "/" } else { "" }
+                if (-not $okFirst.Contains($name)) { $okFirst[$name] = $status }
+            }
+            "DETAIL" {
+                $d = if ($f.Count -ge 3) { $f[2..($f.Count - 1)] -join "/" } else { "" }
+                if (-not $details.ContainsKey($name)) { $details[$name] = [System.Collections.Generic.List[string]]::new() }
+                $details[$name].Add($d)
+            }
+            "WARN" {
+                $t = if ($f.Count -ge 3) { $f[2..($f.Count - 1)] -join "/" } else { "" }
+                [void]$warnOrErr.Add($name)
+                $hit = $null
+                foreach ($y in $yellow) { if ($y.Name -ceq $name -and $y.Text -ceq $t) { $hit = $y; break } }
+                if ($hit) { $hit.Count++ } else { $yellow.Add([pscustomobject]@{ Name = $name; Text = $t; Count = 1 }) }
+            }
+            "ERROR" {
+                $what = if ($f.Count -ge 3) { $f[2] } else { "" }
+                $why = if ($f.Count -ge 4) { $f[3..($f.Count - 1)] -join "/" } else { "" }
+                [void]$warnOrErr.Add($name)
+                $hit = $null
+                foreach ($x in $red) { if ($x.Name -ceq $name -and $x.What -ceq $what -and $x.Reason -ceq $why) { $hit = $x; break } }
+                if ($hit) { $hit.Count++ } else { $red.Add([pscustomobject]@{ Name = $name; What = $what; Reason = $why; Count = 1 }) }
             }
         }
     }
-    foreach ($a in $actions) { $deduped.Add($a) }
 
-    # Color and tag maps for severity categories
-    $colorMap = @{ 'OK' = 'Green'; 'WARN' = 'Yellow'; 'ERROR' = 'Red' }
-    $tagMap = @{ 'OK' = '  [ok]  '; 'WARN' = '  [!]   '; 'ERROR' = '  [ERR] ' }
+    # Lay out (8.5): each line is @{ Text; Color }; DETAIL lines go under a
+    # tool's first panel line only
+    $out = [System.Collections.Generic.List[object]]::new()
+    $placed = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    $addDetails = {
+        param($Tool, $Color)
+        if ($placed.Add($Tool) -and $details.ContainsKey($Tool)) {
+            foreach ($d in $details[$Tool]) { $out.Add(@{ Text = (' ' * 26) + $d; Color = $Color }) }
+        }
+    }
+    foreach ($tool in $okFirst.Keys) {
+        if ($warnOrErr.Contains($tool)) { continue }
+        $out.Add(@{ Text = "  [ok]  $(Get-AitLibPad $tool 16) $($okFirst[$tool])"; Color = "Green" })
+        & $addDetails $tool "Green"
+    }
+    $n = 0
+    foreach ($y in $yellow) {
+        $n++
+        if ($n -gt 20) { [void]$placed.Add($y.Name); continue }
+        $suffix = if ($y.Count -gt 1) { " (x$($y.Count))" } else { "" }
+        $out.Add(@{ Text = "  [!]   $(Get-AitLibPad $y.Name 16) $(Get-AitLibCut $y.Text 70)$suffix"; Color = "Yellow" })
+        & $addDetails $y.Name "Yellow"
+    }
+    if ($yellow.Count -gt 20) { $out.Add(@{ Text = (' ' * 8) + "+$($yellow.Count - 20) more in deploy.log"; Color = "Yellow" }) }
+    $n = 0
+    foreach ($x in $red) {
+        $n++
+        if ($n -gt 20) { [void]$placed.Add($x.Name); continue }
+        $suffix = if ($x.Count -gt 1) { " (x$($x.Count))" } else { "" }
+        $out.Add(@{ Text = "  [ERR] $(Get-AitLibPad $x.Name 16) $(Get-AitLibRedBody $x.What $x.Reason)$suffix"; Color = "Red" })
+        & $addDetails $x.Name "Red"
+    }
+    if ($red.Count -gt 20) { $out.Add(@{ Text = (' ' * 8) + "+$($red.Count - 20) more in deploy.log"; Color = "Red" }) }
 
-    # Single-pass display: deduped list is pre-sorted by severity.
-    # DETAIL lines inherit the color of their preceding parent entry.
+    $rule = "-" * 60
     Write-Host ""
-    Write-Host "------------------------------------------------------------"
-    $lastColor = 'Green'
-    $firstAction = $true
-    foreach ($line in $deduped) {
-        $parts = $line -split '\|', 3
-        $cat = $parts[0]
-        if ($cat -eq 'DETAIL') {
-            Write-Host ("                          {0}" -f $parts[2]) -ForegroundColor $lastColor
-            continue
-        }
-        if ($colorMap.ContainsKey($cat)) {
-            $lastColor = $colorMap[$cat]
-            Write-Host ("{0}{1,-16} {2}" -f $tagMap[$cat], $parts[1], $parts[2]) -ForegroundColor $lastColor
-            continue
-        }
-        if ($cat -eq 'ACTION') {
-            if ($firstAction) {
-                Write-Host ""
-                Write-Host "  ACTION REQUIRED -- run before tools are ready:" -ForegroundColor Magenta
-                $firstAction = $false
-            }
-            Write-Host "  >>  $($parts[2])" -ForegroundColor Magenta
-        }
+    Write-Host $rule
+    foreach ($o in $out) { Write-Host $o.Text -ForegroundColor $o.Color }
+    if ($actions.Count -gt 0) {
+        Write-Host ""
+        Write-Host "  ACTION REQUIRED -- run before tools are ready:" -ForegroundColor Magenta
+        foreach ($a in $actions) { Write-Host "  >>  $a" -ForegroundColor Magenta }
     }
-    Write-Host "------------------------------------------------------------"
+    Write-Host $rule
 
+    if ($Keep) { return }
     # Preserve summary for log compliance checks
     if ($env:AITOOLS_PRESERVE_SUMMARY -eq "1") {
         $preserveDest = Join-Path $script:logDir "last-summary.txt"
-        try { Copy-Item $sfile $preserveDest -Force -ErrorAction Stop }
-        catch {
-            # Non-blocking: summary already displayed; preservation is for compliance checks
-            Write-Host "  warning: could not preserve summary: $_" -ForegroundColor Yellow
-        }
+        try { Copy-Item -LiteralPath $sfile -Destination $preserveDest -Force -ErrorAction Stop }
+        catch { Log "run summary not preserved as last-summary.txt: $($_.Exception.Message)" "warn" }
     }
-    # Summary file cleanup (already displayed; next run creates a fresh one)
-    try { Remove-Item $sfile -Force -ErrorAction Stop }
-    catch { Write-Host "  note: could not remove summary file" -ForegroundColor Gray }
+    # Summary file cleanup (already displayed; the next run creates a fresh one)
+    try { Remove-Item -LiteralPath $sfile -Force -ErrorAction Stop }
+    catch { LogDetail "run summary file not removed: $($_.Exception.Message)" }
 }
 
 # ---------------------------------------------------------------------------
@@ -4752,17 +5353,28 @@ function Check-BuildPrereqs {
 # Build failure diagnosis
 # ---------------------------------------------------------------------------
 
-# Known build failure signatures.
-# To add a new signature: add an entry to this array.
-# When a user reports a new build failure, add the error pattern + remedy here.
+# Known build failure signatures: ONE list, identical in aitools-lib.sh
+# (diagnose_build_failure) and here: the same order, names, patterns and
+# remedies. The first match wins; patterns are matched case-insensitively, line
+# by line, and are valid in Perl and .NET. Remedies name every platform, so one
+# text serves both twins. Get-AitErrorReason returns "<Name>: <Remedy>" for a
+# match (reference/logging.md 8.3, rule 1).
+# To add a new signature: add an entry here AND in aitools-lib.sh.
 $script:BuildFailureSignatures = @(
-    @{ Pattern = "NASM command not found";                Remedy = "winget install NASM.NASM";                     Name = "NASM (assembler)" }
-    @{ Pattern = "linker.*not found|link\.exe.*not found"; Remedy = "Install MSVC Build Tools with C++ workload";  Name = "MSVC linker" }
-    @{ Pattern = "cmake.*not found|Could not find cmake"; Remedy = "uv tool install cmake (or see cmake.org/download)"; Name = "CMake" }
-    @{ Pattern = "pkg-config.*not found";                 Remedy = "Install pkg-config";                           Name = "pkg-config" }
-    @{ Pattern = "Python\.h.*not found|python.*dev";      Remedy = "Install Python development headers";           Name = "Python headers" }
-    @{ Pattern = "C compiler.*not found|cc.*not found";   Remedy = "Install a C compiler (MSVC/gcc/clang)";        Name = "C compiler" }
-    @{ Pattern = "openssl.*not found|OPENSSL_DIR";        Remedy = "Install OpenSSL or set OPENSSL_DIR";           Name = "OpenSSL" }
+    @{ Name = "NASM";           Pattern = 'NASM command not found'
+       Remedy = "brew install nasm / apt-get install nasm / winget install NASM.NASM" }
+    @{ Name = "Linker";         Pattern = 'linker.*not found|link\.exe.*not found'
+       Remedy = "Install Xcode CLI tools (macOS), build-essential (Linux) or MSVC Build Tools with C++ workload (Windows)" }
+    @{ Name = "CMake";          Pattern = 'cmake.*not found|Could not find cmake'
+       Remedy = "brew install cmake / uv tool install cmake (see cmake.org/download)" }
+    @{ Name = "pkg-config";     Pattern = 'pkg-config.*not found'
+       Remedy = "brew install pkg-config / apt-get install pkg-config" }
+    @{ Name = "Python headers"; Pattern = 'Python\.h.*not found|python[0-9.]*-dev(el)?\b'
+       Remedy = "Install python3-dev or python3-devel (Python development headers)" }
+    @{ Name = "C compiler";     Pattern = 'C compiler.*not found|\bcc\b.*not found'
+       Remedy = "Install a C compiler (MSVC/gcc/clang)" }
+    @{ Name = "OpenSSL";        Pattern = 'openssl.*not found|OPENSSL_DIR'
+       Remedy = "brew install openssl / apt-get install libssl-dev, or set OPENSSL_DIR" }
 )
 
 function Diagnose-BuildFailure {
@@ -4770,15 +5382,19 @@ function Diagnose-BuildFailure {
     .SYNOPSIS
     Scans build output for known failure signatures and returns actionable remediation.
     Call this after a build command fails to surface the real cause.
-    Returns $null if no known signature matches (generic failure).
+    Returns the matching entry (@{ Name; Pattern; Remedy }), or $null if no known
+    signature matches (generic failure). Each line of Output is matched
+    case-insensitively; the first entry that matches any line wins.
+    Parity: diagnose_build_failure in aitools-lib.sh (prints "NAME|REMEDY").
     #>
     param(
-        [Parameter(Mandatory)][string]$Output
+        [Parameter(Mandatory)][AllowEmptyString()][string]$Output
     )
 
+    $lines = $Output -split "`r?`n"
     foreach ($sig in $script:BuildFailureSignatures) {
-        if ($Output -match $sig.Pattern) {
-            return $sig
+        foreach ($l in $lines) {
+            if ($l -match $sig.Pattern) { return $sig }
         }
     }
     return $null
