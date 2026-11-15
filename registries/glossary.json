@@ -7,7 +7,7 @@
       "scope": "Definitions, facets, and abbreviation mappings only. NOT the word list (glossary rule). NOT the composition convention (framework-governed-vocabulary.md). NOT usage guidance (/glossary skill)",
       "audience": "/glossary skill, agents resolving terminology questions"
     },
-    "lastUpdated": "2026-11-13"
+    "lastUpdated": "2026-11-15"
   },
   "facets": {
     "scopeModifiers": {
@@ -223,6 +223,13 @@
     "observation": {
       "definition": "An incident schema field stating concrete facts about what was observed. Quote specific text, cite files and line numbers, name behaviors. No interpretation — facts only.",
       "source": ".claude/rules/incident-governance.md"
+    },
+    "operational learning": {
+      "definition": "A lesson about how the work is done: what worked, what failed, and what to do differently next time. It is stated with its source and carried forward so that later sessions and delegates start with it. Distinct from an observation, which states facts only: operational learning is the lesson drawn from observations. It is the user-facing form of intelligence. Recorded in the relay (.aitools/channel/relay.md), handoff prompts, delegation prompts (/delegate element 4), and the prompt-turn record (reference/prompt-turn-checklist.md item 12). Numbered entries use OL-<n>.",
+      "source": "/delegate skill element 4; reference/prompt-turn-checklist.md item 12; commander, 2026-11-15 (RFI fa81-42, session 87795dc3)"
+    },
+    "OL": {
+      "abbreviationOf": "operational learning"
     },
     "orchestration": {
       "definition": "The harness layer where aitools manages the full lifecycle of harness content: authoring, building, deploying, maintaining, and reconciling configuration across machines and users.",
