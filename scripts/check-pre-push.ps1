@@ -124,7 +124,9 @@ StepWarn "6" "Roadmap reflects reality" "check if push completes or starts a roa
 # deletes and rebuilds <dotprofile>/deploy, at the real dotprofile.
 # build-deploy.sh runs under Git Bash (approved cross-language exception), found by
 # check-lib ResolveGitBash: the Git for Windows locations only, no PATH fallback (in a
-# native pwsh the first bash on PATH is the WSL launcher).
+# native pwsh the first bash on PATH is the WSL launcher). This is the only Git Bash
+# call in the check-*.ps1 scripts (tests/check-no-git-bash): build-deploy.sh is
+# bash-only, and no other check verifies the real dotprofile build from Windows.
 $d7Bash = ResolveGitBash
 if (-not $script:UserRepoPath -or -not (Test-Path (Join-Path $script:UserRepoPath ".git"))) {
     StepSkip "7" "deploy/ matches source" "userRepoPath not configured -- dotprofile deploy/ not verified"
