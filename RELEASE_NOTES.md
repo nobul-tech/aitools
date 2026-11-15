@@ -12,7 +12,7 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
-## v0.77.14 -- No pipefail script ends a pipeline in grep -q; compliance step 7 fails on it (2026-11-14)
+## v0.77.15 -- No pipefail script ends a pipeline in grep -q; compliance step 7 fails on it (2026-11-14)
 
 Not tagged. Branch `fix/38dc-24-pipefail-grepq`, mission 38dc-24 (M6-Polish, session 87795dc3), the follow-up to v0.77.11 (commander, 2026-11-14: "dont file incident, just launch mission to fix this").
 
