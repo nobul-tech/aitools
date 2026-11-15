@@ -569,7 +569,7 @@ if [ -z "$badlines" ]; then
     ok "$S deploy.log: every line has the log line format"
 else
     bad "$S deploy.log: lines without the log line format"
-    printf '%s\n' "$badlines" | head -n 5 | perl -pe 's/^/      | /'
+    printf '%s\n' "$badlines" | sed -n '1,5p' | perl -pe 's/^/      | /'
 fi
 
 # logged TEXT DESC: a detail line containing TEXT in this driver's log
@@ -586,7 +586,7 @@ logged "fanout_text_equal: perl failed (exit 9): stub perl: boom" "fanout_text_e
 logged "backup_dir: $F/bd/sh/nomd/d: not backed up (no top-level *.md file)" "backup_dir skip rule"
 logged "backup_dir: $F/bd/sh/missing/nope: not backed up (no directory)" "backup_dir: no directory"
 if $SYMLINKS; then
-    if logtext | grep -F "[error] Failed: dangling.md: " | grep -qF "is a dangling symlink -- not written through it"; then
+    if logtext | grep -F "[error] Failed: dangling.md: " | grep -F "is a dangling symlink -- not written through it" >/dev/null; then
         ok "$S deploy_managed_file: dangling symlink logged as an error"
     else
         bad "$S deploy_managed_file: dangling symlink logged as an error"
