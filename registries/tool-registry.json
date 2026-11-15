@@ -255,7 +255,7 @@
         ],
         "preservedFields": ["authInfo", "privacyCache", "network", "sandbox", "attribution"],
         "knownIssues": {
-          "mcpDisableScope": "agent mcp disable <name> is project-scoped, not user-scoped. The disable state is stored in Cursor's internal per-project config, not in ~/.cursor/mcp.json or cli-config.json. Impact: setup-cursor-ide-mcp runs agent mcp disable vercel/webflow from the directory where aitools install executes. Other projects see these servers as enabled, causing authentication errors. Workaround: Users must run agent mcp disable manually in each new project directory. Planned fix: Stop deploying vercel/webflow to user-level mcp.json; add per-project only via aitools --addmcp."
+          "mcpDisableScope": "agent mcp disable <name> is project-scoped, not user-scoped. The disable state is stored per project in ~/.cursor/projects/<slug>/mcp-disabled.json, where the project is the git root containing the working directory (observed 2026-11-15, CLI 2026.11.13-bca9ff2: exit 0, no login needed), not in ~/.cursor/mcp.json or cli-config.json. Impact: setup-cursor-ide-mcp runs agent mcp disable vercel/webflow from the directory where aitools install executes, so the disable lands on that directory's git root. Other projects see these servers as enabled, causing authentication errors. Workaround: Users must run agent mcp disable manually in each new project directory. Planned fix: Stop deploying vercel/webflow to user-level mcp.json; add per-project only via aitools --addmcp."
         },
         "platformMcpCommands": {
           "windows": "cmd /c npx -y chrome-devtools-mcp@latest --isolated",
