@@ -168,7 +168,7 @@ class ProcessSessionEvents(unittest.TestCase):
         work = Path(tempfile.mkdtemp(prefix="session-", dir=_TMP.name))
         db_path = Path(_TMP.name) / f"{work.name}-harness.db"
         conn = hdb.open_db(db_path)
-        hdb.ensure_schema(conn, hdb.HARNESS_SCHEMA)
+        hdb.ensure_schema(conn, "harness")
         conn.close()
 
         lines = [

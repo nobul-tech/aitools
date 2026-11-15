@@ -121,6 +121,10 @@ jobs:
       - name: harness-db delegation score tests (Python)
         run: python3 tests/harness-db/test-delegation-score.py
 
+      - name: harness-db schema and migration tests (Python)
+        if: ${{ !cancelled() }}
+        run: python3 tests/harness-db/test-schema.py
+
       - name: ait-harvest harvest/archive tests (Python)
         run: python3 tests/harvest/test-ait-harvest.py
 
@@ -558,6 +562,10 @@ jobs:
       - name: harness-db delegation score tests (Python)
         run: python3 tests/harness-db/test-delegation-score.py
 
+      - name: harness-db schema and migration tests (Python)
+        if: ${{ !cancelled() }}
+        run: python3 tests/harness-db/test-schema.py
+
       - name: ait-harvest harvest/archive tests (Python)
         run: python3 tests/harvest/test-ait-harvest.py
 
@@ -849,6 +857,11 @@ jobs:
         if: ${{ !cancelled() }}
         shell: pwsh
         run: python tests/harness-db/test-delegation-score.py
+
+      - name: harness-db schema and migration tests (Python, native)
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: python tests/harness-db/test-schema.py
 
       - name: ait-harvest harvest/archive tests (Python, native)
         if: ${{ !cancelled() }}

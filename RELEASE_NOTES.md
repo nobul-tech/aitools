@@ -26,6 +26,44 @@ Not tagged. Branch `fix/fa81-05-wdg-timing`, mission fa81-05-wdg under fa81-05-m
 
 ---
 
+## v0.77.23 -- One versioned harness-DB schema (version 4) and doctrine-based intelligence types (2026-11-15)
+
+Not tagged. Branch `feature/fa81-04-intel-schema`, mission fa81-04-intel-schema (session 87795dc3). Commander, 2026-11-15: "43) dont file incident. launch mission to fix this. mission to figure correct schema and give it version number. have this mission decide on rfi 44 as well."; then "i kind of like findings over insights ... perhaps can carry third element 1cause/2effect/3suggestion"; then "46) yes" (the AAR's middle node is `findings`).
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 1 | Medium | `reference/harness-db-schema.sql` had drifted from `scripts/harness-db.py`: the command-channel tables `commander_directives` and `commander_feedback` (and their indexes) existed only in the script, added in `8a5e869` (2026-03-25, a commit titled "Harvest 49 session artifacts"), and the `delegation_log` index had a different name. The script is now the single source of truth and the .sql is generated from it (`harness-db.py schema --output reference/harness-db-schema.sql`); `tests/harness-db/test-schema.py` fails when they differ |
+| 2 | Medium | `schema_version` recorded only the version a DB was created at (`ensure_schema` inserted a row only into an empty table): the live `harness.db` said 2 while the code was at 3. Every migration now records its version row; a DB newer than the script gets a warning and is left alone |
+
+### New features
+
+| # | Change |
+|---|--------|
+| 3 | Schema version 4. Intelligence types, one set for both tiers: observation, fact, assumption, finding, operational learning, proposal, rfi (`INTELLIGENCE_TYPES`); the harness DB also keeps decision, commander_directive, rule_change, framework_change. `finding` is now the analysis type, with `criteria`, `cause`, `effect`, `suggestion` columns; the SALUTE FINDING is retired (an observation with a severity; the message type is `spotrep`); `ol_entry` is `operational_learning`. New provenance and judgement columns on session observations and knowledge items: `attributed_to` (session), `source_kind`, `source`, `quote`, `confidence`, `refs` (session), and severity on knowledge items |
+| 4 | Forward-only, idempotent migration from schema 3 (`ensure_schema`, `migrate_v4`): tables whose CHECK sets changed are rebuilt in one transaction with foreign keys off, row counts and AUTOINCREMENT sequences kept, foreign keys checked; v3 values are remapped by rule (`ol add`'s signature becomes operational_learning, other findings become observations, `legacy_category` / `legacy_item_type` keep the old value). Commands that write to an older DB (`ol add`, `observation add`, `decision add`, `incident add`, `directive add`/`ack`, `log`, `knowledge add`, `session start`, `init`) migrate it first; the list and search commands never migrate (`ol list` reads a v3 DB by the same mapping rule; `directive poll`, which acknowledges directives, does not migrate either: v4 did not change `commander_directives`), and `directive add` no longer creates its own CHECK-less copy of `commander_directives` |
+| 5 | `harness-db.py schema [--output]` prints the canonical DDL. `observation add` takes every intelligence type and `--confidence`, `--criteria`, `--cause`, `--effect`, `--suggestion`, `--refs`, `--attributed-to`, `--source-kind`, `--source`, `--quote`; `ol add` and `knowledge add` take the provenance options. `log --type` is `sitrep` or `spotrep` (`finding` is refused). `ol list` lists category `operational_learning` (before: `fact` and `finding`) |
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 6 | `reference/framework-intelligence-types.md` (new, v1.0): the doctrine read (JP 2-0, FM 2-0, FM 1-02.1, JDP 2-00 with the NATO grading system, GAO Yellow Book), quoted with URLs; the doctrine-to-type mapping; the decided types with fields, lifecycle and origin; the RFI 44 decision; the migration rule. Registered as framework "Intelligence types" |
+| 7 | Glossary: new terms intelligence type, fact, finding (the analysis type), proposal, SPOTREP, SITREP; `insight` deprecated (`replacedBy: finding`); `observation` widened from an incident field to an intelligence type; `assumption` no longer says a falsified assumption "becomes a finding"; `operational learning` sits under the AAR's `findings` node; the `intelligence` source names where RFC 0005 v3 lives (nobul-tech/nobulai-tools `f408790`) |
+
+### Files created
+
+| File | Purpose |
+|------|---------|
+| `reference/framework-intelligence-types.md` | Intelligence types and their doctrine |
+| `tests/harness-db/test-schema.py` | Schema single-source check, value sets, v3 -> v4 migration, CLI end to end |
+| `tests/harness-db/fixtures/harness-db-v3-session.sql`, `harness-db-v3-harness.sql` | Frozen schema-3 DDL for the migration test |
+
+**Verified on:** Windows 11 (Python 3.14): `tests/harness-db/test-schema.py` 12/12 and `test-delegation-score.py` 14/14; migration of copies of the 10 live DBs (1 harness, 9 session): every row count kept, schema_version +1 row, migrated shape equal to a fresh v4 DB, second run a no-op. Linux and macOS: CI.
+
+---
+
 ## v0.77.22 -- The pre-commit checklist's line-ending command works on Linux and Windows (2026-11-14)
 
 Not tagged. Branch `docs/m7-precommit-sed`, mission M7-Ckl under M7-Sweep (session 87795dc3), item 5c. Commander, 2026-11-14: "launch mission go fix them, dont bother filing incidents, check to see if these were already fixed by the other running missions first, if not do it".
