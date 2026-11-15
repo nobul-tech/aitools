@@ -38,6 +38,11 @@
 #   - Helpful feedback: tell Claude which tool to use instead
 #   - Pipeline exemption: cat/head/tail in pipelines (cmd | ...) are allowed
 #     because the Read tool cannot pipe output into other commands
+#   - Log writes are fail-safe (reference/logging.md section 5): a log directory
+#     that cannot be created, or an observe log that cannot be written, never
+#     changes the exit code or the decision. Until 2026-11-14 a failed mkdir
+#     exited 1, which Claude Code treats as a non-blocking error: the hook
+#     failed open and the violating command ran
 #
 # KPI definitions (emit to log, future: structured JSONL):
 #   - guardFireCount: total hook invocations per session
@@ -59,8 +64,13 @@ MODE_SED="enforce"       # sed — #82 sed -n exemption (2026-10-21) only narrow
 LOG_DIR="$HOME/.aitools/logs"
 LOG_FILE="$LOG_DIR/standing-order-guard.log"
 
-# Ensure log directory exists (needed for observe logging; harmless in enforce-only runs)
-mkdir -p "$LOG_DIR"
+# Ensure log directory exists (needed for observe logging; harmless in enforce-only runs).
+# Fail-safe (reference/logging.md section 5: a failed log write is swallowed, "the
+# only sanctioned silent-suppression in the harness"): under set -e a failed mkdir
+# (e.g. ~/.aitools is a file) would exit 1 and let the command run. 2>/dev/null
+# hides mkdir's message, || true keeps going; no result check is needed because
+# the only writer, the observe append in violation(), is fail-safe itself.
+mkdir -p "$LOG_DIR" 2>/dev/null || true
 
 # --- Telemetry: JSONL event emission ---
 # Appends one structured line to the session event log (~0.1ms).
@@ -96,9 +106,13 @@ violation() {
         exit 2
     else
         emit_hook_event "hook_warn" "{\"check\":\"$check_name\",\"mode\":\"observe\"}"
-        printf '%s [WOULD-BLOCK] %s | cmd: %s\n' \
+        # Fail-safe (reference/logging.md section 5): an unwritable log, or one
+        # that is a directory, must not turn this allow (exit 0) into a hook
+        # error (exit 1). The group puts the redirection's own error message
+        # under 2>/dev/null (as _aitlib_log_append does); || true keeps going.
+        { printf '%s [WOULD-BLOCK] %s | cmd: %s\n' \
             "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$message" "$COMMAND" \
-            >> "$LOG_FILE"
+            >> "$LOG_FILE"; } 2>/dev/null || true
         exit 0
     fi
 }

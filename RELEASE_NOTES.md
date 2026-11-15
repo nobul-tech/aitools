@@ -12,6 +12,26 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.77.20 -- standing-order-guard keeps blocking when its log directory cannot be written (2026-11-14)
+
+Not tagged. Branch `fix/m7-sog-log-failsafe`, mission M7-Hook under M7-Sweep (session 87795dc3). Commander, 2026-11-14: "25) launch mission go fix them, dont bother filing incidents, check to see if these were already fixed by the other running missions first, if not do it".
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 1 | High | `shared/hooks/standing-order-guard.sh` (PreToolUse, every Bash call) ran `mkdir -p "$LOG_DIR"` under `set -e` with no guard. When `~/.aitools/logs` could not be created (for example `~/.aitools` a regular file) the hook exited 1 on every call with `mkdir: cannot create directory ...`; Claude Code treats exit 1 as a non-blocking hook error, so a violating command such as `git status && git log` ran: the hook failed open. The observe-mode append in `violation()` was unguarded the same way (an unwritable log, or one that is a directory, turned an allow into exit 1; reached only in observe mode, and every check is at enforce today). Both writes are now fail-safe (`reference/logging.md` section 5): `mkdir -p "$LOG_DIR" 2>/dev/null \|\| true`, and the append in a `{ ...; } 2>/dev/null \|\| true` group, as `_aitlib_log_append` does. No mode variable, matching logic or message changed: exit 0 for a clean command and exit 2 with the same reason for a violation, whether the log directory is usable or not |
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 2 | `tests/hooks/test-hooks-smoke.sh`: 9 new standing-order-guard cases. With `~/.aitools` a regular file: a clean command exits 0 with no output; `&&` exits 2 with the usual reason and no mkdir error. With a temp copy switched to observe (`MODE_AND` only): a writable log gets the `[WOULD-BLOCK]` line and exits 0; a log path that is a directory, and an uncreatable log directory, exit 0 with no output. Against the old hook 6 of them fail |
+
+**Verified on:** Windows 11 (Git Bash 5.3): hook-rollout pre-deploy verification before and after (`bash -n`; clean exit 0; `&&` exit 2) with a writable HOME, with `~/.aitools` a file (before: exit 1 and 1; after: 0 and 2) and with an observe copy whose log path is a directory or uncreatable (before: exit 1; after: 0); the whole `tests/hooks` suite before and after (smoke 44 -> 53 passed, the other suites unchanged). Linux and macOS (bash 5 and `/bin/bash` 3.2): CI.
+
+---
+
 ## v0.77.12 -- On Windows the bash aitools hands off to aitools.ps1; OS guards on hh.sh, bootstrap.sh, init-hh-hooks.sh and analyze-session.sh (2026-11-14)
 
 Not tagged. Branch `fix/38dc-19-aitools-win-forwarder` (PR #162), mission 38dc-19 under M6-Polish (session 87795dc3). Commander, 2026-11-14, RFI 38dc-3 ("make the bash `aitools` a forwarder on Windows"): "agreed"; RFI 38dc-5: "add an OS guard to all of them".

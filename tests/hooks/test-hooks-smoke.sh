@@ -4,7 +4,8 @@
 #
 # Each hook gets a clean input (expected exit and output) and, where it has
 # one, its guidance case, checked on the channel Claude Code reads:
-#   standing-order-guard.sh   PreToolUse   exit 2 + stderr on a violation; exempt sed -n
+#   standing-order-guard.sh   PreToolUse   exit 2 + stderr on a violation; exempt sed -n;
+#                                          same decision when the log dir is unusable
 #   block-claude-code-guide.sh PreToolUse  exit 0 + permissionDecision deny JSON
 #   block-explore-agent.sh    PreToolUse   exit 0 + permissionDecision deny JSON
 #   command-channel-stop.sh   Stop         exit 2 + stderr on a pending directive
@@ -44,6 +45,37 @@ check "sed -n exemption: exit 0, no output" quiet0
 printf '{"tool_name":"Bash","tool_input":{"command":"sed -i s/a/b/ file.txt"}}' > "$P"
 run_hook "$H" "$P" "$NOGIT"
 check "sed -i: exit 2" [ "$RC" -eq 2 ]
+# Log writes are fail-safe (reference/logging.md section 5): an unusable log
+# directory must not change the exit code or the decision. Until 2026-11-14
+# the failed mkdir exited 1, a non-blocking hook error in Claude Code, so the
+# violating command ran (the hook failed open).
+BADHOME="$WORK/home-aitools-file"
+mkdir -p "$BADHOME"
+printf 'not a dir\n' > "$BADHOME/.aitools"  # ~/.aitools/logs cannot be created
+printf '{"tool_name":"Bash","tool_input":{"command":"git status"}}' > "$P"
+run_hook "$H" "$P" "$NOGIT" HOME="$BADHOME"
+check "~/.aitools a file, clean: exit 0, no output" quiet0
+printf '{"tool_name":"Bash","tool_input":{"command":"git status && git log"}}' > "$P"
+run_hook "$H" "$P" "$NOGIT" HOME="$BADHOME"
+check "~/.aitools a file, &&: exit 2" [ "$RC" -eq 2 ]
+check "~/.aitools a file, &&: reason on stderr" contains "$ERR" "Don't use '&&'"
+check "~/.aitools a file, &&: no mkdir error on stderr" eval '! contains "$ERR" "mkdir"'
+# Observe mode: a temp copy with one check (MODE_AND) switched to observe
+OBS="$WORK/standing-order-guard-observe.sh"
+perl -pe 's/^MODE_AND="enforce"/MODE_AND="observe"/' "$H" > "$OBS"
+check "observe copy: MODE_AND is observe" contains "$(cat "$OBS")" 'MODE_AND="observe"'
+OBSHOME="$WORK/home-observe"
+mkdir -p "$OBSHOME"
+run_hook "$OBS" "$P" "$NOGIT" HOME="$OBSHOME"
+check "observe, writable log: exit 0, no output" quiet0
+# cat fails when the log is missing; the "none" sentinel then fails contains
+check "observe, writable log: WOULD-BLOCK line logged" contains "$(cat "$OBSHOME/.aitools/logs/standing-order-guard.log" 2>/dev/null || echo none)" "[WOULD-BLOCK] USO: Simple Bash commands only"
+DIRLOGHOME="$WORK/home-log-is-dir"
+mkdir -p "$DIRLOGHOME/.aitools/logs/standing-order-guard.log"  # the log path is a directory
+run_hook "$OBS" "$P" "$NOGIT" HOME="$DIRLOGHOME"
+check "observe, log path a directory: exit 0, no output" quiet0
+run_hook "$OBS" "$P" "$NOGIT" HOME="$BADHOME"
+check "observe, ~/.aitools a file: exit 0, no output" quiet0
 
 echo "== block-claude-code-guide.sh =="
 H="$HOOKS/block-claude-code-guide.sh"
