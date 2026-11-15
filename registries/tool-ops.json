@@ -7,7 +7,7 @@
       "scope": "Operational metadata and governance modes only. NOT the ops knowledge itself. NOT install/versions. NOT incidents. NOT the framework definition",
       "audience": "/tool-ops skill, tool-ops-session-audit.sh hook, setup scripts"
     },
-    "lastUpdated": "2026-11-13"
+    "lastUpdated": "2026-11-14"
   },
   "tools": {
     "claude-code": {
@@ -143,10 +143,13 @@
           "skills.md",
           "hooks.md",
           "subagents.md",
-          "cli/reference/configuration.md"
+          "cli/reference/configuration.md",
+          "reference/ignore-file.md",
+          "agent/security.md"
         ],
         "helpPages": [
-          "https://cursor.com/help/customization/rules.md"
+          "https://cursor.com/help/customization/rules.md",
+          "https://cursor.com/help/customization/ignore-files.md"
         ],
         "userRules": {
           "location": "~/.cursor/rules/ (Windows: %USERPROFILE%\\.cursor\\rules\\)",
@@ -155,6 +158,14 @@
           "globAnchoring": "IDE matches a relative glob against the path relative to the directory owning .cursor/rules (home for user rules); use **/<pattern> to match inside repos; inline globs are comma-split, so use an indented block list; CLI anchoring unknown",
           "deployedBy": "setup-user-cursor step 4 (fan-out of ~/.aitools/rules, .md converted to .mdc)",
           "verifiedOn": "Cursor IDE 3.13.10 and CLI 2026.05.21-f84ab11, bundle inspection 2026-10-22; live canary not run (CLI unauthenticated)"
+        },
+        "ignoreFiles": {
+          "effect": ".cursorignore blocks the agent's file tools (Read, Write and Grep refuse; Glob leaves ignored files out) and @ mentions, not only indexing; the terminal and MCP tools are not blocked",
+          "gitignore": ".gitignore and Cursor's default ignore list (it has *.tmp) do not block Read, Write or StrReplace; Glob and Grep from the workspace root skip git-ignored directories, inside one they skip files matching another .gitignore pattern, and Grep given a single file's path searches it",
+          "outsideWorkspace": "in a repo outside the workspace (a git worktree under ~/.cursor/worktrees/), Read and Write ignore that repo's .cursorignore; Grep applies it and kept the version it first saw after the file changed",
+          "configEdits": "the file tools refuse to edit any .cursorignore (Blocked by permissions configuration): configuration files need the user's approval",
+          "harnessPractice": "do not add to aitools .cursorignore a path agents must read or write: .scratch/, *.log and *.tmp removed 2026-11-14 (commander); harvesting/, .claude/worktrees/ and the full-session transcripts are still listed (open)",
+          "verifiedOn": "Cursor IDE 3.30.14 (Windows 11 x64), before-and-after test 2026-11-14, after-test re-run independently by a delegate; reference/ignore-file.md and agent/security.md read 2026-11-14"
         },
         "quickRef": "User Rules in Customize -> Rules live on the Cursor account (not files); user rule FILES live in ~/.cursor/rules; ~/.cursor/AGENTS.md is not read by the rules loader (loader reads <ancestor>/AGENTS.md)"
       },
