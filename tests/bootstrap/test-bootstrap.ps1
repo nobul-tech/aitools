@@ -10,8 +10,8 @@
 # .local\bin\aitools.ps1, each recording the PowerShell version it ran under.
 # Nothing is installed, cloned or pulled. Removed on exit.
 # Platform: Windows (pwsh 7 runs this file; powershell.exe 5.1 runs bootstrap.ps1).
-# Elsewhere every case is SKIP (bootstrap.ps1 is Windows-only). Exit 1 if any
-# case fails.
+# Elsewhere it refuses to run (OS guard, exit 1: bootstrap.ps1 is Windows-only).
+# Exit 1 if any case fails.
 #
 # Cases:
 #   static   ASCII only; parses under pwsh and under Windows PowerShell 5.1; no
@@ -62,11 +62,9 @@ $root = (Resolve-Path (Join-Path $PSScriptRoot ".." "..")).Path
 if (-not $Bootstrap) { $Bootstrap = Join-Path $root "scripts" "bootstrap.ps1" }
 $Bootstrap = (Resolve-Path $Bootstrap).Path
 
-if (-not $IsWindows) {
-    foreach ($c in @("static", "present", "failrc", "initrc", "install", "nowinget", "iex")) {
-        Skip $c "bootstrap.ps1 is Windows-only"
-    }
-    Finish
+if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
+    [Console]::Error.WriteLine("This script is for Windows (bootstrap.ps1 is Windows-only); it has no macOS/Linux twin.")
+    exit 1
 }
 
 $winPs = Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe"
