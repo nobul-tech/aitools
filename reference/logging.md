@@ -22,6 +22,9 @@ v2.1 (2026-11-15): error markers extended; the non-recording path,
 library-style tools, managed-file records, user-abort recording and skipped
 records stated.
 
+v2.2 (2026-11-15): a nested abort is recorded once; the relay's mirror and
+quiet options.
+
 > Ratified 2026-06-14 as part of the harvest/archive/logging plan
 > (`plans/harvest-archive-resilience.md` §14). This doc consolidates logging
 > decisions previously scattered across `script-standards.md`,
@@ -287,7 +290,9 @@ record, and its warnings and errors reach the run summary through its caller
 - **Children.**
   - **Relayed lines.** The relay prints a child's lines. It mirrors the
     structured lines (`[<time>] [<script>] [<level>] <message>`) to
-    deploy.jsonl. It counts the `warn` and `error` lines, but not the exit
+    deploy.jsonl. A runner may ask it not to mirror them (a child that writes
+    its own deploy.jsonl records) or to print only the `warn` and `error`
+    lines (a child whose other output is not shown). It counts the `warn` and `error` lines, but not the exit
     footer (`COMPLETED with ...`, `FAILED with ...`), in the child counts.
     A child's warnings are not added to the parent's warning count.
   - **A failed child** (non-zero exit, a throw, or error lines with exit 0)
@@ -307,7 +312,10 @@ record, and its warnings and errors reach the run summary through its caller
       over the error records it wrote (in-process PowerShell children);
     - `error_reason` over its last stdout line.
   - **A user abort (exit 2)** keeps its outcome. The relay records it, as
-    one record; the runner never writes a second one.
+    one record, only when the child recorded no WARN or ERROR record while
+    it was executing (so an abort inside a relayed child that runs its own
+    relay is recorded once, by the innermost relay); the runner never writes
+    a second one.
     - A runner may ask the relay to record a child's abort as a warning
       instead of an error. `deploy-harness` aborted: one WARN record
       (`harness files`, `aborted by user`), counted as one warning of the
