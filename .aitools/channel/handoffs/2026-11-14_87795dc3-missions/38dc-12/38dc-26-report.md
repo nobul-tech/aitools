@@ -10,7 +10,8 @@ NOT check.yml, tests or the exemptions table (missions 38dc-13 and 38dc-23).
 NOT the merge result (in the hand-back: it comes after this file is committed).
 **Audience**: M6-Polish, the independent reviewer, the commander.
 
-Version 1.0, 2026-11-14. PR: https://github.com/nobul-tech/aitools/pull/159
+Version 1.1, 2026-11-14 (v1.0 at 731cbf9; v1.1 applies the independent
+review, "Review" below). PR: https://github.com/nobul-tech/aitools/pull/159
 (branch `docs/38dc-12-windows-test-practice`), on top of M6-Polish's merge
 commit 0a5a0ae (origin/main 5f962b1 into the branch).
 
@@ -92,11 +93,12 @@ commit 0a5a0ae (origin/main 5f962b1 into the branch).
    main's table; "eight `.ps1` suites" -> ten; "42 suite steps: 8, 2, 32" ->
    "46 ... on main at 5f962b1: 10, 2, 34"; the #162 forward named. The entry
    stays between v0.77.7 and v0.77.5.
-10. **Unchanged, checked.** `CLAUDE.md` tests line: still true (the `.ps1`
+10. **Checked.** `CLAUDE.md` tests line: still true, unchanged (the `.ps1`
     suites with `pwsh -NoProfile -File`; `.sh` suites in Git Bash only for
-    explicitly cross-platform scripts). `/delegate` "Checks" (v2.3 line): the
-    three `check-*.sh` still carry the POSIX guard ("This script is for
-    macOS/Linux"), so "the `.sh` checks refuse Windows" holds.
+    explicitly cross-platform scripts). `/delegate` "Checks": the three
+    `check-*.sh` still carry the POSIX guard ("This script is for
+    macOS/Linux"), so "the `.sh` checks refuse Windows" holds; its "known
+    pre-existing failures" were stale (review finding 2, fixed in v1.1).
 
 ## Counts: how derived
 
@@ -110,7 +112,35 @@ compliance check). M6-Polish's `count-win-steps.pl` (unique suites) gives the
 same 10/2/34. The three groups were assigned by hand from each suite's step
 name and header and sum to 4 + 20 + 10 = 34.
 
-## Checks, review, merge
+## Review
+
+Independent reviewer 88c9-01 (fresh delegate, author notes withheld) on
+731cbf9: CHANGES NEEDED, 1 blocking
+(https://github.com/nobul-tech/aitools/pull/159#issuecomment-6886688334).
+Spot-checked before acting: finding 1 holds (`tests/check-post-push/test-menu-parity.sh`
+header: "tests for scripts/check-menu-parity.pl"; `tests/profile/test-profile.sh`
+header: "and the JSON engines scripts/aitools-json.pl"); finding 2 holds (no
+tracked `.sh` at mode 100644, `git ls-files -s`; pre-commit step 6 PASS and
+pre-push step 7 PASS "dotprofile deploy/ untracked, not compared" in this
+mission's runs). Applied in v1.1:
+
+1. Perl: "The rule" gives Perl a Windows runtime ("Perl and Python
+   natively"); the drivers row names the Perl subjects of
+   `test-menu-parity.sh` and `test-profile.sh`; "How to run" lets those two
+   run locally in Git Bash.
+2. `/delegate` "Checks": "Known pre-existing failures ... pre-commit step 6
+   ...; pre-push step 7 ..." -> none on main at 5f962b1, with why; the v2.3
+   line and RELEASE_NOTES item 3 say so.
+3. Twins row: the library also loads in every POSIX-guarded script before
+   its guard refuses.
+4. "Currently shadowed tools": `perl` (managed) apart from Windows' own
+   `find`, `sort.exe` (System32) and `bash` (the WSL launcher).
+5. The no-suite steps listed in full.
+6. "the seven `scripts/aitools` run cases" of `test-logging.sh` (its line
+   "SKIP entry: 7 pre-lib and argument cases").
+7. PR #166 (38dc-13) and PR #167 (38dc-23) cited.
+
+## Checks and merge
 
 In the hand-back (they run after this file is committed).
 

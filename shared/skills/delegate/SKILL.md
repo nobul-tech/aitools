@@ -39,8 +39,9 @@ v2.2 (2026-11-14, 38dc-08): "Environment limits" gains delegate identity and
 control (description as the name-to-agentId link, transcript path, TaskStop,
 repeat hand-backs, background tasks); "Verifying what comes back" points to the
 delegate's transcript.
-v2.3 (2026-11-14, 38dc-12): "In the aitools repo" "Checks" names the `.ps1`
-check twins for Windows and points to the Windows test practice.
+v2.3 (2026-11-14, 38dc-12, 38dc-26): "In the aitools repo" "Checks" names
+the `.ps1` check twins for Windows, points to the Windows test practice, and
+lists no known pre-existing check failures (the two it listed pass on main).
 
 ## When to use
 
@@ -471,9 +472,11 @@ section travels with the skill).
   `.sh` checks refuse Windows). Tests on Windows: the `.ps1` suites, and
   `.sh` suites only for scripts explicitly marked cross-platform
   (`reference/cross-platform-detail.md` "Running tests on Windows"). Known
-  pre-existing failures to record, not block on: pre-commit step 6 (a
-  harvesting file at mode 100644); pre-push step 7 (dotprofile `deploy/`
-  stale until rebuilt; it runs on every push since 2026-10-26).
+  pre-existing failures to record, not block on: none on main at 5f962b1.
+  The two listed before both passed on 2026-11-14: pre-commit step 6 (no
+  tracked `.sh` is at mode 100644 any more) and pre-push step 7 (it rebuilds
+  the dotprofile `deploy/` into a temp copy on every push but no longer
+  compares it, the dotprofile no longer tracking `deploy/`).
 - **Registries**: `registries/incidents.json` is long; parse all of it before
   choosing an id. Governed JSON only through its skill.
 - **Scratch**: `<worktree>/.scratch/session-<NAME>`, NAME 10 characters or
