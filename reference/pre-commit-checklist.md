@@ -44,44 +44,16 @@ the step WARNed "run with --fix" (incident #136). Tests:
 
 ## 4. Line endings
 
-`.sh` files must have LF. The check reads each staged `.sh` file in the working
-tree and FAILs on a CR (`check-pre-commit.sh`: any CR; `check-pre-commit.ps1`:
-CRLF); `--fix` / `-Fix` strips the CRs and stages the file again. What else
-handles CRLF today:
+`.sh` files must have LF. The step FAILs when the working-tree copy of a staged
+`.sh` file has a CR (`check-pre-commit.ps1`: CRLF); `--fix` / `-Fix` converts
+CRLF to LF and stages the file again. To fix a file by hand (`sed -i ''` works
+only with BSD sed, on macOS):
 
-- `.gitattributes` (`* text=auto eol=lf`) stores a `.sh` file with LF when it is
-  staged and checks it out with LF, but leaves the working-tree copy as it is:
-  bash still fails on that copy and the check still reports it.
-- The `shared/hooks/sh-file-fixup.sh` hook (PostToolUse on Write and Edit,
-  deployed by `aitools`) strips the CRs of a `.sh` file right after Claude Code
-  writes or edits it, and tells Claude it did.
-- The Claude Code Write tool was seen writing CRLF on macOS in 2.1.51; it did
-  not reproduce on 2.1.307 (macOS, 2026-10-21; `/tool-registry` skill,
-  `claude-code` workaround item 10). Other versions and platforms: unknown.
+- macOS, Linux and Git Bash: `PERLIO=:perlio perl -pi -e 's/\r$//' <file>`
+- Windows (PowerShell): `$env:PERLIO = ':perlio'`, then `perl -pi -e 's/\r$//' <file>`
 
-To fix one file by hand, use Perl. `sed -i '' 's/\r$//'` is BSD sed (macOS)
-only: GNU sed (Linux, Git Bash) reads `''` as the script and `s/\r$//` as a
-file name, and exits 2.
-
-macOS, Linux and Git Bash:
-
-```bash
-PERLIO=:perlio perl -pi -e 's/\r$//' <file>
-```
-
-Windows (PowerShell):
-
-```powershell
-$env:PERLIO = ':perlio'
-perl -pi -e 's/\r$//' <file>
-```
-
-`PERLIO=:perlio` matters for Strawberry Perl (the managed perl on Windows):
-without it, Strawberry's text-mode layer writes the CRLF back, and the command
-exits 0 with the file unchanged (verified 2026-11-14 with Strawberry Perl
-5.42.0; `.claude/rules/cross-platform.md` "Strawberry Perl text mode"). With
-Git's bundled perl (5.42.3) the result is the same with or without it. Both
-commands verified on Windows only; not yet run on macOS or Linux.
+Without `PERLIO=:perlio`, Strawberry Perl leaves the CRLF and still exits 0
+(`reference/cross-platform-detail.md` "Strawberry Perl text mode").
 
 ## 5. Platform note
 
