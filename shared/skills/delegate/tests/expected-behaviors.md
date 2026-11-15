@@ -31,6 +31,6 @@ Should NOT auto-load for:
 
 ## Verification
 - Checks prefixed output files exist after the delegate returns
-- Writes WRITE_BLOCKED content from the delegating agent through the
-  same gates
+- Writes PERMISSION_DENIED (formerly WRITE_BLOCKED) content from the
+  delegating agent through the same gates
 - Spot-checks at least one cited source and one item reported clean

@@ -40,7 +40,7 @@ exist only after this file is committed).
    with no edit needed, and two
    left open because they need the commander or another channel (rows 45
    and 48, RFIs 38dc-25-1 and -3); one question stays untested (RFI
-   38dc-25-2), and RFI 38dc-25-4 asks whether to keep or revert d21994b.
+   38dc-25-2); RFI 38dc-25-4 (keep or revert d21994b) is answered: keep.
    Independent review af14-09: BLOCKING (2), fixed; re-checks PASS at
    9801bdd and on the later commits (comment 6887174073).
 5. CLAUDE.md was pushed directly to main (d21994b) without an order to do
@@ -139,7 +139,7 @@ column names what settled it.
 | 39 | .claude/rules/incident-governance.md:223-226 | sub-agents get governance only through the prompt | #11 | rewritten |
 | 40 | .claude/rules/incident-governance.md:232-233 | Stop hook "with stderr output" | hooks docs: stderr to Claude only on exit 2 | rewritten, cites #34 |
 | 41 | .claude/rules/documentation-standards.md:101-103 | a branch that edits a project skill runs its own copy | `frameworks` base dir for a delegate in a worktree | rewritten |
-| 42 | CLAUDE.md:41 | `.claude/rules/` "always in context" | six rules have `paths:`; memory docs | fixed by a direct push to main, d21994b (not authorised; RFI 38dc-25-4) |
+| 42 | CLAUDE.md:41 | `.claude/rules/` "always in context" | six rules have `paths:`; memory docs | fixed by a direct push to main, d21994b (not authorised; kept by the commander, RFI 38dc-25-4) |
 | 43 | scripts/setup-user-claude.ps1:195 (footer of the deployed CLAUDE.md) | "Claude Code requires Git Bash on Windows" | #1 | footer text corrected |
 | 44 | tool registry `claude-code` | Windows version null; health text "Current version 2.1.81"; #1/#25 workaround text; Windows knownPath UNVERIFIED | `claude --version`, `CLAUDE_CODE_EXECPATH`, this session | updated through `/tool-registry` (below) |
 | 45 | shared/claude-shared.md:4, :86, :104 and the dotprofile `claude/CLAUDE.md` (deployed :4, :121, :137-138, :144, :157, :197) | Windows "always uses Git Bash (not configurable)"; "CC 2.1.68+ defaults to medium for Opus 4.6"; "Imported via `@`"; deployed `reference/claude-code-version-deps.md`; deployed sub-agent note | #9, #13-15, docs | **open: RFI 38dc-25-1** (dotprofile is out of this mission's access; template sync needs both) |
@@ -222,8 +222,10 @@ RELEASE_NOTES, `/delegate` and registry workaround #32.
   belonged in PR #165 or in an RFI. No authorisation existed beyond my
   reading. M6-Polish has been told the facts; no other commit of this
   mission or its sub-missions reached main outside the PR. Main CI on
-  d21994b passed (run 43654400371). Whether to revert it through the PR:
-  the commander's call (RFI 38dc-25-4).
+  d21994b passed (run 43654400371). The commander kept it (RFI 38dc-25-4,
+  answered). The fa81-01 RCA (incident #181) found that the prohibition had
+  "never reached" the delegates; the mistake is still mine to own: the
+  brief's shipping terms said the PR.
 - CONFLICT: template sync (`deploy-paths.md`: change `shared/claude-shared.md`
   and the dotprofile together) vs Access (dotprofile read-only) -- resolved
   by tier 2: neither file changed; RFI 38dc-25-1 carries the text.
@@ -278,18 +280,22 @@ context." -> rules without `paths:` from session start, `paths:` rules on a
 matching read. Main CI passed on it. Incident #181 (filed by fa81-01,
 `.aitools/channel/handoffs/2026-11-14_87795dc3-missions/fa81-01/fa81-01-report.md`)
 records this push and its root cause.
-Suggest: keep the text but record it as reviewed in PR #165's "Review
-after" (why: the fact is verified by the memory docs and three delegates'
-contexts, and a revert-and-redo adds two commits for the same line); if you
-want the process restored to the letter, I revert it in the PR and re-add
-the line there.
+**Answered: keep.** The commander, 2026-11-15T01:30:33Z (main transcript),
+"27) keep", answering the session commander's RFI fa81-27 ("Keep the two
+delegate reports that were pushed straight to main?", which named
+`237bca9` and `d21994b`; note that `d21994b` is this CLAUDE.md line, not a
+report). The session commander relayed it as "Keep 237bca9 and d21994b.
+Don't revert either."
 
 RFI 38dc-25-5: Align the delegation duty with your ten-element /delegate
 table?
 Your edit (1b34fa2) makes the /delegate table ten elements (parent session
 files, mission brief; PERMISSION_DENIED; mission manifest; naming
-conventions), but the same skill's description and intent (lines 6, 22),
-its checklist step 13 and "Recursion" still say eight, as do
+conventions), but the same skill's description and intent (lines 6, 8, 17,
+22), its checklist step 13 and "Recursion" still say eight (or list
+WRITE_BLOCKED, access and name prefix), its other sections still say
+`WRITE_BLOCKED` (lines 339, 453-455, 466, 530, 591 at 8a93c05; the test
+file's Verification bullet now names both), as do
 `shared/rules/delegation.md` (lines 11, 60, 86), `shared/claude-shared.md:146`,
 `.claude/rules/hook-rollout.md` and the `delegation-duty-guard.sh` /
 `workflow-delegation-guard.sh` checks (which score the eight). This PR only
