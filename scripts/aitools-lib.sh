@@ -1548,20 +1548,26 @@ validate_ai_merge_output() {
     # Check 1: conversational patterns (first non-empty line)
     local first_line
     first_line=$(printf '%s' "$output" | perl -ne 'next if $done; if (/\S/) { print; $done = 1 }')
-    if printf '%s' "$first_line" | perl -ne 'exit 0 if /^(I |Here|Sure|Certainly|Let me)/i; exit 1'; then
+    # perl -0777 reads the whole input before it decides; an empty first line
+    # is not conversational (as Test-AiMergeOutput in aitools-lib.ps1)
+    if printf '%s' "$first_line" | perl -0777 -ne 'exit(/^(I |Here|Sure|Certainly|Let me)/i ? 0 : 1)'; then
         MERGE_REJECT_REASON="AI responded conversationally instead of producing merged content"
         return 1
     fi
 
-    # Check 2: markdown code fences
-    if printf '%s\n' "$output" | perl -ne 'exit 0 if /^```/; END { exit 1 }'; then
+    # Check 2: markdown code fences. The status is decided in END, after the
+    # last line: an exit in the loop would stop reading (the writer can then die
+    # of SIGPIPE under pipefail), and an "exit 0" followed by END { exit 1 }
+    # ends with status 1 (perl runs END after exit), which is why checks 2 and
+    # 3 never rejected anything before this form.
+    if printf '%s\n' "$output" | perl -ne '$f = 1 if /^```/; END { exit($f ? 0 : 1) }'; then
         MERGE_REJECT_REASON="AI wrapped output in code fences -- need raw content"
         return 1
     fi
 
     # Check 3: conversational refusal patterns (not bare keywords -- content may
     # legitimately contain "permission", "access", etc.)
-    if printf '%s' "$output" | perl -ne 'exit 0 if /(?:I don.t have permission|I cannot access|I.m not authorized|I need (?:your )?approval|permission denied|access denied|I.m unable to|I can.t (?:read|write|access|open|modify))/i; END { exit 1 }'; then
+    if printf '%s' "$output" | perl -ne '$f = 1 if /(?:I don.t have permission|I cannot access|I.m not authorized|I need (?:your )?approval|permission denied|access denied|I.m unable to|I can.t (?:read|write|access|open|modify))/i; END { exit($f ? 0 : 1) }'; then
         MERGE_REJECT_REASON="AI indicated it couldn't perform the merge"
         return 1
     fi
