@@ -11,7 +11,7 @@ pseudocode in `plans/*.md`, and any code you propose in conversation.
 
 1. Shebang + header comment (name, purpose, "safe to re-run", platform, reference to the `/tool-registry` skill)
 2. `set -euo pipefail`
-3. `source aitools-lib.sh` + `logging_init "script-name"` (provides platform detection, display_path, read_config_key, log/log_ok/log_error/log_warn, write_summary, backup_file, backup_dir, emit_merge_details, ERRORS/WARNINGS counters)
+3. `source aitools-lib.sh` + `logging_init "script-name"` (provides platform detection, display_path, read_config_key, log/log_ok/log_error/log_warn, write_warn/write_action/write_error, error_reason, write_summary, backup_file, backup_dir, emit_merge_details, ERRORS/WARNINGS counters)
 4. OS guard -- see `@.claude/rules/cross-platform.md` "OS guard patterns"
 5. Script body
 6. Exit footer (check `$ERRORS` + `$WARNINGS`, exit 1 on errors)
@@ -19,7 +19,7 @@ pseudocode in `plans/*.md`, and any code you propose in conversation.
 ### Block order (PowerShell reusable scripts)
 
 1. Header comment (name, purpose, "safe to re-run", platform, reference to the `/tool-registry` skill)
-2. `. aitools-lib.ps1` + `Initialize-Logging "script-name"` (provides ReadConfigKey, Log/LogOk/LogError/LogWarn, Write-Summary, Backup-File, Backup-Dir, ConvertPSObjectToHashtable, Emit-MergeDetails, $errors/$warnings counters)
+2. `. aitools-lib.ps1` + `Initialize-Logging "script-name"` (provides ReadConfigKey, Log/LogOk/LogError/LogWarn, Write-AitWarn/Write-AitAction/Write-AitError, Get-AitErrorReason, Write-Summary, Backup-File, Backup-Dir, ConvertPSObjectToHashtable, Emit-MergeDetails, $errors/$warnings counters)
 3. OS guard -- see `@.claude/rules/cross-platform.md` "OS guard patterns"
 4. Script body
 5. Exit footer (check `$errors` + `$warnings`, exit 1 on errors)
@@ -55,9 +55,16 @@ double-init (init-logging → CheckLogInit) is safe.
 
 ### Error and warning tracking requirement
 
-- Bash: `log_error()` MUST increment `ERRORS`; `log_warn()` MUST increment `WARNINGS`
-- PS1: `LogError` MUST increment `$script:errors`; `LogWarn` MUST increment `$script:warnings`
-- Missing tracking is a bug. Scripts that only log without counting silently misreport exit status.
+- Every warning goes through a warning helper (`log_warn`, `write_warn`, `write_action` /
+  `LogWarn`, `Write-AitWarn`, `Write-AitAction`) and every error through an error helper
+  (`log_error`, `write_error` / `LogError`, `Write-AitError`). One call logs, counts and
+  records it once (`@reference/logging.md` 8.2); never raise `ERRORS` / `WARNINGS`
+  (`$script:errors` / `$script:warnings`) or write a WARN or ERROR record by hand.
+- Each script counts its own warnings; its error count also includes every child it
+  relayed that failed. A relayed child's warnings are the child's, not the parent's
+  (`@reference/logging.md` 8.3).
+- Missing tracking is a bug: an uncounted error misreports the exit status, and an
+  unrecorded warning or error is missing from the end-of-run panel.
 
 ### Log line format
 
@@ -73,19 +80,30 @@ per-component file names are the single source of truth in `@reference/logging.m
 
 ### Required logging helpers
 
-| Bash | PowerShell | Level | Purpose |
-|------|-----------|-------|---------|
-| `log` | `Log` | `info` | General info |
+This table says when to use each helper. What each one writes to deploy.log, counts and
+records in the run summary file is specified in `@reference/logging.md` 8.2.
+
+| Bash | PowerShell | Level | When to use |
+|------|-----------|-------|-------------|
+| `log` | `Log` | `info` | General info; also a step the user explicitly asked for in this run that completed as asked (not a warning: `@reference/logging.md` 8.3 "What is a warning") |
 | `log_ok` | `LogOk` | `ok` | Success |
-| `log_error` | `LogError` | `error` | Error (must increment ERRORS) |
-| `log_warn` | `LogWarn` | `warn` | Warning (must increment WARNINGS) |
-| `log_detail` | `LogDetail` | `detail` | Diagnostic content (file-only, no console) |
+| `log_detail` | `LogDetail` | `detail` | Diagnostic content (file-only, no console): diffs, captured command output |
+| `write_warn TOOL TEXT` | `Write-AitWarn` | `warn` | A warning about a known tool; TEXT says what is wrong |
+| `write_action TOOL TEXT ACTION` | `Write-AitAction` | `warn` | A warning the user must act on; TEXT says what needs to be done (for a login: `not authenticated -- run: vercel login`), ACTION is the command or step |
+| `log_warn TEXT` | `LogWarn` | `warn` | A warning when no tool is known (recorded under the script name) |
+| `write_error TOOL WHAT REASON` | `Write-AitError` | `error` | An error: WHAT is the step that failed, REASON why |
+| `log_error TEXT` | `LogError` | `error` | Only an error whose TEXT already states its cause: it records an empty reason |
+| `error_reason OUTPUT EXIT_CODE` | `Get-AitErrorReason -Output -ExitCode [-ErrorRecord]` | `detail` (the output) | The REASON for a failed external command, from its captured output |
+| `write_summary OK\|DETAIL\|ACTION` | `Write-Summary` | none | A tool's status, the items of its outcome, an ACTION with no warning of its own ("End-of-run summary") |
+
+A warning reports something that is wrong, or that still needs the user; anything else is
+logged at info (`@reference/logging.md` 8.3 "What is a warning").
 
 All timestamps must be UTC with Z suffix (`date -u +%Y-%m-%dT%H:%M:%SZ` / `.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")`).
 
 Logging framework is required -- raw `echo` or `Write-Host` without structured logging is not acceptable in reusable scripts.
 
-All helpers are defined in `@scripts/aitools-lib.sh` (bash) / `.ps1`. Scripts source the lib and call `logging_init` / `Initialize-Logging`. Entry points with specialized logging override the functions after sourcing. Do not define inline copies.
+All helpers are defined in `@scripts/aitools-lib.sh` (bash) / `.ps1`. Scripts source the lib and call `logging_init` / `Initialize-Logging`. Apart from the writers listed in `@reference/logging.md` 8.1 (the hooks, the Python tools, check-lib and the check scripts, among others), no script defines or overrides a logging function, or appends to a log or run summary file directly: a script that needs other behaviour sets a library option (the installers' jsonl option, the profile resolver's stderr console option: `@reference/logging.md` sections 3, 5 and 7). Do not define inline copies.
 
 ### Agentic invocation logging
 
@@ -112,8 +130,9 @@ prompt design standards, and evaluation lifecycle.
 
 ### Exit footer
 
-Every setup script must end with an exit footer that checks both ERRORS and WARNINGS counters.
-See `@reference/script-standards-detail.md` for exact code patterns.
+Every setup script must end with an exit footer that checks both ERRORS and WARNINGS counters:
+the script's own warnings, and its errors including every relayed child that failed
+(`@reference/logging.md` 8.3). See `@reference/script-standards-detail.md` for exact code patterns.
 
 ### Cross-platform grep portability
 
@@ -131,12 +150,6 @@ end: `grep PATTERN >/dev/null`, `sed -n '1,Np'` for `head -n N`, perl
 `next if $done; ...` or `END { exit(...) }`. `check-script-compliance` step 7
 fails on all of them in `scripts/`, `shared/hooks/` and `tests/`.
 Detail: `@reference/script-standards-detail.md` "Pipelines into grep -q under pipefail".
-
-### Standalone build logging
-
-`build-deploy.sh` defines its own `blog`/`blog_ok`/`blog_error` (doesn't source aitools-lib.sh).
-These must also follow the `[timestamp] [script] [level] message` format.
-Documented as a logging override exception in `@reference/script-standards-detail.md`.
 
 ### Check script logging
 
@@ -157,41 +170,55 @@ logging variables, so lib functions called from check steps can write to
 
 ### End-of-run summary
 
-Every setup script MUST call `write_summary` / `Write-Summary` (3-arg, from `aitools-lib`) to contribute to the end-of-run panel:
+Every setup script reports to the end-of-run panel through the `aitools-lib` helpers
+(the run summary file: `@reference/logging.md` 8.4; the panel: 8.5):
 
 ```bash
-write_summary OK    "tool_name" "version or status"
-write_summary WARN  "tool_name" "advisory message"
-write_summary ERROR "tool_name" "failure description"
-write_summary ACTION ""         "instruction for user"
+write_summary OK     "tool_name" "version or status"
+write_summary DETAIL "tool_name" "one item of the outcome"
+write_warn   "tool_name" "what is wrong"
+write_action "tool_name" "not authenticated -- run: tool login" "tool login -- authenticate tool"
+write_error  "tool_name" "brew install failed" "$(error_reason "$out" "$rc")"
+write_summary ACTION ""  "instruction for user"
 ```
 
 ```powershell
 Write-Summary "OK"     "tool_name" "version or status"
-Write-Summary "WARN"   "tool_name" "advisory message"
-Write-Summary "ERROR"  "tool_name" "failure description"
-Write-Summary "ACTION" ""          "instruction for user"
+Write-Summary "DETAIL" "tool_name" "one item of the outcome"
+Write-AitWarn   "tool_name" "what is wrong"
+Write-AitAction "tool_name" "not authenticated -- run: tool login" "tool login -- authenticate tool"
+Write-AitError  "tool_name" "winget install failed" (Get-AitErrorReason -Output $out -ExitCode $rc)
+Write-Summary "ACTION" ""  "instruction for user"
 ```
 
-| Category | Meaning |
-|----------|---------|
-| OK | Tool installed and usable |
-| WARN | Advisory -- tool works but something is off |
-| ERROR | Functional failure -- tool not usable |
-| ACTION | User must act before tool is ready |
+| Record | Meaning | Written by |
+|--------|---------|------------|
+| OK | The tool's status: installed and usable (a version, `verified`, `n/a (<reason>)`) | `write_summary OK` |
+| DETAIL | One item of the tool's outcome | `write_summary DETAIL` |
+| WARN | One warning: something is wrong, or still needs the user | `write_warn`, `write_action`, `log_warn` |
+| ERROR | One error: what failed and why | `write_error`, `log_error`, the relay (a failed child) |
+| ACTION | A command or step the user must take | `write_action`; `write_summary ACTION` for an instruction with no warning of its own |
 
-Every code path (success AND failure) must call `write_summary`. A tool that fails
-must appear as ERROR, not be silently absent.
+A WARN or ERROR record is one warning or one error, never a tool's status:
+`write_summary WARN` / `ERROR` are retired, and `write_summary` never changes a
+record's category. A tool with a warning or an error is shown in yellow or red,
+not in green (`@reference/logging.md` 8.5).
 
-See `@reference/script-standards-detail.md` for severity definitions, renderer colors,
-tool name table, function signatures, and platform-specific patterns.
+Every code path (success AND failure) must report: an OK record when the tool works,
+and an error through `write_error` when it fails. A tool that fails must appear as
+an error, not be silently absent.
+
+See `@reference/script-standards-detail.md` "End-of-run summary" for the tool name
+table, the severity decision guide and platform-specific patterns.
 
 ### Config and file update reporting
 
 Setup scripts that write config files, .md files, hooks, or skills must follow the
-three-outcome pattern (unchanged/updated/failed) with file-type-specific change logging.
-Summary detail text is max 30 chars. JSON configs log changed keys and emit DETAIL
-summary lines; text files log diffs to deploy.log.
+three-outcome pattern (unchanged/updated/failed) with file-type-specific change logging;
+a failed write is `write_error` with the write error as its reason.
+The text of OK and DETAIL records is max 30 chars; warning and error text is not held
+to that limit (the panel cuts yellow and red lines at 70: `@reference/logging.md` 8.5).
+JSON configs log changed keys and emit DETAIL summary lines; text files log diffs to deploy.log.
 See `@reference/script-standards-detail.md` for patterns and examples.
 
 For interactive managed file deployment (diff review + user choice), see
@@ -205,6 +232,9 @@ External install/upgrade commands (pip, npm, winget, brew, cargo, apt-get) MUST:
 2. **Check exit codes** -- `$LASTEXITCODE` (PS1) or wrap to prevent `set -e` abort (bash)
 3. **Distinguish "up to date" from failure** -- inspect output messages, not just exit codes
 4. **Treat PATH issues as errors** -- tool installed but not on PATH = functional failure
+5. **Report a failure with its reason** -- `write_error TOOL WHAT "$(error_reason "$out" "$rc")"` /
+   `Write-AitError TOOL WHAT (Get-AitErrorReason -Output $out -ExitCode $rc)`. Output that is
+   streamed (`| while read`) is captured or teed first, so there is output to take the reason from
 
 See `@reference/script-standards-detail.md` for platform-specific code patterns and
 anti-patterns.
@@ -215,7 +245,8 @@ Setup scripts for tools requiring authentication MUST check auth status on every
 not just fresh installs. After successful install/upgrade:
 
 1. Check auth using the tool's own command or config file presence
-2. Not authenticated: `log_warn` + `write_summary WARN` + `write_summary ACTION`
+2. Not authenticated: `write_action TOOL TEXT ACTION` / `Write-AitAction` -- one warning whose
+   TEXT says what needs to be done (`not authenticated -- run: vercel login`), and one ACTION
 3. Authenticated: no extra output (silent success)
 
 Auth check commands are documented per-tool in the tool registry (`/tool-registry` skill, `authentication` field).
@@ -234,12 +265,15 @@ Setup scripts that compile from source (`cargo install`, `pip install` with C ex
 `go install` with cgo) MUST use the two-layer prerequisite framework:
 
 **Layer 1 (preventive):** Call `Check-BuildPrereqs` / `check_build_prereqs` before the build.
-If any prerequisites are missing, `log_error` + `write_summary ERROR/ACTION` and skip the build.
+If any prerequisites are missing, one `write_error` (the missing prerequisites as the reason),
+one `write_summary ACTION` per install command, and skip the build.
 Don't waste minutes on a doomed compilation.
 
-**Layer 2 (diagnostic):** If the build fails, call `Diagnose-BuildFailure` /
-`diagnose_build_failure` on the captured output. If a known signature matches, surface the
-specific remedy. If no signature matches, log the generic failure.
+**Layer 2 (diagnostic):** If the build fails, `write_error` with `error_reason` /
+`Get-AitErrorReason` over the captured output: it tries the known signatures first
+(`diagnose_build_failure` / `Diagnose-BuildFailure`) and returns `<NAME>: <REMEDY>`, else the
+output's error line (`@reference/logging.md` 8.3). When a signature matches, also write its
+remedy as an ACTION.
 
 Both layers use centralized data tables in `aitools-lib.ps1`/`.sh`. Adding a new prerequisite
 or failure signature = one entry in the table. See `@reference/script-standards-detail.md` for
