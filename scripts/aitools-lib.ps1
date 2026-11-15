@@ -4791,12 +4791,11 @@ function Log-WingetOutput([string]$Output) {
 # its warning and error (a tool name from the tool name table, e.g. "modal
 # cli"; "" = the script name).
 # Returns (identical in repair_uv_tool_env):
-#   0  repaired (the broken environment is one warning, recorded)
+#   0  repaired (the broken environment and the repair are logged at info)
 #   1  not applicable (the output does not show a broken environment): nothing
 #      logged, the caller handles its own failure
-#   3  the repair failed and the library has recorded it (one warning for the
-#      broken environment, one Write-AitError with its reason): the caller
-#      records nothing more
+#   3  the repair failed and the library has recorded it (one Write-AitError
+#      with its reason): the caller records nothing more
 function Repair-UvToolEnv {
     param(
         [Parameter(Mandatory)][string]$ToolName,
@@ -4806,7 +4805,9 @@ function Repair-UvToolEnv {
 
     if ($UpgradeOutput -notmatch 'missing a valid environment') { return 1 }
 
-    Write-AitWarn $Tool "$ToolName uv environment is broken (Python removed?) -- repairing..."
+    # Info, not a warning: a successful automatic repair leaves nothing wrong
+    # and nothing for the user (logging.md 8.3); a failed one is the error below
+    Log "$ToolName uv environment is broken (Python removed?) -- repairing..."
 
     # Find a working Python -- uv's own Pythons first, then system
     # Get-Command exempt: command-existence check with fallback chain

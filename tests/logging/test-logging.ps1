@@ -271,6 +271,10 @@ exit 4
     $r = Invoke-LibScript "sync-fail" '$rc = Invoke-RelaySync "{PWSH}" @("-NoProfile", "-NonInteractive", "-Command", "Write-Output ''error: sync broke''; exit 3"); Write-Output "RC=$rc COUNTS=$($script:warnings)"' $s
     Check "lib: Invoke-RelaySync failure -- one warning 'relay sync' with the reason" ((($r.Summary -join '//') -ceq 'WARN|relay sync|relay -> AGENTS.md sync failed (exit 3, non-fatal): error: sync broke') -and ($r.Out -match 'RC=3 COUNTS=1'))
 
+    $s = Join-Path $tmpRoot "sync-nocmd.txt"; [IO.File]::WriteAllText($s, "")
+    $r = Invoke-LibScript "sync-nocmd" '$rc = Invoke-RelaySync "aitools-no-such-python" @("x.py"); Write-Output "RC=$rc COUNTS=$($script:warnings)"' $s
+    Check "lib: Invoke-RelaySync, command not found -- one warning 'not run', exit 127" ((($r.Summary -join '//') -ceq 'WARN|relay sync|relay -> AGENTS.md sync not run (non-fatal): aitools-no-such-python not found') -and ($r.Out -match 'RC=127 COUNTS=1'))
+
     # Repair-UvToolEnv: not applicable returns 1 and logs nothing
     $r = Invoke-LibScript "uv-na" '$rc = Repair-UvToolEnv -ToolName "modal" -UpgradeOutput "some other failure" -Tool "modal cli"; Write-Output "RC=$rc COUNTS=$($script:errors)/$($script:warnings)"'
     Check "lib: Repair-UvToolEnv on other output -- returns 1, nothing logged" ($r.Out -match 'RC=1 COUNTS=0/0')
