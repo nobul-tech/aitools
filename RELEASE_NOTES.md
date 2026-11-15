@@ -12,7 +12,7 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
-## v0.77.17 -- Incident #180: an orchestrator re-asked the commander an RFI he had already answered (2026-11-14)
+## v0.77.21 -- Incident #180: an orchestrator re-asked the commander an RFI he had already answered (2026-11-14)
 
 Not tagged. Branch `docs/38dc-28-rfi-repeat-rca`, mission 38dc-28 under M6-Polish (session 87795dc3). Commander, 2026-11-14: "launch a mission to 1) file this as incident 2) use the investigate skill and other skills to determine RCA of why you asked me when i had previously given answer." Documentation only; no harness behaviour changes.
 
