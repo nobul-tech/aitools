@@ -214,7 +214,10 @@ Bash's PATH where `usr/bin/` may appear before managed tool install
 directories (e.g., `C:\Strawberry\perl\bin`).
 
 **Consequence**: `perl --version` from pwsh-spawned-by-Git-Bash may return
-Git's bundled perl (v5.38.2) instead of the managed Strawberry Perl (v5.42.0).
+Git's bundled perl instead of the managed Strawberry Perl. Probe of 2026-11-14:
+in Git Bash, `perl` printed `v5.42.3 cygwin`; in a native pwsh,
+`C:\Strawberry\perl\bin\perl.exe` printed `v5.42.0 MSWin32` (Git's perl was
+v5.38.2 when this was first written).
 
 **Resolution in check scripts**: `check-lib.ps1` explicitly prepends the
 managed Strawberry Perl install path on Windows, ensuring it takes priority
@@ -357,8 +360,10 @@ So:
   their tests run only on Windows.
 - The exception is a script explicitly marked cross-platform for a good reason.
   The commander's examples: `build-deploy.sh` and all Perl and Python scripts.
-  Such a script's tests run on Windows too: Perl and Python natively, a bash
-  script in Git Bash, its Windows runtime.
+  Such a script's tests run on Windows too: the Python suites natively, the
+  suites of a bash script in Git Bash (its Windows runtime), and the `.sh`
+  suites of a Perl script in Git Bash, where a bare `perl` is Git's perl, not
+  the managed Strawberry Perl (issue 1 below).
 - The marks are recorded in `.claude/rules/cross-platform.md` "OS guard
   exemptions", the list of unguarded scripts (hooks and the bash entry points are
   there because they run in Git Bash on Windows). RFI 38dc-7 (M6-Polish,
@@ -432,7 +437,9 @@ From Claude Code:
   So may the `.sh` suites whose subject includes a Perl script (cross-platform
   by the commander's words above): `tests/check-post-push/test-menu-parity.sh`
   (`scripts/check-menu-parity.pl`) and `tests/profile/test-profile.sh`
-  (`scripts/aitools-json.pl`, beside the `.ps1` resolver).
+  (`scripts/aitools-json.pl`, beside the `.ps1` resolver). A local run of
+  `test-menu-parity.sh` also runs its cut of step 29 of the POSIX-guarded
+  `scripts/check-post-push.sh` in bash.
   Any other suite of `.ps1` code that has only a `.sh` driver (the drivers in
   "What CI runs on Windows today" below) is not run locally: the Windows CI job
   runs it on the pushed branch, and the report lists it under "Not run".

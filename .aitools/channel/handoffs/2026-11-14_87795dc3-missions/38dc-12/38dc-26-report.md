@@ -10,8 +10,8 @@ NOT check.yml, tests or the exemptions table (missions 38dc-13 and 38dc-23).
 NOT the merge result (in the hand-back: it comes after this file is committed).
 **Audience**: M6-Polish, the independent reviewer, the commander.
 
-Version 1.1, 2026-11-14 (v1.0 at 731cbf9; v1.1 applies the independent
-review, "Review" below). PR: https://github.com/nobul-tech/aitools/pull/159
+Version 1.2, 2026-11-14 (v1.0 at 731cbf9; v1.1 applies the independent
+review, v1.2 its re-check, "Review" below). PR: https://github.com/nobul-tech/aitools/pull/159
 (branch `docs/38dc-12-windows-test-practice`), on top of M6-Polish's merge
 commit 0a5a0ae (origin/main 5f962b1 into the branch).
 
@@ -139,6 +139,21 @@ mission's runs). Applied in v1.1:
 6. "the seven `scripts/aitools` run cases" of `test-logging.sh` (its line
    "SKIP entry: 7 pre-lib and argument cases").
 7. PR #166 (38dc-13) and PR #167 (38dc-23) cited.
+
+Re-check on 51c7953: CHANGES NEEDED, 1 blocking
+(https://github.com/nobul-tech/aitools/pull/159#issuecomment-6886744073);
+findings 2-7 fixed, 1 mostly. Spot-checked: in Git Bash `perl -e 'print
+qq($^V $^O)'` printed `v5.42.3 cygwin`; in the PowerShell tool `perl` is
+`C:\Strawberry\perl\bin\perl.exe`, `v5.42.0 MSWin32`. Applied in v1.2:
+
+- A (blocking): "Perl and Python natively" -> the Python suites natively, the
+  suites of a bash script in Git Bash, and the `.sh` suites of a Perl script in
+  Git Bash, where a bare `perl` is Git's perl, not Strawberry (issue 1).
+- B: a local run of `test-menu-parity.sh` also runs its cut of
+  `check-post-push.sh` step 29 in bash.
+- C: "Git Bash PATH shadowing": "Git's bundled perl (v5.38.2) instead of the
+  managed Strawberry Perl (v5.42.0)" -> the 2026-11-14 probe values, with
+  v5.38.2 kept as the value when the text was first written.
 
 ## Checks and merge
 
