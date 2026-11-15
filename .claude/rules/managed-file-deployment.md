@@ -80,8 +80,9 @@ These apply equally regardless of file type:
    helper that logs it. `deploy_managed_file` results (created, updated,
    verified, accept & adopt, skipped, failed) are recorded with the deploy
    tracker, which writes the OK status record and the DETAIL records. On
-   `failed` the library has already recorded the error (`write_error`,
-   with the write, merge or validation error as its reason), and on
+   `failed` the library has already recorded the error (`write_error`
+   under the tool name the caller passed: WHAT the failed step, REASON the
+   write, AI merge, adopt filter or validation error), and on
    `skipped` the warning; the run continues with the next file. A fan-out
    consumer that backs up and deletes its copy of a retired rule or skill
    records `removed`; an outcome the tracker does not know is logged and

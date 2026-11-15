@@ -322,9 +322,10 @@ For an adopt target in the dotprofile, `accept & adopt` also means the
 library tried to commit and push it (see Caller Responsibilities, N-Q2).
 
 On `failed` the library has already restored every file it backed up and
-recorded the error once: `write_error` / `Write-AitError` under the tool
-name, WHAT the step that failed (with the item), REASON the write, merge or
-validation error. On `skipped` it has recorded one warning under the tool
+recorded the error once, at the source (`@reference/logging.md` 8.3,
+"Recorded at the source"): `write_error` / `Write-AitError` under the tool
+name the caller passed, WHAT the step that failed (with the item), REASON
+the write, AI merge, adopt filter or validation error. On `skipped` it has recorded one warning under the tool
 name: the item was skipped at the review and still differs from SOURCE.
 The caller records the outcome (`deploy_tracker_record failed ...` /
 `Record-DeployOutcome failed ...`), writes no second WARN or ERROR record,
@@ -721,7 +722,9 @@ For a JSON file deployed from a JSON SOURCE through `deploy_managed_file`.
 (`@.claude/rules/config-file-safety.md`) with no review menu and no adopt.
 Their values come from `profile.json` (cursor.cli) or are hardcoded. They
 refuse to write a corrupt file, or a merge that would lose fields, without
-`--force`.
+`--force`. Under `--force` they write it, and that write stays a warning,
+not info: data is lost, which `--force` alone does not ask for
+(`@reference/logging.md` 8.3, "What is a warning").
 
 | Config file | Regime | Managed field source | Adopt target |
 |-------------|--------|---------------------|--------------|

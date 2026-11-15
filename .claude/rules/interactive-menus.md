@@ -24,8 +24,9 @@ validate this (`check-post-push` step 29: Menu parity audit).
 Every return value from `Deploy-ManagedFile` / `deploy_managed_file` MUST be
 handled at **every call site**: `created`, `updated`, `verified`,
 `accept & adopt`, `skipped`, `failed`. On `failed` the library has restored
-its backups and recorded the error once (`write_error`, with the write,
-merge or validation error as its reason); on `skipped` it has recorded the
+its backups and recorded the error once (`write_error` under the tool name
+the caller passed: WHAT the failed step, REASON the write, AI merge, adopt
+filter or validation error); on `skipped` it has recorded the
 warning once (`@reference/logging.md` section 8). The caller records the
 outcome with the deploy tracker, writes no second WARN or ERROR record, and
 continues. Scripts with multiple call sites (e.g.,
