@@ -19,6 +19,15 @@ For every `.sh` or `.ps1` file being committed:
 - PS1: See `.claude/rules/cross-platform.md` Pre-validation convention for the full ParseFile command. Note: `$e` must be declared before `[ref]$e` -- undeclared variables cause `[ref]` to error.
 - If the other platform's scripts can't be validated locally, note in commit message: `(tested: macOS)` or `(tested: Windows)`
 
+`check-pre-commit.ps1` (Windows) does not run `bash -n`: it calls no Git Bash
+(commander, 2026-11-14: "id like to avoid calling git bash on thowse ps1
+scripts"), and a `.sh` never runs on Windows. With a `.sh` staged it reports
+SKIP (`N .sh staged: bash -n runs in CI (linux, macos) and check-pre-commit.sh,
+not on Windows`). The CI linux and macos jobs ("Validate bash script syntax")
+run `bash -n` on every tracked shell script on each push and pull request;
+`check-pre-commit.sh` runs it on macOS and Linux. Tests:
+`tests/check-no-git-bash/test-check-no-git-bash.ps1`.
+
 ## 3. Build freshness (retired)
 
 Always SKIP (`retired: check-pre-push step 7 rebuilds into a temp dotprofile
