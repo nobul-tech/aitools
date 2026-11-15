@@ -1,8 +1,9 @@
 ---
 name: handoff
 description: "Write a handoff yourself, in the session that holds the
-  conversation, and print it in full in the terminal: no step is
-  delegated, and no file is written unless the commander asks for one.
+  conversation, and print it in full in the terminal: no delegates and
+  no artifacts (no file, scratch file or commit) unless the commander
+  asks for them.
   Use when the commander says /handoff, before a /compact the session
   will resume from, when ending a session, when context is getting
   large, or when switching machines. Tested on Claude Code; other
@@ -16,8 +17,9 @@ terminal, so that the accepting session (the same session after a
 `/compact`, or another session the commander gives it to) continues with
 the decisions, work in flight, open threads and exclusions it needs,
 without the conversation the handoff came from. The agent writes it from
-its own context and delegates no step: it holds the whole conversation,
-and a delegate would start with none of it.
+its own context and, unless the commander asks otherwise, launches no
+delegates and produces no artifacts: it holds the whole conversation, a
+delegate would start with none of it, and the handoff lives in the reply.
 
 NOT for mid-session checkpoints (commit and continue). NOT for artifact
 harvesting (`/harvest` skill). NOT for session planning (`/planning`
@@ -31,6 +33,10 @@ skill so that the handoff happens at the terminal just like we did in
 this round and is not delegated"). v1.x was an 8-step workflow in which
 S2, S3 and Verifier subagents audited the session and wrote and verified
 a handoff file; v2.0 retires it (its text is in this file's git history).
+v2.1, 2026-11-15 (commander: "unless otherwise asked to do so, handoff
+skill should not produce any delegates or artifacts"): no artifacts
+either (no file, scratch file or commit) unless he asks; a delegate only
+when he asks.
 
 ## Harness support
 
@@ -56,8 +62,9 @@ Invoke `/handoff` when ANY of these arise:
 - Context usage exceeds 60% and significant work remains
 - The session has uncommitted decisions, investigations or work in
   flight that the accepting session needs
-- The commander is switching machines: suggest a file as well (see "When
-  the commander asks for a file")
+- The commander is switching machines: suggest a file in your reply and
+  write it only if he asks (see "When the commander asks for a file or a
+  delegate")
 - The session has run 3+ hours with several work streams
 
 ## German doctrine concepts
@@ -83,15 +90,18 @@ used as thinking tools, not formal frameworks:
 
 ## Rules
 
-1. **Yourself, no delegation.** Write the handoff in the session that
-   holds the conversation. Launch no subagent, workflow or background
-   session for any step: not the audit, the assessment, the writing or
-   the verification. A delegate starts with none of the conversation
-   (`/delegate` skill) and would rebuild it from files, losing what exists
-   only in the conversation. A delegated step the commander orders himself
-   is a delegation under the `/delegate` skill.
-2. **In the terminal.** Print the whole handoff in your reply, in full,
-   never a summary of it. Write no file unless the commander asks for one.
+1. **Yourself, no delegates unless asked.** Write the handoff in the
+   session that holds the conversation. Unless the commander asks for one,
+   launch no subagent, workflow or background session for any step: not
+   the audit, the assessment, the writing or the verification. A delegate
+   starts with none of the conversation (`/delegate` skill) and would
+   rebuild it from files, losing what exists only in the conversation. A
+   delegate he asks for is launched under the `/delegate` skill.
+2. **In the terminal, no artifacts unless asked.** Print the whole
+   handoff in your reply, in full, never a summary of it. Unless the
+   commander asks for one, produce no artifact: no handoff file, no
+   scratch file, no commit. Reading files, `git status` and transcripts is
+   not producing an artifact.
 3. **Last before `/compact`.** When the session will resume after
    `/compact`, the handoff is the last reply before it: no other reply and
    no tool call after it. In the Claude Code test the compaction kept that
@@ -106,8 +116,8 @@ used as thinking tools, not formal frameworks:
 
 ## Process
 
-Every step runs in your own thinking and context. No step uses a
-subagent.
+Every step runs in your own thinking and context. Unless the commander
+asks, no step uses a delegate or writes a file.
 
 ### Step 1: Schwerpunkt
 
@@ -212,10 +222,10 @@ so the handoff stays in the last message. Name the next step in that
 reply: "run `/compact`" (same session) or "start the accepting session
 with this handoff" (another session).
 
-A terminal handoff commits nothing: there is no file. A work product the
-handoff cites (a plan, a report) is either committed under its own rules
-before you print, or listed in the handoff as uncommitted, with where it
-is.
+A terminal handoff produces no artifact: no file, no scratch file, no
+commit. A work product the handoff cites (a plan, a report) that is not
+committed is listed in the handoff as uncommitted, with where it is;
+the handoff does not commit it.
 
 ### After `/compact`: the accepting agent
 
@@ -223,9 +233,10 @@ is.
    the compaction summary.
 2. Check it is complete when an action depends on its exact words: search
    the session transcript for a phrase unique to the handoff (aitools:
-   `python3 ~/.aitools/bin/read-session.py <transcript> --search "<phrase>"`,
-   output saved to your session scratch directory) and compare. The
-   Claude Code summary names the transcript path.
+   `python3 ~/.aitools/bin/read-session.py <transcript> --search "<phrase>"`)
+   and compare. Read the search output in the tool result; save it to a
+   file only if the commander asks. The Claude Code summary names the
+   transcript path.
 3. Treat the summary as compressed: re-read from the transcript anything
    an action depends on word for word. The Claude Code summary says it was
    written without seeing the kept messages, so where the two disagree on
@@ -233,12 +244,17 @@ is.
 4. Re-check the staleness items (missions may have reported, branches
    may have moved), then act on the Schwerpunkt.
 
-## When the commander asks for a file
+## When the commander asks for a file or a delegate
 
-Write a file only when the commander asks for one (for example to switch
+A delegate: only when the commander asks for one (for example an
+independent verifier). Load the `/delegate` skill first and give the
+delegate the full draft verbatim; you stay accountable for the handoff.
+
+A file: only when the commander asks for one (for example to switch
 machines, or to hand off to another session):
 
-- Write it yourself, steps 1 to 4 as above; do not delegate.
+- Write it yourself, steps 1 to 4 as above; no delegate unless he asked
+  for one.
 - Path: `.aitools/channel/handoffs/<UTC date>_<session-prefix>.md`
   (tracked; in aitools it is committed directly to main under CLAUDE.md
   "Channel exception"). In a repo without `.aitools/`, a tracked path such
@@ -269,7 +285,7 @@ A good handoff satisfies all of these:
 | **Complete** | Every decision, thread, running delegate and work product is accounted for |
 | **Harness-correct** | What it relies on from the harness (compaction, how to reach delegates) is stated for the harness in use, and was tested there or flagged as untested |
 | **Consistent** | Does not contradict itself or prior handoffs |
-| **In the terminal** | Printed in full as the last reply before `/compact`; a file only when the commander asked for one |
+| **In the terminal** | Printed in full as the last reply before `/compact`; no delegate and no artifact (file, scratch file, commit) unless the commander asked for one |
 
 ## Adapting to project context
 
@@ -324,8 +340,9 @@ Each assumption gets tracked with:
   `reference/tool-ops-claude-code.md` item #36; `/tool-ops` skill
 - Reading session transcripts: `/delegate` skill, "Reading the
   commander's sessions"
-- Delegation duty (a handoff is not delegated; this covers work handed to
-  delegates): `/delegate` skill, user rule `delegation.md`
+- Delegation duty (a handoff uses no delegate unless the commander asks;
+  this covers work handed to delegates): `/delegate` skill, user rule
+  `delegation.md`
 - Session planning: `/planning` skill
 - Scratch files: `/scratch` skill
 - Investigation methodology: `/investigate` skill

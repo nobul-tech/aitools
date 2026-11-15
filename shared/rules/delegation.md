@@ -94,8 +94,8 @@ agents, manually started sessions) rely on this rule and the skill alone.
 - Everything about writing, shipping and verifying delegations: `/delegate`
   skill
 - Handoffs: `/handoff` skill (written by the session agent itself and
-  printed in the terminal, never delegated; tested on Claude Code, other
-  harnesses not yet tested)
+  printed in the terminal, with no delegates and no artifacts unless the
+  commander asks; tested on Claude Code, other harnesses not yet tested)
 - Claude Code limits behind the elements: `/tool-ops` skill (the
   `/aitool-ops` card is retired)
 - Mission monitoring: `/mission-control` skill
