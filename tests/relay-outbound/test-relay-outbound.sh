@@ -123,7 +123,7 @@ else
     check "ps1 run: structured guard line on stderr" \
         "$(grep -Eq '^\[[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z\] \[relay-outbound-prompt\] \[error\] This script is for Windows\. On macOS/Linux, use relay-outbound-prompt\.sh' "$WORK/ps1.err" && echo 0 || echo 1)" "$(head -c 300 "$WORK/ps1.err")"
     check "ps1 run: nothing on stdout" "$([ ! -s "$WORK/ps1.out" ] && echo 0 || echo 1)" "$(head -c 300 "$WORK/ps1.out")"
-    stray=$(cd "$H1" && find . -type f ! -path './.cache/powershell/*' | head -n 5)
+    stray=$(cd "$H1" && find . -type f ! -path './.cache/powershell/*' | sed -n '1,5p')
     check "ps1 run: writes nothing under HOME but pwsh's cache" "$([ -z "$stray" ] && echo 0 || echo 1)" "$stray"
 
     # Dot-sourced, `exit 1` ends only the guarded file: the caller goes on with

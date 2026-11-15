@@ -124,7 +124,7 @@ refuse() {
     # startup cache (~/.cache/powershell/StartupProfileData-*, written by pwsh
     # itself before any script code runs).
     local stray
-    stray=$(cd "$h" && find . -type f ! -path './.aitools/logs/*' ! -path './.cache/powershell/*' | head -n 5)
+    stray=$(cd "$h" && find . -type f ! -path './.aitools/logs/*' ! -path './.cache/powershell/*' | sed -n '1,5p')
     if [ "$rc" -eq 1 ] && grep -qF "$want" "$WORK/out.txt" && [ -z "$stray" ]; then
         ok "$f refuses $PLATFORM (exit 1, guard message, only logs written)"
     else
