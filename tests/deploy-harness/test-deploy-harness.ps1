@@ -862,6 +862,62 @@ try {
         Skip "locked-file cases (an open handle does not block a replace or a copy here)"
     }
 
+    # A file in a retired skill held open by an ordinary reader (FileShare.Read)
+    # across two runs, then released. The commander (RFI 38dc-9, 2026-11-14): "it
+    # should try to delete them. if it cant, it should log that it cant. it should
+    # retry on any and all turns". The backup copy and its check succeed (a reader
+    # allows reads); the delete removes the other files and fails on the held
+    # one: log line, ERROR row, exit 1, the manifest line retired. While the file
+    # stays held, every run tries again (a new backup of what is left, the same
+    # log line and row); after release the next run removes the directory. The
+    # probe: a reader must allow File.Copy of its file and block
+    # Directory.Delete of its directory, and the delete must work once released.
+    $delProbe = Join-Path $tmpRoot "lock-probe-del"
+    New-Dirs @("$delProbe\d")
+    W "$delProbe\d\f" "f`n"
+    W "$delProbe\d\g" "g`n"
+    $haveDelLock = $false
+    try {
+        Hold-File "$delProbe\d\f" Read Read
+        [IO.File]::Copy("$delProbe\d\f", "$delProbe\c")    # throws if a reader blocks a copy: probe failed, SKIP
+        $delBlocked = $false
+        try { [IO.Directory]::Delete("$delProbe\d", $true) } catch { $delBlocked = $true }   # the caught error is the answer: blocked
+        Release-Held
+        if (Exists "$delProbe\d") { [IO.Directory]::Delete("$delProbe\d", $true) }    # released: the delete works (throws otherwise)
+        $haveDelLock = $delBlocked
+    } catch {
+        Write-Host "      | delete-lock probe: $($_.Exception.Message)"
+    } finally {
+        Release-Held
+    }
+    if ($haveDelLock) {
+        Setup-Case locked-retry
+        Run-DH
+        $sk1 = "$(A)\skills\s1"
+        Gitc @("-C", $R, "rm", "-q", "-r", "shared/skills/s1"); Gitc @("-C", $R, "commit", "-q", "-m", "s1-gone")
+        try {
+            Hold-File "$sk1\SKILL.md" Read Read
+            Fresh-Log; Run-DH    # run 1
+            Check "$lang locked retry: run 1 -- delete tried (tests\ gone, held SKILL.md left), 'cannot remove' logged, ERROR row, exit 1, line retired" ($rc -eq 1 -and -not (Exists "$sk1\tests") -and (@(LsA $sk1) -join "|") -ceq 'SKILL.md' -and (GrepC $LOG '\[error\] Retired skill s1: cannot remove .*/\.aitools/skills/s1$') -eq 1 -and (Row 'ERROR|harness files|retire failed: s1') -and -not (HasRow 'retired: skills/s1') -and (GrepX (SM) "s1${T}retired"))
+            Check "$lang locked retry: run 1 -- one complete backup (both files)" ((N-Bak s1) -eq 1 -and (BakLine s1 'SKILL.md' 'skill one') -and (BakLine s1 'tests\t.md' 'skill one test'))
+            # Backup names have one-second resolution (<name>.bak.<UTC>): a run in the
+            # same second as the last backup finds the name taken ("backup failed
+            # (... already exists)") and tries no delete. A run takes under a second
+            # here, so wait for the next second before each later run.
+            Start-Sleep -Milliseconds 1100
+            Fresh-Log; Run-DH    # run 2: still held
+            Check "$lang locked retry: run 2, still held -- tried again: 'cannot remove' logged, ERROR row, exit 1, line still retired" ($rc -eq 1 -and (@(LsA $sk1) -join "|") -ceq 'SKILL.md' -and (GrepC $LOG '\[error\] Retired skill s1: cannot remove .*/\.aitools/skills/s1$') -eq 1 -and (Row 'ERROR|harness files|retire failed: s1') -and -not (HasRow 'retired: skills/s1') -and (GrepX (SM) "s1${T}retired"))
+            Check "$lang locked retry: run 2 -- a second backup (what is left), the complete one kept" ((N-Bak s1) -eq 2 -and (BakLine s1 'tests\t.md' 'skill one test'))
+        } finally {
+            Release-Held
+        }
+        Start-Sleep -Milliseconds 1100
+        Fresh-Log; Run-DH    # run 3: released
+        Check "$lang locked retry: released -- run 3 removes the directory, line stays retired, DETAIL row, no ERROR row, exit 0" ($rc -eq 0 -and -not (Exists $sk1) -and (GrepX (SM) "s1${T}retired") -and (Row 'DETAIL|harness files|retired: skills/s1') -and -not (GrepQ "$C\summary" '^ERROR\|') -and (GrepQ $LOG 'Removed .*/\.aitools/skills/s1 \(retired skill; backup ') -and (N-Bak s1) -eq 3 -and (BakLine s1 'tests\t.md' 'skill one test'))
+    } else {
+        Skip "locked retry case (an open reader does not block a directory delete here)"
+    }
+
     # ---------------------------------------------------------------------------
     # Rule names with an upper- or mixed-case .md extension (plan rules-fanout-claude.md
     # F2/R9; D1 "case-insensitive, *.md only, skipping *.bak.*"): deployed as named,
