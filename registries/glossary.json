@@ -178,7 +178,42 @@
     },
     "intelligence": {
       "definition": "One component of aitools. A graph. A continuously defined concept. Everything the harness learns through operation. Four domains: session, tool, spec, harness. One schema across all domains. The harness IS intelligence. OL is the user-facing term. Intelligence is both capability (schemas, hooks, DBs) and content (actual OL, decisions, provenance chains). The harness is in failure mode when capability exists but content doesn't flow.",
-      "source": "session ddfe01cb (2026-03-30), RFC 0005 v3"
+      "source": "session ddfe01cb (2026-03-30), RFC 0005 v3 (not in this repo: nobul-tech/nobulai-tools, commit f408790, 0005-v3-session-intelligence-architecture.md); types: reference/framework-intelligence-types.md"
+    },
+    "intelligence type": {
+      "definition": "One of the defined kinds of intelligence item: observation, fact, assumption, finding, operational learning, proposal, and RFI (a session RFI). The harness DB's knowledge items may also be record types: decision, commander directive, rule change, framework change. Each type has a definition, fields, a lifecycle and a doctrinal origin; every item carries its provenance (who, where, verbatim quote). Adapted from military intelligence doctrine to a world of a commander, agents and code.",
+      "source": "reference/framework-intelligence-types.md; scripts/harness-db.py (INTELLIGENCE_TYPES, the schema's source of truth); commander, 2026-11-15 (session 87795dc3: 'there should be a schema for defined intelligence types')",
+      "sourceDiscipline": "Military intelligence doctrine (JP 2-0, FM 2-0, JDP 2-00), adapted"
+    },
+    "fact": {
+      "definition": "An intelligence type: an observation confirmed against its source or by a second, independent source. A verified assumption becomes a fact. Lifecycle: current until invalidated (t_invalid set, with a 'superseded' or 'invalidated' edge from what replaced it).",
+      "source": "reference/framework-intelligence-types.md",
+      "sourceDiscipline": "Intelligence doctrine: 'facts that have been observed' (JP 2-0, 2013, Appendix A); NATO grading credibility 1, 'Confirmed by other sources' (JDP 2-00, 2023, Table 3.1)"
+    },
+    "finding": {
+      "definition": "An intelligence type: the analysis of one or more observations. It states the condition found (citing the observations it rests on), the criteria it was measured against when there are any, the cause, the effect, and a one-line suggestion. Active, not passive: it says why and what follows. The worked-out change is a proposal, derived from the finding. In an AAR, findings are the middle node (observations, findings, proposals; commander, 2026-11-15, '46) yes'). An incident is a finding about a harness deficiency, tracked in incidents.json (observation = condition, expected = criteria, rootCause = cause, impact = effect, suggestedResolution = suggestion). Before schema 4, FINDING meant a SALUTE report of something seen; that meaning is retired: such a report is an observation with a severity, sent as a SPOTREP.",
+      "source": "reference/framework-intelligence-types.md; commander, 2026-11-15 (session 87795dc3: 'i like how a finding is defined as cause and effect ... 1cause/2effect/3suggestion')",
+      "sourceDiscipline": "Government auditing: elements of a finding, criteria, condition, cause and effect (GAO Yellow Book, 2024 revision, 8.116-8.127)"
+    },
+    "insight": {
+      "definition": "Deprecated (commander, 2026-11-15: 'i kind of like findings over insights ... an insight is also a very passive term'). Proposed in issue #180 as the name of the analysis type; that type is finding. The AAR node once named insights is named findings (commander, 2026-11-15, '46) yes').",
+      "source": "reference/framework-intelligence-types.md; issue #180",
+      "deprecated": true,
+      "replacedBy": "finding"
+    },
+    "proposal": {
+      "definition": "An intelligence type: a worked-out change to make, derived from one or more findings: what to change, why, the barrier analysis (would it have prevented the issue?), its severity and what it affects (files, decisions). Lifecycle: proposed, then the commander's disposition: accepted, rejected or deferred. The third node of an AAR (commander, 2026-03-16: the last node is 'proposals', with barrier analysis). A finding's suggestion points at the change; the proposal works it out.",
+      "source": "reference/framework-intelligence-types.md; issue #180 (AAR, commander 2026-03-16)"
+    },
+    "SPOTREP": {
+      "definition": "Spot report: a channel message that reports an observation at once, SALUTE-style (severity, what was seen, where, by whom, when, context). Its content is an observation. Replaces the FINDING message (schema 4: message type spotrep).",
+      "source": "reference/framework-intelligence-types.md; scripts/harness-db.py (log --type spotrep)",
+      "sourceDiscipline": "US military doctrine: spot report, 'a concise narrative report of essential information covering events or conditions that may have an immediate and significant effect on current planning and operations' (JP 3-09.3, via FM 1-02.1); SALUTE (FM 2-0, 2023)"
+    },
+    "SITREP": {
+      "definition": "Situation report: a channel message on the status of a mission or batch (what is done, what is in progress, files written). Carries status, not intelligence; an observation found along the way goes in a SPOTREP.",
+      "source": "reference/framework-intelligence-types.md; scripts/harness-db.py (log --type sitrep); planning-brief decision #23",
+      "sourceDiscipline": "Military reporting: situation report"
     },
     "hook": {
       "definition": "A Claude Code mechanism that fires during session events (PreToolUse, PostToolUse, SessionStart, SessionEnd, SubagentStart, InstructionsLoaded, PermissionRequest, Stop). Types: command, prompt, agent, HTTP. Part of the detection layer.",
@@ -221,11 +256,12 @@
       "source": "reference/framework-adoption.md; /tool-registry skill; reference/tool-support-decision-tree.md (after M2)"
     },
     "observation": {
-      "definition": "An incident schema field stating concrete facts about what was observed. Quote specific text, cite files and line numbers, name behaviors. No interpretation — facts only.",
-      "source": ".claude/rules/incident-governance.md"
+      "definition": "An intelligence type: what was seen or reported at a source, stated without interpretation (information, not yet analysed). Quote specific text, cite files and line numbers, name behaviors; give the source and who reported it. May carry a severity (critical/high/medium/low); an observation reported at once is a SPOTREP. A finding analyses observations. Also the incident schema field of the same name, which states the condition an incident found: facts only.",
+      "source": "reference/framework-intelligence-types.md; .claude/rules/incident-governance.md (the incident field)",
+      "sourceDiscipline": "Intelligence doctrine: information versus intelligence (JP 2-0, 2013, Figure I-1; NATOTerm 'information: data arranged to convey meaning', JDP 2-00, 2023)"
     },
     "operational learning": {
-      "definition": "A lesson about how the work is done: what worked, what failed, and what to do differently next time. It is stated with its source and carried forward so that later sessions and delegates start with it. Distinct from an observation, which states facts only: operational learning is the lesson drawn from observations. It is the user-facing form of intelligence. Recorded in the relay (.aitools/channel/relay.md), handoff prompts, delegation prompts (/delegate element 4), and the prompt-turn record (reference/prompt-turn-checklist.md item 12). Numbered entries use OL-<n>.",
+      "definition": "A lesson about how the work is done: what worked, what failed, and what to do differently next time. It is stated with its source and carried forward so that later sessions and delegates start with it. Distinct from an observation, which states facts only: operational learning is the lesson drawn from observations and the findings that analyse them. It is the user-facing form of intelligence, and an intelligence type (stored as operational_learning; ol_entry before schema 4). In an AAR it sits under the findings node (commander, 2026-11-15, answers 45 and 46). Recorded in the relay (.aitools/channel/relay.md), handoff prompts, delegation prompts (/delegate element 4), and the prompt-turn record (reference/prompt-turn-checklist.md item 12). Numbered entries use OL-<n>.",
       "source": "/delegate skill element 4; reference/prompt-turn-checklist.md item 12; commander, 2026-11-15 (RFI fa81-42, session 87795dc3)"
     },
     "OL": {
@@ -360,8 +396,9 @@
       "source": "shared/skills/handoff/SKILL.md"
     },
     "assumption": {
-      "definition": "An unverified belief held by an agent during a session that influences decisions or plans. Assumptions are invisible until failure unless explicitly tracked. Lifecycle: unverified (default when surfaced), verified (confirmed against evidence, becomes a fact), falsified (contradicted by evidence, becomes a finding). Tracked in running estimates (session-level) and planning briefs (plan-level).",
-      "source": "shared/skills/handoff/SKILL.md"
+      "definition": "An intelligence type: an unverified belief held by an agent during a session that influences decisions or plans. Assumptions are invisible until failure unless explicitly tracked. Lifecycle: unverified (default when surfaced), verified (confirmed against evidence: a fact is recorded with a 'validated' edge to the assumption), falsified (contradicted by evidence: the contradicting observation is recorded with an 'invalidated' edge to the assumption, and a finding may explain it). Tracked in running estimates (session-level) and planning briefs (plan-level).",
+      "source": "shared/skills/handoff/SKILL.md; reference/framework-intelligence-types.md",
+      "sourceDiscipline": "Intelligence doctrine: fact versus untested assumption (JP 2-0, 2013, Appendix A)"
     },
     "mission order": {
       "definition": "A mission-type order: the commander's intent expressed as the objective to achieve, not the method to use. Used informally in the harness as a thinking tool — not a formal framework. The delegating agent states the mission order; the accepting agent determines how to achieve it.",

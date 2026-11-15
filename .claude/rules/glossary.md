@@ -58,7 +58,9 @@ dotprofile repo
 drift
 environment
 expected
+fact
 file classification
+finding
 framework
 gap
 governed file
@@ -66,8 +68,10 @@ governed vocabulary
 harness
 impact
 incident
+insight
 install provenance
 intelligence
+intelligence type
 intent
 intent scope
 intent verification
@@ -87,6 +91,7 @@ preserved
 prevention
 process deviation
 profile
+proposal
 provenance
 project coaching item
 PCI
@@ -98,6 +103,8 @@ registry
 scope creep
 skill-as-capability
 skipped
+SITREP
+SPOTREP
 state audit
 suggested resolution
 surfacing duty

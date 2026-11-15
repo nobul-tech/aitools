@@ -7,7 +7,7 @@
       "scope": "Framework entries and pending adoptions only. NOT the adoption process (framework-adoption.md). NOT framework documentation (framework-*.md files)",
       "audience": "/frameworks skill"
     },
-    "lastUpdated": "2026-11-13"
+    "lastUpdated": "2026-11-15"
   },
   "frameworks": [
     {
@@ -223,6 +223,21 @@
         ".claude/rules/glossary.md (term: session RFI)"
       ],
       "lastUpdated": "2026-11-13"
+    },
+    {
+      "name": "Intelligence types",
+      "governs": "Which kind of intelligence item an agent records (observation, fact, assumption, finding, operational learning, proposal, RFI), the fields and lifecycle of each, and the provenance every item carries",
+      "discipline": "Military intelligence doctrine (adapted); government auditing",
+      "concepts": ["Information versus intelligence (JP 2-0, 2013; NATOTerm via JDP 2-00, 2023)", "Facts versus untested assumptions; confidence Low/Moderate/High (JP 2-0 Appendix A)", "Source reliability and information credibility graded separately (NATO Intelligence Grading System, JDP 2-00 Table 3.1)", "Spot report and SALUTE (FM 1-02.1; FM 2-0, 2023)", "Elements of a finding: criteria, condition, cause, effect (GAO Yellow Book 2024, 8.116-8.127)", "Request for information (JP 2-0; FM 1-02.1)"],
+      "referenceFile": "reference/framework-intelligence-types.md",
+      "artifacts": [
+        "reference/framework-intelligence-types.md",
+        "scripts/harness-db.py (INTELLIGENCE_TYPES, the schema, the v3 -> v4 migration)",
+        "reference/harness-db-schema.sql (generated)",
+        "tests/harness-db/test-schema.py",
+        ".claude/rules/glossary.md (terms: intelligence type, observation, fact, assumption, finding, insight, proposal, SPOTREP, SITREP)"
+      ],
+      "lastUpdated": "2026-11-15"
     }
   ],
   "pending": [
