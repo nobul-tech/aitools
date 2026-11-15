@@ -629,12 +629,12 @@ Capture output and check the message:
 
 ```bash
 UPGRADE_OUTPUT=$(brew upgrade tool 2>&1) || true
-if printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'already installed\|up.to.date'; then
+if printf '%s\n' "$UPGRADE_OUTPUT" | grep -i 'already installed\|up.to.date' >/dev/null; then
     log_ok "tool already up to date"
     write_summary OK "tool" "$version"
 else
     printf '%s\n' "$UPGRADE_OUTPUT" | while IFS= read -r line; do log "$line"; done
-    if printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'error\|fatal'; then
+    if printf '%s\n' "$UPGRADE_OUTPUT" | grep -i 'error\|fatal' >/dev/null; then
         log_warn "brew upgrade returned unexpected output"
         write_summary WARN "tool" "$version (upgrade check failed)"
     fi
@@ -764,7 +764,7 @@ Use when the tool's status command always exits 0 and reports auth state in outp
 # toolname auth status exits 0 regardless; check output content for auth state
 if command -v toolname >/dev/null 2>&1 && [ "$ERRORS" -eq 0 ]; then
     AUTH_OUTPUT=$(toolname auth status 2>&1) || true
-    if printf '%s\n' "$AUTH_OUTPUT" | grep -qi 'not authenticated'; then
+    if printf '%s\n' "$AUTH_OUTPUT" | grep -i 'not authenticated' >/dev/null; then
         log_warn "Not authenticated: run 'toolname auth login' (one-time OAuth)"
         write_summary WARN "tool name" "not authenticated"
         write_summary ACTION "" "toolname auth login -- authenticate tool"
@@ -1011,6 +1011,54 @@ grep -rl $'\r' "$file"
 
 This aligns with the user-level USO "Perl for string manipulation" -- use `perl`
 (not `sed`/`awk`/`grep -P`) for non-trivial string operations.
+
+### Pipelines into grep -q under pipefail
+
+In a script that runs under `set -o pipefail` (every reusable script runs
+`set -euo pipefail`), or a library sourced by one (`aitools-lib.sh`,
+`check-lib.sh`, `init-logging.sh`), never end a pipeline in `grep -q` (or
+`--quiet` / `--silent`).
+
+**Why it fails at random.** `grep -q` exits at its first match without reading
+the rest of its input. If the writer still has output to write, it is killed by
+SIGPIPE (exit status 141, 128 + 13). With `pipefail` the pipeline's status is
+that of the last command that exited non-zero (Bash manual, "Pipelines"), so
+`if writer | grep -q P` is false although P matched, and `if ! writer | grep -q P`
+is true. Whether the writer is still writing is a race: the same commit can pass
+and fail. CI runs 43640967140 and 43642017937 (check-script-compliance steps 4
+and 5, fixed in v0.77.11) failed this way.
+
+**The fix.** Keep the pattern and the other flags, drop `q`, and send the output to
+`/dev/null`:
+
+```bash
+# Wrong -- the writer can die of SIGPIPE
+if printf '%s\n' "$output" | grep -qi 'error\|fatal'; then
+# Correct -- grep reads its input to the end
+if printf '%s\n' "$output" | grep -i 'error\|fatal' >/dev/null; then
+```
+
+The exit status is the same (0 when a line matches, 1 when none does). Both greps
+read the whole input in this form:
+
+- **GNU grep** (Linux, Git Bash): when stdout is `/dev/null` it stops matching at
+  the first match and then drains its input before exiting (grep 3.11
+  `src/grep.c`: `dev_null_output` sets `done_on_match`; `finalize_input` calls
+  `drain_input` on a pipe).
+- **BSD grep** (macOS): it has no `/dev/null` special case; without `-q`, `-l`,
+  `-L` or `-m` its read loop runs to end of input (Apple `text_cmds`
+  `grep/util.c`, `procfile()`: `for (lines = 0; lines == 0 || !(lflag || qflag); )`).
+
+`grep -c` (count) also reads its whole input. A grep that reads a file
+(`grep -q P "$f"`) has no writer and is safe. A pipeline ending in `head -N` or
+`grep -m N` has the same SIGPIPE exposure; it is not checked yet.
+
+**Enforcement.** `check-script-compliance` step 7 ("Grep pipefail safety") fails on
+any line in `scripts/*.sh`, `scripts/githooks/*` or `shared/hooks/*.sh` (pipefail
+scripts and the three libraries above) where a single `|` feeds a `grep` whose
+options include `q`, `--quiet` or `--silent`. CI runs the check in the linux job;
+`tests/check-script-compliance/test-step7-grepq.sh` plants bad and fixed pipelines
+and checks that both greps drain their input.
 
 ## Post-write validation
 

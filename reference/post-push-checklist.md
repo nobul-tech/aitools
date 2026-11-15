@@ -215,9 +215,14 @@ of its checks fails, SKIP when the script is missing.
 CI also runs it before merge, on every PR and push to main
 (`.github/workflows/check.yml`): the `.sh` twin in the linux job, the `.ps1`
 twin in the windows job ("Script standards compliance"). A FAIL check fails the
-job; WARN checks (raw echo / Write-Host, grep pipefail safety) do not. Until
-then nothing ran it before merge, so a FAIL line (an unchecked
-`-ErrorAction SilentlyContinue` in `setup-pywinpty.ps1`) reached main.
+job; WARN checks (raw echo / Write-Host, the grep-without-`|| true` part of
+grep pipefail safety) do not. Until then nothing ran it before merge, so a
+FAIL line (an unchecked `-ErrorAction SilentlyContinue` in
+`setup-pywinpty.ps1`) reached main.
+
+Step 7 (grep pipefail safety) FAILs on a pipeline that ends in `grep -q` in a
+pipefail script (see `reference/script-standards-detail.md`
+"Pipelines into grep -q under pipefail").
 
 ### 24. Summary panel DETAIL support
 
