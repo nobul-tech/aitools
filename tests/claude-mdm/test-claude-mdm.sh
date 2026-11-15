@@ -1,47 +1,62 @@
 #!/usr/bin/env bash
-# test-claude-mdm.sh -- tests for setup-user-claude.sh/.ps1 (dev path) and the
+# test-claude-mdm.sh -- tests for setup-user-claude.sh (dev path) and the
 # generated MDM copies that scripts/build-deploy.sh writes into <dotprofile>/deploy/
 #
 # Cases (S3-MF-Audit ids):
 #   A-25  the CLAUDE.md footer hostname is the resolver's (lib result
-#         AITLIB_MACHINE_HOSTNAME / $script:AitLibMachineHostname), "unknown" when
-#         empty; dev and MDM
-#   A-26  --dry-run / -DryRun writes one claude.md row: "dry-run: would create",
+#         AITLIB_MACHINE_HOSTNAME), "unknown" when empty; dev and MDM
+#   A-26  --dry-run writes one claude.md row: "dry-run: would create",
 #         "verified", "dry-run: would update" (same rows in .sh and .ps1: golden)
 #   A-19  every generated .ps1 that embeds the profile resolver removes its temp
 #         dir and restores AITOOLS_PROFILE_PS1 on every exit (try/finally), also
-#         in-process (& script): on macOS/Linux through the generated OS guard's
-#         early exit 1 (a guard-refusal test, not a Windows run), on Windows
-#         through a dry run
+#         in-process (& script): here through the generated OS guard's early
+#         exit 1 (a guard-refusal test, not a Windows run); the Windows harness
+#         tests it through a dry run
 #   A-20  build-deploy output has no colour codes when stderr is not a terminal,
 #         and the standalone child resolver's console lines are not repeated in
 #         it (they are in deploy.log once); on a terminal both stay visible
 #   FO-4  the generated MDM copies fan out ~/.aitools/skills
 #
-# Platform targeting (plans/ci-platform-targeting.md): each script runs only where
-# its OS guard allows. macOS/Linux run setup-user-claude.sh and the generated
-# deploy/setup-user-claude.sh; Windows (Git Bash) runs setup-user-claude.ps1 and the
-# generated deploy/setup-user-claude.ps1 with native pwsh. build-deploy.sh (a bash
-# builder for every platform, cross-platform.md "Build scripts") runs on all three.
-# The .sh/.ps1 parity of the dry-run rows is checked against the committed golden
-# files in tests/claude-mdm/golden/ (tests/lib/platform-lib.sh golden_match);
-# AITOOLS_TEST_UPDATE_GOLDEN=1 on macOS/Linux rewrites them. Parsing a .ps1 with
-# the PowerShell parser is not running it and is done on every platform with pwsh.
+# Platform targeting (plans/ci-platform-targeting.md; commander 2026-11-14:
+# "sh scripts and tests should only run on linux/mac and ps1 on windows"):
+# this harness runs setup-user-claude.sh and the generated
+# deploy/setup-user-claude.sh on macOS/Linux and refuses Windows; the .ps1
+# scripts are tested on Windows by tests/claude-mdm/test-claude-mdm.ps1.
+# build-deploy.sh (a bash builder for every platform, cross-platform.md "Build
+# scripts") runs in both harnesses. The .sh/.ps1 parity of the dry-run rows is
+# checked against the committed golden files in tests/claude-mdm/golden/
+# (tests/lib/platform-lib.sh golden_match); AITOOLS_TEST_UPDATE_GOLDEN=1 on
+# macOS/Linux rewrites them. Parsing a .ps1 with the PowerShell parser is not
+# running it and is done here when pwsh is installed.
 #
 # Safe to re-run: every case runs under its own temp HOME (never the real HOME
 # or a real dotprofile), removed on exit. The resolver is stubbed through
-# AITOOLS_PROFILE_SH / AITOOLS_PROFILE_PS1 (the lib's lookup override) to fix the
-# hostname it reports. AITOOLS_TEST_BASH picks the bash that runs the .sh scripts
-# (default: bash). Needs perl, git, node for the build; pwsh on Windows; python3
-# for the terminal case (pywinpty on Windows). Exit 1 if any case fails.
+# AITOOLS_PROFILE_SH (the lib's lookup override) to fix the hostname it
+# reports. AITOOLS_TEST_BASH picks the bash that runs the .sh scripts (default:
+# bash). Needs perl, git, node for the build; pwsh for the A-19 cases; python3
+# for the terminal case. Exit 1 if any case fails.
 #
 # Usage: bash tests/claude-mdm/test-claude-mdm.sh [--bash-only] [--help]
-#   --bash-only  accepted for compatibility: macOS/Linux always run only .sh
+#   --bash-only  accepted for compatibility: the harness always runs only .sh
 
 set -uo pipefail
 
+# OS guard: macOS/Linux only. BASH_VERSINFO[5] is bash's compiled-in machine
+# type (read-only, never taken from the environment), so neither a uname shim
+# on PATH nor an exported OSTYPE hides Git Bash.
+case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*)
+        printf 'This script is for macOS/Linux. On Windows, run tests/claude-mdm/test-claude-mdm.ps1 with pwsh.\n' >&2
+        exit 1 ;;
+esac
+case "${BASH_VERSINFO[5]:-}" in
+    *-msys*|*-cygwin*|*-mingw*)
+        printf 'This script is for macOS/Linux. On Windows, run tests/claude-mdm/test-claude-mdm.ps1 with pwsh.\n' >&2
+        exit 1 ;;
+esac
+
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
-    perl -ne 'print if $. >= 2 && $. <= 39' "$0"
+    perl -ne 'print if $. >= 2 && $. <= 40' "$0"
     exit 0
 fi
 
@@ -53,7 +68,6 @@ TMP_ROOT="$(mktemp -d)"
 trap 'rm -rf "$TMP_ROOT"' EXIT
 GOLDEN_DIR="$ROOT/tests/claude-mdm/golden"
 GOLDEN_TMP="$TMP_ROOT"
-LANG_RUN="$TEST_LANG"   # sh on macOS/Linux, ps1 on Windows
 W="$TMP_ROOT/work"
 mkdir -p "$W"
 
@@ -88,26 +102,16 @@ for t in perl git; do
 done
 HAVE_PWSH=false
 if command -v pwsh >/dev/null 2>&1; then HAVE_PWSH=true; fi
-if [ "$LANG_RUN" = ps1 ] && ! $HAVE_PWSH; then
-    printf 'FAIL pwsh is not on PATH: the .ps1 scripts cannot be tested on Windows\n'
-    exit 1
-fi
 HAVE_NODE=false
 if command -v node >/dev/null 2>&1; then HAVE_NODE=true; fi
-CAN_CHMOD_READ=true   # chmod 000 blocks reads (not for root, not under Git Bash)
-if [ "$TEST_PLATFORM" = windows ]; then CAN_CHMOD_READ=false; fi
+CAN_CHMOD_READ=true   # chmod 000 blocks reads (not for root)
 if [ "$(id -u)" = 0 ]; then CAN_CHMOD_READ=false; fi
 HAVE_PTY=false
 if command -v python3 >/dev/null 2>&1 && [ -f "$PTY" ]; then HAVE_PTY=true; fi
-# Windows pty = pywinpty (ConPTY); python3 -c's failure means "not installed".
-if $HAVE_PTY && [ "$TEST_PLATFORM" = windows ] && ! python3 -c 'import winpty' >/dev/null 2>&1; then
-    HAVE_PTY=false
-fi
 
 # The bash that runs the .sh scripts (CI also runs macOS /bin/bash 3.2)
 TB="${AITOOLS_TEST_BASH:-bash}"
-# Dry-run flag of the language under test
-DRY="--dry-run"; if [ "$LANG_RUN" = ps1 ]; then DRY="-DryRun"; fi
+DRY="--dry-run"
 
 gitc() { git -c user.name=test -c user.email=test@example.invalid -c commit.gpgsign=false "$@"; }
 
@@ -121,58 +125,40 @@ git -C "$DP" init -q
 gitc -C "$DP" add -A
 gitc -C "$DP" commit -q -m fixture
 
-write_config() {  # write_config HOME_DIR (userRepoPath in the form native pwsh reads)
+write_config() {  # write_config HOME_DIR
     mkdir -p "$1/.aitools"
-    printf '{"userRepoPath":"%s","machineAlias":"m1"}\n' "$(native_path "$DP")" > "$1/.aitools/config.json"
+    printf '{"userRepoPath":"%s","machineAlias":"m1"}\n' "$DP" > "$1/.aitools/config.json"
 }
 
 # --- Resolver stubs: the real resolver, with its hostname result replaced ---
-# stub-host: "stub-host"; no-host: empty (the footer must say "unknown"). The .sh
-# stub is read on macOS/Linux, the .ps1 stub on Windows (the lib picks by platform).
+# stub-host: "stub-host"; no-host: empty (the footer must say "unknown").
 for v in stub-host no-host; do
     h="$v"; if [ "$v" = no-host ]; then h=""; fi
     printf '#!/usr/bin/env bash\nout=$("${BASH:-bash}" "%s/scripts/aitools-profile.sh" "$@")\nrc=$?\nprintf "%%s\\n" "$out" | perl -pe '"'"'s/^hostname\\t.*/hostname\\t%s/'"'"'\nexit $rc\n' \
         "$ROOT" "$h" > "$W/$v.sh"
-    printf '$out = @(& "%s/scripts/aitools-profile.ps1" @args)\n$rc = $LASTEXITCODE\nforeach ($l in $out) { if ("$l".StartsWith("hostname`t")) { "hostname`t%s" } else { "$l" } }\nexit $rc\n' \
-        "$(native_path "$ROOT")" "$h" > "$W/$v.ps1"
 done
 # fail: a resolver error (exit 2), so resolve_user_repo_path returns 3
 printf '#!/usr/bin/env bash\nprintf "via\\tnone\\nerror\\tstub resolver failure\\n"\nexit 2\n' > "$W/fail.sh"
-printf '[Console]::Out.WriteLine("via`tnone")\n[Console]::Out.WriteLine("error`tstub resolver failure")\nexit 2\n' > "$W/fail.ps1"
 
-# The live resolver hostname, in the language under test. Isolated HOME and log
-# dir: the resolver logs (review N-1). stderr dropped: an unavailable hostname is
-# checked through LIVE_HOST being empty.
-if [ "$LANG_RUN" = sh ]; then
-    LIVE_HOST=$(env HOME="$W/home-host" AITOOLS_LOG_DIR="$W/logs-host" "$TB" "$ROOT/scripts/aitools-profile.sh" hostname 2>/dev/null)
-else
-    mkdir -p "$W/home-host"
-    LIVE_HOST=$(env HOME="$(native_path "$W/home-host")" USERPROFILE="$(native_path "$W/home-host")" \
-        AITOOLS_LOG_DIR="$(native_path "$W/logs-host")" \
-        pwsh -NoProfile -NonInteractive -File "$(native_path "$ROOT/scripts/aitools-profile.ps1")" hostname 2>/dev/null < /dev/null | perl -pe 's/\r//g')
-fi
+# The live resolver hostname. Isolated HOME and log dir: the resolver logs
+# (review N-1). stderr dropped: an unavailable hostname is checked through
+# LIVE_HOST being empty.
+LIVE_HOST=$(env HOME="$W/home-host" AITOOLS_LOG_DIR="$W/logs-host" "$TB" "$ROOT/scripts/aitools-profile.sh" hostname 2>/dev/null)
 if [ -z "$LIVE_HOST" ]; then LIVE_HOST="unknown"; fi
 
-# run_claude CASE STUB [args...] -- scripts/setup-user-claude in the language under
-# test; HOME = $TMP_ROOT/CASE (kept between calls of the same CASE); STUB =
-# stub-host|no-host|live. Paths handed to native pwsh are native (cygpath -m).
+# run_claude CASE STUB [args...] -- scripts/setup-user-claude.sh; HOME =
+# $TMP_ROOT/CASE (kept between calls of the same CASE); STUB =
+# stub-host|no-host|live.
 run_claude() {
     local name="$1" stub="$2" h; shift 2
     h="$TMP_ROOT/$name"
     [ -f "$h/.aitools/config.json" ] || write_config "$h"
     OUT="$TMP_ROOT/$name.out"
     : > "$TMP_ROOT/$name.summary"
-    local envs=(HOME="$h" USERPROFILE="$(native_path "$h")" AITOOLS_LOG_DIR="$(native_path "$h/logs")"
-        AITOOLS_SUMMARY_FILE="$(native_path "$TMP_ROOT/$name.summary")")
-    if [ "$stub" != live ]; then envs+=(AITOOLS_PROFILE_SH="$W/$stub.sh" AITOOLS_PROFILE_PS1="$(native_path "$W/$stub.ps1")"); fi
-    if [ "$LANG_RUN" = sh ]; then
-        env -u AITOOLS_FORCE -u AITOOLS_DRY_RUN -u AITOOLS_USER_REPO_PATH -u AITOOLS_PROFILE_FILE "${envs[@]}" \
-            "$TB" "$ROOT/scripts/setup-user-claude.sh" "$@" < /dev/null > "$OUT" 2>&1
-    else
-        env -u AITOOLS_FORCE -u AITOOLS_DRY_RUN -u AITOOLS_USER_REPO_PATH -u AITOOLS_PROFILE_FILE "${envs[@]}" \
-            HOME="$(native_path "$h")" \
-            pwsh -NoProfile -NonInteractive -File "$(native_path "$ROOT/scripts/setup-user-claude.ps1")" "$@" < /dev/null > "$OUT" 2>&1
-    fi
+    local envs=(HOME="$h" AITOOLS_LOG_DIR="$h/logs" AITOOLS_SUMMARY_FILE="$TMP_ROOT/$name.summary")
+    if [ "$stub" != live ]; then envs+=(AITOOLS_PROFILE_SH="$W/$stub.sh"); fi
+    env -u AITOOLS_FORCE -u AITOOLS_DRY_RUN -u AITOOLS_USER_REPO_PATH -u AITOOLS_PROFILE_FILE "${envs[@]}" \
+        "$TB" "$ROOT/scripts/setup-user-claude.sh" "$@" < /dev/null > "$OUT" 2>&1
     echo $? > "$TMP_ROOT/$name.rc"
 }
 rc_of() { cat "$TMP_ROOT/$1.rc"; }
@@ -180,10 +166,10 @@ row() { has_line "$TMP_ROOT/$1.summary" "$2"; }
 md_of() { printf '%s' "$TMP_ROOT/$1/.claude/CLAUDE.md"; }
 claude_rows() { perl -pe 's/\r//g' "$TMP_ROOT/$1.summary" | grep '|claude.md|'; }
 
-lang="$LANG_RUN"
+lang=sh
 
 # ---------------------------------------------------------------------------
-# A-25 / A-26, dev path (the language under test)
+# A-25 / A-26, dev path
 # ---------------------------------------------------------------------------
 run_claude "$lang-host" stub-host
 check "$lang A-25: footer hostname is the resolver's (stub-host)" \
@@ -217,7 +203,7 @@ claude_rows "$lang-dry" > "$TMP_ROOT/dry-3.rows"
 check "parity A-26 (edited CLAUDE.md): claude.md rows match golden" \
     "golden_match dry-3.rows '$TMP_ROOT/dry-3.rows'"
 # Unreadable CLAUDE.md (review B-1): a counted warning, a row, exit 0 -- not a
-# set -e abort. chmod does not block reads for root or under Git Bash.
+# set -e abort. chmod does not block reads for root.
 if $CAN_CHMOD_READ; then
     chmod 000 "$(md_of "$lang-dry")"
     run_claude "$lang-dry" stub-host "$DRY"
@@ -233,8 +219,8 @@ fi
 
 # ---------------------------------------------------------------------------
 # Build (isolated HOME, fixture dotprofile; stderr is a file, not a terminal).
-# build-deploy.sh runs on every platform (Git Bash on Windows); its child pwsh
-# (resolver, PS1 validation on Windows) reads USERPROFILE, so both are set.
+# build-deploy.sh runs on every platform; the Windows harness runs it with Git
+# Bash.
 # ---------------------------------------------------------------------------
 if ! $HAVE_NODE; then
     skip "build and MDM cases (node not found; build-deploy needs it)"
@@ -247,7 +233,7 @@ HB="$TMP_ROOT/home-build"
 write_config "$HB"
 OUT="$TMP_ROOT/build.out"
 env -u AITOOLS_USER_REPO_PATH -u AITOOLS_SUMMARY_FILE -u AITOOLS_PROFILE_SH -u AITOOLS_PROFILE_PS1 \
-    HOME="$HB" USERPROFILE="$(native_path "$HB")" AITOOLS_LOG_DIR="$(native_path "$HB/logs")" \
+    HOME="$HB" AITOOLS_LOG_DIR="$HB/logs" \
     "$TB" "$ROOT/scripts/build-deploy.sh" < /dev/null > "$OUT" 2>&1
 BUILD_RC=$?
 G="$DP/deploy"
@@ -278,10 +264,10 @@ _a19_static() {
 check "build A-19: each resolver-embedding .ps1 ends with '} finally { Remove-AitoolsEmbed }'" "_a19_static"
 
 # ---------------------------------------------------------------------------
-# A-19 runtime. Parsing (every platform with pwsh) is not running. macOS/Linux:
-# the generated OS guard refuses (exit 1) -- a guard-refusal test of the
-# generated scripts, which tests/os-guards (scripts/, shared/, packaging/) does
-# not cover. Windows: the script runs (dry run) and exits normally.
+# A-19 runtime. Parsing (with pwsh) is not running. The generated OS guard
+# refuses (exit 1) -- a guard-refusal test of the generated scripts, which
+# tests/os-guards (scripts/, shared/, packaging/) does not cover. The Windows
+# harness runs them (dry run).
 # ---------------------------------------------------------------------------
 if $HAVE_PWSH; then
     printf '%s\n' '$e = $null' \
@@ -290,38 +276,27 @@ if $HAVE_PWSH; then
     _parse_all() {
         local f
         for f in $EMBED_PS1; do
-            pwsh -NoProfile -NonInteractive -File "$(native_path "$W/parse.ps1")" "$(native_path "$G/$f")" < /dev/null > /dev/null || return 1
+            pwsh -NoProfile -NonInteractive -File "$W/parse.ps1" "$G/$f" < /dev/null > /dev/null || return 1
         done
     }
     check "build A-19: pwsh parser accepts the three generated .ps1" "_parse_all"
-    if [ "$LANG_RUN" = ps1 ]; then
-        A19_ARGS="-DryRun"; A19_HOW="dry-run exit"
-    else
-        A19_ARGS=""; A19_HOW="OS-guard exit 1 (guard refusal)"
-    fi
+    A19_HOW="OS-guard exit 1 (guard refusal)"
     for f in $EMBED_PS1; do
         n="${f%.ps1}"
         T="$TMP_ROOT/tmp-$n"; mkdir -p "$T"
         h="$TMP_ROOT/g-$n"; write_config "$h"
         OUT="$TMP_ROOT/g-$n.out"
-        # TMPDIR: .NET's temp dir on macOS/Linux; TMP/TEMP: on Windows
-        # shellcheck disable=SC2086  # A19_ARGS is empty or one switch
-        env -u AITOOLS_PROFILE_PS1 -u AITOOLS_PROFILE_FILE -u AITOOLS_DRY_RUN HOME="$(native_path "$h")" USERPROFILE="$(native_path "$h")" \
-            TMPDIR="$T/" TMP="$(native_path "$T")" TEMP="$(native_path "$T")" AITOOLS_LOG_DIR="$(native_path "$h/logs")" \
-            AITOOLS_SUMMARY_FILE="$(native_path "$TMP_ROOT/g-$n.summary")" \
-            pwsh -NoProfile -NonInteractive -File "$(native_path "$G/$f")" $A19_ARGS < /dev/null > "$OUT" 2>&1
+        # TMPDIR: .NET's temp dir on macOS/Linux
+        env -u AITOOLS_PROFILE_PS1 -u AITOOLS_PROFILE_FILE -u AITOOLS_DRY_RUN HOME="$h" \
+            TMPDIR="$T/" AITOOLS_LOG_DIR="$h/logs" AITOOLS_SUMMARY_FILE="$TMP_ROOT/g-$n.summary" \
+            pwsh -NoProfile -NonInteractive -File "$G/$f" < /dev/null > "$OUT" 2>&1
         echo $? > "$TMP_ROOT/g-$n.rc"
-        if [ "$LANG_RUN" = ps1 ]; then
-            check "A-19 $f: $A19_HOW leaves no aitools-embed-* temp dir" "no_embed '$T'"
-        else
-            check "A-19 $f: $A19_HOW leaves no aitools-embed-* temp dir" \
-                "[ \"\$(rc_of g-$n)\" = 1 ] && grep -q 'This script is for Windows' '$OUT' && no_embed '$T'"
-        fi
+        check "A-19 $f: $A19_HOW leaves no aitools-embed-* temp dir" \
+            "[ \"\$(rc_of g-$n)\" = 1 ] && grep -q 'This script is for Windows' '$OUT' && no_embed '$T'"
         OUT="$TMP_ROOT/gi-$n.out"
-        env -u AITOOLS_PROFILE_PS1 -u AITOOLS_PROFILE_FILE -u AITOOLS_DRY_RUN HOME="$(native_path "$h")" USERPROFILE="$(native_path "$h")" \
-            TMPDIR="$T/" TMP="$(native_path "$T")" TEMP="$(native_path "$T")" AITOOLS_LOG_DIR="$(native_path "$h/logs")" \
-            AITOOLS_SUMMARY_FILE="$(native_path "$TMP_ROOT/g-$n.summary")" G_SCRIPT="$(native_path "$G/$f")" G_ARGS="$A19_ARGS" \
-            pwsh -NoProfile -NonInteractive -Command 'if ($env:G_ARGS) { & $env:G_SCRIPT -DryRun } else { & $env:G_SCRIPT }; if ($env:AITOOLS_PROFILE_PS1) { [Console]::WriteLine("LEAK $($env:AITOOLS_PROFILE_PS1)") } else { [Console]::WriteLine("ENV-RESTORED") }' \
+        env -u AITOOLS_PROFILE_PS1 -u AITOOLS_PROFILE_FILE -u AITOOLS_DRY_RUN HOME="$h" \
+            TMPDIR="$T/" AITOOLS_LOG_DIR="$h/logs" AITOOLS_SUMMARY_FILE="$TMP_ROOT/g-$n.summary" G_SCRIPT="$G/$f" \
+            pwsh -NoProfile -NonInteractive -Command '& $env:G_SCRIPT; if ($env:AITOOLS_PROFILE_PS1) { [Console]::WriteLine("LEAK $($env:AITOOLS_PROFILE_PS1)") } else { [Console]::WriteLine("ENV-RESTORED") }' \
             < /dev/null > "$OUT" 2>&1
         check "A-19 $f: in-process (& script) $A19_HOW restores AITOOLS_PROFILE_PS1" \
             "has_line '$OUT' 'ENV-RESTORED' && no_embed '$T'"
@@ -330,43 +305,16 @@ else
     skip "A-19 parse and guard-refusal cases (pwsh not found)"
 fi
 
-# Full run of the generated claude .ps1 on Windows, stub hostname
-if [ "$LANG_RUN" = ps1 ]; then
-    T="$TMP_ROOT/tmp-full"; mkdir -p "$T"
-    h="$TMP_ROOT/gps-full"; write_config "$h"
-    mkdir -p "$h/.aitools/skills/sk1"
-    printf 'skill one\n' > "$h/.aitools/skills/sk1/SKILL.md"
-    printf '# aitools skills manifest v1\nsk1\tdotprofile\n' > "$h/.aitools/skills/.aitools-skills-manifest"
-    OUT="$TMP_ROOT/gps-full.out"; : > "$TMP_ROOT/gps-full.summary"
-    env -u AITOOLS_PROFILE_FILE -u AITOOLS_FORCE -u AITOOLS_DRY_RUN HOME="$(native_path "$h")" USERPROFILE="$(native_path "$h")" \
-        TMP="$(native_path "$T")" TEMP="$(native_path "$T")" AITOOLS_LOG_DIR="$(native_path "$h/logs")" \
-        AITOOLS_SUMMARY_FILE="$(native_path "$TMP_ROOT/gps-full.summary")" AITOOLS_PROFILE_PS1="$(native_path "$W/stub-host.ps1")" \
-        pwsh -NoProfile -NonInteractive -File "$(native_path "$G/setup-user-claude.ps1")" < /dev/null > "$OUT" 2>&1
-    echo $? > "$TMP_ROOT/gps-full.rc"
-    check "MDM ps1 full run: exit 0, footer stub-host, claude.md row, temp dir removed" \
-        "[ \"\$(rc_of gps-full)\" = 0 ] && grep -qF '(stub-host; profile m1)' '$h/.claude/CLAUDE.md' && grep -q '^OK|claude.md|created' '$TMP_ROOT/gps-full.summary' && no_embed '$T'"
-    check "MDM ps1 full run: skills fanned out from ~/.aitools/skills" \
-        "grep -qx 'skill one' '$h/.claude/skills/sk1/SKILL.md' && row gps-full 'OK|claude skills|1 added'"
-fi
-
 # ---------------------------------------------------------------------------
-# MDM smoke runs (generated script in the language under test, isolated HOME,
-# the embedded resolver: no stub)
+# MDM smoke runs (generated script, isolated HOME, the embedded resolver: no stub)
 # ---------------------------------------------------------------------------
 run_mdm() {  # run_mdm CASE [args...] -- HOME = $TMP_ROOT/CASE
     local name="$1" h; shift
     h="$TMP_ROOT/$name"; [ -f "$h/.aitools/config.json" ] || write_config "$h"
     OUT="$TMP_ROOT/$name.out"; : > "$TMP_ROOT/$name.summary"
-    if [ "$LANG_RUN" = sh ]; then
-        env -u AITOOLS_FORCE -u AITOOLS_DRY_RUN -u AITOOLS_USER_REPO_PATH -u AITOOLS_PROFILE_FILE -u AITOOLS_PROFILE_SH \
-            HOME="$h" AITOOLS_LOG_DIR="$h/logs" AITOOLS_SUMMARY_FILE="$TMP_ROOT/$name.summary" \
-            "$TB" "$G/setup-user-claude.sh" "$@" < /dev/null > "$OUT" 2>&1
-    else
-        env -u AITOOLS_FORCE -u AITOOLS_DRY_RUN -u AITOOLS_USER_REPO_PATH -u AITOOLS_PROFILE_FILE -u AITOOLS_PROFILE_PS1 \
-            HOME="$(native_path "$h")" USERPROFILE="$(native_path "$h")" AITOOLS_LOG_DIR="$(native_path "$h/logs")" \
-            AITOOLS_SUMMARY_FILE="$(native_path "$TMP_ROOT/$name.summary")" \
-            pwsh -NoProfile -NonInteractive -File "$(native_path "$G/setup-user-claude.ps1")" "$@" < /dev/null > "$OUT" 2>&1
-    fi
+    env -u AITOOLS_FORCE -u AITOOLS_DRY_RUN -u AITOOLS_USER_REPO_PATH -u AITOOLS_PROFILE_FILE -u AITOOLS_PROFILE_SH \
+        HOME="$h" AITOOLS_LOG_DIR="$h/logs" AITOOLS_SUMMARY_FILE="$TMP_ROOT/$name.summary" \
+        "$TB" "$G/setup-user-claude.sh" "$@" < /dev/null > "$OUT" 2>&1
     echo $? > "$TMP_ROOT/$name.rc"
 }
 M="mdm-$lang"
@@ -400,14 +348,13 @@ check "MDM $lang dry run after the deploy: 'verified'" \
     "[ \"\$(rc_of $M)\" = 0 ] && [ \"\$(claude_rows $M)\" = 'OK|claude.md|verified' ]"
 
 # ---------------------------------------------------------------------------
-# A-20: the standalone child resolver (no AITOOLS_USER_REPO_PATH) fails. Both
-# stubs are set: the lib runs fail.sh on macOS/Linux and fail.ps1 on Windows.
+# A-20: the standalone child resolver (no AITOOLS_USER_REPO_PATH) fails: the
+# lib runs the fail.sh stub.
 # ---------------------------------------------------------------------------
 HF="$TMP_ROOT/home-fail"; write_config "$HF"
 OUT="$TMP_ROOT/build-fail.out"
 env -u AITOOLS_USER_REPO_PATH -u AITOOLS_SUMMARY_FILE \
-    HOME="$HF" USERPROFILE="$(native_path "$HF")" AITOOLS_LOG_DIR="$(native_path "$HF/logs")" \
-    AITOOLS_PROFILE_SH="$W/fail.sh" AITOOLS_PROFILE_PS1="$W/fail.ps1" \
+    HOME="$HF" AITOOLS_LOG_DIR="$HF/logs" AITOOLS_PROFILE_SH="$W/fail.sh" \
     "$TB" "$ROOT/scripts/build-deploy.sh" < /dev/null > "$OUT" 2>&1
 echo $? > "$TMP_ROOT/build-fail.rc"
 check "A-20 resolver error: build skips (exit 0) with a plain-text warning" \
@@ -417,12 +364,10 @@ check "A-20 resolver error: the child's error line is in deploy.log once, not in
 if $HAVE_PTY; then
     OUT="$TMP_ROOT/build-fail-tty.out"
     env -u AITOOLS_USER_REPO_PATH -u AITOOLS_SUMMARY_FILE \
-        HOME="$HF" USERPROFILE="$(native_path "$HF")" AITOOLS_LOG_DIR="$(native_path "$HF/logs")" \
-        AITOOLS_PROFILE_SH="$W/fail.sh" AITOOLS_PROFILE_PS1="$W/fail.ps1" \
+        HOME="$HF" AITOOLS_LOG_DIR="$HF/logs" AITOOLS_PROFILE_SH="$W/fail.sh" \
         python3 "$PTY" --input '' --log "$OUT" -- "$TB" "$ROOT/scripts/build-deploy.sh"
-    # ConPTY (Windows) re-renders the screen, so its colour sequence may differ
-    # from the [33m the build writes: any SGR sequence counts there.
-    COLOUR="\${ESC}[33m"; if [ "$TEST_PLATFORM" = windows ]; then COLOUR="\${ESC}["; fi
+    # the [33m the build writes for the warning (eval'd in the check)
+    COLOUR="\${ESC}[33m"
     check "A-20 on a terminal: the warning is coloured and the child's error line is shown" \
         "grep -qF \"$COLOUR\" '$OUT' && grep -q 'stub resolver failure' '$OUT'"
 else

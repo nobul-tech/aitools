@@ -37,7 +37,8 @@
 # usage or read error.
 # Platform: any perl 5 (macOS, Linux, Windows Git Bash or Strawberry perl).
 # Called by: scripts/check-post-push.sh and .ps1, step 29.
-# Tests: tests/check-post-push/test-menu-parity.sh.
+# Tests: tests/check-post-push/test-menu-parity.sh (macOS/Linux) and
+# tests/check-post-push/test-menu-parity.ps1 (Windows).
 use strict;
 use warnings;
 

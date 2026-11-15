@@ -4,9 +4,10 @@
 #
 # Safe to re-run: the probe cases use fake bash.exe files in a temp dir, removed
 # on exit; nothing outside it is written.
-# Platform: Windows (pwsh 7). check-lib.ps1 and the check-*.ps1 scripts are
-# Windows-only (OS guard); the default-probe cases need Windows and are SKIP
-# elsewhere. Exit 1 if any case fails.
+# Platform: Windows only (pwsh 7; OS guard below). check-lib.ps1 and the
+# check-*.ps1 scripts are Windows-only (OS guard) and ResolveGitBash has no bash
+# twin, so there is no macOS/Linux side. Commander, 2026-11-14: "sh scripts and
+# tests should only run on linux/mac and ps1 on windows". Exit 1 if any case fails.
 # What it checks: the first existing candidate wins; a missing candidate is
 # skipped; no existing candidate gives $null, never a fallback; a candidate under
 # %SystemRoot% or the WindowsApps alias directory (the WSL launchers) is refused
@@ -19,8 +20,13 @@
 param([switch]$Help)
 
 if ($Help) {
-    Get-Content $PSCommandPath | Select-Object -Skip 1 -First 16
+    Get-Content $PSCommandPath | Select-Object -Skip 1 -First 17
     exit 0
+}
+
+if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
+    [Console]::Error.WriteLine("This script is for Windows. ResolveGitBash and the check-*.ps1 scripts it serves are Windows-only, so there is no macOS/Linux side to run.")
+    exit 1
 }
 
 $root = (Resolve-Path (Join-Path $PSScriptRoot ".." "..")).Path
@@ -79,52 +85,38 @@ try {
     $sys32 = Join-Path $winRoot "System32\bash.exe"
     $sys32Lower = $sys32.ToLowerInvariant()
     $appsBash = if ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA "Microsoft\WindowsApps\bash.exe" } else { "" }
-    if ($env:SystemRoot) {
-        $r = ResolveGitBash -Candidates @($sys32)
-        Check "refuse: %SystemRoot%\System32\bash.exe (exists: $(Test-Path -LiteralPath $sys32)) gives `$null" ($null -eq $r) "got '$r'"
-        $r = ResolveGitBash -Candidates @($sys32Lower, $gitA)
-        Check "refuse: the System32 launcher is skipped in any letter case, the next candidate wins" ($r -eq $gitA) "got '$r'"
-    } else {
-        Skip "refuse: %SystemRoot%\System32\bash.exe gives `$null" "SystemRoot not set (not Windows)"
-        Skip "refuse: the System32 launcher is skipped in any letter case, the next candidate wins" "SystemRoot not set (not Windows)"
-    }
-    if ($appsBash) {
-        $r = ResolveGitBash -Candidates @($appsBash, $gitB)
-        Check "refuse: %LOCALAPPDATA%\Microsoft\WindowsApps\bash.exe (exists: $(Test-Path -LiteralPath $appsBash)) is skipped, the next candidate wins" ($r -eq $gitB) "got '$r'"
-    } else {
-        Skip "refuse: %LOCALAPPDATA%\Microsoft\WindowsApps\bash.exe is skipped" "LOCALAPPDATA not set (not Windows)"
-    }
+    $r = ResolveGitBash -Candidates @($sys32)
+    Check "refuse: %SystemRoot%\System32\bash.exe (exists: $(Test-Path -LiteralPath $sys32)) gives `$null" ($null -eq $r) "got '$r'"
+    $r = ResolveGitBash -Candidates @($sys32Lower, $gitA)
+    Check "refuse: the System32 launcher is skipped in any letter case, the next candidate wins" ($r -eq $gitA) "got '$r'"
+    $r = ResolveGitBash -Candidates @($appsBash, $gitB)
+    Check "refuse: %LOCALAPPDATA%\Microsoft\WindowsApps\bash.exe (exists: $(Test-Path -LiteralPath $appsBash)) is skipped, the next candidate wins" ($r -eq $gitB) "got '$r'"
 
     # -----------------------------------------------------------------------
     # Default probe (Git for Windows locations) against this machine
     # -----------------------------------------------------------------------
-    if (-not $IsWindows) {
-        Skip "default: returns a Git for Windows bash.exe" "not Windows"
-        Skip "default: never the bash a native PATH resolves to when that is a WSL launcher" "not Windows"
+    $r = ResolveGitBash
+    $gitInstalled = @("$env:ProgramFiles\Git\bin\bash.exe", "${env:ProgramFiles(x86)}\Git\bin\bash.exe",
+        "$env:LOCALAPPDATA\Programs\Git\bin\bash.exe") | Where-Object { $_ -and (Test-Path -LiteralPath $_ -PathType Leaf) }
+    if (@($gitInstalled).Count -eq 0) {
+        Check "default: no Git for Windows install, so `$null" ($null -eq $r) "got '$r'"
     } else {
-        $r = ResolveGitBash
-        $gitInstalled = @("$env:ProgramFiles\Git\bin\bash.exe", "${env:ProgramFiles(x86)}\Git\bin\bash.exe",
-            "$env:LOCALAPPDATA\Programs\Git\bin\bash.exe") | Where-Object { $_ -and (Test-Path -LiteralPath $_ -PathType Leaf) }
-        if (@($gitInstalled).Count -eq 0) {
-            Check "default: no Git for Windows install, so `$null" ($null -eq $r) "got '$r'"
-        } else {
-            Check "default: returns a Git for Windows bash.exe (\Git\bin\bash.exe)" (($null -ne $r) -and ($r -match '\\Git\\bin\\bash\.exe$')) "got '$r'"
-        }
-        # The bash a native pwsh sees: PATH rebuilt from the registry (this suite may
-        # run under Git Bash, whose PATH puts Git's own bash first)
-        $nativePath = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')
-        $nativeBash = $null
-        foreach ($dir in ($nativePath -split ';')) {
-            if (-not $dir) { continue }
-            $cand = Join-Path ([Environment]::ExpandEnvironmentVariables($dir)) "bash.exe"
-            if (Test-Path -LiteralPath $cand -PathType Leaf) { $nativeBash = $cand; break }
-        }
-        $isLauncher = $nativeBash -and ($nativeBash -match '\\(System32|Microsoft\\WindowsApps)\\bash\.exe$')
-        if ($isLauncher) {
-            Check "default: not the WSL launcher a native PATH resolves bash to ($nativeBash)" ($r -ne $nativeBash) "got '$r'"
-        } else {
-            Skip "default: never the bash a native PATH resolves to when that is a WSL launcher" "native PATH bash is '$nativeBash', not a WSL launcher"
-        }
+        Check "default: returns a Git for Windows bash.exe (\Git\bin\bash.exe)" (($null -ne $r) -and ($r -match '\\Git\\bin\\bash\.exe$')) "got '$r'"
+    }
+    # The bash a native pwsh sees: PATH rebuilt from the registry (this suite may
+    # run under Git Bash, whose PATH puts Git's own bash first)
+    $nativePath = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')
+    $nativeBash = $null
+    foreach ($dir in ($nativePath -split ';')) {
+        if (-not $dir) { continue }
+        $cand = Join-Path ([Environment]::ExpandEnvironmentVariables($dir)) "bash.exe"
+        if (Test-Path -LiteralPath $cand -PathType Leaf) { $nativeBash = $cand; break }
+    }
+    $isLauncher = $nativeBash -and ($nativeBash -match '\\(System32|Microsoft\\WindowsApps)\\bash\.exe$')
+    if ($isLauncher) {
+        Check "default: not the WSL launcher a native PATH resolves bash to ($nativeBash)" ($r -ne $nativeBash) "got '$r'"
+    } else {
+        Skip "default: never the bash a native PATH resolves to when that is a WSL launcher" "native PATH bash is '$nativeBash', not a WSL launcher"
     }
 
     # -----------------------------------------------------------------------

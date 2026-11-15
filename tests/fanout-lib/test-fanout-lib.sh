@@ -10,25 +10,39 @@
 # Test-FanoutDirMatches (match, extra or missing file, *.bak.* ignored, empty dir,
 # symlinks, unreadable entries).
 #
-# Platform targeting (plans/ci-platform-targeting.md): one driver process
-# sources the lib under an isolated HOME and log dir and runs the whole case
-# list; every result must equal the expectation. macOS/Linux run the bash
-# driver (aitools-lib.sh); Windows (Git Bash) runs the PowerShell driver
-# (aitools-lib.ps1, a Windows library) with native pwsh. Parity between the two
-# is checked against the committed golden results in tests/fanout-lib/golden/
-# (tests/lib/platform-lib.sh golden_match), one file per fixture group (base,
-# symlinks, fifos, special, unread) so a platform that cannot make a fixture
-# (Windows: no symlinks, FIFOs, * ? in names or chmod 000) leaves out only that
-# group. AITOOLS_TEST_UPDATE_GOLDEN=1 on macOS/Linux rewrites them.
+# Platform targeting (plans/ci-platform-targeting.md; commander 2026-11-14:
+# "sh scripts and tests should only run on linux/mac and ps1 on windows"):
+# this harness runs on macOS/Linux and refuses Windows. One driver process
+# sources aitools-lib.sh under an isolated HOME and log dir and runs the whole
+# case list; every result must equal the expectation. aitools-lib.ps1 (a
+# Windows library) is tested on Windows by tests/fanout-lib/test-fanout-lib.ps1.
+# Parity between the two is checked against the committed golden results in
+# tests/fanout-lib/golden/ (tests/lib/platform-lib.sh golden_match), one file
+# per fixture group (base, symlinks, fifos, special, unread) so a platform that
+# cannot make a fixture leaves out only that group.
+# AITOOLS_TEST_UPDATE_GOLDEN=1 on macOS/Linux rewrites them.
 # Safe to re-run: everything lives in a temp dir removed on exit.
-# Platform: macOS, Linux (bash driver), Windows Git Bash (pwsh driver). Exit 1
-# if any case fails.
+# Platform: macOS, Linux. Exit 1 if any case fails.
 #
 # Usage: bash tests/fanout-lib/test-fanout-lib.sh [--bash-only] [--help]
-#   --bash-only               accepted for compatibility: macOS/Linux always run only bash
+#   --bash-only               accepted for compatibility: the harness always runs only bash
 #   AITOOLS_TEST_BASH=/bin/bash  run the lib under another bash (macOS 3.2)
 
 set -uo pipefail
+
+# OS guard: macOS/Linux only. BASH_VERSINFO[5] is bash's compiled-in machine
+# type (read-only, never taken from the environment), so neither a uname shim
+# on PATH nor an exported OSTYPE hides Git Bash.
+case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*)
+        printf 'This script is for macOS/Linux. On Windows, run tests/fanout-lib/test-fanout-lib.ps1 with pwsh.\n' >&2
+        exit 1 ;;
+esac
+case "${BASH_VERSINFO[5]:-}" in
+    *-msys*|*-cygwin*|*-mingw*)
+        printf 'This script is for macOS/Linux. On Windows, run tests/fanout-lib/test-fanout-lib.ps1 with pwsh.\n' >&2
+        exit 1 ;;
+esac
 
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
     perl -ne 'print if $. >= 2 && $. <= 29' "$0"
@@ -39,13 +53,9 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # shellcheck source=../lib/platform-lib.sh
 . "$REPO/tests/lib/platform-lib.sh"
 TB="${AITOOLS_TEST_BASH:-bash}"
-# DRV: the driver of this platform, sh (macOS/Linux) or ps (Windows); also the
-# tag of the per-driver fixture copies ("@" in a case path)
-if [ "$TEST_LANG" = ps1 ]; then DRV=ps; else DRV=sh; fi
-if [ "$DRV" = ps ] && ! command -v pwsh >/dev/null 2>&1; then
-    printf 'FAIL pwsh is not on PATH: aitools-lib.ps1 cannot be tested on Windows\n'
-    exit 1
-fi
+# DRV: the tag of this driver's fixture copies ("@" in a case path) and of its
+# check names; sh (the PowerShell driver, tag ps, is in test-fanout-lib.ps1)
+DRV=sh
 
 WORK="$(mktemp -d)"
 GOLDEN_DIR="$REPO/tests/fanout-lib/golden"
@@ -142,9 +152,8 @@ mkdir -p "$D/targetfile"; printf 'f\n' > "$D/targetfile/T"; skill "$D/targetfile
 mkdir -p "$D/targetmissing"; skill "$D/targetmissing/C"
 SYMLINKS=true
 skill "$D/linktarget/real"; skill "$D/linktarget/C"
-# Real symlinks, a dangling one included (the ml- cases need one). Git Bash
-# copies the target instead of linking unless native symlinks are enabled, and
-# cannot make a dangling native link: the symlink group is left out there.
+# Real symlinks, a dangling one included (the ml- cases need one): the symlink
+# group is left out where ln -s cannot make both.
 if ! ln -s "$D/linktarget/real" "$D/linktarget/T" 2>/dev/null || [ ! -L "$D/linktarget/T" ] \
     || ! ln -s "$WORK/nowhere-probe" "$WORK/dangling-probe" 2>/dev/null || [ ! -L "$WORK/dangling-probe" ]; then
     SYMLINKS=false
@@ -156,9 +165,9 @@ if $SYMLINKS; then
 fi
 skill "$D/linkdir/T"; skill "$D/linkdir/C"
 if $SYMLINKS; then ln -s "$D/linkdir/C/sub" "$D/linkdir/T/other"; fi
-# deploy_managed_file / Deploy-ManagedFile onto a symlink destination, in this
-# driver's copy: dangling (failed, nothing written through it; also in a dry
-# run) and live (written through, the link kept)
+# deploy_managed_file onto a symlink destination, in this driver's copy:
+# dangling (failed, nothing written through it; also in a dry run) and live
+# (written through, the link kept)
 if $SYMLINKS; then
     for tag in $DRV; do
         L="$F/ml/$tag"
@@ -175,20 +184,15 @@ fi
 FIFOS=true
 skill "$D/fifo/T"; skill "$D/fifo/C"; printf 'p\n' > "$D/fifo/C/pipe"
 skill "$D/candfifo/T"; skill "$D/candfifo/C"; printf 'p\n' > "$D/candfifo/T/p.txt"
-# Windows: a Git Bash FIFO is an MSYS emulation that native pwsh does not see
-# as one, so the group is left out there
-if [ "$TEST_PLATFORM" = windows ] || ! command -v mkfifo >/dev/null 2>&1 \
-    || ! mkfifo "$D/fifo/T/pipe" "$D/candfifo/C/p.txt"; then
+if ! command -v mkfifo >/dev/null 2>&1 || ! mkfifo "$D/fifo/T/pipe" "$D/candfifo/C/p.txt"; then
     FIFOS=false
 fi
 
 # backup_dir fixtures, in this driver's copy (the run backs them up): plain;
 # a name with [ ] * ? next to 6 old backups and decoys a glob would match
 # (another directory's backups, a non-stamp suffix); no top-level *.md; missing.
-# Windows refuses * ? in names (Git Bash maps them to private-use characters,
-# which native pwsh would see): the special group is left out there.
+# A file system that refuses * ? in names leaves the special group out.
 SPECIAL=true
-if [ "$TEST_PLATFORM" = windows ]; then SPECIAL=false; fi
 for tag in $DRV; do
     B="$F/bd/$tag"
     mkdir -p "$B/plain/rules" "$B/nomd/d" "$B/missing" "$B/unread/d" "$B/mdcase/upper" "$B/partial/part"
@@ -214,7 +218,7 @@ for tag in $DRV; do
             "$B/special/r[1]*?.bak.2020-01-01T000000Z.bak.2020-01-02T000000Z" \
             "$B/special/r[1]*?x.bak.2020-01-07T000000Z"
     else
-        SPECIAL=false   # a file system that refuses * ? in names (Windows)
+        SPECIAL=false   # a file system that refuses * ? in names
     fi
 done
 
@@ -338,9 +342,9 @@ printf 'bd-missing\tok=false reason=no directory path=- copied=no siblings=(none
 printf 'bd-mdcase\tok=true reason=- path=upper.bak.<TS> copied=yes siblings=upper,upper.bak.<TS>\tbdir\tbd/@/mdcase/upper\n'
 if $SYMLINKS; then
     grp symlinks
-    # symlinks inside the directory: cp -R keeps them as links (sh); Copy-DirectoryTree copies their content (ps)
+    # symlinks inside the directory: cp -R keeps them as links (bash only: the
+    # PowerShell Copy-DirectoryTree copies their content instead)
     printf 'bd-link-sh\tok=true l.md=link sub=link sub/x.txt=yes\tsh_bdirlink\tbd/@/link/lk\n'
-    printf 'bd-link-ps\tok=true l.md=file:outside sub=dir sub/x.txt=yes\tps_bdirlink\tbd/@/link/lk\n'
     grp base
 fi
 if $SPECIAL; then
@@ -378,9 +382,9 @@ if $UNREAD; then
 fi
 } > "$CASES"
 if ! $SYMLINKS; then SKIP=$((SKIP + 7)); printf '  skip symlink cases (ln -s does not make real and dangling symlinks here)\n'; fi
-if ! $FIFOS; then SKIP=$((SKIP + 2)); printf '  skip FIFO cases (no mkfifo, or Windows: no FIFOs native pwsh can see)\n'; fi
+if ! $FIFOS; then SKIP=$((SKIP + 2)); printf '  skip FIFO cases (no mkfifo here)\n'; fi
 if ! $SPECIAL; then SKIP=$((SKIP + 1)); printf '  skip backup_dir special-name case (* ? not allowed in names here)\n'; fi
-if ! $UNREAD; then SKIP=$((SKIP + 10)); printf '  skip unreadable cases (chmod 000 leaves files readable: root or Windows)\n'; fi
+if ! $UNREAD; then SKIP=$((SKIP + 10)); printf '  skip unreadable cases (chmod 000 leaves files readable: root)\n'; fi
 
 # A stub perl that fails, for te-perlfail
 mkdir -p "$WORK/badperl"
@@ -462,7 +466,6 @@ while IFS="$TAB" read -r id want call a1 a2 <&3; do
                            open my $fh, "<", $l or do { print "target=unreadable"; exit 0 };
                            local $/; my $c = <$fh>; $c =~ s/\n\z//; print "target=$c"' "$p")
             emit "$id" "result=$MANAGED_FILE_RESULT $tgt" ;;
-        ps_*) ;;   # PowerShell-only case
         sh_bdirlink)
             p=$(fx "$a1")
             backup_dir "$p"
@@ -488,136 +491,18 @@ while IFS="$TAB" read -r id want call a1 a2 <&3; do
 done 3< "$CASES"
 DRIVE
 
-cat > "$WORK/drive.ps1" <<'DRIVE'
-# Dot-source the lib, run every case from $env:CASES, write "<id><TAB><result>" lines to $env:OUT
-$ErrorActionPreference = "Stop"
-. (Join-Path $env:REPO "scripts/aitools-lib.ps1")
-Initialize-Logging "test-fanout-lib"
-$F = $env:F
-$results = New-Object System.Collections.Generic.List[string]
-function Format-Manifest($r) {
-    if ($r.Status -eq "header-bad") { return "header-bad" }
-    $a = @()
-    foreach ($x in $r.Rules) { $a += "rule^$($x.Name)^$($x.Source)" }
-    foreach ($x in $r.Invalid) { $a += "invalid^$x" }
-    $a = @($a | ForEach-Object { $_ -replace "`r", "<CR>" })
-    if ($a.Count -eq 0) { return "(none)" }
-    return ($a -join " ;; ")
-}
-function Resolve-Fx([string]$Rel) {  # "-" is the empty string, "@" this shell's copy (ps)
-    if ($Rel -eq "-") { return "" }
-    return (Join-Path $F $Rel).Replace("@", "ps")
-}
-function Get-Names([string]$Dir) {  # sorted top-level names, comma-joined (as names_of in drive.sh)
-    if (-not [IO.Directory]::Exists($Dir)) { return "" }
-    [string[]]$n = @([IO.Directory]::GetFileSystemEntries($Dir) | ForEach-Object { [IO.Path]::GetFileName($_) })
-    [Array]::Sort($n, [StringComparer]::Ordinal)
-    return ($n -join ",")
-}
-function Get-EntryType([string]$Path) {  # link | dir | file:<first line> | missing (as entry_type in drive.sh)
-    $info = [IO.FileInfo]::new($Path)
-    if ($null -ne $info.LinkTarget) { return "link" }
-    if ([IO.Directory]::Exists($Path)) { return "dir" }
-    if ([IO.File]::Exists($Path)) { return "file:" + (([IO.File]::ReadAllText($Path) -split "`n")[0]) }
-    return "missing"
-}
-function Invoke-Reader([scriptblock]$Read) {
-    try { return Format-Manifest (& $Read) } catch { LogDetail "reader threw: $_"; return "fail" }
-}
-foreach ($line in [IO.File]::ReadAllLines($env:CASES)) {
-    if ($line.StartsWith("#")) { continue }   # a "#group" line
-    $fields = $line -split "`t"   # (not $f: PowerShell names are case-insensitive, $F is the fixtures dir)
-    $id = $fields[0]; $call = $fields[2]
-    $a1 = if ($fields.Count -gt 3) { $fields[3] } else { "" }
-    $a2 = if ($fields.Count -gt 4) { $fields[4] } else { "" }
-    if ($call.StartsWith("sh_")) { continue }   # bash-only case (ps_ cases run only here)
-    switch -CaseSensitive ($call) {
-        "tracker" {
-            $env:AITOOLS_SUMMARY_FILE = Join-Path $env:WORK "sum-ps-$id"
-            [IO.File]::WriteAllText($env:AITOOLS_SUMMARY_FILE, "")
-            $e0 = $script:errors
-            Initialize-DeployTracker
-            foreach ($pair in ($a1 -split ",")) {
-                $c = $pair.IndexOf(":")
-                Record-DeployOutcome -Outcome $pair.Substring(0, $c) -ToolName "t" -ItemName $pair.Substring($c + 1)
-            }
-            Write-DeployTrackerSummary -ToolName "t"
-            $rows = @([IO.File]::ReadAllLines($env:AITOOLS_SUMMARY_FILE)) -join " ;; "
-            $res = "$rows ;; text=$($script:deployTrackerText) ;; errors=$($script:errors - $e0)"
-        }
-        "rkind" { $res = Get-RuleNameKind $a1 }
-        "skind" { $res = Get-SkillNameKind $a1 }
-        "manifest" { $p = Join-Path $F $a1; $k = $a2; $res = Invoke-Reader { Read-HarnessManifest -Path $p -Kind $k } }
-        "teq" { $res = "rc=" + (Test-FanoutTextEqual (Resolve-Fx $a1) (Resolve-Fx $a2)) }
-        "dmatch" { $res = "rc=" + (Test-FanoutDirMatches (Resolve-Fx $a1) (Resolve-Fx $a2)) }
-        { $_ -ceq "dmf" -or $_ -ceq "dmfdry" } {
-            $p = Resolve-Fx $a1
-            $DryRun = ($call -ceq "dmfdry")
-            $r = Deploy-ManagedFile -Content "new" -DestPath $p -ToolName "t" -ItemName ([IO.Path]::GetFileName($p)) 6>$null
-            $DryRun = $false
-            $lt = [IO.FileInfo]::new($p).LinkTarget
-            $tgt = if ($null -eq $lt) { "notlink" }
-                   elseif (-not (Test-Path -LiteralPath $lt)) { "target=absent" }
-                   else { "target=" + ([IO.File]::ReadAllText($lt) -replace '\n\z', '') }
-            $res = "result=$r $tgt"
-        }
-        "ps_bdirlink" {
-            $p = Resolve-Fx $a1
-            Backup-Dir -DirPath $p
-            $b = $script:BackupDirPath
-            $x = if ([IO.File]::Exists([IO.Path]::Combine($b, "sub", "x.txt"))) { "yes" } else { "no" }
-            $ok = if ($script:BackupDirOk) { "true" } else { "false" }
-            $res = "ok=$ok l.md=$(Get-EntryType ([IO.Path]::Combine($b, 'l.md'))) sub=$(Get-EntryType ([IO.Path]::Combine($b, 'sub'))) sub/x.txt=$x"
-        }
-        "bdir" {
-            $p = Resolve-Fx $a1
-            Backup-Dir -DirPath $p
-            $copied = "no"   # yes: the copy holds the same top-level names as the source
-            if ($script:BackupDirOk) {
-                $srcNames = Get-Names $p; $bakNames = Get-Names $script:BackupDirPath
-                if ($srcNames -and $srcNames -ceq $bakNames) { $copied = "yes" }
-            }
-            $bp = if ($script:BackupDirPath) { [IO.Path]::GetFileName($script:BackupDirPath) } else { "-" }
-            try {
-                [string[]]$sib = @([IO.Directory]::GetFileSystemEntries([IO.Path]::GetDirectoryName($p)) | ForEach-Object { [IO.Path]::GetFileName($_) })
-                [Array]::Sort($sib, [StringComparer]::Ordinal)
-                $sibText = if ($sib.Count -gt 0) { $sib -join "," } else { "(none)" }
-            } catch {
-                LogDetail "driver: cannot list the parent of ${p}: $_"
-                $sibText = "cannot list"
-            }
-            $reason = if ($script:BackupDirReason) { $script:BackupDirReason } else { "-" }
-            $ok = if ($script:BackupDirOk) { "true" } else { "false" }
-            $res = "ok=$ok reason=$reason path=$bp copied=$copied siblings=$sibText" -replace '(?!2020)[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{6}Z', '<TS>'
-        }
-        default { $res = "unknown call $call" }
-    }
-    $results.Add("$id`t$res")
-}
-[IO.File]::WriteAllText($env:OUT, (($results -join "`n") + "`n"), [Text.UTF8Encoding]::new($false))
-DRIVE
-
 # ---------------------------------------------------------------------------
 # Run
 # ---------------------------------------------------------------------------
-run_shell() {  # run_shell sh|ps: run the driver under an isolated HOME
-    local s="$1" h="$WORK/home-$1"
+run_shell() {  # run_shell sh: run the bash driver under an isolated HOME
+    local h="$WORK/home-$1"
     mkdir -p "$h"
-    if [ "$s" = "sh" ]; then
-        env HOME="$h" AITOOLS_LOG_DIR="$WORK/logs-sh" AITOOLS_SUMMARY_FILE="$WORK/sum-sh" \
-            REPO="$REPO" CASES="$CASES" F="$F" WORK="$WORK" OUT="$WORK/out-sh" \
-            "$TB" "$WORK/drive.sh" < /dev/null > "$WORK/console-sh" 2>&1
-    else
-        # native pwsh: every path it reads is a native one; pwsh's $HOME follows USERPROFILE
-        env HOME="$(native_path "$h")" USERPROFILE="$(native_path "$h")" \
-            AITOOLS_LOG_DIR="$(native_path "$WORK/logs-ps")" AITOOLS_SUMMARY_FILE="$(native_path "$WORK/sum-ps")" \
-            REPO="$(native_path "$REPO")" CASES="$(native_path "$CASES")" F="$(native_path "$F")" \
-            WORK="$(native_path "$WORK")" OUT="$(native_path "$WORK/out-ps")" \
-            pwsh -NoProfile -NonInteractive -File "$(native_path "$WORK/drive.ps1")" < /dev/null > "$WORK/console-ps" 2>&1
-    fi
+    env HOME="$h" AITOOLS_LOG_DIR="$WORK/logs-sh" AITOOLS_SUMMARY_FILE="$WORK/sum-sh" \
+        REPO="$REPO" CASES="$CASES" F="$F" WORK="$WORK" OUT="$WORK/out-sh" \
+        "$TB" "$WORK/drive.sh" < /dev/null > "$WORK/console-sh" 2>&1
 }
 
-S="$DRV"   # the one driver this platform runs
+S="$DRV"   # the one driver this harness runs (sh)
 rc=0
 run_shell "$S" || rc=$?
 if [ "$rc" -ne 0 ] || [ ! -s "$WORK/out-$S" ]; then
@@ -632,8 +517,9 @@ result_of() {
 }
 
 # Every case of this driver must give its expectation. The results of the cases
-# both drivers run (no sh_ / ps_ prefix) are collected per fixture group and
-# compared with the golden file the other platform's driver must also give.
+# both drivers run (no sh_ prefix) are collected per fixture group and compared
+# with the golden file the PowerShell driver (test-fanout-lib.ps1, Windows)
+# must also give.
 group=base
 GROUPS_SEEN="base"
 while IFS="$TAB" read -r id want call rest <&3; do
@@ -645,8 +531,7 @@ while IFS="$TAB" read -r id want call rest <&3; do
     esac
     shared=true
     case "$call" in
-        sh_*) shared=false; [ "$S" = sh ] || continue ;;   # bash-only case
-        ps_*) shared=false; [ "$S" = ps ] || continue ;;   # PowerShell-only case
+        sh_*) shared=false ;;   # bash-only case
     esac
     got=$(result_of "$S" "$id") || got="(no result)"
     if [ "$got" = "$want" ]; then
@@ -666,14 +551,9 @@ for g in $GROUPS_SEEN; do
     fi
 done
 
-# LOG: this driver's deploy.log as text with / separators (pwsh on Windows
-# joins native paths with \); NF, ND: the fixture paths as that driver names them
+# LOG: this driver's deploy.log
 LOG="$WORK/logs-$S/deploy.log"
-NF="$(native_path "$F")"
-ND="$(native_path "$D")"
-logtext() {
-    if [ "$TEST_PLATFORM" = windows ]; then perl -pe 's/\r//; tr{\\}{/}' "$LOG"; else cat "$LOG"; fi
-}
+logtext() { cat "$LOG"; }
 
 # The unknown outcome is logged with its name
 if grep -rqF 'unknown outcome "bogus" for b.md (t) -- counted as failed' "$WORK/logs-$S"; then
@@ -700,18 +580,11 @@ logged() {
         bad "$S detail log: $2 (no line with: $1)"
     fi
 }
-if [ "$S" = sh ]; then
-    logged "fanout_text_equal: cannot read $F/t/nope: " "fanout_text_equal names the missing file and why"
-    logged "fanout_text_equal: cannot read $F/t/dir: is a directory" "fanout_text_equal: a directory"
-    logged "fanout_text_equal: perl failed (exit 9): stub perl: boom" "fanout_text_equal: perl failure"
-    logged "backup_dir: $F/bd/sh/nomd/d: not backed up (no top-level *.md file)" "backup_dir skip rule"
-    logged "backup_dir: $F/bd/sh/missing/nope: not backed up (no directory)" "backup_dir: no directory"
-else
-    logged "Test-FanoutTextEqual: cannot read $NF/t/nope: " "Test-FanoutTextEqual names the missing file and why"
-    logged "Test-FanoutTextEqual: cannot read $NF/t/dir: is a directory" "Test-FanoutTextEqual: a directory"
-    logged "Backup-Dir: $NF/bd/ps/nomd/d: not backed up (no top-level *.md file)" "Backup-Dir skip rule"
-    logged "Backup-Dir: $NF/bd/ps/missing/nope: not backed up (no directory)" "Backup-Dir: no directory"
-fi
+logged "fanout_text_equal: cannot read $F/t/nope: " "fanout_text_equal names the missing file and why"
+logged "fanout_text_equal: cannot read $F/t/dir: is a directory" "fanout_text_equal: a directory"
+logged "fanout_text_equal: perl failed (exit 9): stub perl: boom" "fanout_text_equal: perl failure"
+logged "backup_dir: $F/bd/sh/nomd/d: not backed up (no top-level *.md file)" "backup_dir skip rule"
+logged "backup_dir: $F/bd/sh/missing/nope: not backed up (no directory)" "backup_dir: no directory"
 if $SYMLINKS; then
     if logtext | grep -F "[error] Failed: dangling.md: " | grep -qF "is a dangling symlink -- not written through it"; then
         ok "$S deploy_managed_file: dangling symlink logged as an error"
@@ -720,20 +593,14 @@ if $SYMLINKS; then
     fi
 fi
 if $UNREAD; then
-    if logtext | grep -F "[info] Removed the incomplete backup copy $NF/bd/$S/partial/part.bak." > /dev/null; then
+    if logtext | grep -F "[info] Removed the incomplete backup copy $F/bd/$S/partial/part.bak." > /dev/null; then
         ok "$S backup_dir: the half-made copy is removed and logged"
     else
         bad "$S backup_dir: the half-made copy is removed and logged"
     fi
-    if [ "$S" = sh ]; then
-        logged "fanout_dir_matches: cannot read $D/unread2/T/a.txt: " "fanout_dir_matches: first unreadable entry"
-        logged "fanout_dir_matches: cannot read $D/unread2/T/b.txt: " "fanout_dir_matches: second unreadable entry (own line)"
-        logged "fanout_dir_matches: cannot read $D/noexec/T/sub/" "fanout_dir_matches: lstat failure"
-    else
-        logged "Test-FanoutDirMatches: cannot read $ND/unread2/T/a.txt: " "Test-FanoutDirMatches: first unreadable entry"
-        logged "Test-FanoutDirMatches: cannot read $ND/unread2/T/b.txt: " "Test-FanoutDirMatches: second unreadable entry (own line)"
-        logged "Test-FanoutDirMatches: cannot list $ND/noexec/T/sub: " "Test-FanoutDirMatches: directory without search permission"
-    fi
+    logged "fanout_dir_matches: cannot read $D/unread2/T/a.txt: " "fanout_dir_matches: first unreadable entry"
+    logged "fanout_dir_matches: cannot read $D/unread2/T/b.txt: " "fanout_dir_matches: second unreadable entry (own line)"
+    logged "fanout_dir_matches: cannot read $D/noexec/T/sub/" "fanout_dir_matches: lstat failure"
 fi
 
 printf '\n%d passed, %d failed, %d skipped\n' "$PASS" "$FAIL" "$SKIP"
