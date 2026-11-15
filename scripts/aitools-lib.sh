@@ -1793,7 +1793,8 @@ _managed_adopt_notice() {
 # caller sets them just before the call; they are cleared on return). On any
 # failure every file this call touched is restored from its snapshot (a file
 # that did not exist is removed), MANAGED_WRITE_ERROR is set, and 1 is
-# returned. The caller logs MANAGED_WRITE_ERROR with log_error.
+# returned. The caller records MANAGED_WRITE_ERROR as the reason of its
+# write_error (a failed restore below is one more log_error: it states its cause).
 # ---------------------------------------------------------------------------
 MANAGED_WRITE_ERROR=""
 MANAGED_WRITE_REQUIRED_1=""
@@ -2931,7 +2932,7 @@ review_json_fields() {
     MANAGED_FILE_RESULT="verified"
 
     if ! command -v node >/dev/null 2>&1; then
-        write_error "$tool" "Failed: $item" "node is required for the JSON field review (not found on PATH)"
+        write_error "$tool" "Failed: $item" "node is required for the JSON field review"
         MANAGED_FILE_RESULT="failed"
         return 0
     fi
@@ -3290,7 +3291,7 @@ adopt_managed_file() {
     ADOPT_TARGETS_WRITTEN=0
 
     if [ ! -f "$src" ]; then
-        write_error "$tool" "adopt_managed_file: adopt failed" "adopted source not found: $(display_path "$src")"
+        write_error "$tool" "adopt failed" "adopted source not found: $(display_path "$src")"
         return 1
     fi
 
@@ -3299,14 +3300,14 @@ adopt_managed_file() {
         [ -n "$target" ] || continue
         backup_file "$target"                 # rotation; no-op if target absent
         if ! err=$(mkdir -p "$(dirname "$target")" 2>&1); then
-            write_error "$tool" "adopt_managed_file: failed to write $(display_path "$target")" "cannot create its directory: $err"
+            write_error "$tool" "adopt to $(display_path "$target") failed" "cannot create its directory: $err"
             continue
         fi
         if err=$(cp "$src" "$target" 2>&1); then
             log_ok "Adopted -> $(display_path "$target")"
             ADOPT_TARGETS_WRITTEN=$((ADOPT_TARGETS_WRITTEN + 1))
         else
-            write_error "$tool" "adopt_managed_file: failed to write $(display_path "$target")" "${err:-cp failed}"
+            write_error "$tool" "adopt to $(display_path "$target") failed" "${err:-cp failed}"
         fi
     done
 
@@ -3351,7 +3352,7 @@ deploy_tracker_record() {
                    write_summary DETAIL "$tool_name" "removed: $item_name" ;;
         verified)  _DT_VERIFIED=$((_DT_VERIFIED + 1)) ;;
         preserved) _DT_PRESERVED=$((_DT_PRESERVED + 1)) ;;
-        *)         write_error "$tool_name" "deploy_tracker_record: unknown outcome \"$outcome\" for $item_name" "caller bug -- counted as failed"
+        *)         log_error "deploy_tracker_record: unknown outcome \"$outcome\" for $item_name ($tool_name) -- counted as failed"
                    _DT_FAILED=$((_DT_FAILED + 1))
                    write_summary DETAIL "$tool_name" "failed: $item_name" ;;
     esac
@@ -3883,7 +3884,7 @@ fanout_harness_skills() {
             case "$_fs_m_line" in
                 "invalid$_fs_tab"*)
                     _fs_m_invalid=true
-                    write_warn "$_fs_tool" "Skills manifest $(display_path "$_fs_manifest"): line ignored: ${_fs_m_line#invalid"$_fs_tab"} -- Run aitools to rebuild ~/.aitools/skills and its manifest" ;;
+                    write_action "$_fs_tool" "Skills manifest $(display_path "$_fs_manifest"): line ignored: ${_fs_m_line#invalid"$_fs_tab"} -- Run aitools to rebuild ~/.aitools/skills and its manifest" "Run aitools to rebuild ~/.aitools/skills and its manifest" ;;
                 "rule$_fs_tab"*)
                     _fs_m_rest="${_fs_m_line#rule"$_fs_tab"}"
                     _fs_m_name="${_fs_m_rest%%"$_fs_tab"*}"
@@ -3899,9 +3900,6 @@ fanout_harness_skills() {
                     fi ;;
             esac
         done <<< "$_fs_m_out"
-        if [ "$_fs_m_invalid" = "true" ]; then
-            _aitlib_action_once "Run aitools to rebuild ~/.aitools/skills and its manifest"
-        fi
     fi
 
     # Skill directories: every entry whose kind is "skill", not retired
@@ -3940,7 +3938,7 @@ fanout_harness_skills() {
     if [ "${DRY_RUN:-}" = "true" ]; then
         # The dry run predicts the real run's outcome for a DEST that is not a directory
         if [ -e "$_fs_dest" ] && [ ! -d "$_fs_dest" ]; then
-            write_error "$_fs_tool" "cannot create skills dir" "$(display_path "$_fs_dest"): a file is in the way [DRY RUN]"
+            write_error "$_fs_tool" "cannot create skills dir" "$(display_path "$_fs_dest") (a file is in the way) [DRY RUN]"
             return 0
         fi
     else
@@ -3970,7 +3968,7 @@ fanout_harness_skills() {
         _fs_lc=$(lower_name "$_fs_ent")
         # A name Claude Code owns in its skills directory: never written
         if _fanout_skill_reserved "$_fs_ent"; then
-            write_error "$_fs_tool" "Not fanned out: $_fs_ent" "a reserved skills directory name: synced and anthropic-skills* belong to Claude Code -- rename the harness skill"
+            write_error "$_fs_tool" "Not fanned out: $_fs_ent" "a reserved skills directory name (synced and anthropic-skills* belong to Claude Code) -- rename the harness skill"
             deploy_tracker_record "failed" "$_fs_tool" "$_fs_ent"
             continue
         fi
@@ -4067,7 +4065,7 @@ fanout_harness_skills() {
         _fs_lrc=0
         _fs_content=$(_fanout_is_binary "$_fs_sfile") || _fs_lrc=$?
         if [ "$_fs_lrc" -ne 0 ] && [ "$_fs_lrc" -ne 1 ]; then
-            write_error "$_fs_tool" "Failed: $_fs_item" "cannot read harness skill file $(display_path "$_fs_sfile"): ${_fs_content:-perl failed (exit $_fs_lrc)}"
+            write_error "$_fs_tool" "Cannot read harness skill file $(display_path "$_fs_sfile")" "${_fs_content:-perl failed (exit $_fs_lrc)}"
             deploy_tracker_record "failed" "$_fs_tool" "$_fs_item"
             continue
         fi
@@ -4082,7 +4080,7 @@ fanout_harness_skills() {
                 # captured); "|| :" because it fails by definition here -- the
                 # empty case falls back to "cat failed" below
                 _fs_err=$(cat "$_fs_sfile" 2>&1 >/dev/null) || :
-                write_error "$_fs_tool" "Failed: $_fs_item" "cannot read harness skill file $(display_path "$_fs_sfile"): ${_fs_err:-cat failed}"
+                write_error "$_fs_tool" "Cannot read harness skill file $(display_path "$_fs_sfile")" "${_fs_err:-cat failed}"
                 deploy_tracker_record "failed" "$_fs_tool" "$_fs_item"
                 continue
             fi
@@ -4092,7 +4090,7 @@ fanout_harness_skills() {
         case "$_fs_res" in
             created|updated|verified|"accept & adopt"|skipped|failed) ;;
             *)
-                write_error "$_fs_tool" "Failed: $_fs_item" "unexpected deploy result: $_fs_res"
+                write_error "$_fs_tool" "Unexpected deploy result for $_fs_item" "$_fs_res"
                 _fs_res="failed" ;;
         esac
         # The executable bit follows the harness copy (a skill may ship scripts)
@@ -4166,7 +4164,7 @@ fanout_harness_skills() {
                 break
             fi
             if [ "$_fs_rc" -ne 1 ]; then
-                write_warn "$_fs_tool" "Cannot compare $(display_path "$_fs_rm_path") with $(display_path "$_fs_cand") (see the detail lines in deploy.log)"
+                write_warn "$_fs_tool" "Cannot compare $(display_path "$_fs_rm_path") with $(display_path "$_fs_cand")"
             fi
         done
         if [ -z "$_fs_rm_why" ]; then
@@ -4431,7 +4429,7 @@ sync_managed_json() {
     SYNC_MANAGED_JSON_RESULT="unchanged"
 
     if ! command -v node >/dev/null 2>&1; then
-        write_error "$tool" "settings sync failed" "node is required for the JSON sync (not found on PATH)"
+        write_error "$tool" "settings sync not run" "node is required for the JSON sync"
         return 1
     fi
 
