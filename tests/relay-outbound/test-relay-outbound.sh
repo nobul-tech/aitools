@@ -15,8 +15,9 @@
 #   - relay-outbound-prompt.ps1 refuses macOS/Linux (pwsh, isolated HOME): run,
 #     it exits 1 with "[<UTC>] [relay-outbound-prompt] [error] This script is for
 #     Windows ..." on stderr and writes nothing but pwsh's own cache; dot-sourced
-#     by a calling script, the caller ends with exit 1 too (its callers,
-#     aitools.ps1 and hh.ps1, are Windows entry points).
+#     by a calling script, the guard's exit 1 ends only the guarded file: the
+#     caller goes on with $LASTEXITCODE 1 and neither function defined, so a
+#     caller under $ErrorActionPreference Stop (hh.ps1) ends nonzero at the call.
 # The Windows side (the .ps1 loads, the .sh refuses, scripts/aitools forwards
 # before it could source the .sh) is tests/relay-outbound/test-relay-outbound.ps1.
 #
@@ -125,12 +126,24 @@ else
     stray=$(cd "$H1" && find . -type f ! -path './.cache/powershell/*' | head -n 5)
     check "ps1 run: writes nothing under HOME but pwsh's cache" "$([ -z "$stray" ] && echo 0 || echo 1)" "$stray"
 
+    # Dot-sourced, `exit 1` ends only the guarded file: the caller goes on with
+    # $LASTEXITCODE 1 and neither function defined
     CALLER="$WORK/caller.ps1"
-    printf '. "%s"\n"after the dot-source"\nexit 0\n' "$RELAY_PS1" > "$CALLER"
+    printf '. "%s"\n"after: lastexit=" + $LASTEXITCODE + " defined=" + [bool](Get-Command Invoke-RelayOutboundPrompt -ErrorAction SilentlyContinue) + "," + [bool](Get-Command Read-RelayOutboundChoice -ErrorAction SilentlyContinue)\nexit 0\n' "$RELAY_PS1" > "$CALLER"
     rc=0
     (cd "$WORK" && env HOME="$H1" pwsh -NoProfile -NonInteractive -File "$CALLER" < /dev/null > "$WORK/caller.out" 2> "$WORK/caller.err") || rc=$?
-    check "ps1 dot-sourced on $(uname -s): the caller ends with exit 1" "$([ "$rc" = 1 ] && echo 0 || echo 1)" "rc=$rc"
-    check "ps1 dot-sourced: the caller runs nothing after the dot-source" "$(grep -Fq 'after the dot-source' "$WORK/caller.out" && echo 1 || echo 0)" "$(head -c 300 "$WORK/caller.out")"
+    got=$(perl -ne 's/\r//; print if /^after: /' "$WORK/caller.out")
+    check "ps1 dot-sourced on $(uname -s): \$LASTEXITCODE 1, no function defined" "$([ "$got" = "after: lastexit=1 defined=False,False" ] && echo 0 || echo 1)" "rc=$rc got=$got"
+    check "ps1 dot-sourced: structured guard line on stderr" "$(grep -Fq '[relay-outbound-prompt] [error] This script is for Windows' "$WORK/caller.err" && echo 0 || echo 1)" "$(head -c 300 "$WORK/caller.err")"
+
+    # A caller that then calls the prompt under $ErrorActionPreference Stop (as
+    # hh.ps1 does) ends with a nonzero exit before its next line
+    CALLER2="$WORK/caller-stop.ps1"
+    printf '$ErrorActionPreference = "Stop"\n. "%s"\n$null = Invoke-RelayOutboundPrompt -RepoPath "."\n"after the prompt"\nexit 0\n' "$RELAY_PS1" > "$CALLER2"
+    rc=0
+    (cd "$WORK" && env HOME="$H1" pwsh -NoProfile -NonInteractive -File "$CALLER2" < /dev/null > "$WORK/caller2.out" 2> "$WORK/caller2.err") || rc=$?
+    check "ps1 dot-sourced, caller under Stop: nonzero exit" "$([ "$rc" != 0 ] && echo 0 || echo 1)" "rc=$rc"
+    check "ps1 dot-sourced, caller under Stop: nothing after the call runs" "$(grep -Fq 'after the prompt' "$WORK/caller2.out" && echo 1 || echo 0)" "$(head -c 300 "$WORK/caller2.out")"
 fi
 
 printf -- '---- %d passed, %d failed, %d skipped (%s, bash %s)\n' "$PASS" "$FAIL" "$SKIP" "$(uname -s)" "$BASH_VERSION"

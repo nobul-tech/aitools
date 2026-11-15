@@ -101,7 +101,7 @@ try {
     $guardRe = '-not \$IsWindows\)\s*\{[^}]{0,300}?This script is for Windows[^}]{0,200}?exit 1'
     Check "ps1 guard: canonical Windows form (classifier regex)" ($ps1Text -match $guardRe)
     $guardAt = ([regex]::Match($ps1Text, $guardRe)).Index
-    $fnAt = $ps1Text.IndexOf("function ")
+    $fnAt = ([regex]::Match($ps1Text, '(?m)^function ')).Index
     Check "ps1 guard: before the first function" ($guardAt -gt 0 -and $fnAt -gt $guardAt) "guard at $guardAt, first function at $fnAt"
     $lineOk = ($ps1Text -match '\[Console\]::Error\.WriteLine\("\[" \+ \[DateTime\]::UtcNow\.ToString\("yyyy-MM-dd''T''HH:mm:ss''Z''"') -and
         ($ps1Text -match '\] \[relay-outbound-prompt\] \[error\] This script is for Windows\. On macOS/Linux, use relay-outbound-prompt\.sh\.')

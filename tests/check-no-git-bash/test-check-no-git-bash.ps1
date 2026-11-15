@@ -9,7 +9,8 @@
 #   Static (PowerShell AST of every scripts/check-*.ps1):
 #   - only check-pre-push.ps1 calls ResolveGitBash, once, into $d7Bash, and its
 #     one `& $d7Bash` call runs scripts/build-deploy.sh;
-#   - no check-*.ps1 runs a command named bash, bash.exe or sh.
+#   - no check-*.ps1 runs bash or sh (by name, by a literal path, or with
+#     Start-Process), and none but check-lib.ps1 holds a Git for Windows bash path.
 #   Behaviour (each step's section, cut out of the script by its header comments
 #   and run in a child pwsh with stub Step*/Log* functions):
 #   - check-pre-commit step 2: a staged .sh with a syntax error gives SKIP for
@@ -30,7 +31,7 @@
 param([switch]$Help)
 
 if ($Help) {
-    Get-Content $PSCommandPath | Select-Object -Skip 1 -First 29
+    Get-Content $PSCommandPath | Select-Object -Skip 1 -First 30
     exit 0
 }
 
@@ -139,8 +140,19 @@ try {
                 $resolveCalls[$f.Name] += $target
             }
             if ($name -in @("bash", "bash.exe", "sh", "sh.exe")) { $bashNamed += "$($f.Name):$($c.Extent.StartLineNumber)" }
+            # A bash by literal path (& "C:\...\Git\bin\bash.exe") or started with Start-Process
+            if ($name -match '(?i)(^|[\\/])(ba)?sh(\.exe)?$' -and $name -notin @("bash", "bash.exe", "sh", "sh.exe")) { $bashNamed += "$($f.Name):$($c.Extent.StartLineNumber): $name" }
+            if ($name -eq "Start-Process" -and $c.Extent.Text -match '(?i)\b(ba)?sh(\.exe)?\b') { $bashNamed += "$($f.Name):$($c.Extent.StartLineNumber): Start-Process" }
             if ($c.InvocationOperator -eq "Ampersand" -and $c.CommandElements[0].Extent.Text -eq '$d7Bash') {
                 $d7Calls += [pscustomobject]@{ file = $f.Name; text = $c.Extent.Text }
+            }
+        }
+        # Any string in the code (not comments) naming a Git for Windows bash, outside
+        # check-lib.ps1, whose ResolveGitBash holds the one probe list
+        if ($f.Name -ne "check-lib.ps1") {
+            $strs = $ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.StringConstantExpressionAst] -or $n -is [System.Management.Automation.Language.ExpandableStringExpressionAst] }, $true)
+            foreach ($s in $strs) {
+                if ($s.Value -match '(?i)\\Git\\(usr\\)?bin\\|(^|[\\/])bash\.exe\b') { $bashNamed += "$($f.Name):$($s.Extent.StartLineNumber): string '$($s.Value)'" }
             }
         }
     }

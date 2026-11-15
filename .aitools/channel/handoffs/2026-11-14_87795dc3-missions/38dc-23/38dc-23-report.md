@@ -9,7 +9,10 @@ open question. **Scope**: This mission's branch
 the `grep -q` pipefail race (38dc-24), or `build-deploy.sh` itself.
 **Audience**: The commander; M6-Polish (orchestrator, id ends 38dc).
 
-v1.0, 2026-11-14. Author: 38dc-23 (delegated by M6-Polish, session 87795dc3).
+v1.1, 2026-11-14. Author: 38dc-23 (delegated by M6-Polish, session 87795dc3).
+v1.1: the independent review's blocking finding (the `.ps1` guard does not
+end a dot-sourcing caller) and its non-blocking findings are resolved (section
+10); the counts and the mutation results are updated.
 
 ## Commander's words this mission carries out (2026-11-14)
 
@@ -53,6 +56,11 @@ Source: `git grep relay-outbound-prompt origin/main -- scripts shared tests pack
 - `.ps1`: canonical `-not $IsWindows` guard; prints the same structured line
   ("This script is for Windows. On macOS/Linux, use relay-outbound-prompt.sh.")
   with `[Console]::Error`, `exit 1`. ASCII only (5.1 may load it).
+  Dot-sourced, `exit 1` ends only the guarded file (probed: the caller goes on
+  with `$LASTEXITCODE` 1 and neither function defined); `hh.ps1`, under
+  `$ErrorActionPreference = "Stop"`, then ends nonzero at its call, and
+  `aitools.ps1` never gets there (its own Windows guard). `exit 1` stays: the
+  classifier needs it and a direct run must exit 1.
 - Why the guards write their own line instead of loading init-logging: both
   files are sourced into other scripts; init-logging would re-initialize the
   caller's log. Recorded in `.claude/rules/cross-platform.md` "OS guard
@@ -65,7 +73,7 @@ Source: `git grep relay-outbound-prompt origin/main -- scripts shared tests pack
 
 | Call (origin/main 5f962b1) | What it checked | What would be lost without it | Done |
 |---|---|---|---|
-| `check-pre-commit.ps1` step 2: `& $gitBash -n <staged .sh>` | bash syntax of staged `.sh` files | nothing that CI does not catch on the push: the CI linux and macos jobs ran `bash -n` on `scripts/*.sh`, `shared/hooks/*.sh`, `deploy/*.sh` and the git hook; staged `.sh` elsewhere (`tests/`, `packaging/macos/`, `shared/shell/aliases.sh`) were not in that loop | Removed. Step 2 (.sh) reports SKIP and names CI and `check-pre-commit.sh`. The CI loop now covers every tracked shell script (125 files, extensionless ones included; all parse today) |
+| `check-pre-commit.ps1` step 2: `& $gitBash -n <staged .sh>` | bash syntax of staged `.sh` files | nothing that CI does not catch on the push: the CI linux and macos jobs ran `bash -n` on `scripts/*.sh`, `shared/hooks/*.sh`, `deploy/*.sh` and the git hook; staged `.sh` elsewhere (`tests/`, `packaging/macos/`, `shared/shell/aliases.sh`) were not in that loop | Removed. Step 2 (.sh) reports SKIP and names CI and `check-pre-commit.sh`. The CI loop now covers every tracked shell script under `scripts/`, `shared/`, `packaging/`, `tests/`, `deploy/` (126 files, extensionless ones included; all parse) and fails on an empty list. Not covered: the 424 archived `.sh` under `.aitools/channel/handoffs/` and `harvesting/` (never run; all parse today), which the old step checked when staged |
 | `check-pre-commit.ps1` step 3: `build-deploy.sh` | | | Already retired by PR #154 |
 | `check-post-push.ps1` step 2: `bash -n deploy/*.sh` | | | Already retired by PR #154 |
 | `check-post-push.ps1` step 4: `& $bashExe scripts/aitools --version` | the CLI entry point answers `--version` | nothing: after PR #162 the bash entry on Windows only hands off to `aitools.ps1`; the hand-off is tested by `tests/aitools-entry/test-win-forwarder.ps1` (CI windows) and the bash entry by `check-post-push.sh` step 4 | Replaced by `pwsh -NoProfile -NonInteractive -File scripts/aitools.ps1 --version`. Also fixed: the old step passed on any output, even an empty one after a failure; it now needs exit 0 and an `aitools <version>` line, and FAILs without pwsh |
@@ -83,15 +91,21 @@ by PR #154 before this mission started.
 
 - `tests/relay-outbound/test-relay-outbound.ps1` (Windows): 20/0.
 - `tests/check-no-git-bash/test-check-no-git-bash.ps1` (Windows): 28/0.
-- `tests/relay-outbound/test-relay-outbound.sh` (macOS/Linux): CI only.
+- `tests/relay-outbound/test-relay-outbound.sh` (macOS/Linux): CI only. Its
+  first version expected a dot-sourcing caller to end with exit 1 and failed
+  in CI (run 43658142484); v1.1 checks what pwsh does (probed on Windows with
+  a stand-in guard: `after: lastexit=1 defined=False,False`; a caller under
+  Stop exits 1).
 - Existing suites rerun on Windows: `test-resolve-git-bash.ps1` 15/0,
   `test-menu-choice.ps1` 97/0, `test-win-forwarder.ps1` 45/0,
   `test-logging.ps1` 45/0.
 - Mutations (scratch harness, each applied to the worktree file and restored
-  byte for byte): 12 of 12 killed: pre-commit 2 runs `bash -n` again;
+  byte for byte, after a baseline run of both suites must pass): 14 of 14
+  killed: pre-commit 2 runs `bash -n` again;
   post-push 4 ignores the exit code; post-push 4 runs the bash entry via Git
   Bash; post-push 4 without the pwsh check; post-push 6 runs `bash -n`
-  again; post-push resolves Git Bash at the top; the `.sh` guard exits when
+  again; post-push resolves Git Bash at the top; post-push 6 runs Git Bash by
+  literal path; pre-commit starts bash with Start-Process; the `.sh` guard exits when
   sourced; the `.sh` guard exits 0; the `.sh` guard removed; the `.ps1` guard
   removed; the hand-off in `scripts/aitools` falls through; the relay
   script named before the hand-off.
@@ -126,8 +140,9 @@ RFI 38dc-23-1: Keep the one Git Bash call left in the Windows checks (check-pre-
 Suggest: keep it, and record `check-pre-push.ps1` step 7 under the approved `build-deploy.sh` exception (why: it is the only check of the real build from Windows, and it is the same approved call `aitools.ps1` makes).
 
 Still open from 38dc-19: RFI 38dc-19-1 (guard `hh.ps1` and `bootstrap.ps1`).
-With the relay `.ps1` guard, `hh.ps1 -n` under pwsh on macOS/Linux now ends
-with exit 1 at the dot-source instead of running the Windows prompt.
+With the relay `.ps1` guard, `hh.ps1 -n` under pwsh on macOS/Linux prints
+the guard line and ends nonzero at its call to `Invoke-RelayOutboundPrompt`
+(reasoned from `hh.ps1`'s `$ErrorActionPreference = "Stop"`; not run).
 
 ## 9. Operational learning
 
@@ -141,3 +156,28 @@ with exit 1 at the dot-source instead of running the Windows prompt.
 - A guard in a sourced bash file: `[ "${BASH_SOURCE[0]}" = "$0" ] || return 1`
   then `exit 1`, with no `;` between the message and `exit 1`, so the OS guard
   classifier (`[^;]{0,200}`) still sees it.
+- In pwsh 7, `exit` in a dot-sourced file ends only that file; the caller
+  goes on with `$LASTEXITCODE` set. I assumed the opposite and the `.sh`
+  suite I could not run on Windows caught it in CI: probe a language
+  behaviour before writing a test that asserts it.
+- A mutation harness must first prove the suites pass on the unmutated tree:
+  a later comment containing "function " made one case fail on the baseline,
+  and every mutation then looked "killed".
+
+## 10. Independent review and what was done
+
+Review: https://github.com/nobul-tech/aitools/pull/167#issuecomment-6886680027
+(38dc-23-01-review, CHANGES NEEDED: 1 blocking).
+
+| Finding | Done |
+|---|---|
+| B1 (blocking): `exit 1` in a dot-sourced `.ps1` does not end the caller; the `.sh` suite and the docs said it did; CI linux and macos failed | Comment in the `.ps1`, RELEASE_NOTES, this report corrected; the `.sh` suite now checks `$LASTEXITCODE` 1 with no function defined, and that a caller under Stop ends nonzero before its next line |
+| 1: an installed `aitools` older than v0.77.12, run in Git Bash, ends nonzero once | RELEASE_NOTES item 1 says so |
+| 2: the static test missed bash by literal path and Start-Process | Both caught now (AST command names and string constants outside check-lib.ps1); two more mutations, killed |
+| 3: "nothing goes unchecked" was not exact | Wording corrected: the archived `.sh` under `.aitools/channel/handoffs/` and `harvesting/` are not listed (never run) |
+| 4: an empty list passed the CI step | The step fails on an empty list |
+| 5: `check-post-push.ps1` header said PS 5.1 compatible | Now "pwsh 7" |
+| 6: step 4 runs the worktree's `aitools.ps1` with the configured repo's library | Not a regression (the bash entry did the same); recorded |
+| 7: 126 scripts, not 125 | Corrected |
+| 8: `test-relay-outbound.ps1` runs Git Bash to prove the `.sh` refuses Windows | Kept: it is the `tests/os-guards` pattern (a `.ps1` suite runs only the product script under test in Git Bash); recorded for the #159 test-practice doc |
+| 9: overlap with PR #166 (check.yml, cross-platform.md/.mdc, test-resolve-git-bash.ps1) | Recorded in the PR follow-ups; whichever merges second keeps both sides |

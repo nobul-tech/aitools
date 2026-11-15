@@ -1,6 +1,6 @@
 # check-post-push.ps1 -- automated post-push checklist for aitools
 # Usage: .\scripts\check-post-push.ps1
-# Platform: Windows (PS 5.1 compatible). Runs no Git Bash: step 4 runs
+# Platform: Windows (pwsh 7: 3-argument Join-Path). Runs no Git Bash: step 4 runs
 # aitools.ps1 with pwsh, step 6 leaves the .sh syntax check to CI and
 # check-post-push.sh.
 

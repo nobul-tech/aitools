@@ -13,8 +13,11 @@
 # 2026-11-14: "relay-outbound.sh/.ps1 need os guards they are not exempt").
 # This file is dot-sourced into aitools.ps1 and hh.ps1, so the guard writes the
 # structured line itself, to stderr (dot-sourcing init-logging.ps1 here would
-# re-initialize the caller's log). exit 1 also ends the caller: both callers
-# are Windows entry points. Windows PowerShell 5.1 runs only on Windows.
+# re-initialize the caller's log). Dot-sourced, exit 1 ends only this file: the
+# caller goes on with $LASTEXITCODE 1 and neither function defined, so its call
+# to Invoke-RelayOutboundPrompt fails (hh.ps1 runs under ErrorActionPreference
+# Stop and ends there; aitools.ps1 has its own Windows guard). Windows
+# PowerShell 5.1 runs only on Windows.
 if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
     [Console]::Error.WriteLine("[" + [DateTime]::UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", [Globalization.CultureInfo]::InvariantCulture) + "] [relay-outbound-prompt] [error] This script is for Windows. On macOS/Linux, use relay-outbound-prompt.sh.")
     exit 1

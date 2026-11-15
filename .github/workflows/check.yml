@@ -56,7 +56,8 @@ jobs:
       # package maintainer scripts). The Windows check-*.ps1 scripts run no Git
       # Bash (commander, 2026-11-14), so this step and the linux job's copy are
       # the .sh syntax check for every push and pull request. Same list as the
-      # linux job.
+      # linux job. Not listed: the archived .sh under .aitools/channel/handoffs/
+      # and harvesting/ (never run). An empty list fails the step.
       - name: Validate bash script syntax
         run: |
           echo "::group::Checking shell scripts"
@@ -64,6 +65,10 @@ jobs:
           git ls-files -- scripts shared packaging tests deploy > /tmp/tracked-files.txt
           perl -ne 'chomp; if (/\.sh$/) { print "$_\n"; next } next if m{^(tests|deploy)/} || m{/[^/]*\.[^/]*$}; open(my $fh, "<", $_) or die "cannot read $_: $!\n"; my $l = <$fh> // ""; close $fh; print "$_\n" if $l =~ m{^#!.*\b(ba)?sh\b}' /tmp/tracked-files.txt > /tmp/shell-scripts.txt
           echo "$(wc -l < /tmp/shell-scripts.txt) shell scripts"
+          if [ ! -s /tmp/shell-scripts.txt ]; then
+            echo "::error::no shell scripts listed (git ls-files or the filter failed)"
+            exit 1
+          fi
           while IFS= read -r f; do
             if ! bash -n "$f" 2>/tmp/bash-syntax-err.txt; then
               echo "FAIL: $f"
@@ -449,6 +454,10 @@ jobs:
           git ls-files -- scripts shared packaging tests deploy > /tmp/tracked-files.txt
           perl -ne 'chomp; if (/\.sh$/) { print "$_\n"; next } next if m{^(tests|deploy)/} || m{/[^/]*\.[^/]*$}; open(my $fh, "<", $_) or die "cannot read $_: $!\n"; my $l = <$fh> // ""; close $fh; print "$_\n" if $l =~ m{^#!.*\b(ba)?sh\b}' /tmp/tracked-files.txt > /tmp/shell-scripts.txt
           echo "$(wc -l < /tmp/shell-scripts.txt) shell scripts"
+          if [ ! -s /tmp/shell-scripts.txt ]; then
+            echo "::error::no shell scripts listed (git ls-files or the filter failed)"
+            exit 1
+          fi
           while IFS= read -r f; do
             if ! bash -n "$f" 2>/tmp/bash-syntax-err.txt; then
               echo "FAIL: $f"
