@@ -2,8 +2,10 @@
 # the check-lib.ps1 / aitools-profile.ps1 log writers, and the entry point (scripts/aitools.ps1).
 #
 # Safe to re-run: every case uses its own temp log dir, removed on exit.
-# Platform: Windows, macOS, Linux (pwsh 7). Entry-point run cases need Windows
-# (aitools.ps1 has a Windows OS guard) and are reported as SKIP elsewhere.
+# Platform: Windows only (pwsh 7; OS guard below; commander, 2026-11-14: "sh scripts
+# and tests should only run on linux/mac and ps1 on windows"). On macOS/Linux,
+# tests/logging/test-logging.sh tests the bash side (aitools-lib.sh, check-lib.sh,
+# scripts/aitools).
 # Exit 1 if any case fails.
 # Spec: .claude/rules/script-standards.md (log line format, levels, counters,
 # end-of-run summary), reference/logging.md (incl. section 5, fail-safe writes), reference/script-standards-detail.md
@@ -14,8 +16,12 @@
 param([switch]$Help)
 
 if ($Help) {
-    Get-Content $PSCommandPath | Select-Object -Skip 1 -First 11
+    Get-Content $PSCommandPath | Select-Object -Skip 1 -First 13
     exit 0
+}
+if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
+    [Console]::Error.WriteLine("This script is for Windows. On macOS/Linux, run tests/logging/test-logging.sh with bash.")
+    exit 1
 }
 
 $root = (Resolve-Path (Join-Path $PSScriptRoot ".." "..")).Path
@@ -32,7 +38,6 @@ $tsRe = '\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z\]'
 function Check([string]$Name, [bool]$Ok) {
     if ($Ok) { Write-Output "PASS $Name"; $script:pass++ } else { Write-Output "FAIL $Name"; $script:fail++ }
 }
-function Skip([string]$Name, [string]$Why) { Write-Output "SKIP $Name ($Why)"; $script:skip++ }
 
 # Run a snippet in a fresh pwsh with the lib dot-sourced and an isolated log dir.
 # Returns @{ Out = console text; Log = deploy.log text; Dir = case dir }.
@@ -121,12 +126,7 @@ try {
     Check "lib: locked deploy.log -- console lines still printed (info, warn, error, ok)" (($lockOut -match '\[info\] info-line') -and ($lockOut -match '\[warn\] warn-line') -and ($lockOut -match '\[error\] error-line') -and ($lockOut -match '\[ok\] ok-line'))
     Check "lib: locked deploy.log -- LogError/LogWarn still count" ($lockOut -match 'COUNTS=1/1')
     Check "lib: locked deploy.log -- detail and AI telemetry stay off the console" (-not ($lockOut -match 'detail-line|ai-line'))
-    if ($IsWindows) {
-        Check "lib: locked deploy.log -- nothing written to it (the lock held)" ((Get-Item $lockLog).Length -eq 0)
-    } else {
-        # .NET maps FileShare.None to an advisory lock off Windows (not verified here)
-        Skip "lib: locked deploy.log -- nothing written to it (the lock held)" "Windows file locks only"
-    }
+    Check "lib: locked deploy.log -- nothing written to it (the lock held)" ((Get-Item $lockLog).Length -eq 0)
 
     # The log directory cannot be created (its parent is a file)
     $notDir = Join-Path $tmpRoot "not-a-dir"
@@ -207,18 +207,12 @@ try {
     Test-CheckLibRun "checks.log/.jsonl are directories" (Invoke-CheckLibCase $cdDir)
 
     # checks.log and checks.jsonl held open with no sharing by this process
-    # (another process's lock); Windows only
-    if ($IsWindows) {
-        $clDir = Join-Path $tmpRoot "checks-locked" "logs"
-        New-Item -ItemType Directory -Path $clDir -Force | Out-Null
-        foreach ($n in "checks.log", "checks.jsonl") { [IO.File]::WriteAllText((Join-Path $clDir $n), "") }
-        Test-CheckLibRun "checks.log/.jsonl locked" (Invoke-CheckLibCase $clDir -Lock)
-        Check "check-lib: checks.log/.jsonl locked -- nothing written to them (the lock held)" (((Get-Item (Join-Path $clDir "checks.log")).Length -eq 0) -and ((Get-Item (Join-Path $clDir "checks.jsonl")).Length -eq 0))
-    } else {
-        foreach ($n in @("Stop run goes on (exit 0, no catch)", "step lines still printed", "step counters still count", "nothing written to them (the lock held)")) {
-            Skip "check-lib: checks.log/.jsonl locked -- $n" "Windows file locks only"
-        }
-    }
+    # (another process's lock)
+    $clDir = Join-Path $tmpRoot "checks-locked" "logs"
+    New-Item -ItemType Directory -Path $clDir -Force | Out-Null
+    foreach ($n in "checks.log", "checks.jsonl") { [IO.File]::WriteAllText((Join-Path $clDir $n), "") }
+    Test-CheckLibRun "checks.log/.jsonl locked" (Invoke-CheckLibCase $clDir -Lock)
+    Check "check-lib: checks.log/.jsonl locked -- nothing written to them (the lock held)" (((Get-Item (Join-Path $clDir "checks.log")).Length -eq 0) -and ((Get-Item (Join-Path $clDir "checks.jsonl")).Length -eq 0))
 
     # The log directory cannot be created (its parent is a file)
     $cnFile = Join-Path $tmpRoot "checks-notadir"
@@ -235,33 +229,27 @@ try {
     # and the warning must reach stderr. A directory in place of deploy.log and a
     # writable one: tests/profile/test-profile.sh. Windows only (OS guard).
     $profileScript = Join-Path $root "scripts" "aitools-profile.ps1"
-    if ($IsWindows) {
-        $plDir = Join-Path $tmpRoot "profile-locked"
-        New-Item -ItemType Directory -Path (Join-Path $plDir "logs"), (Join-Path $plDir "home") -Force | Out-Null
-        $plLog = Join-Path $plDir "logs" "deploy.log"
-        [IO.File]::WriteAllText($plLog, "")
-        $plErr = Join-Path $plDir "stderr.txt"
-        $savedHome = $env:HOME; $savedProfile = $env:USERPROFILE
-        $env:HOME = Join-Path $plDir "home"; $env:USERPROFILE = $env:HOME
-        $env:AITOOLS_LOG_DIR = Join-Path $plDir "logs"; $env:AITOOLS_ENVIRONMENT = "bogus"
-        $h = [IO.File]::Open($plLog, 'Open', 'ReadWrite', 'None')
-        try {
-            $plOut = & pwsh -NoProfile -NonInteractive -File $profileScript hostname --hostname-value probe-host 2> $plErr | Out-String
-            $plRc = $LASTEXITCODE
-        } finally {
-            $h.Dispose()
-            $env:HOME = $savedHome; $env:USERPROFILE = $savedProfile
-            $env:AITOOLS_LOG_DIR = $null; $env:AITOOLS_ENVIRONMENT = $null
-        }
-        $plErrText = if (Test-Path $plErr) { [IO.File]::ReadAllText($plErr) } else { "" }
-        Check "profile: locked deploy.log -- the resolver answers (exit 0, data on stdout)" (($plRc -eq 0) -and ($plOut.Trim() -eq "probe-host"))
-        Check "profile: locked deploy.log -- the warning reached stderr, no write error" (($plErrText -match "\[aitools-profile\] \[warn\] AITOOLS_ENVIRONMENT='bogus' ignored") -and -not ($plErrText -match 'Exception|AppendAllText|being used by another process'))
-        Check "profile: locked deploy.log -- nothing written to it (the lock held)" ((Get-Item $plLog).Length -eq 0)
-    } else {
-        foreach ($n in @("the resolver answers (exit 0, data on stdout)", "the warning reached stderr, no write error", "nothing written to it (the lock held)")) {
-            Skip "profile: locked deploy.log -- $n" "aitools-profile.ps1 runs on Windows only"
-        }
+    $plDir = Join-Path $tmpRoot "profile-locked"
+    New-Item -ItemType Directory -Path (Join-Path $plDir "logs"), (Join-Path $plDir "home") -Force | Out-Null
+    $plLog = Join-Path $plDir "logs" "deploy.log"
+    [IO.File]::WriteAllText($plLog, "")
+    $plErr = Join-Path $plDir "stderr.txt"
+    $savedHome = $env:HOME; $savedProfile = $env:USERPROFILE
+    $env:HOME = Join-Path $plDir "home"; $env:USERPROFILE = $env:HOME
+    $env:AITOOLS_LOG_DIR = Join-Path $plDir "logs"; $env:AITOOLS_ENVIRONMENT = "bogus"
+    $h = [IO.File]::Open($plLog, 'Open', 'ReadWrite', 'None')
+    try {
+        $plOut = & pwsh -NoProfile -NonInteractive -File $profileScript hostname --hostname-value probe-host 2> $plErr | Out-String
+        $plRc = $LASTEXITCODE
+    } finally {
+        $h.Dispose()
+        $env:HOME = $savedHome; $env:USERPROFILE = $savedProfile
+        $env:AITOOLS_LOG_DIR = $null; $env:AITOOLS_ENVIRONMENT = $null
     }
+    $plErrText = if (Test-Path $plErr) { [IO.File]::ReadAllText($plErr) } else { "" }
+    Check "profile: locked deploy.log -- the resolver answers (exit 0, data on stdout)" (($plRc -eq 0) -and ($plOut.Trim() -eq "probe-host"))
+    Check "profile: locked deploy.log -- the warning reached stderr, no write error" (($plErrText -match "\[aitools-profile\] \[warn\] AITOOLS_ENVIRONMENT='bogus' ignored") -and -not ($plErrText -match 'Exception|AppendAllText|being used by another process'))
+    Check "profile: locked deploy.log -- nothing written to it (the lock held)" ((Get-Item $plLog).Length -eq 0)
 
     # -----------------------------------------------------------------------
     # scripts/aitools.ps1 (entry point) -- uses the lib's logging, defines none of its own
@@ -270,49 +258,41 @@ try {
     $own = @($ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -match '^(Log|LogOk|LogWarn|LogError|LogDetail)$' }, $true))
     Check "entry: defines no log functions (uses aitools-lib)" ($own.Count -eq 0)
 
-    if ($IsWindows) {
-        # Fake USERPROFILE with config.json -> a repo dir holding the lib.
-        function New-FakeRepo([string]$Case, [bool]$WithLib) {
-            $d = Join-Path $tmpRoot $Case
-            New-Item -ItemType Directory -Path (Join-Path $d "home" ".aitools"), (Join-Path $d "repo" ".git"), (Join-Path $d "repo" "scripts") -Force | Out-Null
-            if ($WithLib) { Copy-Item $lib (Join-Path $d "repo" "scripts") }
-            $cfg = @{ version = 2; repoPath = (Join-Path $d "repo") } | ConvertTo-Json
-            [IO.File]::WriteAllText((Join-Path $d "home" ".aitools" "config.json"), $cfg)
-            return $d
-        }
-        function Invoke-Entry([string]$Dir, [string[]]$EntryArgs) {
-            $savedProfile = $env:USERPROFILE
-            $env:USERPROFILE = Join-Path $Dir "home"
-            $env:AITOOLS_LOG_DIR = Join-Path $Dir "logs"
-            $out = & pwsh -NoProfile -File $entry @EntryArgs *>&1 | Out-String
-            $rc = $LASTEXITCODE
-            $env:USERPROFILE = $savedProfile
-            $env:AITOOLS_LOG_DIR = $null
-            $logPath = Join-Path $Dir "logs" "deploy.log"
-            $log = if (Test-Path $logPath) { [IO.File]::ReadAllText($logPath) } else { "" }
-            return @{ Out = $out; Rc = $rc; Log = $log }
-        }
-        $d = New-FakeRepo "unknown" $true
-        $r = Invoke-Entry $d @("bogus-command")
-        Check "entry: unknown command exits 1" ($r.Rc -eq 1)
-        Check "entry: unknown command logged by the lib ([aitools] [error])" ($r.Log -match "$tsRe \[aitools\] \[error\] unknown command 'bogus-command'")
-
-        $d = New-FakeRepo "nolib" $false
-        $r = Invoke-Entry $d @("bogus-command")
-        Check "entry: missing aitools-lib exits 1" ($r.Rc -eq 1)
-        Check "entry: missing aitools-lib names the path" ($r.Out -match 'aitools-lib.ps1 not found at')
-
-        $d = New-FakeRepo "version" $false
-        Remove-Item -Recurse -Force (Join-Path $d "repo")
-        $r = Invoke-Entry $d @("-Version")
-        Check "entry: -Version answers without the repo" (($r.Rc -eq 0) -and ($r.Out -match 'repo: not found'))
-    } else {
-        foreach ($n in @("entry: unknown command exits 1", "entry: unknown command logged by the lib ([aitools] [error])",
-                         "entry: missing aitools-lib exits 1", "entry: missing aitools-lib names the path",
-                         "entry: -Version answers without the repo")) {
-            Skip $n "aitools.ps1 runs on Windows only"
-        }
+    # Fake USERPROFILE with config.json -> a repo dir holding the lib.
+    function New-FakeRepo([string]$Case, [bool]$WithLib) {
+        $d = Join-Path $tmpRoot $Case
+        New-Item -ItemType Directory -Path (Join-Path $d "home" ".aitools"), (Join-Path $d "repo" ".git"), (Join-Path $d "repo" "scripts") -Force | Out-Null
+        if ($WithLib) { Copy-Item $lib (Join-Path $d "repo" "scripts") }
+        $cfg = @{ version = 2; repoPath = (Join-Path $d "repo") } | ConvertTo-Json
+        [IO.File]::WriteAllText((Join-Path $d "home" ".aitools" "config.json"), $cfg)
+        return $d
     }
+    function Invoke-Entry([string]$Dir, [string[]]$EntryArgs) {
+        $savedProfile = $env:USERPROFILE
+        $env:USERPROFILE = Join-Path $Dir "home"
+        $env:AITOOLS_LOG_DIR = Join-Path $Dir "logs"
+        $out = & pwsh -NoProfile -File $entry @EntryArgs *>&1 | Out-String
+        $rc = $LASTEXITCODE
+        $env:USERPROFILE = $savedProfile
+        $env:AITOOLS_LOG_DIR = $null
+        $logPath = Join-Path $Dir "logs" "deploy.log"
+        $log = if (Test-Path $logPath) { [IO.File]::ReadAllText($logPath) } else { "" }
+        return @{ Out = $out; Rc = $rc; Log = $log }
+    }
+    $d = New-FakeRepo "unknown" $true
+    $r = Invoke-Entry $d @("bogus-command")
+    Check "entry: unknown command exits 1" ($r.Rc -eq 1)
+    Check "entry: unknown command logged by the lib ([aitools] [error])" ($r.Log -match "$tsRe \[aitools\] \[error\] unknown command 'bogus-command'")
+
+    $d = New-FakeRepo "nolib" $false
+    $r = Invoke-Entry $d @("bogus-command")
+    Check "entry: missing aitools-lib exits 1" ($r.Rc -eq 1)
+    Check "entry: missing aitools-lib names the path" ($r.Out -match 'aitools-lib.ps1 not found at')
+
+    $d = New-FakeRepo "version" $false
+    Remove-Item -Recurse -Force (Join-Path $d "repo")
+    $r = Invoke-Entry $d @("-Version")
+    Check "entry: -Version answers without the repo" (($r.Rc -eq 0) -and ($r.Out -match 'repo: not found'))
 } finally {
     if (Test-Path $tmpRoot) { Remove-Item -Recurse -Force $tmpRoot }
 }

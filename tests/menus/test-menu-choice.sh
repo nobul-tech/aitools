@@ -27,10 +27,11 @@
 # exit. The real read_menu_choice and read_tty_choice run on a pseudo-terminal
 # (tests/managed-files/pty-run.py, python3); the guard, flag and CR cases
 # replace read_tty_choice with a stub inside the same pty run (the wrapper
-# still writes to /dev/tty). Without a pty (python3 missing, or pywinpty not
-# installed on Windows) the pty cases SKIP with the reason. The JSON cases
-# need node (SKIP without it).
-# Platform: macOS, Linux, Windows Git Bash (aitools-lib.sh also runs there).
+# still writes to /dev/tty). Without a pty (python3 missing) the pty cases
+# SKIP with the reason. The JSON cases need node (SKIP without it).
+# Platform: macOS, Linux (OS guard below; commander, 2026-11-14: "sh scripts
+# and tests should only run on linux/mac and ps1 on windows"). On Windows,
+# tests/menus/test-menu-choice.ps1 tests the PowerShell side (aitools-lib.ps1).
 # AITOOLS_TEST_BASH=/bin/bash runs the lib under another bash (macOS 3.2).
 # Spec: .claude/rules/interactive-menus.md; reference/managed-file-deployment.md
 # "Menus"; commander 2026-11-13: "no default or other characters should re-ask".
@@ -40,8 +41,22 @@
 
 set -uo pipefail
 
+# OS guard: macOS/Linux only. BASH_VERSINFO[5] is bash's compiled-in machine
+# type (read-only, never taken from the environment), so neither a uname shim
+# on PATH nor an exported OSTYPE hides Git Bash.
+case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*)
+        printf 'This script is for macOS/Linux. On Windows, run tests/menus/test-menu-choice.ps1 with pwsh.\n' >&2
+        exit 1 ;;
+esac
+case "${BASH_VERSINFO[5]:-}" in
+    *-msys*|*-cygwin*|*-mingw*)
+        printf 'This script is for macOS/Linux. On Windows, run tests/menus/test-menu-choice.ps1 with pwsh.\n' >&2
+        exit 1 ;;
+esac
+
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
-    perl -ne 'print if $. >= 2 && $. <= 39' "$0"
+    perl -ne 'print if $. >= 2 && $. <= 40' "$0"
     exit 0
 fi
 
@@ -56,14 +71,7 @@ PASS=0
 FAIL=0
 SKIP=0
 HAVE_PTY=true
-IS_WINDOWS=false
 command -v python3 >/dev/null 2>&1 || HAVE_PTY=false
-case "$(uname -s)" in
-    MINGW*|MSYS*|CYGWIN*)
-        IS_WINDOWS=true
-        # Windows pty = pywinpty (ConPTY); python3 -c's failure means "not installed".
-        if $HAVE_PTY && ! python3 -c 'import winpty' >/dev/null 2>&1; then HAVE_PTY=false; fi ;;
-esac
 
 # check <name> <command...>: PASS when the command succeeds
 check() {
@@ -86,17 +94,8 @@ res_is() { [ "$(cat "$C/rc")" = 0 ] && [ "$(cat "$C/result" 2>/dev/null)" = "$1"
 occ_is() {
     [ "$(perl -0777 -ne 'BEGIN { $s = shift @ARGV } $n++ while /\Q$s\E/g; END { print $n + 0 }' "$2" "$3")" = "$1" ]
 }
-# tty_occ <n> <fixed string>: occ_is on the terminal output ($C/plain). On
-# Windows ConPTY re-renders the screen and may repeat a line it already sent, so
-# there the count is a minimum (0 stays exact; the deploy.log counts are exact
-# everywhere, and test-menu-choice.ps1 counts the hints exactly on Windows).
-tty_occ() {
-    if $IS_WINDOWS && [ "$1" -gt 0 ]; then
-        [ "$(perl -0777 -ne 'BEGIN { $s = shift @ARGV } $n++ while /\Q$s\E/g; END { print $n + 0 }' "$2" "$C/plain")" -ge "$1" ]
-    else
-        occ_is "$1" "$2" "$C/plain"
-    fi
-}
+# tty_occ <n> <fixed string>: occ_is on the terminal output ($C/plain)
+tty_occ() { occ_is "$1" "$2" "$C/plain"; }
 has() { grep -qF -- "$1" "$2"; }
 
 setup_case() {
@@ -158,10 +157,7 @@ if $HAVE_PTY; then
     check "re-ask: accepted answer logged" has '[detail] menu answer (reask): "o" -> o' "$LOG"
     check "re-ask: answers not on the console" not has "menu answer" "$C/plain"
     check "re-ask: no warning" not has "[warn]" "$LOG"
-    if ! $IS_WINDOWS; then
-        # ConPTY re-renders lines with cursor moves; the own-line check is POSIX only
-        check "re-ask: hint on its own line" grep -qx -- "  please type one of o/a/m/s/x" "$C/plain"
-    fi
+    check "re-ask: hint on its own line" grep -qx -- "  please type one of o/a/m/s/x" "$C/plain"
 
     setup_case case-space; menu "o a m s x" o case-space
     run_menu '  S \n'
@@ -218,7 +214,7 @@ if $HAVE_PTY; then
     run_menu "" 'read_tty_choice() { printf -v "$1" "a\r"; }'
     check "trailing CR trimmed: 'a<CR>' -> a" res_is a
 else
-    printf 'SKIP pty cases (no pseudo-terminal: python3 missing, or pywinpty not installed on Windows)\n'; SKIP=$((SKIP + 1))
+    printf 'SKIP pty cases (no pseudo-terminal: python3 missing)\n'; SKIP=$((SKIP + 1))
 fi
 
 # ===========================================================================
@@ -302,11 +298,8 @@ if $HAVE_PTY; then
         eval 'has "[detail] menu answer (review a.md): \"\" -> not one of o/a/m/s/x, asked again" "$LOG" && has "[detail] menu answer (review a.md): \"skip\" -> not one of o/a/m/s/x, asked again" "$LOG" && has "[detail] menu answer (review a.md): \"q\" -> not one of o/a/m/s/x, asked again" "$LOG"'
     check "text review (adopt): s logged" has '[detail] menu answer (review a.md): "s" -> s' "$LOG"
     check "text review (adopt): skipped logged" has "Skipped: item (local differs from source" "$LOG"
-    if ! $IS_WINDOWS; then
-        # ConPTY may repeat lines it already sent; the exact menu count is POSIX only
-        check "text review (adopt): re-ask prints the hint and the prompt, not the menu again" \
-            occ_is 1 "  [s]kip            : nothing written; asked again next run" "$C/plain"
-    fi
+    check "text review (adopt): re-ask prints the hint and the prompt, not the menu again" \
+        occ_is 1 "  [s]kip            : nothing written; asked again next run" "$C/plain"
 
     # --- Text review without an adopt target: a and m are not offered ---
     setup_dmf dmf-reask-noadopt
@@ -434,7 +427,7 @@ if $HAVE_PTY; then
     check "EOF at the refine feedback: the merge refined (AI called twice), then EOF rejects it and EOF overwrites" \
         eval 'occ_is 2 "==CALL==" "$C/bin/calls.txt" && has "[detail] menu answer (merge preview a.md): \"r\" -> r" "$LOG" && has "[detail] menu answer (merge preview a.md): EOF -> n" "$LOG" && has "[detail] menu answer (review a.md): EOF -> o" "$LOG" && res_is updated && text_is "$C/dest/a.md" "# Title\nsource line" && ! has "merged line" "$C/dest/a.md" && ! has "merged line" "$C/repo/a.md"'
 else
-    printf 'SKIP real-menu pty cases (no pseudo-terminal: python3 missing, or pywinpty not installed on Windows)\n'; SKIP=$((SKIP + 1))
+    printf 'SKIP real-menu pty cases (no pseudo-terminal: python3 missing)\n'; SKIP=$((SKIP + 1))
 fi
 if ! $HAVE_NODE; then
     printf 'SKIP JSON review cases (node not on PATH)\n'; SKIP=$((SKIP + 1))

@@ -223,8 +223,12 @@ Claude Code 2.1.309; recorded as `@reference/tool-ops-claude-code.md` item
   `~/.claude/skills/synced/`).
 - **Same name**: "Enterprise over personal, and personal over project. With
   deploy in both ~/.claude/skills/ and the project's .claude/skills/,
-  /deploy runs the personal one." Inside aitools every project skill
-  therefore runs from its user-level copy (section 7.1).
+  /deploy runs the personal one." Since 2026-11-06 a project skill has no
+  user-level copy (one name, one place), so inside aitools it runs from the
+  project copy in the session's working directory: observed at 2.1.325
+  (Windows, 2026-11-14), a delegate working in a worktree loaded
+  `frameworks` from the main checkout (`@reference/tool-ops-claude-code.md`
+  item #5). A same-named personal skill would still win.
 - **In context**: "skill descriptions are loaded into context so Claude
   knows what's available, but full skill content only loads when invoked";
   `disable-model-invocation: true` keeps the description out too.
