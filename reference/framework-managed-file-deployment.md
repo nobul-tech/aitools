@@ -26,8 +26,9 @@ options, and track outcomes.
 - **Backup before write** → every deployment backs up the target
 - **Outcome tracking** → every deployment resolves to one governed
   outcome (`created`, `updated`, `verified`, `accept & adopt`, `skipped`,
-  `failed`), recorded by the deploy tracker; `failed` is an ERROR row and
-  the run continues
+  `failed`), recorded by the deploy tracker; `failed` is one error,
+  recorded with `write_error` and the write or merge error as its reason
+  (`@reference/logging.md` section 8), and the run continues
 - **Non-interactive fallback** → `AITOOLS_FORCE` and non-terminal stdin
   select overwrite with no menu (SOURCE wins; a JSON field only in LOCAL is
   kept); EOF at a prompt takes that prompt's default with a warning
