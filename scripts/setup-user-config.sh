@@ -382,7 +382,7 @@ if [ "$MERGE_RC" -ne 0 ]; then
     # A key that differs only in case from a managed key (the JSON engines refuse to add
     # its twin, aitools-json.pl): name both keys, so the user knows what to fix (PR #108 n-2)
     MERGE_WHY=""
-    MERGE_WHY=$(printf '%s\n' "$MERGE_MSG" | perl -ne 'if (/set: \x27(.*?)\x27 differs only in case from existing key \x27(.*)\x27/) { print " -- key \"$2\" differs only in case from the managed key \"$1\": rename or remove it"; exit }') || MERGE_WHY=""  # perl failed: the generic message below
+    MERGE_WHY=$(printf '%s\n' "$MERGE_MSG" | perl -ne 'next if $done; if (/set: \x27(.*?)\x27 differs only in case from existing key \x27(.*)\x27/) { print " -- key \"$2\" differs only in case from the managed key \"$1\": rename or remove it"; $done = 1 }') || MERGE_WHY=""  # perl failed: the generic message below
     log_error "Failed: $(display_path "$CONFIG_FILE"): config merge failed (exit $MERGE_RC)$MERGE_WHY -- existing file left untouched"
     write_summary ERROR "aitools config" "merge failed"
 else
