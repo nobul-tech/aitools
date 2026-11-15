@@ -7,7 +7,7 @@
       "scope": "Tool data only. NOT lifecycle gates or onboarding checklists (shared/rules/tool-lifecycle.md). NOT evaluation process (/tool-eval skill). NOT per-tool ops metadata (tool-ops.json)",
       "audience": "/tool-registry skill, /tool-eval skill, setup scripts, check scripts, aitools-install"
     },
-    "lastUpdated": "2026-11-14",
+    "lastUpdated": "2026-11-15",
     "repositories": {
       "primary": "https://github.com/nobul-tech/aitools",
       "userTemplate": "https://github.com/nobul-jose/aitools-{username}"
@@ -205,17 +205,17 @@
       "purpose": null,
       "install": {
         "macos": [
-          { "method": "native", "command": "curl https://cursor.com/install -fsS | bash", "preferred": true, "autoUpdates": false, "ccCompatible": true, "notes": null }
+          { "method": "native", "command": "curl https://cursor.com/install -fsS | bash", "preferred": true, "autoUpdates": true, "ccCompatible": true, "notes": "Verified 2026-11-15 against https://cursor.com/docs/cli/installation (verbatim command). Installer pins 2026.11.13-eacade1 (downloads.cursor.com/lab); creates ~/.local/bin/agent (primary) and ~/.local/bin/cursor-agent (legacy). Homebrew cask cursor-cli exists (community, links only cursor-agent): not preferred." }
         ],
         "windows": [
-          { "method": "native-powershell", "command": "irm 'https://cursor.com/install?win32=true' | iex", "preferred": true, "autoUpdates": false, "ccCompatible": true, "notes": null }
+          { "method": "native-powershell", "command": "irm 'https://cursor.com/install?win32=true' | iex", "preferred": true, "autoUpdates": true, "ccCompatible": true, "notes": "Verified 2026-11-15 against https://cursor.com/docs/cli/installation (\"Windows (native)\"). Installs to %LOCALAPPDATA%\\cursor-agent and adds it to the user PATH (agent.exe/.cmd/.ps1 beside cursor-agent.*). No winget package (Anysphere publishes only Anysphere.Cursor, the IDE)." }
         ],
         "linux": [
-          { "method": "native", "command": "curl https://cursor.com/install -fsS | bash", "preferred": true, "autoUpdates": false, "ccCompatible": true, "notes": null }
+          { "method": "native", "command": "curl https://cursor.com/install -fsS | bash", "preferred": true, "autoUpdates": true, "ccCompatible": true, "notes": "Verified 2026-11-15 against https://cursor.com/docs/cli/installation (\"macOS, Linux and Windows (WSL)\"). No apt package." }
         ]
       },
       "update": {
-        "all": "agent update (or agent upgrade)"
+        "all": "agent update"
       },
       "versionCheck": "agent --version",
       "systemRequirements": "PATH: `~/.local/bin` must be in PATH (bash -> ~/.bashrc, zsh -> ~/.zshrc). ripgrep (`rg`) required at runtime — not in official docs but confirmed via error: 'Could not find ripgrep (rg) binary'.",
@@ -228,7 +228,7 @@
         "invocation": { "command": "agent", "antiPatterns": [] }
       },
       "versions": {
-        "macos": { "lastVerifiedVersion": "2026.02.27-e7d2ef6", "lastVerified": "2026-03-02" },
+        "macos": { "lastVerifiedVersion": "2026.11.13-bca9ff2", "lastVerified": "2026-11-15" },
         "windows": { "lastVerifiedVersion": "2026.03.11-6dfa30c", "lastVerified": "2026-03-13" },
         "linux": { "lastVerifiedVersion": null, "lastVerified": null },
         "minVersion": null,
@@ -778,10 +778,10 @@
       "purpose": "Go programming language toolchain. Required by go install for tools like Datadog Pup CLI.",
       "install": {
         "macos": [
-          { "method": "homebrew", "command": "brew install go", "preferred": true, "autoUpdates": false, "ccCompatible": true, "notes": null }
+          { "method": "homebrew", "command": "brew install go", "preferred": true, "autoUpdates": false, "ccCompatible": true, "notes": "Verified 2026-11-15: Homebrew formula go 1.27.4 (https://formulae.brew.sh/formula/go). Upstream's own macOS method is the go.dev .pkg (https://go.dev/doc/install)." }
         ],
         "windows": [
-          { "method": "winget", "command": "winget install GoLang.Go", "preferred": true, "autoUpdates": false, "ccCompatible": true, "notes": null }
+          { "method": "winget", "command": "winget install GoLang.Go", "preferred": true, "autoUpdates": false, "ccCompatible": true, "notes": "Verified 2026-11-15: winget GoLang.Go 1.27.4 wraps the official MSI (InstallerUrl https://go.dev/dl/go1.27.4.windows-amd64.msi, Publisher https://go.dev, Scope machine)." }
         ],
         "linux": []
       },
@@ -791,16 +791,16 @@
       },
       "versionCheck": "go version",
       "systemRequirements": null,
-      "notes": "GOPATH/bin must be on PATH for go install binaries to be accessible. Default GOPATH: ~/go (macOS) / %USERPROFILE%\\go (Windows). go install used by Datadog Pup as alternative install method.",
+      "notes": "go install puts binaries in GOBIN, default $GOPATH/bin, or $HOME/go/bin when GOPATH is unset (https://pkg.go.dev/cmd/go, verified 2026-11-15). Default GOPATH: $HOME/go (macOS, Linux) / %USERPROFILE%\\go (Windows). go install used by Datadog Pup as alternative install method.",
       "lifecycle": {
         "platformStatus": { "macos": "supported", "windows": "supported", "linux": "supported" },
         "concurrency": "Yes — stateless CLI",
-        "postInstallConfig": "GOPATH/bin on PATH (automated by setup script)",
+        "postInstallConfig": "GOPATH/bin on PATH: macOS/Linux via the managed PATH block (setup-user-shell.sh, ${GOPATH:-$HOME/go}/bin, appended); Windows via setup-go.ps1 (persistent user PATH)",
         "dependencies": [],
         "invocation": { "command": "go", "antiPatterns": [] }
       },
       "versions": {
-        "macos": { "lastVerifiedVersion": "go1.26.1", "lastVerified": "2026-03-06" },
+        "macos": { "lastVerifiedVersion": "go1.27.4", "lastVerified": "2026-11-15" },
         "windows": { "lastVerifiedVersion": "go1.26.1", "lastVerified": "2026-03-13" },
         "linux": { "lastVerifiedVersion": null, "lastVerified": null },
         "minVersion": null,
