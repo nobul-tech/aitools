@@ -16,13 +16,17 @@
 # dependencies. Hashes from https://pypi.org/pypi/pywinpty/3.1.2/json: every
 # win_amd64 wheel (cp310-cp315, incl. free-threaded), so the same file installs
 # on CI (3.12) and on a developer workstation (e.g. 3.14, with --user). Hash ->
-# file mapping re-read from the PyPI JSON API 2026-11-13 (M4-Winpty). win_arm64
-# wheels are not pinned.
+# file mapping re-read from the PyPI JSON API 2026-11-13 (M4-Winpty). Since
+# 2026-11-14 also every win_arm64 wheel (cp310-cp315, incl. free-threaded;
+# commander: "21a) add hashes"): all 16 wheel hashes re-read from the PyPI JSON
+# API in a browser on 2026-11-14 (M7-Pty) and compared digit by digit. win_arm64
+# is not runtime-verified: no ARM64 Windows machine; CI and the workstation are
+# x64. The sdist is not pinned (wheel only: --only-binary=:all:).
 # Evaluation: reference/evaluations/pywinpty-windows-2026-11-13.md.
 #
 # The line below is read by setup-pywinpty.ps1: the interpreter tags this pin covers
 # (cp<major><minor>[t]-<platform>). Keep it in step with the hashes.
-# wheel-tags: cp310-win_amd64 cp311-win_amd64 cp312-win_amd64 cp313-win_amd64 cp314-win_amd64 cp314t-win_amd64 cp315-win_amd64 cp315t-win_amd64
+# wheel-tags: cp310-win_amd64 cp311-win_amd64 cp312-win_amd64 cp313-win_amd64 cp314-win_amd64 cp314t-win_amd64 cp315-win_amd64 cp315t-win_amd64 cp310-win_arm64 cp311-win_arm64 cp312-win_arm64 cp313-win_arm64 cp314-win_arm64 cp314t-win_arm64 cp315-win_arm64 cp315t-win_arm64
 pywinpty==3.1.2 \
     --hash=sha256:197cb43a5a1c6ed5836907fdcb3f008883386bcdaa05ae0cfdf4848b3624e237 \
     --hash=sha256:a58997fa8519694725dca4a297aa7bebada3675263742cfb12fbc5eb09d466e7 \
@@ -31,4 +35,12 @@ pywinpty==3.1.2 \
     --hash=sha256:980af688956fe78c87882682732e6eea45aa0b8d10a9628812e95878264d5204 \
     --hash=sha256:fe0abcffd095642c78ba7c6abf4cc8129dce9568e97a1c9194eea23383d0de29 \
     --hash=sha256:b8c47556fbf19595898dd75f45763072ff1160b080eefabeae8cc43c5acbd720 \
-    --hash=sha256:ed5c5ca288001590fbf1d5a52c6389f0f6ae7e4751bdc8b2f8f9c7249f266f9b
+    --hash=sha256:ed5c5ca288001590fbf1d5a52c6389f0f6ae7e4751bdc8b2f8f9c7249f266f9b \
+    --hash=sha256:6b351d5853e0899179f1e82a53c5ebd0d6ea8dca023f1b7f7082f2837002018a \
+    --hash=sha256:0cd10bc1a08dbb92c8d951f042c93510394862e08a7d1e5d5a3514f798cfdb0e \
+    --hash=sha256:50e6504a1d616542036221e3ae38363600b6839f958142c1950a661c938b3a1e \
+    --hash=sha256:804e90d912ba17a246972209c6ae0358ef7c9fe958c2e5388183521113e9131e \
+    --hash=sha256:81d83678211cc6f8cd2954e98a8a18d8e5de1e0666900a1df8da70f33572d34d \
+    --hash=sha256:30235f396856fbc03c9bb181b4e27bf50f7b355e432e5731729063d920a09867 \
+    --hash=sha256:7af19f25e769f0c70f5920ce0964c508abdfe01e676cf05d5ed935848d8c782e \
+    --hash=sha256:0a40537712279ed74d5884b1af9037add1ed4b2e2339e9152268b582abad3a57

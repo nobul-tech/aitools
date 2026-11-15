@@ -12,6 +12,34 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.77.24 -- The adversarial workflow-guard timing case gets the 250 ms hard limit on macOS (2026-11-15)
+
+Not tagged. Branch `fix/fa81-05-wdg-timing`, mission fa81-05-wdg under fa81-05-merge-queue (session 87795dc3). Commander, 2026-11-15, answering RFI fa81-55 (give the adversarial case the stress case's rule: WARN at 100 ms or more, FAIL only at the 250 ms hard limit): "55) yes".
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 1 | Medium | `tests/hooks/test-workflow-delegation-guard.sh`: the timing case "adversarial 476 KB 'name prefix x.md' prompt" FAILed on the GitHub macOS runner at 100-107 ms (run 43668923612: 100 ms; run 43674468619: 107 ms on `/bin/bash` 3.2, then 103 ms on bash 5 on the rerun; each `FAIL adversarial 476 KB 'name prefix x.md' prompt: <n> ms (>= 100)`), turning main and the queued PRs red. Its `timing` call now passes `250` as the hard limit, the one the stress case already has: on macOS 100-249 ms is a counted WARN and 250 ms or more still FAILs; on Linux and Windows Git Bash nothing changes (advisory). The comment above the call gives the observed times and the reason. The hook and its 100 ms budget (spec v1.1 section 9) are unchanged |
+
+**Verified on:** Windows 11 (Git Bash): `bash -n` on the test; the whole test suite in Git Bash; `scripts/check-pre-commit.ps1`. macOS and Linux (bash 5 and `/bin/bash` 3.2): CI.
+
+---
+
+## v0.77.22 -- The pre-commit checklist's line-ending command works on Linux and Windows (2026-11-14)
+
+Not tagged. Branch `docs/m7-precommit-sed`, mission M7-Ckl under M7-Sweep (session 87795dc3), item 5c. Commander, 2026-11-14: "launch mission go fix them, dont bother filing incidents, check to see if these were already fixed by the other running missions first, if not do it".
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 1 | `reference/pre-commit-checklist.md` step 4 (Line endings): the manual fix is `PERLIO=:perlio perl -pi -e 's/\r$//' <file>` (macOS, Linux, Git Bash) and `$env:PERLIO = ':perlio'` then `perl -pi -e 's/\r$//' <file>` (PowerShell), replacing `sed -i '' 's/\r$//' <file>`, which is BSD-only: GNU sed (Linux, Git Bash) takes `''` as the script and exits 2. A one-line warning says Strawberry Perl without `PERLIO=:perlio` leaves the CRLF and exits 0, with a pointer to `reference/cross-platform-detail.md` "Strawberry Perl text mode". The step now says what it checks (a CR in the working-tree copy of a staged `.sh`; the `.ps1` twin: CRLF) and that `--fix` / `-Fix` converts CRLF to LF and stages the file again. The unverified "the Write tool on macOS produces CRLF" is dropped (it did not reproduce on Claude Code 2.1.307; tool-ops item #10) |
+
+**Verified on:** Windows 11 (Git Bash: GNU sed 4.9 exits 2 on the old command; Git perl 5.42.3 and Strawberry Perl 5.42.0 with `PERLIO=:perlio` turn a CRLF `.sh` into LF, Strawberry without it leaves CRLF; PowerShell 7 with Strawberry Perl, same results; a scratch repo with this repo's `.gitattributes` stores a staged CRLF `.sh` as LF and leaves the working copy CRLF). Not run on macOS or Linux.
+
+---
+
 ## v0.77.20 -- standing-order-guard keeps blocking when its log directory cannot be written (2026-11-14)
 
 Not tagged. Branch `fix/m7-sog-log-failsafe`, mission M7-Hook under M7-Sweep (session 87795dc3). Commander, 2026-11-14: "25) launch mission go fix them, dont bother filing incidents, check to see if these were already fixed by the other running missions first, if not do it".
@@ -30,6 +58,47 @@ Not tagged. Branch `fix/m7-sog-log-failsafe`, mission M7-Hook under M7-Sweep (se
 | 3 | `tests/hooks/test-hooks-smoke.sh`: 14 new standing-order-guard cases. With `~/.aitools` a regular file: a clean command exits 0 with no output; `&&` exits 2 with the usual reason and no mkdir error. With a temp copy switched to observe (`MODE_AND` only): a writable log gets the `[WOULD-BLOCK]` line and exits 0; a log path that is a directory, and an uncreatable log directory, exit 0 with no output. In a temp git repo whose `.scratch/.current-session` names a session dir: a writable `events.jsonl` gets the `hook_fire` event; with `events.jsonl` a directory a clean command exits 0 with no output and `&&` exits 2 with stderr exactly the block message. Against the old hook 8 of them fail |
 
 **Verified on:** Windows 11 (Git Bash 5.3): hook-rollout pre-deploy verification before and after (`bash -n`; clean exit 0; `&&` exit 2) with a writable HOME, with `~/.aitools` a file (before: exit 1 and 1; after: 0 and 2) and with an observe copy whose log path is a directory or uncreatable (before: exit 1; after: 0); with `events.jsonl` a directory the old hook printed `line 78: ... events.jsonl: Is a directory` before the block message, the new one only the message; the whole `tests/hooks` suite before and after (smoke 44 -> 58 passed, the other suites unchanged). Linux and macOS (bash 5 and `/bin/bash` 3.2): CI.
+
+---
+
+## v0.77.19 -- The pywinpty pin covers the Windows ARM64 (win_arm64) wheels (2026-11-14)
+
+Not tagged. Branch `fix/m7-pywinpty-arm64`, mission M7-Pty under M7-Sweep (session 87795dc3), item 9 of M7-Sweep. Commander, 2026-11-14, answering RFI fa81-21a ("No hashes for the Windows ARM (win_arm64) wheels ... Suggest: add the hashes when an ARM Windows machine appears"): "21a) add hashes".
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 1 | `scripts/requirements-pywinpty.txt` pins the sha256 of the 8 pywinpty 3.1.2 win_arm64 wheels (cp310, cp311, cp312, cp313, cp314, cp314t, cp315, cp315t) beside the 8 win_amd64 ones (16 hashes, was 8; the sdist stays unpinned), and its `# wheel-tags:` line lists the matching `cpXY[t]-win_arm64` tags, so `setup-pywinpty.ps1` installs on a Windows on ARM64 CPython instead of reporting WARN "no wheel for cp3XY-win_arm64". Every digest was read from the PyPI JSON API (https://pypi.org/pypi/pywinpty/3.1.2/json) in a browser on 2026-11-14 and compared with the pin digit by digit by script; the 8 win_amd64 hashes still match. No script changes: `setup-pywinpty.ps1` already accepted `win_arm64` tags and builds the interpreter tag from `sysconfig.get_platform()` (`win-arm64` on ARM64), and `build-deploy.sh` embeds the whole pin |
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 2 | `reference/evaluations/pywinpty-windows-2026-11-13.md` v1.4: the v1.4 changelog, section 6 "Pin coverage (v1.4)" (the 8 win_arm64 wheels, their sha256 and upload times, the comparison, what was and was not verified), unknown 5 (ARM64 runtime), the statements that said win_arm64 is not pinned |
+
+**Verified on:** Windows 11 x64 (pwsh 7.6, Git Bash 5.3.15): hashes from the PyPI JSON API read in a browser, 16 of 16 equal to the pin by script; `tests/pywinpty/test-setup-pywinpty.ps1` 54 passed, 0 failed, 0 skipped (a real cp314 win_amd64 install from the 16-hash pin, the MDM copy with the embedded pin, the uv-managed `--target` path); `tests/pywinpty/test-setup-pywinpty.sh` 31 passed, 0 failed, 2 skipped (the build embeds 16 hashes); a fake interpreter reporting `cp314-win_arm64` gets the hash-pinned pip command. **ARM64 not runtime-verified**: no ARM64 Windows machine; CI and the workstation are x64, so no win_arm64 wheel was downloaded, installed or imported.
+
+---
+
+## v0.77.18 -- A private account address redacted from tracked text files (2026-11-14)
+
+Not tagged. Branch `docs/m7-redact-email`, mission M7-Priv under M7-Sweep (session 87795dc3), item 7 of M7-Sweep. Commander, 2026-11-14: "25) launch mission go fix them, dont bother filing incidents, check to see if these were already fixed by the other running missions first, if not do it".
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 1 | The commander's secondary Google account address is replaced with `<secondary Google account>`, and its path-sanitized form (in `~/.claude/projects/` directory names) with `<secondary-Google-account>`, in the five tracked text files that held it: `.aitools/channel/handoffs/2026-10-21_360aa8f3-8-missions/S2-Layout/inventory2.txt` (2), `harvesting/2026-03-22_6_40agent-human-messages.md` (2), `harvesting/2026-03-29_session-fbf7decb-9_1bc9fd30-full.md` (7), `harvesting/2026-03-29_session-fbf7decb-9_f078fb16-session.md` (2) and `plans/user-repo-and-session-hooks.md` (1). No other byte changes. Four archives and git history still hold it: `harvesting/2026-10-29_session-ma-fci_main.tar`, `..._ma106_main.tar`, `..._ma106_merged.tar` and `..._mg108_tree.tar` (the two other archives of that date, `..._rccode_main.tar` and `..._rccode_pr106.tar`, hold no occurrence); nothing is rewritten |
+| 2 | Decision memo for the commander: every location of the address (files, lines, the commits that added it, the `.tar` members), what remains after this change, what a history rewrite and a `.tar` replacement would involve (GitHub's procedure quoted from docs.github.com), a recommendation, and counts of other personal data in tracked files (not edited) |
+
+### Files created
+
+| File | Purpose |
+|------|---------|
+| `.aitools/channel/handoffs/2026-11-14_87795dc3-missions/M7-Sweep/M7-Sweep-email-memo.md` | The decision memo (v1.1) |
+
+**Verified on:** Windows 11: after the change `git grep -I -i` with the scan pattern finds no tracked text file holding the address in either form; a character-level `git diff --word-diff` shows only the 14 replaced tokens; line counts and line endings of the five files unchanged. `scripts/ait-harvest.py` keys harvested files by name and records no content hash, so the three edited harvested files are not re-harvested.
 
 ---
 
