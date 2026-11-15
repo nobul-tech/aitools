@@ -282,6 +282,21 @@ contexts, and a revert-and-redo adds two commits for the same line); if you
 want the process restored to the letter, I revert it in the PR and re-add
 the line there.
 
+RFI 38dc-25-5: Align the delegation duty with your ten-element /delegate
+table?
+Your edit (1b34fa2) makes the /delegate table ten elements (parent session
+files, mission brief; PERMISSION_DENIED; mission manifest; naming
+conventions), but the same skill's description and intent (lines 6, 22),
+its checklist step 13 and "Recursion" still say eight, as do
+`shared/rules/delegation.md` (lines 11, 60, 86), `shared/claude-shared.md:146`,
+`.claude/rules/hook-rollout.md` and the `delegation-duty-guard.sh` /
+`workflow-delegation-guard.sh` checks (which score the eight). This PR only
+moved the skill's own test file to your ten.
+Suggest: a mission that updates those texts to ten and widens the two hooks'
+element block (a widening change, so the checks stay in observe;
+`hook-rollout.md`) (why: agents and hooks now hold two definitions of the
+duty, and your table is the newest word).
+
 ## Operational learning
 
 - Probe hand-back behaviour with throwaway delegates and a 2 s file poller:
