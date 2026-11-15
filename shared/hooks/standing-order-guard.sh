@@ -307,7 +307,7 @@ esac
 # Check for file-writing patterns (should use Write tool)
 # These are harder to detect by first token alone. Check the full first line
 # for redirection patterns that indicate file creation.
-FIRST_LINE=$(printf '%s' "$COMMAND" | head -1)
+FIRST_LINE=$(printf '%s' "$COMMAND" | sed -n '1p')  # sed -n reads to the end: no SIGPIPE under pipefail
 case "$FIRST_LINE" in
     echo*\>*|printf*\>*)
         # echo/printf redirecting to a file
