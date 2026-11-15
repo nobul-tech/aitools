@@ -26,6 +26,20 @@ Not tagged. Branch `fix/fa81-05-wdg-timing`, mission fa81-05-wdg under fa81-05-m
 
 ---
 
+## v0.77.22 -- The pre-commit checklist's line-ending command works on Linux and Windows (2026-11-14)
+
+Not tagged. Branch `docs/m7-precommit-sed`, mission M7-Ckl under M7-Sweep (session 87795dc3), item 5c. Commander, 2026-11-14: "launch mission go fix them, dont bother filing incidents, check to see if these were already fixed by the other running missions first, if not do it".
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 1 | `reference/pre-commit-checklist.md` step 4 (Line endings): the manual fix is `PERLIO=:perlio perl -pi -e 's/\r$//' <file>` (macOS, Linux, Git Bash) and `$env:PERLIO = ':perlio'` then `perl -pi -e 's/\r$//' <file>` (PowerShell), replacing `sed -i '' 's/\r$//' <file>`, which is BSD-only: GNU sed (Linux, Git Bash) takes `''` as the script and exits 2. A one-line warning says Strawberry Perl without `PERLIO=:perlio` leaves the CRLF and exits 0, with a pointer to `reference/cross-platform-detail.md` "Strawberry Perl text mode". The step now says what it checks (a CR in the working-tree copy of a staged `.sh`; the `.ps1` twin: CRLF) and that `--fix` / `-Fix` converts CRLF to LF and stages the file again. The unverified "the Write tool on macOS produces CRLF" is dropped (it did not reproduce on Claude Code 2.1.307; tool-ops item #10) |
+
+**Verified on:** Windows 11 (Git Bash: GNU sed 4.9 exits 2 on the old command; Git perl 5.42.3 and Strawberry Perl 5.42.0 with `PERLIO=:perlio` turn a CRLF `.sh` into LF, Strawberry without it leaves CRLF; PowerShell 7 with Strawberry Perl, same results; a scratch repo with this repo's `.gitattributes` stores a staged CRLF `.sh` as LF and leaves the working copy CRLF). Not run on macOS or Linux.
+
+---
+
 ## v0.77.20 -- standing-order-guard keeps blocking when its log directory cannot be written (2026-11-14)
 
 Not tagged. Branch `fix/m7-sog-log-failsafe`, mission M7-Hook under M7-Sweep (session 87795dc3). Commander, 2026-11-14: "25) launch mission go fix them, dont bother filing incidents, check to see if these were already fixed by the other running missions first, if not do it".
