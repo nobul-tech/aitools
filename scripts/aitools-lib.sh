@@ -1588,7 +1588,7 @@ validate_ai_merge_output() {
     if [ "$total" -gt 0 ]; then
         while IFS= read -r header; do
             [ -z "$header" ] && continue
-            printf '%s' "$output" | grep -qF "$header" && preserved=$((preserved + 1))
+            printf '%s' "$output" | grep -F "$header" >/dev/null && preserved=$((preserved + 1))
         done <<< "$combined_headers"
         local threshold=$(( (total * 60 + 99) / 100 ))
         [ "$threshold" -lt 1 ] && threshold=1
@@ -4151,7 +4151,7 @@ repair_uv_tool_env() {
     local tool_name="$1"
     local upgrade_output="${2:-}"
 
-    if ! printf '%s\n' "$upgrade_output" | grep -q 'missing a valid environment'; then
+    if ! printf '%s\n' "$upgrade_output" | grep 'missing a valid environment' >/dev/null; then
         return 1
     fi
 
@@ -4499,7 +4499,7 @@ diagnose_build_failure() {
     for entry in "${patterns[@]}"; do
         local pattern="${entry%%|*}"
         local rest="${entry#*|}"
-        if printf '%s\n' "$output" | grep -qiE "$pattern"; then
+        if printf '%s\n' "$output" | grep -iE "$pattern" >/dev/null; then
             echo "$rest"
             return 0
         fi

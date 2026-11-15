@@ -10,7 +10,7 @@ cd "$REPO"
 
 STAGED="$(git diff --cached --name-only)"
 
-if echo "$STAGED" | grep -qE '^shared/|^scripts/build-deploy\.sh$'; then
+if echo "$STAGED" | grep -E '^shared/|^scripts/build-deploy\.sh$' >/dev/null; then
   echo "hh pre-commit: shared/ or build-deploy.sh changed — running build-deploy.sh"
   bash scripts/build-deploy.sh
   git add deploy/
