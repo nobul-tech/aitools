@@ -164,8 +164,9 @@ The fan-out consumers read the manifest and prune retired names.
 - **Each skipped duplicate is an error**: one `write_error "harness
   files"` per duplicate, WHAT naming the skipped duplicate and its source,
   REASON naming the source that kept the name (first source wins;
-  `@reference/logging.md` section 8.2). The run continues and exits 1. The duplicate stays an error on every run until it is
-  renamed or removed in one of the sources.
+  `@reference/logging.md` section 8.2). The run continues and exits 1.
+  The duplicate stays an error on every run until it is renamed or
+  removed in one of the sources.
 - **Case-insensitive.** Names that differ only in case are duplicates
   (the macOS and Windows file systems are case-insensitive).
 - **Skills are whole directories.** The winning source's skill directory
@@ -312,8 +313,9 @@ manifest; one planner and one writer serve both kinds
   prune; `.bak.` keeps it from being deployed or fanned out) with an
   error. Any failure is `write_error "harness files"`, REASON being the
   failed step's error (the copy, the `diff -r -q` difference or the
-  removal), and the directory stays (the next run tries again). A file or symlink with a retired name is left
-  alone with a warning. Dry run: logged only.
+  removal), and the directory stays (the next run tries again). A file
+  or symlink with a retired name is left alone with a warning. Dry run:
+  logged only.
 - **A skill that moves into `shared/skills/`** (e.g. from `.claude/skills/`)
   changes its manifest source to `shared` and is not retired; one that
   moves out of `shared/skills/` (into `.claude/skills/`) is retired.

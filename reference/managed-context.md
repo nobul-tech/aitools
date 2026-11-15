@@ -23,8 +23,9 @@ macOS/Linux and `%USERPROFILE%` on Windows; section 9 lists both forms.
 v1.1, 2026-11-15: warnings and errors named by the `aitools-lib` helpers of
 `@reference/logging.md` section 8 (legend below).
 
-Legend for the diagrams: `ERROR "<what>"` is one error, recorded with
-`write_error` (WHAT the failed step, REASON why it failed); `WARN "<text>"`
+Legend for the diagrams: `ERROR "<what>"` (or `ERROR "<tool>" "<what>"`) is
+one error, recorded with `write_error` (WHAT the failed step, REASON why it
+failed); `WARN "<text>"`
 is one warning (`write_warn`, or `log_warn`, which names the script);
 `WARN + ACTION` is one `write_action` (one warning and one ACTION). `OK`,
 `DETAIL` and `ACTION` rows are `write_summary` records.
@@ -147,7 +148,7 @@ One thing, and it does not reach any agent today:
       "validation failed" (REASON the check that failed)
       rows: OK claude.md created | updated | verified | "accepted to profile";
             WARN "skipped (user review)"; ERROR "deploy failed" (REASON the
-            write, AI merge or adopt filter error)
+            write, AI merge or filter error)
 ```
 
 ### 3.1 Tokens, rendered per platform
@@ -403,8 +404,9 @@ templates with tokens, and each endpoint renders its own
   interpolation failed               ERROR, exit 1, untouched
   write, AI merge or filter fails    the library restores every snapshot it took
                                      (LOCAL and the adopt target); one ERROR
-                                     "deploy failed", REASON the write, merge
-                                     or filter error; nothing half-written
+                                     "deploy failed", REASON the write, AI
+                                     merge or filter error; nothing
+                                     half-written
   post-write validation fails        ERROR "validation failed", REASON the
                                      check that failed (the file stays, the
                                      next run reviews it again)
