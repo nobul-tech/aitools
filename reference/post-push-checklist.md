@@ -59,7 +59,12 @@ If missing, flag for Extensive tier (#15) or manual fix -- do not run setup scri
 ### 4. CLI entry point + version consistency
 
 `bash scripts/aitools --version` -- confirms the self-update stamp and that
-the entry point parses.
+the entry point parses. On Windows `check-post-push.ps1` runs the Windows
+entry point instead, natively: `pwsh -NoProfile -NonInteractive -File
+scripts/aitools.ps1 --version`, and passes on exit 0 with an `aitools
+<version>` line (no Git Bash; commander, 2026-11-14). In Git Bash the bash
+entry only hands off to `aitools.ps1`; that hand-off is tested by
+`tests/aitools-entry/test-win-forwarder.ps1` in CI.
 
 Also verify version matches the latest tag:
 `git describe --tags --match "v*" --abbrev=0`. A `+N` suffix indicates
@@ -86,6 +91,10 @@ Run all Always items first, then:
 through pwsh, a managed tool: FAIL when it is missing; see
 `.claude/rules/cross-platform.md` Pre-validation convention for the command).
 The source scripts only: the frozen aitools `deploy/` is not read (step 2).
+On Windows `check-post-push.ps1` reports the `.sh` half as SKIP (`bash -n
+runs in CI (linux, macos) and check-post-push.sh, not on Windows`): it calls
+no Git Bash (commander, 2026-11-14). The CI linux and macos jobs run `bash -n`
+on every tracked shell script on each push and pull request.
 
 ### 7. deploy/ drift audit (retired)
 
