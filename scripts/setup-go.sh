@@ -117,12 +117,14 @@ else
     fi
 fi
 
-# --- Ensure GOPATH/bin is on PATH ---
+# --- GOPATH/bin on PATH ---
+# Login shells get Go's bin directory from the aitools managed PATH block
+# (setup-user-shell.sh), so there is nothing for the user to do here. This
+# script runs as a child process: the PATH change below lasts only for this
+# script, not for the user's shell or later setup steps.
 if ! ensure_gopath_bin_on_path; then
     GOPATH_BIN="${GOPATH:-$HOME/go}/bin"
-    log_warn "Added $GOPATH_BIN to PATH for this session only"
-    log_warn "For persistence, add to shell profile: export PATH=\"\$GOPATH_BIN:\$PATH\""
-    write_summary ACTION "" "Add $GOPATH_BIN to PATH -- go install binaries"
+    log "$GOPATH_BIN is not on PATH in this shell; new login shells get it from the aitools managed block"
 fi
 
 # --- Exit ---

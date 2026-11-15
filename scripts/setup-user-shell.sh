@@ -77,6 +77,10 @@ NEW_FILE="$TMP_DIR/new-profile"
 PERL_FILE="$TMP_DIR/shell-blocks.pl"
 
 # --- The managed block (identical across Macs; arch detected at runtime) ---
+# Go's bin directory is added with no existence check: it does not exist until
+# the first `go install`, a PATH entry for a missing directory is harmless, and
+# the line names the directory setup-go.sh checks, ${GOPATH:-$HOME/go}/bin
+# (nobul-tech/aitools#185).
 cat > "$BLOCK_FILE" <<'BLOCK'
 # >>> aitools managed >>>
 # Owned by aitools (scripts/setup-user-shell.sh). Placed last so it re-asserts
@@ -88,7 +92,7 @@ elif [ -x /usr/local/bin/brew ]; then
 fi
 export PATH="$HOME/.local/bin:$PATH"
 [ -d "$HOME/.cargo/bin" ] && export PATH="$PATH:$HOME/.cargo/bin"
-[ -d "$HOME/go/bin" ] && export PATH="$PATH:$HOME/go/bin"
+export PATH="$PATH:${GOPATH:-$HOME/go}/bin"
 # <<< aitools managed <<<
 BLOCK
 
