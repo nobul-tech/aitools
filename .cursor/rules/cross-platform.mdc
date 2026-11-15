@@ -39,17 +39,39 @@ bash** is a different product — do not assume `bash` in PATH is Git Bash.
 
 Every script uses the canonical guard pattern. Guards MUST use structured
 logging (`LogError`/`log_error`), not raw output. Source `init-logging`
-before the guard. See `.claude/rules/cross-platform.md` "OS guard patterns".
+before the guard; a script with no aitools-lib beside it (bootstrap.sh from
+curl, hh.sh installed alone) or sourced into another script
+(relay-outbound-prompt.sh/.ps1) prints the structured line itself, to stderr;
+a sourced .sh guard returns 1 instead of exiting. See `.claude/rules/cross-platform.md` "OS guard patterns".
 
 **PS1:** `if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows)` —
 use `-not $IsWindows` (catches macOS AND Linux), never `$IsMacOS` alone.
 **Bash:** `case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*)` — exits on Windows.
 
 Exemptions: libraries (aitools-lib, check-lib, init-logging), hooks, build
-scripts (build-deploy, build-package), scratch files, and (pending approval)
-bootstrap/hh/relay-outbound-prompt/init-hh-hooks entry points, helper modules
-(aitools-json.ps1, _validate-ps1.ps1) and analyze-session.sh. Full table in
+scripts (build-deploy, build-package; approved 2026-11-14), helper modules
+(aitools-json.ps1, _validate-ps1.ps1; commander 2026-11-14), scratch files,
+the entry points aitools-install.sh, aitools (on Windows it forwards to
+aitools.ps1 before its library loads) and the git pre-commit hook, and
+(pending approval) bootstrap.ps1 and hh.ps1. bootstrap.sh, hh.sh,
+init-hh-hooks.sh, analyze-session.sh and relay-outbound-prompt.sh carry the
+POSIX guard, relay-outbound-prompt.ps1 the Windows guard (2026-11-14).
+Cross-platform test suites (hooks, build-deploy backup, build-package CLI,
+pywinpty); all Perl and Python scripts and their tests (commander,
+2026-11-14). Full table in
 `.claude/rules/cross-platform.md`.
+
+**Test suites** (commander, 2026-11-14: "sh scripts and tests should only run
+on linux/mac and ps1 on windows"): every `tests/<dir>/test-*.sh` has the POSIX
+guard (plus a `${BASH_VERSINFO[5]:-}` case that a `uname` shim or an exported
+`OSTYPE` cannot fool), every `test-*.ps1` the Windows guard, both printing to
+stderr, first thing after `set` / `param` (a `.ps1` may print `-Help` first). A
+suite for a `.sh`/`.ps1` pair has a `.ps1` twin harness; the 2026-11 ports
+share cases, plus platform-only cases on each side (the script-suite ports also golden files; the check-suite ports
+repeat the expectations in each harness), the older twins (managed-files,
+adopt-push, logging, menus, setup-user-shell, relay-outbound) do not yet. On Windows run only `.ps1` suites (and the listed
+cross-platform ones); never run a `.sh` suite past its guard or spoof
+`uname`/`OSTYPE`. Patterns: `.claude/rules/cross-platform.md` "OS guard patterns".
 
 Dead code rule: Do not write platform branches for the rejected platform
 below an OS guard. Branch on capability, not identity (`IS_MACOS`,

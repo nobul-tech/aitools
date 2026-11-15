@@ -25,7 +25,7 @@ json_field() {
     local val
     val=$(printf '%s' "$json" \
         | grep -o "\"$key\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" \
-        | head -1 \
+        | sed -n '1p' \
         | sed 's/.*"'"$key"'"[[:space:]]*:[[:space:]]*"//' \
         | sed 's/"$//')
     printf '%s' "$val"

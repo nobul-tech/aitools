@@ -12,6 +12,23 @@
 #   AITOOLS_SKIP_RELAY_PROMPT=1  — skip (automation / CI)
 #   CI                           — non-interactive: one-line hint only
 #   RELAY_PROMPT_FORCE=1         — prompt even when CI is set (TTY only)
+#
+# Platform: macOS/Linux (OS guard below). Windows: relay-outbound-prompt.ps1,
+# loaded by aitools.ps1 and hh.ps1.
+
+# OS guard (.claude/rules/cross-platform.md "OS guard patterns"; commander,
+# 2026-11-14: "relay-outbound.sh/.ps1 need os guards they are not exempt").
+# On Windows the bash entry point scripts/aitools hands off to aitools.ps1
+# before it reaches the relay prompt, and hh.sh refuses Windows. This file is
+# sourced into scripts/aitools and hh.sh, so the guard writes the structured
+# line itself (sourcing init-logging here would re-initialize the caller's
+# log) and, when sourced, returns 1 instead of ending the caller's shell.
+case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*)
+        printf '[%s] [relay-outbound-prompt] [error] This script is for macOS/Linux. On Windows, use relay-outbound-prompt.ps1 (pwsh).\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >&2
+        [ "${BASH_SOURCE[0]}" = "$0" ] || return 1
+        exit 1 ;;
+esac
 
 relay_outbound_prompt() {
     local repo="${1:?relay_outbound_prompt: repo path required}"
@@ -72,22 +89,52 @@ relay_outbound_prompt() {
     printf '    git commit -m "channel: update relay — …"\n' > /dev/tty
     printf '    git push\n' > /dev/tty
     printf '\n  [c]ontinue  [q]uit (exit 2)  [s]how git status\n' > /dev/tty
-    printf '  choice [c/q/s] (default c): ' > /dev/tty
-    local choice
-    read -r choice < /dev/tty
-    case "$(printf '%s' "$choice" | tr '[:upper:]' '[:lower:]')" in
-        q|q*)
+    local rc=0
+    _relay_outbound_choice < /dev/tty > /dev/tty || rc=$?
+    case "$rc" in
+        2)
             return 2
             ;;
-        s|s*)
+        3)
             git -C "$repo" status -sb > /dev/tty
             printf '\n' > /dev/tty
             ;;
-        *)
-            return 0
-            ;;
     esac
     return 0
+}
+
+# Read the [RELAY] choice from stdin; the prompt and hints go to stdout (the
+# caller points both at /dev/tty). An empty or unrecognised answer asks again.
+# Returns 0 continue, 2 quit, 3 show git status. End of input, or 50
+# unrecognised answers in a row, continues (the prompt's EOF default) and says so.
+# hh.sh does not load aitools-lib, so this mirrors the library's
+# read_menu_choice locally: same hint text, no answer logging.
+_relay_outbound_choice() {
+    local choice="" rc=0 tries=0
+    while :; do
+        printf '  choice [c/q/s]: '
+        rc=0
+        IFS= read -r choice || rc=$?
+        # Trim surrounding whitespace (a CR included), then lowercase
+        choice="${choice#"${choice%%[![:space:]]*}"}"
+        choice="${choice%"${choice##*[![:space:]]}"}"
+        choice=$(printf '%s' "$choice" | tr '[:upper:]' '[:lower:]')
+        case "$choice" in
+            c|continue) return 0 ;;
+            q|quit) return 2 ;;
+            s|show) return 3 ;;
+        esac
+        if [ "$rc" -ne 0 ]; then
+            printf '\n  (no input -- continuing)\n'
+            return 0
+        fi
+        tries=$((tries + 1))
+        if [ "$tries" -ge 50 ]; then
+            printf '  (no input -- continuing)\n'
+            return 0
+        fi
+        printf '  please type one of c/continue/q/quit/s/show\n'
+    done
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then

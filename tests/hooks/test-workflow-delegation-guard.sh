@@ -322,9 +322,9 @@ printf '{"tool_name":"Bash","tool_input":{"command":"ls"}}' > "$WORK/p.json"
 (cd "$WORK/repo" && "$BASH_BIN" "$HOOK" < "$WORK/p.json" >/dev/null 2>&1)
 n="$(sed -n '$=' "$EV" 2>/dev/null || echo 0)"
 [ "$n" = "6" ] && ok "fallback: 1 event, no script: 1, no agent(: 1, Bash: none" || bad "event count after fallback/none/Bash=$n"
-sed -n '4p' "$EV" | grep -q '"score":1,.*"checked":1,"scope":"script","why":"unterminated template"}' && ok "fallback event: scope script, checked 1, why" || bad "fallback event: $(sed -n '4p' "$EV")"
-sed -n '5p' "$EV" | grep -q '"score":0,.*"checked":0,"scope":"script","why":"no script or scriptPath in the input"}' && ok "no-script event: checked 0, why" || bad "none event: $(sed -n '5p' "$EV")"
-sed -n '6p' "$EV" | grep -q '"checked":0,"scope":"script","why":"no agent() call in the script"}' && ok "no-agent( event: checked 0, why" || bad "no-agent event: $(sed -n '6p' "$EV")"
+sed -n '4p' "$EV" | grep '"score":1,.*"checked":1,"scope":"script","why":"unterminated template"}' >/dev/null && ok "fallback event: scope script, checked 1, why" || bad "fallback event: $(sed -n '4p' "$EV")"
+sed -n '5p' "$EV" | grep '"score":0,.*"checked":0,"scope":"script","why":"no script or scriptPath in the input"}' >/dev/null && ok "no-script event: checked 0, why" || bad "none event: $(sed -n '5p' "$EV")"
+sed -n '6p' "$EV" | grep '"checked":0,"scope":"script","why":"no agent() call in the script"}' >/dev/null && ok "no-agent( event: checked 0, why" || bad "no-agent event: $(sed -n '6p' "$EV")"
 if $HAVE_PY; then
     python3 -c 'import json,sys; [json.loads(l) for l in open(sys.argv[1])]' "$EV" && ok "events are valid JSON" || bad "events not valid JSON"
 else
@@ -484,9 +484,12 @@ wf_payload "$WORK/one.js" > "$WORK/one.json"
 timing "500 KB script, one 486 KB prompt" "$WORK/one.json" "$(summary 1 1 0)"
 # Adversarial: under the 512 KB cap (so the template closes and the prompt is
 # scored per agent), with ".md" hits so the bounded md-prefix loop runs.
+# 100-107 ms on the GitHub macOS runner (runs 43668923612, 43674468619), so it
+# gets the stress case's 250 ms hard limit (RFI fa81-55); the 100 ms budget is
+# unchanged: on macOS 100-249 ms is a counted WARN, 250 ms or more FAILs.
 perl -e 'print "agent(`", "name prefix x.md " x 28000, "`)\n"' > "$WORK/adv.js"
 wf_payload "$WORK/adv.js" > "$WORK/adv.json"
-timing "adversarial 476 KB 'name prefix x.md' prompt" "$WORK/adv.json" "$(summary 1 0 0)"
+timing "adversarial 476 KB 'name prefix x.md' prompt" "$WORK/adv.json" "$(summary 1 0 0)" 250
 
 echo
 printf 'workflow-delegation-guard: %d passed, %d failed, %d skipped, %d warnings (bash: %s)\n' "$PASS" "$FAIL" "$SKIP" "$WARN" "$("$BASH_BIN" -c 'echo $BASH_VERSION')"

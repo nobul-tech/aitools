@@ -50,18 +50,32 @@ jobs:
           fi
           echo "bash $BASH_VER OK (>= 4.0)"
 
+      # Every tracked shell script: each *.sh under scripts/, shared/, packaging/,
+      # tests/ and deploy/, and each extensionless file under scripts/, shared/
+      # and packaging/ with a bash/sh shebang (scripts/aitools, the git hook, the
+      # package maintainer scripts). The Windows check-*.ps1 scripts run no Git
+      # Bash (commander, 2026-11-14), so this step and the linux job's copy are
+      # the .sh syntax check for every push and pull request. Same list as the
+      # linux job. Not listed: the archived .sh under .aitools/channel/handoffs/
+      # and harvesting/ (never run). An empty list fails the step.
       - name: Validate bash script syntax
         run: |
-          echo "::group::Checking .sh files"
+          echo "::group::Checking shell scripts"
           errors=0
-          for f in scripts/*.sh scripts/githooks/pre-commit deploy/*.sh shared/hooks/*.sh; do
-            [ -f "$f" ] || continue
+          git ls-files -- scripts shared packaging tests deploy > /tmp/tracked-files.txt
+          perl -ne 'chomp; if (/\.sh$/) { print "$_\n"; next } next if m{^(tests|deploy)/} || m{/[^/]*\.[^/]*$}; open(my $fh, "<", $_) or die "cannot read $_: $!\n"; my $l = <$fh> // ""; close $fh; print "$_\n" if $l =~ m{^#!.*\b(ba)?sh\b}' /tmp/tracked-files.txt > /tmp/shell-scripts.txt
+          echo "$(wc -l < /tmp/shell-scripts.txt) shell scripts"
+          if [ ! -s /tmp/shell-scripts.txt ]; then
+            echo "::error::no shell scripts listed (git ls-files or the filter failed)"
+            exit 1
+          fi
+          while IFS= read -r f; do
             if ! bash -n "$f" 2>/tmp/bash-syntax-err.txt; then
               echo "FAIL: $f"
               cat /tmp/bash-syntax-err.txt
               errors=$((errors + 1))
             fi
-          done
+          done < /tmp/shell-scripts.txt
           echo "::endgroup::"
           if [ "$errors" -gt 0 ]; then
             echo "::error::$errors bash file(s) failed syntax check"
@@ -95,8 +109,21 @@ jobs:
       - name: OS guard tests (macOS /bin/bash 3.2)
         run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/os-guards/test-os-guards.sh
 
+      # The [RELAY] prompt scripts: the .sh loads here, the .ps1 refuses (pwsh)
+      - name: Relay prompt guard tests (bash 5)
+        if: ${{ !cancelled() }}
+        run: bash tests/relay-outbound/test-relay-outbound.sh
+
+      - name: Relay prompt guard tests (macOS /bin/bash 3.2)
+        if: ${{ !cancelled() }}
+        run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/relay-outbound/test-relay-outbound.sh
+
       - name: harness-db delegation score tests (Python)
         run: python3 tests/harness-db/test-delegation-score.py
+
+      - name: harness-db schema and migration tests (Python)
+        if: ${{ !cancelled() }}
+        run: python3 tests/harness-db/test-schema.py
 
       - name: ait-harvest harvest/archive tests (Python)
         run: python3 tests/harvest/test-ait-harvest.py
@@ -109,6 +136,15 @@ jobs:
 
       - name: Dotprofile adopt commit+push tests (bash)
         run: bash tests/managed-files/test-adopt-push.sh
+
+      # Menu-choice wrapper read_menu_choice (re-ask on unrecognised input)
+      - name: Menu-choice wrapper tests (bash 5, pty)
+        if: ${{ !cancelled() }}
+        run: bash tests/menus/test-menu-choice.sh
+
+      - name: Menu-choice wrapper tests (macOS /bin/bash 3.2, pty)
+        if: ${{ !cancelled() }}
+        run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/menus/test-menu-choice.sh
 
       - name: Profile resolver tests (.sh, bash 5)
         run: bash tests/profile/test-profile.sh
@@ -253,6 +289,73 @@ jobs:
         if: ${{ !cancelled() }}
         run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/build-deploy/test-build-deploy-backup.sh
 
+      - name: setup-pywinpty n/a + MDM pin embed tests (bash 5)
+        if: ${{ !cancelled() }}
+        run: bash tests/pywinpty/test-setup-pywinpty.sh
+
+      - name: setup-pywinpty n/a + MDM pin embed tests (macOS /bin/bash 3.2)
+        if: ${{ !cancelled() }}
+        run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/pywinpty/test-setup-pywinpty.sh
+
+      - name: check-pre-push step 7 tests (.sh twin, bash 5)
+        if: ${{ !cancelled() }}
+        run: bash tests/check-pre-push/test-pre-push-step7.sh
+
+      - name: check-pre-push step 7 tests (macOS /bin/bash 3.2)
+        if: ${{ !cancelled() }}
+        run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/check-pre-push/test-pre-push-step7.sh
+
+      # check-pre-commit steps 3 and 10 are retired: no twin runs build-deploy.sh (incident #136)
+      - name: check-pre-commit steps 3 and 10 tests (bash 5; whole .sh with --fix)
+        if: ${{ !cancelled() }}
+        run: bash tests/check-pre-commit/test-pre-commit-steps3-10.sh
+
+      - name: check-pre-commit steps 3 and 10 tests (macOS /bin/bash 3.2)
+        if: ${{ !cancelled() }}
+        run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/check-pre-commit/test-pre-commit-steps3-10.sh
+
+      # check-post-push steps 2, 6 and 14 never read the frozen aitools deploy/ (incident #176)
+      - name: check-post-push steps 2, 6 and 14 tests (.sh twin, bash 5)
+        if: ${{ !cancelled() }}
+        run: bash tests/check-post-push/test-post-push-deploy-steps.sh
+
+      - name: check-post-push steps 2, 6 and 14 tests (macOS /bin/bash 3.2)
+        if: ${{ !cancelled() }}
+        run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/check-post-push/test-post-push-deploy-steps.sh
+
+      - name: check-post-push step 7 tests (.sh twin, bash 5)
+        if: ${{ !cancelled() }}
+        run: bash tests/check-post-push/test-post-push-step7.sh
+
+      - name: check-post-push step 7 tests (macOS /bin/bash 3.2)
+        if: ${{ !cancelled() }}
+        run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/check-post-push/test-post-push-step7.sh
+
+      - name: check-post-push step 29 menu parity tests (.sh twin + check-menu-parity.pl, bash 5)
+        if: ${{ !cancelled() }}
+        run: bash tests/check-post-push/test-menu-parity.sh
+
+      - name: check-post-push step 29 menu parity tests (macOS /bin/bash 3.2)
+        if: ${{ !cancelled() }}
+        run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/check-post-push/test-menu-parity.sh
+
+      # check-script-compliance step 7: a pipeline ending in grep -q under pipefail FAILS; BSD grep mechanism
+      - name: check-script-compliance step 7 grep -q tests (bash 5)
+        if: ${{ !cancelled() }}
+        run: bash tests/check-script-compliance/test-step7-grepq.sh
+
+      - name: check-script-compliance step 7 grep -q tests (macOS /bin/bash 3.2)
+        if: ${{ !cancelled() }}
+        run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/check-script-compliance/test-step7-grepq.sh
+
+      - name: setup-user-shell login profile + rc tests (bash 5)
+        if: ${{ !cancelled() }}
+        run: bash tests/setup-user-shell/test-setup-user-shell.sh
+
+      - name: setup-user-shell login profile + rc tests (macOS /bin/bash 3.2)
+        if: ${{ !cancelled() }}
+        run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/setup-user-shell/test-setup-user-shell.sh
+
       # Hook output-channel tests: one step per suite (not run-hook-tests.sh),
       # so the "Every test suite is in CI" step sees each test-*.sh.
       - name: Hook output-channel tests, sh-file-fixup (bash 5)
@@ -377,17 +480,24 @@ jobs:
           fi
           echo "bash $BASH_VER OK (>= 4.0)"
 
+      # Every tracked shell script (the list and the reason: the macos job's step)
       - name: Validate bash script syntax
         run: |
           errors=0
-          for f in scripts/*.sh scripts/githooks/pre-commit deploy/*.sh shared/hooks/*.sh; do
-            [ -f "$f" ] || continue
+          git ls-files -- scripts shared packaging tests deploy > /tmp/tracked-files.txt
+          perl -ne 'chomp; if (/\.sh$/) { print "$_\n"; next } next if m{^(tests|deploy)/} || m{/[^/]*\.[^/]*$}; open(my $fh, "<", $_) or die "cannot read $_: $!\n"; my $l = <$fh> // ""; close $fh; print "$_\n" if $l =~ m{^#!.*\b(ba)?sh\b}' /tmp/tracked-files.txt > /tmp/shell-scripts.txt
+          echo "$(wc -l < /tmp/shell-scripts.txt) shell scripts"
+          if [ ! -s /tmp/shell-scripts.txt ]; then
+            echo "::error::no shell scripts listed (git ls-files or the filter failed)"
+            exit 1
+          fi
+          while IFS= read -r f; do
             if ! bash -n "$f" 2>/tmp/bash-syntax-err.txt; then
               echo "FAIL: $f"
               cat /tmp/bash-syntax-err.txt
               errors=$((errors + 1))
             fi
-          done
+          done < /tmp/shell-scripts.txt
           if [ "$errors" -gt 0 ]; then
             echo "::error::$errors bash file(s) failed syntax check"
             exit 1
@@ -414,48 +524,21 @@ jobs:
       - name: Every test suite is in CI
         if: ${{ !cancelled() }}
         run: |
-          # Fails when a tracked tests/<dir>/test-*.sh is not run by a step of
-          # this workflow (a "run:" line that runs "bash <path>"). The only
-          # copy of this step (the check is static; the macos job points here).
-          # A suite that cannot run in CI goes in %exempt with the reason; an
-          # exempt suite that is also run, or no longer exists, fails the step
-          # too (stale exemption).
-          # Blind spots (a cheap check, plan FO-0): it sees single-line run:
-          # only (a suite started inside a "run: |" block is reported missing);
-          # it counts a suite run in any job, not in macos and linux each; it
-          # ignores if: conditions (an if: false step still counts); it only
-          # needs "bash <path>" somewhere on the run: line before any "#"; it
-          # covers test-*.sh only, not test-*.ps1 run by pwsh -File.
-          git ls-files 'tests/*/test-*.sh' | perl -e '
-            my %exempt = (
-              # "tests/<dir>/test-<name>.sh" => "reason it cannot run in CI",
-            );
-            open(my $fh, "<", ".github/workflows/check.yml") or die "cannot read .github/workflows/check.yml: $!\n";
-            my $yml = do { local $/; <$fh> };
-            close($fh);
-            my ($n, $bad) = (0, 0);
-            my %seen;
-            while (my $p = <STDIN>) {
-              chomp $p;
-              next if $p eq "";
-              $n++;
-              $seen{$p} = 1;
-              my $run = $yml =~ /^\s*run:\s[^#\n]*\bbash\s+\Q$p\E(?:\s|$)/m;
-              if (exists $exempt{$p}) {
-                if ($run) { print "::error::$p is run in CI and also exempt: remove the exemption\n"; $bad++; }
-                else { print "exempt: $p ($exempt{$p})\n"; }
-              } elsif (!$run) {
-                print "::error::$p is not run by any step in .github/workflows/check.yml\n"; $bad++;
-              }
-            }
-            for my $p (sort keys %exempt) {
-              next if $seen{$p};
-              print "::error::exempt suite $p is not tracked: remove the exemption\n"; $bad++;
-            }
-            die "::error::no tests/*/test-*.sh found (git ls-files)\n" if $n == 0;
-            exit 1 if $bad;
-            print "All $n test suites are in CI or exempt\n";
-          '
+          # Fails when a tracked tests/<dir>/test-*.sh or test-*.ps1 is not run
+          # by a step of this workflow: a single-line "run:" that runs
+          # "bash <path>" (.sh) or "pwsh [-File] <path>" (.ps1, / or \ in the
+          # path). The only copy of this step (the check is static; the macos
+          # job points here). The logic, its %exempt table (a suite that cannot
+          # run in CI, with the reason; a stale exemption fails) and its blind
+          # spots (a suite started inside a "run: |" block is reported missing;
+          # a suite run in any job counts, not one per platform; if: conditions
+          # are ignored) live in scripts/check-ci-suites.pl (--help); its tests
+          # are tests/ci-suites/test-check-ci-suites.sh (next step).
+          git ls-files 'tests/*/test-*.sh' 'tests/*/test-*.ps1' | perl scripts/check-ci-suites.pl .github/workflows/check.yml
+
+      - name: check-ci-suites tests (the step above, planted gaps)
+        if: ${{ !cancelled() }}
+        run: bash tests/ci-suites/test-check-ci-suites.sh
 
       - name: Hook-registration parity audit
         run: |
@@ -471,8 +554,17 @@ jobs:
       - name: OS guard tests (Windows-guarded .ps1 refuse Linux)
         run: bash tests/os-guards/test-os-guards.sh
 
+      # The [RELAY] prompt scripts: the .sh loads here, the .ps1 refuses (pwsh)
+      - name: Relay prompt guard tests
+        if: ${{ !cancelled() }}
+        run: bash tests/relay-outbound/test-relay-outbound.sh
+
       - name: harness-db delegation score tests (Python)
         run: python3 tests/harness-db/test-delegation-score.py
+
+      - name: harness-db schema and migration tests (Python)
+        if: ${{ !cancelled() }}
+        run: python3 tests/harness-db/test-schema.py
 
       - name: ait-harvest harvest/archive tests (Python)
         run: python3 tests/harvest/test-ait-harvest.py
@@ -485,6 +577,11 @@ jobs:
 
       - name: Dotprofile adopt commit+push tests (bash)
         run: bash tests/managed-files/test-adopt-push.sh
+
+      # Menu-choice wrapper read_menu_choice (re-ask on unrecognised input)
+      - name: Menu-choice wrapper tests (bash, pty)
+        if: ${{ !cancelled() }}
+        run: bash tests/menus/test-menu-choice.sh
 
       - name: Profile resolver tests (.sh, incl. claude-code-web)
         run: bash tests/profile/test-profile.sh
@@ -557,6 +654,38 @@ jobs:
         if: ${{ !cancelled() }}
         run: bash tests/build-deploy/test-build-deploy-backup.sh
 
+      - name: setup-pywinpty n/a + MDM pin embed tests
+        if: ${{ !cancelled() }}
+        run: bash tests/pywinpty/test-setup-pywinpty.sh
+
+      - name: check-pre-push step 7 tests
+        if: ${{ !cancelled() }}
+        run: bash tests/check-pre-push/test-pre-push-step7.sh
+
+      # check-post-push step 7 is retired: neither twin runs build-deploy.sh
+      - name: check-post-push step 7 tests (.sh twin)
+        if: ${{ !cancelled() }}
+        run: bash tests/check-post-push/test-post-push-step7.sh
+
+      # check-post-push steps 2, 6 and 14 never read the frozen aitools deploy/ (incident #176)
+      - name: check-post-push steps 2, 6 and 14 tests (.sh twin)
+        if: ${{ !cancelled() }}
+        run: bash tests/check-post-push/test-post-push-deploy-steps.sh
+
+      # check-post-push step 29: menu lines and read_menu_choice / Read-MenuChoice prompts
+      - name: check-post-push step 29 menu parity tests (.sh twin + check-menu-parity.pl)
+        if: ${{ !cancelled() }}
+        run: bash tests/check-post-push/test-menu-parity.sh
+
+      # check-pre-commit steps 3 and 10 are retired: no twin runs build-deploy.sh (incident #136)
+      - name: check-pre-commit steps 3 and 10 tests (.sh twin; whole .sh with --fix)
+        if: ${{ !cancelled() }}
+        run: bash tests/check-pre-commit/test-pre-commit-steps3-10.sh
+
+      - name: setup-user-shell login profile + rc tests
+        if: ${{ !cancelled() }}
+        run: bash tests/setup-user-shell/test-setup-user-shell.sh
+
       # Hook output-channel tests: one step per suite (see the macos job).
       - name: Hook output-channel tests, sh-file-fixup
         if: ${{ !cancelled() }}
@@ -590,8 +719,28 @@ jobs:
             exit 1
           fi
 
+      # check-script-compliance step 7: a pipeline ending in grep -q under pipefail FAILS; GNU grep mechanism
+      - name: check-script-compliance step 7 grep -q tests
+        if: ${{ !cancelled() }}
+        run: bash tests/check-script-compliance/test-step7-grepq.sh
+
+      # Script standards compliance, the .sh twin (check-post-push step 23 runs it,
+      # but only after a push): fails the job on a FAIL check (an unchecked
+      # -ErrorAction SilentlyContinue, an exit 1 without write_summary, a missing
+      # OS guard ...). The .ps1 twin runs in the windows job. Static, so one POSIX
+      # copy is enough (not repeated in the macos job). Last step of the job on
+      # purpose: a failed step skips every later step without an if: condition.
+      - name: Script standards compliance (check-script-compliance.sh)
+        if: ${{ !cancelled() }}
+        run: bash scripts/check-script-compliance.sh
+
   # =====================================================================
-  # Windows -- validates PS1 scripts natively + bash scripts via Git Bash
+  # Windows -- test suites are .ps1, run natively with pwsh (commander,
+  # 2026-11-14: "sh scripts and tests should only run on linux/mac and ps1 on
+  # windows"). The .sh steps left here are the cross-platform suites (no OS
+  # guard, listed in .claude/rules/cross-platform.md): the hooks,
+  # build-deploy.sh, build-package.sh and the setup-pywinpty MDM pin embed.
+  # scripts/check-ci-suites.pl (linux job) enforces which job runs what.
   # =====================================================================
   windows:
     runs-on: windows-2022
@@ -604,25 +753,45 @@ jobs:
         uses: actions/checkout@v7
 
       # Python pinned for the test-only dependencies (plans/ci-platform-targeting.md):
-      # pywinpty (ConPTY backend of tests/managed-files/pty-run.py), hash-pinned.
+      # pywinpty (ConPTY backend of tests/managed-files/pty-run.py), hash-pinned,
+      # installed by scripts/setup-pywinpty.ps1 (next step).
       - name: Set up Python 3.12
         uses: actions/setup-python@v7.0.0
         with:
           python-version: '3.12'
 
-      - name: Install Windows test dependencies (pywinpty, hash-pinned)
+      # Dogfooding: the same script and pin as aitools install Step 15b (--user,
+      # wheel only, --require-hashes). python3 here is setup-python's
+      # (C:\hostedtoolcache\windows\Python\3.12.x\x64\python3.exe). A WARN outcome
+      # (python3 externally managed, a venv, a tag the pin does not cover) exits 0
+      # without winpty: it fails this step loudly instead of letting the pty
+      # suites SKIP.
+      - name: Install pywinpty (scripts/setup-pywinpty.ps1, hash-pinned)
         if: ${{ !cancelled() }}
         shell: pwsh
-        run: python -m pip install --require-hashes -r tests/managed-files/requirements-windows.txt
+        run: |
+          $env:AITOOLS_SUMMARY_FILE = Join-Path $env:RUNNER_TEMP "pywinpty-summary.txt"
+          $env:AITOOLS_LOG_DIR = Join-Path $env:RUNNER_TEMP "pywinpty-logs"
+          pwsh -NoProfile -NonInteractive -File scripts/setup-pywinpty.ps1
+          $rc = $LASTEXITCODE
+          $rows = @(Get-Content -LiteralPath $env:AITOOLS_SUMMARY_FILE -ErrorAction SilentlyContinue)
+          $rows | ForEach-Object { Write-Host "summary: $_" }
+          if ($rc -ne 0 -or $rows.Count -eq 0 -or ($rows | Where-Object { $_ -notmatch '^OK\|pywinpty\|' })) {
+            Get-Content -LiteralPath (Join-Path $env:AITOOLS_LOG_DIR "deploy.log") -Tail 40 -ErrorAction SilentlyContinue
+            Write-Error "setup-pywinpty.ps1: exit $rc, want exit 0 and only OK rows"
+            exit 1
+          }
+          python3 -c "import winpty, importlib.metadata as m; print('pywinpty', m.version('pywinpty'), winpty.__file__)"
+          if ($LASTEXITCODE -ne 0) { Write-Error "python3 cannot import winpty after setup-pywinpty.ps1"; exit 1 }
 
       - name: Windows runner probe (HOME isolation, Python, ConPTY)
         shell: bash
         run: python tests/managed-files/winpty-probe.py "$(cygpath -w "$BASH")"
 
-      - name: OS guard tests (POSIX-guarded .sh refuse Windows)
+      - name: OS guard tests (POSIX-guarded .sh refuse Git Bash; PowerShell harness)
         if: ${{ !cancelled() }}
-        shell: bash
-        run: bash tests/os-guards/test-os-guards.sh
+        shell: pwsh
+        run: pwsh -NoProfile -File tests/os-guards/test-os-guards.ps1
 
       - name: Verify Git Bash version
         shell: bash
@@ -677,128 +846,215 @@ jobs:
           }
           Write-Host "All .ps1 files passed syntax validation"
 
+      # bootstrap.ps1 under Windows PowerShell 5.1 with stubbed git, winget,
+      # installer and aitools.ps1: the installer and aitools.ps1 run under pwsh 7
+      - name: bootstrap.ps1 pwsh 7 launch tests (PowerShell, native; bootstrap under 5.1)
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: pwsh -NoProfile -File tests/bootstrap/test-bootstrap.ps1
+
       - name: harness-db delegation score tests (Python, native)
         if: ${{ !cancelled() }}
         shell: pwsh
         run: python tests/harness-db/test-delegation-score.py
+
+      - name: harness-db schema and migration tests (Python, native)
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: python tests/harness-db/test-schema.py
 
       - name: ait-harvest harvest/archive tests (Python, native)
         if: ${{ !cancelled() }}
         shell: pwsh
         run: python tests/harvest/test-ait-harvest.py
 
-      - name: Logging unit tests (bash, via Git Bash)
-        if: ${{ !cancelled() }}
-        shell: bash
-        run: bash tests/logging/test-logging.sh
-
       - name: Logging unit tests (PowerShell, native)
         if: ${{ !cancelled() }}
         shell: pwsh
         run: pwsh -NoProfile -File tests/logging/test-logging.ps1
 
-      - name: Managed-file tests (bash, via Git Bash)
+      - name: aitools.ps1 console input mode guard tests (PowerShell, native)
         if: ${{ !cancelled() }}
-        shell: bash
-        run: bash tests/managed-files/test-managed-files.sh
+        shell: pwsh
+        run: pwsh -NoProfile -File tests/aitools-entry/test-console-mode-guard.ps1
+
+      # The bash entry point scripts/aitools forwards to aitools.ps1 in Git Bash
+      # (RFI 38dc-3): argument translation, exit codes, stdin, the dashboard-serve call
+      - name: aitools bash entry Windows forward tests (PowerShell, native)
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: pwsh -NoProfile -File tests/aitools-entry/test-win-forwarder.ps1
+
+      # The [RELAY] prompt scripts: the .ps1 loads here, the .sh refuses, and the
+      # bash entry forwards before it could source the .sh
+      - name: Relay prompt guard tests (PowerShell, native)
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: pwsh -NoProfile -File tests/relay-outbound/test-relay-outbound.ps1
+
+      # The check-*.ps1 scripts run no Git Bash except check-pre-push step 7
+      # (build-deploy.sh); pre-commit 2, post-push 4 and 6 (commander, 2026-11-14)
+      - name: check-*.ps1 no-Git-Bash tests (PowerShell, native)
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: pwsh -NoProfile -File tests/check-no-git-bash/test-check-no-git-bash.ps1
 
       - name: Managed-file tests (PowerShell, native)
         if: ${{ !cancelled() }}
         shell: pwsh
         run: pwsh -NoProfile -File tests/managed-files/test-managed-files.ps1
 
-      - name: Dotprofile adopt commit+push tests (bash, via Git Bash)
-        if: ${{ !cancelled() }}
-        shell: bash
-        run: bash tests/managed-files/test-adopt-push.sh
-
       - name: Dotprofile adopt commit+push tests (PowerShell, native)
         if: ${{ !cancelled() }}
         shell: pwsh
         run: pwsh -NoProfile -File tests/managed-files/test-adopt-push.ps1
 
-      # Heavy suites, .ps1 half: Git Bash drives native pwsh; results are
-      # compared with the golden files the macOS/Linux .sh runs produce
-      # (plans/ci-platform-targeting.md).
-      - name: Dotprofile resolver consumer tests (.ps1, native pwsh)
+      # Menu-choice wrapper read_menu_choice / Read-MenuChoice (re-ask on
+      # unrecognised input); the bash twin's pty cases use pywinpty (installed above)
+      - name: Menu-choice wrapper tests (PowerShell, native)
         if: ${{ !cancelled() }}
-        shell: bash
-        run: bash tests/b8-consumers/test-b8-consumers.sh
+        shell: pwsh
+        run: pwsh -NoProfile -File tests/menus/test-menu-choice.ps1
 
-      - name: setup-user-claude dev + MDM tests (.ps1, native pwsh)
+      - name: setup-user-shell PowerShell profile block tests (PowerShell, native)
         if: ${{ !cancelled() }}
-        shell: bash
-        run: bash tests/claude-mdm/test-claude-mdm.sh
+        shell: pwsh
+        run: pwsh -NoProfile -File tests/setup-user-shell/test-setup-user-shell.ps1
 
-      - name: Installer harness hook-in tests (.ps1 native pwsh, scripts/aitools Windows branch)
+      # check-lib ResolveGitBash: check-pre-push step 7 runs build-deploy.sh with Git
+      # Bash, never the WSL launcher a bare `bash` resolves to in a native pwsh
+      - name: check-lib ResolveGitBash tests (PowerShell, native)
         if: ${{ !cancelled() }}
-        shell: bash
-        run: bash tests/hookin/test-hookin.sh
+        shell: pwsh
+        run: pwsh -NoProfile -File tests/check-lib/test-resolve-git-bash.ps1
+
+      # tests/lib/platform-lib.ps1: the shared helpers of the .ps1 harnesses below
+      - name: Windows harness helper tests (tests/lib/platform-lib.ps1, PowerShell, native)
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: pwsh -NoProfile -File tests/lib/test-platform-lib.ps1
+
+      # Heavy suites: native PowerShell harnesses (tests/<dir>/test-*.ps1) run the
+      # .ps1 scripts and compare with the golden files the macOS/Linux .sh
+      # harnesses check (plans/ci-platform-targeting.md; commander 2026-11-14:
+      # "sh scripts and tests should only run on linux/mac and ps1 on windows").
+      # Bash code that runs on Windows (build-deploy.sh, the scripts/aitools
+      # Windows branch, aitools-lib.sh's Git Bash pwsh branch) is run from
+      # those harnesses with Git Bash (tests/lib/platform-lib.ps1).
+      - name: Dotprofile resolver consumer tests (PowerShell, native)
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: pwsh -NoProfile -File tests/b8-consumers/test-b8-consumers.ps1
+
+      - name: setup-user-claude dev + MDM tests (PowerShell, native; build-deploy.sh in Git Bash)
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: pwsh -NoProfile -File tests/claude-mdm/test-claude-mdm.ps1
+
+      - name: Installer harness hook-in tests (PowerShell, native; scripts/aitools Windows branch in Git Bash)
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: pwsh -NoProfile -File tests/hookin/test-hookin.ps1
 
       - name: build-deploy backup + swap tests (incident #86, via Git Bash)
         if: ${{ !cancelled() }}
         shell: bash
         run: bash tests/build-deploy/test-build-deploy-backup.sh
 
-      - name: Profile resolver tests (.ps1, native pwsh)
+      - name: setup-pywinpty MDM pin embed tests (via Git Bash)
         if: ${{ !cancelled() }}
         shell: bash
-        run: bash tests/profile/test-profile.sh
+        run: bash tests/pywinpty/test-setup-pywinpty.sh
 
-      - name: Config writer tests (.ps1, native pwsh)
+      - name: setup-pywinpty dev + MDM install tests (PowerShell, native)
         if: ${{ !cancelled() }}
-        shell: bash
-        run: bash tests/profile/test-config.sh
+        shell: pwsh
+        run: pwsh -NoProfile -File tests/pywinpty/test-setup-pywinpty.ps1
 
-      - name: Profile lib wrapper tests (.ps1 + Git Bash pwsh branch)
+      - name: check-pre-push step 7 tests (check-pre-push.ps1, PowerShell, native)
         if: ${{ !cancelled() }}
-        shell: bash
-        run: bash tests/profile/test-lib.sh
+        shell: pwsh
+        run: pwsh -NoProfile -File tests/check-pre-push/test-pre-push-step7.ps1
 
-      - name: User init tests (.ps1, native pwsh, ConPTY menus)
+      - name: check-post-push step 7 tests (.ps1 twin, PowerShell, native)
         if: ${{ !cancelled() }}
-        shell: bash
-        run: bash tests/profile/test-user-init.sh
+        shell: pwsh
+        run: pwsh -NoProfile -File tests/check-post-push/test-post-push-step7.ps1
 
-      - name: Installer Step 3/5 relay tests (.ps1, native pwsh)
+      - name: check-post-push steps 2, 6 and 14 tests (.ps1 twin, PowerShell, native)
         if: ${{ !cancelled() }}
-        shell: bash
-        run: bash tests/profile/test-install.sh
+        shell: pwsh
+        run: pwsh -NoProfile -File tests/check-post-push/test-post-push-deploy-steps.ps1
 
-      - name: Fan-out lib helper tests (aitools-lib.ps1, native pwsh)
+      - name: check-post-push step 29 menu parity tests (.ps1 twin + check-menu-parity.pl, PowerShell, native)
         if: ${{ !cancelled() }}
-        shell: bash
-        run: bash tests/fanout-lib/test-fanout-lib.sh
+        shell: pwsh
+        run: pwsh -NoProfile -File tests/check-post-push/test-menu-parity.ps1
 
-      - name: Claude rules fan-out tests (.ps1, native pwsh)
+      - name: check-pre-commit steps 3 and 10 tests (.ps1 twin; whole .ps1 with -Fix, PowerShell, native)
         if: ${{ !cancelled() }}
-        shell: bash
-        run: bash tests/rules-fanout/test-rules-fanout.sh
+        shell: pwsh
+        run: pwsh -NoProfile -File tests/check-pre-commit/test-pre-commit-steps3-10.ps1
 
-      - name: Cursor rules fan-out tests (.ps1, native pwsh)
+      - name: Profile resolver tests (PowerShell, native)
         if: ${{ !cancelled() }}
-        shell: bash
-        run: bash tests/rules-fanout-cursor/test-rules-fanout-cursor.sh
+        shell: pwsh
+        run: pwsh -NoProfile -File tests/profile/test-profile.ps1
 
-      - name: Claude skills fan-out tests (.ps1, native pwsh)
+      - name: Config writer tests (PowerShell, native)
         if: ${{ !cancelled() }}
-        shell: bash
-        run: bash tests/skills-fanout/test-skills-fanout.sh
+        shell: pwsh
+        run: pwsh -NoProfile -File tests/profile/test-config.ps1
 
-      - name: setup-user-skills fallback dev + MDM tests (.ps1, native pwsh)
+      - name: Profile lib wrapper tests (PowerShell, native; Git Bash pwsh branch)
         if: ${{ !cancelled() }}
-        shell: bash
-        run: bash tests/skills-legacy/test-skills-legacy.sh
+        shell: pwsh
+        run: pwsh -NoProfile -File tests/profile/test-lib.ps1
 
-      - name: deploy-harness tests (.ps1, native pwsh)
+      - name: User init tests (PowerShell, native, ConPTY menus)
         if: ${{ !cancelled() }}
-        shell: bash
-        run: bash tests/deploy-harness/test-deploy-harness.sh
+        shell: pwsh
+        run: pwsh -NoProfile -File tests/profile/test-user-init.ps1
 
-      - name: deploy-harness MDM build tests (.ps1, native pwsh)
+      - name: Installer Step 3/5 relay tests (PowerShell, native)
         if: ${{ !cancelled() }}
-        shell: bash
-        run: bash tests/deploy-harness-mdm/test-deploy-harness-mdm.sh
+        shell: pwsh
+        run: pwsh -NoProfile -File tests/profile/test-install.ps1
+
+      - name: Fan-out lib helper tests (PowerShell, native)
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: pwsh -NoProfile -File tests/fanout-lib/test-fanout-lib.ps1
+
+      - name: Claude rules fan-out tests (PowerShell, native)
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: pwsh -NoProfile -File tests/rules-fanout/test-rules-fanout.ps1
+
+      - name: Cursor rules fan-out tests (PowerShell, native)
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: pwsh -NoProfile -File tests/rules-fanout-cursor/test-rules-fanout-cursor.ps1
+
+      - name: Claude skills fan-out tests (PowerShell, native)
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: pwsh -NoProfile -File tests/skills-fanout/test-skills-fanout.ps1
+
+      - name: setup-user-skills fallback dev + MDM tests (PowerShell, native; build-deploy.sh in Git Bash)
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: pwsh -NoProfile -File tests/skills-legacy/test-skills-legacy.ps1
+
+      - name: deploy-harness tests (PowerShell, native)
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: pwsh -NoProfile -File tests/deploy-harness/test-deploy-harness.ps1
+
+      - name: deploy-harness MDM build tests (PowerShell, native; build-deploy.sh in Git Bash)
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: pwsh -NoProfile -File tests/deploy-harness-mdm/test-deploy-harness-mdm.ps1
 
       - name: delegation-duty-guard hook tests (via Git Bash)
         if: ${{ !cancelled() }}
@@ -899,3 +1155,12 @@ jobs:
             # Windows Git Bash build may produce minor line-ending diffs
             echo "::warning::deploy/ has non-profile drift on Windows (may be line-ending)"
           fi
+
+      # Script standards compliance, the .ps1 twin (check-post-push step 23 on
+      # Windows): fails the job on a FAIL check. The .sh twin runs in the linux
+      # job. Last step of the job on purpose: a failed step skips every later
+      # step without an if: condition.
+      - name: Script standards compliance (check-script-compliance.ps1, native)
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: pwsh -NoProfile -File scripts/check-script-compliance.ps1

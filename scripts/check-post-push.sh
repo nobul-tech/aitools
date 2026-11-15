@@ -48,21 +48,16 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 2. Smoke-test deploy scripts
+# 2. Smoke-test deploy scripts (retired)
 # ---------------------------------------------------------------------------
-deploy_errors=0
-for f in "$REPO_ROOT"/deploy/*.sh; do
-    [ -f "$f" ] || continue
-    if ! bash -n "$f" 2>/dev/null; then
-        echo "      FAIL: $(basename "$f")"
-        deploy_errors=$((deploy_errors + 1))
-    fi
-done
-if [ "$deploy_errors" -eq 0 ]; then
-    step_pass "2" "Smoke-test deploy scripts"
-else
-    step_fail "2" "Smoke-test deploy scripts" "$deploy_errors file(s) failed bash -n"
-fi
+# Retired (incident #176): the step ran bash -n on the aitools deploy/*.sh, which
+# is frozen (build-deploy.sh writes the dotprofile deploy/ since 2c0fd32), so it
+# proved nothing about the generated scripts. check-pre-push step 7 runs on every
+# push (commander, 2026-10-26): it rebuilds into a temporary copy of the
+# dotprofile under a temporary HOME (build-deploy parses every generated .ps1
+# when pwsh is installed) and dry-runs the resolver consumers. No step reads the
+# aitools deploy/; the number stays so outputs stay stable.
+step_skip "2" "Smoke-test deploy scripts" "retired: check-pre-push step 7 rebuilds into a temp dotprofile copy"
 
 # ---------------------------------------------------------------------------
 # 3. MCP config integrity
@@ -163,8 +158,11 @@ echo ""
 # ---------------------------------------------------------------------------
 # 6. Full script syntax validation
 # ---------------------------------------------------------------------------
+# Source scripts only: scripts/ and shared/hooks/. The aitools deploy/ is frozen
+# and no longer read (incident #176); check-pre-push step 7 builds the generated
+# scripts into a temporary dotprofile copy.
 sh_errors=0
-for f in "$REPO_ROOT"/scripts/*.sh "$REPO_ROOT"/deploy/*.sh "$REPO_ROOT"/shared/hooks/*.sh; do
+for f in "$REPO_ROOT"/scripts/*.sh "$REPO_ROOT"/shared/hooks/*.sh; do
     [ -f "$f" ] || continue
     if ! bash -n "$f" 2>/dev/null; then
         echo "      FAIL: $f"
@@ -180,7 +178,7 @@ fi
 # PS1 validation
 if require_pwsh "6" "Full syntax (.ps1)"; then
     ps1_errors=0
-    for f in "$REPO_ROOT"/scripts/*.ps1 "$REPO_ROOT"/deploy/*.ps1; do
+    for f in "$REPO_ROOT"/scripts/*.ps1; do
         [ -f "$f" ] || continue
         if ! pwsh -NoProfile -Command "
             \$e = \$null
@@ -199,16 +197,15 @@ if require_pwsh "6" "Full syntax (.ps1)"; then
 fi
 
 # ---------------------------------------------------------------------------
-# 7. deploy/ drift audit
+# 7. deploy/ drift audit (retired)
 # ---------------------------------------------------------------------------
-bash "$SCRIPT_DIR/build-deploy.sh" >/dev/null 2>&1
-drift=$(git diff deploy/ 2>/dev/null || true)
-if [ -z "$drift" ]; then
-    step_pass "7" "deploy/ drift audit"
-else
-    step_fail "7" "deploy/ drift audit" "deploy/ is stale -- rebuild needed"
-    git checkout -- deploy/ 2>/dev/null || true
-fi
+# Retired (M5-Fixes item 3): the step ran build-deploy.sh with this shell's HOME,
+# which replaces the real dotprofile deploy/ (incident #86 class), then diffed the
+# frozen aitools deploy/, which build-deploy no longer writes, so it always passed.
+# check-pre-push step 7 runs on every push (commander, 2026-10-26) and does the real
+# check: a rebuild into a temporary copy of the dotprofile under a temporary HOME.
+# This step never runs build-deploy.sh; the number stays so outputs stay stable.
+step_skip "7" "deploy/ drift audit" "retired: check-pre-push step 7 rebuilds into a temp dotprofile copy"
 
 # ---------------------------------------------------------------------------
 # 9. Source-of-truth consistency
@@ -310,8 +307,10 @@ fi
 # ---------------------------------------------------------------------------
 # 14. Line ending audit
 # ---------------------------------------------------------------------------
+# Source scripts only: scripts/ and shared/hooks/ (the frozen aitools deploy/ is
+# not read, incident #176).
 crlf_count=0
-for f in "$REPO_ROOT"/scripts/*.sh "$REPO_ROOT"/deploy/*.sh "$REPO_ROOT"/shared/hooks/*.sh; do
+for f in "$REPO_ROOT"/scripts/*.sh "$REPO_ROOT"/shared/hooks/*.sh; do
     [ -f "$f" ] || continue
     if grep -rl $'\r' "$f" >/dev/null 2>&1; then
         echo "      CRLF: $f"
@@ -423,7 +422,7 @@ for f in "$REPO_ROOT"/scripts/setup-*.sh "$REPO_ROOT"/scripts/setup-*.ps1; do
     if grep -qE 'cat[[:space:]]*>' "$f" 2>/dev/null; then
         fname=$(basename "$f")
         # Skip if header says "sole owner" (check first 15 lines, matching PS1 TotalCount 15)
-        if ! head -15 "$f" | grep -qi 'sole owner'; then
+        if ! head -15 "$f" | grep -i 'sole owner' >/dev/null; then
             echo "      potential blind overwrite: $fname"
             overwrite_count=$((overwrite_count + 1))
         fi
@@ -438,11 +437,11 @@ fi
 # ---------------------------------------------------------------------------
 # 20. CC version-dep review
 # ---------------------------------------------------------------------------
-cc_version=$(claude --version 2>/dev/null | head -1 || echo "unknown")
-registry_version=$(grep -E 'Current version' "$REPO_ROOT/reference/tool-ops-claude-code.md" 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || echo "unknown")
+cc_version=$(claude --version 2>/dev/null | sed -n '1p' || echo "unknown")
+registry_version=$(grep -E 'Current version' "$REPO_ROOT/reference/tool-ops-claude-code.md" 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | sed -n '1p' || echo "unknown")
 if [ "$cc_version" = "unknown" ]; then
     step_skip "20" "CC version-dep review" "claude CLI not found"
-elif echo "$cc_version" | grep -q "$registry_version"; then
+elif echo "$cc_version" | grep "$registry_version" >/dev/null; then
     step_pass "20" "CC version-dep review" "v$registry_version"
 else
     step_warn "20" "CC version-dep review" "CLI: $cc_version vs registry: $registry_version"
@@ -489,6 +488,8 @@ TOOL_CMDS = {
     'datadog-pup':      ['pup', 'version'],
     'perl':             ['perl', '--version'],
     'bash':             ['bash', '--version'],
+    # Managed library (tool-lifecycle.md "Managed libraries"): version from package metadata
+    'pywinpty':         ['python3', '-c', "import importlib.metadata as m; print(m.version('pywinpty'))"],
 }
 plat_key = {'Darwin': 'macos', 'Windows': 'windows'}.get(platform.system(), 'linux')
 plat_name = {'macos': 'macOS', 'windows': 'Windows', 'linux': 'Linux'}[plat_key]
@@ -577,13 +578,13 @@ fi
 step22b_fail=0
 # Bash: check exit section calls show_cloud_mcp_status
 mcp_exit_bash=$(sed -n '/BEGIN exit/,/END exit/p' "$REPO_ROOT/scripts/setup-user-mcp.sh")
-if ! echo "$mcp_exit_bash" | grep -q 'show_cloud_mcp_status'; then
+if ! echo "$mcp_exit_bash" | grep 'show_cloud_mcp_status' >/dev/null; then
     step22b_fail=1
     echo "      FAIL: scripts/setup-user-mcp.sh missing show_cloud_mcp_status in exit section"
 fi
 # PS1: check exit section calls Show-CloudMcpStatus
 mcp_exit_ps1=$(sed -n '/BEGIN exit/,/END exit/p' "$REPO_ROOT/scripts/setup-user-mcp.ps1")
-if ! echo "$mcp_exit_ps1" | grep -q 'Show-CloudMcpStatus'; then
+if ! echo "$mcp_exit_ps1" | grep 'Show-CloudMcpStatus' >/dev/null; then
     step22b_fail=1
     echo "      FAIL: scripts/setup-user-mcp.ps1 missing Show-CloudMcpStatus in exit section"
 fi
@@ -661,7 +662,7 @@ else
     missing=""
     while IFS= read -r cmd; do
         [ -z "$cmd" ] && continue
-        if ! echo "$shared_cmds" | grep -qxF "$cmd"; then
+        if ! echo "$shared_cmds" | grep -xF "$cmd" >/dev/null; then
             missing="$missing $cmd"
         fi
     done <<< "$registry_cmds"
@@ -694,10 +695,10 @@ else
         while IFS= read -r base; do
             [ -z "$base" ] && continue
             # Check if the base name appears in CLAUDE.md (full name or abbreviated -suffix)
-            if ! echo "$claude_deploy" | grep -qF "$base"; then
+            if ! echo "$claude_deploy" | grep -F "$base" >/dev/null; then
                 short=$(echo "$base" | perl -pe 's/^setup-user-//; s/^setup-//')
-                if ! echo "$claude_deploy" | grep -qF -- "-$short"; then
-                    if ! echo "$claude_deploy" | grep -qF "$short"; then
+                if ! echo "$claude_deploy" | grep -F -- "-$short" >/dev/null; then
+                    if ! echo "$claude_deploy" | grep -F "$short" >/dev/null; then
                         missing_deploy="$missing_deploy $base"
                     fi
                 fi
@@ -746,13 +747,24 @@ step_skip "28" "Deploy state integrity" "retired: managed files keep no deploy s
 if $EXTENSIVE; then
     ps1_lib="$REPO_ROOT/scripts/aitools-lib.ps1"
     sh_lib="$REPO_ROOT/scripts/aitools-lib.sh"
-    # Extract [letter] patterns from auto-merge menu sections
-    ps1_auto=$(perl -ne 'print "$1\n" if /Console.*Write.*\[(\w)\]/' "$ps1_lib" | sort -u | paste -s -d , -)
-    sh_auto=$(perl -ne 'print "$1\n" if /printf.*\[(\w)\]/' "$sh_lib" | sort -u | paste -s -d , -)
-    if [ "$ps1_auto" = "$sh_auto" ]; then
-        step_pass "29" "Deployment menu parity audit" "PS1 and bash menus match: $ps1_auto"
+    # The menu letters printed by printf / [Console]::Write lines and the
+    # prompts passed to read_menu_choice / Read-MenuChoice, compared in
+    # scripts/check-menu-parity.pl (same script as the PS1 step 29; its header
+    # lists the blind spots). Exit 0 match, 1 mismatch, 2 usage or read error;
+    # the last output line is the summary. Capture the exit without a set -e abort.
+    if ! command -v perl >/dev/null 2>&1; then
+        # Command-existence check with an explicit fallback (the SKIP)
+        step_skip "29" "Deployment menu parity audit" "perl not available"
     else
-        step_fail "29" "Deployment menu parity audit" "PS1: $ps1_auto vs bash: $sh_auto"
+        mp_rc=0
+        mp_out=$(perl "$REPO_ROOT/scripts/check-menu-parity.pl" "$sh_lib" "$ps1_lib" 2>&1) || mp_rc=$?
+        mp_last=$(printf '%s\n' "$mp_out" | tail -n 1)
+        if [ "$mp_rc" -eq 0 ]; then
+            step_pass "29" "Deployment menu parity audit" "PS1 and bash menus match: $mp_last"
+        else
+            printf '%s\n' "$mp_out" | perl -pe 's/^/      /'
+            step_fail "29" "Deployment menu parity audit" "$mp_last (exit $mp_rc)"
+        fi
     fi
 fi
 

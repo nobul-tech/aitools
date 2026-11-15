@@ -7,7 +7,7 @@ bash, /dev/tty opens), so interactive test cases run the command here.
 Backends:
   POSIX    stdlib pty.fork(): the child is a session leader with the pty as its
            controlling terminal.
-  Windows  pywinpty (ConPTY; tests/managed-files/requirements-windows.txt,
+  Windows  pywinpty (ConPTY; pinned in scripts/requirements-pywinpty.txt,
            commander 2026-11-01 "Adopt, spike first"). The CI probe
            (winpty-probe.py, run 41262097075) showed Git Bash sees a terminal
            and /dev/tty inside ConPTY, pwsh sees non-redirected input, and pwsh
@@ -111,7 +111,8 @@ def run_windows(cmd: list[str], keys: bytes, timeout: float) -> tuple[int, bytes
     except ImportError as e:
         sys.stderr.write(
             f"pty-run: pywinpty is not installed ({e}); install it with "
-            "python -m pip install --require-hashes -r tests/managed-files/requirements-windows.txt\n")
+            "pwsh -NoProfile -File scripts/setup-pywinpty.ps1 "
+            "(hash-pinned in scripts/requirements-pywinpty.txt)\n")
         return 127, b""
     exe = shutil.which(cmd[0]) or cmd[0]
     try:

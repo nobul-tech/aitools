@@ -67,11 +67,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/aitools-lib.sh"
 # stdout carries data: console log lines go to stderr (deploy.log unchanged).
 # Defined before logging_init, whose environment check may already log a warning.
+# The deploy.log line goes through the lib's _aitlib_log_append: a failed write is
+# swallowed (reference/logging.md section 5; incident #174), so set -e does not end
+# the resolver and the stderr line still prints.
 log() {
     local level="${2:-info}"
     local ts; ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     local line="[$ts] [$SCRIPT_NAME] [$level] $1"
-    printf '%s\n' "$line" >> "$LOG_FILE"
+    _aitlib_log_append "$line" "$LOG_FILE"
     printf '%s\n' "$line" >&2
 }
 logging_init "aitools-profile"

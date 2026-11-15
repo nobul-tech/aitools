@@ -43,7 +43,8 @@ merge". This file is the implementation detail.
 | `Invoke-HarnessSkillsFanout` | `fanout_harness_skills` | Fan `~/.aitools/skills` out to one tool's skills directory (`claude skills`, `cursor skills`): deploy every file of every non-retired skill, adopt target from the manifest, retired prune, summary row (`@reference/skills.md` section 6) |
 | `Adopt-ManagedFile` | `adopt_managed_file` | Back up and write an adopt target. Used inside `deploy_managed_file` for review adopts; called directly only by reverse discovery of user-created hooks and skills (no SOURCE; see "Shell Script Deployment Detail") |
 | `Sync-ManagedJson` | `sync_managed_json` | Profile-mirror regime for `settings.json` (see "JSON Config Review Detail"); unchanged |
-| `Prompt-JsonFieldReview` | `prompt_json_field_review` | Per-leaf prompt used by `sync_managed_json`; unchanged |
+| `Prompt-JsonFieldReview` | `prompt_json_field_review` | Per-leaf prompt used by `sync_managed_json` and `review_json_fields` |
+| `Read-MenuChoice` | `read_menu_choice` | Read one menu answer: only an offered answer counts, anything else asks again, EOF takes the default; every answer logged at `detail` (see "Menu answers") |
 | `Invoke-DotprofileCommitPush` | `dotprofile_commit_push` | Commit one dotprofile file (pathspec) and push it (N-Q2); sets `AITLIB_DOTPROFILE_PUSH` |
 | `Write-ManagedFiles` | `_managed_write` | Snapshot, back up, write and validate LOCAL and the adopt target as one step; restore on failure |
 
@@ -162,7 +163,16 @@ offered, and the `+++` header reads `source (embedded)`:
   choice [o/s/x]:
 ```
 
-An unrecognised answer selects `overwrite`, as today.
+Only an offered letter counts (any case, surrounding whitespace ignored).
+An empty line (bare Enter), a word such as `skip`, or a letter the menu
+does not offer (`a` or `m` without an adopt target) asks again: the menu
+prints `  please type one of o/a/m/s/x` (the offered letters) and the
+`choice [...]` prompt again, and nothing is applied until an offered letter
+arrives (commander, 2026-11-13: "no default or other characters should
+re-ask"; until then an unrecognised answer selected `overwrite`). EOF still
+selects `overwrite` (see "Non-Interactive Behavior"). Every answer is logged
+to deploy.log at `detail`. The answer is read with `read_menu_choice` /
+`Read-MenuChoice` (see "Menu answers" below).
 
 ### JSON files (`review_json_fields`)
 
@@ -178,7 +188,50 @@ showing the LOCAL and SOURCE values. With an adopt target:
 
 Without an adopt target, `[a]` is not offered. There is no `[m]erge` for
 JSON. Overwrite, adopt and skip apply to one field; abort applies to the
-script.
+script. The prompt lists the offered letters (`choice [o/a/s/x]`,
+`choice [o/s/x]`, `choice [a/s/x]` for a field only in LOCAL); as for text
+files, any other answer asks again and EOF takes the default (`o`, or `s`
+for a field only in LOCAL).
+
+### Menu answers (`read_menu_choice` / `Read-MenuChoice`)
+
+Every choice menu reads its answer through one helper pair in
+`@scripts/aitools-lib.sh` / `@scripts/aitools-lib.ps1`, which reads through
+`read_tty_choice` / `Read-ConsoleChoice`:
+
+```
+read_menu_choice VAR "VALID" DEFAULT "DEFAULT_DESC" "CONTEXT" "PROMPT"
+$c = Read-MenuChoice -Valid @(...) -Default <a> -DefaultDesc <d> -Context <c> -Prompt <p>
+```
+
+- It prints PROMPT (as data) before every read; the caller prints the menu
+  lines.
+- An answer in VALID (lowercased, surrounding whitespace trimmed) is
+  returned and logged at `detail`: `menu answer (<CONTEXT>): "<typed>" ->
+  <answer>`.
+- Anything else prints `  please type one of <VALID joined by />` and asks
+  again; logged as `... -> not one of <...>, asked again`.
+- EOF returns DEFAULT (`read_tty_choice` / `Read-ConsoleChoice` log their
+  EOF warning); logged as `menu answer (<CONTEXT>): EOF -> <DEFAULT>`.
+  `read_tty_choice` / `Read-ConsoleChoice` return `""` both at EOF and for a
+  typed empty line, so the helper treats the read as EOF when
+  `READ_TTY_EOF=1` / `$script:ReadConsoleEof` is set after it, or when the
+  answer is empty and the warnings counter rose during the read (their EOF
+  branch warns).
+- After 50 unrecognised answers in a row it logs a warning and returns
+  DEFAULT, so an input that ends without being detected cannot loop forever.
+- It is never called in a `--force` or non-interactive run: the menu
+  functions return their default before showing a menu.
+
+Users: the review menus, the AI merge preview (`y r n`, EOF `n`), the
+user-init menus and confirms in `scripts/aitools` / `aitools.ps1`, and
+reverse discovery in `setup-user-hooks` / `setup-user-skills` (`a adopt s
+skip`, EOF `s`), and the PowerShell relay-outbound prompt
+(`Read-RelayOutboundChoice` in `scripts/relay-outbound-prompt.ps1`; under
+`hh.ps1` it dot-sources the library itself, inside the function, and logs as
+`relay-outbound`; without the library it falls back to a local loop).
+`shared/shell/aliases.*` cannot load the library and the bash relay-outbound
+prompt does not: they loop the same way locally, without logging.
 
 ### [x]abort
 
@@ -207,10 +260,21 @@ The run is non-interactive when any of these holds:
   (`tty_interactive` / `Test-InteractiveConsole`)
 - EOF at a prompt (input ended): a warning is logged
 
+An empty or unrecognised answer typed at an interactive prompt is not one
+of these: it asks again (see "Menus").
+
 Then no menu is shown and `overwrite` is selected: SOURCE is written to LOCAL
 (backup kept) and the result is `updated`. No AI merge runs. The decision is
 logged to deploy.log. For JSON, each differing field takes the SOURCE value;
 a field only in LOCAL stays in LOCAL.
+
+**Read-only copies.** A caller marks LOCAL as a read-only copy (never edited
+there) with `MANAGED_NO_REVIEW=true` on the `deploy_managed_file` call /
+`-NoReview` on `Deploy-ManagedFile`. When it differs from SOURCE, SOURCE is
+written (backup kept) with no menu, in every run; adopt and merge are not
+offered, and JSON is written whole (no field review). The result is
+`updated`. Today's caller: deploy-harness, for `~/.aitools/reference/` and
+`~/.aitools/registries/`.
 
 `DRY_RUN=true` (`AITOOLS_DRY_RUN`) logs what would happen, writes nothing,
 and reports the file as `verified`.
@@ -449,7 +513,9 @@ menu including merge & adopt.
 
 **Content source**: `shared/hooks/` in the aitools repo (SD-2: one hook
 version, in `shared/hooks`). Hook scripts are bash-only on both platforms
-(Claude Code runs hooks in bash on all platforms). No platform-specific
+(each hook is registered as `bash "<path>"`; Claude Code passes hook
+commands to `sh -c` on macOS and Linux and to Git Bash on Windows:
+`@reference/tool-ops-claude-code.md` item #8). No platform-specific
 variants needed.
 
 **Scripts**:
@@ -551,8 +617,10 @@ Code + Cursor sessions. See the `/tool-registry` skill, entry
 
 **Path format in settings.json hooks**: PowerShell setup converts
 backslash paths to forward slashes (`-replace '\\', '/'`) for bash
-compatibility. This is intentional — Claude Code always runs hooks via
-bash, even on Windows.
+compatibility. This is intentional — each hook command is `bash "<path>"`,
+and Claude Code passes a hook command to Git Bash on Windows (to PowerShell
+only when Git Bash is not installed, which the harness requires;
+`@reference/tool-ops-claude-code.md` item #8).
 
 ## Shell Script Deployment Detail
 
@@ -746,7 +814,9 @@ the adopt target. Merge is adopt.
 **Post-merge flow:**
 1. Defense-in-depth: strip code fences even if validation passed
 2. Preview first 30 lines in terminal (preview before write)
-3. User chooses: `[y]es` accept, `[r]efine` with feedback, `[n]o` reject
+3. User chooses: `[y]es` accept, `[r]efine` with feedback, `[n]o` reject;
+   any other answer asks again, EOF rejects (`read_menu_choice` /
+   `Read-MenuChoice`)
 4. Refine: user provides feedback → refinement prompt → re-validate →
    preview again
 5. `[y]es`: `prompt_diff_review` returns `merge` with `MERGED_CONTENT`;

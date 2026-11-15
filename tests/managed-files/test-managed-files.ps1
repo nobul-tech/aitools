@@ -4,16 +4,22 @@
 #
 # Safe to re-run: every case runs in a child pwsh with its own temp HOME/log dir,
 # removed on exit. Interactive cases run on a pseudo-terminal
-# (tests/managed-files/pty-run.py, python3; pywinpty/ConPTY on Windows). The AI
+# (tests/managed-files/pty-run.py, python3 with pywinpty/ConPTY). The AI
 # merge uses a stub `claude` on PATH; no real AI is called.
-# Platform: Windows (pwsh 7; aitools-lib.ps1 is a Windows library, so CI runs
-# this suite on the windows job only, plans/ci-platform-targeting.md).
+# Platform: Windows only (OS guard below; commander, 2026-11-14: "sh scripts and
+# tests should only run on linux/mac and ps1 on windows"). On macOS/Linux,
+# tests/managed-files/test-managed-files.sh tests aitools-lib.sh.
 # Exit 1 if any case fails.
 #
 # Usage: pwsh -NoProfile -File tests/managed-files/test-managed-files.ps1 [-Help]
 
 param([switch]$Help)
-if ($Help) { Get-Content $PSCommandPath -TotalCount 12 | Select-Object -Skip 1; exit 0 }
+if ($Help) { Get-Content $PSCommandPath -TotalCount 13 | Select-Object -Skip 1; exit 0 }
+
+if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
+    [Console]::Error.WriteLine("This script is for Windows. On macOS/Linux, run tests/managed-files/test-managed-files.sh with bash.")
+    exit 1
+}
 
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
@@ -26,8 +32,8 @@ $pwshExe = (Get-Process -Id $PID).Path
 $script:pass = 0; $script:fail = 0; $script:skip = 0
 $havePty = [bool](Get-Command python3 -ErrorAction SilentlyContinue)
 # Get-Command exempt: command-existence check; $havePty is the fallback branch
-if ($havePty -and $IsWindows) {
-    # Windows pty = pywinpty (ConPTY); a failing import means "not installed".
+if ($havePty) {
+    # pty = pywinpty (ConPTY); a failing import means "not installed".
     & python3 -c "import winpty" 2>$null
     $havePty = ($LASTEXITCODE -eq 0)
 }
@@ -53,17 +59,10 @@ function Setup-Case([string]$Name) {
 
 function Stub-Claude([string]$Kind) {
     $text = if ($Kind -eq "good") { "# Title`nmerged line" } else { "Sure, here is the merge" }
-    if ($IsWindows) {
-        # Native Windows runs a .cmd, not an extensionless bash script: read the
-        # prompt from stdin (discarded), print the canned answer line by line.
-        $lines = ($text -split "`n" | ForEach-Object { "echo $_" }) -join "`r`n"
-        [IO.File]::WriteAllText((Join-Path $script:C "bin/claude.cmd"), "@echo off`r`nmore > nul`r`n$lines`r`n")
-        return
-    }
-    $stub = "#!/usr/bin/env bash`ncat > /dev/null`nprintf '%s\n' '$($text -replace "`n", "' '")'`n"
-    $path = Join-Path $script:C "bin/claude"
-    [IO.File]::WriteAllText($path, $stub)
-    & chmod +x $path
+    # Native Windows runs a .cmd, not an extensionless bash script: read the
+    # prompt from stdin (discarded), print the canned answer line by line.
+    $lines = ($text -split "`n" | ForEach-Object { "echo $_" }) -join "`r`n"
+    [IO.File]::WriteAllText((Join-Path $script:C "bin/claude.cmd"), "@echo off`r`nmore > nul`r`n$lines`r`n")
 }
 
 # Stub-Git-Fail: a `git` on PATH that fails (exit > 1, which the review diff
@@ -73,12 +72,8 @@ function Stub-Claude([string]$Kind) {
 # given git's arguments ("-c core.quotePath=false ...") where.exe rejects the
 # option and exits 2. bin/git.cmd (exit 128) covers `& git` calls.
 function Stub-Git-Fail {
-    if ($IsWindows) {
-        Copy-Item -LiteralPath (Join-Path $env:SystemRoot "System32\where.exe") -Destination (Join-Path $script:C "bin/git.exe")
-        [IO.File]::WriteAllText((Join-Path $script:C "bin/git.cmd"), "@exit /b 128`r`n")
-        return
-    }
-    [IO.File]::WriteAllText((Join-Path $script:C "bin/git"), "#!/usr/bin/env bash`nexit 128`n"); & chmod +x (Join-Path $script:C "bin/git")
+    Copy-Item -LiteralPath (Join-Path $env:SystemRoot "System32\where.exe") -Destination (Join-Path $script:C "bin/git.exe")
+    [IO.File]::WriteAllText((Join-Path $script:C "bin/git.cmd"), "@exit /b 128`r`n")
 }
 
 # Run-Lib <snippet> [input]: dot-source the lib in a child pwsh under the case HOME.
@@ -149,14 +144,6 @@ try {
     Check "non-interactive: LOCAL backed up, adopt target untouched" ((@(Get-ChildItem "$C/dest" -Filter "a.md.bak.*").Count -ge 1) -and -not (Test-Path "$C/repo/a.md"))
     Check "non-interactive: no review diff, no colour" (-not (Out).Contains("this machine") -and -not (Out).Contains("$esc[31m") -and -not (Out).Contains("$esc[32m"))
 
-    if (-not $IsWindows) {
-        Setup-Case "readonly-dir"; W "src.md" "x"; New-Item -ItemType Directory -Path "$C/dest/ro" | Out-Null; & chmod 555 "$C/dest/ro"
-        Run-Lib "`$src='$C/src.md'; `$dest='$C/dest/ro/new.md'; `$adopt=''; $dmf; `$r2 = Deploy-ManagedFile -Content 'y' -DestPath '$C/dest/b.md' -ToolName tool -ItemName b; Set-Content -Path '$C/result2' -Value `$r2 -NoNewline"
-        Check "write failure: failed, nothing left" ((Result) -eq "failed" -and -not (Test-Path "$C/dest/ro/new.md"))
-        Check "write failure: the run continues" ((Txt "result2") -eq "created")
-        & chmod 755 "$C/dest/ro"
-    }
-
     Setup-Case "tracker"
     Run-Lib 'Initialize-DeployTracker; Record-DeployOutcome -Outcome failed -ToolName tool -ItemName x.md; Write-DeployTrackerSummary -ToolName tool'
     $sum = Get-Content "$C/summary" -Raw
@@ -172,6 +159,44 @@ try {
     Run-Lib "`$src='$C/src.json'; `$dest='$C/dest/c.json'; `$adopt=''; $dmf"
     Check "json: invalid LOCAL -> failed, untouched" ((Result) -eq "failed" -and (Txt "dest/c.json") -eq "not json")
 
+    # --- Read-only copies (-NoReview): SOURCE wins, backup kept, no warning ---
+    $dmfRo = $dmf -replace 'Deploy-ManagedFile ', 'Deploy-ManagedFile -NoReview '
+    Setup-Case "readonly-copy-text"; W "src.md" "new"; W "dest/a.md" "old"
+    Run-Lib "`$src='$C/src.md'; `$dest='$C/dest/a.md'; `$adopt='$C/repo/a.md'; $dmfRo"
+    Check "read-only copy (text): SOURCE written, backup kept, adopt target untouched" ((Result) -eq "updated" -and (Txt "dest/a.md") -eq "new" -and (@(Get-ChildItem "$C/dest" -Filter "a.md.bak.*").Count -ge 1) -and -not (Test-Path "$C/repo/a.md"))
+    Check "read-only copy (text): logged as such, no warning" ((Log).Contains("read-only copy: source wins, backup kept") -and -not ((Log) -match "\[warn\]"))
+
+    Setup-Case "readonly-copy-json"; W "repo/c.json" '{"a":1,"b":[1,2]}'; W "dest/c.json" '{"z":0,"b":[2]}'
+    Run-Lib "`$src='$C/repo/c.json'; `$dest='$C/dest/c.json'; `$adopt='$C/repo/c.json'; $dmfRo"
+    Check "read-only copy (JSON): written whole (LOCAL-only field gone), backup kept" ((Result) -eq "updated" -and (Txt "dest/c.json") -ceq (Txt "repo/c.json") -and (@(Get-ChildItem "$C/dest" -Filter "c.json.bak.*").Count -ge 1))
+
+    Setup-Case "readonly-copy-json-new"; W "repo/c.json" '{"a":1}'
+    Run-Lib "`$src='$C/repo/c.json'; `$dest='$C/dest/c.json'; `$adopt='$C/repo/c.json'; $dmfRo"
+    Check "read-only copy (JSON), LOCAL missing: created from SOURCE" ((Result) -eq "created" -and (JsonCompact "dest/c.json") -eq '{"a":1}')
+
+    Setup-Case "readonly-copy-dryrun"; W "src.md" "new"; W "dest/a.md" "old"
+    Run-Lib "`$DryRun = `$true; `$src='$C/src.md'; `$dest='$C/dest/a.md'; `$adopt='$C/repo/a.md'; $dmfRo"
+    Check "read-only copy in a dry run: reported, nothing written" ((Result) -eq "verified" -and (Txt "dest/a.md") -eq "old" -and (Log).Contains("[DRY RUN] Would update: item") -and @(Get-ChildItem "$C/dest" -Filter "a.md.bak.*").Count -eq 0)
+
+    # --- The JSON review names the file by the caller's item name (deploy-harness: registries/x.json) ---
+    $dmfLabel = $dmf -replace '-ItemName "item"', '-ItemName "registries/c.json"'
+    Setup-Case "json-label"; W "repo/c.json" '{"a":1,"b":[1]}'
+    Run-Lib "`$src='$C/repo/c.json'; `$dest='$C/dest/c.json'; `$adopt='$C/repo/c.json'; $dmfLabel"
+    Check "json label: Created names the item" ((Result) -eq "created" -and (Log).Contains("Created: registries/c.json -> "))
+    W "dest/c.json" '{"a":2,"b":[2]}'
+    Run-Lib "`$src='$C/repo/c.json'; `$dest='$C/dest/c.json'; `$adopt='$C/repo/c.json'; $dmfLabel"
+    Check "json label: Divergence and Updated name the item" ((Result) -eq "updated" -and (Log).Contains("Divergence in registries/c.json: a -- overwriting from source (non-interactive)") -and (Log).Contains("Updated: registries/c.json -> "))
+
+    # --- Write-JsonFieldDetail: the element lines of an array field ---
+    $detailCall = "Write-JsonFieldDetail -What 'registries/c.json: t' -Detail ('2 local, 1 source element(s)' + [char]0x1f + '- [1] 2' + [char]0x1f + '+ [0] 3' + [char]0x1f + '~ order differs (same elements)') -LocalLabel local -SourceLabel source"
+    Setup-Case "json-detail-plain"
+    Run-Lib $detailCall -Term "dumb"
+    Check "json detail, no colour: legend and one line per element" ((HasLine "  red - = only in local   green + = only in source   yellow ~ = changed") -and (HasLine "  2 local, 1 source element(s)") -and (HasLine "  - [1] 2") -and (HasLine "  + [0] 3") -and (HasLine "  ~ order differs (same elements)") -and -not (Out).Contains("$esc["))
+    Check "json detail: every element line logged" ((Log).Contains("review registries/c.json: t: 2 local, 1 source element(s)") -and (Log).Contains("review registries/c.json: t: - [1] 2") -and (Log).Contains("review registries/c.json: t: ~ order differs (same elements)"))
+    Setup-Case "json-detail-colour"
+    Run-Lib $detailCall
+    Check "json detail, colour: red -, green +, yellow ~, count line plain" ((Out).Contains("$esc[31m- [1] 2$esc[0m") -and (Out).Contains("$esc[32m+ [0] 3$esc[0m") -and (Out).Contains("$esc[33m~ order differs") -and (HasLine "  2 local, 1 source element(s)") -and -not (Out).Contains("m2 local"))
+
     # --- EOF at a prompt ---
     # Not sent as Ctrl-D on the pty: EOF there is terminal-driver behavior (Ctrl-D on
     # Unix, Ctrl-Z Enter on Windows) and pwsh on Linux does not end ReadLine on \x04.
@@ -183,8 +208,9 @@ try {
     # --- Interactive (pty) ---
     if ($havePty) {
         Setup-Case "enter"; W "src.md" "new"; W "dest/a.md" "old"
-        Run-Lib "`$src='$C/src.md'; `$dest='$C/dest/a.md'; `$adopt='$C/repo/a.md'; $dmf" "\n"
-        Check "empty choice at the menu: overwrite" ((Result) -eq "updated" -and (Txt "dest/a.md") -eq "new")
+        Run-Lib "`$src='$C/src.md'; `$dest='$C/dest/a.md'; `$adopt='$C/repo/a.md'; $dmf" "\ns\n"
+        # Commander 2026-11-13: "no default or other characters should re-ask"
+        Check "empty choice at the menu: asked again, then skip applies" ((Result) -eq "skipped" -and (Txt "dest/a.md") -eq "old" -and (Out).Contains("please type one of o/a/m/s/x") -and (Log).Contains('menu answer (review a.md): "" -> not one of o/a/m/s/x, asked again'))
 
         Setup-Case "skip"; W "src.md" "new"; W "dest/a.md" "old"
         Run-Lib "`$src='$C/src.md'; `$dest='$C/dest/a.md'; `$adopt='$C/repo/a.md'; $dmf" "s\n"
@@ -207,11 +233,12 @@ try {
         Check "merge & adopt: next run verifies" ((Result) -eq "verified")
 
         Setup-Case "merge-reject"; Stub-Claude "good"; W "repo/a.md" "# Title`nsource line"; W "dest/a.md" "# Title`nlocal line"
-        Run-Lib "`$src='$C/repo/a.md'; `$dest='$C/dest/a.md'; `$adopt='$C/repo/a.md'; $dmf" "m\nn\ns\n"
+        Run-Lib "`$src='$C/repo/a.md'; `$dest='$C/dest/a.md'; `$adopt='$C/repo/a.md'; $dmf" "m\nn\ns\ns\ns\n"
         # The read after the menu returns is not asserted: under this pty harness the
         # console input after the AI spinner job (Start-Job) comes back corrupted
-        # (open observation, see the mission report). Asserted: the menu is shown
-        # again and the rejected merge is not written.
+        # (open observation, see the mission report). A corrupted answer now asks
+        # again instead of overwriting, so spare "s" lines end the menu. Asserted:
+        # the menu is shown again and the rejected merge is not written.
         $menus = ([regex]::Matches((Get-Content "$C/out" -Raw), [regex]::Escape("choice [o/a/m/s/x]"))).Count
         Check "merge [n]o: back to the menu, merge not written" ($menus -ge 2 -and (Txt "dest/a.md") -notmatch "merged line" -and (Txt "repo/a.md") -match "source line")
 
@@ -231,6 +258,26 @@ try {
         Setup-Case "json-fields"; W "repo/c.json" '{"a":1,"b":2,"c":3}'; W "dest/c.json" '{"a":9,"b":8,"c":7,"z":0}'
         Run-Lib "`$src='$C/repo/c.json'; `$dest='$C/dest/c.json'; `$adopt='$C/repo/c.json'; $dmf" "o\na\ns\na\n"
         Check "json per-field: overwrite/adopt/skip + LOCAL-only adopt" ((JsonCompact "dest/c.json") -eq '{"a":1,"b":8,"c":7,"z":0}' -and (JsonCompact "repo/c.json") -eq '{"a":1,"b":8,"c":3,"z":0}' -and (Result) -eq "accept & adopt")
+
+        Setup-Case "readonly-copy-pty"; W "src.md" "new"; W "dest/a.md" "old"
+        Run-Lib "`$src='$C/src.md'; `$dest='$C/dest/a.md'; `$adopt='$C/repo/a.md'; $dmfRo" "a\n"
+        Check "read-only copy on a terminal: no menu, SOURCE written, nothing adopted" ((Result) -eq "updated" -and (Txt "dest/a.md") -eq "new" -and -not (Out).Contains("choice [") -and -not (Test-Path "$C/repo/a.md"))
+
+        Setup-Case "json-array-display"
+        W "repo/c.json" '{"list":[{"id":1,"v":"a"},{"id":2,"v":"b"}],"tags":["x","y"]}'
+        W "dest/c.json" '{"list":[{"id":1,"v":"a"},{"id":2,"v":"OLD"},{"id":3,"v":"c"}],"tags":["y","x"]}'
+        Run-Lib "`$src='$C/repo/c.json'; `$dest='$C/dest/c.json'; `$adopt='$C/repo/c.json'; $dmf" "o\no\n"
+        Check "json array: the header names the file" (HasLine "[REVIEW] item: list differs from source.")
+        Check "json array: counts, the changed and the removed element shown" ((HasLine "  3 local, 2 source element(s)") -and (HasLine '  ~ [1] id=2: v: "OLD" -> "b"') -and (HasLine '  - [2] {"id":3,"v":"c"}'))
+        Check "json array: a reorder alone is one line" (HasLine "  ~ order differs (same elements)")
+        Check "json array: legend, colour-coded lines" ((HasLine "  red - = only in local   green + = only in source   yellow ~ = changed") -and (Out).Contains("$esc[33m~ [1] id=2") -and (Out).Contains("$esc[31m- [2]"))
+        Check "json array: element lines in the log" ((Log).Contains('review item: list: ~ [1] id=2: v: "OLD" -> "b"'))
+        Check "json array: overwrite applied" ((Result) -eq "updated" -and (JsonCompact "dest/c.json") -eq '{"list":[{"id":1,"v":"a"},{"id":2,"v":"b"}],"tags":["x","y"]}')
+
+        Setup-Case "json-label-pty"; W "repo/c.json" '{"a":1,"b":2}'; W "dest/c.json" '{"a":9,"b":8,"z":0}'
+        Run-Lib "`$src='$C/repo/c.json'; `$dest='$C/dest/c.json'; `$adopt='$C/repo/c.json'; $dmfLabel" "a\ns\ns\n"
+        Check "json label: every review header names the file, the LOCAL-only field too" ((HasLine "[REVIEW] registries/c.json: a differs from source.") -and (HasLine "[REVIEW] registries/c.json: z differs from source."))
+        Check "json label: Accept & adopt and Skipped name the item" ((Result) -eq "accept & adopt" -and (Log).Contains("Accept & adopt: registries/c.json -> ") -and (Log).Contains("Skipped: registries/c.json ("))
 
         # --- Review display: LOCAL -> SOURCE, labelled, coloured (mission DIFF-UX) ---
         Setup-Case "display"; W "repo/a.md" "# Title`nline one`nrepo line`nend"; W "dest/a.md" "# Title`nline one`nmy local line`nend"
@@ -264,11 +311,13 @@ try {
         Check "display >40 lines: first 30 shown, rest in the log" ((HasLine "  ... (73 more lines -- full diff in deploy log)") -and (HasLine "-local 27") -and -not (HasLine "-local 28") -and $logDiff -eq 103 -and (Log).Contains("diff a.md: +repo 50"))
 
         Setup-Case "display-huge"
-        W "dest/a.md" ((1..3000 | ForEach-Object { "local line $_ " + ("x" * 40) }) -join "`n"); W "src.md" ((1..3000 | ForEach-Object { "repo line $_ " + ("y" * 40) }) -join "`n")
+        # 1500 lines a side (~170 KB diff, past a pipe buffer), as in the .sh twin,
+        # where 3000 timed out a slow macOS runner (main CI run 43632383993)
+        W "dest/a.md" ((1..1500 | ForEach-Object { "local line $_ " + ("x" * 40) }) -join "`n"); W "src.md" ((1..1500 | ForEach-Object { "repo line $_ " + ("y" * 40) }) -join "`n")
         $env:GIT_DIFF_OPTS = "--unified=0"
         try { Run-Lib "`$src='$C/src.md'; `$dest='$C/dest/a.md'; `$adopt=''; $dmf" "s\n" } finally { $env:GIT_DIFF_OPTS = $null }
         $logDiff = ([regex]::Matches((Log), "diff a\.md: ")).Count
-        Check "display, diff over 64 KB: menu shown, run continues, full diff logged" ((Rc) -eq "0" -and (Result) -eq "skipped" -and (HasLine "  ... (5973 more lines -- full diff in deploy log)") -and $logDiff -eq 6003)
+        Check "display, diff over 64 KB: menu shown, run continues, full diff logged" ((Rc) -eq "0" -and (Result) -eq "skipped" -and (HasLine "  ... (2973 more lines -- full diff in deploy log)") -and $logDiff -eq 3003)
 
         Setup-Case "display-nogit"; W "src.md" "new"; W "dest/a.md" "old"
         Stub-Git-Fail
@@ -278,7 +327,6 @@ try {
         Write-Output "SKIP interactive cases (no pseudo-terminal: python3 missing, or pywinpty not installed on Windows)"; $script:skip++
     }
 } finally {
-    if (-not $IsWindows) { & chmod -R u+w $tmpRoot }
     Remove-Item -LiteralPath $tmpRoot -Recurse -Force
 }
 

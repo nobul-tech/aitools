@@ -88,8 +88,13 @@ copy that appears later: they ignore it and warn (see "Deployment" below).
 ### Prompts in the hook deploy
 
 - Every prompt is gated by `tty_interactive` / `Test-InteractiveConsole` and
-  read with `read_tty_choice` / `Read-ConsoleChoice`. Never a bare `read` or
+  read with `read_menu_choice` / `Read-MenuChoice` (which reads through
+  `read_tty_choice` / `Read-ConsoleChoice`). Never a bare `read` or
   `[Console]::ReadLine()`.
+- Only an offered answer counts, in any case: an empty line or anything else
+  asks again (aitools `.claude/rules/interactive-menus.md` "Answers"; reverse
+  discovery takes `a`, `adopt`, `s`, `skip`). Every answer is logged at
+  `detail`.
 - EOF at a prompt: `read_tty_choice` / `Read-ConsoleChoice` log a warning and
   take the default.
 - Diff review of a manifest hook: non-interactive stdin, `--force`, or EOF take

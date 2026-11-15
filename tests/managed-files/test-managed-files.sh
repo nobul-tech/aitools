@@ -6,16 +6,30 @@
 # Safe to re-run: every case runs in its own temp HOME, removed on exit.
 # Interactive cases run on a pseudo-terminal (tests/managed-files/pty-run.py,
 # python3). The AI merge uses a stub `claude` on PATH; no real AI is called.
-# Platform: macOS, Linux, Windows Git Bash (aitools-lib.sh also runs there: the
-# bash entry point sources it). On Windows the pty cases run through pywinpty
-# (ConPTY, tests/managed-files/requirements-windows.txt) and are skipped, with
-# the reason, when it is not installed. Exit 1 if any case fails.
+# Platform: macOS, Linux (OS guard below; commander, 2026-11-14: "sh scripts
+# and tests should only run on linux/mac and ps1 on windows"). On Windows,
+# tests/managed-files/test-managed-files.ps1 tests the PowerShell side
+# (aitools-lib.ps1). Exit 1 if any case fails.
 # Spec: .claude/rules/agentic-standards.md "Managed-file review choices and
 # merge"; reference/managed-file-deployment.md; .claude/rules/interactive-menus.md.
 #
 # Usage: bash tests/managed-files/test-managed-files.sh [--help]
 
 set -uo pipefail
+
+# OS guard: macOS/Linux only. BASH_VERSINFO[5] is bash's compiled-in machine
+# type (read-only, never taken from the environment), so neither a uname shim
+# on PATH nor an exported OSTYPE hides Git Bash.
+case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*)
+        printf 'This script is for macOS/Linux. On Windows, run tests/managed-files/test-managed-files.ps1 with pwsh.\n' >&2
+        exit 1 ;;
+esac
+case "${BASH_VERSINFO[5]:-}" in
+    *-msys*|*-cygwin*|*-mingw*)
+        printf 'This script is for macOS/Linux. On Windows, run tests/managed-files/test-managed-files.ps1 with pwsh.\n' >&2
+        exit 1 ;;
+esac
 
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
     perl -ne 'print if $. >= 2 && $. <= 14' "$0"
@@ -34,14 +48,7 @@ PASS=0
 FAIL=0
 SKIP=0
 HAVE_PTY=true
-HAVE_READONLY=true   # chmod 555/444 does not block writes under Git Bash
 command -v python3 >/dev/null 2>&1 || HAVE_PTY=false
-case "$(uname -s)" in
-    MINGW*|MSYS*|CYGWIN*)
-        HAVE_READONLY=false
-        # Windows pty = pywinpty (ConPTY); python3 -c's failure means "not installed".
-        if $HAVE_PTY && ! python3 -c 'import winpty' >/dev/null 2>&1; then HAVE_PTY=false; fi ;;
-esac
 
 check() {  # name, condition (eval'd)
     if eval "$2"; then
@@ -100,11 +107,6 @@ result() { cat "$C/result" 2>/dev/null; }
 ESC=$(printf '\033')
 # has_line <file> <exact line>: the file has this line (fixed string, whole line)
 has_line() { grep -qxF -- "$2" "$1"; }
-# shown <path>: a path the way the lib's display_path prints it (cygpath -w on
-# Windows Git Bash, unchanged elsewhere), for checks on review headers and menus.
-shown() { if command -v cygpath >/dev/null 2>&1; then cygpath -w "$1"; else printf '%s' "$1"; fi; }
-IS_WINDOWS=false
-case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) IS_WINDOWS=true ;; esac
 DMF='deploy_managed_file "$(cat "$SRCF")" "$DEST" tool item "$ADOPT"; printf "%s" "$MANAGED_FILE_RESULT" > "$C/result"'
 
 # ---------------------------------------------------------------------------
@@ -133,23 +135,19 @@ run_lib "C='$C' SRCF='$C/src.md' DEST='$C/dest/a.md' ADOPT=''; $DMF"
 check "deploy state: old files left on disk, noted once (detail)" \
     "[ -f '$C/home/.aitools/deploy-state/manifest.json' ] && [ \"\$(grep -c 'deploy state is no longer used' '$LOG')\" = 1 ]"
 
-if $HAVE_READONLY; then
-    setup_case readonly-dir
-    printf 'x\n' > "$C/src.md"; mkdir -p "$C/dest/ro"; chmod 555 "$C/dest/ro"
-    run_lib "C='$C' SRCF='$C/src.md' DEST='$C/dest/ro/new.md' ADOPT=''; $DMF; deploy_managed_file 'y' '$C/dest/b.md' tool b ''; printf '%s' \"\$MANAGED_FILE_RESULT\" > '$C/result2'"
-    check "write failure: result failed, nothing left" "[ \"\$(result)\" = failed ] && [ ! -e '$C/dest/ro/new.md' ]"
-    check "write failure: log_error with the reason" "grep -q '\[error\] Failed: item: write failed' '$LOG'"
-    check "write failure: the run continues" "[ \"\$(cat '$C/result2')\" = created ] && [ \"\$(cat '$C/rc')\" = 0 ]"
-    chmod 755 "$C/dest/ro"
+setup_case readonly-dir
+printf 'x\n' > "$C/src.md"; mkdir -p "$C/dest/ro"; chmod 555 "$C/dest/ro"
+run_lib "C='$C' SRCF='$C/src.md' DEST='$C/dest/ro/new.md' ADOPT=''; $DMF; deploy_managed_file 'y' '$C/dest/b.md' tool b ''; printf '%s' \"\$MANAGED_FILE_RESULT\" > '$C/result2'"
+check "write failure: result failed, nothing left" "[ \"\$(result)\" = failed ] && [ ! -e '$C/dest/ro/new.md' ]"
+check "write failure: log_error with the reason" "grep -q '\[error\] Failed: item: write failed' '$LOG'"
+check "write failure: the run continues" "[ \"\$(cat '$C/result2')\" = created ] && [ \"\$(cat '$C/rc')\" = 0 ]"
+chmod 755 "$C/dest/ro"
 
-    setup_case backup-fail
-    printf 'new\n' > "$C/src.md"; mkdir -p "$C/dest/ro"; printf 'old\n' > "$C/dest/ro/a.md"; chmod 555 "$C/dest/ro"
-    run_lib "C='$C' SRCF='$C/src.md' DEST='$C/dest/ro/a.md' ADOPT=''; $DMF"
-    check "failed backup: step failed, LOCAL unchanged" "[ \"\$(result)\" = failed ] && grep -qx old '$C/dest/ro/a.md'"
-    chmod 755 "$C/dest/ro"
-else
-    printf 'SKIP read-only cases (chmod does not block writes on this platform)\n'; SKIP=$((SKIP + 1))
-fi
+setup_case backup-fail
+printf 'new\n' > "$C/src.md"; mkdir -p "$C/dest/ro"; printf 'old\n' > "$C/dest/ro/a.md"; chmod 555 "$C/dest/ro"
+run_lib "C='$C' SRCF='$C/src.md' DEST='$C/dest/ro/a.md' ADOPT=''; $DMF"
+check "failed backup: step failed, LOCAL unchanged" "[ \"\$(result)\" = failed ] && grep -qx old '$C/dest/ro/a.md'"
+chmod 755 "$C/dest/ro"
 
 setup_case tracker
 run_lib "deploy_tracker_init; deploy_tracker_record failed tool x.md; deploy_tracker_record updated tool y.md; deploy_tracker_summary tool"
@@ -232,7 +230,7 @@ if $HAVE_PTY; then
     printf '# Title\nline one\nrepo line\nend\n' > "$C/repo/a.md"; printf '# Title\nline one\nmy local line\nend\n' > "$C/dest/a.md"
     run_lib "C='$C' SRCF='$C/repo/a.md' DEST='$C/dest/a.md' ADOPT='$C/repo/a.md'; $DMF" "s\n"
     P="$C/plain"
-    SD="$(shown "$C/dest/a.md")"; SR="$(shown "$C/repo/a.md")"
+    SD="$C/dest/a.md"; SR="$C/repo/a.md"
     check "display: diff is LOCAL -> SOURCE (- this machine, + repo)" "has_line '$P' '-my local line' && has_line '$P' '+repo line' && ! has_line '$P' '+my local line'"
     check "display: headers name both paths, padded" "has_line '$P' '--- this machine  $SD' && has_line '$P' '+++ repo          $SR'"
     check "display: legend above the diff" "has_line '$P' '  red - = only on this machine   green + = only in the repo' && [ \"\$(grep -n 'red - = only' '$P' | cut -d: -f1)\" -lt \"\$(grep -n '^--- this machine' '$P' | cut -d: -f1)\" ]"
@@ -265,20 +263,15 @@ if $HAVE_PTY; then
     check "display >40 lines: first 30 shown, rest in the log" \
         "has_line '$C/plain' '  ... (73 more lines -- full diff in deploy log)' && has_line '$C/plain' '-local 27' && ! has_line '$C/plain' '-local 28' && [ \"\$(grep -c 'diff a.md: ' '$LOG')\" = 103 ] && grep -qF 'diff a.md: +repo 50' '$LOG'"
 
-    if $IS_WINDOWS; then
-        # ConPTY (pywinpty) passes ~330 KB of output too slowly for the 30 s
-        # pty-run timeout (CI run 41262590653: killed after 30.1 s with the menu
-        # not yet shown; pywinpty issue #564, ConPTY throughput). The truncation
-        # code is the same lib code the macOS/Linux run covers.
-        printf 'SKIP display, diff over 64 KB: ConPTY output throughput exceeds the 30 s pty timeout on Windows\n'; SKIP=$((SKIP + 1))
-    else
     setup_case display-huge
-    perl -e 'print "local line $_ " . ("x" x 40) . "\n" for 1..3000' > "$C/dest/a.md"; perl -e 'print "repo line $_ " . ("y" x 40) . "\n" for 1..3000' > "$C/src.md"
+    perl -e 'print "local line $_ " . ("x" x 40) . "\n" for 1..1500' > "$C/dest/a.md"; perl -e 'print "repo line $_ " . ("y" x 40) . "\n" for 1..1500' > "$C/src.md"
     GIT_DIFF_OPTS=--unified=0 run_lib "export GIT_DIFF_OPTS; C='$C' SRCF='$C/src.md' DEST='$C/dest/a.md' ADOPT=''; $DMF" "s\n"
-    # ~330 KB diff, larger than a pipe buffer (head-based truncation died of SIGPIPE here)
+    # ~170 KB diff, larger than a pipe buffer (head-based truncation died of SIGPIPE
+    # here). 1500 lines a side, not 3000: with 3000 the case took 25 s of the 30 s
+    # pty-run timeout on macOS and timed out on a slower runner (main CI run
+    # 43632383993, 2026-11-14)
     check "display, diff over 64 KB: menu shown, run continues, full diff logged" \
-        "[ \"\$(cat '$C/rc')\" = 0 ] && [ \"\$(result)\" = skipped ] && has_line '$C/plain' '  ... (5973 more lines -- full diff in deploy log)' && [ \"\$(grep -c 'diff a.md: ' '$LOG')\" = 6003 ]"
-    fi
+        "[ \"\$(cat '$C/rc')\" = 0 ] && [ \"\$(result)\" = skipped ] && has_line '$C/plain' '  ... (2973 more lines -- full diff in deploy log)' && [ \"\$(grep -c 'diff a.md: ' '$LOG')\" = 3003 ]"
 
     setup_case display-nogit
     printf '#!/usr/bin/env bash\nexit 128\n' > "$C/bin/git"; chmod +x "$C/bin/git"
@@ -312,6 +305,127 @@ printf '{"a":1}\n' > "$C/src.json"; printf 'not json\n' > "$C/dest/c.json"
 run_lib "C='$C' SRCF='$C/src.json' DEST='$C/dest/c.json' ADOPT=''; $DMF"
 check "json: invalid LOCAL -> failed, untouched" "[ \"\$(result)\" = failed ] && grep -qx 'not json' '$C/dest/c.json'"
 
+# The JSON review names the file by the caller's item name (deploy-harness: registries/x.json)
+DMF_LABEL='deploy_managed_file "$(cat "$SRCF")" "$DEST" tool registries/c.json "$ADOPT"; printf "%s" "$MANAGED_FILE_RESULT" > "$C/result"'
+setup_case json-label
+printf '{"a":1,"b":[1]}\n' > "$C/repo/c.json"
+run_lib "C='$C' SRCF='$C/repo/c.json' DEST='$C/dest/c.json' ADOPT='$C/repo/c.json'; $DMF_LABEL"
+check "json label: Created names the item" "[ \"\$(result)\" = created ] && grep -qF 'Created: registries/c.json -> ' '$LOG'"
+printf '{"a":2,"b":[2]}\n' > "$C/dest/c.json"
+run_lib "C='$C' SRCF='$C/repo/c.json' DEST='$C/dest/c.json' ADOPT='$C/repo/c.json'; $DMF_LABEL"
+check "json label: Divergence and Updated name the item" \
+    "[ \"\$(result)\" = updated ] && grep -qF 'Divergence in registries/c.json: a -- overwriting from source (non-interactive)' '$LOG' && grep -qF 'Updated: registries/c.json -> ' '$LOG'"
+
+# ---------------------------------------------------------------------------
+# The JSON review's node script (plan mode): the twins embed the same text, and
+# the detail column (arrayDetail) for array fields. No pseudo-terminal needed.
+# ---------------------------------------------------------------------------
+NODE_SH="$TMP_ROOT/review-sh.js"; NODE_PS1="$TMP_ROOT/review-ps1.js"
+perl -0777 -ne 's/\r//g; print $1 if /<<\x27REVIEW_JSON_NODE_EOF\x27\n(.*?\n)REVIEW_JSON_NODE_EOF\n/s' "$LIB" > "$NODE_SH"
+perl -0777 -ne 's/\r//g; print $1 if /\$script:ReviewJsonNode = \@\x27\n(.*?\n)\x27\@\n/s' "$ROOT/scripts/aitools-lib.ps1" > "$NODE_PS1"
+check "json review node script: found in both libs, identical" "[ -s '$NODE_SH' ] && [ -s '$NODE_PS1' ] && cmp -s '$NODE_SH' '$NODE_PS1'"
+
+# plan_detail <source json> <local json>: run plan mode; $C/detail gets the first
+# field's detail column, one element line per line (empty file: no detail);
+# $C/plan.tsv keeps the raw plan.
+plan_detail() {
+    printf '%s\n' "$1" > "$C/s.json"; printf '%s\n' "$2" > "$C/l.json"
+    : > "$C/plan.tsv"
+    node "$NODE_SH" plan "$C/s.json" "$C/l.json" "$C/plan.tsv" 2> "$C/err" || printf 'node failed: %s\n' "$(cat "$C/err")"
+    perl -ne 'chomp; my @f = split /\t/, $_, -1; if ($. == 1 && length($f[5] // "")) { print map { "$_\n" } split /\x1f/, $f[5] }' "$C/plan.tsv" > "$C/detail"
+}
+# detail_is <line>...: $C/detail is exactly these lines
+detail_is() { [ "$(cat "$C/detail")" = "$(printf '%s\n' "$@")" ]; }
+
+if command -v node >/dev/null 2>&1; then
+    setup_case array-detail
+    plan_detail '{"t":[1,3,4]}' '{"t":[1,2,3]}'
+    check "array detail: scalars, removed and added by index" "detail_is '3 local, 3 source element(s)' '- [1] 2' '+ [2] 4'"
+    plan_detail '{"t":[1,1]}' '{"t":[1]}'
+    check "array detail: a duplicate element counts" "detail_is '1 local, 2 source element(s)' '+ [1] 1'"
+    plan_detail '{"t":["1",1,{"a":2}]}' '{"t":[1,"1",null,{"a":1}]}'
+    check "array detail: mixed types (1 and \"1\" differ), objects without identity" \
+        "detail_is '4 local, 3 source element(s)' '+ [2] {\"a\":2}' '- [2] null' '- [3] {\"a\":1}'"
+    plan_detail '{"t":[]}' '{"t":[1]}'
+    check "array detail: empty SOURCE array" "detail_is '1 local, 0 source element(s)' '- [0] 1'"
+    plan_detail '{"t":[1]}' '{"t":[]}'
+    check "array detail: empty LOCAL array" "detail_is '0 local, 1 source element(s)' '+ [0] 1'"
+    plan_detail '{"t":[[1,2],[3,4]]}' '{"t":[[1,2],[3]]}'
+    check "array detail: nested arrays compared whole" "detail_is '2 local, 2 source element(s)' '+ [1] [3,4]' '- [1] [3]'"
+    plan_detail '{"t":[{"id":5,"v":"b"}]}' '{"t":[{"id":5,"v":"a","x":1}]}'
+    check "array detail: same identity, one line per changed key, absent key" \
+        "detail_is '1 local, 1 source element(s)' '~ [0] id=5: v: \"a\" -> \"b\"' '~ [0] id=5: x: 1 -> (absent)'"
+    plan_detail '{"t":[{"name":"n","k":{"b":1,"a":2}}]}' '{"t":[{"k":{"a":2,"b":1},"name":"n"}]}'
+    check "array detail: key order inside an element is no difference" "[ ! -s '$C/plan.tsv' ]"
+    plan_detail '{"t":["x","y"]}' '{"t":["y","x"]}'
+    check "array detail: a reorder alone is one line" "detail_is '2 local, 2 source element(s)' '~ order differs (same elements)'"
+    # 0,1,...,24 (perl, not seq: BSD seq -s leaves a trailing separator on macOS)
+    plan_detail "{\"t\":[$(perl -e 'print join(",", 0 .. 24)')]}" '{"t":[]}'
+    check "array detail: at most 20 element lines, then a count of the rest" \
+        "[ \"\$(wc -l < '$C/detail')\" -eq 22 ] && [ \"\$(sed -n 2p '$C/detail')\" = '+ [0] 0' ] && [ \"\$(sed -n 21p '$C/detail')\" = '+ [19] 19' ] && [ \"\$(tail -n 1 '$C/detail')\" = '... 5 more line(s)' ]"
+    plan_detail '{"t":["a\tb\u001fc"]}' '{"t":[]}'
+    check "array detail: tab and unit separator inside a value stay escaped" \
+        "detail_is '0 local, 1 source element(s)' '+ [0] \"a\\tb\\u001fc\"' && [ \"\$(perl -ne 'chomp; @f = split /\\t/, \$_, -1; print scalar @f' '$C/plan.tsv')\" = 6 ]"
+    plan_detail '{"a":1}' '{"a":2}'
+    check "array detail: a scalar field has an empty detail column (6 columns)" \
+        "[ ! -s '$C/detail' ] && [ \"\$(perl -ne 'chomp; @f = split /\\t/, \$_, -1; print scalar @f' '$C/plan.tsv')\" = 6 ]"
+    plan_detail '{"t":[1]}' '{"t":"x"}'
+    check "array detail: array against a non-array, no detail" "[ ! -s '$C/detail' ] && [ -s '$C/plan.tsv' ]"
+    plan_detail '{"t":[1]}' '{}'
+    check "array detail: a field only in SOURCE, no detail" "[ ! -s '$C/detail' ] && grep -q 'source-only' '$C/plan.tsv'"
+else
+    printf 'SKIP json review node script cases: node not installed\n'; SKIP=$((SKIP + 1))
+fi
+
+# Read-only copies: a new file is created; a dry run writes nothing
+setup_case readonly-copy-json-new
+printf '{"a":1}\n' > "$C/repo/c.json"
+run_lib "export MANAGED_NO_REVIEW=true; C='$C' SRCF='$C/repo/c.json' DEST='$C/dest/c.json' ADOPT='$C/repo/c.json'; $DMF"
+check "read-only copy (JSON), LOCAL missing: created from SOURCE" "[ \"\$(result)\" = created ] && cmp -s '$C/repo/c.json' '$C/dest/c.json'"
+setup_case readonly-copy-dryrun
+printf 'new\n' > "$C/src.md"; printf 'old\n' > "$C/dest/a.md"
+run_lib "export MANAGED_NO_REVIEW=true DRY_RUN=true; C='$C' SRCF='$C/src.md' DEST='$C/dest/a.md' ADOPT='$C/repo/a.md'; $DMF"
+check "read-only copy in a dry run: reported, nothing written" \
+    "[ \"\$(result)\" = verified ] && grep -qx old '$C/dest/a.md' && grep -qF '[DRY RUN] Would update: item' '$LOG' && ! ls '$C/dest/'a.md.bak.* >/dev/null 2>&1"
+
+# Read-only copies (MANAGED_NO_REVIEW=true): SOURCE wins, backup kept, no warning
+setup_case readonly-copy-text
+printf 'new\n' > "$C/src.md"; printf 'old\n' > "$C/dest/a.md"
+run_lib "export MANAGED_NO_REVIEW=true; C='$C' SRCF='$C/src.md' DEST='$C/dest/a.md' ADOPT='$C/repo/a.md'; $DMF"
+check "read-only copy (text): SOURCE written, backup kept, adopt target untouched" \
+    "[ \"\$(result)\" = updated ] && grep -qx new '$C/dest/a.md' && ls '$C/dest/'a.md.bak.* >/dev/null 2>&1 && [ ! -e '$C/repo/a.md' ]"
+check "read-only copy (text): logged as such, no warning" \
+    "grep -q 'read-only copy: source wins, backup kept' '$LOG' && ! grep -q '\[warn\]' '$LOG'"
+
+setup_case readonly-copy-json
+printf '{"a":1,"b":[1,2]}\n' > "$C/repo/c.json"; printf '{"z":0,"b":[2]}\n' > "$C/dest/c.json"
+run_lib "export MANAGED_NO_REVIEW=true; C='$C' SRCF='$C/repo/c.json' DEST='$C/dest/c.json' ADOPT='$C/repo/c.json'; $DMF"
+check "read-only copy (JSON): written whole (LOCAL-only field gone), backup kept" \
+    "[ \"\$(result)\" = updated ] && cmp -s '$C/repo/c.json' '$C/dest/c.json' && ls '$C/dest/'c.json.bak.* >/dev/null 2>&1"
+
+if $HAVE_PTY; then
+    setup_case readonly-copy-pty
+    printf 'new\n' > "$C/src.md"; printf 'old\n' > "$C/dest/a.md"
+    run_lib "export MANAGED_NO_REVIEW=true; C='$C' SRCF='$C/src.md' DEST='$C/dest/a.md' ADOPT='$C/repo/a.md'; $DMF" "a\n"
+    check "read-only copy on a terminal: no menu, SOURCE written, nothing adopted" \
+        "[ \"\$(result)\" = updated ] && grep -qx new '$C/dest/a.md' && ! grep -q 'choice \[' '$C/out' && [ ! -e '$C/repo/a.md' ]"
+
+    setup_case json-array-display
+    printf '{"list":[{"id":1,"v":"a"},{"id":2,"v":"b"}],"tags":["x","y"]}\n' > "$C/repo/c.json"
+    printf '{"list":[{"id":1,"v":"a"},{"id":2,"v":"OLD"},{"id":3,"v":"c"}],"tags":["y","x"]}\n' > "$C/dest/c.json"
+    run_lib "C='$C' SRCF='$C/repo/c.json' DEST='$C/dest/c.json' ADOPT='$C/repo/c.json'; $DMF" "o\no\n"
+    perl -pe 's/\e\[[0-9;]*m//g; s/\r//g' "$C/out" > "$C/out.plain"
+    check "json array: the header names the file" "has_line '$C/out.plain' '[REVIEW] item: list differs from source.'"
+    check "json array: counts, the changed and the removed element shown" \
+        "has_line '$C/out.plain' '  3 local, 2 source element(s)' && has_line '$C/out.plain' '  ~ [1] id=2: v: \"OLD\" -> \"b\"' && has_line '$C/out.plain' '  - [2] {\"id\":3,\"v\":\"c\"}'"
+    check "json array: a reorder alone is one line" "has_line '$C/out.plain' '  ~ order differs (same elements)'"
+    check "json array: legend, colour-coded lines" \
+        "has_line '$C/out.plain' '  red - = only in local   green + = only in source   yellow ~ = changed' && grep -qF \"\${ESC}[33m~ [1] id=2\" '$C/out' && grep -qF \"\${ESC}[31m- [2]\" '$C/out'"
+    check "json array: element lines in the log" "grep -qF 'review item: list: ~ [1] id=2: v: \"OLD\" -> \"b\"' '$LOG'"
+    check "json array: overwrite applied" \
+        "[ \"\$(result)\" = updated ] && [ \"\$(node -e 'console.log(JSON.stringify(JSON.parse(require(\"fs\").readFileSync(process.argv[1]))))' '$C/dest/c.json')\" = '{\"list\":[{\"id\":1,\"v\":\"a\"},{\"id\":2,\"v\":\"b\"}],\"tags\":[\"x\",\"y\"]}' ]"
+fi
+
 if $HAVE_PTY; then
     setup_case json-fields
     printf '{"a":1,"b":2,"c":3}\n' > "$C/repo/c.json"; printf '{"a":9,"b":8,"c":7,"z":0}\n' > "$C/dest/c.json"
@@ -320,6 +434,14 @@ if $HAVE_PTY; then
         "[ \"\$(node -e 'console.log(JSON.stringify(JSON.parse(require(\"fs\").readFileSync(process.argv[1]))))' '$C/dest/c.json')\" = '{\"a\":1,\"b\":8,\"c\":7,\"z\":0}' ] && [ \"\$(node -e 'console.log(JSON.stringify(JSON.parse(require(\"fs\").readFileSync(process.argv[1]))))' '$C/repo/c.json')\" = '{\"a\":1,\"b\":8,\"c\":3,\"z\":0}' ]"
     check "json per-field: precedence -> accept & adopt" "[ \"\$(result)\" = 'accept & adopt' ]"
     check "json LOCAL-only: no [o]verwrite offered" "grep -q 'choice \[a/s/x\]' '$C/out'"
+
+    setup_case json-label-pty
+    printf '{"a":1,"b":2}\n' > "$C/repo/c.json"; printf '{"a":9,"b":8,"z":0}\n' > "$C/dest/c.json"
+    run_lib "C='$C' SRCF='$C/repo/c.json' DEST='$C/dest/c.json' ADOPT='$C/repo/c.json'; $DMF_LABEL" "a\ns\ns\n"
+    check "json label: every review header names the file, the LOCAL-only field too" \
+        "has_line '$C/plain' '[REVIEW] registries/c.json: a differs from source.' && has_line '$C/plain' '[REVIEW] registries/c.json: z differs from source.'"
+    check "json label: Accept & adopt and Skipped name the item" \
+        "[ \"\$(result)\" = 'accept & adopt' ] && grep -qF 'Accept & adopt: registries/c.json -> ' '$LOG' && grep -qF 'Skipped: registries/c.json (' '$LOG'"
 
     setup_case json-skip
     printf '{"a":1}\n' > "$C/repo/c.json"; printf '{"a":2}\n' > "$C/dest/c.json"
@@ -336,11 +458,7 @@ fi
 # ---------------------------------------------------------------------------
 # setup-user-claude.sh: CLAUDE.md adopt filter round trip (isolated HOME)
 # ---------------------------------------------------------------------------
-if $IS_WINDOWS; then
-    # setup-user-claude.sh is POSIX-only (its OS guard refuses Git Bash, tested by
-    # tests/os-guards); its .ps1 twin is tested on Windows by tests/claude-mdm.
-    printf 'SKIP claude.md adopt round trip: setup-user-claude.sh does not run on Windows\n'; SKIP=$((SKIP + 1))
-elif $HAVE_PTY && command -v node >/dev/null 2>&1; then
+if $HAVE_PTY && command -v node >/dev/null 2>&1; then
     setup_case claude-md
     DP="$C/dotprofile"; mkdir -p "$DP/claude" "$C/home/.aitools"
     git -C "$C" init -q dotprofile

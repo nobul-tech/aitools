@@ -1,0 +1,39 @@
+suite	command	exit	seconds
+os-guards	bash tests/os-guards/test-os-guards.sh	0	8
+delegation-score	python tests/harness-db/test-delegation-score.py	0	1
+ait-harvest	python tests/harvest/test-ait-harvest.py	0	1
+logging-sh	bash tests/logging/test-logging.sh	0	3
+logging-ps1	pwsh -NoProfile -File tests/logging/test-logging.ps1	0	5
+console-mode-guard-ps1	pwsh -NoProfile -File tests/aitools-entry/test-console-mode-guard.ps1	0	4
+managed-files-sh	bash tests/managed-files/test-managed-files.sh	0	62
+managed-files-ps1	pwsh -NoProfile -File tests/managed-files/test-managed-files.ps1	0	42
+adopt-push-sh	bash tests/managed-files/test-adopt-push.sh	0	35
+adopt-push-ps1	pwsh -NoProfile -File tests/managed-files/test-adopt-push.ps1	0	18
+menu-choice-sh	bash tests/menus/test-menu-choice.sh	0	35
+menu-choice-ps1	pwsh -NoProfile -File tests/menus/test-menu-choice.ps1	0	13
+setup-user-shell-ps1	pwsh -NoProfile -File tests/setup-user-shell/test-setup-user-shell.ps1	0	7
+b8-consumers	bash tests/b8-consumers/test-b8-consumers.sh	0	6
+claude-mdm	bash tests/claude-mdm/test-claude-mdm.sh	0	47
+hookin	bash tests/hookin/test-hookin.sh	0	35
+build-deploy-backup	bash tests/build-deploy/test-build-deploy-backup.sh	0	64
+pre-push-step7	bash tests/check-pre-push/test-pre-push-step7.sh	0	55
+profile	bash tests/profile/test-profile.sh	0	127
+config	bash tests/profile/test-config.sh	0	46
+lib	bash tests/profile/test-lib.sh	0	76
+user-init	bash tests/profile/test-user-init.sh	0	78
+install	bash tests/profile/test-install.sh	0	5
+fanout-lib	bash tests/fanout-lib/test-fanout-lib.sh	0	4
+rules-fanout	bash tests/rules-fanout/test-rules-fanout.sh	0	33
+rules-fanout-cursor	bash tests/rules-fanout-cursor/test-rules-fanout-cursor.sh	0	46
+skills-fanout	bash tests/skills-fanout/test-skills-fanout.sh	0	54
+skills-legacy	bash tests/skills-legacy/test-skills-legacy.sh	0	38
+deploy-harness	bash tests/deploy-harness/test-deploy-harness.sh	0	85
+deploy-harness-mdm	bash tests/deploy-harness-mdm/test-deploy-harness-mdm.sh	0	157
+delegation-duty-guard	bash tests/hooks/test-delegation-duty-guard.sh	0	10
+workflow-delegation-guard	bash tests/hooks/test-workflow-delegation-guard.sh	0	19
+sh-file-fixup	bash tests/hooks/test-sh-file-fixup.sh	0	6
+glossary-skill-guard	bash tests/hooks/test-glossary-skill-guard.sh	0	1
+sessionstart-harness-db	bash tests/hooks/test-sessionstart-harness-db.sh	0	7
+hooks-smoke	bash tests/hooks/test-hooks-smoke.sh	0	5
+build-package-cli	bash tests/build-package/test-cli.sh	0	5
+setup-user-shell-sh	bash tests/setup-user-shell/test-setup-user-shell.sh	0	0

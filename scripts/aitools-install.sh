@@ -188,6 +188,38 @@ resolve_repos_dir() {
     esac
     return 0
 }
+
+# prompt_repos_path -- Step 3, interactive run: ask where new repos live. The
+# prompt goes to the terminal (/dev/tty), never stdout, like every other prompt
+# (interactive-menus.md "Console I/O"); the answer is read with read_tty_choice
+# (EOF-safe: it logs a warning and returns empty). Sets REPOS_PATH to the answer
+# with a leading ~ expanded, or to $HOME/repos for an empty answer or EOF.
+# Parity: the Step 3 prompt in aitools-install.ps1 ([Console]::Write +
+# Read-ConsoleChoice).
+prompt_repos_path() {
+    local user_path=""
+    printf 'Where should new repos live? [~/repos]: ' > /dev/tty
+    read_tty_choice user_path "~/repos"
+    if [ -n "$user_path" ]; then
+        REPOS_PATH="${user_path/#\~/$HOME}"
+    else
+        REPOS_PATH="$HOME/repos"
+    fi
+}
+
+# run_relay_sync CMD ARGS... -- Step 22: run the relay -> Cursor AGENTS.md sync
+# (CMD ARGS = the python command, the sync script and its options) and put its
+# output in deploy.log. The output is captured and appended through the lib's
+# _aitlib_log_append, so a deploy.log that cannot be written is swallowed
+# (reference/logging.md section 5; incident #174) instead of skipping the sync,
+# as a failed `>>"$LOG_FILE"` redirection did. Returns the sync's exit code.
+# Parity: Invoke-RelaySync in aitools-install.ps1.
+run_relay_sync() {
+    local out="" rc=0
+    out=$("$@" 2>&1) || rc=$?
+    if [ -n "$out" ]; then _aitlib_log_append "$out" "$LOG_FILE"; fi
+    return "$rc"
+}
 # --- END install log helpers ---
 
 # --- BEGIN install log override (tests/profile/test-install.sh extracts this block) ---
@@ -207,11 +239,16 @@ fi
 # Override: JSONL dual-format (human-readable + structured JSON). The record goes
 # through the lib's jsonl_record: escaped, one run_id for the installer's own
 # lines and its relayed children's, and an unwritable deploy.jsonl is one warning,
-# not the end of the installer under set -e (A-16).
+# not the end of the installer under set -e (A-16). The deploy.log line goes
+# through the lib's _aitlib_log_append: a failed write is swallowed
+# (reference/logging.md section 5; incident #174), the console line still prints
+# and log_error / log_warn still count.
 log() {
     local level="${2:-info}"
     local ts; ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-    printf '[%s] [%s] [%s] %s\n' "$ts" "$SCRIPT_NAME" "$level" "$1" | tee -a "$LOG_FILE"
+    local line="[$ts] [$SCRIPT_NAME] [$level] $1"
+    _aitlib_log_append "$line" "$LOG_FILE"
+    printf '%s\n' "$line"
     jsonl_record "$ts" "$SCRIPT_NAME" "$level" "$1"
 }
 log_ok()    { log "$1" "ok"; }
@@ -377,7 +414,7 @@ read_config_key() {
     [ -f "$file" ] || return 1
     local val
     val=$(tr -d '\357\273\277' < "$file" \
-        | grep -o "\"$key\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" | head -1 | cut -d'"' -f4 || true)
+        | grep -o "\"$key\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" | sed -n '1p' | cut -d'"' -f4 || true)
     [ -n "$val" ] || return 1
     # Unescape JSON backslashes: \\ -> \
     printf '%b' "$val"
@@ -459,14 +496,8 @@ elif REPOS_PATH=$(read_config_key "$CONFIG_FILE" "reposPath"); then
 fi
 if [ -z "$REPOS_PATH" ]; then
     if $INSTALL_INTERACTIVE; then
-        # Interactive — prompt (EOF-safe: read_tty_choice logs and returns empty)
-        printf 'Where should new repos live? [~/repos]: '
-        read_tty_choice user_path "~/repos"
-        if [ -n "$user_path" ]; then
-            REPOS_PATH="${user_path/#\~/$HOME}"
-        else
-            REPOS_PATH="$HOME/repos"
-        fi
+        # Interactive -- prompt on the terminal (EOF-safe; see prompt_repos_path)
+        prompt_repos_path
     else
         # Non-interactive — use default
         REPOS_PATH="$HOME/repos"
@@ -594,38 +625,15 @@ fi
 # ============================================================
 log "Step 7: Shell integration"
 
-# Login-profile PATH ownership (managed marked block) -- must run so the harness
-# resolves managed tools (uv python, cursor-agent, brew bash) deterministically.
+# setup-user-shell.sh is the single owner of the shell files (incident #173 parity):
+# the PATH block in the login profile -- must run so the harness resolves managed
+# tools (uv python, cursor-agent, brew bash) deterministically -- and the aliases
+# source line in ~/.bashrc / ~/.zshrc.
 shell_script="$SCRIPT_DIR/setup-user-shell.sh"
 if [ -f "$shell_script" ]; then
     validate_and_run "$shell_script"
 else
-    log_warn "setup-user-shell.sh not found — skipping login-profile PATH block (MDM deploy)"
-fi
-
-ALIASES_PATH="$SCRIPT_DIR/../shared/shell/aliases.sh"
-if [ -f "$ALIASES_PATH" ]; then
-    ALIASES_ABS=$(cd "$(dirname "$ALIASES_PATH")" && pwd)/$(basename "$ALIASES_PATH")
-    OLD_MARKER="# ai-tooling shell integration"
-    MARKER="# aitools shell integration"
-    for rcfile in "$HOME/.bashrc" "$HOME/.zshrc"; do
-        # Only add to files that exist OR create .bashrc as fallback
-        if [ "$rcfile" = "$HOME/.bashrc" ] || [ -f "$rcfile" ]; then
-            # Remove old marker block if present
-            if grep -qF "$OLD_MARKER" "$rcfile" 2>/dev/null; then
-                perl -i -0777 -pe 's/\n?# ai-tooling shell integration\nsource "[^\n]*"\n?//g' "$rcfile"
-                log "Removed old shell integration marker from $(display_path "$rcfile")"
-            fi
-            if ! grep -qF "$MARKER" "$rcfile" 2>/dev/null; then
-                printf '\n%s\nsource "%s"\n' "$MARKER" "$ALIASES_ABS" >> "$rcfile"
-                log_ok "Added shell integration to $(display_path "$rcfile")"
-            else
-                log_ok "Shell integration already in $(display_path "$rcfile")"
-            fi
-        fi
-    done
-else
-    log_warn "aliases.sh not found — skipping shell integration (MDM deploy)"
+    log_warn "setup-user-shell.sh not found — skipping the login-profile PATH block and shell integration (MDM deploy)"
 fi
 
 # ============================================================
@@ -692,8 +700,8 @@ fi
 log "Step 9: Claude Code CLI"
 
 if command -v claude &>/dev/null; then
-    log_ok "Claude Code already installed ($(claude --version 2>/dev/null | head -1))"
-    write_summary OK "claude code" "$(claude --version 2>/dev/null | head -1)"
+    log_ok "Claude Code already installed ($(claude --version 2>/dev/null | sed -n '1p'))"
+    write_summary OK "claude code" "$(claude --version 2>/dev/null | sed -n '1p')"
     log "Running claude update..."
     # Exit code decides (C-F2); every output line is logged.
     update_rc=0
@@ -703,7 +711,7 @@ if command -v claude &>/dev/null; then
     done <<< "$UPDATE_OUTPUT"
     if [ "$update_rc" -ne 0 ]; then
         log_warn "claude update failed (exit $update_rc) -- see $(display_path "$LOG_FILE")"
-    elif printf '%s\n' "$UPDATE_OUTPUT" | grep -qi 'already.*up.to.date\|no update'; then
+    elif printf '%s\n' "$UPDATE_OUTPUT" | grep -i 'already.*up.to.date\|no update' >/dev/null; then
         log_ok "Already up to date"
     else
         log_ok "claude update finished"
@@ -716,8 +724,8 @@ else
         write_summary ERROR "claude code" "install failed"
     fi
     if command -v claude &>/dev/null; then
-        log_ok "Claude Code installed ($(claude --version 2>/dev/null | head -1))"
-        write_summary OK "claude code" "$(claude --version 2>/dev/null | head -1)"
+        log_ok "Claude Code installed ($(claude --version 2>/dev/null | sed -n '1p'))"
+        write_summary OK "claude code" "$(claude --version 2>/dev/null | sed -n '1p')"
     else
         log_error "Claude Code install failed"
         write_summary ERROR "claude code" "install failed"
@@ -794,6 +802,20 @@ if [ -f "$python_script" ]; then
     validate_and_run "$python_script"
 else
     log_warn "setup-python.sh not found — skipping (MDM deploy)"
+fi
+
+# ============================================================
+# 15b. pywinpty (Windows test library; macOS/Linux report n/a -- requires Step 15)
+# ============================================================
+# Parity with aitools-install.ps1, which installs it: here the script reports
+# "n/a (<platform>)" and changes nothing.
+log "Step 15b: pywinpty"
+
+pywinpty_script="$SCRIPT_DIR/setup-pywinpty.sh"
+if [ -f "$pywinpty_script" ]; then
+    validate_and_run "$pywinpty_script"
+else
+    log_warn "setup-pywinpty.sh not found -- skipping (MDM deploy)"
 fi
 
 # ============================================================
@@ -898,13 +920,13 @@ if [ -f "$sync_py" ]; then
     if $DRY_RUN; then sync_args+=(--dry-run); fi
     if ! $DRY_RUN; then export AITOOLS_SYNC_DEPLOY_LOG=1; fi
     if command -v python3 >/dev/null 2>&1; then
-        if python3 "$sync_py" ${sync_args[@]+"${sync_args[@]}"} >>"$LOG_FILE" 2>&1; then
+        if run_relay_sync python3 "$sync_py" ${sync_args[@]+"${sync_args[@]}"}; then
             if $DRY_RUN; then log_ok "relay→AGENTS sync (dry-run)"; fi
         else
             log_warn "sync-relay-to-cursor-agents.py failed (non-fatal)"
         fi
     elif command -v py >/dev/null 2>&1; then
-        if py -3 "$sync_py" ${sync_args[@]+"${sync_args[@]}"} >>"$LOG_FILE" 2>&1; then
+        if run_relay_sync py -3 "$sync_py" ${sync_args[@]+"${sync_args[@]}"}; then
             if $DRY_RUN; then log_ok "relay→AGENTS sync (dry-run)"; fi
         else
             log_warn "sync-relay-to-cursor-agents.py failed (non-fatal)"

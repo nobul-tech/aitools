@@ -48,7 +48,9 @@ if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
     exit 1
 }
 
-if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir -Force | Out-Null }
+# The log directory: Initialize-Logging (aitools-lib) creates it, fail-safe
+# (reference/logging.md section 5; incident #174: a second, unguarded New-Item here
+# printed an error when it could not be created)
 
 # Env passthrough from parent (aitools CLI)
 if ($env:AITOOLS_DRY_RUN -eq "1") { $DryRun = [switch]::Present }
@@ -120,6 +122,22 @@ function Resolve-ReposDir([string]$Path) {
     }
     return $abs
 }
+
+# Invoke-RelaySync EXE ARGS -- Step 22: run the relay -> Cursor AGENTS.md sync (EXE
+# ARGS = the python command, the sync script and its options) and put its output in
+# deploy.log through the lib's Add-AitLibLogText, so a deploy.log that cannot be
+# written is swallowed (reference/logging.md section 5; incident #174). The old
+# `$out | Add-Content` printed an error record and the run went on: the installer
+# sets no $ErrorActionPreference, and neither do its callers (aitools.ps1 runs it
+# in-process; bootstrap.ps1 sets "Stop" but starts it in a new process). Returns the
+# sync's exit code. Parity: run_relay_sync in aitools-install.sh.
+function Invoke-RelaySync([string]$Exe, [string[]]$SyncArgs) {
+    $out = & $Exe @SyncArgs 2>&1
+    $rc = $LASTEXITCODE
+    $text = (@($out) | ForEach-Object { "$_" }) -join "`n"
+    if ($text) { Add-AitLibLogText $text }
+    return $rc
+}
 # --- END install log helpers ---
 
 # --- BEGIN install log override (tests/profile/test-install.sh extracts this block) ---
@@ -137,11 +155,15 @@ if (-not $env:AITOOLS_RUN_ID) {
 # Override: JSONL dual-format (human-readable + structured JSON). The record goes
 # through the lib's Write-JsonlRecord: escaped, one run_id for the installer's own
 # lines and its relayed children's, and an unwritable deploy.jsonl is one warning (A-16).
+# The deploy.log line goes through the lib's Add-AitLibLogText: a failed write is
+# swallowed (reference/logging.md section 5; incident #174), also under
+# $ErrorActionPreference = "Stop" and inside a caller's try; the console line still
+# prints and LogError / LogWarn still count.
 function Log($msg, $level = "info") {
     $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
     $line = "[$ts] [$scriptName] [$level] $msg"
     Write-Host $line
-    Add-Content -Path $logFile -Value $line
+    Add-AitLibLogText $line
     Write-JsonlRecord $ts $scriptName $level $msg
 }
 function LogOk($msg)    { Log $msg "ok" }
@@ -492,76 +514,14 @@ if (Test-Path $hhPs1Src) {
 # ============================================================
 Log "Step 7: Shell integration"
 
-# Login-profile PATH ownership (managed marked block)
+# setup-user-shell.ps1 is the single owner of $PROFILE (incident #173): the
+# PATH block, the shell integration block (aliases.ps1, aitools, hh) and the
+# migration of the legacy "# aitools shell integration" lines.
 $shellScript = Join-Path $PSScriptRoot "setup-user-shell.ps1"
 if (Test-Path $shellScript) {
     Invoke-ValidatedScript $shellScript
 } else {
-    LogWarn "setup-user-shell.ps1 not found -- skipping login-profile PATH block (MDM deploy)"
-}
-
-$aliasesPath = Join-Path $PSScriptRoot "..\shared\shell\aliases.ps1"
-if (Test-Path $aliasesPath) {
-    $aliasesAbs = (Resolve-Path $aliasesPath).Path
-    $profileDir = Split-Path $PROFILE -Parent
-    if (-not (Test-Path $profileDir)) { New-Item -ItemType Directory -Path $profileDir -Force | Out-Null }
-    $oldMarker = "# ai-tooling shell integration"
-    $marker = "# aitools shell integration"
-
-    if (Test-Path $PROFILE) {
-        $content = Get-Content $PROFILE -Raw
-    } else {
-        $content = ""
-    }
-
-    # Remove old marker block if present
-    if ($content -match [regex]::Escape($oldMarker)) {
-        $lines = @(Get-Content $PROFILE)
-        $result = @()
-        $i = 0
-        while ($i -lt $lines.Count) {
-            if ($lines[$i] -match [regex]::Escape($oldMarker)) {
-                $i++  # skip marker
-                while ($i -lt $lines.Count -and $lines[$i].Trim() -ne '') { $i++ }
-            } else {
-                $result += $lines[$i]
-                $i++
-            }
-        }
-        Set-Content $PROFILE -Value ($result -join "`n")
-        $content = Get-Content $PROFILE -Raw
-        Log "Removed old shell integration marker from $PROFILE"
-    }
-
-    $desiredBlock = @"
-$marker
-. "$aliasesAbs"
-function aitools { & "`$HOME\.local\bin\aitools.ps1" @args }
-function hh { & "`$HOME\.local\bin\hh.ps1" @args }
-"@
-
-    if ($content -notmatch [regex]::Escape($marker)) {
-        Add-Content -Path $PROFILE -Value "`n$desiredBlock"
-        LogOk "Added shell integration to $PROFILE"
-    } else {
-        # Upgrade: remove old block (marker + following non-empty lines), re-add current
-        $lines = @(Get-Content $PROFILE)
-        $result = @()
-        $i = 0
-        while ($i -lt $lines.Count) {
-            if ($lines[$i] -match [regex]::Escape($marker)) {
-                $i++  # skip marker
-                while ($i -lt $lines.Count -and $lines[$i].Trim() -ne '') { $i++ }
-            } else {
-                $result += $lines[$i]
-                $i++
-            }
-        }
-        Set-Content $PROFILE -Value (($result -join "`n") + "`n`n$desiredBlock`n")
-        LogOk "Updated shell integration in $PROFILE"
-    }
-} else {
-    LogWarn "aliases.ps1 not found -- skipping shell integration (MDM deploy)"
+    LogWarn "setup-user-shell.ps1 not found -- skipping the PowerShell profile blocks (MDM deploy)"
 }
 
 # ============================================================
@@ -725,6 +685,20 @@ if (Test-Path $pythonScript) {
 }
 
 # ============================================================
+# 15b. pywinpty (Windows test library; macOS/Linux report n/a -- requires Step 15)
+# ============================================================
+# Parity with aitools-install.sh: the .sh reports "n/a (<platform>)". The pin is
+# scripts/requirements-pywinpty.txt, next to the script.
+Log "Step 15b: pywinpty"
+
+$pywinptyScript = Join-Path $PSScriptRoot "setup-pywinpty.ps1"
+if (Test-Path $pywinptyScript) {
+    Invoke-ValidatedScript $pywinptyScript
+} else {
+    LogWarn "setup-pywinpty.ps1 not found -- skipping (MDM deploy)"
+}
+
+# ============================================================
 # 16. Modal CLI
 # ============================================================
 Log "Step 16: Modal CLI"
@@ -834,14 +808,10 @@ if (Test-Path $syncPy) {
     if ($DryRun) { $syncArgs += "--dry-run" }
     $exitCode = -1
     if (Get-Command python3 -ErrorAction SilentlyContinue) {
-        $out = & python3 @syncArgs 2>&1
-        $exitCode = $LASTEXITCODE
-        $out | Add-Content -Path $logFile
+        $exitCode = Invoke-RelaySync "python3" $syncArgs
     } elseif (Get-Command py -ErrorAction SilentlyContinue) {
         $pyArgs = @("-3") + $syncArgs
-        $out = & py @pyArgs 2>&1
-        $exitCode = $LASTEXITCODE
-        $out | Add-Content -Path $logFile
+        $exitCode = Invoke-RelaySync "py" $pyArgs
     } else {
         LogWarn "Python not found -- skipping relay→AGENTS sync"
         $exitCode = -2

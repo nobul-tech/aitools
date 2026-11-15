@@ -1,6 +1,8 @@
 # check-post-push.ps1 -- automated post-push checklist for aitools
 # Usage: .\scripts\check-post-push.ps1
-# Platform: Windows (PS 5.1 compatible)
+# Platform: Windows (pwsh 7: 3-argument Join-Path). Runs no Git Bash: step 4 runs
+# aitools.ps1 with pwsh, step 6 leaves the .sh syntax check to CI and
+# check-post-push.sh.
 
 $ErrorActionPreference = "Stop"
 
@@ -44,31 +46,16 @@ if ($localHead -eq $remoteHead) {
 }
 
 # ---------------------------------------------------------------------------
-# 2. Smoke-test deploy scripts
+# 2. Smoke-test deploy scripts (retired)
 # ---------------------------------------------------------------------------
-$deployErrors = 0
-$bashExe = (Get-Command bash -ErrorAction SilentlyContinue).Source
-if ($bashExe) {
-    $deployFiles = Get-ChildItem (Join-Path $script:RepoRoot "deploy") -Filter "*.sh" -ErrorAction SilentlyContinue
-    if (-not $deployFiles) {
-        StepFail "2" "Smoke-test deploy scripts" "no .sh files found in deploy/"
-    } else {
-        foreach ($f in $deployFiles) {
-            & $bashExe -n $f.FullName 2>$null
-            if ($LASTEXITCODE -ne 0) {
-                Write-Host "      FAIL: $($f.Name)"
-                $deployErrors++
-            }
-        }
-        if ($deployErrors -eq 0) {
-            StepPass "2" "Smoke-test deploy scripts"
-        } else {
-            StepFail "2" "Smoke-test deploy scripts" "$deployErrors file(s) failed bash -n"
-        }
-    }
-} else {
-    StepSkip "2" "Smoke-test deploy scripts" "bash not found"
-}
+# Retired (incident #176): the step ran bash -n on the aitools deploy/*.sh, which
+# is frozen (build-deploy.sh writes the dotprofile deploy/ since 2c0fd32), so it
+# proved nothing about the generated scripts. check-pre-push step 7 runs on every
+# push (commander, 2026-10-26): it rebuilds into a temporary copy of the
+# dotprofile under a temporary HOME (build-deploy parses every generated .ps1
+# when pwsh is installed) and dry-runs the resolver consumers. No step reads the
+# aitools deploy/; the number stays so outputs stay stable.
+StepSkip "2" "Smoke-test deploy scripts" "retired: check-pre-push step 7 rebuilds into a temp dotprofile copy"
 
 # ---------------------------------------------------------------------------
 # 3. MCP config integrity
@@ -107,16 +94,38 @@ if ($mcpOk) {
 # ---------------------------------------------------------------------------
 # 4. CLI entry point + version
 # ---------------------------------------------------------------------------
-$aitoolsVersion = "FAILED"
-if ($bashExe) {
-    $aitoolsVersion = & $bashExe (Join-Path $scriptDir "aitools") --version 2>$null
-}
+# The Windows entry point is aitools.ps1, run here with pwsh; no Git Bash
+# (commander, 2026-11-14: "id like to avoid calling git bash on thowse ps1
+# scripts"). On Windows the bash entry scripts/aitools only hands off to
+# aitools.ps1 (aitools_win_forward), which tests/aitools-entry/test-win-forwarder.ps1
+# covers in CI; check-post-push.sh step 4 runs the bash entry on macOS/Linux.
+# The step passes on exit 0 with an "aitools <version>" line.
 $tagVersion = InvokeGit describe --tags --match "v*" --abbrev=0
 if (-not $tagVersion) { $tagVersion = "none" }
-if ($aitoolsVersion -ne "FAILED") {
-    StepPass "4" "CLI entry point + version" "$aitoolsVersion (tag: $tagVersion)"
+$aitoolsPs1 = Join-Path $scriptDir "aitools.ps1"
+# Command-existence check: no pwsh fails the step below
+$pwshCmd = Get-Command pwsh -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+if (-not $pwshCmd) {
+    StepFail "4" "CLI entry point + version" "pwsh (PowerShell 7) not found -- aitools.ps1 not run"
+} elseif (-not (Test-Path -LiteralPath $aitoolsPs1)) {
+    StepFail "4" "CLI entry point + version" "scripts/aitools.ps1 not found"
 } else {
-    StepFail "4" "CLI entry point + version" "aitools --version failed"
+    # Native stderr must not stop the script: the exit code is checked instead
+    $prevEap = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        $verOut = @(& $pwshCmd.Source -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $aitoolsPs1 --version 2>&1 | ForEach-Object { "$_" })
+        $verRc = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $prevEap
+    }
+    $verLine = $verOut | Where-Object { $_ -match '^aitools \S' } | Select-Object -First 1
+    if ($verRc -eq 0 -and $verLine) {
+        StepPass "4" "CLI entry point + version" "$verLine (tag: $tagVersion)"
+    } else {
+        foreach ($l in $verOut) { LogDetail "post-push 4 aitools.ps1 --version: $l" }
+        StepFail "4" "CLI entry point + version" "aitools.ps1 --version failed (exit $verRc)"
+    }
 }
 
 # ---------------------------------------------------------------------------
@@ -171,43 +180,23 @@ Write-Host ""
 # ---------------------------------------------------------------------------
 # 6. Full script syntax validation
 # ---------------------------------------------------------------------------
-# .sh validation
-$shErrors = 0
-if ($bashExe) {
-    $allSh = @()
-    $allSh += Get-ChildItem (Join-Path $script:RepoRoot "scripts") -Filter "*.sh" -ErrorAction SilentlyContinue
-    $allSh += Get-ChildItem (Join-Path $script:RepoRoot "deploy") -Filter "*.sh" -ErrorAction SilentlyContinue
-    $hooksDir = Join-Path (Join-Path $script:RepoRoot "shared") "hooks"
-    if (Test-Path $hooksDir) {
-        $allSh += Get-ChildItem $hooksDir -Filter "*.sh" -ErrorAction SilentlyContinue
-    }
-    if ($allSh.Count -eq 0) {
-        StepFail "6" "Full syntax (.sh)" "no .sh files found in scripts/, deploy/, or shared/hooks/"
-    } else {
-        foreach ($f in $allSh) {
-            & $bashExe -n $f.FullName 2>$null
-            if ($LASTEXITCODE -ne 0) {
-                Write-Host "      FAIL: $($f.FullName)"
-                $shErrors++
-            }
-        }
-        if ($shErrors -eq 0) {
-            StepPass "6" "Full syntax (.sh)"
-        } else {
-            StepFail "6" "Full syntax (.sh)" "$shErrors file(s) failed"
-        }
-    }
-} else {
-    StepSkip "6" "Full syntax (.sh)" "bash not found"
-}
+# Source scripts only: scripts/ and shared/hooks/. The aitools deploy/ is frozen
+# and no longer read (incident #176); check-pre-push step 7 builds the generated
+# scripts into a temporary dotprofile copy.
+# .sh validation: not run on Windows. bash -n needs Git Bash, and the Windows
+# checks call no Git Bash (commander, 2026-11-14: "id like to avoid calling git
+# bash on thowse ps1 scripts"); a .sh never runs on Windows. CI runs bash -n on
+# every tracked shell script on each push and pull request (the linux and macos
+# jobs, "Validate bash script syntax"), and check-post-push.sh step 6 runs it on
+# macOS/Linux.
+StepSkip "6" "Full syntax (.sh)" "bash -n runs in CI (linux, macos) and check-post-push.sh, not on Windows"
 
 # .ps1 validation (native on Windows)
 $ps1Errors = 0
 $allPs1 = @()
 $allPs1 += Get-ChildItem (Join-Path $script:RepoRoot "scripts") -Filter "*.ps1" -ErrorAction SilentlyContinue
-$allPs1 += Get-ChildItem (Join-Path $script:RepoRoot "deploy") -Filter "*.ps1" -ErrorAction SilentlyContinue
 if ($allPs1.Count -eq 0) {
-    StepFail "6" "Full syntax (.ps1)" "no .ps1 files found in scripts/ or deploy/"
+    StepFail "6" "Full syntax (.ps1)" "no .ps1 files found in scripts/"
 } else {
     foreach ($f in $allPs1) {
         $e = $null
@@ -228,21 +217,15 @@ if ($allPs1.Count -eq 0) {
 }
 
 # ---------------------------------------------------------------------------
-# 7. deploy/ drift audit
+# 7. deploy/ drift audit (retired)
 # ---------------------------------------------------------------------------
-if ($bashExe) {
-    & $bashExe (Join-Path $scriptDir "build-deploy.sh") 2>$null | Out-Null
-    $drift = InvokeGit diff deploy/
-    if (-not $drift) {
-        StepPass "7" "deploy/ drift audit"
-    } else {
-        StepFail "7" "deploy/ drift audit" "deploy/ is stale -- rebuild needed"
-        InvokeGit checkout -- deploy/
-    }
-} else {
-    StepSkip "7" "deploy/ drift audit" "bash not found"
-}
-
+# Retired (M5-Fixes item 3): the step ran build-deploy.sh with this shell's HOME,
+# which replaces the real dotprofile deploy/ (incident #86 class), then diffed the
+# frozen aitools deploy/, which build-deploy no longer writes, so it always passed.
+# check-pre-push step 7 runs on every push (commander, 2026-10-26) and does the real
+# check: a rebuild into a temporary copy of the dotprofile under a temporary HOME.
+# This step never runs build-deploy.sh; the number stays so outputs stay stable.
+StepSkip "7" "deploy/ drift audit" "retired: check-pre-push step 7 rebuilds into a temp dotprofile copy"
 
 
 # ---------------------------------------------------------------------------
@@ -365,10 +348,11 @@ if ($refErrors -eq 0) {
 # ---------------------------------------------------------------------------
 # 14. Line ending audit
 # ---------------------------------------------------------------------------
+# Source scripts only: scripts/ and shared/hooks/ (the frozen aitools deploy/ is
+# not read, incident #176).
 $crlfCount = 0
 $allShFiles = @()
 $allShFiles += Get-ChildItem (Join-Path $script:RepoRoot "scripts") -Filter "*.sh" -ErrorAction SilentlyContinue
-$allShFiles += Get-ChildItem (Join-Path $script:RepoRoot "deploy") -Filter "*.sh" -ErrorAction SilentlyContinue
 $hooksDir2 = Join-Path (Join-Path $script:RepoRoot "shared") "hooks"
 if (Test-Path $hooksDir2) {
     $allShFiles += Get-ChildItem $hooksDir2 -Filter "*.sh" -ErrorAction SilentlyContinue
@@ -556,6 +540,8 @@ if (-not (Test-Path $versionsJson)) {
         'go'               = @('go', 'version')
         'datadog-pup'      = @('pup', 'version')
         'perl'             = @('perl', '--version')
+        # Managed library (tool-lifecycle.md "Managed libraries"): version from package metadata
+        'pywinpty'         = @('python3', '-c', "import importlib.metadata as m; print(m.version('pywinpty'))")
     }
     foreach ($entry in $toolData.tools.PSObject.Properties) {
         $key = $entry.Name
@@ -883,15 +869,25 @@ StepSkip "28" "Deploy state integrity" "retired: managed files keep no deploy st
 if ($Extensive) {
     $ps1Lib = Join-Path $script:RepoRoot "scripts\aitools-lib.ps1"
     $shLib = Join-Path $script:RepoRoot "scripts\aitools-lib.sh"
-    # Extract [letter] patterns from menu lines
-    $ps1Choices = (Select-String -Path $ps1Lib -Pattern 'Console.*Write.*\[(\w)\]' -AllMatches |
-        ForEach-Object { $_.Matches } | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique) -join ','
-    $shChoices = (Select-String -Path $shLib -Pattern 'printf.*\[(\w)\]' -AllMatches |
-        ForEach-Object { $_.Matches } | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique) -join ','
-    if ($ps1Choices -eq $shChoices) {
-        StepPass "29" "Deployment menu parity audit" "PS1 and bash menus match: $ps1Choices"
+    # The menu letters printed by printf / [Console]::Write lines and the
+    # prompts passed to read_menu_choice / Read-MenuChoice, compared in
+    # scripts/check-menu-parity.pl (same script as the bash step 29; its header
+    # lists the blind spots). Exit 0 match, 1 mismatch, 2 usage or read error;
+    # the last output line is the summary.
+    $mpScript = Join-Path (Join-Path $script:RepoRoot "scripts") "check-menu-parity.pl"
+    if (-not (Get-Command perl -ErrorAction SilentlyContinue)) {
+        # Command-existence check with an explicit fallback (the SKIP)
+        StepSkip "29" "Deployment menu parity audit" "perl not available"
     } else {
-        StepFail "29" "Deployment menu parity audit" "PS1: $ps1Choices vs bash: $shChoices"
+        $mpOut = @(& perl $mpScript $shLib $ps1Lib 2>&1 | ForEach-Object { "$_" })
+        $mpRc = $LASTEXITCODE
+        $mpLast = if ($mpOut.Count -gt 0) { $mpOut[-1] } else { "(no output)" }
+        if ($mpRc -eq 0) {
+            StepPass "29" "Deployment menu parity audit" "PS1 and bash menus match: $mpLast"
+        } else {
+            foreach ($mpLine in $mpOut) { Write-Host "      $mpLine" }
+            StepFail "29" "Deployment menu parity audit" "$mpLast (exit $mpRc)"
+        }
     }
 }
 

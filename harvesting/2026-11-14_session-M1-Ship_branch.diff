@@ -1,0 +1,848 @@
+diff --git a/.claude/rules/agentic-standards.md b/.claude/rules/agentic-standards.md
+index 45f4246..9ab8447 100644
+--- a/.claude/rules/agentic-standards.md
++++ b/.claude/rules/agentic-standards.md
+@@ -60,6 +60,9 @@ against LOCAL.
+ - LOCAL equals SOURCE: verified, nothing written.
+ - LOCAL differs, non-interactive run (no terminal, EOF, or `--force`):
+   SOURCE written to LOCAL. No merge runs.
++- LOCAL differs, read-only copy (deploy-harness `reference/`, `registries/`;
++  `MANAGED_NO_REVIEW=true` / `-NoReview`): SOURCE written to LOCAL, no menu,
++  no adopt, in every run.
+ - LOCAL differs, interactive run: the review menu.
+ 
+ **Text files** (markdown, shell): one review per file, with the full menu,
+diff --git a/reference/harness.md b/reference/harness.md
+index a4d08a7..e0a8302 100644
+--- a/reference/harness.md
++++ b/reference/harness.md
+@@ -122,7 +122,10 @@ file goes through `deploy_managed_file()` in `@scripts/aitools-lib.sh` /
+ `Deploy-ManagedFile` in `@scripts/aitools-lib.ps1`, with the summary tool
+ name `harness files` and the repo file it came from as the adopt target
+ (the generated MDM copy passes no adopt target: its source is the
+-build-time embed). `config.json` is generated from `profile.json` by
++build-time embed). `reference/` and `registries/` are read-only copies:
++a file there that differs from its source is overwritten (backup kept)
++with no review menu and no adopt (`@reference/managed-file-deployment.md`
++"Read-only copies"). `config.json` is generated from `profile.json` by
+ calling the only config writer, `scripts/setup-user-config.sh` / `.ps1`,
+ unless `--skip-config` / `-SkipConfig` is given (installer Step 8b passes it
+ after Step 5 ran the writer, so it runs once per install; row OK
+diff --git a/reference/managed-file-deployment.md b/reference/managed-file-deployment.md
+index 9a521eb..786f835 100644
+--- a/reference/managed-file-deployment.md
++++ b/reference/managed-file-deployment.md
+@@ -212,6 +212,14 @@ Then no menu is shown and `overwrite` is selected: SOURCE is written to LOCAL
+ logged to deploy.log. For JSON, each differing field takes the SOURCE value;
+ a field only in LOCAL stays in LOCAL.
+ 
++**Read-only copies.** A caller marks LOCAL as a read-only copy (never edited
++there) with `MANAGED_NO_REVIEW=true` on the `deploy_managed_file` call /
++`-NoReview` on `Deploy-ManagedFile`. When it differs from SOURCE, SOURCE is
++written (backup kept) with no menu, in every run; adopt and merge are not
++offered, and JSON is written whole (no field review). The result is
++`updated`. Today's caller: deploy-harness, for `~/.aitools/reference/` and
++`~/.aitools/registries/`.
++
+ `DRY_RUN=true` (`AITOOLS_DRY_RUN`) logs what would happen, writes nothing,
+ and reports the file as `verified`.
+ 
+diff --git a/scripts/aitools-lib.ps1 b/scripts/aitools-lib.ps1
+index 85d0bd1..b9bda9e 100644
+--- a/scripts/aitools-lib.ps1
++++ b/scripts/aitools-lib.ps1
+@@ -1733,6 +1733,8 @@ function Invoke-AiMerge {
+ #   LOCAL missing                       -> SOURCE written, "created"
+ #   LOCAL == SOURCE                     -> nothing written, "verified"
+ #   no console, EOF, or AITOOLS_FORCE   -> SOURCE written (backup), "updated"
++#   a read-only copy (-NoReview)        -> SOURCE written (backup), "updated";
++#                                          JSON too (whole file, no field review)
+ #
+ # Text files (DestPath not ending in .json), one review per file:
+ #   [o]verwrite      -> SOURCE written to LOCAL (backup kept); "updated"
+@@ -2040,6 +2042,10 @@ function Prompt-DiffReview {
+ #   -AdoptFilter  optional, text files only: scriptblock that takes LOCAL
+ #                 content and returns the content the adopt target gets
+ #                 (e.g. CLAUDE.md strips its machine footer). $null = copy.
++#   -NoReview     LOCAL is a read-only copy (never edited there, e.g.
++#                 deploy-harness reference\ and registries\): when it differs,
++#                 SOURCE is written (backup kept) with no menu and no adopt;
++#                 JSON is written whole, not reviewed field by field.
+ #
+ # Returns "created", "updated", "verified", "accept & adopt", "skipped" or
+ # "failed". On "failed" nothing is left half-written (snapshots restored) and
+@@ -2054,7 +2060,8 @@ function Deploy-ManagedFile {
+         [string]$ToolName,
+         [string]$ItemName,
+         [string]$AdoptPath = "",
+-        [scriptblock]$AdoptFilter = $null
++        [scriptblock]$AdoptFilter = $null,
++        [switch]$NoReview
+     )
+ 
+     Write-ManagedStateNotice
+@@ -2108,8 +2115,8 @@ function Deploy-ManagedFile {
+         return "verified"
+     }
+ 
+-    # JSON: field-by-field review
+-    if ($DestPath -like '*.json') {
++    # JSON: field-by-field review (a read-only copy is written whole, below)
++    if ($DestPath -like '*.json' -and -not $NoReview) {
+         $srcTmp = $null
+         try {
+             $srcTmp = [IO.Path]::GetTempFileName()
+@@ -2122,7 +2129,7 @@ function Deploy-ManagedFile {
+             }
+             return "failed"
+         }
+-        $jsonResult = Review-JsonFields -SourceFile $srcTmp -DestPath $DestPath -AdoptPath $AdoptPath
++        $jsonResult = Review-JsonFields -SourceFile $srcTmp -DestPath $DestPath -AdoptPath $AdoptPath -ItemName $ItemName
+         Remove-Item -LiteralPath $srcTmp -Force -ErrorAction SilentlyContinue
+         # ErrorAction exempt: temp file cleanup; nothing depends on it
+         return $jsonResult
+@@ -2149,6 +2156,16 @@ function Deploy-ManagedFile {
+         return "verified"
+     }
+ 
++    # A read-only copy: SOURCE wins, no menu, no adopt (backup kept by Write-ManagedFiles)
++    if ($NoReview) {
++        if (Write-ManagedFiles -LocalPath $DestPath -LocalContent $Content) {
++            LogOk "Updated: $ItemName -> $DestPath (read-only copy: source wins, backup kept)"
++            return "updated"
++        }
++        LogError "Failed: ${ItemName}: $($script:ManagedWriteError) (files restored)"
++        return "failed"
++    }
++
+     # LOCAL differs from SOURCE: review (non-interactive / EOF / -Force -> overwrite)
+     $script:PdrAdoptTarget = $AdoptPath
+     $choice = Prompt-DiffReview -FilePath $DestPath -NewContent $Content `
+@@ -2226,8 +2243,9 @@ $script:ReviewJsonNode = @'
+ // review_json_fields / Review-JsonFields: SOURCE against LOCAL, field by field.
+ // The same text is embedded in aitools-lib.sh and aitools-lib.ps1: keep them identical.
+ //   plan  SRC LOCAL OUT_PLAN
+-//     OUT_PLAN: one line per differing field: idx<TAB>kind<TAB>key<TAB>local<TAB>source
+-//     kind: differ | source-only | local-only. A whole array is one field.
++//     OUT_PLAN: one line per differing field: idx<TAB>kind<TAB>key<TAB>local<TAB>source<TAB>detail
++//     kind: differ | source-only | local-only. A whole array is one field; its
++//     detail lists the elements that differ (arrayDetail), "" for other fields.
+ //   apply SRC LOCAL ADOPT CHOICES OUT_LOCAL OUT_ADOPT OUT_RESULT OUT_REQ_LOCAL OUT_REQ_ADOPT
+ //     ADOPT: the adopt target, or "-" for none.
+ //     CHOICES: idx<TAB>overwrite|adopt|skip|keep per field (missing = skip).
+@@ -2288,8 +2306,61 @@ function disp(v) {
+     if (t.length > 200) t = t.slice(0, 197) + '...';
+     return t;
+ }
+-function clean(t) { return String(t).replace(/[\t\r\n]/g, ' '); }
++function clean(t) { return String(t).replace(/[\t\r\n\x1f]/g, ' '); }
+ function clone(v) { return v === undefined ? undefined : JSON.parse(JSON.stringify(v)); }
++function short(v, n) {
++    const t = v === undefined ? '(absent)' : JSON.stringify(v);
++    return t.length > n ? t.slice(0, n - 3) + '...' : t;
++}
++// identity(v): "id=172" for an object element with an id, name, key, file or
++// slug (string or number), else undefined
++function identity(v) {
++    if (!isObj(v)) return undefined;
++    for (const k of ['id', 'name', 'key', 'file', 'slug']) {
++        if (has(v, k) && (typeof v[k] === 'string' || typeof v[k] === 'number')) return k + '=' + JSON.stringify(v[k]);
++    }
++    return undefined;
++}
++// arrayDetail(l, s): the plan's detail column for an array field ("" for
++// anything else). Lines joined by \x1f: a count line, then "- [i] value" (only
++// in LOCAL, its index there), "+ [j] value" (only in SOURCE, its index there)
++// and "~ [j] id=..: key: local -> source" (an object element with the same
++// identity in both, one line per changed key). Elements are matched by value,
++// so a reorder alone is one "~ order differs" line. At most 20 element lines.
++function arrayDetail(l, s) {
++    if (!Array.isArray(l) || !Array.isArray(s)) return '';
++    const left = new Map();
++    l.forEach((v, i) => { const c = canon(v); if (!left.has(c)) left.set(c, []); left.get(c).push(i); });
++    const added = [];
++    s.forEach((v, j) => { const q = left.get(canon(v)); if (q && q.length) q.shift(); else added.push(j); });
++    const removed = [];
++    for (const q of left.values()) removed.push(...q);
++    removed.sort((a, b) => a - b);
++    const byId = new Map();
++    for (const i of removed) { const id = identity(l[i]); if (id !== undefined && !byId.has(id)) byId.set(id, i); }
++    const paired = new Set();
++    const rows = [];
++    for (const j of added) {
++        const id = identity(s[j]);
++        if (id !== undefined && byId.has(id) && !paired.has(byId.get(id))) {
++            const i = byId.get(id), a = l[i], b = s[j];
++            paired.add(i);
++            const keys = Object.keys(a).concat(Object.keys(b).filter(k => !has(a, k)));
++            const ls = keys.filter(k => canon(a[k]) !== canon(b[k]))
++                .map(k => '~ [' + j + '] ' + id + ': ' + k + ': ' + short(a[k], 70) + ' -> ' + short(b[k], 70));
++            rows.push([j, ls]);
++        } else {
++            rows.push([j, ['+ [' + j + '] ' + short(s[j], 160)]]);
++        }
++    }
++    for (const i of removed) if (!paired.has(i)) rows.push([i, ['- [' + i + '] ' + short(l[i], 160)]]);
++    rows.sort((x, y) => x[0] - y[0]);
++    let out = [];
++    for (const r of rows) out.push(...r[1]);
++    if (out.length === 0) out.push('~ order differs (same elements)');
++    if (out.length > 20) out = out.slice(0, 20).concat(['... ' + (out.length - 20) + ' more line(s)']);
++    return [l.length + ' local, ' + s.length + ' source element(s)'].concat(out).map(clean).join('\x1f');
++}
+ function setPath(obj, path, val) {
+     let o = obj;
+     for (let i = 0; i < path.length - 1; i++) {
+@@ -2322,7 +2393,7 @@ try {
+     const list = fields(src, loc);
+     if (mode === 'plan') {
+         const lines = list.map((f, i) => [i, f.kind, f.path.length ? clean(f.path.join('.')) : '(document)',
+-            clean(disp(f.l)), clean(disp(f.s))].join('\t'));
++            clean(disp(f.l)), clean(disp(f.s)), f.kind === 'differ' ? arrayDetail(f.l, f.s) : ''].join('\t'));
+         fs.writeFileSync(process.argv[5], lines.length ? lines.join('\n') + '\n' : '');
+     } else if (mode === 'apply') {
+         const adoptPath = (process.argv[5] && process.argv[5] !== '-') ? process.argv[5] : '';
+@@ -2372,9 +2443,12 @@ function Review-JsonFields {
+     param(
+         [string]$SourceFile,
+         [string]$DestPath,
+-        [string]$AdoptPath = ""
++        [string]$AdoptPath = "",
++        [string]$ItemName = ""
+     )
+     $item = Split-Path -Leaf $DestPath
++    # The review header names the file (the caller's item name, else the file name)
++    $fileLabel = if ($ItemName) { $ItemName } else { $item }
+ 
+     # Get-Command exempt: command-existence check with explicit failure branch
+     if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
+@@ -2441,19 +2515,20 @@ function Review-JsonFields {
+     foreach ($pl in $planLines) {
+         $f = $pl -split "`t"
+         $idx = $f[0]; $kind = $f[1]; $key = $f[2]; $lDisp = $f[3]; $sDisp = $f[4]
++        $detail = if ($f.Count -gt 5) { $f[5] } else { "" }
+         if ($kind -eq "local-only") {
+             # A field only in LOCAL: [a]dopt / [s]kip / [x]abort, no overwrite.
+             # Without an adopt target or a console it is kept, no prompt.
+             if ($adoptOk -eq "1" -and $canPrompt) {
+                 $choice = Prompt-JsonFieldReview -Leaf $key -Current $lDisp -Proposed "(not in source)" `
+-                    -SourceLabel "source" -AdoptAllowed "1" -LocalLabel "local" -OverwriteAllowed "0"
++                    -SourceLabel "source" -AdoptAllowed "1" -LocalLabel "local" -OverwriteAllowed "0" -FileLabel $fileLabel
+             } else {
+                 LogDetail "${item}: $key only in local -- kept"
+                 $choice = "keep"
+             }
+         } else {
+             $choice = Prompt-JsonFieldReview -Leaf $key -Current $lDisp -Proposed $sDisp `
+-                -SourceLabel "source" -AdoptAllowed $adoptOk -LocalLabel "local"
++                -SourceLabel "source" -AdoptAllowed $adoptOk -LocalLabel "local" -FileLabel $fileLabel -Detail $detail
+         }
+         $choices.Add("$idx`t$choice")
+     }
+@@ -3534,6 +3609,32 @@ function Invoke-HarnessSkillsFanout {
+     }
+ }
+ 
++# ---------------------------------------------------------------------------
++# Write-JsonFieldDetail -What -Detail -LocalLabel -SourceLabel: the element
++# lines of an array field under its review header, one per line, colour-coded
++# when Test-ReviewColour (red "-" only in LOCAL, green "+" only in SOURCE,
++# yellow "~" changed), after a legend. Each line also goes to deploy.log
++# (detail). Parity: _json_field_detail in aitools-lib.sh.
++# ---------------------------------------------------------------------------
++function Write-JsonFieldDetail([string]$What, [string]$Detail, [string]$LocalLabel, [string]$SourceLabel) {
++    $esc = [char]27
++    $useColour = Test-ReviewColour
++    if ($useColour) {
++        [Console]::WriteLine("  $esc[31mred -$esc[0m = only in $LocalLabel   $esc[32mgreen +$esc[0m = only in $SourceLabel   $esc[33myellow ~$esc[0m = changed")
++    } else {
++        [Console]::WriteLine("  red - = only in $LocalLabel   green + = only in $SourceLabel   yellow ~ = changed")
++    }
++    foreach ($dl in ($Detail -split [char]0x1f)) {
++        LogDetail "review ${What}: $dl"
++        $code = if ($dl.StartsWith("-")) { "31" } elseif ($dl.StartsWith("+")) { "32" } elseif ($dl.StartsWith("~")) { "33" } else { "" }
++        if ($useColour -and $code) {
++            [Console]::WriteLine("  $esc[${code}m$dl$esc[0m")
++        } else {
++            [Console]::WriteLine("  $dl")
++        }
++    }
++}
++
+ # ---------------------------------------------------------------------------
+ # Granular per-leaf review prompt for JSON settings sync (Sync-ManagedJson)
+ # and the JSON field review (Review-JsonFields). Mirror of
+@@ -3542,6 +3643,10 @@ function Invoke-HarnessSkillsFanout {
+ # -LocalLabel names the local file's side (default "settings.json").
+ # -OverwriteAllowed "0" (a field only in the local file): no [o]verwrite, and
+ # the default answer is skip.
++# -FileLabel names the file in the header ("" = the leaf alone).
++# -Detail: element lines for an array field, joined by U+001F (the plan's
++# detail column, Review-JsonFields); shown colour-coded instead of the two
++# value lines ("" = show the two value lines).
+ # Returns "overwrite", "adopt", or "skip".
+ # -Force / AITOOLS_FORCE / non-interactive -> "overwrite" (source wins), or
+ # "skip" when overwrite is not allowed.
+@@ -3554,7 +3659,9 @@ function Prompt-JsonFieldReview {
+         [string]$SourceLabel = "profile.json",
+         [string]$AdoptAllowed = "1",
+         [string]$LocalLabel = "settings.json",
+-        [string]$OverwriteAllowed = "1"
++        [string]$OverwriteAllowed = "1",
++        [string]$FileLabel = "",
++        [string]$Detail = ""
+     )
+ 
+     $defaultChoice = "overwrite"
+@@ -3563,20 +3670,25 @@ function Prompt-JsonFieldReview {
+         $defaultChoice = "skip"
+         $defaultDesc = "skipping (only in $LocalLabel)"
+     }
++    $what = if ($FileLabel) { "${FileLabel}: $Leaf" } else { $Leaf }
+ 
+     if ($env:AITOOLS_FORCE -eq "1" -or $Force) {
+-        Log "Divergence in $Leaf -- $defaultDesc (--force)"
++        Log "Divergence in $what -- $defaultDesc (--force)"
+         return $defaultChoice
+     }
+     if (-not (Test-InteractiveConsole)) {
+-        Log "Divergence in $Leaf -- $defaultDesc (non-interactive)"
++        Log "Divergence in $what -- $defaultDesc (non-interactive)"
+         return $defaultChoice
+     }
+ 
+     [Console]::WriteLine("")
+-    [Console]::WriteLine("[REVIEW] $Leaf differs from $SourceLabel.")
+-    [Console]::WriteLine("  ${LocalLabel} : $Current")
+-    [Console]::WriteLine("  ${SourceLabel} : $Proposed")
++    [Console]::WriteLine("[REVIEW] $what differs from $SourceLabel.")
++    if ($Detail) {
++        Write-JsonFieldDetail -What $what -Detail $Detail -LocalLabel $LocalLabel -SourceLabel $SourceLabel
++    } else {
++        [Console]::WriteLine("  ${LocalLabel} : $Current")
++        [Console]::WriteLine("  ${SourceLabel} : $Proposed")
++    }
+     [Console]::WriteLine("")
+     if ($OverwriteAllowed -eq "1") {
+         [Console]::WriteLine("  [o]verwrite : $SourceLabel value -> $LocalLabel")
+diff --git a/scripts/aitools-lib.sh b/scripts/aitools-lib.sh
+index 593ea64..f408c25 100755
+--- a/scripts/aitools-lib.sh
++++ b/scripts/aitools-lib.sh
+@@ -1776,6 +1776,9 @@ _invoke_ai_merge() {
+ #   LOCAL missing                       -> SOURCE written, "created"
+ #   LOCAL == SOURCE                     -> nothing written, "verified"
+ #   no terminal, EOF, or AITOOLS_FORCE  -> SOURCE written (backup), "updated"
++#   a read-only copy (MANAGED_NO_REVIEW=true) -> SOURCE written (backup),
++#                                          "updated"; JSON too (whole file,
++#                                          no field review)
+ #
+ # Text files (DEST not ending in .json), one review per file:
+ #   [o]verwrite      -> SOURCE written to LOCAL (backup kept); "updated"
+@@ -2052,6 +2055,11 @@ prompt_diff_review() {
+ #                      reads LOCAL content on stdin and prints the content the
+ #                      adopt target gets (CLAUDE.md strips its machine footer
+ #                      and restores profile tokens). "" = plain copy.
++# MANAGED_NO_REVIEW=true (set for the one call: MANAGED_NO_REVIEW=true
++#   deploy_managed_file ...): LOCAL is a read-only copy (never edited there,
++#   e.g. deploy-harness reference/ and registries/): when it differs, SOURCE is
++#   written (backup kept) with no menu and no adopt; JSON is written whole, not
++#   reviewed field by field. Parity: -NoReview in aitools-lib.ps1.
+ #
+ # Sets MANAGED_FILE_RESULT to "created", "updated", "verified",
+ # "accept & adopt", "skipped" or "failed". On "failed" nothing is left
+@@ -2067,6 +2075,7 @@ deploy_managed_file() {
+     local item_name="$4"
+     local adopt_path="${5:-}"
+     local adopt_filter="${6:-}"
++    local no_review="${MANAGED_NO_REVIEW:-false}"
+ 
+     MANAGED_FILE_RESULT="verified"
+     _managed_state_notice
+@@ -2102,24 +2111,26 @@ deploy_managed_file() {
+         return 0
+     fi
+ 
+-    # JSON: field-by-field review
++    # JSON: field-by-field review (a read-only copy is written whole, below)
+     case "$dest" in
+         *.json)
+-            local _src_tmp
+-            if ! _src_tmp=$(mktemp); then
+-                log_error "Failed: $item_name: could not create a temp file for the JSON review"
+-                MANAGED_FILE_RESULT="failed"
+-                return 0
+-            fi
+-            if ! printf '%s\n' "$src_content" > "$_src_tmp"; then
++            if [ "$no_review" != "true" ]; then
++                local _src_tmp
++                if ! _src_tmp=$(mktemp); then
++                    log_error "Failed: $item_name: could not create a temp file for the JSON review"
++                    MANAGED_FILE_RESULT="failed"
++                    return 0
++                fi
++                if ! printf '%s\n' "$src_content" > "$_src_tmp"; then
++                    rm -f "$_src_tmp"
++                    log_error "Failed: $item_name: could not write a temp file for the JSON review"
++                    MANAGED_FILE_RESULT="failed"
++                    return 0
++                fi
++                review_json_fields "$_src_tmp" "$dest" "$adopt_path" "$item_name"
+                 rm -f "$_src_tmp"
+-                log_error "Failed: $item_name: could not write a temp file for the JSON review"
+-                MANAGED_FILE_RESULT="failed"
+                 return 0
+-            fi
+-            review_json_fields "$_src_tmp" "$dest" "$adopt_path"
+-            rm -f "$_src_tmp"
+-            return 0 ;;
++            fi ;;
+     esac
+ 
+     # New file: create
+@@ -2146,6 +2157,18 @@ deploy_managed_file() {
+         return 0
+     fi
+ 
++    # A read-only copy: SOURCE wins, no menu, no adopt (backup kept by _managed_write)
++    if [ "$no_review" = "true" ]; then
++        if _managed_write "$dest" "$src_content" "" ""; then
++            log_ok "Updated: $item_name -> $(display_path "$dest") (read-only copy: source wins, backup kept)"
++            MANAGED_FILE_RESULT="updated"
++        else
++            log_error "Failed: $item_name: $MANAGED_WRITE_ERROR (files restored)"
++            MANAGED_FILE_RESULT="failed"
++        fi
++        return 0
++    fi
++
+     # LOCAL differs from SOURCE: review (non-interactive / EOF / --force -> overwrite)
+     local adopt_offered=0
+     if [ -n "$adopt_path" ]; then adopt_offered=1; fi
+@@ -2206,6 +2229,8 @@ deploy_managed_file() {
+ #   $1 = SRC_FILE    file holding the SOURCE JSON
+ #   $2 = DEST        deployed JSON file (LOCAL)
+ #   $3 = ADOPT_PATH  repo JSON file that is the source of truth; "" = no adopt
++#   $4 = ITEM_NAME   the file as the review header names it (default: DEST's
++#                    file name)
+ #
+ # Sets MANAGED_FILE_RESULT, one per file by precedence failed > accept & adopt
+ # > skipped > updated > verified: "created" (LOCAL was missing), "failed"
+@@ -2215,9 +2240,11 @@ deploy_managed_file() {
+ # "verified" (nothing written). Requires node. Exits 2 on [x]abort.
+ # ---------------------------------------------------------------------------
+ review_json_fields() {
+-    local src_file="$1" dest="$2" adopt_path="${3:-}"
++    local src_file="$1" dest="$2" adopt_path="${3:-}" file_label="${4:-}"
+     local item
+     item=$(basename "$dest")
++    # The review header names the file (the caller's item name, else the file name)
++    if [ -z "$file_label" ]; then file_label="$item"; fi
+     MANAGED_FILE_RESULT="verified"
+ 
+     if ! command -v node >/dev/null 2>&1; then
+@@ -2236,8 +2263,9 @@ review_json_fields() {
+ // review_json_fields / Review-JsonFields: SOURCE against LOCAL, field by field.
+ // The same text is embedded in aitools-lib.sh and aitools-lib.ps1: keep them identical.
+ //   plan  SRC LOCAL OUT_PLAN
+-//     OUT_PLAN: one line per differing field: idx<TAB>kind<TAB>key<TAB>local<TAB>source
+-//     kind: differ | source-only | local-only. A whole array is one field.
++//     OUT_PLAN: one line per differing field: idx<TAB>kind<TAB>key<TAB>local<TAB>source<TAB>detail
++//     kind: differ | source-only | local-only. A whole array is one field; its
++//     detail lists the elements that differ (arrayDetail), "" for other fields.
+ //   apply SRC LOCAL ADOPT CHOICES OUT_LOCAL OUT_ADOPT OUT_RESULT OUT_REQ_LOCAL OUT_REQ_ADOPT
+ //     ADOPT: the adopt target, or "-" for none.
+ //     CHOICES: idx<TAB>overwrite|adopt|skip|keep per field (missing = skip).
+@@ -2298,8 +2326,61 @@ function disp(v) {
+     if (t.length > 200) t = t.slice(0, 197) + '...';
+     return t;
+ }
+-function clean(t) { return String(t).replace(/[\t\r\n]/g, ' '); }
++function clean(t) { return String(t).replace(/[\t\r\n\x1f]/g, ' '); }
+ function clone(v) { return v === undefined ? undefined : JSON.parse(JSON.stringify(v)); }
++function short(v, n) {
++    const t = v === undefined ? '(absent)' : JSON.stringify(v);
++    return t.length > n ? t.slice(0, n - 3) + '...' : t;
++}
++// identity(v): "id=172" for an object element with an id, name, key, file or
++// slug (string or number), else undefined
++function identity(v) {
++    if (!isObj(v)) return undefined;
++    for (const k of ['id', 'name', 'key', 'file', 'slug']) {
++        if (has(v, k) && (typeof v[k] === 'string' || typeof v[k] === 'number')) return k + '=' + JSON.stringify(v[k]);
++    }
++    return undefined;
++}
++// arrayDetail(l, s): the plan's detail column for an array field ("" for
++// anything else). Lines joined by \x1f: a count line, then "- [i] value" (only
++// in LOCAL, its index there), "+ [j] value" (only in SOURCE, its index there)
++// and "~ [j] id=..: key: local -> source" (an object element with the same
++// identity in both, one line per changed key). Elements are matched by value,
++// so a reorder alone is one "~ order differs" line. At most 20 element lines.
++function arrayDetail(l, s) {
++    if (!Array.isArray(l) || !Array.isArray(s)) return '';
++    const left = new Map();
++    l.forEach((v, i) => { const c = canon(v); if (!left.has(c)) left.set(c, []); left.get(c).push(i); });
++    const added = [];
++    s.forEach((v, j) => { const q = left.get(canon(v)); if (q && q.length) q.shift(); else added.push(j); });
++    const removed = [];
++    for (const q of left.values()) removed.push(...q);
++    removed.sort((a, b) => a - b);
++    const byId = new Map();
++    for (const i of removed) { const id = identity(l[i]); if (id !== undefined && !byId.has(id)) byId.set(id, i); }
++    const paired = new Set();
++    const rows = [];
++    for (const j of added) {
++        const id = identity(s[j]);
++        if (id !== undefined && byId.has(id) && !paired.has(byId.get(id))) {
++            const i = byId.get(id), a = l[i], b = s[j];
++            paired.add(i);
++            const keys = Object.keys(a).concat(Object.keys(b).filter(k => !has(a, k)));
++            const ls = keys.filter(k => canon(a[k]) !== canon(b[k]))
++                .map(k => '~ [' + j + '] ' + id + ': ' + k + ': ' + short(a[k], 70) + ' -> ' + short(b[k], 70));
++            rows.push([j, ls]);
++        } else {
++            rows.push([j, ['+ [' + j + '] ' + short(s[j], 160)]]);
++        }
++    }
++    for (const i of removed) if (!paired.has(i)) rows.push([i, ['- [' + i + '] ' + short(l[i], 160)]]);
++    rows.sort((x, y) => x[0] - y[0]);
++    let out = [];
++    for (const r of rows) out.push(...r[1]);
++    if (out.length === 0) out.push('~ order differs (same elements)');
++    if (out.length > 20) out = out.slice(0, 20).concat(['... ' + (out.length - 20) + ' more line(s)']);
++    return [l.length + ' local, ' + s.length + ' source element(s)'].concat(out).map(clean).join('\x1f');
++}
+ function setPath(obj, path, val) {
+     let o = obj;
+     for (let i = 0; i < path.length - 1; i++) {
+@@ -2332,7 +2413,7 @@ try {
+     const list = fields(src, loc);
+     if (mode === 'plan') {
+         const lines = list.map((f, i) => [i, f.kind, f.path.length ? clean(f.path.join('.')) : '(document)',
+-            clean(disp(f.l)), clean(disp(f.s))].join('\t'));
++            clean(disp(f.l)), clean(disp(f.s)), f.kind === 'differ' ? arrayDetail(f.l, f.s) : ''].join('\t'));
+         fs.writeFileSync(process.argv[5], lines.length ? lines.join('\n') + '\n' : '');
+     } else if (mode === 'apply') {
+         const adoptPath = (process.argv[5] && process.argv[5] !== '-') ? process.argv[5] : '';
+@@ -2420,21 +2501,21 @@ REVIEW_JSON_NODE_EOF
+     if [ -n "$adopt_path" ]; then adopt_ok=1; fi
+     if [ "${AITOOLS_FORCE:-}" != "1" ] && [ "${FORCE:-}" != "true" ] && tty_interactive; then can_prompt=1; fi
+     : > "$work/choices.tsv"
+-    local idx kind key ldisp sdisp choice
+-    while IFS=$'\t' read -r idx kind key ldisp sdisp <&3; do
++    local idx kind key ldisp sdisp detail choice
++    while IFS=$'\t' read -r idx kind key ldisp sdisp detail <&3; do
+         [ -n "$idx" ] || continue
+         if [ "$kind" = "local-only" ]; then
+             # A field only in LOCAL: [a]dopt / [s]kip / [x]abort, no overwrite.
+             # Without an adopt target or a terminal it is kept, no prompt.
+             if [ "$adopt_ok" = "1" ] && [ "$can_prompt" = "1" ]; then
+-                prompt_json_field_review "$key" "$ldisp" "(not in source)" "source" "1" "local" "0"
++                prompt_json_field_review "$key" "$ldisp" "(not in source)" "source" "1" "local" "0" "$file_label" ""
+                 choice="$JSON_FIELD_REVIEW_RESULT"
+             else
+                 log_detail "$item: $key only in local -- kept"
+                 choice="keep"
+             fi
+         else
+-            prompt_json_field_review "$key" "$ldisp" "$sdisp" "source" "$adopt_ok" "local"
++            prompt_json_field_review "$key" "$ldisp" "$sdisp" "source" "$adopt_ok" "local" "1" "$file_label" "$detail"
+             choice="$JSON_FIELD_REVIEW_RESULT"
+         fi
+         printf '%s\t%s\n' "$idx" "$choice" >> "$work/choices.tsv"
+@@ -3509,6 +3590,35 @@ fanout_harness_skills() {
+     return 0
+ }
+ 
++# ---------------------------------------------------------------------------
++# _json_field_detail WHAT DETAIL LOCAL_LABEL SOURCE_LABEL: the element lines of
++# an array field under its review header (DETAIL: lines joined by \x1f), one
++# per line, colour-coded when _review_colour (red "-" only in LOCAL, green "+"
++# only in SOURCE, yellow "~" changed), after a legend. Each line also goes to
++# deploy.log (detail). Parity: Write-JsonFieldDetail in aitools-lib.ps1.
++# ---------------------------------------------------------------------------
++_json_field_detail() {
++    local what="$1" rest="$2" llabel="$3" slabel="$4" dl colour=0 us=$'\x1f'
++    if _review_colour; then colour=1; fi
++    if [ "$colour" = "1" ]; then
++        printf '  \033[31mred -\033[0m = only in %s   \033[32mgreen +\033[0m = only in %s   \033[33myellow ~\033[0m = changed\n' "$llabel" "$slabel" > /dev/tty
++    else
++        printf '  red - = only in %s   green + = only in %s   yellow ~ = changed\n' "$llabel" "$slabel" > /dev/tty
++    fi
++    while :; do
++        dl="${rest%%"$us"*}"
++        log_detail "review $what: $dl"
++        case "$colour$dl" in
++            1-*) printf '  \033[31m%s\033[0m\n' "$dl" ;;
++            1+*) printf '  \033[32m%s\033[0m\n' "$dl" ;;
++            1~*) printf '  \033[33m%s\033[0m\n' "$dl" ;;
++            *)   printf '  %s\n' "$dl" ;;
++        esac > /dev/tty
++        if [ "$rest" = "$dl" ]; then break; fi
++        rest="${rest#*"$us"}"
++    done
++}
++
+ # ---------------------------------------------------------------------------
+ # Granular per-leaf review prompt for JSON settings sync (sync_managed_json)
+ # and the JSON field review (review_json_fields).
+@@ -3524,6 +3634,10 @@ fanout_harness_skills() {
+ #   $6 = local label (default "settings.json")
+ #   $7 = overwrite-allowed flag (default "1"; "0" for a field only in the
+ #        local file: no [o]verwrite, and the default answer is skip)
++#   $8 = file label: names the file in the header ("" = the leaf alone)
++#   $9 = detail: element lines for an array field, joined by \x1f (the
++#        plan's detail column, review_json_fields); shown colour-coded instead
++#        of the two value lines ("" = show the two value lines)
+ #
+ # Sets JSON_FIELD_REVIEW_RESULT to "overwrite", "adopt", or "skip".
+ # --force / AITOOLS_FORCE / non-interactive -> "overwrite" (source wins), or
+@@ -3532,28 +3646,33 @@ fanout_harness_skills() {
+ JSON_FIELD_REVIEW_RESULT=""
+ prompt_json_field_review() {
+     local leaf="$1" current="$2" proposed="$3" source_label="${4:-profile.json}" adopt_allowed="${5:-1}"
+-    local local_label="${6:-settings.json}" overwrite_allowed="${7:-1}"
+-    local default_choice="overwrite" default_desc="overwriting from $source_label"
++    local local_label="${6:-settings.json}" overwrite_allowed="${7:-1}" file_label="${8:-}" detail="${9:-}"
++    local default_choice="overwrite" default_desc="overwriting from $source_label" what="$leaf"
+     if [ "$overwrite_allowed" != "1" ]; then
+         default_choice="skip"; default_desc="skipping (only in $local_label)"
+     fi
++    if [ -n "$file_label" ]; then what="$file_label: $leaf"; fi
+ 
+     JSON_FIELD_REVIEW_RESULT="$default_choice"
+ 
+     # --force / AITOOLS_FORCE: source wins
+     if [ "${AITOOLS_FORCE:-}" = "1" ] || [ "${FORCE:-}" = "true" ]; then
+-        log "Divergence in $leaf -- $default_desc (--force)"
++        log "Divergence in $what -- $default_desc (--force)"
+         return 0
+     fi
+     # Non-interactive: source wins
+     if ! tty_interactive; then
+-        log "Divergence in $leaf -- $default_desc (non-interactive)"
++        log "Divergence in $what -- $default_desc (non-interactive)"
+         return 0
+     fi
+ 
+-    printf '\n\033[33m[REVIEW]\033[0m %s differs from %s.\n' "$leaf" "$source_label" > /dev/tty
+-    printf '  %s : %s\n' "$local_label" "$current" > /dev/tty
+-    printf '  %s : %s\n' "$source_label" "$proposed" > /dev/tty
++    printf '\n\033[33m[REVIEW]\033[0m %s differs from %s.\n' "$what" "$source_label" > /dev/tty
++    if [ -n "$detail" ]; then
++        _json_field_detail "$what" "$detail" "$local_label" "$source_label"
++    else
++        printf '  %s : %s\n' "$local_label" "$current" > /dev/tty
++        printf '  %s : %s\n' "$source_label" "$proposed" > /dev/tty
++    fi
+     printf '\n' > /dev/tty
+     if [ "$overwrite_allowed" = "1" ]; then
+         printf '  [o]verwrite : %s value -> %s\n' "$source_label" "$local_label" > /dev/tty
+diff --git a/scripts/deploy-harness.ps1 b/scripts/deploy-harness.ps1
+index a074f57..e7dabac 100644
+--- a/scripts/deploy-harness.ps1
++++ b/scripts/deploy-harness.ps1
+@@ -46,7 +46,10 @@
+ #   until a source has the name again.
+ # Preserved: every other file under .aitools (logs, backups, files with no
+ #   source -- each logged, never deleted; backups and the manifests are not listed).
+-# Overwrites: no -- a deployed file that differs from its source gets the review menu.
++# Overwrites: reference\ and registries\ only -- read-only copies (never edited
++#   there): a file that differs from its source is overwritten (backup kept),
++#   with no review menu and no adopt. Any other deployed file that differs from
++#   its source gets the review menu.
+ # --- END scope (extracted by build-deploy) ---
+ #
+ # Usage: deploy-harness.ps1 [-DryRun] [-Force] [-SkipConfig] [-Help]
+@@ -324,8 +327,12 @@ foreach ($p in $plan) {
+             if ($null -eq $cur -or ($cur -replace '[\r\n]+$', '') -cne ($content -replace '[\r\n]+$', '')) { $nWouldUpdate++ }
+         }
+     }
+-    # Not inside a pipeline or job: [x]abort exits 2 from the library.
+-    $result = Deploy-ManagedFile -Content $content -DestPath $p.Dest -ToolName $tool -ItemName $p.Item -AdoptPath $p.Src
++    # reference\ and registries\ are read-only copies: the source wins, no menu
++    # (header "Overwrites"). [x]abort at a menu exits 2 from the library (the
++    # entry points run this script through the lib relay, a pipeline: the exit
++    # still ends it with code 2).
++    $readOnlyCopy = $p.Kind -in @("reference", "registries")
++    $result = Deploy-ManagedFile -NoReview:$readOnlyCopy -Content $content -DestPath $p.Dest -ToolName $tool -ItemName $p.Item -AdoptPath $p.Src
+     if ($result -is [array]) { $result = $result[-1] }   # the result is the last output
+     switch ($result) {
+         "created"  { $nAdded++ }
+diff --git a/scripts/deploy-harness.sh b/scripts/deploy-harness.sh
+index 597c171..7157ed0 100755
+--- a/scripts/deploy-harness.sh
++++ b/scripts/deploy-harness.sh
+@@ -45,7 +45,10 @@
+ #   until a source has the name again.
+ # Preserved: every other file under ~/.aitools (logs, backups, files with no
+ #   source -- each logged, never deleted; backups and the manifests are not listed).
+-# Overwrites: no -- a deployed file that differs from its source gets the review menu.
++# Overwrites: reference/ and registries/ only -- read-only copies (never edited
++#   there): a file that differs from its source is overwritten (backup kept),
++#   with no review menu and no adopt. Any other deployed file that differs from
++#   its source gets the review menu.
+ # --- END scope (extracted by build-deploy) ---
+ #
+ # Usage: deploy-harness.sh [--dry-run] [--force] [--skip-config] [--help]
+@@ -344,7 +347,11 @@ deploy_one() {
+             N_WOULD_UPDATE=$((N_WOULD_UPDATE + 1))
+         fi
+     fi
+-    deploy_managed_file "$content" "$dest" "$TOOL" "$item" "$src"
++    # reference/ and registries/ are read-only copies: the source wins, no menu
++    # (header "Overwrites")
++    local no_review=false
++    case "$item" in reference/*|registries/*) no_review=true ;; esac
++    MANAGED_NO_REVIEW="$no_review" deploy_managed_file "$content" "$dest" "$TOOL" "$item" "$src"
+     case "$MANAGED_FILE_RESULT" in
+         created)
+             N_ADDED=$((N_ADDED + 1)); fix_exec "$src" "$dest" ;;
+diff --git a/tests/deploy-harness/test-deploy-harness.sh b/tests/deploy-harness/test-deploy-harness.sh
+index 2c6e208..7fa2af2 100755
+--- a/tests/deploy-harness/test-deploy-harness.sh
++++ b/tests/deploy-harness/test-deploy-harness.sh
+@@ -290,6 +290,19 @@ printf 'mine\n' > "$(A)/rules/mine.md"
+ run_dh "" --
+ check "preserved: file with no source kept and logged" "[ -f '$(A)/rules/mine.md' ] && grep -q 'Preserved: .*rules/mine.md' '$LOG'"
+ 
++# reference/ and registries/ are read-only copies: source wins, backup kept, no warning
++setup_case readonly
++run_dh "" --
++printf '# Harness\n\nlocal edit\n' > "$(A)/reference/harness.md"
++printf '{"a": 9}\n' > "$(A)/registries/r.json"
++run_dh "" --
++check "read-only copies: reference and registries overwritten from source" \
++    "[ \"\$(rc)\" = 0 ] && cmp -s '$R/reference/harness.md' '$(A)/reference/harness.md' && cmp -s '$R/registries/r.json' '$(A)/registries/r.json'"
++check "read-only copies: backups kept" \
++    "ls '$(A)/reference/'harness.md.bak.* >/dev/null 2>&1 && ls '$(A)/registries/'r.json.bak.* >/dev/null 2>&1"
++check "read-only copies: OK row (no warning), logged as read-only" \
++    "row 'OK|harness files|2 updated, 12 verified' && [ \"\$(grep -c 'read-only copy: source wins, backup kept' '$LOG')\" = 2 ] && ! grep -q '\[warn\]' '$LOG'"
++
+ # ---------------------------------------------------------------------------
+ # Interactive (pty): adopt, skip, abort, --force
+ # ---------------------------------------------------------------------------
+@@ -298,17 +311,25 @@ no_menu() { ! perl -pe 's/\e\[[0-9;?]*[A-Za-z]//g' "$C/out" | grep -q 'choice \[
+ if $HAVE_PTY; then
+     setup_case adopt
+     run_dh "" --
+-    printf '# Harness\n\nlocal edit\n' > "$(A)/reference/harness.md"
++    printf 'local edit\n' > "$(A)/rules/scratch.md"
+     run_dh 'a\n' --
+     check "adopt: exit 0" "[ \"\$(rc)\" = 0 ]"
+     check "adopt: LOCAL kept and copied to the repo source" \
+-        "grep -qx 'local edit' '$(A)/reference/harness.md' && grep -qx 'local edit' '$R/reference/harness.md'"
++        "grep -qx 'local edit' '$(A)/rules/scratch.md' && grep -qx 'local edit' '$R/shared/rules/scratch.md'"
+     check "adopt: aitools repo target left uncommitted and logged, no protected-file WARN" \
+-        "grep -q 'Uncommitted change in .*: harness.md' '$LOG' && ! grep -q 'Adopted into protected file' '$LOG'"
++        "grep -q 'Uncommitted change in .*: scratch.md' '$LOG' && ! grep -q 'Adopted into protected file' '$LOG'"
+     check "adopt: DETAIL row" "grep -q '^DETAIL|harness files|accept & adopt: ' '$C/summary'"
+     run_dh "" --
+     check "adopt: next run verifies; repo backup not deployed" \
+-        "row 'OK|harness files|14 verified' && [ -z \"\$(find '$(A)/reference' -name '*.bak.*' -print)\" ]"
++        "row 'OK|harness files|14 verified' && [ -z \"\$(find '$(A)/rules' -name '*.bak.*' -print)\" ]"
++
++    setup_case readonly-pty
++    run_dh "" --
++    printf '# Harness\n\nlocal edit\n' > "$(A)/reference/harness.md"
++    printf '{"a": 9}\n' > "$(A)/registries/r.json"
++    run_dh 'a\na\n' --
++    check "read-only copies on a terminal: no menu, source wins, nothing adopted" \
++        "[ \"\$(rc)\" = 0 ] && no_menu && cmp -s '$R/reference/harness.md' '$(A)/reference/harness.md' && cmp -s '$R/registries/r.json' '$(A)/registries/r.json' && ! grep -q 'local edit' '$R/reference/harness.md'"
+ 
+     setup_case skip
+     run_dh "" --
+diff --git a/tests/managed-files/test-managed-files.ps1 b/tests/managed-files/test-managed-files.ps1
+index b637367..8cb13e3 100644
+--- a/tests/managed-files/test-managed-files.ps1
++++ b/tests/managed-files/test-managed-files.ps1
+@@ -172,6 +172,17 @@ try {
+     Run-Lib "`$src='$C/src.json'; `$dest='$C/dest/c.json'; `$adopt=''; $dmf"
+     Check "json: invalid LOCAL -> failed, untouched" ((Result) -eq "failed" -and (Txt "dest/c.json") -eq "not json")
+ 
++    # --- Read-only copies (-NoReview): SOURCE wins, backup kept, no warning ---
++    $dmfRo = $dmf -replace 'Deploy-ManagedFile ', 'Deploy-ManagedFile -NoReview '
++    Setup-Case "readonly-copy-text"; W "src.md" "new"; W "dest/a.md" "old"
++    Run-Lib "`$src='$C/src.md'; `$dest='$C/dest/a.md'; `$adopt='$C/repo/a.md'; $dmfRo"
++    Check "read-only copy (text): SOURCE written, backup kept, adopt target untouched" ((Result) -eq "updated" -and (Txt "dest/a.md") -eq "new" -and (@(Get-ChildItem "$C/dest" -Filter "a.md.bak.*").Count -ge 1) -and -not (Test-Path "$C/repo/a.md"))
++    Check "read-only copy (text): logged as such, no warning" ((Log).Contains("read-only copy: source wins, backup kept") -and -not ((Log) -match "\[warn\]"))
++
++    Setup-Case "readonly-copy-json"; W "repo/c.json" '{"a":1,"b":[1,2]}'; W "dest/c.json" '{"z":0,"b":[2]}'
++    Run-Lib "`$src='$C/repo/c.json'; `$dest='$C/dest/c.json'; `$adopt='$C/repo/c.json'; $dmfRo"
++    Check "read-only copy (JSON): written whole (LOCAL-only field gone), backup kept" ((Result) -eq "updated" -and (Txt "dest/c.json") -ceq (Txt "repo/c.json") -and (@(Get-ChildItem "$C/dest" -Filter "c.json.bak.*").Count -ge 1))
++
+     # --- EOF at a prompt ---
+     # Not sent as Ctrl-D on the pty: EOF there is terminal-driver behavior (Ctrl-D on
+     # Unix, Ctrl-Z Enter on Windows) and pwsh on Linux does not end ReadLine on \x04.
+@@ -232,6 +243,21 @@ try {
+         Run-Lib "`$src='$C/repo/c.json'; `$dest='$C/dest/c.json'; `$adopt='$C/repo/c.json'; $dmf" "o\na\ns\na\n"
+         Check "json per-field: overwrite/adopt/skip + LOCAL-only adopt" ((JsonCompact "dest/c.json") -eq '{"a":1,"b":8,"c":7,"z":0}' -and (JsonCompact "repo/c.json") -eq '{"a":1,"b":8,"c":3,"z":0}' -and (Result) -eq "accept & adopt")
+ 
++        Setup-Case "readonly-copy-pty"; W "src.md" "new"; W "dest/a.md" "old"
++        Run-Lib "`$src='$C/src.md'; `$dest='$C/dest/a.md'; `$adopt='$C/repo/a.md'; $dmfRo" "a\n"
++        Check "read-only copy on a terminal: no menu, SOURCE written, nothing adopted" ((Result) -eq "updated" -and (Txt "dest/a.md") -eq "new" -and -not (Out).Contains("choice [") -and -not (Test-Path "$C/repo/a.md"))
++
++        Setup-Case "json-array-display"
++        W "repo/c.json" '{"list":[{"id":1,"v":"a"},{"id":2,"v":"b"}],"tags":["x","y"]}'
++        W "dest/c.json" '{"list":[{"id":1,"v":"a"},{"id":2,"v":"OLD"},{"id":3,"v":"c"}],"tags":["y","x"]}'
++        Run-Lib "`$src='$C/repo/c.json'; `$dest='$C/dest/c.json'; `$adopt='$C/repo/c.json'; $dmf" "o\no\n"
++        Check "json array: the header names the file" (HasLine "[REVIEW] item: list differs from source.")
++        Check "json array: counts, the changed and the removed element shown" ((HasLine "  3 local, 2 source element(s)") -and (HasLine '  ~ [1] id=2: v: "OLD" -> "b"') -and (HasLine '  - [2] {"id":3,"v":"c"}'))
++        Check "json array: a reorder alone is one line" (HasLine "  ~ order differs (same elements)")
++        Check "json array: legend, colour-coded lines" ((HasLine "  red - = only in local   green + = only in source   yellow ~ = changed") -and (Out).Contains("$esc[33m~ [1] id=2") -and (Out).Contains("$esc[31m- [2]"))
++        Check "json array: element lines in the log" ((Log).Contains('review item: list: ~ [1] id=2: v: "OLD" -> "b"'))
++        Check "json array: overwrite applied" ((Result) -eq "updated" -and (JsonCompact "dest/c.json") -eq '{"list":[{"id":1,"v":"a"},{"id":2,"v":"b"}],"tags":["x","y"]}')
++
+         # --- Review display: LOCAL -> SOURCE, labelled, coloured (mission DIFF-UX) ---
+         Setup-Case "display"; W "repo/a.md" "# Title`nline one`nrepo line`nend"; W "dest/a.md" "# Title`nline one`nmy local line`nend"
+         Run-Lib "`$src='$C/repo/a.md'; `$dest='$C/dest/a.md'; `$adopt='$C/repo/a.md'; $dmf" "s\n"
+diff --git a/tests/managed-files/test-managed-files.sh b/tests/managed-files/test-managed-files.sh
+index 3bc08e5..f595d1e 100755
+--- a/tests/managed-files/test-managed-files.sh
++++ b/tests/managed-files/test-managed-files.sh
+@@ -312,6 +312,44 @@ printf '{"a":1}\n' > "$C/src.json"; printf 'not json\n' > "$C/dest/c.json"
+ run_lib "C='$C' SRCF='$C/src.json' DEST='$C/dest/c.json' ADOPT=''; $DMF"
+ check "json: invalid LOCAL -> failed, untouched" "[ \"\$(result)\" = failed ] && grep -qx 'not json' '$C/dest/c.json'"
+ 
++# Read-only copies (MANAGED_NO_REVIEW=true): SOURCE wins, backup kept, no warning
++setup_case readonly-copy-text
++printf 'new\n' > "$C/src.md"; printf 'old\n' > "$C/dest/a.md"
++run_lib "export MANAGED_NO_REVIEW=true; C='$C' SRCF='$C/src.md' DEST='$C/dest/a.md' ADOPT='$C/repo/a.md'; $DMF"
++check "read-only copy (text): SOURCE written, backup kept, adopt target untouched" \
++    "[ \"\$(result)\" = updated ] && grep -qx new '$C/dest/a.md' && ls '$C/dest/'a.md.bak.* >/dev/null 2>&1 && [ ! -e '$C/repo/a.md' ]"
++check "read-only copy (text): logged as such, no warning" \
++    "grep -q 'read-only copy: source wins, backup kept' '$LOG' && ! grep -q '\[warn\]' '$LOG'"
++
++setup_case readonly-copy-json
++printf '{"a":1,"b":[1,2]}\n' > "$C/repo/c.json"; printf '{"z":0,"b":[2]}\n' > "$C/dest/c.json"
++run_lib "export MANAGED_NO_REVIEW=true; C='$C' SRCF='$C/repo/c.json' DEST='$C/dest/c.json' ADOPT='$C/repo/c.json'; $DMF"
++check "read-only copy (JSON): written whole (LOCAL-only field gone), backup kept" \
++    "[ \"\$(result)\" = updated ] && cmp -s '$C/repo/c.json' '$C/dest/c.json' && ls '$C/dest/'c.json.bak.* >/dev/null 2>&1"
++
++if $HAVE_PTY; then
++    setup_case readonly-copy-pty
++    printf 'new\n' > "$C/src.md"; printf 'old\n' > "$C/dest/a.md"
++    run_lib "export MANAGED_NO_REVIEW=true; C='$C' SRCF='$C/src.md' DEST='$C/dest/a.md' ADOPT='$C/repo/a.md'; $DMF" "a\n"
++    check "read-only copy on a terminal: no menu, SOURCE written, nothing adopted" \
++        "[ \"\$(result)\" = updated ] && grep -qx new '$C/dest/a.md' && ! grep -q 'choice \[' '$C/out' && [ ! -e '$C/repo/a.md' ]"
++
++    setup_case json-array-display
++    printf '{"list":[{"id":1,"v":"a"},{"id":2,"v":"b"}],"tags":["x","y"]}\n' > "$C/repo/c.json"
++    printf '{"list":[{"id":1,"v":"a"},{"id":2,"v":"OLD"},{"id":3,"v":"c"}],"tags":["y","x"]}\n' > "$C/dest/c.json"
++    run_lib "C='$C' SRCF='$C/repo/c.json' DEST='$C/dest/c.json' ADOPT='$C/repo/c.json'; $DMF" "o\no\n"
++    perl -pe 's/\e\[[0-9;]*m//g; s/\r//g' "$C/out" > "$C/out.plain"
++    check "json array: the header names the file" "has_line '$C/out.plain' '[REVIEW] item: list differs from source.'"
++    check "json array: counts, the changed and the removed element shown" \
++        "has_line '$C/out.plain' '  3 local, 2 source element(s)' && has_line '$C/out.plain' '  ~ [1] id=2: v: \"OLD\" -> \"b\"' && has_line '$C/out.plain' '  - [2] {\"id\":3,\"v\":\"c\"}'"
++    check "json array: a reorder alone is one line" "has_line '$C/out.plain' '  ~ order differs (same elements)'"
++    check "json array: legend, colour-coded lines" \
++        "has_line '$C/out.plain' '  red - = only in local   green + = only in source   yellow ~ = changed' && grep -qF \"\${ESC}[33m~ [1] id=2\" '$C/out' && grep -qF \"\${ESC}[31m- [2]\" '$C/out'"
++    check "json array: element lines in the log" "grep -qF 'review item: list: ~ [1] id=2: v: \"OLD\" -> \"b\"' '$LOG'"
++    check "json array: overwrite applied" \
++        "[ \"\$(result)\" = updated ] && [ \"\$(node -e 'console.log(JSON.stringify(JSON.parse(require(\"fs\").readFileSync(process.argv[1]))))' '$C/dest/c.json')\" = '{\"list\":[{\"id\":1,\"v\":\"a\"},{\"id\":2,\"v\":\"b\"}],\"tags\":[\"x\",\"y\"]}' ]"
++fi
++
+ if $HAVE_PTY; then
+     setup_case json-fields
+     printf '{"a":1,"b":2,"c":3}\n' > "$C/repo/c.json"; printf '{"a":9,"b":8,"c":7,"z":0}\n' > "$C/dest/c.json"

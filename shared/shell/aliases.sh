@@ -5,13 +5,43 @@
 # Datadog site (region-specific)
 export DD_SITE="us5.datadoghq.com"
 
+# Yes/no confirm: prints the prompt and reads a line from stdin until the
+# answer is y/yes/n/no (any case). Returns 0 for yes, 1 for no. An empty or
+# other answer asks again; end of input, or 50 unrecognised answers in a row,
+# means no. Runs in bash and zsh: every local is declared once, before the
+# loop (zsh's `local name` on an existing name prints it).
+_aitools_confirm() {
+  local prompt="$1" answer="" rc=0 tries=0
+  while :; do
+    printf '%s' "$prompt"
+    rc=0
+    IFS= read -r answer || rc=$?
+    # Trim surrounding whitespace (a CR included), then lowercase
+    answer="${answer#"${answer%%[![:space:]]*}"}"
+    answer="${answer%"${answer##*[![:space:]]}"}"
+    answer=$(printf '%s' "$answer" | tr '[:upper:]' '[:lower:]')
+    case "$answer" in
+      y|yes) return 0 ;;
+      n|no) return 1 ;;
+    esac
+    if [ "$rc" -ne 0 ]; then
+      printf '\n'
+      return 1
+    fi
+    tries=$((tries + 1))
+    if [ "$tries" -ge 50 ]; then
+      printf '  (no valid answer after 50 tries -- treating as no)\n'
+      return 1
+    fi
+    printf '  please type one of y/yes/n/no\n'
+  done
+}
+
 # Claude Code launcher with CLAUDE.md check
 cc() {
   if [ ! -f "CLAUDE.md" ] && [ ! -f "CLAUDE.local.md" ]; then
     echo "No CLAUDE.md found in $(pwd)."
-    printf "Create one with 'claude /init'? [y/N] "
-    read -r answer
-    if [[ "$answer" =~ ^[Yy]$ ]]; then
+    if _aitools_confirm "Create one with 'claude /init'? [y/n] "; then
       claude /init
     fi
   fi
@@ -249,9 +279,7 @@ clip2md() {
 
     # Check overwrite
     if [ -f "$name" ]; then
-      printf '%s exists. Overwrite? [y/N] ' "$name"
-      read -r answer
-      if [[ ! "$answer" =~ ^[Yy]$ ]]; then
+      if ! _aitools_confirm "$name exists. Overwrite? [y/n] "; then
         echo "Aborted."
         _clip2md_log "aborted: user declined overwrite of $name"
         return 0

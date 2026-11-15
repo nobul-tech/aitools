@@ -1423,3 +1423,58 @@ agent commander, engineer:    No one session gets to claim the whole story — b
 - Why `tests/skills-fanout` "adopt ps: DETAIL rows" stalled 60 s and failed once in CI (run 41254096114, linux). It passed on a rerun of the job; flaky, not caused by this change.
 - The CI macOS job is pinned to `macos-14`, which GitHub retires on 2026-11-02. Both of today's macOS jobs were cancelled by a scheduled brownout. It needs `runs-on: macos-15` (not changed: commander's call).
 - The deployed hooks in `~/.claude/hooks` are still the old ones until the next `aitools` run. Sessions in aitools pick up the new `ait-harvest.py` from the repo at once; `scratch-init.sh` changes only after a deploy.
+
+---
+
+### 423faec3-8 (2026-11-13T21:57Z)
+
+**State**: functional (Cursor agent, Claude Opus 5.5, Windows 11, pwsh 7.6.10)
+**Context loaded**: the broken `$PROFILE` and its three backups (read byte by byte), `scripts/setup-user-shell.ps1` / `.sh`, `aitools-install.ps1` / `.sh` Step 7, `aitools-lib.ps1` (Backup-File, Initialize-Logging, Write-Summary), the `/scratch` and `/incident` skills, the incident-governance rule, check-pre-commit / check-pre-push
+**Mission**: commander: "whats going on with this profile script? can you take a look and fix please" (pwsh startup: `ParserError ... Microsoft.PowerShell_profile.ps1:507 Missing closing ')' in expression`). Profile restored on this machine; root-cause fix in PR #143 (incident #172 closed in v0.76.1, #173 filed open)
+
+#### What I learned
+
+- **In a .NET regex replacement string `$_` is the whole input.** `setup-user-shell.ps1` passed its block to `[regex]::Replace` as the replacement string, and the block holds `$__aitoolsLocalBin` four times, so every refresh inserted four copies of the whole profile (5 blocks, then 84, then 21,568). The same applies to `-replace` and to `$&`, `$1`, `` $` ``, `$'`. Use a `MatchEvaluator`, as `setup-user-claude.ps1` already does. The `.sh` twin is safe: Perl does not re-expand an interpolated variable.
+- **The first run of a setup script proves nothing about the second.** The append path was clean; only the refresh was broken, and no one had run the script twice on Windows (its header said "UNTESTED on Windows"). Run setup scripts at least twice in a test and require byte-identical output from run 2.
+- **Marker presence is not validation.** A profile with 84 copies of the block still has both markers, so all runs reported OK and the profile stayed broken from 2026-06-22 to today. A parse check of the result is what proves a PowerShell profile loads; the script now refuses to write a profile that parses worse than before.
+- **Here-strings keep the script file's line endings** (CRLF for a `.ps1` checked out with `eol=crlf`). `aitools-install.ps1` Step 7 then rewrites the whole profile with LF, so each `aitools install` run rewrites `$PROFILE` twice with different line endings. Only `aitools install` runs Step 7; plain `aitools` and `hh` do not touch the profile.
+- **Cursor cannot use `.scratch/` or `.claude/worktrees/` in this repo**: `.cursorignore` lists both, and Cursor's Read/Write tools are denied there. I used `%TEMP%\aitools-session-423faec3-8\` for scratch and `~\.cursor\worktrees\aitools\` for the worktree. The scratch rule and `.cursorignore` conflict for Cursor agents; that needs a decision from the commander.
+
+#### CC defaults I caught
+
+- I first picked "the written profile contains the block verbatim" as the new post-write check. It would have passed on the corrupted profile, because the embedded copies of the old profile contain the block verbatim. A parse check catches it; proved by re-inserting the old splice into a temp copy (exit 1, profile unchanged).
+- I read four CRs in the corrupted profile as "here-strings drop CR". The smoke test showed CRLF in the block; the four CRs came from the installer's rewrite. A test settled what my inference got wrong.
+
+#### What I still don't know
+
+- Which other Windows machines of the commander have a broken profile. Every one that ran `aitools install` twice since v0.70.0 does; the fix does not repair it (restore the newest `.bak.<UTC>` that parses).
+- Whether the same authoring gap hides bugs in the other scripts still marked "UNTESTED on Windows": `setup-user-settings.ps1`, `setup-user-hooks.ps1`, `harness_python` in `aitools-lib.ps1`.
+- `CLAUDE.md:100` still names `.claude/rules/relay-outbound.md`, which is gone from main (check-pre-commit step 20 FAIL). The dotprofile `deploy/` is stale for 47 generated files (check-pre-push step 7 FAIL). Neither touched.
+
+---
+
+### 740edb7d-a (2026-11-14T18:21Z)
+
+**State**: functional (Cursor agent, Claude Opus 5.5, Windows 11, Cursor IDE 3.30.14)
+**Context loaded**: `reference/prompt-turn-checklist.md` v1.19 in full (twice, from disk), the glossary, the frameworks registry, `delegation-duty-guard.sh` (how injected text is escaped), the commander profile, `reference/rules.md`, the `/intent-writing`, `/tool-ops`, `/scratch`, `/delegate` and `chrome-devtools` skills, the dotprofile `delegation.md`, `reference/tool-ops-cursor.md`, `registries/tool-ops.json`, Cursor docs (ignore-file, ignore-files help, agent security) read with chrome-devtools
+**Mission**: commander: condense checklist section 1 losslessly into a token-efficient, military pre-flight block for hook injection; then, answering RFIs f6ea-1 to f6ea-6, fill `shared/rules/prompt-turn.md` with all 12 items, update the reference, open `.scratch` to Cursor agents, record the Cursor knowledge, test it with a delegate, confirm the profile fix. PR #156
+
+#### What I learned
+
+- **Cursor's `.cursorignore` blocks the agent's file tools, not only indexing**, and the docs say so ("Cursor blocks access to files listed in `.cursorignore` from: Code accessible by Agent and Tab"). Each tool fails differently: Write `Read permission denied`, Read `Permission denied`, Grep `filtered out by .cursorignore`, Glob silently returns nothing. An empty Glob of an ignored path is therefore no evidence that a file is absent.
+- **`.gitignore` does not block Read or Write; it only filters Glob and Grep walks.** With `.scratch/`, `*.log` and `*.tmp` gone from `.cursorignore`, Read and Write work in `.scratch/` although `.gitignore` still lists all three (re-run independently by delegate V-CurIgn).
+- **Agents cannot edit `.cursorignore` with the file tools** (`Blocked by permissions configuration`): Cursor treats it as a configuration file that needs the user's approval. On the commander's explicit order I changed it with the shell and said so.
+- **Outside the workspace, only Grep applies a repo's `.cursorignore`, and it kept the version it first saw** after the file changed; Read and Write ignored it.
+- **Lossless condensation has a ceiling, and only measuring shows where it is.** Section 1 shrank 36% because its prose repeated itself; items 2-12 about 20% (29% counting the provenance kept in the reference). My first full draft saved 18% because I had let the telegraphic style of item 1 slip.
+- **In Cursor, the session id for RFI numbers is the chat's transcript id** (this one ends `f6ea`).
+
+#### CC defaults I caught
+
+- I concluded there was no `.scratch/.current-session` from a Glob on an ignored path. The shell showed the file was there.
+- My first tool-ops entry overstated two findings ("returns its .md files"; "`.cursorignore` lists no path an agent must read"). The delegate's independent run caught both before the commit.
+
+#### What I still don't know
+
+- Whether the commander's unsaved editor buffer for `shared/rules/prompt-turn.md` held a template other than the item-1 block: the file was 0 bytes on disk, so I used the block.
+- Whether dropping "reaches outside the session" from checklist item 4 is the reading he meant (RFI f6ea-7).
+- `.cursorignore` still blocks `harvesting/`, `.claude/worktrees/` and the full-session transcripts for Cursor agents (RFI f6ea-8). The `/scratch` skill still says scratch ids are 10 characters; `scratch-init.sh` uses the full session id since 2026-10-31 (RFI f6ea-9).

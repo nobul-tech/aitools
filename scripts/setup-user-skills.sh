@@ -281,13 +281,15 @@ reverse_discover_skills() {
             if [ "$DRY_RUN" = "true" ]; then
                 log "[DRY RUN] Would offer to adopt $skill_name to dotprofile"
             elif tty_interactive; then
-                # tty_interactive + read_tty_choice (GitHub #29): EOF at the
-                # prompt logs a warning and takes the default, [s]kip.
+                # tty_interactive + read_menu_choice (GitHub #29):
+                # read_menu_choice prints the prompt, lowercases the answer (so
+                # `A` adopts, as in the PS1 twin), logs it at detail, and
+                # re-asks on an empty or unrecognised answer; only EOF takes
+                # the default, [s]kip.
                 printf '\n  User-created skill detected: %s\n' "$skill_name" > /dev/tty
                 printf '  [a]dopt to dotprofile  [s]kip\n' > /dev/tty
-                printf '  > ' > /dev/tty
                 local choice=""
-                read_tty_choice choice "skip"
+                read_menu_choice choice "a adopt s skip" "s" "skip" "adopt skill $skill_name" "  > "
                 case "$choice" in
                     a|adopt)
                         local _errors_before=$ERRORS
@@ -295,8 +297,13 @@ reverse_discover_skills() {
                             write_summary ERROR "$SKILLS_ROW_TOOL" "adopt failed: $skill_name"
                         fi
                         ;;
-                    *)
+                    s|skip)
                         log "Skipped adoption of $skill_name"
+                        ;;
+                    *)
+                        # Unreachable: read_menu_choice returns only a VALID
+                        # answer. Skip (writes nothing) and say so.
+                        log_warn "Unexpected answer \"$choice\" at adopt skill $skill_name -- skipped adoption of $skill_name"
                         ;;
                 esac
             else

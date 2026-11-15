@@ -715,9 +715,12 @@ approved/supported tool has a setup script or an inline owner; the
 Planned hook (framework-adoption.md step 7; build later, observe first):
 PreToolUse (command) on Write/Edit of a tool setup script (a script named by a
 registry `lifecycle.setupScript`, read from `generated/tool-specs/`; never
-`setup-user-*` or `setup-cursor-ide-mcp`, which are managed-file deployment), stderr
-`setup scripts follow the tool support decision tree -- use /tool-adopt
-(tool-lifecycle.md)`.
+`setup-user-*` or `setup-cursor-ide-mcp`, which are managed-file deployment),
+message `setup scripts follow the tool support decision tree -- use /tool-adopt
+(tool-lifecycle.md)`: in observe mode as stdout JSON
+`hookSpecificOutput.additionalContext` with exit 0, in enforce mode on stderr
+with exit 2 (Claude never sees stderr from a hook that exits 0:
+`@reference/tool-ops-claude-code.md` item #34).
 
 ## 10. Test matrix (each migrated script, isolated HOME)
 

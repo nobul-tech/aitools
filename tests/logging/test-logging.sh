@@ -1,19 +1,36 @@
 #!/usr/bin/env bash
-# test-logging.sh -- unit tests for the shared logging framework (scripts/aitools-lib.sh)
-# and for the bash entry point's use of it (scripts/aitools).
+# test-logging.sh -- unit tests for the shared logging framework (scripts/aitools-lib.sh),
+# check-lib.sh's checks.log / checks.jsonl writers, and the bash entry point (scripts/aitools).
 #
 # Safe to re-run: every case runs in its own temp HOME / log dir, removed on exit.
-# Platform: macOS, Linux, Windows (Git Bash). Exit 1 if any case fails.
+# Platform: macOS, Linux (OS guard below; commander, 2026-11-14: "sh scripts
+# and tests should only run on linux/mac and ps1 on windows"). On Windows,
+# tests/logging/test-logging.ps1 tests the PowerShell side (aitools-lib.ps1,
+# check-lib.ps1, scripts/aitools.ps1). Exit 1 if any case fails.
 # Spec: .claude/rules/script-standards.md (log line format, levels, counters,
-# end-of-run summary), reference/logging.md (location, rotation),
+# end-of-run summary), reference/logging.md (location, rotation, fail-safe writes),
 # reference/script-standards-detail.md "Logging overrides".
 #
 # Usage: bash tests/logging/test-logging.sh [--help]
 
 set -uo pipefail
 
+# OS guard: macOS/Linux only. BASH_VERSINFO[5] is bash's compiled-in machine
+# type (read-only, never taken from the environment), so neither a uname shim
+# on PATH nor an exported OSTYPE hides Git Bash.
+case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*)
+        printf 'This script is for macOS/Linux. On Windows, run tests/logging/test-logging.ps1 with pwsh.\n' >&2
+        exit 1 ;;
+esac
+case "${BASH_VERSINFO[5]:-}" in
+    *-msys*|*-cygwin*|*-mingw*)
+        printf 'This script is for macOS/Linux. On Windows, run tests/logging/test-logging.ps1 with pwsh.\n' >&2
+        exit 1 ;;
+esac
+
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
-    sed -n '2,12p' "$0"
+    sed -n '2,14p' "$0"
     exit 0
 fi
 
@@ -92,12 +109,105 @@ env HOME="$C" AITOOLS_LOG_DIR="$C/logs" bash -c "source '$LIB'; logging_init t; 
 check "lib: logging_init rotates a 5 MB log to deploy.log.1" \
     "[ -f '$C/logs/deploy.log.1' ] && grep -q '\[info\] after' '$C/logs/deploy.log' && [ \$(wc -c < '$C/logs/deploy.log') -lt 1000 ]"
 
+# Fail-safe log writes (reference/logging.md section 5): a failed log write is
+# swallowed. Under set -euo pipefail the script goes on, the console lines still
+# print, the counters still count, and no shell error message appears.
+# run_unwritable <case> <log dir>: every log helper, then the counters
+run_unwritable() {
+    C="$TMP_ROOT/$1"
+    mkdir -p "$C/home"
+    env HOME="$C/home" AITOOLS_LOG_DIR="$2" bash -c "set -euo pipefail; source '$LIB'; logging_init t; log info-line; log_detail detail-line; log_warn warn-line; log_error error-line; log_ok ok-line; _ai_log ai-line; echo \"COUNTS=\$ERRORS/\$WARNINGS\"; echo REACHED-END" > "$C/out" 2>&1
+    echo $? > "$C/rc"
+}
+unwritable_checks() {  # <what>
+    check "lib: $1 -- set -e run goes on (exit 0)" "[ \"\$(cat '$C/rc')\" = 0 ] && grep -q REACHED-END '$C/out'"
+    check "lib: $1 -- console lines still printed" \
+        "grep -q '\[info\] info-line' '$C/out' && grep -q '\[warn\] warn-line' '$C/out' && grep -q '\[error\] error-line' '$C/out' && grep -q '\[ok\] ok-line' '$C/out'"
+    check "lib: $1 -- log_error/log_warn still count" "grep -q 'COUNTS=1/1' '$C/out'"
+    check "lib: $1 -- no shell error, detail and AI lines stay off the console" \
+        "! grep -Eq 'Is a directory|Permission denied|cannot create|No such file|detail-line|ai-line' '$C/out'"
+}
+
+# deploy.log is a directory (cannot be opened for writing on any platform)
+mkdir -p "$TMP_ROOT/logdir-is-dir/logs/deploy.log"
+run_unwritable logdir-is-dir "$TMP_ROOT/logdir-is-dir/logs"
+unwritable_checks "deploy.log is a directory"
+
+# deploy.log without write permission (root ignores the mode: the write then works,
+# and the checks still hold)
+mkdir -p "$TMP_ROOT/no-write/logs"; : > "$TMP_ROOT/no-write/logs/deploy.log"
+chmod 000 "$TMP_ROOT/no-write/logs/deploy.log"
+run_unwritable no-write "$TMP_ROOT/no-write/logs"
+chmod 644 "$TMP_ROOT/no-write/logs/deploy.log"
+unwritable_checks "deploy.log not writable (chmod 000)"
+
+# The log directory cannot be created (its parent is a file)
+: > "$TMP_ROOT/not-a-dir"
+run_unwritable no-dir "$TMP_ROOT/not-a-dir/logs"
+unwritable_checks "log dir cannot be created"
+
+# ---------------------------------------------------------------------------
+# scripts/check-lib.sh -- checks.log / checks.jsonl writers (incident #174)
+# ---------------------------------------------------------------------------
+# The same fail-safe contract for the check scripts' own log files: under
+# set -euo pipefail a checks.log / checks.jsonl that cannot be written (or a log
+# dir that cannot be created) ends nothing, every step line still prints and
+# every step counter still counts. A writable pair still gets every line.
+CHECK_LIB="$ROOT/scripts/check-lib.sh"
+# run_checks <case> <log dir>: check_log_init, one step of each kind, print_summary
+run_checks() {
+    C="$TMP_ROOT/$1"
+    mkdir -p "$C/home"
+    env HOME="$C/home" AITOOLS_LOG_DIR="$2" bash -c "set -euo pipefail; source '$CHECK_LIB'; check_log_init probe; step_pass 1 pass-step; step_fail 2 fail-step 'a \"quoted\" detail'; step_warn 3 warn-step; step_skip 4 skip-step; print_summary; echo \"COUNTS=\$PASS_COUNT/\$FAIL_COUNT/\$WARN_COUNT/\$SKIP_COUNT\"; echo REACHED-END" > "$C/out" 2>&1
+    echo $? > "$C/rc"
+}
+check_run_checks() {  # <what>
+    check "check-lib: $1 -- set -e run goes on (exit 0)" "[ \"\$(cat '$C/rc')\" = 0 ] && grep -q REACHED-END '$C/out'"
+    check "check-lib: $1 -- step lines still printed" \
+        "grep -q 'pass-step.*\[PASS\]' '$C/out' && grep -q 'fail-step.*\[FAIL\]' '$C/out' && grep -q 'warn-step.*\[WARN\]' '$C/out' && grep -q 'skip-step.*\[SKIP\]' '$C/out' && grep -q 'SUMMARY: 1 PASS, 1 SKIP, 1 WARN, 1 FAIL' '$C/out'"
+    check "check-lib: $1 -- step counters still count" "grep -q 'COUNTS=1/1/1/1' '$C/out'"
+    check "check-lib: $1 -- no shell error on the console" \
+        "! grep -Eq 'Is a directory|Permission denied|cannot create|Not a directory|No such file' '$C/out'"
+}
+
+# Writable: every line reaches checks.log, every checks.jsonl line is one JSON object
+run_checks checks-written "$TMP_ROOT/checks-written/logs"
+check_run_checks "writable"
+check "check-lib: writable -- checks.log has run start, the 4 steps and the summary" \
+    "[ \"\$(grep -cE 'RUN START|pass-step|fail-step.*a \"quoted\" detail|warn-step|skip-step|=== SUMMARY: 1 PASS, 1 SKIP, 1 WARN, 1 FAIL' '$TMP_ROOT/checks-written/logs/checks.log')\" = 6 ]"
+check "check-lib: writable -- checks.jsonl has 6 records, each valid JSON" \
+    "perl -MJSON::PP -ne 'BEGIN { \$n = 0; \$bad = 0 } s/\\r?\\n\\z//; \$n++; \$bad++ unless eval { decode_json(\$_); 1 }; END { exit((\$n == 6 && !\$bad) ? 0 : 1) }' '$TMP_ROOT/checks-written/logs/checks.jsonl'"
+
+# checks.log and checks.jsonl are directories
+mkdir -p "$TMP_ROOT/checks-dir/logs/checks.log" "$TMP_ROOT/checks-dir/logs/checks.jsonl"
+run_checks checks-dir "$TMP_ROOT/checks-dir/logs"
+check_run_checks "checks.log/.jsonl are directories"
+
+# checks.log and checks.jsonl without write permission (root ignores the mode:
+# the writes then work, and the checks still hold)
+mkdir -p "$TMP_ROOT/checks-nowrite/logs"
+: > "$TMP_ROOT/checks-nowrite/logs/checks.log"; : > "$TMP_ROOT/checks-nowrite/logs/checks.jsonl"
+chmod 000 "$TMP_ROOT/checks-nowrite/logs/checks.log" "$TMP_ROOT/checks-nowrite/logs/checks.jsonl"
+run_checks checks-nowrite "$TMP_ROOT/checks-nowrite/logs"
+chmod 644 "$TMP_ROOT/checks-nowrite/logs/checks.log" "$TMP_ROOT/checks-nowrite/logs/checks.jsonl"
+check_run_checks "checks.log/.jsonl not writable (chmod 000)"
+
+# The log directory cannot be created (its parent is a file)
+: > "$TMP_ROOT/checks-notadir"
+run_checks checks-nodir "$TMP_ROOT/checks-notadir/logs"
+check_run_checks "log dir cannot be created"
+
 # ---------------------------------------------------------------------------
 # scripts/aitools (entry point) -- uses the lib's logging, defines none of its own
 # ---------------------------------------------------------------------------
 
 check "entry: defines no log functions (uses aitools-lib)" \
     "! grep -Eq '^[[:space:]]*(log|log_ok|log_warn|log_error|log_detail)\(\)' '$ENTRY'"
+
+# The cases below run scripts/aitools past its argument parsing. (In Git Bash on
+# Windows it hands off to aitools.ps1 before any of this code runs: commander,
+# 2026-11-14, RFI 38dc-3; tests/aitools-entry/test-win-forwarder.ps1 covers that
+# path.)
 
 # fake_repo <case> [with-lib]: HOME with config.json -> a repo dir holding the lib.
 fake_repo() {

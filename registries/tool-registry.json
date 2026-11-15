@@ -7,7 +7,7 @@
       "scope": "Tool data only. NOT lifecycle gates or onboarding checklists (shared/rules/tool-lifecycle.md). NOT evaluation process (/tool-eval skill). NOT per-tool ops metadata (tool-ops.json)",
       "audience": "/tool-registry skill, /tool-eval skill, setup scripts, check scripts, aitools-install"
     },
-    "lastUpdated": "2026-11-13",
+    "lastUpdated": "2026-11-14",
     "repositories": {
       "primary": "https://github.com/nobul-tech/aitools",
       "userTemplate": "https://github.com/nobul-jose/aitools-{username}"
@@ -65,14 +65,14 @@
         "linux": { "packageMaintainer": "Anthropic", "upstreamSource": "https://claude.ai/install.sh -> https://downloads.claude.ai/claude-code-releases/<version>/linux-<arch>[-musl]/claude; signed apt/dnf/apk repos under https://downloads.claude.ai/claude-code/", "officialEndorsement": "code.claude.com/docs/en/setup: 'Native Install (Recommended)'; signed apt, dnf and apk repositories published by Anthropic", "provenanceVerified": null }
       },
       "health": {
-        "macos": { "flag": "yellow", "reasons": ["Active workaround on this platform: D-DEL1 Markdown name prefix for sub-agent writes (tool-ops-claude-code.md item #26; reproduced on macOS 2.1.307, 2026-10-21)", "Evaluation status is stale until the Windows and Linux trials and the re-verification of items #1-#25 are done", "Operational reference stale: tool-ops-claude-code.md 'Current version' is 2.1.81 against 2.1.307 installed (check-post-push step 20 warns)"] },
-        "windows": { "flag": "yellow", "reasons": ["Version unverified: lastVerifiedVersion null. The last Windows date on record is 2026-03-13 (2.1.74), the last-verified date of workaround item #1 in tool-ops-claude-code.md, 222 days before 2026-10-21; if the commander reads that as the version verification, the red criterion (>180 days) applies and needs a migration plan", "Active workaround (item #1: Bash tool on Git Bash, pwsh -File dispatch) predates upstream changes: PowerShell tool (2.1.84), PowerShell as primary shell when enabled (2.1.126), Git for Windows optional (2.1.120); needs re-verification", "Provenance not verified on Windows"] },
+        "macos": { "flag": "yellow", "reasons": ["Active workaround on this platform: D-DEL1 Markdown name prefix for sub-agent writes (tool-ops-claude-code.md item #26; reproduced on macOS 2.1.307, 2026-10-21)", "Evaluation status is stale until the Linux trial, Windows provenance and the re-verification of items #2-#24 are done (#1, #25 and #27 re-verified at 2.1.325 on Windows, 2026-11-14)", "Not re-checked on macOS since 2.1.309 (2026-10-28): tool-ops-claude-code.md 'Current version' is 2.1.325 (Windows, 2026-11-14), and items #2-#24 keep last-verified versions at or before 2.1.81"] },
+        "windows": { "flag": "yellow", "reasons": ["Workaround item #1 partly obsolete (re-verified 2.1.325, 2026-11-14): the Bash tool still runs Git Bash, but a PowerShell tool is in every session and PowerShell is the primary shell; harness text that says Claude Code on Windows always uses Git Bash is stale", "Provenance not verified on Windows (version 2.1.325 and the launcher path verified 2026-11-14; install method not confirmed, claude doctor not run)"] },
         "linux": { "flag": "yellow", "reasons": ["Version unverified: lastVerifiedVersion null", "Provenance not verified on Linux"] }
       },
       "evaluation": {
         "status": "stale",
         "provenance": "reference/evaluations/claude-code-macos-2026-10-21.md",
-        "pendingChanges": "Evaluation approved and written 2026-10-21 (status kept stale, commander); status can become current once the items below are done. Pending: Windows and Linux trials (version, provenance, knownPaths); re-verify tool-ops-claude-code.md items #1-#25 at 2.1.307; schema 1.1 updateChannel (SD-4) for this entry: proposed vendor-auto."
+        "pendingChanges": "Evaluation approved and written 2026-10-21 (status kept stale, commander); status can become current once the items below are done. Pending: Linux trial (version, provenance, knownPaths); Windows provenance and install method (version and launcher path verified 2026-11-14, 2.1.325); re-verify tool-ops-claude-code.md items #2-#24 (#1, #25 and #27 re-verified at 2.1.325 on Windows, 2026-11-14); schema 1.1 updateChannel (SD-4) for this entry: proposed vendor-auto."
       },
       "lifecycle": {
         "platformStatus": { "macos": "supported", "windows": "supported", "linux": "supported" },
@@ -83,12 +83,12 @@
       },
       "versions": {
         "macos": { "lastVerifiedVersion": "2.1.307", "lastVerified": "2026-10-21" },
-        "windows": { "lastVerifiedVersion": null, "lastVerified": null },
+        "windows": { "lastVerifiedVersion": "2.1.325", "lastVerified": "2026-11-14" },
         "linux": { "lastVerifiedVersion": null, "lastVerified": null },
         "minVersion": null,
         "blocked": [],
         "maintenanceFile": "reference/tool-ops-claude-code.md",
-        "notes": "macOS: claude --version -> 2.1.307 (Claude Code); claude doctor: native, channel latest, last update success -> 2.1.307 (2026-10-21); 2.1.307 is the newest changelog entry (October 21, 2026). Windows and Linux: unknown, no machine checked 2026-10-21. maintenanceFile: the deployed copy will live under ~/.aitools/reference/ once mission HARNESS ships deploy-harness."
+        "notes": "macOS: claude --version -> 2.1.307 (Claude Code); claude doctor: native, channel latest, last update success -> 2.1.307 (2026-10-21); 2.1.307 is the newest changelog entry (October 21, 2026). Windows: claude --version -> 2.1.325 (Claude Code) on Windows 11 Pro for Workstations, 2026-11-14 (mission 38dc-25), in a running session whose CLAUDE_CODE_EXECPATH is %USERPROFILE%\\.local\\bin\\claude.exe; claude doctor not run, changelog not read. Linux: unknown, no machine checked. maintenanceFile: deployed by deploy-harness to ~/.aitools/reference/tool-ops-claude-code.md (may lag the repo until the next aitools run)."
       },
       "maintenance": {
         "harness": "scripts/aitools-install.sh/.ps1 Step 9 (no setup-claude-code script): claude on PATH -> log version, run `claude update`; otherwise run the native installer (install.sh / install.ps1). Configuration: setup-user-claude, setup-user-settings, setup-user-hooks, setup-user-skills, setup-user-mcp. Version-dep review: check-post-push step 20.",
@@ -99,19 +99,20 @@
         },
         "workarounds": [
           { "item": 26, "summary": "Sub-agent Write refuses ^(REPORT|SUMMARY|FINDINGS|ANALYSIS).*\\.md$; D-DEL1 name prefix", "platforms": ["macos", "windows", "linux"], "severity": "high", "lastVerified": "2.1.307 (2026-10-21, macOS: sub-agent Write of REPORT-probe.md refused by S3-RegCC-Check)" },
-          { "item": 27, "summary": "Sub-agent nesting cap (default 3; web sets 1); Workflow agents cannot delegate", "platforms": ["macos", "windows", "linux"], "severity": "high", "lastVerified": "2.1.307 (2026-10-21)" },
-          { "item": 1, "summary": "Windows Bash tool on Git Bash; PowerShell via pwsh -File", "platforms": ["windows"], "severity": "critical", "lastVerified": "2.1.74 (2026-03-13); upstream changed since (2.1.84, 2.1.120)" },
-          { "item": 5, "summary": "Sub-agents do not inherit rules/CLAUDE.md; delegation duty restates them", "platforms": ["macos", "windows", "linux"], "severity": "high", "lastVerified": "2.1.74 (2026-03-13)" },
+          { "item": 27, "summary": "Sub-agent nesting cap (default 3; web sets 1); Workflow agents cannot delegate", "platforms": ["macos", "windows", "linux"], "severity": "high", "lastVerified": "2.1.307 (2026-10-21); level-3 tool set (no Agent, no Workflow) re-verified 2.1.325 (2026-11-14, Windows)" },
+          { "item": 1, "summary": "Windows Bash tool on Git Bash; PowerShell through the PowerShell tool (2.1.325) or pwsh -File from Bash", "platforms": ["windows"], "severity": "critical", "lastVerified": "2.1.325 (2026-11-14, Windows): partly obsolete -- the Bash tool still runs Git Bash; a PowerShell tool is in every session and PowerShell is the primary shell; CLAUDE_CODE_SHELL not re-tested" },
+          { "item": 5, "summary": "What a sub-agent receives varies: general-purpose Agent delegates get CLAUDE.md and the rules without paths: from the session's working directory (not their worktree), paths: rules only after reading files; Explore and Plan skip CLAUDE.md; the delegation duty restates them", "platforms": ["macos", "windows", "linux"], "severity": "high", "lastVerified": "2.1.325 (2026-11-14, Windows): partly superseded (tool-ops-claude-code.md item #5; sub-agents docs 'What loads at startup')" },
           { "item": 24, "summary": "Sub-agent Glob/Grep denied outside the CWD repo; explicit-path Read works", "platforms": ["macos", "windows", "linux"], "severity": "high", "lastVerified": "2.1.74 (2026-03-24)" },
-          { "item": 25, "summary": "No agent continuation (SendMessage); self-contained launch prompts", "platforms": ["macos", "windows", "linux"], "severity": "high", "lastVerified": "2.1.81 (2026-03-24); likely obsolete: changelog 2.1.77 says use SendMessage({to: agentId}), and SendMessage is offered in 2.1.307 sessions" },
+          { "item": 25, "summary": "Closed: SendMessage reaches a running delegate at its next tool round and resumes a finished one; launch prompts stay self-contained", "platforms": ["macos", "windows", "linux"], "severity": "high", "lastVerified": "2.1.325 (2026-11-14, Windows): obsolete as a workaround, tested end to end (tool-ops-claude-code.md items #25, #32)" },
+          { "item": 32, "summary": "Delegate control: an orchestrator cannot TaskStop its own delegate (message it instead); a second SubagentHandback is refused while the delegate's background shell from its earlier report is live or after that shell's completion wakes it (send by SendMessage); output_file was observed to stay empty until the delegate is woken again", "platforms": ["windows"], "severity": "high", "lastVerified": "2.1.325 (2026-11-14, Windows; probes 2b10-01, 2b10-02, af14-01 to af14-07)" },
           { "item": 11, "summary": "npm global bin not on Claude Code PATH (node fallback in setup-user-mcp)", "platforms": ["macos"], "severity": "medium", "lastVerified": "2.1.51" },
           { "item": 10, "summary": "Write tool produced CRLF on macOS", "platforms": ["macos"], "severity": "medium", "lastVerified": "2.1.51; did not reproduce on 2.1.307 (2026-10-21, `file` reports ASCII text for Write output): candidate for removal" }
         ],
         "upstreamRisks": [
           "Release cadence: 2.1.304 (Oct 19) to 2.1.307 (Oct 21, 2026); version-dependent behaviour drifts faster than tool-ops-claude-code.md is re-verified",
           "Security advisories are frequent (GHSA list on anthropics/claude-code, many high); all published CLI advisories are patched at or below 2.1.260. Package-manager channels lag latest (2026-10-21: Homebrew stable cask 2.1.304, @latest 2.1.306, WinGet 2.1.302, native 2.1.307)",
-          "Windows shell model changed upstream (PowerShell tool, Git for Windows optional): harness text saying Claude Code on Windows always uses Git Bash may be wrong",
-          "Harness relies on undocumented behaviour: sub-agent Markdown name block (#26), JSONL session storage and path sanitization (#4, #16, #17)",
+          "Windows shell model changed upstream (PowerShell tool, Git for Windows optional): harness text saying Claude Code on Windows always uses Git Bash is wrong for 2.1.325 (observed 2026-11-14: a PowerShell tool in every session, PowerShell the primary shell; the Bash tool is Git Bash)",
+          "Harness relies on undocumented behaviour: sub-agent Markdown name block (#26), JSONL session storage and path sanitization (#4, #16, #17), delegate transcript paths, output_file linking and hand-back refusal (#31, #32)",
           "Proprietary licence (repo LICENSE.md: 'All rights reserved', use subject to Anthropic Commercial Terms of Service; GitHub API reports license null because it is not SPDX; WinGet manifest: License Proprietary)"
         ]
       },
@@ -120,7 +121,7 @@
         "setupCommand": "claude auth login",
         "checkCommand": "claude auth status --json",
         "checkType": "command-output",
-        "checkNotes": "JSON field loggedIn (true/false). Verified 2026-10-21 on macOS (2.1.307): keys include loggedIn and authMethod. Exit code on logged-out state not verified.",
+        "checkNotes": "JSON field loggedIn (true/false). Verified 2026-10-21 on macOS (2.1.307): keys include loggedIn and authMethod. Verified 2026-11-14 on Windows (2.1.325): exit 0 when logged in; keys include loggedIn, authMethod, apiProvider, loginExpiresAt and subscriptionType. Exit code on logged-out state not verified.",
         "refreshCommand": "/login (startup warns 3 days before the login expires)",
         "logoutCommand": "claude auth logout",
         "tokenStorage": "macOS: Keychain (fallback ~/.claude/.credentials.json, mode 0600, when the Keychain rejects the write); Linux: ~/.claude/.credentials.json (0600); Windows: %USERPROFILE%\\.claude\\.credentials.json; CLAUDE_CONFIG_DIR moves it",
@@ -133,7 +134,7 @@
           { "tool": "Claude Code", "installMethod": "native", "standardPath": "~/.local/bin/claude", "verified": "2026-10-21 (v2.1.307)", "notes": "Symlink to ~/.local/share/claude/versions/2.1.307 (ls -la)" }
         ],
         "windows": [
-          { "tool": "Claude Code", "installMethod": "native", "standardPath": "%USERPROFILE%\\.local\\bin\\claude.exe", "verified": null, "notes": "UNVERIFIED: from the docs uninstall section, not observed on a machine" }
+          { "tool": "Claude Code", "installMethod": "native", "standardPath": "%USERPROFILE%\\.local\\bin\\claude.exe", "verified": "2026-11-14 (v2.1.325)", "notes": "Observed on Windows 11: CLAUDE_CODE_EXECPATH of a running 2.1.325 session is %USERPROFILE%\\.local\\bin\\claude.exe and the file exists (372,461,728 bytes). installMethod native is inferred from the path (claude doctor not run)" }
         ],
         "linux": [
           { "tool": "Claude Code", "installMethod": "native", "standardPath": "~/.local/bin/claude", "verified": null, "notes": "UNVERIFIED: docs say the native installer manages ~/.local/bin/claude on macOS and Linux" }
@@ -143,7 +144,7 @@
         { "method": "npm", "detection": "npm ls -g @anthropic-ai/claude-code", "reason": "Deprecated in the harness; can shadow the native launcher on PATH. Remove: npm uninstall -g @anthropic-ai/claude-code. Detection: absent case observed on macOS 2026-10-21 (exit 1, prints '(empty)'); present case UNVERIFIED (no npm install on this machine)." }
       ],
       "pathIssues": "Native install puts the launcher in ~/.local/bin (%USERPROFILE%\\.local\\bin on Windows); if `claude` is not found, that directory is not on PATH (docs: 'Fix your PATH'). A second install or an old shell alias can shadow it (docs: 'Check for conflicting installations').",
-      "platformGotchas": "Windows: with Git for Windows the Bash tool uses Git Bash (set CLAUDE_CODE_GIT_BASH_PATH if not found) and the PowerShell tool is also on by default for claude.ai and Console accounts, and when it is enabled Claude treats PowerShell as the primary shell (changelog 2.1.126); without it the PowerShell tool is the shell. Native Windows has no sandboxing (WSL 2 does). WinGet upgrades can fail while claude runs (locked executable). Linux binaries are not individually code-signed: verify with the signed manifest or use apt/dnf/apk."
+      "platformGotchas": "Windows: with Git for Windows the Bash tool uses Git Bash (set CLAUDE_CODE_GIT_BASH_PATH if not found) and the PowerShell tool is also on by default for claude.ai and Console accounts, and when it is enabled Claude treats PowerShell as the primary shell (changelog 2.1.126); without it the PowerShell tool is the shell. Observed 2.1.325 (2026-11-14, claude.ai account, no shell setting): the PowerShell tool is offered to the main session and every delegate, and the environment reads 'Shell: PowerShell (primary); Bash tool also available for POSIX scripts'. Native Windows has no sandboxing (WSL 2 does). WinGet upgrades can fail while claude runs (locked executable). Linux binaries are not individually code-signed: verify with the signed manifest or use apt/dnf/apk."
     },
     "vercel-cli": {
       "displayName": "Vercel CLI",
@@ -511,7 +512,7 @@
           { "method": "homebrew-tap", "command": "brew install powershell/tap/powershell", "preferred": true, "autoUpdates": false, "ccCompatible": true, "notes": "Microsoft tap" }
         ],
         "windows": [
-          { "method": "winget", "command": "winget install --id Microsoft.PowerShell --source winget", "preferred": true, "autoUpdates": false, "ccCompatible": true, "notes": null }
+          { "method": "winget", "command": "winget install --id Microsoft.PowerShell --source winget", "preferred": true, "autoUpdates": false, "ccCompatible": true, "notes": "Verified 2026-11-14 with chrome-devtools against https://learn.microsoft.com/en-us/powershell/scripting/install/install-powershell-on-windows (view=powershell-7.6): the page's install command; since the 7.6.0 winget package it installs the MSIX package (MSI: --installer-type wix; no MSI from 7.7.0). Runs from scripts/bootstrap.ps1 and the Git Bash forwarder in scripts/aitools-install.sh when pwsh is missing." }
         ],
         "linux": []
       },
@@ -520,7 +521,7 @@
       },
       "versionCheck": "pwsh --version",
       "systemRequirements": null,
-      "notes": "Binary is `pwsh` on both platforms (not `powershell` or `powershell.exe`). Windows also ships `powershell.exe` (PS 5.1) — not used by this project except as bootstrap fallback in aitools-install.sh.",
+      "notes": "Binary is `pwsh` on both platforms (not `powershell` or `powershell.exe`). Windows also ships `powershell.exe` (PS 5.1) — not used by this project except to bootstrap pwsh: scripts/bootstrap.ps1 may itself run under 5.1 (`irm | iex`) and launches the installer and aitools.ps1 with pwsh; the Git Bash forwarder in aitools-install.sh calls powershell.exe only to winget-install pwsh.",
       "lifecycle": {
         "platformStatus": { "macos": "supported", "windows": "supported", "linux": "supported" },
         "concurrency": "Yes — independent sessions",
@@ -1029,6 +1030,86 @@
       "nonPreferredMethods": null,
       "pathIssues": null,
       "platformGotchas": null
+    },
+    "pywinpty": {
+      "displayName": "pywinpty",
+      "source": "https://github.com/andfoy/pywinpty",
+      "purpose": "Python library (imported, not a command on PATH): the Windows ConPTY backend of tests/managed-files/pty-run.py, so the interactive menu cases of the pty test suites run on Windows (the stdlib pty module is POSIX-only). Test-only library used by the pty suites through python3. Managed per the commander's order of 2026-11-14 (\"/tool-adopt pywinpty\").",
+      "install": {
+        "macos": [],
+        "windows": [
+          { "method": "pip", "command": "python -m pip install --user --only-binary=:all: --require-hashes -r scripts/requirements-pywinpty.txt", "preferred": true, "autoUpdates": false, "ccCompatible": true, "notes": "Binary wheel only, hash-pinned, into the user site (%APPDATA%\\Python\\Python3XY\\site-packages, read by every CPython 3.XY of the user). Run by scripts/setup-pywinpty.ps1. For an EXTERNALLY-MANAGED interpreter (PEP 668; the uv CPython of aitools Step 15) the script uses 'python -m pip install --target <that interpreter's user site> --upgrade --only-binary=:all: --require-hashes -r scripts/requirements-pywinpty.txt' instead (commander, 2026-11-14, RFI fa81-9: \"fix pep\"); pip skips its PEP 668 check for --target by design, nothing is written into the interpreter's install tree, never --break-system-packages. The pin file is the single source of truth for the version and the wheel hashes. Package: https://pypi.org/project/pywinpty/. Upstream lists conda as 'Recommended' and pip as the documented second method; conda is rejected (aitools manages no conda)." }
+        ],
+        "linux": []
+      },
+      "update": {
+        "pip": "Edit scripts/requirements-pywinpty.txt: the new version, its wheel hashes from the PyPI JSON API (https://pypi.org/pypi/pywinpty/<version>/json) and the '# wheel-tags:' line; then re-run scripts/setup-pywinpty.ps1"
+      },
+      "versionCheck": "python3 -c \"import importlib.metadata as m; print(m.version('pywinpty'))\"",
+      "systemRequirements": "Windows only (ConPTY); minimum Windows build: unknown (not stated in the evaluation). CPython >= 3.10 (PyPI requires_python). Pinned wheels: win_amd64 for cp310, cp311, cp312, cp313, cp314, cp314t, cp315, cp315t; win_arm64 not pinned.",
+      "notes": "Test-only library used by the pty suites; no Managed CLI Tools row (library; shared/rules/tool-lifecycle.md 'Managed libraries'). The registry names the pin file and does not duplicate its hashes. MIT licence; no dependencies (PyPI requires_dist null). macOS and Linux use the stdlib pty module. PEP 668: aitools Step 15 makes python/python3 the uv-managed CPython, which carries EXTERNALLY-MANAGED, so pip refuses --user there; setup-pywinpty.ps1 installs with --target <its user site> --upgrade instead (commander, 2026-11-14, RFI fa81-9), and reports WARN 'managed python, no user site' + ACTION only when that interpreter's user site is disabled or inside its install tree. Verified against uv CPython 3.14.10 in an isolated APPDATA by M4-Winpty 2026-11-14 (install, verified re-run, stale dist-info replaced, PYTHONNOUSERSITE=1 -> WARN; uv's tree untouched).",
+      "delivery": {
+        "windows": { "packageMaintainer": "Edgar Margffoy (GitHub/PyPI andfoy; PyPI shows 1 maintainer)", "upstreamSource": "PyPI https://pypi.org/project/pywinpty/ (repository https://github.com/andfoy/pywinpty, PyPI project_urls)", "officialEndorsement": "PyPI project description: 'Using conda (Recommended): conda install pywinpty Using pip: pip install pywinpty'; pip is a documented method, conda the recommended one", "provenanceVerified": "2026-11-14 (sha256 of the 8 pinned win_amd64 wheels equal the PyPI JSON API digests; no PyPI provenance attestations exist)" }
+      },
+      "health": {
+        "windows": { "flag": "yellow", "reasons": ["Sole maintainer on a personal GitHub account (andfoy)", "Low GitHub adoption: 164 stars (against 2.45M PyPI downloads/month; a Windows dependency of terminado)", "Upstream recommends conda first; pip is the documented second method", "No PyPI provenance attestations; no SECURITY.md", "Open ConPTY throughput issue andfoy/pywinpty#564, worked around by one SKIP in tests/managed-files/test-managed-files.sh"] }
+      },
+      "evaluation": {
+        "status": "current",
+        "provenance": "reference/evaluations/pywinpty-windows-2026-11-13.md",
+        "pendingChanges": "PEP 668 decided (commander, 2026-11-14, RFI fa81-9: --target <user site> for an EXTERNALLY-MANAGED interpreter; implemented). win_arm64 wheel hashes are not pinned. Yellow flags due for review by 2027-02-12 (90 days, shared/rules/tool-evaluation.md Gates)."
+      },
+      "setupScript": {
+        "scripts": "scripts/setup-pywinpty.ps1 + .sh (installer Step 15b, after Step 15 Python)",
+        "sourceOfTruth": "scripts/requirements-pywinpty.txt: the version, the wheel hashes and the '# wheel-tags:' line that setup-pywinpty.ps1 reads; the registry does not duplicate the hashes",
+        "platforms": { "windows": "Resolves python3, then python ($env:AITOOLS_PYWINPTY_PYTHON overrides); WARN on no Python, an interpreter tag the pin does not cover, or a venv interpreter; unmanaged interpreter: pip --user; EXTERNALLY-MANAGED interpreter: pip --target <its user site> --upgrade, then removes stale pywinpty-*.dist-info of other versions (WARN 'managed python, no user site' + ACTION when the user site is disabled or inside the install tree; never --break-system-packages); verifies by import", "macos": "OK row n/a (<platform>); stdlib pty", "linux": "OK row n/a (<platform>); stdlib pty" },
+        "deployment": "dev: aitools install Step 15b; MDM: build-deploy.sh copy block pair, the pin embedded in deploy/setup-pywinpty.ps1 as $AitoolsEmbeddedPywinptyPin; package: build-package.sh payload scripts/ -> aitools-install.ps1 -> Step 15b; CI: the windows job installs through setup-pywinpty.ps1"
+      },
+      "lifecycle": {
+        "platformStatus": { "macos": "n/a", "windows": "supported", "linux": "n/a" },
+        "concurrency": "Yes — library, no daemon or shared state",
+        "postInstallConfig": null,
+        "dependencies": ["CPython >= 3.10 on PATH as python3 (Step 15 Python)", "pip"],
+        "invocation": { "command": "python3 -c \"import winpty\" (library; no command on PATH)", "antiPatterns": ["--break-system-packages", "writing into a uv-managed (EXTERNALLY-MANAGED) interpreter's install tree (--target goes to its user site only)", "an unpinned pip install pywinpty", "a venv (the suites call python3, which a Windows venv lacks)"] }
+      },
+      "versions": {
+        "macos": { "lastVerifiedVersion": null, "lastVerified": null },
+        "windows": { "lastVerifiedVersion": "3.1.2", "lastVerified": "2026-11-14" },
+        "linux": { "lastVerifiedVersion": null, "lastVerified": null },
+        "minVersion": "3.1.2",
+        "blocked": [],
+        "notes": "minVersion: 3.1.2 requires winpty-rs 1.0.8, which makes EOF detection work and fixes spawning an executable whose path contains a space (upstream CHANGELOG, Version 3.1.2). Windows verified on CPython 3.14.6 (PyManager pythoncore-3.14-64), cp314 wheel, user site: winpty-probe.py section 3 GOT[abc] for git-bash CR, git-bash LF and pwsh CR; test-managed-files.sh 79 passed, 0 failed, 3 skipped; test-managed-files.ps1 56 passed, 0 failed, 0 skipped."
+      },
+      "maintenance": {
+        "harness": "scripts/setup-pywinpty.ps1 + .sh (aitools install Step 15b; CI windows job); pin scripts/requirements-pywinpty.txt",
+        "lastRun": {
+          "macos": null,
+          "windows": "2026-11-14 (Phase 2 install approved by the commander, run by M4-Winpty with the pip command above against the pin then at tests/managed-files/requirements-windows.txt; then scripts/setup-pywinpty.ps1 run on the same workstation: 'pywinpty 3.1.2 verified', python3 = PyManager CPython 3.14.6, exit 0)",
+          "linux": null
+        },
+        "workarounds": [
+          { "item": "andfoy/pywinpty#564", "summary": "ConPTY throughput on large output: test-managed-files.sh skips its 'display, diff over 64 KB' case on Windows", "platforms": ["windows"], "severity": "low", "lastVerified": "3.1.2 (2026-11-14)" }
+        ],
+        "upstreamRisks": [
+          "Sole maintainer on a personal account",
+          "The output truncation half of #565 is not fixed (cpython#86210; upstream CHANGELOG, Version 3.1.2)",
+          "When python3 moves to a new CPython minor (e.g. 3.15), the user site changes and the pty suites SKIP until setup-pywinpty.ps1 runs again"
+        ]
+      },
+      "authentication": null,
+      "buildPrereqs": null,
+      "knownPaths": {
+        "windows": [
+          { "tool": "pywinpty", "installMethod": "pip --user", "standardPath": "%APPDATA%\\Python\\Python3XY\\site-packages\\winpty", "verified": "2026-11-14 (v3.1.2)", "notes": "Observed: C:\\Users\\jdpal\\AppData\\Roaming\\Python\\Python314\\site-packages\\winpty\\__init__.py (python3 = PyManager pythoncore-3.14-64, 3.14.6)" }
+        ]
+      },
+      "nonPreferredMethods": [
+        { "method": "conda", "detection": "conda list pywinpty", "reason": "Upstream's 'Recommended' method; rejected: aitools manages no conda" },
+        { "method": "uv pip install --system into a uv-managed interpreter", "detection": "EXTERNALLY-MANAGED marker of the interpreter (setup-pywinpty.ps1 WARNs)", "reason": "uv's CPython carries EXTERNALLY-MANAGED (PEP 668: 'managed by uv and should not be modified'); setup-pywinpty.ps1 installs into that interpreter's user site with pip --target instead, which leaves uv's tree untouched" },
+        { "method": "sdist (Rust build)", "detection": "n/a (prevented by --only-binary=:all: and the wheel hashes)", "reason": "Needs a Rust toolchain (x86_64-pc-windows-msvc) and maturin" }
+      ],
+      "pathIssues": null,
+      "platformGotchas": "aitools Step 15 (setup-python.ps1, uv python install --default) makes python/python3 the uv-managed CPython (shim %USERPROFILE%\\.local\\bin\\python3.exe -> %APPDATA%\\uv\\python\\cpython-3.14-windows-x86_64-none\\python.exe, 3.14.10), which carries EXTERNALLY-MANAGED: 'python3 -m pip install --dry-run --user --only-binary=:all: --require-hashes -r scripts/requirements-pywinpty.txt' exits 1 with 'error: externally-managed-environment ... This Python installation is managed by uv and should not be modified.' Its user site (%APPDATA%\\Python\\Python314\\site-packages, ENABLE_USER_SITE True) is shared with any non-managed CPython 3.14, so a --user install made by a python.org/PyManager interpreter is importable by the uv python3 (M4-Winpty, read-only, 2026-11-14). Resolution (commander, 2026-11-14, RFI fa81-9): for such an interpreter setup-pywinpty.ps1 runs pip --target <its user site> --upgrade; pip skips the PEP 668 check for --target (pip/_internal/commands/install.py: check_externally_managed() runs only when target_dir, prefix_path and root_path are None). A Windows venv has python.exe but no python3.exe, so a venv install is invisible to the suites (they call python3)."
     }
   },
   "mcpServers": {

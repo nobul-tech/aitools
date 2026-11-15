@@ -11,8 +11,20 @@
 #
 # Env: AITOOLS_REPO — override repo root if set.
 # Env: HH_NO_PULL=1 — same as --no-pull
+# Platform: macOS/Linux (OS guard below). Windows: hh.ps1 (installed by
+# aitools-install.ps1); this script is installed only by aitools-install.sh.
 
 set -euo pipefail
+
+# OS guard (.claude/rules/cross-platform.md "OS guard patterns"; commander,
+# 2026-11-14, on the entry points that never run on Windows: "add an OS guard
+# to all of them"). This script runs alone (installed as ~/.local/bin/hh, with
+# no aitools-lib beside it), so it writes the structured log line itself.
+case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*)
+        printf '[%s] [hh] [error] This script is for macOS/Linux. On Windows, use hh.ps1 (pwsh).\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >&2
+        exit 1 ;;
+esac
 
 STATUS_ONLY=false
 NO_PULL=false

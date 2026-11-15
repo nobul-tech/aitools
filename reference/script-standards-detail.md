@@ -94,7 +94,7 @@ Check scripts source `check-lib.sh`/`.ps1` which in turn sources `aitools-lib.sh
 | Dir backup | `backup_dir()` | `Backup-Dir` | Directory backup for managed files |
 | JSON hashtable | n/a | `ConvertPSObjectToHashtable` | PSCustomObject to Hashtable (recursive, array-aware) |
 | DETAIL emitter | `emit_merge_details()` | `Emit-MergeDetails` | Parse CHANGED: lines / emit DETAIL summary entries |
-| AI invocation | `invoke_ai()`, `_ai_log()` | `Invoke-AI` | Generalized AI CLI wrapper with speed/permission tiers |
+| AI invocation | `invoke_ai()`, `_ai_log()` | `Invoke-AI`, `Write-AiLog` | Generalized AI CLI wrapper with speed/permission tiers |
 | JSON normalization | `SORT_KEYS_JS`, `normalize_json()` | `Normalize-JsonForComparison`, `ConvertTo-CanonicalObject` | Sorted-key JSON for deterministic comparison |
 | Check logging init | `check_log_init()` | `CheckLogInit` | Sets check log paths + bridges aitools-lib logging vars |
 | Check step functions | `step_pass`/`step_fail`/`step_warn`/`step_skip` | `StepPass`/`StepFail`/`StepWarn`/`StepSkip` | `[PASS]`/`[FAIL]`/`[WARN]`/`[SKIP]` with console colors |
@@ -121,7 +121,10 @@ run before it) and use its logging unchanged; warnings found before it loads are
 and logged right after. `aitools-install` sources the lib first and overrides the log
 functions only to add a `deploy.jsonl` record per line, through the lib's
 `jsonl_record` / `Write-JsonlRecord` (escaped; one `AITOOLS_RUN_ID` for the installer
-and its relayed children; an unwritable file is one warning, audit A-16):
+and its relayed children; an unwritable file is one warning, audit A-16). The
+override writes its `deploy.log` line through the lib's fail-safe append,
+`_aitlib_log_append` / `Add-AitLibLogText` (`@reference/logging.md` section 5,
+incident #174), as the `aitools-profile` override below does:
 
 Bash (`scripts/aitools-install.sh`):
 ```bash
@@ -131,7 +134,9 @@ logging_init "aitools-install"
 log() {
     local level="${2:-info}"
     local ts; ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-    printf '[%s] [%s] [%s] %s\n' "$ts" "$SCRIPT_NAME" "$level" "$1" | tee -a "$LOG_FILE"
+    local line="[$ts] [$SCRIPT_NAME] [$level] $1"
+    _aitlib_log_append "$line" "$LOG_FILE"
+    printf '%s\n' "$line"
     jsonl_record "$ts" "$SCRIPT_NAME" "$level" "$1"
 }
 log_ok()    { log "$1" "ok"; }
@@ -146,7 +151,7 @@ function Log($msg, $level = "info") {
     $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
     $line = "[$ts] [$scriptName] [$level] $msg"
     Write-Host $line
-    Add-Content -Path $logFile -Value $line
+    Add-AitLibLogText $line
     Write-JsonlRecord $ts $scriptName $level $msg
 }
 function LogOk($msg)    { Log $msg "ok" }
@@ -171,10 +176,12 @@ output, verbose debugging). Not included in override tables -- entry points that
 `log`/`Log` do not need to override `log_detail`/`LogDetail` because it always writes
 directly to `$LOG_FILE`/`$logFile` regardless of console routing.
 
-**`_ai_log` (bash only)**: File-only telemetry for `invoke_ai`. Uses the same format
-as `log` but writes only to `$LOG_FILE` (no console). This prevents stdout pollution
-when `invoke_ai` output is captured via `$()`. Entry point overrides of `log` do NOT
-affect `_ai_log` -- it always writes directly to the log file.
+**`_ai_log` / `Write-AiLog`**: File-only telemetry for `invoke_ai` / `Invoke-AI`. Uses
+the same format as `log` / `Log` but writes only to `$LOG_FILE` / `$logFile` (no console)
+and counts no error or warning. In bash this prevents stdout pollution when `invoke_ai`
+output is captured via `$()`; in both it keeps telemetry out of the AI-merge spinner row.
+Entry point overrides of `log` do NOT affect them -- they always write directly to the
+log file.
 
 ### Library-style tools
 
@@ -265,6 +272,7 @@ These are the canonical tool names for field 2. Always use these exact strings.
 | `skills` | setup-user-skills (fanned-out mode: `n/a (fanned out)`, reverse-discovery errors) |
 | `cursor ide mcp` | setup-cursor-ide-mcp |
 | `python` | setup-python |
+| `pywinpty` | setup-pywinpty (Windows install; macOS/Linux `n/a (<platform>)`) |
 | `uv` | setup-uv |
 | `go` | setup-go |
 | `datadog cli` | setup-datadog |
@@ -432,6 +440,10 @@ Write-Summary "DETAIL" "claude settings" "effortLevel: medium -> high"
 
 ### Canonical patterns by file type
 
+Diff lines go to deploy.log fail-safe (`@reference/logging.md` section 5): bash with
+`>> "$LOG_FILE" 2>&1 || true`, PowerShell through the lib's `Add-AitLibLogText`
+(never a bare `Add-Content -Path $logFile`).
+
 **Text files (.md, .mdc, SKILL.md):**
 
 Bash:
@@ -464,9 +476,9 @@ if (-not (Test-Path $dest)) {
         $srcLines = Get-Content $src -ErrorAction Stop
         $dstLines = Get-Content $dest -ErrorAction Stop
         $diffOutput = Compare-Object $dstLines $srcLines -PassThru | Out-String
-        Add-Content -Path $logFile -Value "--- deployed/$(Split-Path $dest -Leaf)"
-        Add-Content -Path $logFile -Value "+++ source/$(Split-Path $src -Leaf)"
-        Add-Content -Path $logFile -Value $diffOutput
+        Add-AitLibLogText "--- deployed/$(Split-Path $dest -Leaf)"
+        Add-AitLibLogText "+++ source/$(Split-Path $src -Leaf)"
+        Add-AitLibLogText $diffOutput
         Copy-Item -Path $src -Destination $dest -Force
         LogOk "Updated: $dest"
     }
@@ -551,9 +563,9 @@ if ($srcContent -eq $dstContent) {
         $srcLines = Get-Content $src -ErrorAction Stop
         $dstLines = Get-Content $dst -ErrorAction Stop
         $diffOutput = Compare-Object $dstLines $srcLines -PassThru | Out-String
-        Add-Content -Path $logFile -Value "--- deployed/$hookName"
-        Add-Content -Path $logFile -Value "+++ source/$hookName"
-        Add-Content -Path $logFile -Value $diffOutput
+        Add-AitLibLogText "--- deployed/$hookName"
+        Add-AitLibLogText "+++ source/$hookName"
+        Add-AitLibLogText $diffOutput
     }
     Copy-Item -Path $src -Destination $dst -Force
     LogOk "Updated: $hookName"
@@ -617,12 +629,12 @@ Capture output and check the message:
 
 ```bash
 UPGRADE_OUTPUT=$(brew upgrade tool 2>&1) || true
-if printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'already installed\|up.to.date'; then
+if printf '%s\n' "$UPGRADE_OUTPUT" | grep -i 'already installed\|up.to.date' >/dev/null; then
     log_ok "tool already up to date"
     write_summary OK "tool" "$version"
 else
     printf '%s\n' "$UPGRADE_OUTPUT" | while IFS= read -r line; do log "$line"; done
-    if printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'error\|fatal'; then
+    if printf '%s\n' "$UPGRADE_OUTPUT" | grep -i 'error\|fatal' >/dev/null; then
         log_warn "brew upgrade returned unexpected output"
         write_summary WARN "tool" "$version (upgrade check failed)"
     fi
@@ -752,7 +764,7 @@ Use when the tool's status command always exits 0 and reports auth state in outp
 # toolname auth status exits 0 regardless; check output content for auth state
 if command -v toolname >/dev/null 2>&1 && [ "$ERRORS" -eq 0 ]; then
     AUTH_OUTPUT=$(toolname auth status 2>&1) || true
-    if printf '%s\n' "$AUTH_OUTPUT" | grep -qi 'not authenticated'; then
+    if printf '%s\n' "$AUTH_OUTPUT" | grep -i 'not authenticated' >/dev/null; then
         log_warn "Not authenticated: run 'toolname auth login' (one-time OAuth)"
         write_summary WARN "tool name" "not authenticated"
         write_summary ACTION "" "toolname auth login -- authenticate tool"
@@ -1000,6 +1012,117 @@ grep -rl $'\r' "$file"
 This aligns with the user-level USO "Perl for string manipulation" -- use `perl`
 (not `sed`/`awk`/`grep -P`) for non-trivial string operations.
 
+### Pipelines into grep -q under pipefail
+
+In a script or test suite that runs under `set -o pipefail` (every reusable
+script runs `set -euo pipefail`; most suites run `set -uo pipefail`), or a library
+sourced by one (`aitools-lib.sh`, `check-lib.sh`, `init-logging.sh`,
+`tests/lib/platform-lib.sh`, `tests/hooks/hook-test-lib.sh`), never end a
+pipeline in `grep -q` (or `--quiet` / `--silent`), or in any other reader that
+exits before its input ends ("Every reader that stops early" below). A check
+string a suite evaluates (`check NAME "cmd | grep -q P"`, run by `eval` in the
+suite's shell) is a pipeline in that shell.
+
+**Why it fails at random.** `grep -q` exits at its first match without reading
+the rest of its input. If the writer still has output to write, it is killed by
+SIGPIPE (exit status 141, 128 + 13), or, where SIGPIPE is ignored (the GitHub
+Actions linux runner), its write fails and it exits non-zero (`seq`: 1). With
+`pipefail` the pipeline's status is
+that of the last command that exited non-zero (Bash manual, "Pipelines"), so
+`if writer | grep -q P` is false although P matched, and `if ! writer | grep -q P`
+is true. Whether the writer is still writing is a race: the same commit can pass
+and fail. CI runs 43640967140 and 43642017937 (check-script-compliance steps 4
+and 5, fixed in v0.77.11) failed this way. On the linux runner (GNU grep
+3.11) `seq 1 300000 | grep -qx 1` under `pipefail` failed 20 runs of 20 with
+status 1 (`tests/check-script-compliance/test-step7-grepq.sh` case D, CI run
+43658571751), and the fix form passed 20 of 20. On the macOS runner (BSD grep
+2.6.0-FreeBSD) the `-q` form never failed (0 of 20), so a passing fix form
+there proves nothing about BSD grep; the BSD evidence below is a reading of the
+source, not a reproduction.
+
+**The fix.** Keep the pattern and the other flags, drop `q`, and send the output to
+`/dev/null`:
+
+```bash
+# Wrong -- the writer can die of SIGPIPE
+if printf '%s\n' "$output" | grep -qi 'error\|fatal'; then
+# Correct -- grep reads its input to the end
+if printf '%s\n' "$output" | grep -i 'error\|fatal' >/dev/null; then
+```
+
+The exit status is the same (0 when a line matches, 1 when none does). Both greps
+read the whole input in this form:
+
+- **GNU grep** (Linux, Git Bash): when stdout is `/dev/null` it stops matching at
+  the first match and then drains its input before exiting (grep 3.11
+  `src/grep.c`: `dev_null_output` sets `done_on_match`; `finalize_input` calls
+  `drain_input` on a pipe).
+- **BSD grep** (macOS): it has no `/dev/null` special case; without `-q`, `-l`,
+  `-L` or `-m` its read loop runs to end of input (Apple `text_cmds`
+  `grep/util.c`, `procfile()`: `for (lines = 0; lines == 0 || !(lflag || qflag); )`;
+  source reading only, not reproduced).
+
+`grep -c` (count) also reads its whole input. A grep that reads a file
+(`grep -q P "$f"`) has no writer and is safe.
+
+**Every reader that stops early.** `grep -q` is one of a class (38dc-24's report:
+"Readers that exit early (`grep -q`, `head`, `grep -m`, perl `exit`) are all the
+same race"). Each has a fix form that reads its input to the end and gives the
+same output and status:
+
+| Reader after a pipe | Stops at | Fix form |
+|---|---|---|
+| `grep -q`, `--quiet`, `--silent` | the first match | `grep PATTERN >/dev/null` (the same flags without `q`) |
+| `grep -l`, `-L`, `--files-with-matches`, `--files-without-match` | the first match (stdin is one "file") | `grep PATTERN >/dev/null`; for `-L`, `! ... grep PATTERN >/dev/null` |
+| `grep -m N`, `--max-count=N` | the Nth match | `grep PATTERN \| sed -n '1,Np'` |
+| `head -n N`, `head -N` | the Nth line | `sed -n '1,Np'` (`sed -n '1p'` for one line) |
+| perl `-n` / `-p` with `exit` or `last` in the loop | the line that runs it | keep reading: `perl -ne 'next if $done; if (/RE/) { print; $done = 1 }'`; a status: decide in `END`, `perl -ne '$f = 1 if /RE/; END { exit($f ? 0 : 1) }'`, or read everything first with `perl -0777 -ne 'exit(...)'` |
+
+Why `sed -n` for `head`: sed stops early only on its `q` command, so `sed -n`
+with a line range and no `q` reads every line. It is the form the hooks already
+use (`delegation-duty-guard.sh` reads its result lines with `sed -n '1p'`), and
+it is not perl: in Git Bash on Windows a Strawberry perl's `:crlf` layer can add
+CRs to captured output ("Strawberry Perl text mode" in
+`reference/cross-platform-detail.md`). Capturing first (`out=$(writer)`) also
+works but needs a second statement. Evidence (Windows Git Bash 5.3, GNU sed,
+perl 5.42.3, 2026-11-15): under `pipefail`, `seq 1 300000 | head -n 1` exited 141
+in 20 of 20 runs and `seq 1 300000 | grep -qx 1` in 20 of 20, while `sed -n '1p'`,
+`perl -ne 'next if $done; ...'` and `perl -ne '... END { exit(...) }'` exited 0
+in 20 of 20 each. BSD sed: not read and not reproduced here; case D of the step 7
+suite records the macOS runs, with the same caveat as for BSD grep above (a fix
+form that passes where the bad form also passes proves nothing).
+
+Perl's `END` and `exit`: perl runs `END` blocks after `exit`, and an `exit` inside
+`END` sets the final status. So `exit 0 if /RE/; END { exit 1 }` always exits 1;
+`validate_ai_merge_output` in `aitools-lib.sh` had two checks in that form that
+never rejected anything (fixed with the `END { exit($f ? 0 : 1) }` form).
+
+Not affected: a reader that reads a file, not a pipe (`grep -q P "$f"`,
+`head -n 1 "$f"`), `grep -c`, a here-string (`grep -q P <<< "$x"`: no writer
+process), `perl -0777` (it reads the whole input before the program runs), an
+`exit` inside perl's `END { }` (it runs after the last line), and a shell
+without `pipefail` (the pipeline's status is the reader's; `scripts/aitools`
+has no `pipefail` and keeps its `head` and `grep -q` readers).
+
+**Enforcement.** `check-script-compliance` step 7 ("Grep pipefail safety") fails on
+any line in `scripts/*.sh`, `scripts/githooks/*`, `shared/hooks/*.sh`,
+`tests/*.sh` or `tests/*/*.sh` (pipefail files and the five libraries above)
+where a single `|` feeds one of the readers in the table: a `grep` whose options
+include `q`, `l`, `L` or `m` (or the long forms), `head`, or a perl `-n` / `-p`
+whose quoted program has `exit` or `last` outside `END { }` (not with `-0777`).
+grep's options are read word by word up to the pattern, so `grep -- -q` and
+`grep -e -q` pass and `grep -q"a"` and `grep "-q" a` fail. Sites are listed as
+`file:line(reader)`. `tests/check-script-compliance/test-step7-grepq.sh` is not
+scanned: it plants the bad forms on purpose. Blind spots are listed in the
+step's header comment (heredoc bodies are scanned as code, a reader behind
+another word such as `LC_ALL=C grep` is missed, sed `q` and awk `exit` are not
+checked). CI runs the check in the linux job;
+`tests/check-script-compliance/test-step7-grepq.sh` plants a bad and a fixed
+pipeline for each reader, in `scripts/` and `tests/`, and checks that step 7
+fails the bad ones and passes the fixed ones. Its case D also runs the fix forms
+20 times each on the host; those runs only demonstrate the fix where the bad
+form fails.
+
 ## Post-write validation
 
 Setup scripts that generate files from templates must validate CONTENT correctness,
@@ -1168,9 +1291,10 @@ Bash (`invoke_ai` uses `_ai_log` for file-only telemetry):
 _ai_log "AI invocation: speed=$speed backend=$cli_cmd attempt=$attempt result=accepted"
 ```
 
-PowerShell (`Invoke-AI` uses standard `Log` -- `Write-Host` doesn't pollute output stream):
+PowerShell (`Invoke-AI` uses `Write-AiLog` for file-only telemetry, so nothing prints into
+the AI-merge spinner row):
 ```powershell
-Log "AI invocation: speed=$Speed backend=$cliCmd attempt=$attempt result=accepted"
+Write-AiLog "AI invocation: speed=$Speed backend=$cliCmd attempt=$attempt result=accepted"
 ```
 
 ### Example deploy.log output

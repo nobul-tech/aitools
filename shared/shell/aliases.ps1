@@ -4,11 +4,31 @@
 # Datadog site (region-specific)
 $env:DD_SITE = "us5.datadoghq.com"
 
+# Yes/no confirm: asks with Read-Host until the answer is y/yes/n/no (any
+# case). Returns $true for yes, $false for no. An empty or other answer asks
+# again; end of input ($null), or 50 unrecognised answers in a row, means no.
+function _aitools_confirm {
+    param([string]$Prompt)
+    $tries = 0
+    while ($true) {
+        $answer = Read-Host $Prompt
+        if ($null -eq $answer) { return $false }
+        $a = "$answer".Trim().ToLowerInvariant()
+        if ($a -in @('y', 'yes')) { return $true }
+        if ($a -in @('n', 'no')) { return $false }
+        $tries++
+        if ($tries -ge 50) {
+            Write-Host "  (no valid answer after 50 tries -- treating as no)"
+            return $false
+        }
+        Write-Host "  please type one of y/yes/n/no"
+    }
+}
+
 function cc {
     if (-not (Test-Path "CLAUDE.md") -and -not (Test-Path "CLAUDE.local.md")) {
         Write-Host "No CLAUDE.md found in $(Get-Location)."
-        $answer = Read-Host "Create one with 'claude /init'? [y/N]"
-        if ($answer -match '^[Yy]$') {
+        if (_aitools_confirm "Create one with 'claude /init'? [y/n]") {
             claude /init
         }
     }
@@ -272,8 +292,7 @@ function clip2md {
 
         # Check overwrite
         if (Test-Path $name) {
-            $answer = Read-Host "$name exists. Overwrite? [y/N]"
-            if ($answer -notmatch '^[Yy]$') {
+            if (-not (_aitools_confirm "$name exists. Overwrite? [y/n]")) {
                 Write-Host "Aborted."
                 _clip2md_log "aborted: user declined overwrite of $name"
                 return

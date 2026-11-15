@@ -43,15 +43,58 @@ Adding a new return value requires updating:
 
 Check scripts validate caller completeness (`check-post-push` step 30).
 
+### Answers: only an offered answer counts
+
+Every choice menu (a fixed set of answers: the review menus, the AI merge
+preview, the user-init menus and confirms, reverse discovery) reads its
+answer with `read_menu_choice` / `Read-MenuChoice` in
+`@scripts/aitools-lib.sh` / `@scripts/aitools-lib.ps1` (commander,
+2026-11-13: "no default or other characters should re-ask"):
+
+- Only an offered answer is accepted, in any case, surrounding whitespace
+  ignored. Each menu lists its answers (usually the bracketed letters; a
+  `[y/n]` confirm also takes `yes` / `no`).
+- An empty line (bare Enter), a word, or a letter the menu does not offer
+  asks again: the menu prints `  please type one of <a/b/c>` and the prompt
+  line again. Nothing is applied until an offered answer arrives.
+- EOF (input ended) takes the menu's documented default with a warning:
+  input that has ended cannot be asked again.
+- Every answer is logged to deploy.log at `detail`
+  (`menu answer (<context>): "<typed>" -> <answer>`, `-> not one of ...,
+  asked again`, or `EOF -> <default>`).
+- A `[y/n]` prompt has no Enter default, so its text has no capital letter.
+
+`shared/shell/aliases.*` cannot load the library and the bash relay-outbound
+prompt does not: they re-ask the same way with a local loop and do not log.
+The PowerShell relay-outbound prompt reads through `Read-MenuChoice` (under
+`hh.ps1` it loads the library itself), so its read gets the cooked-mode guard
+of `Read-ConsoleChoice`; it falls back to the local loop only when the library
+is missing or does not load. Free-text prompts, where an empty answer is itself a value (an alias,
+a name, `Enter = hostname`, the repos path), are not choice menus and keep
+their defaults.
+
 ### Non-interactive fallback
 
 Every menu function (`prompt_diff_review`, `review_json_fields`,
 `prompt_json_field_review` and their PS1 twins) MUST handle:
 - `AITOOLS_FORCE` env var (`--force` / `-Force` on `aitools` and `aitools install`): auto-select `overwrite`
 - Non-terminal stdin: auto-select `overwrite`
-- EOF at the prompt (interactive, input ended): log a warning, auto-select `overwrite`
+- EOF at a prompt (interactive, input ended): log a warning and take that
+  prompt's documented default: `overwrite` at the text review menu
+  (`prompt_diff_review` / `Prompt-DiffReview`) and at every JSON field
+  prompt that offers `[o]verwrite` (`prompt_json_field_review` /
+  `Prompt-JsonFieldReview`: a field in SOURCE, whether or not LOCAL has it;
+  the settings.json sync included); `skip` at a JSON field only in LOCAL
+  (no overwrite offered; LOCAL kept); `n` (reject, back to the review menu)
+  at the AI merge preview (`_invoke_ai_merge` / `Invoke-AiMerge`); empty
+  feedback at the `[r]efine` feedback read, so the merge is refined once
+  more (one more AI merge attempt), then EOF at the preview rejects it and
+  EOF at the review menu overwrites
 
-No AI merge runs in a non-interactive run.
+An empty or unrecognised answer at an interactive prompt is not a
+non-interactive case: it re-asks (see "Answers" above). No AI merge starts
+in a run with no terminal or `--force`: no menu is shown. EOF reaches the
+merge prompts only after `[m]` was chosen at an interactive review menu.
 
 ### Abort
 
@@ -79,6 +122,9 @@ terminal and not forced = prompt; otherwise use the default.
   (adds prompts) or `Write-Host` (can't redirect)
 - Bash: `read -r < /dev/tty` / `printf ... > /dev/tty` -- NOT bare `read`
   (conflicts with piped input)
+- Choice menus read through `read_menu_choice` / `Read-MenuChoice`, which
+  read through `read_tty_choice` / `Read-ConsoleChoice`; free-text prompts
+  call `read_tty_choice` / `Read-ConsoleChoice` directly
 
 ### Encoding
 

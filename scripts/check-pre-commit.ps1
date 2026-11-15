@@ -1,6 +1,10 @@
 # check-pre-commit.ps1 -- automated pre-commit checklist for aitools
 # Usage: .\scripts\check-pre-commit.ps1 [-Fix]
-# -Fix: auto-fix line endings, exec bits, and build freshness
+# -Fix: auto-fix line endings (step 4) and exec bits (step 6). Nothing in this
+#       script runs build-deploy.sh: steps 3 and 10 are retired; check-pre-push
+#       step 7 rebuilds into a temporary copy of the dotprofile (incident #136).
+#       Nothing in this script runs Git Bash: step 2 leaves the .sh syntax check
+#       to CI and check-pre-commit.sh.
 # Platform: Windows (PS 5.1 compatible)
 param([switch]$Fix)
 
@@ -53,21 +57,14 @@ if ($stagedSh.Count -eq 0 -and $stagedPs1.Count -eq 0) {
     StepSkip "2" "Script syntax (.sh)" "no scripts staged"
     StepSkip "2" "Script syntax (.ps1)" "no scripts staged"
 } else {
-    # Bash validation
+    # Bash validation: not run on Windows. bash -n needs Git Bash, and the Windows
+    # checks call no Git Bash (commander, 2026-11-14: "id like to avoid calling
+    # git bash on thowse ps1 scripts"); a .sh never runs on Windows. CI runs
+    # bash -n on every tracked shell script on each push and pull request (the
+    # linux and macos jobs, "Validate bash script syntax"), and
+    # check-pre-commit.sh step 2 runs it on macOS/Linux.
     if ($stagedSh.Count -gt 0) {
-        $shErrors = 0
-        foreach ($f in $stagedSh) {
-            $result = bash -n $f 2>&1
-            if ($LASTEXITCODE -ne 0) {
-                Write-Host "      FAIL: $f"
-                $shErrors++
-            }
-        }
-        if ($shErrors -eq 0) {
-            StepPass "2" "Script syntax (.sh)"
-        } else {
-            StepFail "2" "Script syntax (.sh)" "$shErrors file(s) failed"
-        }
+        StepSkip "2" "Script syntax (.sh)" "$($stagedSh.Count) .sh staged: bash -n runs in CI (linux, macos) and check-pre-commit.sh, not on Windows"
     } else {
         StepSkip "2" "Script syntax (.sh)" "no .sh staged"
     }
@@ -100,27 +97,17 @@ if ($stagedSh.Count -eq 0 -and $stagedPs1.Count -eq 0) {
 # ---------------------------------------------------------------------------
 # 3. Build freshness
 # ---------------------------------------------------------------------------
-$buildNeeded = $false
-foreach ($f in $stagedFiles) {
-    if ($f -match '^(scripts/|shared/)' -and $f -notmatch 'README\.md$') { $buildNeeded = $true; break }
-}
-
-if ($buildNeeded) {
-    if ($Fix) {
-        $bashExe = (Get-Command bash -ErrorAction SilentlyContinue).Source
-        if ($bashExe) {
-            & $bashExe "$script:RepoRoot/scripts/build-deploy.sh" 2>$null | Out-Null
-            InvokeGit add deploy/
-            StepPass "3" "Build freshness" "(rebuilt + staged)"
-        } else {
-            StepFail "3" "Build freshness" "bash not found for build-deploy.sh"
-        }
-    } else {
-        StepWarn "3" "Build freshness" "scripts/ or shared/ modified -- run with -Fix"
-    }
-} else {
-    StepSkip "3" "Build freshness" "no scripts/ or shared/ changes"
-}
+# Retired (incident #136). build-deploy.sh writes the dotprofile deploy/ it
+# resolves from $HOME/.aitools/config.json; the aitools deploy/ is frozen
+# (.claude/rules/git-safety.md, deploy-paths.md). With -Fix this step ran
+# build-deploy.sh under the caller's HOME (rebuilding the real dotprofile
+# deploy/, output and exit code discarded), staged the frozen aitools deploy/
+# and reported PASS; without it, it advised -Fix. check-pre-push step 7
+# rebuilds into a temporary copy of the dotprofile under a temporary HOME on
+# every push when a dotprofile is configured, checks the exit code and
+# dry-runs the result. Step number kept;
+# same SKIP text as check-post-push step 7 and the .sh twin.
+StepSkip "3" "Build freshness" "retired: check-pre-push step 7 rebuilds into a temp dotprofile copy"
 
 # ---------------------------------------------------------------------------
 # 4. Line endings
@@ -162,7 +149,11 @@ if ($stagedSh.Count -gt 0 -or $stagedPs1.Count -gt 0) {
 # ---------------------------------------------------------------------------
 # 6. Executable bit on .sh files
 # ---------------------------------------------------------------------------
-$nonExec = InvokeGit ls-files -s '*.sh' | Where-Object { $_ -notmatch '^100755' }
+# The frozen aitools deploy/ is excluded (':!deploy/'): nothing regenerates it,
+# -Fix must never stage a change under it, and no check audits it (incidents
+# #136, #176; .claude/rules/git-safety.md). Same pathspec as the .sh twin; '--'
+# is quoted because PowerShell drops a bare -- before it reaches InvokeGit's $args.
+$nonExec = InvokeGit ls-files -s '--' '*.sh' ':!deploy/' | Where-Object { $_ -notmatch '^100755' }
 if (-not $nonExec) {
     StepPass "6" "Executable bit (.sh)"
 } else {
@@ -221,16 +212,10 @@ if ($nonDocs.Count -eq 0) {
 # ---------------------------------------------------------------------------
 # 10. Deploy drift check
 # ---------------------------------------------------------------------------
-if ($buildNeeded) {
-    $deployDiff = InvokeGit diff deploy/
-    if (-not $deployDiff) {
-        StepPass "10" "Deploy drift"
-    } else {
-        StepFail "10" "Deploy drift" "unstaged deploy/ changes remain"
-    }
-} else {
-    StepSkip "10" "Deploy drift" "no build needed"
-}
+# Retired with step 3 (incident #136): `git diff deploy/` read the frozen
+# aitools deploy/, which nothing regenerates, so it proved nothing about the
+# dotprofile build. check-pre-push step 7 is the check. Step number kept.
+StepSkip "10" "Deploy drift" "retired: check-pre-push step 7 rebuilds into a temp dotprofile copy"
 
 # ---------------------------------------------------------------------------
 # 11. User repo changes

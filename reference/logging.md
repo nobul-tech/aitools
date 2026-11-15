@@ -53,7 +53,9 @@ Form the path using each language's native idiom; never hardcode a separator:
 - **Python**: `pathlib.Path.home() / ".aitools" / "logs"` — native per OS.
 
 **Exception**: when a path is written **into a bash command string** (e.g. a
-hook `command` in `settings.json`, which always runs in bash on every platform),
+hook `command` in `settings.json`, `bash "<path>"`, which Claude Code hands to
+`sh -c` on macOS and Linux and to Git Bash on Windows:
+`reference/tool-ops-claude-code.md` item #8),
 use forward slashes regardless of host OS.
 
 ### 3. Granularity — per-component log files
@@ -63,7 +65,7 @@ reading one file:
 
 | File | Writer |
 |------|--------|
-| `deploy.log` | setup scripts (via `aitools-lib` `logging_init`/`Initialize-Logging`) |
+| `deploy.log` | setup scripts (via `aitools-lib` `logging_init`/`Initialize-Logging`); the PowerShell `[RELAY]` prompt under `hh.ps1` (script name `relay-outbound`: its menu answers) |
 | `deploy.jsonl` | `jsonl_record` / `Write-JsonlRecord` in `aitools-lib`, called by the installers' `log` / `Log` override and by the child relay (`run_child_relayed` / `Invoke-ChildRelayed`); one JSON record per line, fields `ts, host, os, script, run_id, level, msg`; one `run_id` per installer run (`AITOOLS_RUN_ID`, inherited by relayed children); an unwritable file is one warning, then records are skipped |
 | `ait-harvest.log` | `scripts/ait-harvest.py` |
 | `session-archive.log` | `session-archive.sh` shim (bash-fallback branch only) |
@@ -102,7 +104,25 @@ Same maxBytes/backupCount in all three.
 - Timestamps: UTC with `Z` suffix.
 - **Fail-safe**: logging must never crash the tool. A failed log write is
   swallowed (the only sanctioned silent-suppression in the harness), because a
-  broken log must not break the operation it records.
+  broken log must not break the operation it records. In `aitools-lib` every
+  `deploy.log` write (`log`, `log_detail`, `_ai_log` / `Log`, `LogDetail`,
+  `Write-AiLog`) goes through `_aitlib_log_append` / `Add-AitLibLogText`: a
+  locked, unwritable or missing log never ends the run (not under `set -e`, not
+  under `$ErrorActionPreference = "Stop"`), the console line still prints and
+  the counters still count; a log directory that cannot be created is the same
+  case (v0.77.1). These log writers outside the lib use the same helpers
+  (incident #174): the installers' `log` / `Log` override and their Step 22
+  relay sync output (`run_relay_sync` / `Invoke-RelaySync`), the profile
+  resolver's `log` / `Log` override, and check-lib's `checks.log` /
+  `checks.jsonl` writes (`_aitlib_log_append` with the file as its argument;
+  `Write-CheckLogText` in PowerShell), whose log directory is created
+  fail-safe too. Not fail-safe yet (open incident #178): the `aitools` entry
+  points' own appends to deploy.log (`scripts/aitools`: the build-deploy output
+  and the relay sync output; `scripts/aitools.ps1`: the same two, through
+  `Add-Content`) and two hooks (`standing-order-guard.sh`: its log directory
+  and observe-mode line; `tool-ops-session-audit.sh`: its result line).
+  `deploy.jsonl` differs: its first failed write is one warning (the table in
+  section 3).
 
 ### 6. Setup-vs-check separation preserved
 

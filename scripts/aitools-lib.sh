@@ -99,7 +99,7 @@ read_config_key() {
     local val
     val=$(tr -d '\357\273\277' < "$file" \
         | grep -o "\"$key\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" \
-        | head -1 \
+        | sed -n '1p' \
         | cut -d'"' -f4)
     [ -n "$val" ] || return 1
     # Unescape JSON backslashes: \\ -> \
@@ -419,7 +419,7 @@ tool_exception_get() {
     fi
     while IFS= read -r w; do if [ -n "$w" ]; then log_detail "tool exceptions: $w"; fi; done <<< "$(_aitlib_profile_lines warn)"
     if [ "$AITLIB_PROFILE_RC" -ne 0 ]; then
-        reason=$(_aitlib_profile_lines error | perl -ne 'print, exit if /\S/')
+        reason=$(_aitlib_profile_lines error | perl -ne 'next if $done; if (/\S/) { print; $done = 1 }')
         if [ "$AITLIB_PROFILE_RC" -eq 1 ]; then reason="no dotprofile"; fi
         log_warn "tool exceptions unavailable (${reason:-resolver failed})$(_aitlib_exit_note "$AITLIB_PROFILE_RC")"
         return 1
@@ -474,7 +474,7 @@ tool_exception_record() {
                     unchanged|dry-run)
                         log_detail "tool exceptions: $slug $AITLIB_TOOL_EXC_RESULT -- nothing written, nothing to push" ;;
                     *)
-                        msg=$(_aitlib_profile_lines warn | perl -ne 'print, exit if /commit|push|git repository/')
+                        msg=$(_aitlib_profile_lines warn | perl -ne 'next if $done; if (/commit|push|git repository/) { print; $done = 1 }')
                         log_warn "tool exception for $slug saved but not pushed (${msg:-see deploy.log})"
                         w=$(_aitlib_profile_tag profileFile)
                         if [ -n "$w" ]; then w=$(dirname "$(_aitlib_bash_path "$w")"); else w="your dotprofile"; fi
@@ -484,14 +484,14 @@ tool_exception_record() {
             return 0 ;;
         3)
             AITLIB_TOOL_EXC_RESULT=refused
-            msg=$(_aitlib_profile_lines error | perl -ne 'print, exit if /\S/')
+            msg=$(_aitlib_profile_lines error | perl -ne 'next if $done; if (/\S/) { print; $done = 1 }')
             log_warn "tool exception for $slug not saved (${msg:-refused})$(_aitlib_exit_note 3)"
             _aitlib_action_once "run aitools user init to remember tool choices"
             return 3 ;;
     esac
     # 2 (error), 4 (not a result of exception-set) and any other code: failed
     AITLIB_TOOL_EXC_RESULT=failed
-    msg=$(_aitlib_profile_lines error | perl -ne 'print, exit if /\S/')
+    msg=$(_aitlib_profile_lines error | perl -ne 'next if $done; if (/\S/) { print; $done = 1 }')
     log_warn "tool exception for $slug not saved (${msg:-resolver failed})$(_aitlib_exit_note "$AITLIB_PROFILE_RC")"
     _aitlib_action_once "see deploy.log -- a tool choice (tool exception) was not saved"
     return 1
@@ -763,7 +763,10 @@ logging_init() {
     SCRIPT_NAME="${1:?logging_init requires a script name}"
     LOG_DIR="$AITOOLS_LOG_DIR"
     LOG_FILE="$LOG_DIR/deploy.log"
-    mkdir -p "$LOG_DIR"
+    # Fail-safe (logging.md section 5): a log directory that cannot be created
+    # leaves every log write failing, and each failed write is swallowed; the run
+    # goes on with its console output
+    mkdir -p "$LOG_DIR" 2>/dev/null || true
     _rotate_log "$LOG_FILE"
     ERRORS=0
     WARNINGS=0
@@ -783,11 +786,21 @@ _log_aitools_environment() {
 # ---------------------------------------------------------------------------
 # Standard logging (Pattern A: console + log file, with [level] tag)
 # ---------------------------------------------------------------------------
+# _aitlib_log_append LINE FILE -- append LINE to the log FILE. Fail-safe
+# (reference/logging.md section 5: "A failed log write is swallowed (the only
+# sanctioned silent-suppression in the harness), because a broken log must not
+# break the operation it records"): an unwritable, locked or missing log, or one
+# that is a directory, returns 0 with no message, so set -e never ends the run
+# and the console line is still printed. Parity: Add-AitLibLogText.
+_aitlib_log_append() {
+    { printf '%s\n' "$1" >> "$2"; } 2>/dev/null || true
+}
+
 log() {
     local level="${2:-info}"
     local ts; ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     local line="[$ts] [$SCRIPT_NAME] [$level] $1"
-    printf '%s\n' "$line" >> "$LOG_FILE"
+    _aitlib_log_append "$line" "$LOG_FILE"
     case "$level" in
         error) printf '\033[31m%s\033[0m\n' "$line" ;;
         warn)  printf '\033[33m%s\033[0m\n' "$line" ;;
@@ -799,7 +812,7 @@ log_error() { log "$1" "error"; ERRORS=$((ERRORS + 1)); }
 log_warn()  { log "$1" "warn"; WARNINGS=$((WARNINGS + 1)); }
 log_detail() {
     local ts; ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-    printf '[%s] [%s] [detail] %s\n' "$ts" "$SCRIPT_NAME" "$1" >> "$LOG_FILE"
+    _aitlib_log_append "[$ts] [$SCRIPT_NAME] [detail] $1" "$LOG_FILE"
 }
 
 # ---------------------------------------------------------------------------
@@ -822,7 +835,7 @@ log_detail() {
 # callers decide whether to count invoke_ai failures.
 _ai_log() {
     local ts; ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-    printf '[%s] [%s] [%s] %s\n' "$ts" "$SCRIPT_NAME" "${2:-info}" "$1" >> "${LOG_FILE:-/dev/null}"
+    _aitlib_log_append "[$ts] [$SCRIPT_NAME] [${2:-info}] $1" "${LOG_FILE:-/dev/null}"
 }
 
 AI_REJECT_REASON=""
@@ -1534,21 +1547,27 @@ validate_ai_merge_output() {
 
     # Check 1: conversational patterns (first non-empty line)
     local first_line
-    first_line=$(printf '%s' "$output" | perl -ne 'if (/\S/) { print; exit }')
-    if printf '%s' "$first_line" | perl -ne 'exit 0 if /^(I |Here|Sure|Certainly|Let me)/i; exit 1'; then
+    first_line=$(printf '%s' "$output" | perl -ne 'next if $done; if (/\S/) { print; $done = 1 }')
+    # perl -0777 reads the whole input before it decides; an empty first line
+    # is not conversational (as Test-AiMergeOutput in aitools-lib.ps1)
+    if printf '%s' "$first_line" | perl -0777 -ne 'exit(/^(I |Here|Sure|Certainly|Let me)/i ? 0 : 1)'; then
         MERGE_REJECT_REASON="AI responded conversationally instead of producing merged content"
         return 1
     fi
 
-    # Check 2: markdown code fences
-    if printf '%s\n' "$output" | perl -ne 'exit 0 if /^```/; END { exit 1 }'; then
+    # Check 2: markdown code fences. The status is decided in END, after the
+    # last line: an exit in the loop would stop reading (the writer can then die
+    # of SIGPIPE under pipefail), and an "exit 0" followed by END { exit 1 }
+    # ends with status 1 (perl runs END after exit), which is why checks 2 and
+    # 3 never rejected anything before this form.
+    if printf '%s\n' "$output" | perl -ne '$f = 1 if /^```/; END { exit($f ? 0 : 1) }'; then
         MERGE_REJECT_REASON="AI wrapped output in code fences -- need raw content"
         return 1
     fi
 
     # Check 3: conversational refusal patterns (not bare keywords -- content may
     # legitimately contain "permission", "access", etc.)
-    if printf '%s' "$output" | perl -ne 'exit 0 if /(?:I don.t have permission|I cannot access|I.m not authorized|I need (?:your )?approval|permission denied|access denied|I.m unable to|I can.t (?:read|write|access|open|modify))/i; END { exit 1 }'; then
+    if printf '%s' "$output" | perl -ne '$f = 1 if /(?:I don.t have permission|I cannot access|I.m not authorized|I need (?:your )?approval|permission denied|access denied|I.m unable to|I can.t (?:read|write|access|open|modify))/i; END { exit($f ? 0 : 1) }'; then
         MERGE_REJECT_REASON="AI indicated it couldn't perform the merge"
         return 1
     fi
@@ -1575,7 +1594,7 @@ validate_ai_merge_output() {
     if [ "$total" -gt 0 ]; then
         while IFS= read -r header; do
             [ -z "$header" ] && continue
-            printf '%s' "$output" | grep -qF "$header" && preserved=$((preserved + 1))
+            printf '%s' "$output" | grep -F "$header" >/dev/null && preserved=$((preserved + 1))
         done <<< "$combined_headers"
         local threshold=$(( (total * 60 + 99) / 100 ))
         [ "$threshold" -lt 1 ] && threshold=1
@@ -1592,30 +1611,116 @@ MERGED_CONTENT=""
 
 # ---------------------------------------------------------------------------
 # Spinner for AI operations (visual progress indicator)
+# A background subshell draws "\r  <c> <msg>" on /dev/tty every 0.2 s until
+# _stop_spinner kills it. A background job of a non-interactive shell ignores
+# SIGINT, so Ctrl+C alone never stops it (it kept drawing after the script died,
+# mission M3b). Two guards:
+#   - It watches the shell that started it (the PID taken before the fork:
+#     BASHPID, or $$ on bash 3.2, which has no BASHPID) and ends, clearing its
+#     line, at the first tick after that shell is gone -- whatever ended it,
+#     SIGKILL included, where no trap can run.
+#   - While invoke_ai runs, _invoke_ai_merge stops it from INT, TERM and EXIT
+#     traps (_spinner_traps_set / _spinner_traps_restore).
+# Without a controlling terminal it draws nothing but keeps watching (each draw
+# fails quietly: the spinner is cosmetic). Starting one stops a running one.
+# Parity: Start-AiSpinner / Stop-AiSpinner in aitools-lib.ps1.
 # ---------------------------------------------------------------------------
 _AI_SPINNER_PID=""
 
 _start_spinner() {
-    local msg="${1:-working...}"
+    local msg="${1:-working...}" owner="${BASHPID:-$$}"
+    if [ -n "$_AI_SPINNER_PID" ]; then _stop_spinner; fi
+    # 2>/dev/null on the subshell: a draw on a missing or closed terminal fails
+    # with a shell message; there is nothing to draw, which is not an error
     (
         local chars='/-\|'
         local i=0
-        while true; do
-            printf '\r  %s %s' "${chars:$((i % 4)):1}" "$msg" > /dev/tty
+        while kill -0 "$owner" 2>/dev/null; do
+            printf '\r  %s %s' "${chars:$((i % 4)):1}" "$msg" > /dev/tty || :  # no terminal: keep watching
             i=$((i + 1))
             sleep 0.2
         done
-    ) &
+        printf '\r  \033[K' > /dev/tty || :  # the owner is gone: clear the line if there is one
+    ) 2>/dev/null &
     _AI_SPINNER_PID=$!
 }
 
 _stop_spinner() {
     if [ -n "$_AI_SPINNER_PID" ] && kill -0 "$_AI_SPINNER_PID" 2>/dev/null; then
-        kill "$_AI_SPINNER_PID" 2>/dev/null
+        # || true: the spinner may end on its own between the check and the kill;
+        # either way it is gone, which is all this needs
+        kill "$_AI_SPINNER_PID" 2>/dev/null || true
         wait "$_AI_SPINNER_PID" 2>/dev/null || true  # reap; exit code irrelevant for spinner
     fi
     _AI_SPINNER_PID=""
-    printf '\r  \033[K' > /dev/tty  # clear spinner line
+    # || true: no controlling terminal -- there is no spinner line to clear
+    { printf '\r  \033[K' > /dev/tty; } 2>/dev/null || true
+}
+
+# Traps that stop the spinner while an AI call runs (_invoke_ai_merge).
+# _spinner_traps_set saves the caller's INT, TERM and EXIT traps and sets its
+# own; _spinner_traps_restore puts the caller's back (a no-op when none are
+# saved, so it is safe to call twice). On INT or TERM the handler stops the
+# spinner, restores the caller's traps and sends the same signal to this shell
+# again, so the caller's own trap, or the default action (the script ends, its
+# EXIT trap runs), follows. On EXIT it stops the spinner and runs the caller's
+# EXIT command. bash runs a trap only after the foreground command ends: on
+# Ctrl+C the AI CLI gets SIGINT too and ends, then the handler runs.
+# trap -p goes through a temp file, not $(trap -p ...): whether a command
+# substitution sees the caller's traps differs between bash versions (not
+# verified for bash 3.2, macOS /bin/bash). No temp file: the traps are not set
+# (a detail line); the spinner's owner watch still ends it.
+_AITLIB_SPIN_TRAPS_SET=false
+_AITLIB_SPIN_PREV_INT=""
+_AITLIB_SPIN_PREV_TERM=""
+_AITLIB_SPIN_PREV_EXIT=""
+_AITLIB_SPIN_EXIT_CMD=""
+
+# _aitlib_spin_trap_arg -- '...' SIG: called with the arguments of a saved
+# "trap -- 'CMD' EXIT" line; keeps CMD
+_aitlib_spin_trap_arg() { _AITLIB_SPIN_EXIT_CMD="${2:-}"; }
+
+_spinner_traps_set() {
+    local tf=""
+    if [ "$_AITLIB_SPIN_TRAPS_SET" = "true" ]; then return 0; fi
+    if ! tf="$(mktemp)"; then
+        log_detail "AI spinner: mktemp failed -- no INT/TERM/EXIT traps (the owner watch still stops it)"
+        return 0
+    fi
+    trap -p INT > "$tf";  _AITLIB_SPIN_PREV_INT="$(cat "$tf")"
+    trap -p TERM > "$tf"; _AITLIB_SPIN_PREV_TERM="$(cat "$tf")"
+    trap -p EXIT > "$tf"; _AITLIB_SPIN_PREV_EXIT="$(cat "$tf")"
+    _aitlib_rm_tmp "$tf" "AI spinner"
+    _AITLIB_SPIN_EXIT_CMD=""
+    if [ -n "$_AITLIB_SPIN_PREV_EXIT" ]; then
+        eval "_aitlib_spin_trap_arg ${_AITLIB_SPIN_PREV_EXIT#trap }"
+    fi
+    _AITLIB_SPIN_TRAPS_SET=true
+    trap '_spinner_on_signal INT' INT
+    trap '_spinner_on_signal TERM' TERM
+    trap '_spinner_on_exit' EXIT
+}
+
+_spinner_traps_restore() {
+    if [ "$_AITLIB_SPIN_TRAPS_SET" != "true" ]; then return 0; fi
+    _AITLIB_SPIN_TRAPS_SET=false
+    if [ -n "$_AITLIB_SPIN_PREV_INT" ]; then eval "$_AITLIB_SPIN_PREV_INT"; else trap - INT; fi
+    if [ -n "$_AITLIB_SPIN_PREV_TERM" ]; then eval "$_AITLIB_SPIN_PREV_TERM"; else trap - TERM; fi
+    if [ -n "$_AITLIB_SPIN_PREV_EXIT" ]; then eval "$_AITLIB_SPIN_PREV_EXIT"; else trap - EXIT; fi
+}
+
+_spinner_on_signal() {
+    _stop_spinner
+    log_detail "AI spinner stopped by $1"
+    _spinner_traps_restore
+    kill -s "$1" "${BASHPID:-$$}"
+}
+
+_spinner_on_exit() {
+    _stop_spinner
+    log_detail "AI spinner stopped at exit"
+    _AITLIB_SPIN_TRAPS_SET=false
+    if [ -n "$_AITLIB_SPIN_EXIT_CMD" ]; then eval "$_AITLIB_SPIN_EXIT_CMD"; fi
 }
 
 # ---------------------------------------------------------------------------
@@ -1635,16 +1740,82 @@ tty_interactive() {
 # EOF-safe prompt read. Usage: read_tty_choice <var> <what-the-default-does>
 # Bare `read -r x < /dev/tty` returns 1 at EOF (closed stdin under a pty), which
 # aborts the caller under set -e with no log line. This logs and returns 0 with
-# <var> empty, so each caller's `*)` default branch applies.
+# <var> empty, and sets READ_TTY_EOF=1 (0 after any other read), so a typed
+# empty line and EOF can be told apart: read_menu_choice takes its EOF default
+# only at EOF and asks again otherwise.
 # ---------------------------------------------------------------------------
 read_tty_choice() {
     local __var="$1" __default_desc="$2" __line=""
+    READ_TTY_EOF=0
     if ! IFS= read -r __line < /dev/tty; then
+        READ_TTY_EOF=1
         printf '\n' > /dev/tty
         log_warn "No input at prompt (EOF) -- defaulting to $__default_desc"
         __line=""
     fi
     printf -v "$__var" '%s' "$__line"
+}
+
+# ---------------------------------------------------------------------------
+# Choice-menu read. Usage:
+#   read_menu_choice VAR "VALID" DEFAULT "DEFAULT_DESC" "CONTEXT" "PROMPT"
+# VALID: the accepted answers, lowercase, space-separated ("o a m s x",
+# "y yes n no"). DEFAULT: the answer taken only at EOF (one of VALID).
+# DEFAULT_DESC: what the default does (read_tty_choice's EOF warning).
+# CONTEXT: a short label for the log ("review CLAUDE.md"). PROMPT: printed as
+# data before every read ("  choice [o/s/x]: "); the caller prints the menu.
+# Reads through read_tty_choice, trims surrounding whitespace and lowercases.
+# An offered answer sets VAR. Anything else -- an empty line, a word, a letter
+# not offered -- prints "  please type one of a/b/c" and asks again (commander,
+# 2026-11-13: "no default or other characters should re-ask"). EOF sets VAR to
+# DEFAULT. Every answer is logged at detail (deploy.log only).
+# EOF detection: read_tty_choice returns "" both at EOF and for a typed empty
+# line. READ_TTY_EOF=1 after the read marks EOF (set by read_tty_choice); as a
+# fallback for an older read_tty_choice, an empty answer with WARNINGS raised
+# during the read is also EOF (its EOF branch calls log_warn). 50 unrecognised answers in a row are treated as EOF, so a
+# closed input that is not detected cannot loop forever.
+# Spec: .claude/rules/interactive-menus.md "Answers";
+# reference/managed-file-deployment.md "Menus". Parity: Read-MenuChoice in
+# aitools-lib.ps1.
+# ---------------------------------------------------------------------------
+READ_TTY_EOF=0
+read_menu_choice() {
+    local __mvar="$1" __valid="$2" __default="$3" __desc="$4" __ctx="$5" __prompt="$6"
+    local __ans="" __raw="" __w0=0 __tries=0 __v="" __hint=""
+    for __v in $__valid; do
+        if [ -z "$__hint" ]; then __hint="$__v"; else __hint="$__hint/$__v"; fi
+    done
+    while true; do
+        printf '%s' "$__prompt" > /dev/tty
+        READ_TTY_EOF=0
+        __w0="${WARNINGS:-0}"
+        __raw=""
+        read_tty_choice __raw "$__desc"
+        if [ "${READ_TTY_EOF:-0}" = "1" ] || { [ -z "$__raw" ] && [ "${WARNINGS:-0}" -gt "$__w0" ]; }; then
+            log_detail "menu answer ($__ctx): EOF -> $__default"
+            printf -v "$__mvar" '%s' "$__default"
+            return 0
+        fi
+        # Trim surrounding whitespace (a CR included), then lowercase
+        __ans="${__raw#"${__raw%%[![:space:]]*}"}"
+        __ans="${__ans%"${__ans##*[![:space:]]}"}"
+        __ans=$(printf '%s' "$__ans" | tr '[:upper:]' '[:lower:]')
+        for __v in $__valid; do
+            if [ "$__ans" = "$__v" ]; then
+                log_detail "menu answer ($__ctx): \"$__raw\" -> $__ans"
+                printf -v "$__mvar" '%s' "$__ans"
+                return 0
+            fi
+        done
+        log_detail "menu answer ($__ctx): \"$__raw\" -> not one of $__hint, asked again"
+        __tries=$((__tries + 1))
+        if [ "$__tries" -ge 50 ]; then
+            log_warn "No valid answer after 50 tries at $__ctx -- treating input as ended, defaulting to $__desc"
+            printf -v "$__mvar" '%s' "$__default"
+            return 0
+        fi
+        printf '  please type one of %s\n' "$__hint" > /dev/tty
+    done
 }
 
 # ---------------------------------------------------------------------------
@@ -1703,11 +1874,15 @@ _invoke_ai_merge() {
         fi
 
         local merged
+        # The traps stop the spinner if Ctrl+C, TERM or an exit ends the run
+        # during the AI call; the caller's traps are back right after it
+        _spinner_traps_set
         _start_spinner "merging $display_name (attempt $iteration)..."
         # invoke_ai returns 1 on failure with no stdout; || true suppresses set -e abort
         # (the empty result is checked just below)
         merged=$(printf '%s' "$prompt_text" | invoke_ai balanced none _merge_validate 1) || true
         _stop_spinner
+        _spinner_traps_restore
 
         # Defense-in-depth: strip leading/trailing code fences if AI ignored instructions
         if [ -n "$merged" ]; then
@@ -1723,7 +1898,7 @@ _invoke_ai_merge() {
 
         # Show merge preview
         printf '\n  --- merged result preview (first 30 lines) ---\n' > /dev/tty
-        printf '%s\n' "$merged" | head -30 | while IFS= read -r line; do
+        printf '%s\n' "$merged" | sed -n '1,30p' | while IFS= read -r line; do
             printf '  | %s\n' "$line" > /dev/tty
         done
         local total_lines
@@ -1731,10 +1906,12 @@ _invoke_ai_merge() {
         if [ "$total_lines" -gt 30 ]; then
             printf '  | ... (%d more lines)\n' "$((total_lines - 30))" > /dev/tty
         fi
-        printf '\n  [y]es accept / [r]efine / [n]o reject: ' > /dev/tty
+        printf '\n' > /dev/tty
         local accept
-        read_tty_choice accept "reject the merge (back to the review menu)"
-        case "$(printf '%s' "$accept" | tr '[:upper:]' '[:lower:]')" in
+        # Only y, r or n count; anything else asks again; EOF = n (reject)
+        read_menu_choice accept "y r n" n "reject the merge (back to the review menu)" \
+            "merge preview $display_name" "  [y]es accept / [r]efine / [n]o reject: "
+        case "$accept" in
             y)
                 MERGED_CONTENT="$merged"
                 DIFF_REVIEW_RESULT="merge"
@@ -1746,7 +1923,7 @@ _invoke_ai_merge() {
                 printf '  >> refining merge (iteration %d)...\n' "$iteration" > /dev/tty
                 continue
                 ;;
-            *)
+            *)  # n (read_menu_choice returns only y, r or n)
                 printf '  >> merge rejected -- back to the review menu\n' > /dev/tty
                 DIFF_REVIEW_RESULT="menu"
                 return 0
@@ -1776,6 +1953,9 @@ _invoke_ai_merge() {
 #   LOCAL missing                       -> SOURCE written, "created"
 #   LOCAL == SOURCE                     -> nothing written, "verified"
 #   no terminal, EOF, or AITOOLS_FORCE  -> SOURCE written (backup), "updated"
+#   a read-only copy (MANAGED_NO_REVIEW=true) -> SOURCE written (backup),
+#                                          "updated"; JSON too (whole file,
+#                                          no field review)
 #
 # Text files (DEST not ending in .json), one review per file:
 #   [o]verwrite      -> SOURCE written to LOCAL (backup kept); "updated"
@@ -2004,32 +2184,26 @@ prompt_diff_review() {
         fi
         printf '  [s]kip            : nothing written; asked again next run\n' > /dev/tty
         printf '  [x]abort          : stop this script (exit 2)\n' > /dev/tty
-        if [ "$adopt_offered" = "1" ]; then
-            printf '  choice [o/a/m/s/x]: ' > /dev/tty
-        else
-            printf '  choice [o/s/x]: ' > /dev/tty
-        fi
 
-        read_tty_choice choice "overwrite"
-        case "$(printf '%s' "$choice" | tr '[:upper:]' '[:lower:]')" in
-            a)  if [ "$adopt_offered" = "1" ]; then
-                    printf '  >> accept & adopt: local kept, copied to the repo\n' > /dev/tty
-                    DIFF_REVIEW_RESULT="adopt"
-                else
-                    printf '  >> overwritten: source deployed to local (backup kept)\n' > /dev/tty
-                    DIFF_REVIEW_RESULT="overwrite"
-                fi ;;
-            m)  if [ "$adopt_offered" = "1" ]; then
-                    _invoke_ai_merge "$file_path" "$new_content" "$cur_content" "$diff_output"
-                else
-                    printf '  >> overwritten: source deployed to local (backup kept)\n' > /dev/tty
-                    DIFF_REVIEW_RESULT="overwrite"
-                fi ;;
+        # Only an offered letter counts; an empty line or anything else asks
+        # again (read_menu_choice); EOF = o (overwrite)
+        if [ "$adopt_offered" = "1" ]; then
+            read_menu_choice choice "o a m s x" o "overwrite" "review $leaf" "  choice [o/a/m/s/x]: "
+        else
+            read_menu_choice choice "o s x" o "overwrite" "review $leaf" "  choice [o/s/x]: "
+        fi
+        case "$choice" in
+            o)  printf '  >> overwritten: source deployed to local (backup kept)\n' > /dev/tty
+                DIFF_REVIEW_RESULT="overwrite" ;;
+            a)  printf '  >> accept & adopt: local kept, copied to the repo\n' > /dev/tty
+                DIFF_REVIEW_RESULT="adopt" ;;
+            m)  _invoke_ai_merge "$file_path" "$new_content" "$cur_content" "$diff_output" ;;
             s)  printf '  >> skipped: local file unchanged\n' > /dev/tty
                 DIFF_REVIEW_RESULT="skip" ;;
             x)  _managed_abort ;;
-            *)  printf '  >> overwritten: source deployed to local (backup kept)\n' > /dev/tty
-                DIFF_REVIEW_RESULT="overwrite" ;;
+            *)  # unreachable: read_menu_choice returns only an offered letter
+                log_error "review $leaf: unexpected answer '$choice' -- asking again"
+                DIFF_REVIEW_RESULT="menu" ;;
         esac
         if [ "$DIFF_REVIEW_RESULT" != "menu" ]; then break; fi
     done
@@ -2052,6 +2226,11 @@ prompt_diff_review() {
 #                      reads LOCAL content on stdin and prints the content the
 #                      adopt target gets (CLAUDE.md strips its machine footer
 #                      and restores profile tokens). "" = plain copy.
+# MANAGED_NO_REVIEW=true (set for the one call: MANAGED_NO_REVIEW=true
+#   deploy_managed_file ...): LOCAL is a read-only copy (never edited there,
+#   e.g. deploy-harness reference/ and registries/): when it differs, SOURCE is
+#   written (backup kept) with no menu and no adopt; JSON is written whole, not
+#   reviewed field by field. Parity: -NoReview in aitools-lib.ps1.
 #
 # Sets MANAGED_FILE_RESULT to "created", "updated", "verified",
 # "accept & adopt", "skipped" or "failed". On "failed" nothing is left
@@ -2067,6 +2246,7 @@ deploy_managed_file() {
     local item_name="$4"
     local adopt_path="${5:-}"
     local adopt_filter="${6:-}"
+    local no_review="${MANAGED_NO_REVIEW:-false}"
 
     MANAGED_FILE_RESULT="verified"
     _managed_state_notice
@@ -2102,24 +2282,26 @@ deploy_managed_file() {
         return 0
     fi
 
-    # JSON: field-by-field review
+    # JSON: field-by-field review (a read-only copy is written whole, below)
     case "$dest" in
         *.json)
-            local _src_tmp
-            if ! _src_tmp=$(mktemp); then
-                log_error "Failed: $item_name: could not create a temp file for the JSON review"
-                MANAGED_FILE_RESULT="failed"
-                return 0
-            fi
-            if ! printf '%s\n' "$src_content" > "$_src_tmp"; then
+            if [ "$no_review" != "true" ]; then
+                local _src_tmp
+                if ! _src_tmp=$(mktemp); then
+                    log_error "Failed: $item_name: could not create a temp file for the JSON review"
+                    MANAGED_FILE_RESULT="failed"
+                    return 0
+                fi
+                if ! printf '%s\n' "$src_content" > "$_src_tmp"; then
+                    rm -f "$_src_tmp"
+                    log_error "Failed: $item_name: could not write a temp file for the JSON review"
+                    MANAGED_FILE_RESULT="failed"
+                    return 0
+                fi
+                review_json_fields "$_src_tmp" "$dest" "$adopt_path" "$item_name"
                 rm -f "$_src_tmp"
-                log_error "Failed: $item_name: could not write a temp file for the JSON review"
-                MANAGED_FILE_RESULT="failed"
                 return 0
-            fi
-            review_json_fields "$_src_tmp" "$dest" "$adopt_path"
-            rm -f "$_src_tmp"
-            return 0 ;;
+            fi ;;
     esac
 
     # New file: create
@@ -2143,6 +2325,18 @@ deploy_managed_file() {
     existing=$(printf '%s' "$existing" | perl -0777 -pe 's/[\r\n]+$/\n/')
     if [ "$existing" = "$src_content" ]; then
         MANAGED_FILE_RESULT="verified"
+        return 0
+    fi
+
+    # A read-only copy: SOURCE wins, no menu, no adopt (backup kept by _managed_write)
+    if [ "$no_review" = "true" ]; then
+        if _managed_write "$dest" "$src_content" "" ""; then
+            log_ok "Updated: $item_name -> $(display_path "$dest") (read-only copy: source wins, backup kept)"
+            MANAGED_FILE_RESULT="updated"
+        else
+            log_error "Failed: $item_name: $MANAGED_WRITE_ERROR (files restored)"
+            MANAGED_FILE_RESULT="failed"
+        fi
         return 0
     fi
 
@@ -2206,6 +2400,8 @@ deploy_managed_file() {
 #   $1 = SRC_FILE    file holding the SOURCE JSON
 #   $2 = DEST        deployed JSON file (LOCAL)
 #   $3 = ADOPT_PATH  repo JSON file that is the source of truth; "" = no adopt
+#   $4 = ITEM_NAME   the file as the review header names it (default: DEST's
+#                    file name)
 #
 # Sets MANAGED_FILE_RESULT, one per file by precedence failed > accept & adopt
 # > skipped > updated > verified: "created" (LOCAL was missing), "failed"
@@ -2215,9 +2411,11 @@ deploy_managed_file() {
 # "verified" (nothing written). Requires node. Exits 2 on [x]abort.
 # ---------------------------------------------------------------------------
 review_json_fields() {
-    local src_file="$1" dest="$2" adopt_path="${3:-}"
+    local src_file="$1" dest="$2" adopt_path="${3:-}" file_label="${4:-}"
     local item
     item=$(basename "$dest")
+    # The review header names the file (the caller's item name, else the file name)
+    if [ -z "$file_label" ]; then file_label="$item"; fi
     MANAGED_FILE_RESULT="verified"
 
     if ! command -v node >/dev/null 2>&1; then
@@ -2236,8 +2434,9 @@ review_json_fields() {
 // review_json_fields / Review-JsonFields: SOURCE against LOCAL, field by field.
 // The same text is embedded in aitools-lib.sh and aitools-lib.ps1: keep them identical.
 //   plan  SRC LOCAL OUT_PLAN
-//     OUT_PLAN: one line per differing field: idx<TAB>kind<TAB>key<TAB>local<TAB>source
-//     kind: differ | source-only | local-only. A whole array is one field.
+//     OUT_PLAN: one line per differing field: idx<TAB>kind<TAB>key<TAB>local<TAB>source<TAB>detail
+//     kind: differ | source-only | local-only. A whole array is one field; its
+//     detail lists the elements that differ (arrayDetail), "" for other fields.
 //   apply SRC LOCAL ADOPT CHOICES OUT_LOCAL OUT_ADOPT OUT_RESULT OUT_REQ_LOCAL OUT_REQ_ADOPT
 //     ADOPT: the adopt target, or "-" for none.
 //     CHOICES: idx<TAB>overwrite|adopt|skip|keep per field (missing = skip).
@@ -2298,8 +2497,61 @@ function disp(v) {
     if (t.length > 200) t = t.slice(0, 197) + '...';
     return t;
 }
-function clean(t) { return String(t).replace(/[\t\r\n]/g, ' '); }
+function clean(t) { return String(t).replace(/[\t\r\n\x1f]/g, ' '); }
 function clone(v) { return v === undefined ? undefined : JSON.parse(JSON.stringify(v)); }
+function short(v, n) {
+    const t = v === undefined ? '(absent)' : JSON.stringify(v);
+    return t.length > n ? t.slice(0, n - 3) + '...' : t;
+}
+// identity(v): "id=172" for an object element with an id, name, key, file or
+// slug (string or number), else undefined
+function identity(v) {
+    if (!isObj(v)) return undefined;
+    for (const k of ['id', 'name', 'key', 'file', 'slug']) {
+        if (has(v, k) && (typeof v[k] === 'string' || typeof v[k] === 'number')) return k + '=' + JSON.stringify(v[k]);
+    }
+    return undefined;
+}
+// arrayDetail(l, s): the plan's detail column for an array field ("" for
+// anything else). Lines joined by \x1f: a count line, then "- [i] value" (only
+// in LOCAL, its index there), "+ [j] value" (only in SOURCE, its index there)
+// and "~ [j] id=..: key: local -> source" (an object element with the same
+// identity in both, one line per changed key). Elements are matched by value,
+// so a reorder alone is one "~ order differs" line. At most 20 element lines.
+function arrayDetail(l, s) {
+    if (!Array.isArray(l) || !Array.isArray(s)) return '';
+    const left = new Map();
+    l.forEach((v, i) => { const c = canon(v); if (!left.has(c)) left.set(c, []); left.get(c).push(i); });
+    const added = [];
+    s.forEach((v, j) => { const q = left.get(canon(v)); if (q && q.length) q.shift(); else added.push(j); });
+    const removed = [];
+    for (const q of left.values()) removed.push(...q);
+    removed.sort((a, b) => a - b);
+    const byId = new Map();
+    for (const i of removed) { const id = identity(l[i]); if (id !== undefined && !byId.has(id)) byId.set(id, i); }
+    const paired = new Set();
+    const rows = [];
+    for (const j of added) {
+        const id = identity(s[j]);
+        if (id !== undefined && byId.has(id) && !paired.has(byId.get(id))) {
+            const i = byId.get(id), a = l[i], b = s[j];
+            paired.add(i);
+            const keys = Object.keys(a).concat(Object.keys(b).filter(k => !has(a, k)));
+            const ls = keys.filter(k => canon(a[k]) !== canon(b[k]))
+                .map(k => '~ [' + j + '] ' + id + ': ' + k + ': ' + short(a[k], 70) + ' -> ' + short(b[k], 70));
+            rows.push([j, ls]);
+        } else {
+            rows.push([j, ['+ [' + j + '] ' + short(s[j], 160)]]);
+        }
+    }
+    for (const i of removed) if (!paired.has(i)) rows.push([i, ['- [' + i + '] ' + short(l[i], 160)]]);
+    rows.sort((x, y) => x[0] - y[0]);
+    let out = [];
+    for (const r of rows) out.push(...r[1]);
+    if (out.length === 0) out.push('~ order differs (same elements)');
+    if (out.length > 20) out = out.slice(0, 20).concat(['... ' + (out.length - 20) + ' more line(s)']);
+    return [l.length + ' local, ' + s.length + ' source element(s)'].concat(out).map(clean).join('\x1f');
+}
 function setPath(obj, path, val) {
     let o = obj;
     for (let i = 0; i < path.length - 1; i++) {
@@ -2332,7 +2584,7 @@ try {
     const list = fields(src, loc);
     if (mode === 'plan') {
         const lines = list.map((f, i) => [i, f.kind, f.path.length ? clean(f.path.join('.')) : '(document)',
-            clean(disp(f.l)), clean(disp(f.s))].join('\t'));
+            clean(disp(f.l)), clean(disp(f.s)), f.kind === 'differ' ? arrayDetail(f.l, f.s) : ''].join('\t'));
         fs.writeFileSync(process.argv[5], lines.length ? lines.join('\n') + '\n' : '');
     } else if (mode === 'apply') {
         const adoptPath = (process.argv[5] && process.argv[5] !== '-') ? process.argv[5] : '';
@@ -2392,7 +2644,7 @@ REVIEW_JSON_NODE_EOF
         MANAGED_WRITE_REQUIRED_1=$(cat "$work/keys.json")
         rm -rf "$work"
         if _managed_write "$dest" "$src_json" "" ""; then
-            log_ok "Created: $item -> $(display_path "$dest")"
+            log_ok "Created: $file_label -> $(display_path "$dest")"
             MANAGED_FILE_RESULT="created"
         else
             log_error "Failed: $item: $MANAGED_WRITE_ERROR"
@@ -2420,21 +2672,21 @@ REVIEW_JSON_NODE_EOF
     if [ -n "$adopt_path" ]; then adopt_ok=1; fi
     if [ "${AITOOLS_FORCE:-}" != "1" ] && [ "${FORCE:-}" != "true" ] && tty_interactive; then can_prompt=1; fi
     : > "$work/choices.tsv"
-    local idx kind key ldisp sdisp choice
-    while IFS=$'\t' read -r idx kind key ldisp sdisp <&3; do
+    local idx kind key ldisp sdisp detail choice
+    while IFS=$'\t' read -r idx kind key ldisp sdisp detail <&3; do
         [ -n "$idx" ] || continue
         if [ "$kind" = "local-only" ]; then
             # A field only in LOCAL: [a]dopt / [s]kip / [x]abort, no overwrite.
             # Without an adopt target or a terminal it is kept, no prompt.
             if [ "$adopt_ok" = "1" ] && [ "$can_prompt" = "1" ]; then
-                prompt_json_field_review "$key" "$ldisp" "(not in source)" "source" "1" "local" "0"
+                prompt_json_field_review "$key" "$ldisp" "(not in source)" "source" "1" "local" "0" "$file_label" ""
                 choice="$JSON_FIELD_REVIEW_RESULT"
             else
                 log_detail "$item: $key only in local -- kept"
                 choice="keep"
             fi
         else
-            prompt_json_field_review "$key" "$ldisp" "$sdisp" "source" "$adopt_ok" "local"
+            prompt_json_field_review "$key" "$ldisp" "$sdisp" "source" "$adopt_ok" "local" "1" "$file_label" "$detail"
             choice="$JSON_FIELD_REVIEW_RESULT"
         fi
         printf '%s\t%s\n' "$idx" "$choice" >> "$work/choices.tsv"
@@ -2474,14 +2726,14 @@ REVIEW_JSON_NODE_EOF
         fi
     fi
     if [ "${n_over:-0}" -gt 0 ]; then
-        log_ok "Updated: $item -> $(display_path "$dest") ($n_over field(s) from source)"
+        log_ok "Updated: $file_label -> $(display_path "$dest") ($n_over field(s) from source)"
     fi
     if [ "${n_adopt:-0}" -gt 0 ]; then
-        log_ok "Accept & adopt: $item -> $(display_path "$adopt_path") ($n_adopt field(s))"
+        log_ok "Accept & adopt: $file_label -> $(display_path "$adopt_path") ($n_adopt field(s))"
         _managed_adopt_notice "$adopt_path"
     fi
     if [ "${n_skip:-0}" -gt 0 ]; then
-        log_warn "Skipped: $item ($n_skip field(s) differ from source; reviewed again next run)"
+        log_warn "Skipped: $file_label ($n_skip field(s) differ from source; reviewed again next run)"
     fi
     if [ "${n_adopt:-0}" -gt 0 ]; then
         MANAGED_FILE_RESULT="accept & adopt"
@@ -3510,6 +3762,35 @@ fanout_harness_skills() {
 }
 
 # ---------------------------------------------------------------------------
+# _json_field_detail WHAT DETAIL LOCAL_LABEL SOURCE_LABEL: the element lines of
+# an array field under its review header (DETAIL: lines joined by \x1f), one
+# per line, colour-coded when _review_colour (red "-" only in LOCAL, green "+"
+# only in SOURCE, yellow "~" changed), after a legend. Each line also goes to
+# deploy.log (detail). Parity: Write-JsonFieldDetail in aitools-lib.ps1.
+# ---------------------------------------------------------------------------
+_json_field_detail() {
+    local what="$1" rest="$2" llabel="$3" slabel="$4" dl colour=0 us=$'\x1f'
+    if _review_colour; then colour=1; fi
+    if [ "$colour" = "1" ]; then
+        printf '  \033[31mred -\033[0m = only in %s   \033[32mgreen +\033[0m = only in %s   \033[33myellow ~\033[0m = changed\n' "$llabel" "$slabel" > /dev/tty
+    else
+        printf '  red - = only in %s   green + = only in %s   yellow ~ = changed\n' "$llabel" "$slabel" > /dev/tty
+    fi
+    while :; do
+        dl="${rest%%"$us"*}"
+        log_detail "review $what: $dl"
+        case "$colour$dl" in
+            1-*) printf '  \033[31m%s\033[0m\n' "$dl" ;;
+            1+*) printf '  \033[32m%s\033[0m\n' "$dl" ;;
+            1~*) printf '  \033[33m%s\033[0m\n' "$dl" ;;
+            *)   printf '  %s\n' "$dl" ;;
+        esac > /dev/tty
+        if [ "$rest" = "$dl" ]; then break; fi
+        rest="${rest#*"$us"}"
+    done
+}
+
+# ---------------------------------------------------------------------------
 # Granular per-leaf review prompt for JSON settings sync (sync_managed_json)
 # and the JSON field review (review_json_fields).
 # One prompt per divergent setting/rule. overwrite/adopt/skip are per-leaf;
@@ -3524,6 +3805,10 @@ fanout_harness_skills() {
 #   $6 = local label (default "settings.json")
 #   $7 = overwrite-allowed flag (default "1"; "0" for a field only in the
 #        local file: no [o]verwrite, and the default answer is skip)
+#   $8 = file label: names the file in the header ("" = the leaf alone)
+#   $9 = detail: element lines for an array field, joined by \x1f (the
+#        plan's detail column, review_json_fields); shown colour-coded instead
+#        of the two value lines ("" = show the two value lines)
 #
 # Sets JSON_FIELD_REVIEW_RESULT to "overwrite", "adopt", or "skip".
 # --force / AITOOLS_FORCE / non-interactive -> "overwrite" (source wins), or
@@ -3532,28 +3817,33 @@ fanout_harness_skills() {
 JSON_FIELD_REVIEW_RESULT=""
 prompt_json_field_review() {
     local leaf="$1" current="$2" proposed="$3" source_label="${4:-profile.json}" adopt_allowed="${5:-1}"
-    local local_label="${6:-settings.json}" overwrite_allowed="${7:-1}"
-    local default_choice="overwrite" default_desc="overwriting from $source_label"
+    local local_label="${6:-settings.json}" overwrite_allowed="${7:-1}" file_label="${8:-}" detail="${9:-}"
+    local default_choice="overwrite" default_desc="overwriting from $source_label" what="$leaf"
     if [ "$overwrite_allowed" != "1" ]; then
         default_choice="skip"; default_desc="skipping (only in $local_label)"
     fi
+    if [ -n "$file_label" ]; then what="$file_label: $leaf"; fi
 
     JSON_FIELD_REVIEW_RESULT="$default_choice"
 
     # --force / AITOOLS_FORCE: source wins
     if [ "${AITOOLS_FORCE:-}" = "1" ] || [ "${FORCE:-}" = "true" ]; then
-        log "Divergence in $leaf -- $default_desc (--force)"
+        log "Divergence in $what -- $default_desc (--force)"
         return 0
     fi
     # Non-interactive: source wins
     if ! tty_interactive; then
-        log "Divergence in $leaf -- $default_desc (non-interactive)"
+        log "Divergence in $what -- $default_desc (non-interactive)"
         return 0
     fi
 
-    printf '\n\033[33m[REVIEW]\033[0m %s differs from %s.\n' "$leaf" "$source_label" > /dev/tty
-    printf '  %s : %s\n' "$local_label" "$current" > /dev/tty
-    printf '  %s : %s\n' "$source_label" "$proposed" > /dev/tty
+    printf '\n\033[33m[REVIEW]\033[0m %s differs from %s.\n' "$what" "$source_label" > /dev/tty
+    if [ -n "$detail" ]; then
+        _json_field_detail "$what" "$detail" "$local_label" "$source_label"
+    else
+        printf '  %s : %s\n' "$local_label" "$current" > /dev/tty
+        printf '  %s : %s\n' "$source_label" "$proposed" > /dev/tty
+    fi
     printf '\n' > /dev/tty
     if [ "$overwrite_allowed" = "1" ]; then
         printf '  [o]verwrite : %s value -> %s\n' "$source_label" "$local_label" > /dev/tty
@@ -3563,37 +3853,25 @@ prompt_json_field_review() {
     fi
     printf '  [s]kip      : leave this setting unchanged\n' > /dev/tty
     printf '  [x]abort    : stop the run\n' > /dev/tty
-    if [ "$overwrite_allowed" != "1" ]; then
-        printf '  choice [a/s/x]: ' > /dev/tty
-    elif [ "$adopt_allowed" = "1" ]; then
-        printf '  choice [o/a/s/x]: ' > /dev/tty
-    else
-        printf '  choice [o/s/x]: ' > /dev/tty
-    fi
 
-    local choice
-    read_tty_choice choice "$default_desc"
-    case "$(printf '%s' "$choice" | tr '[:upper:]' '[:lower:]')" in
-        a)  if [ "$adopt_allowed" = "1" ]; then
-                printf '  >> adopted: %s value kept -> %s\n' "$local_label" "$source_label" > /dev/tty
-                JSON_FIELD_REVIEW_RESULT="adopt"
-            elif [ "$overwrite_allowed" = "1" ]; then
-                printf '  >> overwritten from %s\n' "$source_label" > /dev/tty
-                JSON_FIELD_REVIEW_RESULT="overwrite"
-            else
-                printf '  >> skipped: %s unchanged\n' "$leaf" > /dev/tty
-                JSON_FIELD_REVIEW_RESULT="skip"
-            fi ;;
-        s)  printf '  >> skipped: %s unchanged\n' "$leaf" > /dev/tty
-            JSON_FIELD_REVIEW_RESULT="skip" ;;
+    # The offered letters, from the same flags as the menu lines. Only an
+    # offered letter counts; an empty line or anything else asks again
+    # (read_menu_choice); EOF = the default (o, or s without overwrite).
+    local valid="" default_letter="o" choice=""
+    if [ "$overwrite_allowed" = "1" ]; then valid="o "; else default_letter="s"; fi
+    if [ "$adopt_allowed" = "1" ]; then valid="${valid}a "; fi
+    valid="${valid}s x"
+    read_menu_choice choice "$valid" "$default_letter" "$default_desc" "json $what" \
+        "  choice [$(printf '%s' "$valid" | tr ' ' '/')]: "
+    case "$choice" in
+        o)  printf '  >> overwritten from %s\n' "$source_label" > /dev/tty
+            JSON_FIELD_REVIEW_RESULT="overwrite" ;;
+        a)  printf '  >> adopted: %s value kept -> %s\n' "$local_label" "$source_label" > /dev/tty
+            JSON_FIELD_REVIEW_RESULT="adopt" ;;
         x)  _managed_abort ;;
-        *)  if [ "$overwrite_allowed" = "1" ]; then
-                printf '  >> overwritten from %s\n' "$source_label" > /dev/tty
-                JSON_FIELD_REVIEW_RESULT="overwrite"
-            else
-                printf '  >> skipped: %s unchanged\n' "$leaf" > /dev/tty
-                JSON_FIELD_REVIEW_RESULT="skip"
-            fi ;;
+        *)  # s (read_menu_choice returns only an offered letter)
+            printf '  >> skipped: %s unchanged\n' "$leaf" > /dev/tty
+            JSON_FIELD_REVIEW_RESULT="skip" ;;
     esac
     return 0
 }
@@ -3879,7 +4157,7 @@ repair_uv_tool_env() {
     local tool_name="$1"
     local upgrade_output="${2:-}"
 
-    if ! printf '%s\n' "$upgrade_output" | grep -q 'missing a valid environment'; then
+    if ! printf '%s\n' "$upgrade_output" | grep 'missing a valid environment' >/dev/null; then
         return 1
     fi
 
@@ -4227,7 +4505,7 @@ diagnose_build_failure() {
     for entry in "${patterns[@]}"; do
         local pattern="${entry%%|*}"
         local rest="${entry#*|}"
-        if printf '%s\n' "$output" | grep -qiE "$pattern"; then
+        if printf '%s\n' "$output" | grep -iE "$pattern" >/dev/null; then
             echo "$rest"
             return 0
         fi

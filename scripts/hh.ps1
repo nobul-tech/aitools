@@ -2,6 +2,11 @@
 # Resolves repo: AITOOLS_REPO, or walk up from cwd when Path is non-empty, then
 # ~/.aitools/config.json (repoPath / aiToolingRepoPath).
 # Usage: hh [-n|-status-only] [-NoPull]  (-n = no aitools; -NoPull = skip git pull)
+# Requires PowerShell 7 (pwsh). Windows PowerShell 5.1 is not supported (commander,
+# 2026-11-14: "17) its is pwsh 7 only"): 5.1 reads this BOM-less UTF-8 file as ANSI and
+# cannot parse it. The #Requires line makes 5.1 refuse it with a version message instead
+# of parse errors, whether run with -File or through the profile's hh function.
+#Requires -Version 7.0
 
 param(
     [switch]$n,

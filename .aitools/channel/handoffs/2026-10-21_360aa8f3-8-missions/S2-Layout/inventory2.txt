@@ -469,8 +469,8 @@ ls: /Users/new-jose/.cursor/rules: No such file or directory
       "label": ""
     },
     {
-      "path": "/Users/new-jose/Library/CloudStorage/GoogleDrive-jose@strat-accs.com/My Drive",
-      "account": "jose@strat-accs.com",
+      "path": "/Users/new-jose/Library/CloudStorage/GoogleDrive-<secondary Google account>/My Drive",
+      "account": "<secondary Google account>",
       "label": ""
     }
   ],

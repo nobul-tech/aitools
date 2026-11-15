@@ -5,7 +5,7 @@
 # $AitoolsEnvironment, Test-ClaudeCodeWeb, Test-LocalEnvironment,
 # Write-EnvironmentSkip), ReadConfigKey, Resolve-UserRepoPath,
 # Resolve-MachineProfile, Get-ToolException, Set-ToolException, Initialize-Logging,
-# Log/LogOk/LogError/LogWarn/LogDetail, Invoke-AI, Write-Summary, Show-Summary,
+# Log/LogOk/LogError/LogWarn/LogDetail, Invoke-AI (Write-AiLog), Write-Summary, Show-Summary,
 # Refresh-Path, Log-WingetOutput, Repair-UvToolEnv, Remove-OrphanedPythonDirs,
 # Normalize-JsonForComparison.
 #
@@ -640,7 +640,10 @@ function Initialize-Logging {
     }
     $script:logFile = Join-Path $script:logDir "deploy.log"
     if (-not (Test-Path $script:logDir)) {
-        New-Item -ItemType Directory -Path $script:logDir -Force | Out-Null
+        # Fail-safe (logging.md section 5): a log directory that cannot be
+        # created leaves every log write failing, and each failed write is
+        # swallowed (Add-AitLibLogText); the run goes on with its console output
+        try { New-Item -ItemType Directory -Path $script:logDir -Force -ErrorAction Stop | Out-Null } catch { $null = $_ }
     }
     Rotate-Log $script:logFile
     $script:errors = 0
@@ -660,11 +663,26 @@ function Write-AitoolsEnvironmentLog {
 # ---------------------------------------------------------------------------
 # Standard logging (console + log file, with [level] tag)
 # ---------------------------------------------------------------------------
+# Add-AitLibLogText TEXT -- append TEXT and a newline to the log file ($logFile).
+# Fail-safe (reference/logging.md section 5: "A failed log write is swallowed
+# (the only sanctioned silent-suppression in the harness), because a broken log
+# must not break the operation it records"): a log another process holds locked,
+# an unwritable or missing one, or no log file set never throws -- not even under
+# $ErrorActionPreference = "Stop" or inside a caller's try -- and the caller's
+# console line is still printed. Parity: _aitlib_log_append.
+function Add-AitLibLogText([string]$Text) {
+    try {
+        $resolvedLog = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($logFile)
+        [IO.File]::AppendAllText($resolvedLog, "$Text`n", [System.Text.UTF8Encoding]::new($false))
+    } catch {
+        $null = $_  # swallowed by design (logging.md section 5)
+    }
+}
+
 function Log($msg, $level = "info") {
     $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
     $line = "[$ts] [$scriptName] [$level] $msg"
-    $resolvedLog = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($logFile)
-    [IO.File]::AppendAllText($resolvedLog, "$line`n", [System.Text.UTF8Encoding]::new($false))
+    Add-AitLibLogText $line
     switch ($level) {
         "error" { Write-Host $line -ForegroundColor Red }
         "warn"  { Write-Host $line -ForegroundColor Yellow }
@@ -676,8 +694,7 @@ function LogError($msg) { Log $msg "error"; $script:errors++ }
 function LogWarn($msg)  { Log $msg "warn"; $script:warnings++ }
 function LogDetail($msg) {
     $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
-    $resolvedLog = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($logFile)
-    [IO.File]::AppendAllText($resolvedLog, "[$ts] [$scriptName] [detail] $msg`n", [System.Text.UTF8Encoding]::new($false))
+    Add-AitLibLogText "[$ts] [$scriptName] [detail] $msg"
 }
 
 # ---------------------------------------------------------------------------
@@ -692,6 +709,18 @@ function LogDetail($msg) {
 # Known limitations: Agent CLI has no --model flag; speed is hint-only via
 #   prompt prefix. Retry prepends rejection reason but may not fix structural
 #   issues (e.g., model always wrapping in code fences).
+# Telemetry ("AI invocation: ..." lines) is file-only, through Write-AiLog.
+
+# File-only AI telemetry (parity: _ai_log in aitools-lib.sh). The same line as
+# Log ("[ts] [script] [level] msg", same log file), but nothing on the console:
+# Invoke-AI's lines never print into the AI-merge spinner row (Start-AiSpinner),
+# and its caller's console output stays its own. Counts no error or warning --
+# callers decide whether an Invoke-AI failure counts.
+function Write-AiLog([string]$Msg, [string]$Level = "info") {
+    $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+    Add-AitLibLogText "[$ts] [$scriptName] [$Level] $Msg"
+}
+
 $script:AIRejectReason = ""
 
 function Invoke-AI {
@@ -716,7 +745,7 @@ function Invoke-AI {
 
     if (-not $cliCmd) {
         $script:AIRejectReason = "No AI CLI available (claude or agent)"
-        Log "AI invocation: no CLI available (claude or agent)" "error"
+        Write-AiLog "AI invocation: no CLI available (claude or agent)" "error"
         return $null
     }
 
@@ -767,7 +796,7 @@ function Invoke-AI {
     # Retry loop
     $currentPrompt = $Prompt
     for ($attempt = 1; $attempt -le ($MaxRetries + 1); $attempt++) {
-        Log "AI invocation: speed=$Speed backend=$cliCmd attempt=$attempt"
+        Write-AiLog "AI invocation: speed=$Speed backend=$cliCmd attempt=$attempt"
 
         $fullPrompt = "${speedPrefix}${currentPrompt}"
 
@@ -777,7 +806,7 @@ function Invoke-AI {
             if ($LASTEXITCODE -ne 0) { $output = $null }
         } catch {
             # CLI invocation failed (e.g., binary not found despite Get-Command)
-            Log "AI invocation error: $_" "warn"
+            Write-AiLog "AI invocation error: $_" "warn"
             $output = $null
         }
 
@@ -786,7 +815,7 @@ function Invoke-AI {
 
         if ([string]::IsNullOrWhiteSpace($output)) {
             $script:AIRejectReason = "Empty output from $cliCmd"
-            Log "AI invocation: speed=$Speed backend=$cliCmd attempt=$attempt result=empty" "warn"
+            Write-AiLog "AI invocation: speed=$Speed backend=$cliCmd attempt=$attempt result=empty" "warn"
             if ($attempt -le $MaxRetries) {
                 $currentPrompt = "Your previous output was empty. Try again.`n`n$Prompt"
                 continue
@@ -799,7 +828,7 @@ function Invoke-AI {
             $valid = & $ValidateFn $output
             if (-not $valid) {
                 if (-not $script:AIRejectReason) { $script:AIRejectReason = "Validation failed" }
-                Log "AI invocation: speed=$Speed backend=$cliCmd attempt=$attempt result=rejected reason=$($script:AIRejectReason)" "warn"
+                Write-AiLog "AI invocation: speed=$Speed backend=$cliCmd attempt=$attempt result=rejected reason=$($script:AIRejectReason)" "warn"
                 foreach ($rejLine in ($output -split "`n")) {
                     LogDetail "ai-rejected: $rejLine"
                 }
@@ -807,13 +836,13 @@ function Invoke-AI {
                     $currentPrompt = "Your previous output was rejected: $($script:AIRejectReason). Try again.`n`n$Prompt"
                     continue
                 }
-                Log "AI invocation: speed=$Speed backend=$cliCmd exhausted after $attempt attempts" "warn"
+                Write-AiLog "AI invocation: speed=$Speed backend=$cliCmd exhausted after $attempt attempts" "warn"
                 return $null
             }
         }
 
         # Success
-        Log "AI invocation: speed=$Speed backend=$cliCmd attempt=$attempt result=accepted"
+        Write-AiLog "AI invocation: speed=$Speed backend=$cliCmd attempt=$attempt result=accepted"
         return $output
     }
 
@@ -1558,33 +1587,178 @@ function Test-AiMergeOutput {
 }
 
 # ---------------------------------------------------------------------------
-# Spinner for AI operations (visual progress indicator)
+# Spinner for AI operations (visual progress indicator).
+# Parity: _start_spinner / _stop_spinner in aitools-lib.sh -- same frame
+# "`r  <c> <msg>", chars / - \ |, 200 ms period, and the stop clears the line
+# with "`r  `e[K". One difference: bash writes /dev/tty, so it draws even when
+# stdout is redirected; here the frames reach the console through stdout, like
+# the rest of Invoke-AiMerge, and the spinner is a no-op when stdout is
+# redirected or the session is not interactive (no frames in a pipe, a log or
+# CI output).
+# In-process: the loop runs in a second runspace on its own thread
+# ([powershell]::Create() + BeginInvoke), so [Console]::Write reaches this
+# process's console. Not Start-Job: a job is a separate pwsh process with no
+# console and a redirected stdout, so nothing it writes is ever shown.
+# Start-AiSpinner stops a running spinner first (one at a time). Stop-AiSpinner
+# is synchronous: it signals the loop, waits for it to end (2 s cap, then
+# PowerShell.Stop()), disposes the runspace, and only then clears the line, so
+# no spinner thread outlives it. With no spinner running it writes nothing
+# (bash _stop_spinner clears the line anyway).
 # ---------------------------------------------------------------------------
-$script:_aiSpinnerJob = $null
+$script:_aiSpinner = $null
 
 function Start-AiSpinner {
     param([string]$Message = "working...")
-    $script:_aiSpinnerJob = Start-Job -ScriptBlock {
-        param($msg)
-        $chars = '/-\|'
-        $i = 0
-        while ($true) {
-            $c = $chars[$i % 4]
-            [Console]::Write("`r  $c $msg")
-            $i++
-            Start-Sleep -Milliseconds 200
-        }
-    } -ArgumentList $Message
+    Stop-AiSpinner
+    if ([Console]::IsOutputRedirected -or -not [Environment]::UserInteractive) { return }
+    $stop = $null; $ps = $null
+    try {
+        $stop = [System.Threading.ManualResetEventSlim]::new($false)
+        $ps = [powershell]::Create()
+        [void]$ps.AddScript({
+            param($msg, $stop)
+            $chars = '/-\|'
+            $i = 0
+            do {
+                [Console]::Write("`r  $($chars[$i % 4]) $msg")
+                $i++
+            } while (-not $stop.Wait(200))
+        }).AddArgument($Message).AddArgument($stop)
+        $script:_aiSpinner = @{ PS = $ps; Stop = $stop; Handle = $ps.BeginInvoke() }
+    } catch {
+        # The spinner is cosmetic: the AI call goes on without it
+        LogDetail "AI spinner not started: $($_.Exception.Message)"
+        if ($ps) { $ps.Dispose() }
+        if ($stop) { $stop.Dispose() }
+        $script:_aiSpinner = $null
+    }
 }
 
 function Stop-AiSpinner {
-    if ($script:_aiSpinnerJob) {
-        Stop-Job $script:_aiSpinnerJob -ErrorAction SilentlyContinue
-        Remove-Job $script:_aiSpinnerJob -Force -ErrorAction SilentlyContinue
-        # ErrorAction exempt: spinner cleanup; job may already be stopped
-        $script:_aiSpinnerJob = $null
-        [Console]::Write("`r  `e[K")  # clear spinner line
+    $s = $script:_aiSpinner
+    if (-not $s) { return }
+    $script:_aiSpinner = $null
+    try {
+        $s.Stop.Set()
+        if (-not $s.Handle.AsyncWaitHandle.WaitOne(2000)) {
+            LogDetail "AI spinner did not stop within 2 s -- stopping its runspace"
+            $s.PS.Stop()
+        }
+        $null = $s.PS.EndInvoke($s.Handle)
+    } catch {
+        LogDetail "AI spinner stop: $($_.Exception.Message)"
+    } finally {
+        if ($s.PS.Runspace) { $s.PS.Runspace.Dispose() }
+        $s.PS.Dispose()
+        $s.Stop.Dispose()
     }
+    [Console]::Write("`r  `e[K")  # clear spinner line
+}
+
+# ---------------------------------------------------------------------------
+# Console input mode helper (Windows only).
+# The input mode belongs to the console, not to a process: a child run in this
+# console (Git Bash / MSYS, node CLIs) can leave it raw (ENABLE_LINE_INPUT and
+# ENABLE_ECHO_INPUT off, e.g. 0x2E8 or 0x208), and the next
+# [Console]::ReadLine() then returns only when the NEXT key arrives, echoes
+# nothing, and that key leaks into the following prompt.
+# One Add-Type type, AitConsoleInput, serves Read-ConsoleChoice (cooked line
+# input for the one read, the previous mode put back afterwards) and
+# Save-ConsoleInputMode / Restore-ConsoleInputMode (around a child run in this
+# console, e.g. build-deploy in scripts/aitools.ps1). The type is compiled
+# lazily, at most once per process, and only when stdin is a Windows console
+# (Initialize-AitConsoleInput); off Windows and with redirected stdin nothing is
+# compiled and nothing changes. Typeahead is not flushed: keys typed before a
+# prompt are read by it, as with read_tty_choice in aitools-lib.sh.
+# ---------------------------------------------------------------------------
+$script:AitConsoleInputError = ""
+function Initialize-AitConsoleInput {
+    # $true when stdin is a Windows console and the type is loaded.
+    if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) { return $false }
+    if ([Console]::IsInputRedirected) { return $false }
+    if ('AitConsoleInput' -as [type]) { return $true }
+    # A failed compile is not retried: one detail line, then every caller falls back
+    if ($script:AitConsoleInputError) { return $false }
+    try {
+        Add-Type -ErrorAction Stop -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public static class AitConsoleInput {
+    [DllImport("kernel32.dll", SetLastError = true)] static extern IntPtr GetStdHandle(int n);
+    [DllImport("kernel32.dll", SetLastError = true)] static extern bool GetConsoleMode(IntPtr h, out uint m);
+    [DllImport("kernel32.dll", SetLastError = true)] static extern bool SetConsoleMode(IntPtr h, uint m);
+    const uint ProcessedInput = 0x1, LineInput = 0x2, EchoInput = 0x4, VirtualTerminalInput = 0x200;
+    // Win32 error of the last EnterCooked (0 = the cooked mode was set).
+    public static int LastError;
+    // Input mode of STD_INPUT_HANDLE (-10), or -1 when stdin is not a console.
+    public static long Get() { uint m; return GetConsoleMode(GetStdHandle(-10), out m) ? (long)m : -1; }
+    // 0 on success, else the Win32 error code.
+    public static int Set(long m) {
+        if (m < 0 || m > 0xFFFFFFFFL) return 87;
+        return SetConsoleMode(GetStdHandle(-10), (uint)m) ? 0 : Marshal.GetLastWin32Error();
+    }
+    // Cooked line input for one read: PROCESSED | LINE | ECHO on,
+    // VIRTUAL_TERMINAL_INPUT off. Returns the previous mode (put it back with
+    // Set), or -1 when stdin is not a console. LastError is set either way.
+    public static long EnterCooked() {
+        IntPtr h = GetStdHandle(-10); uint m;
+        if (!GetConsoleMode(h, out m)) { LastError = Marshal.GetLastWin32Error(); return -1; }
+        LastError = SetConsoleMode(h, (m | ProcessedInput | LineInput | EchoInput) & ~VirtualTerminalInput) ? 0 : Marshal.GetLastWin32Error();
+        return m;
+    }
+}
+'@
+    } catch {
+        $script:AitConsoleInputError = $_.Exception.Message
+        if (-not $script:AitConsoleInputError) { $script:AitConsoleInputError = "Add-Type failed" }
+        LogDetail "console input helper unavailable: $($script:AitConsoleInputError)"
+        return $false
+    }
+    return $true
+}
+
+# Save-ConsoleInputMode -- read the mode before running a child in this console.
+# Returns [pscustomobject]@{ Mode; Reason } (Mode -1 = not guarded; Reason
+# "console", "not Windows", "not a console" or "unavailable: <message>").
+function Save-ConsoleInputMode {
+    if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
+        return [pscustomobject]@{ Mode = [long]-1; Reason = "not Windows" }
+    }
+    if ([Console]::IsInputRedirected) {
+        return [pscustomobject]@{ Mode = [long]-1; Reason = "not a console" }
+    }
+    if (-not (Initialize-AitConsoleInput)) {
+        return [pscustomobject]@{ Mode = [long]-1; Reason = "unavailable: $($script:AitConsoleInputError)" }
+    }
+    $mode = [AitConsoleInput]::Get()
+    if ($mode -lt 0) { return [pscustomobject]@{ Mode = [long]-1; Reason = "not a console" } }
+    return [pscustomobject]@{ Mode = [long]$mode; Reason = "console" }
+}
+
+# Restore-ConsoleInputMode SAVED LABEL -- put back the mode Save-ConsoleInputMode
+# read and log (detail) any difference. Returns "restored", "unchanged",
+# "restore failed", or the reason nothing was saved ("not saved", "not Windows",
+# "not a console", "unavailable: ...").
+function Restore-ConsoleInputMode {
+    param($Saved, [string]$Label)
+    if ($null -eq $Saved -or $Saved.Mode -lt 0) {
+        $why = if ($null -eq $Saved) { "not saved" } else { $Saved.Reason }
+        LogDetail "console input mode around ${Label}: not guarded ($why)"
+        return $why
+    }
+    $now = [AitConsoleInput]::Get()
+    if ($now -eq $Saved.Mode) {
+        LogDetail ("console input mode 0x{0:X} unchanged after {1}" -f $now, $Label)
+        return "unchanged"
+    }
+    $nowText = if ($now -lt 0) { "unreadable" } else { "0x{0:X}" -f $now }
+    $rc = [AitConsoleInput]::Set($Saved.Mode)
+    if ($rc -eq 0) {
+        LogDetail ("console input mode {0} after {1}, restored 0x{2:X}" -f $nowText, $Label, $Saved.Mode)
+        return "restored"
+    }
+    LogWarn ("Could not restore the console input mode after {0} ({1}, wanted 0x{2:X}, Win32 error {3}) -- review menus may not echo; open a new terminal if a menu does not react" -f $Label, $nowText, $Saved.Mode, $rc)
+    return "restore failed"
 }
 
 # ---------------------------------------------------------------------------
@@ -1592,8 +1766,13 @@ function Stop-AiSpinner {
 # Test-InteractiveConsole: one non-interactive test for every prompt -- a
 # redirected stdin or a non-interactive session never prompts.
 # Read-ConsoleChoice: [Console]::ReadLine() returns $null at EOF, and the
-# callers' .ToLower() then threw. This logs and returns "" so each caller's
-# default branch applies.
+# callers' .ToLower() then threw. This logs and returns "", and sets
+# $script:ReadConsoleEof = $true ($false after any other read), so a typed empty
+# line and EOF can be told apart: Read-MenuChoice takes its EOF default only at
+# EOF and asks again otherwise. On a Windows console the one read runs in cooked
+# line mode (echo on, see the console input mode helper above) and the previous
+# mode is put back afterwards; read_tty_choice needs no such step (Git Bash
+# keeps its own terminal state, so a raw Windows console does not affect it).
 # ---------------------------------------------------------------------------
 function Test-InteractiveConsole {
     return ([Environment]::UserInteractive -and -not [Console]::IsInputRedirected)
@@ -1601,13 +1780,92 @@ function Test-InteractiveConsole {
 
 function Read-ConsoleChoice {
     param([string]$DefaultDesc)
-    $line = [Console]::ReadLine()
+    $script:ReadConsoleEof = $false
+    $saved = [long]-1
+    if (Initialize-AitConsoleInput) {
+        $saved = [AitConsoleInput]::EnterCooked()
+        if ([AitConsoleInput]::LastError -ne 0) {
+            LogDetail ("console input mode: cooked mode not set at prompt (mode {0}, Win32 error {1})" -f $saved, [AitConsoleInput]::LastError)
+        } elseif ($saved -ge 0 -and ($saved -band 0x6) -ne 0x6) {
+            LogDetail ("console input mode 0x{0:X} at prompt (line input or echo off) -- read in cooked mode" -f $saved)
+        }
+    }
+    try {
+        $line = [Console]::ReadLine()
+    } finally {
+        if ($saved -ge 0) {
+            $rc = [AitConsoleInput]::Set($saved)
+            if ($rc -ne 0) { LogDetail ("console input mode 0x{0:X} not restored after prompt (Win32 error {1})" -f $saved, $rc) }
+        }
+    }
     if ($null -eq $line) {
+        $script:ReadConsoleEof = $true
         [Console]::WriteLine("")
         LogWarn "No input at prompt (EOF) -- defaulting to $DefaultDesc"
         return ""
     }
     return $line
+}
+
+# ---------------------------------------------------------------------------
+# Read-MenuChoice: choice-menu read. Usage:
+#   $c = Read-MenuChoice -Valid @("o","a","s","x") -Default "o" -DefaultDesc "overwrite" `
+#        -Context "review CLAUDE.md" -Prompt "  choice [o/a/s/x]: "
+# -Valid: the accepted answers, lowercase. -Default: the answer taken only at
+# EOF (one of -Valid). -DefaultDesc: what the default does (Read-ConsoleChoice's
+# EOF warning). -Context: a short label for the log. -Prompt: printed before
+# every read; the caller prints the menu.
+# Reads through Read-ConsoleChoice, trims surrounding whitespace and lowercases.
+# Returns an offered answer. Anything else -- an empty line, a word, a letter
+# not offered -- prints "  please type one of a/b/c" and asks again (commander,
+# 2026-11-13: "no default or other characters should re-ask"). EOF returns
+# -Default. Every answer is logged at detail (deploy.log only). Writes nothing
+# to the pipeline except the answer.
+# EOF detection: Read-ConsoleChoice returns "" both at EOF and for a typed empty
+# line. $script:ReadConsoleEof = $true after the read marks EOF (set by
+# Read-ConsoleChoice); as a fallback for an older Read-ConsoleChoice, an empty
+# answer with $script:warnings raised during the read is also EOF (its EOF
+# branch calls LogWarn). 50 unrecognised
+# answers in a row are treated as EOF, so a closed input that is not detected
+# cannot loop forever.
+# Spec: .claude/rules/interactive-menus.md "Answers";
+# reference/managed-file-deployment.md "Menus". Parity: read_menu_choice in
+# aitools-lib.sh.
+# ---------------------------------------------------------------------------
+$script:ReadConsoleEof = $false
+function Read-MenuChoice {
+    param(
+        [string[]]$Valid,
+        [string]$Default,
+        [string]$DefaultDesc,
+        [string]$Context,
+        [string]$Prompt
+    )
+    $hint = $Valid -join "/"
+    $tries = 0
+    while ($true) {
+        [Console]::Write($Prompt)
+        $script:ReadConsoleEof = $false
+        $w0 = [int]$script:warnings
+        $raw = Read-ConsoleChoice $DefaultDesc
+        if ($null -eq $raw) { $raw = "" }
+        if ($script:ReadConsoleEof -or ($raw -eq "" -and [int]$script:warnings -gt $w0)) {
+            LogDetail "menu answer (${Context}): EOF -> $Default"
+            return $Default
+        }
+        $ans = $raw.Trim().ToLowerInvariant()
+        if ($Valid -ccontains $ans) {
+            LogDetail "menu answer (${Context}): `"$raw`" -> $ans"
+            return $ans
+        }
+        LogDetail "menu answer (${Context}): `"$raw`" -> not one of $hint, asked again"
+        $tries++
+        if ($tries -ge 50) {
+            LogWarn "No valid answer after 50 tries at $Context -- treating input as ended, defaulting to $DefaultDesc"
+            return $Default
+        }
+        [Console]::WriteLine("  please type one of $hint")
+    }
 }
 
 # ---------------------------------------------------------------------------
@@ -1663,9 +1921,14 @@ function Invoke-AiMerge {
         }
 
         Start-AiSpinner "merging $displayName (attempt $iteration)..."
-        $merged = $promptText | Invoke-AI -Speed "balanced" -Permissions "none" `
-            -ValidateFn "_MergeValidateWrapper" -MaxRetries 1
-        Stop-AiSpinner
+        # finally: Ctrl+C or an error thrown inside Invoke-AI (e.g. a failed log
+        # write) must not leave the spinner drawing over what runs next
+        try {
+            $merged = $promptText | Invoke-AI -Speed "balanced" -Permissions "none" `
+                -ValidateFn "_MergeValidateWrapper" -MaxRetries 1
+        } finally {
+            Stop-AiSpinner
+        }
 
         # Defense-in-depth: strip leading/trailing code fences if AI ignored instructions
         if ($merged) {
@@ -1691,9 +1954,11 @@ function Invoke-AiMerge {
             [Console]::WriteLine("  | ... ($($mergedLines.Count - 30) more lines)")
         }
         [Console]::WriteLine("")
-        [Console]::Write("  [y]es accept / [r]efine / [n]o reject: ")
-        $accept = Read-ConsoleChoice "reject the merge (back to the review menu)"
-        switch ($accept.ToLower()) {
+        # Only y, r or n count; anything else asks again; EOF = n (reject)
+        $accept = Read-MenuChoice -Valid @("y", "r", "n") -Default "n" `
+            -DefaultDesc "reject the merge (back to the review menu)" `
+            -Context "merge preview $displayName" -Prompt "  [y]es accept / [r]efine / [n]o reject: "
+        switch ($accept) {
             "y" {
                 $script:MergedContent = $merged
                 [Console]::WriteLine("  >> merged: AI-merged content accepted (iteration $iteration)")
@@ -1705,6 +1970,7 @@ function Invoke-AiMerge {
                 # continue loop
             }
             default {
+                # n (Read-MenuChoice returns only y, r or n)
                 [Console]::WriteLine("  >> merge rejected -- back to the review menu")
                 return "menu"
             }
@@ -1733,6 +1999,8 @@ function Invoke-AiMerge {
 #   LOCAL missing                       -> SOURCE written, "created"
 #   LOCAL == SOURCE                     -> nothing written, "verified"
 #   no console, EOF, or AITOOLS_FORCE   -> SOURCE written (backup), "updated"
+#   a read-only copy (-NoReview)        -> SOURCE written (backup), "updated";
+#                                          JSON too (whole file, no field review)
 #
 # Text files (DestPath not ending in .json), one review per file:
 #   [o]verwrite      -> SOURCE written to LOCAL (backup kept); "updated"
@@ -1985,30 +2253,28 @@ function Prompt-DiffReview {
         }
         [Console]::WriteLine("  [s]kip            : nothing written; asked again next run")
         [Console]::WriteLine("  [x]abort          : stop this script (exit 2)")
-        if ($AdoptOffered) {
-            [Console]::Write("  choice [o/a/m/s/x]: ")
-        } else {
-            [Console]::Write("  choice [o/s/x]: ")
-        }
 
-        $choice = Read-ConsoleChoice "overwrite"
-        switch ($choice.ToLower()) {
-            "a" {
-                if ($AdoptOffered) {
-                    [Console]::WriteLine("  >> accept & adopt: local kept, copied to the repo")
-                    return "adopt"
-                }
+        # Only an offered letter counts; an empty line or anything else asks
+        # again (Read-MenuChoice); EOF = o (overwrite)
+        if ($AdoptOffered) {
+            $choice = Read-MenuChoice -Valid @("o", "a", "m", "s", "x") -Default "o" -DefaultDesc "overwrite" `
+                -Context "review $leafName" -Prompt "  choice [o/a/m/s/x]: "
+        } else {
+            $choice = Read-MenuChoice -Valid @("o", "s", "x") -Default "o" -DefaultDesc "overwrite" `
+                -Context "review $leafName" -Prompt "  choice [o/s/x]: "
+        }
+        switch ($choice) {
+            "o" {
                 [Console]::WriteLine("  >> overwritten: source deployed to local (backup kept)")
                 return "overwrite"
             }
+            "a" {
+                [Console]::WriteLine("  >> accept & adopt: local kept, copied to the repo")
+                return "adopt"
+            }
             "m" {
-                if ($AdoptOffered) {
-                    $mergeResult = Invoke-AiMerge -FilePath $FilePath -SourceContent $NewContent -LocalContent $CurrentContent -DiffOutput $diffOutput
-                    if ($mergeResult -ne "menu") { return $mergeResult }
-                } else {
-                    [Console]::WriteLine("  >> overwritten: source deployed to local (backup kept)")
-                    return "overwrite"
-                }
+                $mergeResult = Invoke-AiMerge -FilePath $FilePath -SourceContent $NewContent -LocalContent $CurrentContent -DiffOutput $diffOutput
+                if ($mergeResult -ne "menu") { return $mergeResult }
             }
             "s" {
                 [Console]::WriteLine("  >> skipped: local file unchanged")
@@ -2018,8 +2284,8 @@ function Prompt-DiffReview {
                 Invoke-ManagedAbort
             }
             default {
-                [Console]::WriteLine("  >> overwritten: source deployed to local (backup kept)")
-                return "overwrite"
+                # unreachable: Read-MenuChoice returns only an offered letter
+                LogError "review ${leafName}: unexpected answer '$choice' -- asking again"
             }
         }
     }
@@ -2040,6 +2306,10 @@ function Prompt-DiffReview {
 #   -AdoptFilter  optional, text files only: scriptblock that takes LOCAL
 #                 content and returns the content the adopt target gets
 #                 (e.g. CLAUDE.md strips its machine footer). $null = copy.
+#   -NoReview     LOCAL is a read-only copy (never edited there, e.g.
+#                 deploy-harness reference\ and registries\): when it differs,
+#                 SOURCE is written (backup kept) with no menu and no adopt;
+#                 JSON is written whole, not reviewed field by field.
 #
 # Returns "created", "updated", "verified", "accept & adopt", "skipped" or
 # "failed". On "failed" nothing is left half-written (snapshots restored) and
@@ -2054,7 +2324,8 @@ function Deploy-ManagedFile {
         [string]$ToolName,
         [string]$ItemName,
         [string]$AdoptPath = "",
-        [scriptblock]$AdoptFilter = $null
+        [scriptblock]$AdoptFilter = $null,
+        [switch]$NoReview
     )
 
     Write-ManagedStateNotice
@@ -2108,8 +2379,8 @@ function Deploy-ManagedFile {
         return "verified"
     }
 
-    # JSON: field-by-field review
-    if ($DestPath -like '*.json') {
+    # JSON: field-by-field review (a read-only copy is written whole, below)
+    if ($DestPath -like '*.json' -and -not $NoReview) {
         $srcTmp = $null
         try {
             $srcTmp = [IO.Path]::GetTempFileName()
@@ -2122,7 +2393,7 @@ function Deploy-ManagedFile {
             }
             return "failed"
         }
-        $jsonResult = Review-JsonFields -SourceFile $srcTmp -DestPath $DestPath -AdoptPath $AdoptPath
+        $jsonResult = Review-JsonFields -SourceFile $srcTmp -DestPath $DestPath -AdoptPath $AdoptPath -ItemName $ItemName
         Remove-Item -LiteralPath $srcTmp -Force -ErrorAction SilentlyContinue
         # ErrorAction exempt: temp file cleanup; nothing depends on it
         return $jsonResult
@@ -2147,6 +2418,16 @@ function Deploy-ManagedFile {
     $existing = "$existing" -replace '[\r\n]+$', ''
     if ($existing -ceq $Content) {
         return "verified"
+    }
+
+    # A read-only copy: SOURCE wins, no menu, no adopt (backup kept by Write-ManagedFiles)
+    if ($NoReview) {
+        if (Write-ManagedFiles -LocalPath $DestPath -LocalContent $Content) {
+            LogOk "Updated: $ItemName -> $DestPath (read-only copy: source wins, backup kept)"
+            return "updated"
+        }
+        LogError "Failed: ${ItemName}: $($script:ManagedWriteError) (files restored)"
+        return "failed"
     }
 
     # LOCAL differs from SOURCE: review (non-interactive / EOF / -Force -> overwrite)
@@ -2226,8 +2507,9 @@ $script:ReviewJsonNode = @'
 // review_json_fields / Review-JsonFields: SOURCE against LOCAL, field by field.
 // The same text is embedded in aitools-lib.sh and aitools-lib.ps1: keep them identical.
 //   plan  SRC LOCAL OUT_PLAN
-//     OUT_PLAN: one line per differing field: idx<TAB>kind<TAB>key<TAB>local<TAB>source
-//     kind: differ | source-only | local-only. A whole array is one field.
+//     OUT_PLAN: one line per differing field: idx<TAB>kind<TAB>key<TAB>local<TAB>source<TAB>detail
+//     kind: differ | source-only | local-only. A whole array is one field; its
+//     detail lists the elements that differ (arrayDetail), "" for other fields.
 //   apply SRC LOCAL ADOPT CHOICES OUT_LOCAL OUT_ADOPT OUT_RESULT OUT_REQ_LOCAL OUT_REQ_ADOPT
 //     ADOPT: the adopt target, or "-" for none.
 //     CHOICES: idx<TAB>overwrite|adopt|skip|keep per field (missing = skip).
@@ -2288,8 +2570,61 @@ function disp(v) {
     if (t.length > 200) t = t.slice(0, 197) + '...';
     return t;
 }
-function clean(t) { return String(t).replace(/[\t\r\n]/g, ' '); }
+function clean(t) { return String(t).replace(/[\t\r\n\x1f]/g, ' '); }
 function clone(v) { return v === undefined ? undefined : JSON.parse(JSON.stringify(v)); }
+function short(v, n) {
+    const t = v === undefined ? '(absent)' : JSON.stringify(v);
+    return t.length > n ? t.slice(0, n - 3) + '...' : t;
+}
+// identity(v): "id=172" for an object element with an id, name, key, file or
+// slug (string or number), else undefined
+function identity(v) {
+    if (!isObj(v)) return undefined;
+    for (const k of ['id', 'name', 'key', 'file', 'slug']) {
+        if (has(v, k) && (typeof v[k] === 'string' || typeof v[k] === 'number')) return k + '=' + JSON.stringify(v[k]);
+    }
+    return undefined;
+}
+// arrayDetail(l, s): the plan's detail column for an array field ("" for
+// anything else). Lines joined by \x1f: a count line, then "- [i] value" (only
+// in LOCAL, its index there), "+ [j] value" (only in SOURCE, its index there)
+// and "~ [j] id=..: key: local -> source" (an object element with the same
+// identity in both, one line per changed key). Elements are matched by value,
+// so a reorder alone is one "~ order differs" line. At most 20 element lines.
+function arrayDetail(l, s) {
+    if (!Array.isArray(l) || !Array.isArray(s)) return '';
+    const left = new Map();
+    l.forEach((v, i) => { const c = canon(v); if (!left.has(c)) left.set(c, []); left.get(c).push(i); });
+    const added = [];
+    s.forEach((v, j) => { const q = left.get(canon(v)); if (q && q.length) q.shift(); else added.push(j); });
+    const removed = [];
+    for (const q of left.values()) removed.push(...q);
+    removed.sort((a, b) => a - b);
+    const byId = new Map();
+    for (const i of removed) { const id = identity(l[i]); if (id !== undefined && !byId.has(id)) byId.set(id, i); }
+    const paired = new Set();
+    const rows = [];
+    for (const j of added) {
+        const id = identity(s[j]);
+        if (id !== undefined && byId.has(id) && !paired.has(byId.get(id))) {
+            const i = byId.get(id), a = l[i], b = s[j];
+            paired.add(i);
+            const keys = Object.keys(a).concat(Object.keys(b).filter(k => !has(a, k)));
+            const ls = keys.filter(k => canon(a[k]) !== canon(b[k]))
+                .map(k => '~ [' + j + '] ' + id + ': ' + k + ': ' + short(a[k], 70) + ' -> ' + short(b[k], 70));
+            rows.push([j, ls]);
+        } else {
+            rows.push([j, ['+ [' + j + '] ' + short(s[j], 160)]]);
+        }
+    }
+    for (const i of removed) if (!paired.has(i)) rows.push([i, ['- [' + i + '] ' + short(l[i], 160)]]);
+    rows.sort((x, y) => x[0] - y[0]);
+    let out = [];
+    for (const r of rows) out.push(...r[1]);
+    if (out.length === 0) out.push('~ order differs (same elements)');
+    if (out.length > 20) out = out.slice(0, 20).concat(['... ' + (out.length - 20) + ' more line(s)']);
+    return [l.length + ' local, ' + s.length + ' source element(s)'].concat(out).map(clean).join('\x1f');
+}
 function setPath(obj, path, val) {
     let o = obj;
     for (let i = 0; i < path.length - 1; i++) {
@@ -2322,7 +2657,7 @@ try {
     const list = fields(src, loc);
     if (mode === 'plan') {
         const lines = list.map((f, i) => [i, f.kind, f.path.length ? clean(f.path.join('.')) : '(document)',
-            clean(disp(f.l)), clean(disp(f.s))].join('\t'));
+            clean(disp(f.l)), clean(disp(f.s)), f.kind === 'differ' ? arrayDetail(f.l, f.s) : ''].join('\t'));
         fs.writeFileSync(process.argv[5], lines.length ? lines.join('\n') + '\n' : '');
     } else if (mode === 'apply') {
         const adoptPath = (process.argv[5] && process.argv[5] !== '-') ? process.argv[5] : '';
@@ -2372,9 +2707,12 @@ function Review-JsonFields {
     param(
         [string]$SourceFile,
         [string]$DestPath,
-        [string]$AdoptPath = ""
+        [string]$AdoptPath = "",
+        [string]$ItemName = ""
     )
     $item = Split-Path -Leaf $DestPath
+    # The review header names the file (the caller's item name, else the file name)
+    $fileLabel = if ($ItemName) { $ItemName } else { $item }
 
     # Get-Command exempt: command-existence check with explicit failure branch
     if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
@@ -2412,7 +2750,7 @@ function Review-JsonFields {
         Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
         # ErrorAction exempt: work directory cleanup; nothing depends on it
         if (Write-ManagedFiles -LocalPath $DestPath -LocalContent $srcJson -LocalRequiredKeys $reqKeys) {
-            LogOk "Created: $item -> $DestPath"
+            LogOk "Created: $fileLabel -> $DestPath"
             return "created"
         }
         LogError "Failed: ${item}: $($script:ManagedWriteError)"
@@ -2441,19 +2779,20 @@ function Review-JsonFields {
     foreach ($pl in $planLines) {
         $f = $pl -split "`t"
         $idx = $f[0]; $kind = $f[1]; $key = $f[2]; $lDisp = $f[3]; $sDisp = $f[4]
+        $detail = if ($f.Count -gt 5) { $f[5] } else { "" }
         if ($kind -eq "local-only") {
             # A field only in LOCAL: [a]dopt / [s]kip / [x]abort, no overwrite.
             # Without an adopt target or a console it is kept, no prompt.
             if ($adoptOk -eq "1" -and $canPrompt) {
                 $choice = Prompt-JsonFieldReview -Leaf $key -Current $lDisp -Proposed "(not in source)" `
-                    -SourceLabel "source" -AdoptAllowed "1" -LocalLabel "local" -OverwriteAllowed "0"
+                    -SourceLabel "source" -AdoptAllowed "1" -LocalLabel "local" -OverwriteAllowed "0" -FileLabel $fileLabel
             } else {
                 LogDetail "${item}: $key only in local -- kept"
                 $choice = "keep"
             }
         } else {
             $choice = Prompt-JsonFieldReview -Leaf $key -Current $lDisp -Proposed $sDisp `
-                -SourceLabel "source" -AdoptAllowed $adoptOk -LocalLabel "local"
+                -SourceLabel "source" -AdoptAllowed $adoptOk -LocalLabel "local" -FileLabel $fileLabel -Detail $detail
         }
         $choices.Add("$idx`t$choice")
     }
@@ -2511,14 +2850,14 @@ function Review-JsonFields {
         }
     }
     if ($nOver -gt 0) {
-        LogOk "Updated: $item -> $DestPath ($nOver field(s) from source)"
+        LogOk "Updated: $fileLabel -> $DestPath ($nOver field(s) from source)"
     }
     if ($nAdopt -gt 0) {
-        LogOk "Accept & adopt: $item -> $AdoptPath ($nAdopt field(s))"
+        LogOk "Accept & adopt: $fileLabel -> $AdoptPath ($nAdopt field(s))"
         Write-ManagedAdoptNotice -Target $AdoptPath
     }
     if ($nSkip -gt 0) {
-        LogWarn "Skipped: $item ($nSkip field(s) differ from source; reviewed again next run)"
+        LogWarn "Skipped: $fileLabel ($nSkip field(s) differ from source; reviewed again next run)"
     }
     if ($nAdopt -gt 0) { return "accept & adopt" }
     if ($nSkip -gt 0) { return "skipped" }
@@ -3535,6 +3874,32 @@ function Invoke-HarnessSkillsFanout {
 }
 
 # ---------------------------------------------------------------------------
+# Write-JsonFieldDetail -What -Detail -LocalLabel -SourceLabel: the element
+# lines of an array field under its review header, one per line, colour-coded
+# when Test-ReviewColour (red "-" only in LOCAL, green "+" only in SOURCE,
+# yellow "~" changed), after a legend. Each line also goes to deploy.log
+# (detail). Parity: _json_field_detail in aitools-lib.sh.
+# ---------------------------------------------------------------------------
+function Write-JsonFieldDetail([string]$What, [string]$Detail, [string]$LocalLabel, [string]$SourceLabel) {
+    $esc = [char]27
+    $useColour = Test-ReviewColour
+    if ($useColour) {
+        [Console]::WriteLine("  $esc[31mred -$esc[0m = only in $LocalLabel   $esc[32mgreen +$esc[0m = only in $SourceLabel   $esc[33myellow ~$esc[0m = changed")
+    } else {
+        [Console]::WriteLine("  red - = only in $LocalLabel   green + = only in $SourceLabel   yellow ~ = changed")
+    }
+    foreach ($dl in ($Detail -split [char]0x1f)) {
+        LogDetail "review ${What}: $dl"
+        $code = if ($dl.StartsWith("-")) { "31" } elseif ($dl.StartsWith("+")) { "32" } elseif ($dl.StartsWith("~")) { "33" } else { "" }
+        if ($useColour -and $code) {
+            [Console]::WriteLine("  $esc[${code}m$dl$esc[0m")
+        } else {
+            [Console]::WriteLine("  $dl")
+        }
+    }
+}
+
+# ---------------------------------------------------------------------------
 # Granular per-leaf review prompt for JSON settings sync (Sync-ManagedJson)
 # and the JSON field review (Review-JsonFields). Mirror of
 # prompt_json_field_review in aitools-lib.sh. One prompt per divergent
@@ -3542,6 +3907,10 @@ function Invoke-HarnessSkillsFanout {
 # -LocalLabel names the local file's side (default "settings.json").
 # -OverwriteAllowed "0" (a field only in the local file): no [o]verwrite, and
 # the default answer is skip.
+# -FileLabel names the file in the header ("" = the leaf alone).
+# -Detail: element lines for an array field, joined by U+001F (the plan's
+# detail column, Review-JsonFields); shown colour-coded instead of the two
+# value lines ("" = show the two value lines).
 # Returns "overwrite", "adopt", or "skip".
 # -Force / AITOOLS_FORCE / non-interactive -> "overwrite" (source wins), or
 # "skip" when overwrite is not allowed.
@@ -3554,7 +3923,9 @@ function Prompt-JsonFieldReview {
         [string]$SourceLabel = "profile.json",
         [string]$AdoptAllowed = "1",
         [string]$LocalLabel = "settings.json",
-        [string]$OverwriteAllowed = "1"
+        [string]$OverwriteAllowed = "1",
+        [string]$FileLabel = "",
+        [string]$Detail = ""
     )
 
     $defaultChoice = "overwrite"
@@ -3563,20 +3934,25 @@ function Prompt-JsonFieldReview {
         $defaultChoice = "skip"
         $defaultDesc = "skipping (only in $LocalLabel)"
     }
+    $what = if ($FileLabel) { "${FileLabel}: $Leaf" } else { $Leaf }
 
     if ($env:AITOOLS_FORCE -eq "1" -or $Force) {
-        Log "Divergence in $Leaf -- $defaultDesc (--force)"
+        Log "Divergence in $what -- $defaultDesc (--force)"
         return $defaultChoice
     }
     if (-not (Test-InteractiveConsole)) {
-        Log "Divergence in $Leaf -- $defaultDesc (non-interactive)"
+        Log "Divergence in $what -- $defaultDesc (non-interactive)"
         return $defaultChoice
     }
 
     [Console]::WriteLine("")
-    [Console]::WriteLine("[REVIEW] $Leaf differs from $SourceLabel.")
-    [Console]::WriteLine("  ${LocalLabel} : $Current")
-    [Console]::WriteLine("  ${SourceLabel} : $Proposed")
+    [Console]::WriteLine("[REVIEW] $what differs from $SourceLabel.")
+    if ($Detail) {
+        Write-JsonFieldDetail -What $what -Detail $Detail -LocalLabel $LocalLabel -SourceLabel $SourceLabel
+    } else {
+        [Console]::WriteLine("  ${LocalLabel} : $Current")
+        [Console]::WriteLine("  ${SourceLabel} : $Proposed")
+    }
     [Console]::WriteLine("")
     if ($OverwriteAllowed -eq "1") {
         [Console]::WriteLine("  [o]verwrite : $SourceLabel value -> $LocalLabel")
@@ -3586,35 +3962,23 @@ function Prompt-JsonFieldReview {
     }
     [Console]::WriteLine("  [s]kip      : leave this setting unchanged")
     [Console]::WriteLine("  [x]abort    : stop the run")
-    if ($OverwriteAllowed -ne "1") {
-        [Console]::Write("  choice [a/s/x]: ")
-    } elseif ($AdoptAllowed -eq "1") {
-        [Console]::Write("  choice [o/a/s/x]: ")
-    } else {
-        [Console]::Write("  choice [o/s/x]: ")
-    }
 
-    $choice = Read-ConsoleChoice $defaultDesc
-    switch ($choice.ToLower()) {
-        "a" {
-            if ($AdoptAllowed -eq "1") {
-                [Console]::WriteLine("  >> adopted: $LocalLabel value kept -> $SourceLabel")
-                return "adopt"
-            }
-            if ($OverwriteAllowed -eq "1") {
-                [Console]::WriteLine("  >> overwritten from $SourceLabel")
-                return "overwrite"
-            }
-            [Console]::WriteLine("  >> skipped: $Leaf unchanged")
-            return "skip"
-        }
-        "s" { [Console]::WriteLine("  >> skipped: $Leaf unchanged"); return "skip" }
+    # The offered letters, from the same flags as the menu lines. Only an
+    # offered letter counts; an empty line or anything else asks again
+    # (Read-MenuChoice); EOF = the default (o, or s without overwrite).
+    $valid = @()
+    $defaultLetter = "o"
+    if ($OverwriteAllowed -eq "1") { $valid += "o" } else { $defaultLetter = "s" }
+    if ($AdoptAllowed -eq "1") { $valid += "a" }
+    $valid += @("s", "x")
+    $choice = Read-MenuChoice -Valid $valid -Default $defaultLetter -DefaultDesc $defaultDesc `
+        -Context "json $what" -Prompt "  choice [$($valid -join '/')]: "
+    switch ($choice) {
+        "o" { [Console]::WriteLine("  >> overwritten from $SourceLabel"); return "overwrite" }
+        "a" { [Console]::WriteLine("  >> adopted: $LocalLabel value kept -> $SourceLabel"); return "adopt" }
         "x" { Invoke-ManagedAbort }
         default {
-            if ($OverwriteAllowed -eq "1") {
-                [Console]::WriteLine("  >> overwritten from $SourceLabel")
-                return "overwrite"
-            }
+            # s (Read-MenuChoice returns only an offered letter)
             [Console]::WriteLine("  >> skipped: $Leaf unchanged")
             return "skip"
         }

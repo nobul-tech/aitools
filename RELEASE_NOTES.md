@@ -12,6 +12,731 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.77.25 -- No pipefail script, hook or test suite ends a pipeline in a reader that exits early; compliance step 7 fails on every such reader (2026-11-15)
+
+Not tagged. Branch `fix/fa81-02-tests-pipes`, mission fa81-02-tests-pipes (session 87795dc3). Commander, 2026-11-15: "24-2) sure 24-3) yes 27-1) yes the fallback should fail and it should be logged and work should stop right?"; RFI fa81-02-1 (the `head` sites are in `scripts/` and `shared/hooks/` too): "32) yes it should, and it should expand the scope of the tests to include this test case. do it in one PR".
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 1 | Medium | 136 pipelines under `pipefail` ended in a reader that stops before its input ends, so the writer could die of SIGPIPE (141) and the pipeline fail although the reader found its match: `grep -q` (81 sites in 16 test suites), `head` (40: 6 in suites, 30 in `scripts/`, 4 in `shared/hooks/`), perl `exit` in a `-n` loop (15: `aitools-lib.sh` 8, `build-deploy.sh` 2, `setup-user-config.sh` 1, the `test-lib` Git Bash driver 4). Fix forms, each reading to the end: `grep PATTERN >/dev/null`; `sed -n '1p'` / `'1,Np'`; perl `next if $done; if (/RE/) { print; $done = 1 }`, `END { exit($f ? 0 : 1) }` or `-0777`. Same output and status. On Git Bash, `seq 1 300000 \| head -n 1` exits 141 in 20 of 20 runs under `pipefail`; every fix form 0 of 20 |
+| 2 | High | `validate_ai_merge_output` (`aitools-lib.sh`): checks 2 (code fences) and 3 (refusal text) were `perl -ne 'exit 0 if /RE/; END { exit 1 }'`; perl runs `END` after `exit` and the `exit` inside `END` sets the status, so they never rejected anything. With the `END { exit($f ? 0 : 1) }` form they reject as `Test-AiMergeOutput` in `aitools-lib.ps1` does. On macOS and Linux an AI merge whose result has a line starting with three backticks is now rejected, as on Windows (RFI fa81-02-2). Check 1 reads its line with `perl -0777`; an empty first line is no longer "conversational" (the length check rejects empty output), as in the PS1 twin |
+| 3 | Low | `build-deploy.sh`: the payload-sha and `cursor.cli.model` checks passed an empty value (perl `-n` ran no line and exited 0); with `-0777` an empty value fails them |
+| 4 | Medium | `tests/os-guards/test-os-guards.ps1`: no fallback to Git for Windows' bundled perl. It runs `check-lib.ps1`'s Strawberry Perl PATH block, takes the perl on PATH, prints `perl: <path>`, and without perl writes one FAIL naming the tool and the fix and exits 1 before any case (cross-platform.md "Git Bash PATH shadowing": "no fallback to bundled versions"). `tests/profile/test-profile.ps1` keeps Git's perl on purpose: `aitools-json.pl` runs under Git Bash's perl in production (`build-deploy.sh`) |
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 5 | `check-script-compliance` step 7 fails on every early-exit reader -- `grep -q` / `-l` / `-L` / `-m` (and the long forms), `head`, perl `exit` / `last` outside `END` -- in `scripts/`, `scripts/githooks/`, `shared/hooks/` and now `tests/` (with `tests/lib/platform-lib.sh` and `tests/hooks/hook-test-lib.sh` as libraries), listing `file:line(reader)`. grep options are read word by word: `grep -- -q` and `grep -e -q` pass, `grep -q"a"` and `grep "-q" a` fail (PR #168 review note 4). The step 7 suite is excluded (it plants the bad forms) |
+| 6 | `tests/check-script-compliance/test-step7-grepq.sh`: a bad and a fixed case for each reader, in `scripts/` and `tests/` and a test library, the review-note edge cases, and case D running the sed and perl fix forms 20 times each (and the `head` race, info only) |
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 7 | `reference/script-standards-detail.md` "Pipelines into grep -q under pipefail": the readers table with a fix form for each, why `sed -n` for `head`, perl's `END`-after-`exit` rule, what is not affected, the widened step 7. The rule paragraph in `.claude/rules/script-standards.md` (and its Cursor twin) and post-push checklist step 23 name every reader |
+
+Left: `scripts/aitools` (no `pipefail`: the pipeline's status is the reader's) keeps 3 `grep -q`, 2 `head` and 1 perl `exit` reader.
+
+**Verified on:** Windows 11 (native pwsh 7.6, Git Bash 5.3): `bash -n` on every touched `.sh`; the pwsh parser on the two touched `.ps1`; `test-os-guards.ps1` 69/0 and its no-perl negative case; `test-lib.ps1` 201/0/1; the cross-platform suites `test-build-deploy-backup.sh` 24/0, `test-workflow-delegation-guard.sh` 74/0/1, `test-setup-pywinpty.sh` 31/0/2, `run-hook-tests.sh` (all four pass); hook smoke cases; `build-deploy.sh` under an isolated HOME into a copy of the dotprofile (25 generated scripts carry the library fixes); the step 7 scanner over the tree (no site) and a local emulation of its suite (59/0). macOS and Linux (bash 5 and `/bin/bash` 3.2): CI.
+
+---
+
+## v0.77.24 -- The adversarial workflow-guard timing case gets the 250 ms hard limit on macOS (2026-11-15)
+
+Not tagged. Branch `fix/fa81-05-wdg-timing`, mission fa81-05-wdg under fa81-05-merge-queue (session 87795dc3). Commander, 2026-11-15, answering RFI fa81-55 (give the adversarial case the stress case's rule: WARN at 100 ms or more, FAIL only at the 250 ms hard limit): "55) yes".
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 1 | Medium | `tests/hooks/test-workflow-delegation-guard.sh`: the timing case "adversarial 476 KB 'name prefix x.md' prompt" FAILed on the GitHub macOS runner at 100-107 ms (run 43668923612: 100 ms; run 43674468619: 107 ms on `/bin/bash` 3.2, then 103 ms on bash 5 on the rerun; each `FAIL adversarial 476 KB 'name prefix x.md' prompt: <n> ms (>= 100)`), turning main and the queued PRs red. Its `timing` call now passes `250` as the hard limit, the one the stress case already has: on macOS 100-249 ms is a counted WARN and 250 ms or more still FAILs; on Linux and Windows Git Bash nothing changes (advisory). The comment above the call gives the observed times and the reason. The hook and its 100 ms budget (spec v1.1 section 9) are unchanged |
+
+**Verified on:** Windows 11 (Git Bash): `bash -n` on the test; the whole test suite in Git Bash; `scripts/check-pre-commit.ps1`. macOS and Linux (bash 5 and `/bin/bash` 3.2): CI.
+
+---
+
+## v0.77.23 -- One versioned harness-DB schema (version 4) and doctrine-based intelligence types (2026-11-15)
+
+Not tagged. Branch `feature/fa81-04-intel-schema`, mission fa81-04-intel-schema (session 87795dc3). Commander, 2026-11-15: "43) dont file incident. launch mission to fix this. mission to figure correct schema and give it version number. have this mission decide on rfi 44 as well."; then "i kind of like findings over insights ... perhaps can carry third element 1cause/2effect/3suggestion"; then "46) yes" (the AAR's middle node is `findings`).
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 1 | Medium | `reference/harness-db-schema.sql` had drifted from `scripts/harness-db.py`: the command-channel tables `commander_directives` and `commander_feedback` (and their indexes) existed only in the script, added in `8a5e869` (2026-03-25, a commit titled "Harvest 49 session artifacts"), and the `delegation_log` index had a different name. The script is now the single source of truth and the .sql is generated from it (`harness-db.py schema --output reference/harness-db-schema.sql`); `tests/harness-db/test-schema.py` fails when they differ |
+| 2 | Medium | `schema_version` recorded only the version a DB was created at (`ensure_schema` inserted a row only into an empty table): the live `harness.db` said 2 while the code was at 3. Every migration now records its version row; a DB newer than the script gets a warning and is left alone |
+
+### New features
+
+| # | Change |
+|---|--------|
+| 3 | Schema version 4. Intelligence types, one set for both tiers: observation, fact, assumption, finding, operational learning, proposal, rfi (`INTELLIGENCE_TYPES`); the harness DB also keeps decision, commander_directive, rule_change, framework_change. `finding` is now the analysis type, with `criteria`, `cause`, `effect`, `suggestion` columns; the SALUTE FINDING is retired (an observation with a severity; the message type is `spotrep`); `ol_entry` is `operational_learning`. New provenance and judgement columns on session observations and knowledge items: `attributed_to` (session), `source_kind`, `source`, `quote`, `confidence`, `refs` (session), and severity on knowledge items |
+| 4 | Forward-only, idempotent migration from schema 3 (`ensure_schema`, `migrate_v4`): tables whose CHECK sets changed are rebuilt in one transaction with foreign keys off, row counts and AUTOINCREMENT sequences kept, foreign keys checked; v3 values are remapped by rule (`ol add`'s signature becomes operational_learning, other findings become observations, `legacy_category` / `legacy_item_type` keep the old value). Commands that write to an older DB (`ol add`, `observation add`, `decision add`, `incident add`, `directive add`/`ack`, `log`, `knowledge add`, `session start`, `init`) migrate it first; the list and search commands never migrate (`ol list` reads a v3 DB by the same mapping rule; `directive poll`, which acknowledges directives, does not migrate either: v4 did not change `commander_directives`), and `directive add` no longer creates its own CHECK-less copy of `commander_directives` |
+| 5 | `harness-db.py schema [--output]` prints the canonical DDL. `observation add` takes every intelligence type and `--confidence`, `--criteria`, `--cause`, `--effect`, `--suggestion`, `--refs`, `--attributed-to`, `--source-kind`, `--source`, `--quote`; `ol add` and `knowledge add` take the provenance options. `log --type` is `sitrep` or `spotrep` (`finding` is refused). `ol list` lists category `operational_learning` (before: `fact` and `finding`) |
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 6 | `reference/framework-intelligence-types.md` (new, v1.0): the doctrine read (JP 2-0, FM 2-0, FM 1-02.1, JDP 2-00 with the NATO grading system, GAO Yellow Book), quoted with URLs; the doctrine-to-type mapping; the decided types with fields, lifecycle and origin; the RFI 44 decision; the migration rule. Registered as framework "Intelligence types" |
+| 7 | Glossary: new terms intelligence type, fact, finding (the analysis type), proposal, SPOTREP, SITREP; `insight` deprecated (`replacedBy: finding`); `observation` widened from an incident field to an intelligence type; `assumption` no longer says a falsified assumption "becomes a finding"; `operational learning` sits under the AAR's `findings` node; the `intelligence` source names where RFC 0005 v3 lives (nobul-tech/nobulai-tools `f408790`) |
+
+### Files created
+
+| File | Purpose |
+|------|---------|
+| `reference/framework-intelligence-types.md` | Intelligence types and their doctrine |
+| `tests/harness-db/test-schema.py` | Schema single-source check, value sets, v3 -> v4 migration, CLI end to end |
+| `tests/harness-db/fixtures/harness-db-v3-session.sql`, `harness-db-v3-harness.sql` | Frozen schema-3 DDL for the migration test |
+
+**Verified on:** Windows 11 (Python 3.14): `tests/harness-db/test-schema.py` 12/12 and `test-delegation-score.py` 14/14; migration of copies of the 10 live DBs (1 harness, 9 session): every row count kept, schema_version +1 row, migrated shape equal to a fresh v4 DB, second run a no-op. Linux and macOS: CI.
+
+---
+
+## v0.77.22 -- The pre-commit checklist's line-ending command works on Linux and Windows (2026-11-14)
+
+Not tagged. Branch `docs/m7-precommit-sed`, mission M7-Ckl under M7-Sweep (session 87795dc3), item 5c. Commander, 2026-11-14: "launch mission go fix them, dont bother filing incidents, check to see if these were already fixed by the other running missions first, if not do it".
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 1 | `reference/pre-commit-checklist.md` step 4 (Line endings): the manual fix is `PERLIO=:perlio perl -pi -e 's/\r$//' <file>` (macOS, Linux, Git Bash) and `$env:PERLIO = ':perlio'` then `perl -pi -e 's/\r$//' <file>` (PowerShell), replacing `sed -i '' 's/\r$//' <file>`, which is BSD-only: GNU sed (Linux, Git Bash) takes `''` as the script and exits 2. A one-line warning says Strawberry Perl without `PERLIO=:perlio` leaves the CRLF and exits 0, with a pointer to `reference/cross-platform-detail.md` "Strawberry Perl text mode". The step now says what it checks (a CR in the working-tree copy of a staged `.sh`; the `.ps1` twin: CRLF) and that `--fix` / `-Fix` converts CRLF to LF and stages the file again. The unverified "the Write tool on macOS produces CRLF" is dropped (it did not reproduce on Claude Code 2.1.307; tool-ops item #10) |
+
+**Verified on:** Windows 11 (Git Bash: GNU sed 4.9 exits 2 on the old command; Git perl 5.42.3 and Strawberry Perl 5.42.0 with `PERLIO=:perlio` turn a CRLF `.sh` into LF, Strawberry without it leaves CRLF; PowerShell 7 with Strawberry Perl, same results; a scratch repo with this repo's `.gitattributes` stores a staged CRLF `.sh` as LF and leaves the working copy CRLF). Not run on macOS or Linux.
+
+---
+
+## v0.77.21 -- Incident #180: an orchestrator re-asked the commander an RFI he had already answered (2026-11-14)
+
+Not tagged. Branch `docs/38dc-28-rfi-repeat-rca`, mission 38dc-28 under M6-Polish (session 87795dc3). Commander, 2026-11-14: "launch a mission to 1) file this as incident 2) use the investigate skill and other skills to determine RCA of why you asked me when i had previously given answer." Documentation only; no harness behaviour changes.
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 1 | Incident #180 filed (`registries/incidents.json`, medium): M6-Polish relayed its delegate's RFI 38dc-19-1 to the commander as RFI 38dc-11 (Windows OS guards on `bootstrap.ps1` and `hh.ps1`), which his answer 1 ("ps1 on windows") had already decided; answers 5 and 7 had applied it to the same exemptions row. Root cause: the check-before-asking steps (CLAUDE.md "The process", prompt-turn checklist items 1 and 4) faded, and nothing records or enforces them. There is no ledger of the commander's answers, `/delegate` "Verifying what comes back" has no open-questions step, and no hook looks at RFI text. The same question had reached him earlier in RFI 38dc-7, and RFI 38dc-5 had the same shape |
+| 2 | GitHub issue #171 records the root cause, the timeline with transcript locations, the barrier analysis and the proposed preventive changes: prompt-turn checklist items 4-5, a `/delegate` open-questions step, a session RFI ledger, and an observe-mode Stop/SubagentStop RFI hook |
+
+### Files created
+
+| File | Purpose |
+|------|---------|
+| `.aitools/channel/handoffs/2026-11-14_87795dc3-missions/38dc-28/38dc-28-report.md` | The full RCA (v1.2): the commander's answers verbatim, timeline, 5 Whys, Swiss cheese analysis, other instances, preventive actions with a barrier replay |
+
+**Verified on:** Windows 11 (documentation only; `check-pre-commit.ps1` and `check-pre-push.ps1`).
+
+---
+
+## v0.77.20 -- standing-order-guard keeps blocking when its log directory cannot be written (2026-11-14)
+
+Not tagged. Branch `fix/m7-sog-log-failsafe`, mission M7-Hook under M7-Sweep (session 87795dc3). Commander, 2026-11-14: "25) launch mission go fix them, dont bother filing incidents, check to see if these were already fixed by the other running missions first, if not do it".
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 1 | High | `shared/hooks/standing-order-guard.sh` (PreToolUse, every Bash call) ran `mkdir -p "$LOG_DIR"` under `set -e` with no guard. When `~/.aitools/logs` could not be created (for example `~/.aitools` a regular file) the hook exited 1 on every call with `mkdir: cannot create directory ...`; Claude Code treats exit 1 as a non-blocking hook error, so a violating command such as `git status && git log` ran: the hook failed open. The observe-mode append in `violation()` was unguarded the same way (an unwritable log, or one that is a directory, turned an allow into exit 1; reached only in observe mode, and every check is at enforce today). Both writes are now fail-safe (`reference/logging.md` section 5): `mkdir -p "$LOG_DIR" 2>/dev/null \|\| true`, and the append in a `{ ...; } 2>/dev/null \|\| true` group, as `_aitlib_log_append` does. No mode variable, matching logic or message changed: exit 0 for a clean command and exit 2 with the same reason for a violation, whether the log directory is usable or not |
+| 2 | Low | The session telemetry append in `emit_hook_event` (`printf ... >> "$_SESSION_DIR/events.jsonl" 2>/dev/null \|\| true`) kept its exit code, but a redirection's own error is printed before a later `2>/dev/null` applies: when `events.jsonl` could not be written (for example a directory) the shell's `Is a directory` line went to stderr ahead of the block message, and a clean command that reached the final allow printed it too. It now uses the same group form, so stderr carries only the block message |
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 3 | `tests/hooks/test-hooks-smoke.sh`: 14 new standing-order-guard cases. With `~/.aitools` a regular file: a clean command exits 0 with no output; `&&` exits 2 with the usual reason and no mkdir error. With a temp copy switched to observe (`MODE_AND` only): a writable log gets the `[WOULD-BLOCK]` line and exits 0; a log path that is a directory, and an uncreatable log directory, exit 0 with no output. In a temp git repo whose `.scratch/.current-session` names a session dir: a writable `events.jsonl` gets the `hook_fire` event; with `events.jsonl` a directory a clean command exits 0 with no output and `&&` exits 2 with stderr exactly the block message. Against the old hook 8 of them fail |
+
+**Verified on:** Windows 11 (Git Bash 5.3): hook-rollout pre-deploy verification before and after (`bash -n`; clean exit 0; `&&` exit 2) with a writable HOME, with `~/.aitools` a file (before: exit 1 and 1; after: 0 and 2) and with an observe copy whose log path is a directory or uncreatable (before: exit 1; after: 0); with `events.jsonl` a directory the old hook printed `line 78: ... events.jsonl: Is a directory` before the block message, the new one only the message; the whole `tests/hooks` suite before and after (smoke 44 -> 58 passed, the other suites unchanged). Linux and macOS (bash 5 and `/bin/bash` 3.2): CI.
+
+---
+
+## v0.77.19 -- The pywinpty pin covers the Windows ARM64 (win_arm64) wheels (2026-11-14)
+
+Not tagged. Branch `fix/m7-pywinpty-arm64`, mission M7-Pty under M7-Sweep (session 87795dc3), item 9 of M7-Sweep. Commander, 2026-11-14, answering RFI fa81-21a ("No hashes for the Windows ARM (win_arm64) wheels ... Suggest: add the hashes when an ARM Windows machine appears"): "21a) add hashes".
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 1 | `scripts/requirements-pywinpty.txt` pins the sha256 of the 8 pywinpty 3.1.2 win_arm64 wheels (cp310, cp311, cp312, cp313, cp314, cp314t, cp315, cp315t) beside the 8 win_amd64 ones (16 hashes, was 8; the sdist stays unpinned), and its `# wheel-tags:` line lists the matching `cpXY[t]-win_arm64` tags, so `setup-pywinpty.ps1` installs on a Windows on ARM64 CPython instead of reporting WARN "no wheel for cp3XY-win_arm64". Every digest was read from the PyPI JSON API (https://pypi.org/pypi/pywinpty/3.1.2/json) in a browser on 2026-11-14 and compared with the pin digit by digit by script; the 8 win_amd64 hashes still match. No script changes: `setup-pywinpty.ps1` already accepted `win_arm64` tags and builds the interpreter tag from `sysconfig.get_platform()` (`win-arm64` on ARM64), and `build-deploy.sh` embeds the whole pin |
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 2 | `reference/evaluations/pywinpty-windows-2026-11-13.md` v1.4: the v1.4 changelog, section 6 "Pin coverage (v1.4)" (the 8 win_arm64 wheels, their sha256 and upload times, the comparison, what was and was not verified), unknown 5 (ARM64 runtime), the statements that said win_arm64 is not pinned |
+
+**Verified on:** Windows 11 x64 (pwsh 7.6, Git Bash 5.3.15): hashes from the PyPI JSON API read in a browser, 16 of 16 equal to the pin by script; `tests/pywinpty/test-setup-pywinpty.ps1` 54 passed, 0 failed, 0 skipped (a real cp314 win_amd64 install from the 16-hash pin, the MDM copy with the embedded pin, the uv-managed `--target` path); `tests/pywinpty/test-setup-pywinpty.sh` 31 passed, 0 failed, 2 skipped (the build embeds 16 hashes); a fake interpreter reporting `cp314-win_arm64` gets the hash-pinned pip command. **ARM64 not runtime-verified**: no ARM64 Windows machine; CI and the workstation are x64, so no win_arm64 wheel was downloaded, installed or imported.
+
+---
+
+## v0.77.18 -- A private account address redacted from tracked text files (2026-11-14)
+
+Not tagged. Branch `docs/m7-redact-email`, mission M7-Priv under M7-Sweep (session 87795dc3), item 7 of M7-Sweep. Commander, 2026-11-14: "25) launch mission go fix them, dont bother filing incidents, check to see if these were already fixed by the other running missions first, if not do it".
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 1 | The commander's secondary Google account address is replaced with `<secondary Google account>`, and its path-sanitized form (in `~/.claude/projects/` directory names) with `<secondary-Google-account>`, in the five tracked text files that held it: `.aitools/channel/handoffs/2026-10-21_360aa8f3-8-missions/S2-Layout/inventory2.txt` (2), `harvesting/2026-03-22_6_40agent-human-messages.md` (2), `harvesting/2026-03-29_session-fbf7decb-9_1bc9fd30-full.md` (7), `harvesting/2026-03-29_session-fbf7decb-9_f078fb16-session.md` (2) and `plans/user-repo-and-session-hooks.md` (1). No other byte changes. Four archives and git history still hold it: `harvesting/2026-10-29_session-ma-fci_main.tar`, `..._ma106_main.tar`, `..._ma106_merged.tar` and `..._mg108_tree.tar` (the two other archives of that date, `..._rccode_main.tar` and `..._rccode_pr106.tar`, hold no occurrence); nothing is rewritten |
+| 2 | Decision memo for the commander: every location of the address (files, lines, the commits that added it, the `.tar` members), what remains after this change, what a history rewrite and a `.tar` replacement would involve (GitHub's procedure quoted from docs.github.com), a recommendation, and counts of other personal data in tracked files (not edited) |
+
+### Files created
+
+| File | Purpose |
+|------|---------|
+| `.aitools/channel/handoffs/2026-11-14_87795dc3-missions/M7-Sweep/M7-Sweep-email-memo.md` | The decision memo (v1.1) |
+
+**Verified on:** Windows 11: after the change `git grep -I -i` with the scan pattern finds no tracked text file holding the address in either form; a character-level `git diff --word-diff` shows only the 14 replaced tokens; line counts and line endings of the five files unchanged. `scripts/ait-harvest.py` keys harvested files by name and records no content hash, so the three edited harvested files are not re-harvested.
+
+---
+
+## v0.77.17 -- The menu rules state the EOF defaults the code takes (2026-11-14)
+
+Not tagged. Branch `docs/m7-eof-spec`, mission M7-Menus under M7-Sweep (session 87795dc3), item 4 of M7-Sweep. Commander, 2026-11-14 (RFI fa81-25): "launch mission go fix them, dont bother filing incidents, check to see if these were already fixed by the other running missions first, if not do it". No code change.
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 1 | `.claude/rules/interactive-menus.md` (and `.cursor/rules/interactive-menus.mdc`) "Non-interactive fallback": EOF at a prompt no longer reads as "auto-select `overwrite`" for every menu. It takes that prompt's documented default with a warning, as `read_menu_choice` / `Read-MenuChoice` do: `overwrite` at the text review menu (`prompt_diff_review` / `Prompt-DiffReview`) and at every JSON field prompt that offers `[o]verwrite` (`prompt_json_field_review` / `Prompt-JsonFieldReview`: a field in SOURCE, whether or not LOCAL has it, the settings.json sync included); `skip` at a JSON field only in LOCAL (`review_json_fields` / `Review-JsonFields` offer `[a/s/x]` there, no overwrite); `n` (reject) at the AI merge preview (`_invoke_ai_merge` / `Invoke-AiMerge`); empty feedback at the `[r]efine` feedback read (`read_tty_choice` / `Read-ConsoleChoice`), so the merge is refined once more (one more AI merge attempt), then EOF at the preview rejects it and EOF at the review menu overwrites. "No AI merge runs in a non-interactive run" now reads: no AI merge starts in a run with no terminal or `--force` (no menu is shown); EOF reaches the merge prompts only after an interactive `[m]` |
+| 2 | `.claude/rules/agentic-standards.md` (and `.cursor/rules/agentic-standards.mdc`) "Managed-file review choices and merge": the non-interactive bullet lists no terminal or `--force` (not EOF) and says no menu is shown, so no merge starts; "EOF is not a choice and takes overwrite" now names each prompt's EOF default and points to `interactive-menus.md` "Non-interactive fallback" |
+| 3 | `reference/framework-managed-file-deployment.md` "How We Adopted It": "`AITOOLS_FORCE`, non-terminal stdin and EOF at a prompt select overwrite" now reads: `AITOOLS_FORCE` and non-terminal stdin select overwrite with no menu (a JSON field only in LOCAL is kept); EOF at a prompt takes that prompt's default with a warning (pointer to `interactive-menus.md` "Non-interactive fallback") |
+
+**Verified on:** Windows (text read against `read_tty_choice`, `read_menu_choice`, `_invoke_ai_merge`, `prompt_diff_review`, `review_json_fields`, `prompt_json_field_review` in `scripts/aitools-lib.sh` and their twins in `scripts/aitools-lib.ps1`; `tests/menus/test-menu-choice.ps1`: 97 passed, 0 failed, including the EOF cases for a JSON field only in LOCAL, the settings sync and the refine feedback, where one refine makes two AI calls). No code change.
+
+---
+
+## v0.77.16 -- Windows CI runs .ps1 test suites only; the .sh suites refuse Git Bash (2026-11-14)
+
+Not tagged. Branch `fix/38dc-13-windows-ci-ps1-only` (PR #166), missions 38dc-13 and 38dc-27 under M6-Polish / M6b-Finish (session 87795dc3). Commander, 2026-11-14: "unless a script is explicitly marked as cross-platform for good reasons, such as build-deploy.sh and all perl/python scripts, sh scripts and tests should only run on linux/mac and ps1 on windows"; "tests should be .ps1 here on windows and executed as powershell scripts, git bash scripts cause known issues."
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 1 | Native PowerShell harnesses (`tests/<dir>/test-*.ps1`, Windows guard) for every suite whose `.sh` drove the `.ps1` scripts from Git Bash: b8-consumers, claude-mdm, hookin, profile (test-profile, test-config, test-lib, test-user-init, test-install), fanout-lib, rules-fanout, rules-fanout-cursor, skills-fanout, skills-legacy, deploy-harness, deploy-harness-mdm, and the check suites check-pre-push step 7, check-post-push step 7, steps 2/6/14 and step 29 (menu parity, with `check-menu-parity.pl` run from pwsh), check-pre-commit steps 3/10. Each has the same cases as its `.sh` twin and compares against the same golden files; shared helpers in `tests/lib/platform-lib.ps1` (tested by `tests/lib/test-platform-lib.ps1`) |
+| 2 | Every `tests/<dir>/test-*.sh` that is not cross-platform carries the POSIX guard, with a second case on `BASH_VERSINFO[5]` (bash's compiled-in machine type) that a `uname` shim or an exported `OSTYPE` cannot change; the `.sh` harnesses test only the `.sh` scripts (their pwsh/`.ps1` cases moved to the `.ps1` harnesses). Every `.ps1` suite carries the Windows guard (`tests/bootstrap/test-bootstrap.ps1` refused nothing before: it SKIPped every case off Windows) |
+| 3 | `.github/workflows/check.yml`: the windows job runs the `.ps1` suites with `pwsh -NoProfile -File`; the `.sh` steps left there are the cross-platform suites (hooks, build-deploy backup, build-package CLI, setup-pywinpty MDM embed). The macos job gains `test-post-push-step7.sh` and `test-menu-parity.sh` (bash 5 and /bin/bash 3.2), which had never run there |
+| 4 | `scripts/check-ci-suites.pl` v2: a `.ps1` suite must run in the windows job only, a POSIX-guarded `.sh` suite in the macos and linux jobs only, an unguarded `.sh` suite in all three. `tests/os-guards` gains `classify-guards.pl` (one classifier for scripts and suites) and a `.ps1` harness for the windows job; a suite's POSIX guard must have the `BASH_VERSINFO[5]` case |
+| 5 | Windows test harnesses: locked-file cases (a file held open by another program) for the deploy-harness rules manifest replace, the retired-skill backup copy, and the setup-user-claude rules manifest read; probe-gated; Windows only by design. Plus the permission-denied (ACL) cases of deploy-harness, rules-fanout and skills-legacy, and the pinned try-log-retry rule for a retired skill that cannot be deleted |
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 6 | `.claude/rules/cross-platform.md` (+ `.mdc`): "Test suites" guard patterns; exemption rows "Cross-platform test suites" and "Perl and Python scripts (commander, 2026-11-14)"; build-package approved; helper modules recorded (commander, 2026-11-14) |
+| 7 | `reference/cross-platform-detail.md` "Running tests on Windows": the 34 `.ps1` suites, the Perl cases run from the `.ps1` harnesses, and "What CI runs on Windows today" rewritten for the new windows job (45 suite steps: 34 `.ps1`, 2 Python, 9 cross-platform `.sh`) |
+
+**Verified on:** Windows 11 (pwsh 7.6.10): every `.ps1` suite above green locally, each case mutation-proofed; os-guards `.ps1` 68/0/0; `check-ci-suites.pl`: all suites in CI on their platforms. macOS and Linux: CI.
+
+---
+
+## v0.77.15 -- No pipefail script ends a pipeline in grep -q; compliance step 7 fails on it (2026-11-14)
+
+Not tagged. Branch `fix/38dc-24-pipefail-grepq`, mission 38dc-24 (M6-Polish, session 87795dc3), the follow-up to v0.77.11 (commander, 2026-11-14: "dont file incident, just launch mission to fix this").
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 1 | Medium | 49 pipelines in 17 bash files that run under `set -o pipefail` (or are sourced by one) ended in `grep -q`. `grep -q` exits at its first match; a writer that still had output died of SIGPIPE (141; where SIGPIPE is ignored, as on the GitHub linux runner, it exits non-zero on the write error), `pipefail` failed the pipeline, and the condition read "no match" although the pattern matched (or "match" under `if !`). The class failed CI runs 43640967140 and 43642017937 (v0.77.11). Each now ends in `grep PATTERN >/dev/null` with the same pattern and flags, which reads its input to the end on GNU grep (it drains a pipe when stdout is `/dev/null`) and on BSD grep (no `-q`, so its read loop runs to EOF). Highest exposure first: `build-deploy.sh` (the embed EOF-marker collision check, perl writing a whole source file), `check-pre-commit.sh` (8, including the five hook-portability scans that could hide a real violation), `aitools-dashboard.sh` (3, including `ss -tlnp` port detection); then `check-post-push.sh` (8), `check-pre-push.sh` (4), `check-prereq-detection.sh`, `aitools-install.sh`, `aitools-lib.sh` (3), `githooks/pre-commit`, `setup-datadog.sh` (3), `setup-gh-cli.sh` (2), `setup-go.sh` (2), `setup-pandoc.sh` (4), `setup-typst.sh` (3), `setup-uv.sh` (2), `setup-vercelcli.sh` (2) and the SessionEnd hook `tool-ops-session-audit.sh` |
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 2 | `check-script-compliance.sh` step 7 ("Grep pipefail safety") scans `scripts/*.sh`, `scripts/githooks/*` and `shared/hooks/*.sh` (files that set pipefail, plus `aitools-lib.sh`, `check-lib.sh`, `init-logging.sh`) and FAILs with `file:line` on any line where a single pipe feeds a `grep` with `q` in its options, `--quiet` or `--silent`, wherever the pipeline sits (`if`, `!`, `$(...)`, continued lines). Until now it scanned only setup scripts, skipped every line containing `if `, and only WARNed. Its old grep-without-`|| true` heuristic still WARNs. CI runs the check in the linux job, so the class cannot return |
+| 3 | New suite `tests/check-script-compliance/test-step7-grepq.sh` (CI: linux; macos bash 5 and `/bin/bash` 3.2): planted bad pipelines FAIL step 7 and are listed, lines it must ignore are not, the fixed form passes, and 20 runs of `seq 1 300000 \| grep -x 1 >/dev/null` under pipefail must all exit 0 on the host grep (GNU on Linux, BSD on macOS). On this PR's CI (run 43658571751) the fix form passed 20 of 20 on GNU grep 3.11 and BSD grep 2.6.0-FreeBSD (bash 5 and 3.2), and the `-q` form failed 20 of 20 on Linux (status 1). On macOS the `-q` form never failed (0 of 20), so that run proves nothing about BSD grep: the BSD evidence is a reading of Apple `text_cmds` `grep/util.c`, not a reproduction. The suite refuses Windows (OS guard, exit 1); it has no Windows twin |
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 4 | `reference/script-standards-detail.md`: new section "Pipelines into grep -q under pipefail" (mechanism, fix form, GNU and BSD grep source citations, enforcement); its three examples that used `\| grep -qi` use the fix form. `.claude/rules/script-standards.md` and `.cursor/rules/script-standards.mdc`: one paragraph under "Cross-platform grep portability". `reference/post-push-checklist.md` step 23: step 7 now FAILs on the class |
+
+**Verified on:** Windows 11 (Git Bash): `bash -n` on every changed script; the rewrite was a counted perl script that refuses to write unless each file gets its exact expected count, and reproduces PR #164's hand-made 12 edits byte for byte; diff is 49 lines changed in the 17 files and nothing else; the hook smoke and violation tests (isolated HOME) give the same JSONL line as main's hook; a static run of step 7's perl program finds 0 sites on this branch and 62 on main before #164 and this fix. Linux and macOS: CI (the `.sh` check and suite).
+
+---
+
+## v0.77.14 -- Claude Code ops reference reconciled: duplicate item numbers fixed, delegate probes answered, Windows shell and stale changelog facts corrected (2026-11-14)
+
+Not tagged. Branch `docs/38dc-25-tool-ops-registry`, mission 38dc-25 under M6-Polish (session 87795dc3). Commander, 2026-11-14, answering RFI 38dc-10: "yes, have that mission also update the /tool-registry and use its skill. find it resolve any and all conflicts it finds either directly or by running additional missions until all found issuess are resolved".
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 1 | `reference/tool-ops-claude-code.md` Version Dependencies: #28 and #29 were each used twice. The MEDIUM items numbered first (commit 261b9d9) keep them (#28 user-level rules, #29 skills); the HIGH items move: auto mode and allow rules #28 -> #33, hook output channel #29 -> #34. A new "Item numbers" note maps citations in older records. `scripts/check-path-refs-allow.txt` follows (#28 -> #33) |
+| 2 | "Delegate Identity, Transcripts and Control" v1.1, from probes on Claude Code 2.1.325 (Windows): an agent's `output_file` was observed to become a hard link to its transcript when the delegate was woken after it stopped (by SendMessage or its own background task), and not before; a second SubagentHandback is delivered after a resume of a finished delegate or a wake by its own Monitor's event, and refused after a resume while a background shell from before its first report runs or after that shell's completion; the main session stopped a level-1 delegate with TaskStop (and a failed one cannot be stopped); `<tool-use-id>` in a task notification names the call that started the run |
+| 3 | Items re-verified at 2.1.325: #1 Windows shell (partly obsolete: the Bash tool is Git Bash, but a PowerShell tool is in every session and is the primary shell), #5 what a sub-agent receives (CLAUDE.md and rules without `paths:` at launch, from the session's directory, not the delegate's worktree), #8 hook shell (Git Bash on Windows, per the hooks docs), #25 closed. New item #35: the SessionEnd hook time budget (1.5 s default) |
+| 4 | Changelog facts corrected from the changelog read in a browser: 2.1.59 never added an `effortLevel` setting; `InstructionsLoaded`, hook `agent_id` and `includeGitInstructions` came in 2.1.69, not 2.1.68; 2.1.74 is the SessionEnd timeout fix. CLAUDE.md levels are concatenated and none overrides another ("more specific wins" was wrong); 200 lines is a CLAUDE.md target and the auto memory load limit |
+| 5 | `registries/tool-registry.json` `claude-code` (through `/tool-registry`): Windows verified at 2.1.325 (2026-11-14) with the launcher path; health reasons, evaluation pending items, workarounds #1, #5, #25, #27 and a new #32 entry, the Windows auth check and the upstream risks updated |
+| 6 | `/delegate` v2.4 (what a sub-agent receives, which repeat hand-back is refused, TaskStop by the main session, level 3 re-verified; the "In the aitools repo" note no longer says project rules and skills are deployed at user level) and its test, which now lists the ten elements of the commander's table (1b34fa2); `/tool-ops` lookup rows for #5, #28/#29, #30/#34 and #33; `shared/rules/delegation.md` points to `/tool-ops`, not the retired `/aitool-ops`; `/planning` "Subagent context gap" says what a sub-agent receives |
+| 7 | Rules and references that stated stale Claude Code behaviour: `documentation-standards.md` (which project-skill copy a delegate loads), `hook-rollout.md`, `incident-governance.md` (what sub-agents get; Stop-hook stderr reaches Claude only on exit 2), `reference/rules.md`, `skills.md`, `framework-three-layer-governance.md`, `tool-support-decision-tree.md`, `managed-file-deployment.md`, `logging.md`, `cross-platform-detail.md`, and a dated status note in the macOS Claude Code evaluation |
+| 8 | `scripts/setup-user-claude.ps1`: the generated CLAUDE.md footer line reads "Shell: PowerShell and Git Bash (Claude Code on Windows: a PowerShell tool, and a Bash tool that runs Git Bash)" instead of "Claude Code requires Git Bash on Windows" |
+| 9 | `CLAUDE.md` (d21994b, pushed straight to main by the mission without an order to do so; the commander kept it, 2026-11-15, incident #181): rules with `paths:` frontmatter load once a matching file is read, not "always in context" |
+
+### Files created
+
+| File | Purpose |
+|------|---------|
+| `.aitools/channel/handoffs/2026-11-14_87795dc3-missions/38dc-25/38dc-25-report.md` | Mission report: conflict table, probe results, registry changes |
+| `.aitools/channel/handoffs/2026-11-14_87795dc3-missions/38dc-25/af14-04-sweep.md`, `af14-05-sweep.md`, `af14-08-docs.md` | Sub-mission evidence: the reference and rules/skills sweeps, the docs read with chrome-devtools |
+
+**Verified on:** Windows 11, Claude Code 2.1.325: five throwaway level-3 probes and a 2 s `output_file` link poller; the main session transcript for TaskStop; docs read with chrome-devtools (af14-08) and spot-checked (three hooks quotes, the 2.1.69 changelog entry); independent review af14-09 (2 blocking findings, fixed); the pwsh parser on `setup-user-claude.ps1`; `tool-registry.json` parses; `check-pre-commit.ps1` and `check-pre-push.ps1`. Not run: macOS and Linux (CI only); the CLAUDE.md footer in a real `aitools` run.
+
+---
+
+## v0.77.13 -- OS guards on the [RELAY] prompt scripts; the Windows checks call Git Bash only for build-deploy.sh (2026-11-14)
+
+Not tagged. Branch `fix/38dc-23-relay-guards-no-gitbash`, mission 38dc-23 under M6-Polish (session 87795dc3). Commander, 2026-11-14, answer to RFI 38dc-7: "relay-outbound.sh/.ps1 need os guards they are not exempt, the aitools dependency needs to be resolved (how to resolve it and resolving it need to be part of same mission) ... for the check-*.ps1 can youj explain this further? id like to avoid calling git bash on thowse ps1 scripts."
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 1 | `scripts/relay-outbound-prompt.sh` carries the POSIX OS guard and `scripts/relay-outbound-prompt.ps1` the Windows guard. Both are sourced into other scripts (`scripts/aitools` and `hh.sh`; `aitools.ps1` and `hh.ps1`), so each guard writes the structured `[<UTC>] [relay-outbound-prompt] [error]` line itself, to stderr, without loading init-logging (which would re-initialize the caller's log). The `.sh` guard returns 1 when sourced, so the refusal does not end the caller's shell, and exits 1 when run. The `.ps1` guard exits 1; dot-sourced, that ends only the guarded file, so the caller goes on with `$LASTEXITCODE` 1 and neither function defined (`hh.ps1`, under `$ErrorActionPreference = "Stop"`, then ends nonzero at its call; `aitools.ps1` has its own Windows guard). One run of a `~/.local/bin/aitools` installed before v0.77.12, started from Git Bash on Windows, now ends nonzero after its sync summary (it sources the guarded `.sh`, and `relay_outbound_prompt` is then undefined); the same run rewrites the installed copy, so the next run hands off to `aitools.ps1` |
+| 2 | The bash `aitools` dependency on `relay-outbound-prompt.sh` is resolved: since v0.77.12 `main()` hands off to `aitools.ps1` at its top on Windows (and returns 1 when it cannot), so the relay source line near its end is never reached there; now the `.sh` also refuses Windows if anything else sources it. `tests/relay-outbound/test-relay-outbound.ps1` checks that order in `scripts/aitools` |
+| 3 | `check-pre-commit.ps1` step 2 and `check-post-push.ps1` step 6 no longer run `bash -n` through Git Bash: the `.sh` half reports SKIP and names CI and the `.sh` twin. A `.sh` never runs on Windows; `check-pre-commit.sh` / `check-post-push.sh` check it on macOS and Linux |
+| 4 | `check-post-push.ps1` step 4 runs the Windows entry point natively (`pwsh -NoProfile -NonInteractive -File scripts/aitools.ps1 --version`) instead of the bash entry through Git Bash, which only hands off to `aitools.ps1` on Windows. It now fails on a nonzero exit or output without an `aitools <version>` line (before, any output passed, even an empty one) and when pwsh is missing |
+| 5 | CI: the linux and macos "Validate bash script syntax" steps run `bash -n` on every tracked shell script (each `*.sh` under `scripts/`, `shared/`, `packaging/`, `tests/` and `deploy/`, and the extensionless bash/sh scripts under `scripts/`, `shared/` and `packaging/`), not only `scripts/*.sh`, `shared/hooks/*.sh`, `deploy/*.sh` and the git hook: they now also cover `shared/shell/aliases.sh`, `packaging/` and `scripts/aitools` (126 files). The step fails when the list comes out empty. Not covered: the archived `.sh` files under `.aitools/channel/handoffs/` and `harvesting/`, which the old Windows step 2 checked when staged; they are never run, and all parsed when this shipped |
+| 6 | `check-pre-push.ps1` step 7 (`build-deploy.sh` into a temporary dotprofile copy) is the only Git Bash call left in the `check-*.ps1` scripts; whether to keep it is RFI 38dc-23-1. `ResolveGitBash` (check-lib) stays for it |
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 7 | `.claude/rules/cross-platform.md` (and `.cursor/rules/cross-platform.mdc`): the exemption row drops `relay-outbound-prompt.sh/.ps1` (guarded now); "OS guard patterns" records the guard of a sourced file; the "Unrecorded" cross-language row narrows from `check-pre-commit.ps1`, `check-post-push.ps1`, `check-pre-push.ps1` to `check-pre-push.ps1` step 7. `reference/pre-commit-checklist.md` (step 2), `reference/post-push-checklist.md` (steps 4, 6) and `reference/pre-push-checklist.md` (step 7) say what runs on Windows |
+| 8 | `tests/check-post-push/test-post-push-deploy-steps.sh` expects SKIP for step 6 (.sh) of the `.ps1` twin and leaves that line out of the twin comparison; `tests/check-lib/test-resolve-git-bash.ps1` expects `ResolveGitBash` in `check-pre-push.ps1` only |
+
+### Files created
+
+| File | Purpose |
+|------|---------|
+| `tests/relay-outbound/test-relay-outbound.ps1` | Windows (CI windows job): the `.ps1` loads and its guard has the classifier form; the `.sh` refuses Git Bash when run (exit 1, structured line, nothing written) and when sourced (source returns 1, the caller goes on); in `scripts/aitools` the Windows hand-off comes before the relay source line |
+| `tests/relay-outbound/test-relay-outbound.sh` | macOS/Linux (CI linux and macos jobs, macOS also /bin/bash 3.2): the `.sh` loads, runs and prints the CI hint below its guard; the `.ps1` refuses pwsh when run; dot-sourced, it leaves its functions undefined with `$LASTEXITCODE` 1, and a caller under `Stop` ends nonzero at the call |
+| `tests/check-no-git-bash/test-check-no-git-bash.ps1` | Windows (CI windows job): only `check-pre-push.ps1` calls `ResolveGitBash`, once, for `build-deploy.sh`; pre-commit step 2 and post-push step 6 report SKIP for a `.sh` with a syntax error; post-push step 4 passes the real `aitools.ps1` and fails a stub that exits 3, a stub without a version line, and a missing pwsh |
+
+**Verified on:** see the PR (filled in at merge).
+
+---
+
+## v0.77.12 -- On Windows the bash aitools hands off to aitools.ps1; OS guards on hh.sh, bootstrap.sh, init-hh-hooks.sh and analyze-session.sh (2026-11-14)
+
+Not tagged. Branch `fix/38dc-19-aitools-win-forwarder` (PR #162), mission 38dc-19 under M6-Polish (session 87795dc3). Commander, 2026-11-14, RFI 38dc-3 ("make the bash `aitools` a forwarder on Windows"): "agreed"; RFI 38dc-5: "add an OS guard to all of them".
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 1 | High | `aitools.ps1` ran `aitools dashboard ...` with an in-process array splat, which binds every string by position: `aitools dashboard --background` and `--status` failed in PowerShell with `Cannot convert value "--background" to type "System.Int32"` and exited 0. It now runs `aitools-dashboard.ps1` with `pwsh -File` (`[Environment]::ProcessPath`), which binds `--background` to `-Background` as the bash entry point's dispatch did, and leaves `--dry-run` / `--force` after `dashboard` to it. Without this fix the forward below would have broken the dashboard-serve SessionStart hook on Windows |
+| 2 | Medium | `aitools.ps1` rejects an unknown argument, and `--skip-gh-auth`, `--repos-path` or `--skip-drive-detection` without `install`, with `unknown argument '<arg>'` and exit 1, as the bash entry point does; before, a typo such as `aitools --forse` ran the whole sync. In a native pwsh call leading flags no longer take the place of the command or of the `--addmcp` list (`aitools --force install` ran the sync, not the install); an empty `--addmcp` list after them is reported |
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 3 | The bash entry point `scripts/aitools`, run in Git Bash on Windows (the dashboard-serve hook, a Git Bash terminal, an agent's Bash tool), now runs `exec pwsh -NoProfile -ExecutionPolicy Bypass -File <aitools.ps1> <arguments>` inside `main()` before it parses arguments or sources `aitools-lib.sh`, so no bash library code runs on Windows. `aitools.ps1` is the repo copy, else the one beside the entry point (`~/.local/bin`); the exit code and stdin are `aitools.ps1`'s, and `USERPROFILE` is set to this `HOME` (Windows form), so everything goes to the HOME the caller chose (the same directory in a normal Git Bash session); when HOME and USERPROFILE differ, a note on stderr says so. The flags `pwsh -File` cannot bind are rewritten (`--dry-run`, `--skip-gh-auth`, `--skip-drive-detection`, `--repos-path P` as a Windows path, `--addmcp A B` as `-AddMcp A,B`); dashboard arguments pass unchanged. No pwsh, or no `aitools.ps1`: exit 1 with a clear message. macOS and Linux are unchanged |
+| 4 | `aitools.ps1` splits `-AddMcp` values on commas (the form the forward and `pwsh -File -AddMcp a,b` deliver) and drops empty names, so an empty list reports "--addmcp requires at least one server name" |
+| 5 | `scripts/hh.sh`, `scripts/bootstrap.sh`, `scripts/init-hh-hooks.sh` and `scripts/analyze-session.sh` carry the POSIX OS guard (none of them runs on Windows: `hh.sh` is installed only by `aitools-install.sh`, Windows gets `hh.ps1`; `bootstrap.sh` already refused anything but Darwin/Linux). `init-hh-hooks.sh` and `analyze-session.sh` source aitools-lib and init-logging before the guard; `hh.sh` (installed alone) and `bootstrap.sh` (run from curl) print the structured `[<UTC>] [<name>] [error]` line themselves |
+| 6 | `tests/logging/test-logging.sh`: the seven cases that run `scripts/aitools` past its argument parsing run on macOS and Linux only (one SKIP line on Windows, where the entry point forwards); the rest of the suite still runs in all three CI jobs |
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 7 | `.claude/rules/cross-platform.md` (and `.cursor/rules/cross-platform.mdc`): "OS guard patterns" records the guard form of a script with no aitools-lib beside it; the exemptions table drops `bootstrap.sh`, `hh.sh`, `init-hh-hooks.sh` and the "Analysis tools" row (`analyze-session.sh`), and the `aitools` reason now says it forwards to `aitools.ps1`. `reference/tool-ops-claude-code.md` and `README.md` (init-hh-hooks is macOS/Linux) updated |
+| 8 | GitHub issue #163: serve the dashboard-serve hook through a cross-platform Python entry (`aitools.py`) with a Python logging library feature-identical to aitools-lib.sh / .ps1; it answers "can the hook itself be Python?" from the Claude Code hooks docs (exec form `command` + `args`, no shell) |
+
+### Files created
+
+| File | Purpose |
+|------|---------|
+| `tests/aitools-entry/test-win-forwarder.ps1` | Windows suite (CI windows job): placement of the forward; argument cases against a stub `aitools.ps1` with the real param block; exit codes 0/1/2/7; stdin; USERPROFILE from HOME; no pwsh; the `~/.local/bin` fallback; no `aitools.ps1`; the real `aitools.ps1` behind the forward with a stub dashboard, `--addmcp` and unknown arguments; native pwsh calls |
+
+**Verified on:** Windows 11 (Git for Windows bash 5.3.15, pwsh 7.6): `test-win-forwarder.ps1` 45/0, and 21 of 21 mutations of the forward and of `aitools.ps1` make it fail; the four guards refuse Git Bash (exit 1, message, only logs written) and the 38dc-13 guard classifier lists them `posix`; `bash -n` on every touched shell script; the pwsh parser on `aitools.ps1`; `check-ci-suites.pl` 42 suites. Independent review on PR #162: 2 blocking findings, fixed; the re-check found none. macOS and Linux: CI (no `.sh` suite was run locally). Not run: the dashboard-serve hook in a live Claude Code session after an `aitools` run installs the new entry point.
+
+---
+
+## v0.77.11 -- The bash compliance check no longer fails at random under pipefail (2026-11-14)
+
+Not tagged. Branch `fix/38dc-21-compliance-sigpipe`, mission M6-Polish (session 87795dc3), a fix-forward for the CI step added in v0.77.8 (PR #160).
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 1 | Medium | `scripts/check-script-compliance.sh` runs under `set -euo pipefail` and tested pipelines with `... | grep -q PATTERN`. `grep -q` exits at its first match; when the writer (`grep -A2` over `scripts/aitools-lib.sh`, or `echo` / `printf` of a captured block) still had output to write, it died of SIGPIPE, `pipefail` made the pipeline fail, and the check reported a violation that is not there. CI run 43640967140 (PR #154, linux job) failed steps 4 and 5 ("log_error does not increment ERRORS", "log_warn does not increment WARNINGS") on a library whose main CI run passed the same steps. The 12 pipelines now end in `grep PATTERN >/dev/null`, which reads its input to the end, so the writer never gets SIGPIPE; the match result is the same |
+
+**Verified on:** `bash -n` on the script (Windows 11, Git Bash, parse only); the diff is the 12 pipelines and nothing else. Not run locally: the `.sh` check (commander, 2026-11-14: tests and checks on Windows are `.ps1`); the linux CI job runs it on this PR.
+
+---
+
+## v0.77.10 -- The 64 KB review-diff test no longer times out a slow macOS runner (2026-11-14)
+
+Not tagged. Branch `fix/38dc-17-mf-pty-timeout`, mission M6-Polish (session 87795dc3), a fix-forward for main CI run 43632383993.
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 1 | Medium | `tests/managed-files` case "display, diff over 64 KB" built a 3000-line fixture (~330 KB diff). On macOS it took 25 s of pty-run's 30 s timeout (main run 43629540142) and timed out on a slower runner (main run 43632383993, merge commit of #155, which did not touch the suite), failing main's macos job. The fixture is now 1500 lines a side (~170 KB, still past the 64 KB pipe buffer the case exists for) in both twins; the expected counts follow (2973 lines not shown, 3003 diff lines logged). pty-run's 30 s default (commander, 2026-11-01) is unchanged |
+
+**Verified on:** Windows 11 (pwsh 7): `tests/managed-files/test-managed-files.ps1` 56/0, the case passes with the new counts; `bash -n` on the `.sh` twin. macOS and Linux: CI.
+
+---
+
+## v0.77.9 -- No check builds against the real HOME or inspects the frozen deploy/ (2026-11-14)
+
+Not tagged. Branch `fix/m6-checks` (PR #154), mission M6-Polish (session 87795dc3), items b and c (delegates M6-B and 38dc-09).
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 1 | High | `check-pre-commit` step 3 with `--fix` / `-Fix` ran `build-deploy.sh` under the caller's HOME, which rebuilds the real dotprofile `deploy/`, discarded its output and exit code, staged the frozen aitools `deploy/` and reported PASS; without the flag the step advised it. Steps 3 ("Build freshness") and 10 ("Deploy drift", which diffed the frozen aitools `deploy/`) are now SKIPs in both twins, `retired: check-pre-push step 7 rebuilds into a temp dotprofile copy`; no path of the script runs `build-deploy.sh`. `--fix` / `-Fix` repairs line endings and exec bits only, and the `.sh` line-ending repair uses perl (GNU `sed -i ''` ended the run on Linux). Step 6 (exec bits) no longer lists the frozen aitools `deploy/` (`git ls-files -s -- '*.sh' ':!deploy/'`), so neither twin reports it or, with the fix flag, stages a mode change under it (PR review B1). Resolves Incident #136 |
+| 2 | Medium | `check-post-push` steps 2, 6 and 14 read the frozen aitools `deploy/` (bash -n, PowerShell parse, line endings), which `build-deploy.sh` has not written since 2c0fd32, so they passed whatever the dotprofile build produced. Step 2 ("Smoke-test deploy scripts") is now a SKIP in both twins with the same text; steps 6 and 14 check `scripts/` and `shared/hooks/` only. Neither check script reads the aitools `deploy/` any more; step numbers are unchanged. Resolves Incident #176 |
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 3 | `.claude/rules/deploy-paths.md` and `.cursor/rules/deploy-paths.mdc` item 3, `reference/pre-commit-checklist.md`, `reference/post-push-checklist.md` (steps 2, 6, 11, 14), `README.md` and `scripts/README.md` describe the retired steps; pre-push step 7 is the check of the generated `deploy/`. Known gap, stated there: pre-push step 7 does not `bash -n` every generated `.sh` or check its line endings |
+
+### Files created
+
+| File | Purpose |
+|------|---------|
+| `tests/check-pre-commit/test-pre-commit-steps3-10.sh` | Steps 3 and 10 of both twins never run build-deploy.sh, stage deploy/ or advise the fix flag; step 6 never reports or stages a 100644 `deploy/` file; the whole script with the fix flag leaves a temporary HOME and dotprofile unchanged (CI: macOS bash 5 and /bin/bash 3.2, Linux, Windows) |
+| `tests/check-post-push/test-post-push-deploy-steps.sh` | Steps 2, 6 and 14 of both twins ignore problems planted in `deploy/` and still FAIL on the same problems in the sources; no line of either twin reads `deploy/`; the temporary HOME is unchanged (CI: macOS bash 5 and /bin/bash 3.2, Linux, Windows) |
+
+**Verified on:** Windows 11: `test-pre-commit-steps3-10.sh` 38/0 (22 cases fail against the origin/main twins); `test-post-push-deploy-steps.sh` 19/0 (6 fail against origin/main, mutants killed); `check-pre-commit.ps1` and `check-pre-push.ps1` 0 FAIL; one `check-post-push.ps1` run under an isolated HOME/USERPROFILE/APPDATA/LOCALAPPDATA and log dir with a scratch clone of the dotprofile left the real dotprofile `deploy/`, `~/.aitools/logs` and `~/.aitools/config.json` unchanged. CI on linux, macos and windows ran both new suites green. Review fix (38dc-16): the step 6 cases were added after those counts; a native pwsh mirror of the `.ps1` step 6 case passes on the new twin and fails both modes on the previous one, and CI runs the suite.
+
+---
+
+## v0.77.8 -- CI runs the script-compliance check; bootstrap.ps1 runs the installer under pwsh 7; the delegation rule ships as a shared rule (2026-11-14)
+
+Not tagged. Branch `fix/38dc-11-compliance-ci-bootstrap`, mission 38dc-11 (M6-Polish, session 87795dc3).
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 1 | High | `scripts/bootstrap.ps1` ran `aitools-install.ps1` with `powershell` (Windows PowerShell 5.1), against the PowerShell 7 baseline, and called `aitools` for the dotprofile step inside its own (possibly 5.1) host. It now finds `pwsh`, installs it when missing with the tool registry's preferred Windows method (`winget install --id Microsoft.PowerShell --source winget`, verified against learn.microsoft.com on 2026-11-14), refreshes PATH additively, and runs the installer and `%USERPROFILE%\.local\bin\aitools.ps1` (`user init`, then the rebuild) with `pwsh -NoProfile -ExecutionPolicy Bypass -File`; a non-zero installer exit is reported (bootstrap.sh parity). With no `pwsh` and no `winget` it stops with a message (`throw`, never `exit`). The body is one script block, so under `irm | iex` its `$ErrorActionPreference = 'Stop'`, variables and functions no longer leak into the caller's session. The file stays ASCII and parses under 5.1. Resolves Incident #179 |
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 2 | CI runs the script-standards compliance check (until now only check-post-push step 23, after a push) on every PR and push to main: `bash scripts/check-script-compliance.sh` in the linux job, `pwsh -NoProfile -File scripts/check-script-compliance.ps1` in the windows job. A FAIL check fails the job, so a #177-class line (an unchecked `-ErrorAction SilentlyContinue` in a setup script) fails CI before merge (CI is not a required check on main: a red PR can still be merged by hand). Each is the last step of its job, so a compliance failure skips no test step |
+| 3 | The delegation rule ships to user scope: `shared/rules/delegation.md`, a byte-identical copy of the dotprofile `claude/rules/delegation.md` (commander, 2026-11-14). deploy-harness copies it to `~/.aitools/rules`, setup-user-claude to `~/.claude/rules/delegation.md`, setup-user-cursor to `~/.cursor/rules/delegation.mdc` (`alwaysApply: true`), on the next `aitools` run. Until now `~/.claude/rules/delegation.md`, which CLAUDE.md and the `/delegate` skill cite, was not deployed (R-8 deploys `shared/rules` only) |
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 4 | `reference/post-push-checklist.md` step 23 (CI also runs it), `reference/cross-platform-detail.md` (new section "bootstrap.ps1: runs under 5.1, launches pwsh 7"), `reference/tool-registry.md` and the registry's `pwsh` entry (the bootstrap note; Windows install command verified 2026-11-14), `reference/rules.md` v1.4 and `reference/cursor-practices.md` (the new shared rule), the `/delegate` skill's cross-reference (rule source), README (the Windows one-liner also installs PowerShell 7) |
+| 5 | Incident registry (`/incident` skill): #179 filed and closed (bootstrap.ps1 ran the installer under 5.1; id reserved by the M6-Polish orchestrator) |
+
+### Files created
+
+| File | Purpose |
+|------|---------|
+| `shared/rules/delegation.md` | The delegation rule, deployed to every machine (copy of the dotprofile rule) |
+| `tests/bootstrap/test-bootstrap.ps1` | bootstrap.ps1 under Windows PowerShell 5.1 (run with `-File` and through `Invoke-Expression`) with stubbed git, winget, installer and aitools.ps1 (Windows CI job) |
+
+**Verified on:** Windows 11 (pwsh 7.6.10, Windows PowerShell 5.1): `tests/bootstrap/test-bootstrap.ps1` 26 passed (including the `irm | iex` form); against origin/main's bootstrap.ps1 15 checks fail; 8 of 8 one-line mutants killed. `check-script-compliance.ps1` on origin/main: exit 1 (`setup-pywinpty.ps1:151`, #177, fixed by PR #157); on a scratch copy with #157's file: exit 0; with a planted unchecked `SilentlyContinue`: exit 1. `check-ci-suites.pl` finds the new suite, and fails when its step is removed. macOS/Linux: the `.sh` twin of the compliance check runs in the linux CI job only (not run locally on Windows).
+
+---
+
+## v0.77.7 -- Delegate identity, transcripts and control documented (2026-11-14)
+
+Not tagged. Branch `docs/38dc-08-subagent-transcripts`, mission 38dc-08-subagent-transcripts (delegate of M6-Polish, session 87795dc3).
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 1 | `reference/tool-ops-claude-code.md`: new section "Delegate Identity, Transcripts and Control" (v1.0) and Version Dependencies items #31 and #32, tested on Claude Code 2.1.325 (Windows 11) with two throwaway probe delegates: where every delegate's transcript and `meta.json` live (`subagents/agent-<agentId>.*` under the main session, flat for all depths), `meta.json` fields, mapping a mission name to an agentId through the Agent call's `description`, the Agent launch result verbatim, why `output_file` is not a transcript copy (created empty; only some later become a hard link), how a delegate finds its own id (no environment variable; search `meta.json` descriptions, bash and PowerShell recipes), TaskStop (an orchestrator cannot stop its own delegate; an unknown id lists the running agents), SendMessage (queued to a running delegate, resumes a finished one, `to: "main"`), repeat hand-backs (usually delivered, refused once), background tasks that outlive a delegate's hand-back, forced hand-backs and classifier interruptions, and guidance for orchestrators |
+| 2 | `reference/tool-ops-claude-code.md`: current version 2.1.325; item #25 (SendMessage gap) tested end to end and closed; item #27 level-3 tool set re-verified; "Agent Continuation Gap" marked closed (history kept); session-storage tree shows `subagents/*.meta.json` and `tool-results/`; release-notes watch entry for 2.1.325 |
+| 3 | `/delegate` skill v2.2: "Environment limits" gains delegate identity and control; "Verifying what comes back" points to the delegate's transcript. `/tool-ops` skill: lookup row for the new section |
+
+**Verified on:** Windows 11 (Claude Code 2.1.325, Git Bash, pwsh 7): each fact observed in session 87795dc3 (probe delegates 2b10-01 and 2b10-02, the session's 42 `meta.json` files, the M6-Polish transcript); independent review by 2b10-03 (27 claims checked against the raw files; its five blocking findings fixed; its re-check finding on the repeat-hand-back counts fixed); `check-pre-commit.ps1` (no `-Fix`) and `check-pre-push.ps1`: 0 FAIL. macOS, Linux, Claude Code web, Cursor: not tested (documentation only).
+
+---
+
+## v0.77.6 -- How tests run on Windows: the .ps1 suites; Git Bash only for cross-platform scripts (2026-11-14)
+
+Not tagged. Branch `docs/38dc-12-windows-test-practice`, mission 38dc-12 (M6-Polish, session 87795dc3).
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 1 | `reference/cross-platform-detail.md` "Running tests on Windows" (new): the commander's rule (2026-11-14), quoted: `.sh` scripts and tests run only on macOS and Linux, `.ps1` only on Windows, unless a script is explicitly marked cross-platform (his examples: `build-deploy.sh`, all Perl and Python scripts; the marks are the `.claude/rules/cross-platform.md` "OS guard exemptions" table, whose unsettled rows he answered row by row in RFI 38dc-7, an answer main's table shows so far only for the relay prompt guards of PR #167); on Windows an agent runs the twelve `.ps1` suites with `pwsh -NoProfile -File` and the tests of explicitly cross-platform scripts, and leaves `.ps1` code that has only a `.sh` driver to the Windows CI job. Eight known Git Bash issues, each with its source, five re-checked by a probe on the commander's workstation: Git's `usr/bin` first on PATH (a bare `find` in a `.cmd` stub walked C: and hung a suite), `bash` resolving to Git's or to the WSL launcher, `chmod 000` on a directory not enforced, `grep` dropping the line-end CR, MSYS argument rewriting (`/c/...`, `--opt=/tmp/...`, `origin/main:.aitools/...`), GNU tools not BSD, slow pseudo-terminal runs, a faked `uname`. What the Windows CI job runs on main at 8bf15d9 (48 suite steps: 12 `.ps1`, 2 Python, 34 `.sh` in Git Bash, in three groups) and that the bash AI merge has no Windows runtime path (since PR #162 the bash entry point `scripts/aitools` forwards to `aitools.ps1` on Windows before it loads `aitools-lib.sh`); follow-up mission 38dc-13 is changing that layout. "Git Bash PATH shadowing": `find`, `bash` and `sort.exe` added to the shadowed tools |
+| 2 | `CLAUDE.md` tests line: on Windows, the `.ps1` suites, and `.sh` suites in Git Bash only for scripts explicitly marked cross-platform, with a pointer to the new section |
+| 3 | `/delegate` skill v2.3 ("In the aitools repo", "Checks"): on Windows the `.ps1` check twins (the `.sh` checks refuse Windows), the same test rule, the pointer to the new section, and no known pre-existing check failures (pre-commit step 6 and pre-push step 7, listed before, pass on main) |
+
+**Verified on:** Windows 11 (Git Bash 5.3.15, pwsh 7): the Git Bash probes cited in item 1; the CI step counts by a parse of `.github/workflows/check.yml`. Documentation only: no script or test changed.
+
+---
+
+## v0.77.5 -- Fail-safe log writers in the installers, the profile resolver and check-lib; setup-pywinpty checks its listing; hh.ps1 is PowerShell 7 only (2026-11-14)
+
+Not tagged. Branch `fix/m6-logging` (PR #157), mission M6-Polish (session 87795dc3), items f, d and e (delegates M6-F and M6-DE).
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 1 | High | The six log writers outside aitools-lib named in incident #174 are fail-safe (`reference/logging.md` section 5): the installers' log override (with their Step 22 relay sync, `run_relay_sync` / `Invoke-RelaySync`), the profile resolver's log override and check-lib's checks.log / checks.jsonl writers now append through `_aitlib_log_append` / `Add-AitLibLogText` (check-lib.ps1 through `Write-CheckLogText`). A locked, unwritable or missing log no longer ends the bash installer, the resolver or a check script (`set -e`), throws from check-lib under the check scripts' `$ErrorActionPreference = "Stop"`, prints an error record for every log line of the PowerShell installer, turns `aitools-profile.ps1` into exit 2, or skips the bash installer's relay sync. On Windows, deploy.log, checks.log and checks.jsonl lines written by these writers now end in LF instead of CRLF. Not yet fail-safe: the `aitools` entry points' own appends and two hooks (open incident #178). Resolves Incident #174 |
+| 2 | High | `setup-pywinpty.ps1` checks the result of its stale dist-info listing: when the `--target` user site exists but cannot be listed, the run reports ERROR `stale dist-info not removed` instead of silently skipping the removal. The listing no longer uses `Get-ChildItem -Filter`, which hides "access denied" on the listed directory even under `-ErrorAction Stop`. Post-push step 23 passes again (it failed on `setup-pywinpty.ps1` since PR #148). Resolves Incident #177 |
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 3 | `scripts/hh.ps1` is PowerShell 7 (pwsh) only (commander, 2026-11-14: "its is pwsh 7 only"): its header says so and `#Requires -Version 7.0` makes Windows PowerShell 5.1 print one version message instead of six parse errors, with `-File` and through the profile's `hh` function. `scripts/relay-outbound-prompt.ps1` stays ASCII because `aitools.ps1`, which 5.1 can load, loads it; its note now names `aitools.ps1` |
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 4 | `reference/logging.md` section 5 names the writers outside the library that are fail-safe and the helper each uses, and the ones that are not yet (#178); `reference/script-standards-detail.md` shows the new installer override, and its PowerShell text-file and hook-script diff examples append through `Add-AitLibLogText` instead of `Add-Content -Path $logFile`; `reference/cross-platform-detail.md` "PowerShell 7 baseline" records that `hh.ps1` is pwsh 7 only |
+| 5 | Incident registry (`/incident` skill): #174 closed; #177 (high, setup-pywinpty unchecked `SilentlyContinue`) filed and closed; #178 (high, the `aitools` entry points' and two hooks' unguarded log appends) filed, open |
+
+**Verified on:** Windows 11 (Git Bash, pwsh 7.6): the new failure-mode cases fail against origin/main's scripts (test-logging .sh 12, .ps1 11, test-install PowerShell 17, bash 20, test-profile PowerShell 4, bash 8) and pass on the branch (test-logging .sh 54/0, .ps1 45/0; test-install PowerShell 51/0); `tests/pywinpty` .ps1 54/0 (new case 4c fails against the old script); post-push step 23's script 12 PASS / 0 FAIL (was 1 FAIL); `check-pre-commit.ps1` and `check-pre-push.ps1` 0 FAIL, pre-push step 7's isolated build OK. The bash halves ran on Windows with `uname` spoofed to Linux; macOS and Linux: CI. Not run: any Windows PowerShell 5.1 run of `bootstrap.ps1` or the installer.
+
+---
+
+## v0.77.4 -- EOF regression cases for every prompt of issue #29 (2026-11-14)
+
+Not tagged. Branch `test/m6-eof` (PR #155), mission M6-Polish (session 87795dc3), item a.
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 1 | Issue #29 fix 3 completed: ten EOF regression cases, the same names in `tests/menus/test-menu-choice.sh` and `.ps1`, for the JSON field prompt (`deploy_managed_file` / `Deploy-ManagedFile` JSON review: `o`; a field only in LOCAL: `s`), the settings sync (`sync_managed_json` / `Sync-ManagedJson`: `o`), the AI-merge preview (`n`, back to the review menu; EOF there then overwrites and the merge is written nowhere) and the `[r]efine` feedback read (empty feedback, the merge refined). The stub AI CLI records each prompt it gets, so the cases count AI calls and read the refine prompt. Tests only; the library is unchanged |
+
+**Verified on:** Windows 11 (Git Bash 5.3 with pywinpty ConPTY, pwsh 7): menus `.sh` 88/0 (was 78), `.ps1` 97/0 (was 87); 10 library mutants (5 per language, one EOF default broken per call site) each fail at least one new case, every new case fails under at least one mutant, no older case fails under any; managed-files, adopt-push, os-guards, logging and menu-parity suites green; `check-pre-commit.ps1` and `check-pre-push.ps1` 0 FAIL. macOS (bash 5 and /bin/bash 3.2) and Linux: CI.
+
+---
+
+## v0.77.3 -- Pre-commit path-ref check fixed on Windows; release notes backfilled for PRs #144-#147 (2026-11-14)
+
+Not tagged. Branch `docs/m5-docs`, mission M5-Fixes (session 87795dc3), items 6, 7, 8 and 13.
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 1 | Medium | Pre-commit step 20 reported gitignored paths (`.claude/settings.local.json`, `.cursor/mcp.json`) as dead path references, on Windows only: `scripts/check-path-refs.py` `git_ignored()` passed the path list to `git check-ignore --no-index --stdin` in Python text mode, which writes `\n` as `\r\n` on Windows, so every path but the last reached git with a trailing CR and never matched. PRs #144 and #147 recorded these as pre-existing step-20 FAILs. The input now goes as UTF-8 bytes with a final newline, and the output is decoded as UTF-8. Step 20 on Windows: 5 dead refs -> 0 (the fifth is row 2) |
+| 2 | Low | `CLAUDE.md` "Relay outbound (git)" cited `.claude/rules/relay-outbound.md`, deleted in 3cebd24 on the commander's order (2026-11-13); it now points to "Channel exception" |
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 3 | RELEASE_NOTES: v0.76.2 backfilled for PRs #144-#147, which merged on 2026-11-14 before #148 (v0.77.0) and had no entry |
+| 4 | Incident registry (`/incident` skill): #173 closed (closedIn v0.76.2, PR #144); closed #172's corrective action names PR #143 and records the PR #144 follow-up; new open #174 (high): the log writers outside aitools-lib (installer and profile-resolver log overrides, check-lib's checks.log / checks.jsonl writers) are not fail-safe as `reference/logging.md` section 5 requires |
+| 5 | Issue #72 closed ([comment](https://github.com/nobul-tech/aitools/issues/72#issuecomment-6872294548)): the Windows job runs the PS1 interactive cases and a broken menu branch fails the suite. Issue #29 commented ([comment](https://github.com/nobul-tech/aitools/issues/29#issuecomment-6872294831)) and left open: EOF cases are still missing for the JSON field prompt and the AI-merge preview and feedback reads. Comment bodies and the M5-D1 / M5-D2 reports: `.aitools/channel/handoffs/2026-11-14_87795dc3-missions/M5-Fixes/` |
+
+**Verified on:** Windows 11 (pwsh 7, Git Bash): `check-path-refs.py` 5 dead refs before, 0 after; a scratch fixture passes with the fix and fails without it; `check-pre-commit.ps1` and `check-pre-push.ps1` 0 FAIL. macOS/Linux: not run locally (bytes input is platform-neutral; no suite covers `check-path-refs.py`).
+
+---
+
+## v0.77.2 -- Check tooling: Git Bash for the PowerShell checks, CI covers .ps1 suites (2026-11-14)
+
+Not tagged. Mission M5-Fixes (items 9 and 4, batch M5-C1).
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 1 | Medium | `check-pre-commit.ps1`, `check-pre-push.ps1` and `check-post-push.ps1` ran their bash steps with the first `bash` on PATH (`Get-Command bash`, a bare `bash -n`, or a PATH fallback after the Git for Windows locations). In a native pwsh that is the WSL launcher (`%LOCALAPPDATA%\Microsoft\WindowsApps\bash.exe` on the commander's workstation), not Git Bash. They now use one helper, `ResolveGitBash` in `scripts/check-lib.ps1`: the Git for Windows locations only (the list `setup-bash.ps1` probes), no PATH fallback, and any candidate under `%SystemRoot%` or the WindowsApps alias directory refused. No Git Bash: pre-commit step 2 is WARN (new: it had no not-found branch), step 3 `-Fix` FAIL, pre-push step 7 WARN and post-push steps 2, 6, 7 SKIP, as before |
+| 2 | High | `check-post-push` step 7 ("deploy/ drift audit", both twins) ran `build-deploy.sh` with the caller's HOME, which replaces the real dotprofile `deploy/` (incident #86 class), and then diffed the frozen aitools `deploy/`, which build-deploy no longer writes, so it always passed. Step 7 is retired: always SKIP `retired: check-pre-push step 7 rebuilds into a temp dotprofile copy` (pre-push step 7 runs on every push, commander 2026-10-26); the step number stays. The `.ps1` "bash not found" SKIP texts of steps 2 and 6 now say "Git Bash not found". `shared/rules/tool-lifecycle.md` "Rebuild + propagate" and `reference/post-push-checklist.md` step 7 follow |
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 3 | `check-post-push` step 29 (menu parity audit) also compares the prompts passed to the menu-read helper: the PROMPT argument of `read_menu_choice` (bash) and `-Prompt` of `Read-MenuChoice` (PowerShell), one letter set per call (`[x]` letters and `[a/b/c]` lists; a prompt in a variable takes the literal assigned earlier; a prompt built at run time counts as `?`). It only read `printf` / `[Console]::Write` lines, so a mismatch in a prompt such as the AI-merge preview's `[y]es / [r]efine / [n]o` went unseen. The logic moved to `scripts/check-menu-parity.pl` (one script for both twins, as step 32 does with `check-hook-parity.py`; `--help` lists the blind spots); SKIP when perl is missing |
+| 4 | CI "Every test suite is in CI" (linux job) covers `tests/*/test-*.ps1` too: a tracked `.ps1` suite fails the step unless a single-line `run:` runs it with `pwsh` (`-File` optional, `/` or `\` in the path). It was `.sh`-only, so a new `.ps1` suite could go untested. The inline perl moved to `scripts/check-ci-suites.pl` (same `%exempt` table and blind spots, `--help`), which the step calls and a new suite tests. All 8 tracked `.ps1` suites already had a step. (Added after the merge: the auto-mode classifier blocked M5-C1's edit; the commander allowed release-notes edits, 2026-11-14) |
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 5 | `shared/rules/tool-lifecycle.md` "Lifecycle field completeness": an unverified platform version is `null`, not `pending`, and a platform the tool does not support (status `n/a`) keeps a `null` version and date. The registry has never used `pending`: of 57 tool-platform versions, 26 are `null` (the 4 `n/a` platforms among them) and 31 are version strings |
+
+### Files created
+
+| File | Purpose |
+|------|---------|
+| `tests/check-lib/test-resolve-git-bash.ps1` | Probe order, no fallback, the WSL launchers refused, the default probe on the machine, no check-*.ps1 resolving bash through PATH (CI windows job) |
+| `scripts/check-ci-suites.pl` | The "Every test suite is in CI" logic (was inline perl in `check.yml`) |
+| `tests/ci-suites/test-check-ci-suites.sh` | The current tree passes; planted `.sh` / `.ps1` suites and removed steps fail; the `.ps1` forms that count and those that do not (CI linux job) |
+| `tests/check-post-push/test-post-push-step7.sh` | Runs the step 7 section of each twin with a fake `build-deploy.sh` under a temp HOME: never run, one SKIP 7; no line of either twin runs build-deploy (CI linux and windows jobs) |
+| `scripts/check-menu-parity.pl` | The step 29 comparison (menu lines and menu-read prompts), called by both twins |
+| `tests/check-post-push/test-menu-parity.sh` | The current libs match; planted mismatches in a `read_menu_choice` prompt, a `Read-MenuChoice -Prompt`, a choice list and a menu line fail (the old extraction misses the prompt ones); variable prompts; comments; errors; step 29 of both twins (CI linux and windows jobs) |
+
+**Verified on:** Windows 11 (Git for Windows 2.56.0, bash 5.3.15, pwsh 7): items 1 and 4 (M5-C1): `test-resolve-git-bash.ps1` 17/17 (against the pre-fix check scripts it fails 4 cases), `test-check-ci-suites.sh` 21/21; check-pre-commit.ps1 and check-pre-push.ps1 run from the branch; the linux CI job is the first run of `check-ci-suites.pl` on Linux. Items 2, 3 and 5 (M5-C2): `test-post-push-step7.sh` 10/10 (6 cases fail against the pre-fix twins), `test-menu-parity.sh` 24/24, both with bash and pwsh 7.6; check-post-push.ps1 run once after the step 7 fix under an isolated HOME/USERPROFILE/APPDATA/LOCALAPPDATA and log dir with a scratch clone of the dotprofile: step 7 SKIP, step 29 PASS, the real dotprofile `deploy/` and `~/.aitools/logs` unchanged. The .sh twins and the new suites on macOS and Linux run first in CI.
+
+---
+
+## v0.77.1 -- Library fixes: the bash AI-merge spinner always stops, a failed log write never breaks a run, the [RELAY] prompt reads in cooked mode, the installer's repos prompt goes to the terminal (2026-11-14)
+
+Not tagged. Mission M5-Fixes (batches M5-L1, M5-L2), from the findings of missions M3b and M2.
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 1 | Medium | The bash AI-merge spinner (`_start_spinner` / `_stop_spinner` in `scripts/aitools-lib.sh`) kept drawing on the terminal after Ctrl+C ended the script (seen in Git Bash): it is a background subshell, and a background job of a non-interactive shell ignores SIGINT. It now watches the shell that started it (`BASHPID`, `$$` on bash 3.2) and ends, clearing its line, within 200 ms after that shell is gone, SIGKILL included; and `_invoke_ai_merge` wraps `invoke_ai` in INT, TERM and EXIT traps (`_spinner_traps_set` / `_spinner_traps_restore`) that stop it at once and then hand over to the caller's own traps, saved and restored unchanged. Without a terminal the spinner draws nothing (no shell error); `_stop_spinner` no longer fails under `set -e` when the spinner ended on its own or there is no terminal. The PowerShell spinner (`Start-AiSpinner`) did not have the defect: unchanged. Tests: spinner cases in `tests/menus/test-menu-choice.sh` (CI: linux, macOS bash 5 and /bin/bash 3.2, Windows Git Bash) |
+| 2 | High | A failed `deploy.log` write broke the run, contrary to `reference/logging.md` section 5 ("A failed log write is swallowed"). PowerShell: `Log`, `LogDetail` (so `LogWarn`, `LogError`, `LogOk`) and `Write-AiLog` threw when another process held `deploy.log` locked -- an error record on the console, a jump into the caller's `catch`, the end of the script under `$ErrorActionPreference = "Stop"`. bash: `log`, `log_detail` and `_ai_log` ended a `set -euo pipefail` script at the first write to an unwritable log (no permission, a directory), already inside `logging_init`; `logging_init` also ended it when the log directory could not be created. Every write now goes through one fail-safe helper (`Add-AitLibLogText` / `_aitlib_log_append`) that swallows the failure silently, as section 5 specifies; the console line still prints and the counters still count. `Initialize-Logging` / `logging_init` swallow a failed log-directory create. Tests: `tests/logging/test-logging.ps1` (locked file under `Stop` and inside `try`, log dir that cannot be created), `tests/logging/test-logging.sh` (a directory as `deploy.log`, `chmod 000`, log dir that cannot be created, all under `set -euo pipefail`) |
+| 5 | Medium | The PowerShell `[RELAY]` prompt (`Read-RelayOutboundChoice` in `scripts/relay-outbound-prompt.ps1`, shown by `aitools` and `hh -n`) read its answer with its own `[Console]::ReadLine()`, without the library's cooked-mode guard: when a child run earlier in the same console had left it raw (line input and echo off), the read echoed nothing and never returned on Enter (reproduced on a pseudo-terminal: all input sent, the prompt hung until killed). It now reads through `Read-MenuChoice` / `Read-ConsoleChoice` (cooked line mode for the read, the previous mode put back; answers logged at `detail`). Under `hh.ps1`, which does not load the library, the prompt dot-sources it inside the function (nothing outlives the call) and logs as `relay-outbound`; when the library is missing the old local loop remains the fallback. Prompt text, answers (`c`/`continue`, `q`/`quit`, `s`/`show`), re-ask, EOF default (`continue`) and the 50-try limit are unchanged; at EOF the message is now the library's warning (`No input at prompt (EOF) -- defaulting to continue`). The file is now ASCII (the em dash and ellipsis are built with `[char]` codes): Windows PowerShell 5.1 reads a file without a BOM as ANSI, and the em dash's UTF-8 bytes contain a quote character, so 5.1 could not parse the file at all. The bash twin reads `/dev/tty` in a local loop and needs no such guard (Git Bash keeps its own terminal state): unchanged. Tests: `[RELAY]` cases in `tests/menus/test-menu-choice.ps1` (library loaded by the caller, loaded by the prompt, missing; Windows PowerShell 5.1; a pseudo-terminal case that sets the console raw, runs the whole prompt and checks the cooked read and the restored raw mode) |
+| 7 | Low | The bash installer's Step 3 prompt (`Where should new repos live? [~/repos]: `, `scripts/aitools-install.sh`) was printed to stdout while its answer was read from `/dev/tty`: with stdout redirected or piped the prompt was invisible and landed in the output instead (`.claude/rules/interactive-menus.md` "Console I/O": prompts go to `/dev/tty`). It is now printed to `/dev/tty`, in a new helper `prompt_repos_path` in the installer's "install log helpers" block (so the tests can run it). It was the installer's only prompt: `gh auth login` talks to the terminal itself. The PowerShell twin already follows the rule (`[Console]::Write` + `Read-ConsoleChoice`): unchanged. Tests: `step3-prompt-*` cases in `tests/profile/test-install.sh` (bash on macOS/Linux, also `/bin/bash` 3.2: on a pseudo-terminal with stdout and stderr sent to a file, the prompt is on the terminal and not in the file; an answer, `~/...`, an empty answer and EOF) |
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 3 | `reference/cross-platform-detail.md` "Windows console: input mode, jobs, spinner": why the bash spinner could outlive its script, and its two guards |
+| 4 | `reference/logging.md` section 5: names the fail-safe write helpers and what they guarantee, and that `deploy.jsonl` warns once instead |
+| 6 | `.claude/rules/interactive-menus.md` "Answers", `reference/managed-file-deployment.md` "Menu answers", `reference/cross-platform-detail.md` "Windows console": the PowerShell `[RELAY]` prompt reads through `Read-MenuChoice`; only `shared/shell/aliases.*` and the bash `[RELAY]` prompt keep a local loop. `reference/logging.md` section 3: `deploy.log` also gets the `[RELAY]` prompt's answers under `hh.ps1` (`relay-outbound`) |
+
+**Verified on:** Windows 11 (Git Bash 5, pwsh 7). macOS and Linux run in CI only.
+
+---
+
+## v0.77.0 -- pywinpty is a managed Windows library on all three deployment paths (2026-11-14)
+
+Not tagged. Commander order 2026-11-14: "/tool-adopt pywinpty.  we will need setup-pywinpty.ps1.  document its source of truth in registry via /tool-registry.  mark windows/linux as N/A." and "we should support pywinpty through all 3 methods of deployment/install". Platform status: Windows supported, macOS and Linux n/a (the stdlib `pty` module is used there).
+
+### New features
+
+| # | Change |
+|---|--------|
+| 1 | `scripts/setup-pywinpty.ps1`: installs pywinpty (the ConPTY backend of `tests/managed-files/pty-run.py`) into the Python user site with `python -m pip install --user --only-binary=:all: --require-hashes -r <pin>`, for the interpreter the pty suites use (`python3`, then `python`; `AITOOLS_PYWINPTY_PYTHON` overrides). Verifies an existing install by import and changes nothing then. For an EXTERNALLY-MANAGED interpreter (PEP 668; the uv CPython that Step 15 makes `python3`) it installs with `pip install --target <that interpreter's user site> --upgrade` instead of `--user`, removes stale `pywinpty-*.dist-info` of other versions and verifies by import (commander, RFI fa81-9: "fix pep"); never `--break-system-packages`, never a write into the interpreter's install tree. WARN + ACTION for no Python, an interpreter tag the pin does not cover, a venv, or a managed interpreter whose user site is disabled |
+| 2 | `scripts/setup-pywinpty.sh`: OK `pywinpty` `n/a (<platform>)` on macOS and Linux |
+| 3 | Dev path: installer Step 15b (`aitools-install.ps1` / `.sh`), right after Step 15 Python. MDM path: `build-deploy.sh` generates `deploy/setup-pywinpty.sh/.ps1`; the `.ps1` carries the pin as `$AitoolsEmbeddedPywinptyPin` and the build fails on a missing or malformed pin. Package path: `scripts/` is in the `build-package.sh` payload and the package runs `aitools-install.ps1`, so Step 15b runs there unchanged |
+| 4 | Tool registry entry `pywinpty` (`/tool-registry` skill): names the pin as the source of truth for version and hashes; health Windows yellow; verified 3.1.2 on 2026-11-14 |
+| 5 | CI windows job installs pywinpty through `scripts/setup-pywinpty.ps1` (was a raw `pip install`), and fails when the import does not work afterwards |
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 6 | The pin moved from `tests/managed-files/requirements-windows.txt` to `scripts/requirements-pywinpty.txt` (tests/ is not in the package payload); new machine-readable `# wheel-tags:` line; the 8 hashes are unchanged, their wheel mapping re-read from the PyPI JSON API |
+| 7 | `check-post-push` step 21 checks the pywinpty version with a package-metadata command (`TOOL_CMDS`) |
+| 8 | `shared/rules/tool-lifecycle.md` "Managed libraries": a managed library gets no Managed CLI Tools row; its version check is an import/metadata command; its pin is the source of truth the registry names (session-commander decision, for the commander's review) |
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 9 | `reference/evaluations/pywinpty-windows-2026-11-13.md` v1.2: Phase 2 approval and results, integration, and the finding that the aitools-managed (uv) `python3` is EXTERNALLY-MANAGED |
+| 10 | `.claude/rules/deploy-paths.md`: setup-pywinpty is copy + embed; `reference/script-standards-detail.md`: tool name `pywinpty` |
+
+### Files created
+
+| File | Purpose |
+|------|---------|
+| `scripts/setup-pywinpty.ps1` / `.sh` | Windows install / macOS-Linux n/a |
+| `scripts/requirements-pywinpty.txt` | The pin (moved from `tests/managed-files/requirements-windows.txt`) |
+| `tests/pywinpty/test-setup-pywinpty.sh` / `.ps1` | n/a row, MDM build embed (positive and negative), Windows install cases in isolated APPDATA |
+
+**PEP 668:** aitools Step 15 makes `python3` the uv-managed CPython, which carries EXTERNALLY-MANAGED, so pip refuses `--user` there. Commander, 2026-11-14: "fix pep, add it to same branch commit, watch ci/cd, fix any errors, merge when ready". The script installs into that interpreter's user site with `--target` (pip skips its PEP 668 check for `--target` by design; uv's install tree is not touched). Verified against uv CPython 3.14.10 in an isolated APPDATA.
+
+**Verified on:** Windows 11 (pwsh 7, Git Bash 5.3.15, PyManager CPython 3.14.6): pywinpty 3.1.2 installed into the user site; `winpty-probe.py` GOT[abc] for git-bash and pwsh; managed-files suites 79/0/3 (bash) and 56/0/0 (pwsh), no pywinpty SKIP; `setup-pywinpty.ps1` real run "verified". macOS/Linux: CI.
+
+---
+
+## v0.76.2 -- One self-repairing owner of the shell profile, JSON reviews that name the file, menus that re-ask, cooked-mode console reads on Windows (2026-11-14)
+
+Not tagged. Backfilled 2026-11-14 (mission M5-Fixes). Four PRs merged on 2026-11-14 before #148 (v0.77.0): [#144](https://github.com/nobul-tech/aitools/pull/144) (`fix/console-and-profile`, merge c66d4b1, 00:51Z), [#145](https://github.com/nobul-tech/aitools/pull/145) (`fix/json-review-display`, merge e8ebd07, 01:47Z), [#146](https://github.com/nobul-tech/aitools/pull/146) (`fix/menus-reask`, merge a98208e, 02:17Z), [#147](https://github.com/nobul-tech/aitools/pull/147) (`fix/console-input-mode`, merge 301dd22, 02:54Z). Same-day changes roll into one release; it is a patch number only because v0.77.0 (#148, merged 04:32Z) was written first. Resolves Incident #173. Commander, session 87795dc3 (2026-11-13): "launch mission to create all other fixes in its own worktree" (#144, #147); RFI fa81-2, "no default or other characters should re-ask" (#146); "gitignore anything in the deploy/ directory and commit/push that gittignore file to avoid these issues moving forward, also gittinore the harvest manifest in aitools repo" (#145).
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 1 | Medium | Incident #173: `aitools-install.ps1` Step 7 rewrote the `# aitools shell integration` block of `$PROFILE` on every run, with no backup, and its removal loop deleted every non-blank line after the marker. Step 7 (both installers) now only runs `setup-user-shell`, the single owner of the profile and the rc files. The Windows integration (`aliases.ps1`, `aitools`, `hh`) is a second marked block (`# >>> aitools shell integration >>>`) replaced in place (`Update-MarkedBlock`); legacy blocks are migrated by known line shapes only (`Remove-LegacyIntegration`), so a user line after `function hh {...}` is kept; an unchanged profile is neither written nor backed up; every write is backed up first. ([#144](https://github.com/nobul-tech/aitools/pull/144)) |
+| 2 | High | Follow-up to Incident #172 (v0.76.1): a profile already multiplied (64 blocks) still reported OK. `setup-user-shell.ps1` now collapses duplicate managed blocks to one, checks exactly one start and one end marker per block after writing, refuses a write that would add parse errors, and reports damage it cannot fix safely (parse errors, stray `_aitoolsLocalBin` / `Owned by aitools` lines outside the blocks) as WARN `profile damage left in place` plus an ACTION naming the newest clean `<profile>.bak.<UTC>`. `setup-user-shell.sh` applies the same rules to `~/.bash_profile` (Perl, `bash -n` as the parse check) and now owns the `.bashrc` / `.zshrc` aliases source line. ([#144](https://github.com/nobul-tech/aitools/pull/144)) |
+| 3 | High | `aitools.ps1` Step 2: while `build-deploy.sh` ran with the console as stdin, its Git Bash/MSYS processes flipped the console input mode (0x1F7 to 0x2E8 and back, about 45 times per build). Left raw, the next review menu read with no echo and one key late, and the extra key fell into the next menu's default (overwrite). The build now gets a pipe for stdin, and the input mode is saved before it and restored after it. ([#144](https://github.com/nobul-tech/aitools/pull/144)) |
+| 4 | High | The text review, JSON field review and AI-merge preview menus treated any unrecognised input (a bare Enter, a word, a leftover keystroke) as overwrite, and deploy.log did not record what was typed. Every choice menu now accepts only an offered answer and asks again otherwise (`please type one of o/a/m/s/x`); EOF, `--force` and non-interactive runs keep their documented defaults; every answer is logged at `detail`. New `read_menu_choice` / `Read-MenuChoice` (stops after 50 unrecognised answers). Also converted: the `aitools user init` profile menu and confirms, hook and skill reverse discovery (`a adopt s skip` in any case: bash used to skip on `A` while PS1 adopted), `relay-outbound-prompt.sh/.ps1`, and the `cc` / `clip2md` confirms in `shared/shell/aliases.*`. Issue #29 (partly). ([#146](https://github.com/nobul-tech/aitools/pull/146)) |
+| 5 | High | `Read-ConsoleChoice` read in whatever mode a child process had left the Windows console: in raw mode an answer needed two Enters, nothing echoed, and the extra key fell into the next menu (default overwrite). It now reads in cooked mode and restores the previous mode in `finally` (real console: one `o<CR>`, echoed, mode restored). One `AitConsoleInput` type in `aitools-lib.ps1`, compiled once and only on Windows with a console as stdin, serves `Read-ConsoleChoice` and `Save-/Restore-ConsoleInputMode`, which move out of `aitools.ps1`. ([#147](https://github.com/nobul-tech/aitools/pull/147)) |
+| 6 | Medium | The AI-merge spinner never appeared on Windows: it ran in `Start-Job`, a separate process with no console. It now runs in a second runspace of the same process (parity with bash `_start_spinner`) and stops in a `finally` around `Invoke-AI`; `Invoke-AI` telemetry is file-only through the new `Write-AiLog` (twin of bash `_ai_log`), so it no longer prints into the spinner row. ([#147](https://github.com/nobul-tech/aitools/pull/147)) |
+| 7 | Medium | `check-pre-push` step 7 FAILed (`diff exit 2`, .sh) or threw (`Cannot find path ...\committed\deploy`, .ps1) once the dotprofile stopped tracking `deploy/`. Without a committed `deploy/` it now skips the staleness compare (PASS `fresh build OK (dotprofile deploy/ untracked, not compared)`); the build and the dry runs still run. The PS1 extracts with `System32\tar.exe` (from a Git Bash parent, GNU tar read `C:\...` as a remote host). ([#145](https://github.com/nobul-tech/aitools/pull/145)) |
+
+### New features
+
+| # | Change |
+|---|--------|
+| 8 | JSON field reviews name the file (`[REVIEW] registries/incidents.json: incidents differs from source.`), and so do the Created / Updated / Accept & adopt / Skipped log lines (`Review-JsonFields -ItemName` / `review_json_fields` `$4`). ([#145](https://github.com/nobul-tech/aitools/pull/145)) |
+| 9 | An array field shows which elements differ, colour-coded (red `-` only in LOCAL, green `+` only in SOURCE, yellow `~` changed), at most 20 lines, each also logged to deploy.log (`Write-JsonFieldDetail` / `_json_field_detail`; node `arrayDetail()`, identical text in both libs). ([#145](https://github.com/nobul-tech/aitools/pull/145)) |
+| 10 | `deploy-harness` deploys `~/.aitools/reference/` and `~/.aitools/registries/` as read-only copies: overwritten with a backup, no review menu, no adopt (`Deploy-ManagedFile -NoReview` / `MANAGED_NO_REVIEW=true`). ([#145](https://github.com/nobul-tech/aitools/pull/145)) |
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 11 | `harvesting/harvest-manifest.json` is gitignored and removed from the index (machine-local; the file stays on disk). The dotprofile gitignores `deploy/` (nobul-jose/aitools-nobul-jose `6a98d1b`, `fecff7e`). ([#145](https://github.com/nobul-tech/aitools/pull/145)) |
+| 12 | Menu contract asked for by #146: `read_tty_choice` / `Read-ConsoleChoice` set `READ_TTY_EOF=1` / `$script:ReadConsoleEof = $true` at EOF, so EOF and a typed empty line are told apart. ([#147](https://github.com/nobul-tech/aitools/pull/147)) |
+| 13 | `tests/managed-files/requirements-windows.txt` pins the pywinpty 3.1.2 hashes of every win_amd64 wheel (cp310-cp315, was cp312 and cp313); CI still installs the same cp312 wheel. Nothing was installed then (Phase 2 gate; adopted in v0.77.0). ([#144](https://github.com/nobul-tech/aitools/pull/144)) |
+| 14 | Tests and CI: `tests/setup-user-shell` .ps1 8 -> 37 checks and a new .sh suite (23 checks; CI macOS bash 5 and /bin/bash 3.2, Linux) ([#144](https://github.com/nobul-tech/aitools/pull/144)); `tests/aitools-entry/test-console-mode-guard.ps1` (18 checks, Windows CI; [#144](https://github.com/nobul-tech/aitools/pull/144)), 83 checks ([#147](https://github.com/nobul-tech/aitools/pull/147)); managed-files cases for array detail, the item label and `-NoReview`, and `tests/check-pre-push/test-pre-push-step7.sh` (CI macOS, Linux, Windows) ([#145](https://github.com/nobul-tech/aitools/pull/145)); `tests/menus/test-menu-choice.sh/.ps1` (CI macOS bash 5 and /bin/bash 3.2, Linux, Windows) and two re-ask cases in `tests/profile/test-user-init.sh` ([#146](https://github.com/nobul-tech/aitools/pull/146)) |
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 15 | `reference/ait-shellintegration.md` v1.1 (both blocks, repair and damage reporting, rc targets); new `reference/evaluations/pywinpty-windows-2026-11-13.md` v1.1. ([#144](https://github.com/nobul-tech/aitools/pull/144)) |
+| 16 | Read-only harness copies and the gitignored manifest and dotprofile `deploy/`: `.claude/rules/agentic-standards.md`, `aitools-workspace.md`, `deploy-paths.md` (and its `.cursor` twin), `shared/skills/harvest/SKILL.md`, `reference/artifact-harvesting.md`, `harness.md`, `managed-file-deployment.md`, `pre-push-checklist.md`, `user-repo.md`, `README.md`. ([#145](https://github.com/nobul-tech/aitools/pull/145)) |
+| 17 | Menu answers: `.claude/rules/interactive-menus.md` (new section "Answers: only an offered answer counts"), `hook-lifecycle.md`, `agentic-standards.md` (Choices table row), `reference/managed-file-deployment.md` (new section "Menu answers"); prompts `[y/N]` and `[Y/n]` read `[y/n]`. ([#146](https://github.com/nobul-tech/aitools/pull/146)) |
+| 18 | `reference/cross-platform-detail.md` new section "Windows console: input mode, jobs, spinner"; `reference/agentic-framework.md` and `reference/script-standards-detail.md`: PowerShell AI telemetry goes through `Write-AiLog`. ([#147](https://github.com/nobul-tech/aitools/pull/147)) |
+
+### Files created
+
+| File | Purpose |
+|------|---------|
+| `tests/setup-user-shell/test-setup-user-shell.sh` | setup-user-shell rules for `~/.bash_profile` and the rc files (CI: macOS, Linux) |
+| `tests/aitools-entry/test-console-mode-guard.ps1` | Console input-mode helpers, cooked-mode read, spinner, Step 2 structure (CI: Windows) |
+| `reference/evaluations/pywinpty-windows-2026-11-13.md` | pywinpty evaluation for local Windows pty tests |
+| `tests/check-pre-push/test-pre-push-step7.sh` | check-pre-push step 7 against an untracked and a stale committed dotprofile `deploy/` |
+| `tests/menus/test-menu-choice.sh` / `.ps1` | `read_menu_choice` / `Read-MenuChoice` contract and end-to-end menus |
+
+**Once per checkout, before pulling this release (#145):** a locally modified `harvesting/harvest-manifest.json` blocks `git pull --ff-only`; copy it aside, `git checkout -- harvesting/harvest-manifest.json`, pull, copy it back (it is now ignored). Every other machine's dotprofile: pulling `fecff7e` deletes `deploy/` from disk, and a dirty `deploy/` blocks the pull (`git checkout -- deploy` first); the next `aitools` run rebuilds it.
+
+**Verified on:** Windows 11 (pwsh 7, Git Bash 5.3.15), from each PR body: #144 `test-setup-user-shell.ps1` 37/0/0, `test-console-mode-guard.ps1` 18/0/0; #145 all 33 tracked suites exit 0, 0 failed; #146 CI run 43542753176 green (tests/menus 63/0/0 on macOS bash 5, /bin/bash 3.2, Linux and Windows pwsh; 61/0/0 Windows Git Bash ConPTY); #147 38 suites, 2,899 passed, 0 failed, 57 platform skips, and console-mode-guard 76/0/7 in CI. macOS/Linux: CI.
+
+---
+
+## v0.76.1 -- Re-running aitools install no longer corrupts the PowerShell profile (2026-11-13)
+
+Not tagged. Resolves Incident #172.
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 1 | Critical | Re-running `aitools install` on Windows corrupted `$PROFILE` (installer Step 7; plain `aitools` does not run `setup-user-shell`): `setup-user-shell.ps1` refreshed its managed block with `[regex]::Replace` and the block as the replacement string, where `$_` means the whole input, so each of the block's four `$__aitoolsLocalBin` became a copy of the whole profile. Every run after the first multiplied the profile (5 blocks, then 84, then 21,568) and left it unparseable (`Missing closing ')' in expression`), so none of it loaded. The block is now inserted with a `MatchEvaluator` |
+| 2 | High | `setup-user-shell.ps1` reported `OK managed block refreshed` for a profile it had broken: the post-write check only looked for the two markers. The spliced profile is now parse-checked before it is written; a result with more parse errors than the profile it replaces is not written (ERROR `managed block splice failed parse check`, exit 1) |
+
+### Files created
+
+| File | Purpose |
+|------|---------|
+| `tests/setup-user-shell/test-setup-user-shell.ps1` | Block added, refresh byte-stable over three runs, user lines around a stale block kept, breaking splice refused (CI: Windows) |
+
+**Repair on an affected machine:** the fix does not repair a profile that is already broken. Restore the newest `Microsoft.PowerShell_profile.ps1.bak.<UTC>` beside `$PROFILE` that has no parse errors (the script backs the profile up before every write).
+
+**Verified on:** Windows 11 (pwsh 7.6.10): `tests/setup-user-shell` 10/10; against the previous script 6 of 10 fail. macOS/Linux: not affected (`setup-user-shell.sh` splices with Perl, which does not re-expand `$` inside the block).
+
+---
+
 ## v0.76.0 -- Harness rules and skills from shared/ only; project and dotprofile rules and skills retired from user scope (2026-11-06)
 
 Not tagged. Commander order 2026-11-06: "we need to roll that back so that only the skills/rules in the shared/ directory get copied over"; asked whether the dotprofile `claude/rules` stays a source, the answer was "shared/ only". Decisions R-8 (`reference/rules.md`) and S-7 (`reference/skills.md`) supersede R-1, R-3, R-4, R-6 (sources) and S-1, S-2, S-3 (sources).

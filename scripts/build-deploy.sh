@@ -28,8 +28,10 @@
 #
 # CROSS-PLATFORM NOTE: This script is intentionally bash-only (no .ps1 variant).
 # It's a build step that produces platform-independent output (both .sh and .ps1
-# deploy scripts). The result is committed to git, so both platforms get identical
-# deploy/ contents. A parallel PS1 would double maintenance for no output difference.
+# deploy scripts) from one build, so both platforms get identical deploy/ contents.
+# The result is machine-local build output: the dotprofile gitignores deploy/
+# (commander, 2026-11-13). A parallel PS1 would double maintenance for no output
+# difference.
 # On Windows, aitools.ps1 invokes this via Git Bash (a prerequisite for Claude Code).
 # See .claude/rules/cross-platform.md "Approved exceptions" for the exception record.
 
@@ -244,7 +246,8 @@ blog "Build target: $DEPLOY_DIR (dotprofile repo)"
 # setup-user-claude fans out ~/.aitools/rules (rules fan-out, 2026-10-22).
 
 # --- Embedded dotprofile content: fallbacks, resolved per machine at RUNTIME ---
-# deploy/ is committed once and used by every machine of this user, so no machine's
+# deploy/ may be built on one machine and used by every machine of this user (it
+# is no longer committed: the dotprofile gitignores it), so no machine's
 # values are interpolated here (M3 B5: the cross-machine defect, decision 4). The
 # generated setup-user-claude.* resolve this machine's profile when they run: from
 # the live dotprofile on that machine when it has one (what scripts/ reads), else
@@ -304,7 +307,9 @@ if [ -f "$PROFILE_JSON" ]; then
         }
         # The value becomes code (a JS and a PowerShell string literal): only a
         # plain model id is embedded.
-        if printf '%s' "$_pj_model" | perl -ne 'exit(/\A[A-Za-z0-9._-]+\z/ ? 0 : 1)'; then
+        # perl -0777: the whole value is read before the test (pipe-safe; an
+        # empty value is not a model id)
+        if printf '%s' "$_pj_model" | perl -0777 -ne 'exit(/\A[A-Za-z0-9._-]+\z/ ? 0 : 1)'; then
             CURSOR_CLI_MODEL="$_pj_model"
         else
             blog_warn "cursor.cli.model in $PROFILE_JSON is not a plain model id (letters, digits, . _ -) -- the deploy fallback stays 'auto'"
@@ -484,7 +489,7 @@ done
 # newline) to "$_AITOOLS_EMBED_DIR/REL". REL is shell-quoted (printf %q).
 embed_file_bash() {
     local rel="$1" src="$2"
-    if perl -0777 -pe 's/\r\n/\n/g' "$src" | grep -qxF "$EMBED_EOF"; then
+    if perl -0777 -pe 's/\r\n/\n/g' "$src" | grep -xF "$EMBED_EOF" >/dev/null; then
         blog_error "Cannot embed $src: it contains the heredoc delimiter line $EMBED_EOF"
         exit 1
     fi
@@ -715,7 +720,7 @@ fi
 
 # Build into a staging dir; it replaces <dotprofile>/deploy only at the very end, so
 # a build that fails anywhere (inputs, extraction, PS1 validation) leaves the
-# committed deploy/ in place (review m1).
+# previous deploy/ in place (review m1).
 DEPLOY_DIR_FINAL="$DEPLOY_DIR"
 DEPLOY_DIR="$BUILD_TMP/deploy"
 mkdir -p "$DEPLOY_DIR"
@@ -1141,6 +1146,69 @@ blog "Copying deploy/setup-python.ps1"
     echo "$HEADER_COMMENT_PS1"
     cat "$SCRIPTS_DIR/setup-python.ps1" | inline_lib_ps1
 } > "$DEPLOY_DIR/setup-python.ps1"
+GENERATED=$((GENERATED + 1))
+
+# ============================================================
+# deploy/setup-pywinpty.sh (copy as-is) and .ps1 (copy + embedded pin)
+# ============================================================
+# The .sh reports n/a on macOS/Linux. The .ps1 reads its pin from
+# requirements-pywinpty.txt beside it (dev and package paths); deploy/ has no such
+# file, so the pin (scripts/requirements-pywinpty.txt, the single source) is appended
+# after the inlined lib as the here-string $AitoolsEmbeddedPywinptyPin, which
+# setup-pywinpty.ps1 reads when no pin file sits beside it. Only the pin data is
+# embedded; the setup logic is copied. A pin that is missing or empty, has no
+# pywinpty== line, has a line starting with '@ (it would end the here-string), has
+# no "# wheel-tags:" line or no --hash=sha256: entry fails the build
+# (tests/pywinpty/test-setup-pywinpty.sh).
+blog "Copying deploy/setup-pywinpty.sh"
+{
+    echo '#!/usr/bin/env bash'
+    echo "$HEADER_COMMENT_BASH"
+    tail -n +2 "$SCRIPTS_DIR/setup-pywinpty.sh" | inline_lib_bash
+} > "$DEPLOY_DIR/setup-pywinpty.sh"
+chmod +x "$DEPLOY_DIR/setup-pywinpty.sh"
+GENERATED=$((GENERATED + 1))
+
+PYWINPTY_PIN="$SCRIPTS_DIR/requirements-pywinpty.txt"
+PYWINPTY_PIN_BLK="$BUILD_TMP/pywinpty-pin.ps1.blk"
+# The block: a source comment, "$AitoolsEmbeddedPywinptyPin = @'", the pin text
+# (line endings normalized to LF, one final newline; the post-build step makes every
+# deploy/*.ps1 CRLF), and "'@" at column 0. Prints "pywinpty <version>, <n> hash(es)".
+_pin_rc=0
+_pin_msg=$(perl -e '
+    my ($src, $out) = @ARGV;
+    my $q = chr(39);
+    open my $in, "<", $src or die "$src: cannot read ($!)\n";
+    my $t = do { local $/; <$in> };
+    close $in;
+    $t = "" unless defined $t;
+    $t =~ s/\r\n?/\n/g;
+    die "$src is empty\n" unless $t =~ /\S/;
+    my ($ver) = $t =~ /^\s*pywinpty==([0-9][0-9A-Za-z.]*)/m
+        or die "$src has no pywinpty== line\n";
+    die "$src has a line starting with ${q}\@ (it would end the here-string)\n"
+        if $t =~ /^\s*\x27\x40/m;
+    die "$src has no # wheel-tags: line\n" unless $t =~ /^\s*#\s*wheel-tags:/m;
+    $t .= "\n" unless $t =~ /\n\z/;
+    my $n = () = $t =~ /--hash=sha256:/g;
+    die "$src has no --hash=sha256: entries\n" unless $n;
+    open my $o, ">", $out or die "$out: cannot write ($!)\n";
+    print $o "# Embedded by scripts/build-deploy.sh from scripts/requirements-pywinpty.txt -- the pin setup-pywinpty.ps1 uses when no requirements-pywinpty.txt sits beside it\n";
+    print $o "\$AitoolsEmbeddedPywinptyPin = \@$q\n", $t, "$q\@\n";
+    close $o or die "$out: write failed ($!)\n";
+    print "pywinpty $ver, $n hash(es)";
+' "$PYWINPTY_PIN" "$PYWINPTY_PIN_BLK" 2>&1) || _pin_rc=$?
+if [ "$_pin_rc" -ne 0 ]; then
+    blog_error "Cannot embed the pywinpty pin: ${_pin_msg:-perl exit $_pin_rc} -- deploy/setup-pywinpty.ps1 not generated"
+    exit 1
+fi
+blog "Embedding the pywinpty pin ($_pin_msg) from scripts/requirements-pywinpty.txt"
+
+blog "Copying deploy/setup-pywinpty.ps1"
+{
+    echo "$HEADER_COMMENT_PS1"
+    cat "$SCRIPTS_DIR/setup-pywinpty.ps1" | inline_lib_ps1 "$PYWINPTY_PIN_BLK"
+} > "$DEPLOY_DIR/setup-pywinpty.ps1"
 GENERATED=$((GENERATED + 1))
 
 # ============================================================
@@ -2020,7 +2088,9 @@ blog "Writing deploy/deploy-harness.payload (harness snapshot, read by deploy-ha
 if ! MDM_PAYLOAD_SHA=$(mdm_write_payload "$MDM_MANIFEST" "$DEPLOY_DIR/deploy-harness.payload"); then
     exit 1
 fi
-if ! printf '%s' "$MDM_PAYLOAD_SHA" | perl -ne 'exit(/\A[0-9a-f]{64}\z/ ? 0 : 1)'; then
+# perl -0777: the whole value is read before the test (pipe-safe); an empty
+# value now fails here (perl -n ran no line on empty input and exited 0)
+if ! printf '%s' "$MDM_PAYLOAD_SHA" | perl -0777 -ne 'exit(/\A[0-9a-f]{64}\z/ ? 0 : 1)'; then
     blog_error "Harness snapshot: no sha256 for deploy/deploy-harness.payload"
     exit 1
 fi

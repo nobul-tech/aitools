@@ -46,7 +46,10 @@
 #   until a source has the name again.
 # Preserved: every other file under .aitools (logs, backups, files with no
 #   source -- each logged, never deleted; backups and the manifests are not listed).
-# Overwrites: no -- a deployed file that differs from its source gets the review menu.
+# Overwrites: reference\ and registries\ only -- read-only copies (never edited
+#   there): a file that differs from its source is overwritten (backup kept),
+#   with no review menu and no adopt. Any other deployed file that differs from
+#   its source gets the review menu.
 # --- END scope (extracted by build-deploy) ---
 #
 # Usage: deploy-harness.ps1 [-DryRun] [-Force] [-SkipConfig] [-Help]
@@ -324,8 +327,12 @@ foreach ($p in $plan) {
             if ($null -eq $cur -or ($cur -replace '[\r\n]+$', '') -cne ($content -replace '[\r\n]+$', '')) { $nWouldUpdate++ }
         }
     }
-    # Not inside a pipeline or job: [x]abort exits 2 from the library.
-    $result = Deploy-ManagedFile -Content $content -DestPath $p.Dest -ToolName $tool -ItemName $p.Item -AdoptPath $p.Src
+    # reference\ and registries\ are read-only copies: the source wins, no menu
+    # (header "Overwrites"). [x]abort at a menu exits 2 from the library (the
+    # entry points run this script through the lib relay, a pipeline: the exit
+    # still ends it with code 2).
+    $readOnlyCopy = $p.Kind -in @("reference", "registries")
+    $result = Deploy-ManagedFile -NoReview:$readOnlyCopy -Content $content -DestPath $p.Dest -ToolName $tool -ItemName $p.Item -AdoptPath $p.Src
     if ($result -is [array]) { $result = $result[-1] }   # the result is the last output
     switch ($result) {
         "created"  { $nAdded++ }

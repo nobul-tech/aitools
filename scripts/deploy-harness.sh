@@ -45,7 +45,10 @@
 #   until a source has the name again.
 # Preserved: every other file under ~/.aitools (logs, backups, files with no
 #   source -- each logged, never deleted; backups and the manifests are not listed).
-# Overwrites: no -- a deployed file that differs from its source gets the review menu.
+# Overwrites: reference/ and registries/ only -- read-only copies (never edited
+#   there): a file that differs from its source is overwritten (backup kept),
+#   with no review menu and no adopt. Any other deployed file that differs from
+#   its source gets the review menu.
 # --- END scope (extracted by build-deploy) ---
 #
 # Usage: deploy-harness.sh [--dry-run] [--force] [--skip-config] [--help]
@@ -344,7 +347,11 @@ deploy_one() {
             N_WOULD_UPDATE=$((N_WOULD_UPDATE + 1))
         fi
     fi
-    deploy_managed_file "$content" "$dest" "$TOOL" "$item" "$src"
+    # reference/ and registries/ are read-only copies: the source wins, no menu
+    # (header "Overwrites")
+    local no_review=false
+    case "$item" in reference/*|registries/*) no_review=true ;; esac
+    MANAGED_NO_REVIEW="$no_review" deploy_managed_file "$content" "$dest" "$TOOL" "$item" "$src"
     case "$MANAGED_FILE_RESULT" in
         created)
             N_ADDED=$((N_ADDED + 1)); fix_exec "$src" "$dest" ;;

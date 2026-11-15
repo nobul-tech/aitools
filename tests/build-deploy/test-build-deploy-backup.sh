@@ -123,7 +123,7 @@ NB="$(newest_backup)"
 check "success: newest backup is today's run" "case '${NB##*/}' in deploy.bak.2020-*) false ;; deploy.bak.*) true ;; *) false ;; esac"
 check "success: backup identical to the old deploy/" "diff -rq '$C/pristine' '$NB' >/dev/null"
 check "success: no swap directory left" "[ \"\$(count_swap)\" = 0 ]"
-check "success: backups ignored by git" "! git -C '$D' status --porcelain | grep -q 'deploy\\.bak\\.'"
+check "success: backups ignored by git" "! git -C '$D' status --porcelain | grep 'deploy\\.bak\\.' >/dev/null"
 check "success: backup and swap logged" "grep -q 'Backed up deploy/ to' '$C/out' && grep -q 'Pruned old deploy/ backup' '$C/out' && grep -q 'Replaced deploy/' '$C/out'"
 check "success: no ignore warning" "! grep -q 'does not ignore' '$C/out'"
 

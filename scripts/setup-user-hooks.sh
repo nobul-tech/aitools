@@ -217,16 +217,17 @@ else
 
         if [ -n "$USER_REPO_PATH" ]; then
             log "Found user-created hook: $hook_name"
-            # tty_interactive + read_tty_choice (incident #81, GitHub #29): a
-            # non-terminal stdin never prompts, and EOF at the prompt logs a
-            # warning and takes the default, [s]kip -- the choice that writes
-            # nothing (this menu has no overwrite option).
+            # tty_interactive + read_menu_choice (incident #81, GitHub #29): a
+            # non-terminal stdin never prompts. read_menu_choice prints the
+            # prompt, lowercases the answer (so `A` adopts, as in the PS1
+            # twin), logs it at detail, and re-asks on an empty or unrecognised
+            # answer; only EOF takes the default, [s]kip -- the choice that
+            # writes nothing (this menu has no overwrite option).
             if tty_interactive; then
                 printf '\n  User-created hook detected: %s\n' "$hook_name" > /dev/tty
                 printf '  [a]dopt to dotprofile  [s]kip\n' > /dev/tty
-                printf '  > ' > /dev/tty
                 choice=""
-                read_tty_choice choice "skip"
+                read_menu_choice choice "a adopt s skip" "s" "skip" "adopt hook $hook_name" "  > "
                 case "$choice" in
                     a|adopt)
                         # Net-new user hook -> dotprofile only (not a managed
@@ -236,8 +237,13 @@ else
                             write_summary ERROR "claude hooks" "adopt failed: $hook_name"
                         fi
                         ;;
-                    *)
+                    s|skip)
                         log "Skipped adoption of $hook_name"
+                        ;;
+                    *)
+                        # Unreachable: read_menu_choice returns only a VALID
+                        # answer. Skip (writes nothing) and say so.
+                        log_warn "Unexpected answer \"$choice\" at adopt hook $hook_name -- skipped adoption of $hook_name"
                         ;;
                 esac
             else

@@ -20,6 +20,7 @@ through their skills, not listed here.
 | `framework-hook-rollout.md` | Observe-then-enforce hook rollout |
 | `framework-incident-governance.md` | Incident tracking (defect management) |
 | `framework-incident-investigation.md` | Root-cause analysis: 5 Whys, Swiss cheese, barrier analysis |
+| `framework-intelligence-types.md` | Intelligence types (observation, fact, assumption, finding, operational learning, proposal, RFI): doctrine sources and the adaptation |
 | `framework-intent-documentation.md` | Intent statements: purpose, scope, audience |
 | `framework-managed-file-deployment.md` | Configuration management behind managed file deployment |
 | `framework-mission-command.md` | Mission command (disciplined initiative, backbrief, confirmation brief): sources for checklist items 2 and 4 |
@@ -29,9 +30,9 @@ through their skills, not listed here.
 | `framework-three-layer-governance.md` | Prevention / detection / audit layers and the registry convention |
 | `framework-tool-lifecycle.md` | Tool lifecycle: phases, gates, health flags |
 | `framework-tool-ops.md` | Tool operations: SRE-grounded per-tool ops metadata |
-| `harness-db-schema.sql` | SQLite schema for the session and harness databases |
+| `harness-db-schema.sql` | SQLite schema for the session and harness databases (generated from `scripts/harness-db.py`; do not edit) |
 | `incident-020-process-discipline.md` | Incident #20 discovery context (process discipline) |
-| `prompt-turn-checklist.md` | The checklist every agent runs at each prompt turn; spec for the prompt-turn hook |
+| `prompt-turn-checklist.md` | The checklist every agent runs at each prompt turn: full spec of the shared rule `shared/rules/prompt-turn.md` (the condensed form agents load) and of the prompt-turn hook |
 
 ## Scripts and deployment
 

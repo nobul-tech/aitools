@@ -177,11 +177,13 @@ if ($DryRun) {
 
             if ($userRepoPath) {
                 Log "Found user-created hook: $hookName"
-                # Test-InteractiveConsole + Read-ConsoleChoice (incident #81, GitHub
-                # #29): a redirected stdin never prompts, and EOF at the prompt
-                # ([Console]::ReadLine() -> $null) logs a warning and takes the
-                # default, [s]kip -- the choice that writes nothing (this menu has
-                # no overwrite option).
+                # Test-InteractiveConsole + Read-MenuChoice (incident #81, GitHub
+                # #29): a redirected stdin never prompts. Read-MenuChoice prints
+                # the prompt, lowercases the answer, logs it at detail, and
+                # re-asks on an empty or unrecognised answer; only EOF
+                # ([Console]::ReadLine() -> $null) takes the default, [s]kip --
+                # the choice that writes nothing (this menu has no overwrite
+                # option).
                 if (-not (Test-InteractiveConsole)) {
                     Log "Non-interactive: skipped adoption prompt for $hookName"
                     continue
@@ -189,8 +191,8 @@ if ($DryRun) {
                 [Console]::WriteLine("")
                 [Console]::WriteLine("  User-created hook detected: $hookName")
                 [Console]::WriteLine("  [a]dopt to dotprofile  [s]kip")
-                [Console]::Write("  > ")
-                $choice = Read-ConsoleChoice "skip"
+                $choice = Read-MenuChoice -Valid @("a", "adopt", "s", "skip") -Default "s" -DefaultDesc "skip" `
+                    -Context "adopt hook $hookName" -Prompt "  > "
                 switch ($choice) {
                     { $_ -in @("a", "adopt") } {
                         # Net-new user hook -> dotprofile only (not a managed
@@ -202,8 +204,13 @@ if ($DryRun) {
                             Write-Summary "ERROR" "claude hooks" "adopt failed: $hookName"
                         }
                     }
-                    default {
+                    { $_ -in @("s", "skip") } {
                         Log "Skipped adoption of $hookName"
+                    }
+                    default {
+                        # Unreachable: Read-MenuChoice returns only a VALID
+                        # answer. Skip (writes nothing) and say so.
+                        LogWarn "Unexpected answer `"$choice`" at adopt hook $hookName -- skipped adoption of $hookName"
                     }
                 }
             }

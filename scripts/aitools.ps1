@@ -31,6 +31,8 @@ if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
 # --- PS 5.1 compat: --flag arrives as positional $Command since PS 5.1 doesn't support -- prefix ---
 if ($Command -eq "--addmcp" -or $Command -eq "-addmcp") {
     $AddMcp = $Remaining
+    $script:AddMcpGiven = $true
+    $Remaining = @()
     $Command = ""
 }
 if ($Command -eq "--version" -or $Command -eq "-v") {
@@ -49,14 +51,38 @@ if ($Command -eq "--force" -or $Command -eq "-force") {
     $Force = [switch]::Present
     $Command = ""
 }
-# Also check Remaining for --dry-run / --force (may come after a command)
-if ($Remaining -and $Remaining -contains "--dry-run") {
+# A flag given first in a native call (`aitools --force install`) took the place of
+# the command above. Read on: more leading --dry-run / --force, an --addmcp list,
+# or the command
+while (-not $Command -and -not $AddMcp -and $Remaining -and @($Remaining).Count -gt 0) {
+    $first = @($Remaining)[0]
+    if ($first -eq "--dry-run" -or $first -eq "-dry-run") { $DryRun = [switch]::Present }
+    elseif ($first -eq "--force" -or $first -eq "-force") { $Force = [switch]::Present }
+    elseif ($first -eq "--addmcp" -or $first -eq "-addmcp") {
+        $AddMcp = @($Remaining | Select-Object -Skip 1)
+        $script:AddMcpGiven = $true
+        $Remaining = @()
+        break
+    } elseif ($first -in @("install", "gitpull", "mcp", "user", "sessions", "dashboard")) {
+        $Command = $first
+    } else { break }
+    $Remaining = @($Remaining | Select-Object -Skip 1)
+}
+# Also check Remaining for --dry-run / --force (may come after a command); not for
+# dashboard, whose arguments go to aitools-dashboard.ps1 unchanged (as in bash)
+if ($Command -ne "dashboard" -and $Remaining -and $Remaining -contains "--dry-run") {
     $DryRun = [switch]::Present
     $Remaining = @($Remaining | Where-Object { $_ -ne "--dry-run" })
 }
-if ($Remaining -and $Remaining -contains "--force") {
+if ($Command -ne "dashboard" -and $Remaining -and $Remaining -contains "--force") {
     $Force = [switch]::Present
     $Remaining = @($Remaining | Where-Object { $_ -ne "--force" })
+}
+# Under pwsh -File a list arrives as one string: the bash entry point forwards
+# `--addmcp a b` on Windows as -AddMcp "a,b" (scripts/aitools, aitools_ps1_args).
+# Split on commas and drop empty names (an empty list is reported below).
+if ($null -ne $AddMcp) {
+    $AddMcp = @($AddMcp | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 }
 
 # ---------------------------------------------------------------------------
@@ -117,9 +143,8 @@ function Invoke-ProfileCheck {
         "migrate" {
             Write-Host "profile: profile.json is v1 (legacy). Migration to v2 recommended." -ForegroundColor Yellow
             if ($Mode -eq "interactive" -and (Test-UiCanAsk)) {
-                [Console]::Write("Migrate profile.json to v2 now? [y/N]: ")
-                $answer = Read-ConsoleChoice "no"
-                if ($answer -match '^[Yy]' -and $result.profilePath) {
+                $answer = Read-MenuChoice -Valid @("y", "yes", "n", "no") -Default "n" -DefaultDesc "no" -Context "profile migrate" -Prompt "Migrate profile.json to v2 now? [y/n]: "
+                if ($answer -in @("y", "yes") -and $result.profilePath) {
                     $null = Invoke-UiV1Migrate (Split-Path $result.profilePath -Parent)
                 }
             }
@@ -150,6 +175,11 @@ function Get-RepoVersion {
         if ($log) { return $log } else { return "unknown" }
     } catch { return "unknown" }
 }
+
+# Console input mode guard (Windows): Save-ConsoleInputMode / Restore-ConsoleInputMode
+# (used around build-deploy in Step 2) live in scripts/aitools-lib.ps1, next to
+# Read-ConsoleChoice, on the one shared type AitConsoleInput; the lib is dot-sourced
+# below, before Step 2.
 
 # Invoke-DeployAbort SCRIPT -- deploy-harness exited 2: the user chose [x]abort at a
 # review menu (D-TS13; abort ends the whole run, T-Q3). The remaining deploy steps
@@ -558,8 +588,24 @@ if ($Command -and $Command -notin $knownCommands) {
     exit 1
 }
 
+# Reject unknown arguments when not installing (typos like "--forse"; bash parity,
+# scripts/aitools): only install, user, sessions and dashboard take more arguments,
+# and the installer flags belong to install. Without this an unknown flag ran the sync.
+$unknownArg = ""
+if (-not $doInstall) {
+    if ($SkipGhAuth) { $unknownArg = "--skip-gh-auth" }
+    elseif ($PSBoundParameters.ContainsKey('ReposPath')) { $unknownArg = "--repos-path" }
+    elseif ($SkipDriveDetection) { $unknownArg = "--skip-drive-detection" }
+    elseif (-not ($doUser -or $doSessions -or $doDashboard) -and $Remaining -and @($Remaining).Count -gt 0) { $unknownArg = @($Remaining)[0] }
+}
+if ($unknownArg) {
+    LogError "unknown argument '$unknownArg'"
+    Write-Host "Run 'aitools --help' for usage."
+    exit 1
+}
+
 # Reject --addmcp with no server names
-if ($PSBoundParameters.ContainsKey('AddMcp') -and $AddMcp.Count -eq 0) {
+if (($PSBoundParameters.ContainsKey('AddMcp') -or $script:AddMcpGiven) -and @($AddMcp | Where-Object { $_ }).Count -eq 0) {
     LogError "--addmcp requires at least one server name (vercel, webflow)"
     exit 1
 }
@@ -688,10 +734,19 @@ if ($doDashboard) {
         LogError "aitools-dashboard.ps1 not found at $dashboardScript"
         exit 1
     }
-    # Forward all remaining args to the dashboard script
+    # Forward all remaining args to the dashboard script with pwsh -File, which binds
+    # --background to -Background, --status to -Status, and so on (the bash entry
+    # point's dispatch; the dashboard-serve hook passes --background). An in-process
+    # call with an array splat binds every string by position (to -Port first) and
+    # fails: "Cannot convert value "--background" to type "System.Int32"".
     $dashArgs = @()
     if ($Remaining) { $dashArgs = $Remaining }
-    & $dashboardScript @dashArgs
+    $pwshExe = [Environment]::ProcessPath
+    if (-not $pwshExe) {
+        LogError "cannot find the path of this PowerShell process to run aitools-dashboard.ps1"
+        exit 1
+    }
+    & $pwshExe -NoProfile -ExecutionPolicy Bypass -File $dashboardScript @dashArgs
     exit $LASTEXITCODE
 }
 
@@ -1055,13 +1110,17 @@ function Read-UiChoose([string]$Pf, [string]$Suggested, [string]$ThisId) {
     }
     [Console]::WriteLine("  [n] new profile for this machine")
     [Console]::WriteLine("  [s] skip")
-    [Console]::Write("Choice: ")
-    $choice = Read-ConsoleChoice "skip"
-    if (-not $choice -or $choice -match '^[sS]$') {
+    # Only the numbered entries, n and s are answers; anything else (an empty
+    # line included) is asked again by Read-MenuChoice; EOF = s (skip)
+    $valid = @()
+    for ($i = 1; $i -le $nums.Count; $i++) { $valid += "$i" }
+    $valid += @("n", "s")
+    $choice = Read-MenuChoice -Valid $valid -Default "s" -DefaultDesc "skip" -Context "which profile" -Prompt "Choice: "
+    if ($choice -eq "s") {
         LogWarn "machine profile: registration skipped -- deploys will report no machine match"
         return 2
     }
-    if ($choice -match '^[nN]$') {
+    if ($choice -eq "n") {
         [Console]::Write("New alias (e.g., laptop, workstation): ")
         $script:UiChoice = Read-ConsoleChoice "skip"
         if (-not $script:UiChoice) {
@@ -1071,12 +1130,9 @@ function Read-UiChoose([string]$Pf, [string]$Suggested, [string]$ThisId) {
         $script:UiChoiceKind = "new"
         return 0
     }
-    if ($choice -match '^[0-9]+$' -and [int]$choice -ge 1 -and [int]$choice -le $nums.Count) {
-        $script:UiChoice = $nums[[int]$choice - 1]; $script:UiChoiceKind = "claim"
-        return 0
-    }
-    LogWarn "machine profile: invalid choice '$choice' -- registration skipped"
-    return 2
+    # a listed number (Read-MenuChoice accepts nothing else)
+    $script:UiChoice = $nums[[int]$choice - 1]; $script:UiChoiceKind = "claim"
+    return 0
 }
 
 # Read-UiNameCompany ALIAS -- on a console, a new profile's display name and
@@ -1125,9 +1181,8 @@ function Invoke-UiRegister([string]$Dir, [string]$Mode, [string]$Value, [bool]$C
             Write-UiAction "Run: aitools user init --alias <another name> (or confirm on a terminal)"
             return 1
         }
-        [Console]::Write("Alias `"$Value`" is used by another machine's profile ($okey). Use it for this machine too? [y/N]: ")
-        $ans = Read-ConsoleChoice "no"
-        if ($ans -match '^[yY]') {
+        $ans = Read-MenuChoice -Valid @("y", "yes", "n", "no") -Default "n" -DefaultDesc "no" -Context "alias $Value" -Prompt "Alias `"$Value`" is used by another machine's profile ($okey). Use it for this machine too? [y/n]: "
+        if ($ans -in @("y", "yes")) {
             Log "machine profile: alias `"$Value`" shared with profile $okey (confirmed at the prompt)"
             $extra += @("--allow-duplicate-alias")
             continue
@@ -1480,11 +1535,9 @@ function Invoke-UiCreateDotprofile([string]$Dir) {
     }
     $ans = "y"
     if (Test-UiCanAsk) {
-        [Console]::Write("Create the private GitHub repo '$($script:UiRepoName)' and push? [Y/n]: ")
-        $ans = Read-ConsoleChoice "yes"
-        if (-not $ans) { $ans = "y" }
+        $ans = Read-MenuChoice -Valid @("y", "yes", "n", "no") -Default "y" -DefaultDesc "yes" -Context "create dotprofile $($script:UiRepoName)" -Prompt "Create the private GitHub repo '$($script:UiRepoName)' and push? [y/n]: "
     }
-    if ($ans -notmatch '^[yY]') {
+    if ($ans -notin @("y", "yes")) {
         LogWarn "user init: GitHub repo not created -- the dotprofile stays local; create it and push: gh repo create $($script:UiRepoName) --private --source $Dir --push"
         Write-Summary "WARN" "dotprofile" "created, not pushed"
         Write-UiAction $create
@@ -2026,12 +2079,20 @@ if ($unixRepoPath -match '^/([A-Za-z])/') {
 # The dotprofile resolved above reaches the build as AITOOLS_USER_REPO_PATH, scoped
 # to this one call (B5a Q1; PR #95 follow-up, review H5): restored right after it
 $prevUserRepoEnv = $env:AITOOLS_USER_REPO_PATH
+# Console input mode: with the console as stdin, the build's MSYS processes switch
+# the console input mode (0x1F7 -> 0x2E8/0xE7, dozens of times per build) and may
+# leave it raw; the review menus of the later steps read in that console. The build
+# reads no stdin, so it gets a pipe ($null |): MSYS then leaves the console alone.
+# Save-ConsoleInputMode / Restore-ConsoleInputMode (aitools-lib.ps1) also put the mode
+# back in case a process opens CONIN$ itself (no-op without a console).
+$consoleInMode = Save-ConsoleInputMode
 try {
     if ($buildUserRepo) { $env:AITOOLS_USER_REPO_PATH = $buildUserRepo }
-    $buildResult = & $bashExe "$unixRepoPath/scripts/build-deploy.sh" 2>&1 | Out-String
+    $buildResult = $null | & $bashExe "$unixRepoPath/scripts/build-deploy.sh" 2>&1 | Out-String
     $buildRc = $LASTEXITCODE
 } finally {
     $env:AITOOLS_USER_REPO_PATH = $prevUserRepoEnv
+    $null = Restore-ConsoleInputMode $consoleInMode "build-deploy"
 }
 Add-Content -Path $logFile -Value $buildResult
 if ($buildRc -eq 0) {
