@@ -33,6 +33,22 @@ Not tagged. Branch `docs/m7-redact-email`, mission M7-Priv under M7-Sweep (sessi
 
 ---
 
+## v0.77.17 -- The menu rules state the EOF defaults the code takes (2026-11-14)
+
+Not tagged. Branch `docs/m7-eof-spec`, mission M7-Menus under M7-Sweep (session 87795dc3), item 4 of M7-Sweep. Commander, 2026-11-14 (RFI fa81-25): "launch mission go fix them, dont bother filing incidents, check to see if these were already fixed by the other running missions first, if not do it". No code change.
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 1 | `.claude/rules/interactive-menus.md` (and `.cursor/rules/interactive-menus.mdc`) "Non-interactive fallback": EOF at a prompt no longer reads as "auto-select `overwrite`" for every menu. It takes that prompt's documented default with a warning, as `read_menu_choice` / `Read-MenuChoice` do: `overwrite` at the text review menu (`prompt_diff_review` / `Prompt-DiffReview`) and at every JSON field prompt that offers `[o]verwrite` (`prompt_json_field_review` / `Prompt-JsonFieldReview`: a field in SOURCE, whether or not LOCAL has it, the settings.json sync included); `skip` at a JSON field only in LOCAL (`review_json_fields` / `Review-JsonFields` offer `[a/s/x]` there, no overwrite); `n` (reject) at the AI merge preview (`_invoke_ai_merge` / `Invoke-AiMerge`); empty feedback at the `[r]efine` feedback read (`read_tty_choice` / `Read-ConsoleChoice`), so the merge is refined once more (one more AI merge attempt), then EOF at the preview rejects it and EOF at the review menu overwrites. "No AI merge runs in a non-interactive run" now reads: no AI merge starts in a run with no terminal or `--force` (no menu is shown); EOF reaches the merge prompts only after an interactive `[m]` |
+| 2 | `.claude/rules/agentic-standards.md` (and `.cursor/rules/agentic-standards.mdc`) "Managed-file review choices and merge": the non-interactive bullet lists no terminal or `--force` (not EOF) and says no menu is shown, so no merge starts; "EOF is not a choice and takes overwrite" now names each prompt's EOF default and points to `interactive-menus.md` "Non-interactive fallback" |
+| 3 | `reference/framework-managed-file-deployment.md` "How We Adopted It": "`AITOOLS_FORCE`, non-terminal stdin and EOF at a prompt select overwrite" now reads: `AITOOLS_FORCE` and non-terminal stdin select overwrite with no menu (a JSON field only in LOCAL is kept); EOF at a prompt takes that prompt's default with a warning (pointer to `interactive-menus.md` "Non-interactive fallback") |
+
+**Verified on:** Windows (text read against `read_tty_choice`, `read_menu_choice`, `_invoke_ai_merge`, `prompt_diff_review`, `review_json_fields`, `prompt_json_field_review` in `scripts/aitools-lib.sh` and their twins in `scripts/aitools-lib.ps1`; `tests/menus/test-menu-choice.ps1`: 97 passed, 0 failed, including the EOF cases for a JSON field only in LOCAL, the settings sync and the refine feedback, where one refine makes two AI calls). No code change.
+
+---
+
 ## v0.77.13 -- OS guards on the [RELAY] prompt scripts; the Windows checks call Git Bash only for build-deploy.sh (2026-11-14)
 
 Not tagged. Branch `fix/38dc-23-relay-guards-no-gitbash`, mission 38dc-23 under M6-Polish (session 87795dc3). Commander, 2026-11-14, answer to RFI 38dc-7: "relay-outbound.sh/.ps1 need os guards they are not exempt, the aitools dependency needs to be resolved (how to resolve it and resolving it need to be part of same mission) ... for the check-*.ps1 can youj explain this further? id like to avoid calling git bash on thowse ps1 scripts."
