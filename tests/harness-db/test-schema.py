@@ -20,8 +20,8 @@ Checks:
     legacy_category / legacy_item_type set, ids and AUTOINCREMENT sequences
     kept, provenance edges intact (foreign_key_check clean), the migrated
     shape equal to a fresh v4 DB, and a second run changing nothing;
-  - end to end: `ol add` and `log --type spotrep` on a v3 session DB in a
-    temp project migrate it and write v4 values.
+  - end to end: `ol list` on a v3 session DB reads it without migrating;
+    `ol add` and `log --type spotrep` migrate it and write v4 values.
 
 Isolation: HOME and USERPROFILE point at a temp dir for the whole run (so
 harness-db.log is written there); every DB is a temp file. Nothing touches
@@ -347,6 +347,15 @@ class EndToEndCli(unittest.TestCase):
         c.execute("INSERT INTO observations (category, text, status, created_at) "
                   "VALUES ('finding', 'old ol', 'verified', ?)", (NOW,))
         c.commit()
+        c.close()
+        # A read does not migrate: `ol list` on the v3 DB lists its OL row and
+        # leaves the file at schema 3 (the reviewer's N1 on PR #181).
+        r = self.run_cli(proj, "ol", "list", "--session", sid)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(r.stdout.splitlines(), ["OL-1: old ol"])
+        self.assertNotIn("Migrated", r.stderr)
+        c = sqlite3.connect(f"file:{db.as_posix()}?mode=ro", uri=True)
+        self.assertNotIn("legacy_category", hdb._table_columns(c, "observations"))
         c.close()
         r = self.run_cli(proj, "ol", "add", "new lesson", "--session", sid,
                          "--source", "tests/harness-db/test-schema.py", "--source-kind", "artifact")

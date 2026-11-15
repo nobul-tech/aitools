@@ -850,7 +850,8 @@ def ensure_schema(conn: sqlite3.Connection, tier: str) -> list[str]:
     """
     if tier not in ("session", "harness"):
         raise ValueError(f"unknown tier: {tier}")
-    fresh = _table_sql(conn, "schema_version") is None
+    fresh = conn.execute(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table'").fetchone()[0] == 0
     changes = [f"rebuilt {t}" for t in migrate_v4(conn, tier)]
     conn.executescript(SESSION_SCHEMA if tier == "session" else HARNESS_SCHEMA)
     if tier == "session" and migrate_session_columns(conn):
@@ -929,11 +930,16 @@ def find_active_session_id(project_root: Path) -> str | None:
     return None
 
 
-def resolve_session_db(project_root: Path, session_id: str | None = None) -> tuple[Path, str] | None:
+def resolve_session_db(
+    project_root: Path, session_id: str | None = None, *, for_write: bool = False
+) -> tuple[Path, str] | None:
     """Resolve session DB path from explicit ID or auto-detection.
 
+    for_write: the caller will write, so bring the DB to SCHEMA_VERSION
+    first (prepare_db). Read-only callers leave an older DB untouched; the
+    queries they run work on schema 3 and 4 alike.
     Returns (db_path, session_id) or None if no session found.
-    Logs detail to deploy.log on failure.
+    Logs detail to harness-db.log on failure.
     """
     if session_id is None:
         session_id = find_active_session_id(project_root)
@@ -944,7 +950,8 @@ def resolve_session_db(project_root: Path, session_id: str | None = None) -> tup
     if not db_path.exists():
         _log_detail(f"Session DB not found: {db_path}")
         return None
-    prepare_db(db_path, "session")
+    if for_write:
+        prepare_db(db_path, "session")
     return db_path, session_id
 
 
@@ -2759,7 +2766,7 @@ def _insert_intelligence_item(
 def cmd_ol_add(args: argparse.Namespace) -> int:
     """Add an operational learning entry (category operational_learning)."""
     project_root = find_project_root()
-    result = resolve_session_db(project_root, getattr(args, "session", None))
+    result = resolve_session_db(project_root, getattr(args, "session", None), for_write=True)
     if result is None:
         return 1
     db_path, session_id = result
@@ -2772,7 +2779,8 @@ def cmd_ol_list(args: argparse.Namespace) -> int:
     """List operational learning entries (category operational_learning).
 
     Before schema 4 this listed categories 'fact' and 'finding'; a v3
-    'finding' written by `ol add` is migrated to operational_learning.
+    'finding' written by `ol add` is migrated to operational_learning. Reads
+    only: a DB still at schema 3 is listed by the same rule, not migrated.
     """
     project_root = find_project_root()
     result = resolve_session_db(project_root, getattr(args, "session", None))
@@ -2782,12 +2790,18 @@ def cmd_ol_list(args: argparse.Namespace) -> int:
 
     limit = getattr(args, "limit", 20) or 20
     conn = open_db(db_path, readonly=True)
+    # A list does not migrate (it only reads). On a DB still at schema 3, OL
+    # rows are the `ol add` signature the v4 migration maps (see migrate_v4).
+    if "legacy_category" in _table_columns(conn, "observations"):
+        where = "category = 'operational_learning'"
+    else:
+        where = "category = 'finding' AND severity IS NULL AND status = 'verified'"
     total = conn.execute(
-        "SELECT COUNT(*) as cnt FROM observations WHERE category = 'operational_learning'"
+        f"SELECT COUNT(*) as cnt FROM observations WHERE {where}"
     ).fetchone()["cnt"]
     rows = conn.execute(
         "SELECT observation_id, text, created_at FROM observations "
-        "WHERE category = 'operational_learning' "
+        f"WHERE {where} "
         "ORDER BY created_at DESC LIMIT ?",
         (limit,),
     ).fetchall()
@@ -2803,7 +2817,7 @@ def cmd_ol_list(args: argparse.Namespace) -> int:
 def cmd_decision_add(args: argparse.Namespace) -> int:
     """Add a decision to the session decisions table."""
     project_root = find_project_root()
-    result = resolve_session_db(project_root, getattr(args, "session", None))
+    result = resolve_session_db(project_root, getattr(args, "session", None), for_write=True)
     if result is None:
         return 1
     db_path, session_id = result
@@ -2873,7 +2887,7 @@ def cmd_decision_list(args: argparse.Namespace) -> int:
 def cmd_incident_add(args: argparse.Namespace) -> int:
     """Add a process deviation/incident to the session DB."""
     project_root = find_project_root()
-    result = resolve_session_db(project_root, getattr(args, "session", None))
+    result = resolve_session_db(project_root, getattr(args, "session", None), for_write=True)
     if result is None:
         return 1
     db_path, session_id = result
@@ -2925,7 +2939,7 @@ def cmd_incident_list(args: argparse.Namespace) -> int:
 def cmd_observation_add(args: argparse.Namespace) -> int:
     """Add an intelligence item of any type (--category, default observation)."""
     project_root = find_project_root()
-    result = resolve_session_db(project_root, getattr(args, "session", None))
+    result = resolve_session_db(project_root, getattr(args, "session", None), for_write=True)
     if result is None:
         return 1
     db_path, session_id = result
@@ -3012,7 +3026,7 @@ def cmd_search(args: argparse.Namespace) -> int:
 def cmd_directive_add(args: argparse.Namespace) -> int:
     """Add a commander directive to the session DB."""
     project_root = find_project_root()
-    result = resolve_session_db(project_root, getattr(args, "session", None))
+    result = resolve_session_db(project_root, getattr(args, "session", None), for_write=True)
     if result is None:
         return 1
     db_path, session_id = result
@@ -3022,24 +3036,9 @@ def cmd_directive_add(args: argparse.Namespace) -> int:
     priority = getattr(args, "priority", "normal") or "normal"
     target = getattr(args, "target", None)
 
+    # resolve_session_db(for_write=True) ran ensure_schema, which creates
+    # commander_directives from SESSION_SCHEMA on a DB that lacks it.
     conn = open_db(db_path)
-    # Ensure table exists (schema migration for existing DBs)
-    conn.executescript(
-        """CREATE TABLE IF NOT EXISTS commander_directives (
-            directive_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            directive_type TEXT NOT NULL,
-            priority TEXT NOT NULL DEFAULT 'normal',
-            message TEXT NOT NULL,
-            target TEXT,
-            status TEXT NOT NULL DEFAULT 'pending',
-            response TEXT,
-            created_at TEXT NOT NULL,
-            acknowledged_at TEXT,
-            executed_at TEXT
-        );
-        CREATE INDEX IF NOT EXISTS idx_directives_status
-            ON commander_directives(status);"""
-    )
     conn.execute(
         """INSERT INTO commander_directives
            (directive_type, priority, message, target, status, created_at)
@@ -3197,7 +3196,7 @@ def cmd_directive_poll(args: argparse.Namespace) -> int:
 def cmd_directive_ack(args: argparse.Namespace) -> int:
     """Mark a directive as executed with an optional response."""
     project_root = find_project_root()
-    result = resolve_session_db(project_root, getattr(args, "session", None))
+    result = resolve_session_db(project_root, getattr(args, "session", None), for_write=True)
     if result is None:
         return 1
     db_path, _session_id = result

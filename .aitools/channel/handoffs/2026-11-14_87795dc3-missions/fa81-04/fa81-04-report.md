@@ -1,8 +1,13 @@
 # fa81-04-intel-schema: report
 
-v1.0 (2026-11-15). Mission fa81-04-intel-schema, delegated by the session
+v1.1 (2026-11-15). Mission fa81-04-intel-schema, delegated by the session
 commander of session 87795dc3 (level 1). Branch
-`feature/fa81-04-intel-schema`; the PR is linked from the hand-back.
+`feature/fa81-04-intel-schema`, PR https://github.com/nobul-tech/aitools/pull/181.
+v1.1 adds the fixes the independent review led to (tests, observations).
+The review's results and the per-finding dispositions are in the PR
+comments and the mission's hand-back: the edit that added them to the
+"Delegates used" section below was denied (WRITE_BLOCKED, recorded in the
+hand-back), so that section still reads as in v1.0.
 
 ## Summary
 
@@ -152,7 +157,9 @@ Fixture tests (`tests/harness-db/test-schema.py`, 12/12):
 - **End to end**: `ol add`, `ol list`, `log --type spotrep` and
   `observation add --category finding ...` on a v3 session DB in a temp
   project.
-  - The DB migrates, and the migration message goes to stderr.
+  - `ol list` on the v3 DB lists its OL row and leaves the file at
+    schema 3 (added in v1.1).
+  - `ol add` migrates the DB, and the migration message goes to stderr.
   - `ol add` prints `OL-2`, and `ol list` shows the migrated OL-1.
   - `--type finding` is refused.
 
@@ -260,6 +267,9 @@ back.
 6. `missions.findings_count` is never written by any command.
 7. The `.sh` check scripts refuse to run on Windows (OS guard), although the
    brief named them; the `.ps1` twins ran.
+9. The FM 1-02.1 PDF on irp.fas.org encodes its date line in a shifted
+   font. The text decodes to 28 February 2024 (finding N5 of the
+   independent reviewer, checked by me).
 8. `curl` downloads of the doctrine PDFs were denied by the auto-mode
    classifier. Reading them in the browser with pdf.js worked.
 

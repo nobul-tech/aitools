@@ -18,6 +18,9 @@ write intelligence items (`harness-db.py`, AARs, hand-backs); whoever
 builds issue #180; the commander, reviewing the adoption.
 
 v1.0 (2026-11-15), mission fa81-04-intel-schema (session 87795dc3).
+v1.1 (2026-11-15): after the independent review (PR #181): the FM 1-02.1
+edition date, the spot report's usage note, what the CLI writes to
+`status`, and facts versus what a delegate learns after a merge.
 
 ## The commander's orders behind this document
 
@@ -127,16 +130,22 @@ https://irp.fas.org/doddir/army/fm2_0.pdf
 
 ### FM 1-02.1, Operational Terms
 
-https://irp.fas.org/doddir/army/fm1-02-1.pdf. The edition that "supersedes
-FM 1-02.1, dated 09 March 2021"; its own date line is font-encoded in the
-PDF and could not be extracted (unknown). `@reference/framework-mission-command.md`
-cites the May 2026 edition on armypubs.army.mil.
+https://irp.fas.org/doddir/army/fm1-02-1.pdf. The edition of 28 February
+2024 that "supersedes FM 1-02.1, dated 09 March 2021" (its date line is
+font-encoded in the PDF: each character is shifted by 29 code points;
+decoded by the reviewer, fa81-04-rev, and checked by the author).
+`@reference/framework-mission-command.md` cites the May 2026 edition on
+armypubs.army.mil.
 
 - "spot report — (DOD) A concise narrative report of essential information
   covering events or conditions that may have an immediate and significant
   effect on current planning and operations that is afforded the most
   expeditious means of transmission consistent with requisite security.
-  (JP 3-09.3) Also called SPOTREP."
+  (JP 3-09.3) Also called SPOTREP. (Note: In reconnaissance and
+  surveillance usage, spot report is not to be used.)" The note restricts
+  the term in reconnaissance and surveillance usage only; FM 2-0 still
+  lists spot reports among collection products (below), and our harness
+  has no reconnaissance usage.
 - "priority intelligence requirement — (DOD) An intelligence requirement
   that the commander and staff need to understand the threat and other
   aspects of the operational environment. (JP 2-0) Also called PIR."
@@ -296,7 +305,18 @@ directives have their own tables (`decision add`, `directive add`).
 
 `status` is free text in the schema (no CHECK): v3 rows hold values such as
 `active` and `pending-review` that are kept as they are. The values above
-are the ones to write.
+are the ones to write. Today the CLI writes only the first state of each
+lifecycle: `observation add` writes `pending` for every type (for an rfi,
+pending means open; for a proposal, proposed), and `ol add` writes
+`verified`. No verb changes `status` after that yet; the later states are
+set by hand or by the AAR and estimate tooling of issue #180.
+
+**Facts and what a delegate learns after a merge.** The commander,
+2026-11-15 (answer 4): "dont call them post-merge facts, they are either
+observations or operational learning". What a delegate learns after its
+merge is recorded as an observation or as operational learning, never as
+a "fact" by default. A fact is only an observation that has been
+confirmed against its source or by a second source.
 
 ### How the types sit in an AAR
 
