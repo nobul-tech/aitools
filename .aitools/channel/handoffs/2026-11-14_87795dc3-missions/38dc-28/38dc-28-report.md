@@ -1,4 +1,4 @@
-# 38dc-28-rfi-repeat-rca: report (v1.1)
+# 38dc-28-rfi-repeat-rca: report (v1.2)
 
 **Intent**: **Purpose**: Record the root cause analysis of why the
 orchestrator M6-Polish asked the commander RFI 38dc-11 after he had already
@@ -27,6 +27,11 @@ v1.1 (2026-11-14) applies the independent review a50b-01
 - **Registry fields:** `referenceFile` points at this report (B4); the history
   of the #180 id is recorded (B5).
 - **Nits:** counts, timing and wording corrected.
+
+v1.2 (2026-11-14) applies the re-check's nits:
+- RFI 38dc-7's relay-outbound-prompt item is classified as a genuine question.
+- The review note names the version each check covered.
+- The incident's `referenceFile` is a bare path.
 
 ## Summary
 
@@ -88,8 +93,11 @@ v1.1 (2026-11-14) applies the independent review a50b-01
   - None is readable at L2649-L2654, L3060 or L3064.
   - M6's reasoning at the moment it raised RFI 38dc-11 is therefore **unknown**
     beyond what its reply text says.
-- **Review:** the independent reviewer a50b-01 re-checked 53 quotes and
-  citations against the transcripts. All matched.
+- **Review:** the independent reviewer a50b-01 re-checked against the
+  transcripts the 53 quotes and citations of v1.0, then the v1.1 additions. All
+  matched. Verdicts:
+  - v1.0: https://github.com/nobul-tech/aitools/pull/172#issuecomment-6887197331
+  - v1.1 re-check: https://github.com/nobul-tech/aitools/pull/172#issuecomment-6887288043
 
 ## The commander's answers on record (verbatim)
 
@@ -229,7 +237,7 @@ fix.
 | RFI | Where | Answered before? | Classification |
 |---|---|---|---|
 | 38dc-11 | M6 L2654 23:16:15Z (from 38dc-19-1) | Yes, by answer 1. Answers 5 and 7 had applied it to the same row. | The incident |
-| 38dc-7, bootstrap/hh `.ps1` item | M6 L2272 21:24:52Z, restated L2482 | Yes, by answer 1 (2.5 hours earlier), the same question as RFI 38dc-11. Listed with no Suggest line, unaddressed by answer 7, then dropped at "Open RFIs: none" (L2503). The RFI's other items (approving `build-package.sh`, recording the helper modules, the check-script Git Bash calls) were approvals the commander had to give. | Confirmed, partial (one item) |
+| 38dc-7, bootstrap/hh `.ps1` item | M6 L2272 21:24:52Z, restated L2482 | Yes, by answer 1 (2.5 hours earlier), the same question as RFI 38dc-11. Listed with no Suggest line, unaddressed by answer 7, then dropped at "Open RFIs: none" (L2503). The RFI's other items were legitimate. Approving `build-package.sh`, recording the helper modules and the check-script Git Bash calls were approvals the commander had to give. The `relay-outbound-prompt.sh/.ps1` item was a genuine question: M6 suggested recording it as cross-platform because the bash `aitools` sourced it on Windows, and the commander decided otherwise ("need os guards they are not exempt"). | Confirmed, partial (one item) |
 | 38dc-5 | M6 L1340 19:53:24Z (from 38dc-13-3) | Yes, by answer 1 (L932, 55 minutes earlier): "launch followup mission to add a guard to those .sh scripts that should not run on windows". M6's restatement: "so under your rule they should not be exempt" (L1727). Its Suggest (keep `bootstrap.sh` exempt) went against the rule; only the option to delete `init-hh-hooks.sh` was new. | Confirmed, partial |
 | 38dc-12 | M6 L2654 | `.claude/rules/cross-platform.md` "Dead code from platform guards" decides the removal. Its Suggest says "The repo's rule against dead platform branches below an OS guard applies". The timing is a genuine choice. Not answered by the commander. | Candidate |
 | 38dc-1 | M6 L896 18:53:11Z | 3.5 minutes after "tests should be .ps1 here on windows ..." (L830), and its body says "Your rule is that on Windows, tests are `.ps1` run as PowerShell." But "here" did not clearly cover the CI job, so extending it to CI was a genuine scope question. The commander answered "yes" without objection. | Not counted |
@@ -241,7 +249,7 @@ No other complaint of this kind was found.
 **Signature:** every counted instance has an RFI body that cites the
 commander's own rule ("Your rule is ...", "under your rule", "what your rule
 needs"). So do RFI 38dc-1, RFI 38dc-3 (L1340, a genuine design choice) and the
-approval items of RFI 38dc-7. The phrase is a prompt to check, not a verdict.
+legitimate items of RFI 38dc-7. The phrase is a prompt to check, not a verdict.
 
 ## Corrective and preventive actions
 
@@ -266,7 +274,7 @@ approval items of RFI 38dc-7. The phrase is a prompt to check, not a verdict.
   and P4).
 - **P4.** "Your rule is" in RFI 38dc-11 triggers the reminder. So do RFI 38dc-5
   and RFI 38dc-7. False positives: RFI 38dc-1, RFI 38dc-3, and RFI 38dc-7's
-  approval items. It is the only automatic layer.
+  legitimate items. It is the only automatic layer.
 
 Recommendation: P3 + P4, with P1 and P2 as their behavioural halves. A
 behavioural fix alone is not a fix for a recurring pattern (`/investigate`

@@ -27,7 +27,7 @@ Not tagged. Branch `docs/38dc-28-rfi-repeat-rca`, mission 38dc-28 under M6-Polis
 
 | File | Purpose |
 |------|---------|
-| `.aitools/channel/handoffs/2026-11-14_87795dc3-missions/38dc-28/38dc-28-report.md` | The full RCA (v1.1): the commander's answers verbatim, timeline, 5 Whys, Swiss cheese analysis, other instances, preventive actions with a barrier replay |
+| `.aitools/channel/handoffs/2026-11-14_87795dc3-missions/38dc-28/38dc-28-report.md` | The full RCA (v1.2): the commander's answers verbatim, timeline, 5 Whys, Swiss cheese analysis, other instances, preventive actions with a barrier replay |
 
 **Verified on:** Windows 11 (documentation only; `check-pre-commit.ps1` and `check-pre-push.ps1`).
 
