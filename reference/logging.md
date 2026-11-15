@@ -19,7 +19,8 @@ v2.0 (2026-11-15): section 8 added: log entries, warnings and errors across
 scripts.
 
 v2.1 (2026-11-15): error markers extended; the non-recording path,
-library-style tools and managed-file records stated.
+library-style tools, managed-file records, user-abort recording and skipped
+records stated.
 
 > Ratified 2026-06-14 as part of the harvest/archive/logging plan
 > (`plans/harvest-archive-resilience.md` §14). This doc consolidates logging
@@ -305,11 +306,15 @@ record, and its warnings and errors reach the run summary through its caller
       children: the relay tees stderr, which still reaches the console), or
       over the error records it wrote (in-process PowerShell children);
     - `error_reason` over its last stdout line.
-  - **A user abort (exit 2)** keeps its outcome:
-    - `deploy-harness` aborted: one WARN record (`harness files`, `aborted by
-      user`), and the run stops with exit 2;
-    - any other child aborted: one ERROR record (`<label> failed (exit 2)`,
-      `aborted by user`), and the run continues.
+  - **A user abort (exit 2)** keeps its outcome. The relay records it, as
+    one record; the runner never writes a second one.
+    - A runner may ask the relay to record a child's abort as a warning
+      instead of an error. `deploy-harness` aborted: one WARN record
+      (`harness files`, `aborted by user`), counted as one warning of the
+      parent, not an error; the run stops with exit 2.
+    - Any other child aborted: one ERROR record (`<label> failed (exit 2)`,
+      `aborted by user`), counted as one error of the parent; the run
+      continues.
 
     The child's own abort line is logged and counted, not recorded.
 - **Each script counts its own warnings.** Its exit footer reports its own
@@ -381,7 +386,8 @@ ACTION||<instruction>
 - For other kinds, a missing trailing field is empty (so a 3-field ERROR
   record has an empty reason), and extra fields are joined back with `/`.
 - A record of an unknown kind, or any record other than ACTION with an empty
-  name or tool, is skipped and logged at detail.
+  name or tool, is skipped and logged at detail; the detail line quotes the
+  skipped record verbatim.
 
 #### 8.5 Panel format
 
@@ -450,7 +456,7 @@ action-line   = "  >>  " <instruction>
 
 | State | Owner | Changed by | Read by |
 |---|---|---|---|
-| `WARNINGS` / `$script:warnings` | each script process | `log_warn`, `write_warn`, `write_action` | exit footer; `read_menu_choice` end-of-input fallback |
+| `WARNINGS` / `$script:warnings` | each script process | `log_warn`, `write_warn`, `write_action`, the relay (a child's abort recorded as a warning) | exit footer; `read_menu_choice` end-of-input fallback |
 | `ERRORS` / `$script:errors` | each script process | `log_error`, `write_error`, the relay (a failed child) | exit footer (exit 1); fan-out validation |
 | `AITLIB_CHILD_WARNINGS` / `AITLIB_CHILD_ERRORS` (`$script:AitLibChildWarnings` / `$script:AitLibChildErrors`) | the parent, per relayed child | the relay | the relay's failure decision (the error count and the exit code) |
 | Run summary file | the run | the helpers of 8.2; the writers of 8.1 | the panel; the relay (ERROR records written while a child was executing); ACTION de-duplication; checks that inspect it |
@@ -465,7 +471,7 @@ action-line   = "  >>  " <instruction>
 | `write_summary` | Its record is appended as written |
 | The relay sees a child's line | Printed; a structured line mirrored to deploy.jsonl; a warn or error line (not the exit footer) adds 1 to the child count |
 | A child fails | Parent error count +1; one ERROR record from the relay only if the child recorded none (8.3) |
-| A child aborts (exit 2) | As 8.3: one WARN record and exit 2 for `deploy-harness`; one ERROR record for any other child |
+| A child aborts (exit 2) | As 8.3, recorded once, by the relay: `deploy-harness` (recorded as a warning at the runner's request), one WARN record and parent warning count +1, and the run stops with exit 2; any other child, one ERROR record and parent error count +1, and the run continues |
 | Exit footer | The script's counts; exit 1 when its error count is above 0 |
 | The entry point that created the file ends | Panel drawn (8.5); file deleted; `last-summary.txt` kept when `AITOOLS_PRESERVE_SUMMARY=1` |
 
