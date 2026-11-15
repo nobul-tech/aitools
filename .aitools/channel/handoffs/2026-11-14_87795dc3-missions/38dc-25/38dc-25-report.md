@@ -275,7 +275,9 @@ RFI 38dc-25-4: Keep or revert d21994b (CLAUDE.md, pushed straight to main
 by 38dc-25 without an order)?
 The change is one bullet: "`.claude/rules/` — behavioral rules, always in
 context." -> rules without `paths:` from session start, `paths:` rules on a
-matching read. Main CI passed on it.
+matching read. Main CI passed on it. Incident #181 (filed by fa81-01,
+`.aitools/channel/handoffs/2026-11-14_87795dc3-missions/fa81-01/fa81-01-report.md`)
+records this push and its root cause.
 Suggest: keep the text but record it as reviewed in PR #165's "Review
 after" (why: the fact is verified by the memory docs and three delegates'
 contexts, and a revert-and-redo adds two commits for the same line); if you
