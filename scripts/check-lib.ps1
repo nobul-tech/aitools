@@ -235,9 +235,10 @@ function InvokeGit {
 # ---------------------------------------------------------------------------
 # ResolveGitBash -- the path of the managed Windows bash, Git Bash from Git for
 # Windows (.claude/rules/cross-platform.md "Windows: managed bash"), or $null.
-# Every check step that runs bash calls this (check-pre-commit steps 2 and 3,
-# check-pre-push step 7, check-post-push steps 2, 4 and 6), never
-# `Get-Command bash` or a bare `bash`: in a native pwsh the first bash on PATH
+# One check step runs bash: check-pre-push step 7, for build-deploy.sh (bash-only;
+# .claude/rules/cross-platform.md "Cross-language script calls"). It calls this,
+# never `Get-Command bash` or a bare `bash`; no other check-*.ps1 runs Git Bash
+# (commander, 2026-11-14; tests/check-no-git-bash). In a native pwsh the first bash on PATH
 # is the WSL launcher (%LOCALAPPDATA%\Microsoft\WindowsApps\bash.exe on the
 # commander's workstation, C:\Windows\System32\bash.exe on older Windows), not
 # Git Bash. Probes the Git for Windows install locations only (the list
