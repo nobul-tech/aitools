@@ -209,6 +209,35 @@ exit 0
     $r = Invoke-LibScript "relay-nested" '$rc = Invoke-NativeRelayed -Label "mid" -FilePath "{PWSH}" -ArgumentList @("-NoProfile", "-NonInteractive", "-File", "{DIR}/mid.ps1"); Write-Output "RC=$rc"' "" @{ "mid.ps1" = $mid; "gc.ps1" = $gc }
     Check "relay: nested relays -- each structured line in deploy.jsonl exactly once" ((@($r.Jsonl | Where-Object { $_.msg -ceq 'mid-line' }).Count -eq 1) -and (@($r.Jsonl | Where-Object { $_.msg -ceq 'gc-line' }).Count -eq 1) -and ($r.Out -match 'RC=0'))
 
+    # Nested relays: the middle script's own exit code and own error lines
+    # decide; a grandchild's error line it relays (here from captured output,
+    # Send-ChildLog: no failure decision of its own) is shown, not counted
+    $mid2 = @'
+. '{LIB}'
+Initialize-Logging "mid2"
+Log "mid2 runs its child"
+$lines = @(& "{DIR}/gc2.ps1" 6>&1)
+Send-ChildLog $lines
+exit 0
+'@
+    $gc2 = @'
+. '{LIB}'
+Initialize-Logging "gc2"
+LogError "gc2 error line"
+exit 0
+'@
+    $r = Invoke-LibScript "relay-own" '$rc = Invoke-ChildRelayed "mid2" "{DIR}/mid2.ps1" @{} ""; Write-Output "RC=$rc CE=$($script:AitLibChildErrors)"' "" @{ "mid2.ps1" = $mid2; "gc2.ps1" = $gc2 }
+    Check "relay: a grandchild's error line is shown, not counted in the middle script (it exited 0)" (($r.Out -match '\[gc2\] \[error\] gc2 error line') -and ($r.Out -match 'RC=0 CE=0'))
+    # A child that logs under another name than its file's: every line counts
+    $other = @'
+. '{LIB}'
+Initialize-Logging "not-the-file-name"
+LogError "an error line"
+exit 0
+'@
+    $r = Invoke-LibScript "relay-othername" '$rc = Invoke-ChildRelayed "on" "{DIR}/othername.ps1" @{} ""; Write-Output "RC=$rc CE=$($script:AitLibChildErrors)"' "" @{ "othername.ps1" = $other }
+    Check "relay: a child logging under another name -- its error line counts (exit 0 with errors fails)" ($r.Out -match 'RC=1 CE=1')
+
     # An abort is recorded only when the child recorded no WARN or ERROR record
     $ab = @'
 . '{LIB}'

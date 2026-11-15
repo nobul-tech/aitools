@@ -448,7 +448,8 @@ function Set-ToolException([string]$Slug, [string]$Method, [string]$Path, [strin
 #     only lines whose [script] field is that name count. Lines the child relayed
 #     from its own children are shown and mirrored, not counted again: a middle
 #     script's own exit code and own error lines decide its outcome (nested
-#     relays). Name unknown: every structured line counts.
+#     relays). Name unknown, or no structured line under that name (a child
+#     that logs under another name): every structured line counts.
 #   $script:AitLibChildRc: the child's exit code (1 for a throw, or a command
 #     that could not start).
 # Counts and records (8.3): a child's warnings are never added to the parent's
@@ -567,10 +568,28 @@ function Send-AitLibChildLine($Record) {
     # The exit footer restates the counts: relayed, not counted
     if ($text.StartsWith("COMPLETED with ") -or $text.StartsWith("FAILED with ")) { return }
     $script:AitLibRelayLastOut = $clean
+    # Every line counts in the "all" counts; the child's own lines also in the
+    # child counts (Resolve-AitLibChildCounts picks after the run)
+    if ($level -ceq "warn") { $script:AitLibRelayAllWarnings++ }
+    elseif ($level -ceq "error") { $script:AitLibRelayAllErrors++ }
     # A line the child relayed from its own child: shown, not counted again
     if ($script:AitLibRelayName -and $m.Groups[2].Value -cne $script:AitLibRelayName) { return }
+    $script:AitLibRelaySawOwn = $true
     if ($level -ceq "warn") { $script:AitLibChildWarnings++ }
     elseif ($level -ceq "error") { $script:AitLibChildErrors++ }
+}
+
+# Resolve-AitLibChildCounts -- after a relayed run: when the child printed no
+# structured line under its own name (it logs under another name than its
+# file's base name), every structured line counts, as when the name is unknown
+function Resolve-AitLibChildCounts {
+    if ($script:AitLibRelayName -and -not $script:AitLibRelaySawOwn) {
+        if ($script:AitLibRelayAllWarnings -gt 0 -or $script:AitLibRelayAllErrors -gt 0) {
+            LogDetail "relay: no line under the child's name '$($script:AitLibRelayName)' -- every structured line counted"
+        }
+        $script:AitLibChildWarnings = $script:AitLibRelayAllWarnings
+        $script:AitLibChildErrors = $script:AitLibRelayAllErrors
+    }
 }
 
 # Test-AitLibRelayed -- $true when this process (or this in-process script) runs
@@ -588,6 +607,9 @@ function Set-AitLibRelayState([string]$Name, [bool]$NoMirror, [bool]$Quiet) {
     $script:AitLibRelayNoMirror = ($NoMirror -or (Test-AitLibRelayed))
     $script:AitLibRelayQuiet = $Quiet
     $script:AitLibRelayLastOut = ""
+    $script:AitLibRelaySawOwn = $false
+    $script:AitLibRelayAllWarnings = 0
+    $script:AitLibRelayAllErrors = 0
 }
 
 # Send-ChildLog LINES -- relay the captured console output of a child script, line
@@ -644,6 +666,7 @@ function Complete-AitLibChildRun {
         [string]$Label, [string]$Name, [int]$ErrBefore, [int]$AnyBefore,
         [bool]$Threw, [string]$Exception, [object[]]$ReasonLines, [bool]$AbortAsWarning
     )
+    Resolve-AitLibChildCounts
     $rc = $script:AitLibChildRc
     if ($Threw) {
         $why = ("$Exception" -replace '\s*\r?\n\s*', ' ').Trim()
