@@ -12,6 +12,21 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.77.17 -- The menu rules state the EOF defaults the code takes (2026-11-14)
+
+Not tagged. Branch `docs/m7-eof-spec`, mission M7-Menus under M7-Sweep (session 87795dc3), item 4 of M7-Sweep. Commander, 2026-11-14 (RFI fa81-25): "launch mission go fix them, dont bother filing incidents, check to see if these were already fixed by the other running missions first, if not do it". No code change.
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 1 | `.claude/rules/interactive-menus.md` (and `.cursor/rules/interactive-menus.mdc`) "Non-interactive fallback": EOF at a prompt no longer reads as "auto-select `overwrite`" for every menu. It takes that prompt's documented default with a warning, as `read_menu_choice` / `Read-MenuChoice` do: `overwrite` at the text review menu (`prompt_diff_review`) and at a JSON field present in both files (`prompt_json_field_review`); `skip` at a JSON field only in LOCAL (`review_json_fields` offers `[a/s/x]` there, no overwrite); `n` (reject) at the AI merge preview (`_invoke_ai_merge` / `Invoke-AiMerge`); empty feedback at the `[r]efine` feedback read (`read_tty_choice` / `Read-ConsoleChoice`), so the merge is refined once more (a second AI call), then EOF at the preview rejects it and EOF at the review menu overwrites. "No AI merge runs in a non-interactive run" now reads: no AI merge starts in a run with no terminal or `--force` (no menu is shown); EOF reaches the merge prompts only after an interactive `[m]` |
+| 2 | `.claude/rules/agentic-standards.md` (and `.cursor/rules/agentic-standards.mdc`) "Managed-file review choices and merge": the non-interactive bullet lists no terminal or `--force` (not EOF) and says no menu is shown, so no merge starts; "EOF is not a choice and takes overwrite" now names each prompt's EOF default and points to `interactive-menus.md` "Non-interactive fallback" |
+
+**Verified on:** Windows (text read against `read_tty_choice`, `read_menu_choice`, `_invoke_ai_merge`, `prompt_diff_review`, `review_json_fields`, `prompt_json_field_review` in `scripts/aitools-lib.sh` and their twins in `scripts/aitools-lib.ps1`; `tests/menus/test-menu-choice.ps1`: 97 passed, 0 failed, including the EOF cases for a JSON field only in LOCAL and the refine feedback). No code change.
+
+---
+
 ## v0.77.12 -- On Windows the bash aitools hands off to aitools.ps1; OS guards on hh.sh, bootstrap.sh, init-hh-hooks.sh and analyze-session.sh (2026-11-14)
 
 Not tagged. Branch `fix/38dc-19-aitools-win-forwarder` (PR #162), mission 38dc-19 under M6-Polish (session 87795dc3). Commander, 2026-11-14, RFI 38dc-3 ("make the bash `aitools` a forwarder on Windows"): "agreed"; RFI 38dc-5: "add an OS guard to all of them".
