@@ -125,9 +125,8 @@ Same maxBytes/backupCount in all three.
   `Write-CheckLogText` in PowerShell) use the same helpers; check-lib's log
   directory is created fail-safe too. The `aitools` entry points and
   `build-deploy.sh` log through the library (section 8). Not fail-safe yet
-  (open incident #178): the hooks `standing-order-guard.sh` (its log
-  directory and observe-mode line) and `tool-ops-session-audit.sh` (its
-  result line), listed in section 8.1.
+  (open incident #178): the hook `tool-ops-session-audit.sh` (its result
+  line), listed in section 8.1.
   `deploy.jsonl` differs: its first failed write is one warning (the table in
   section 3).
 
@@ -202,7 +201,7 @@ defines no logging functions of its own, and appends to no log or run summary
 file directly. The only exceptions are the writers below.
 
 These writers keep their own logging until the unified-logging roadmap item
-(GitHub issue #<roadmap issue>) is implemented:
+(GitHub issue #187) is implemented:
 - the hooks (their own log files, section 3, and their `events.jsonl`
   records);
 - the Python tools (their component logs, section 3);
