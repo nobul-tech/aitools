@@ -1,5 +1,6 @@
-# 38dc-24-report (v1.1): pipefail grep -q race removed; compliance step 7 fails on it
+# 38dc-24-report (v1.2): pipefail grep -q race removed; compliance step 7 fails on it
 
+v1.2: re-check (https://github.com/nobul-tech/aitools/pull/168#issuecomment-6887251960, PASS with notes) applied: note 2 now in the rule, its Cursor twin, the step 7 comment and the PR body; notes 3-5 listed under Follow-ups.
 v1.1: reviewer 9b19-2 notes 1 and 6 applied (the suite refuses Windows with the POSIX OS guard; the macOS claim is a source reading, not a reproduction); review https://github.com/nobul-tech/aitools/pull/168#issuecomment-6887022744 (PASS with notes).
 
 **Intent**: **Purpose**: record what mission 38dc-24-pipefail-grepq-fix did, how it was verified, and what is still open. **Scope**: PR #168 (branch `fix/38dc-24-pipefail-grepq`). NOT the merge result (in the hand-back to M6-Polish). **Audience**: M6-Polish, the commander.
@@ -72,4 +73,5 @@ Not changed: `scripts/aitools` 2158, 2179, 2190 (no pipefail).
 
 - About 70 `| grep -q` sites in pipefail test suites under `tests/` (out of scope; owner 38dc-13).
 - `| head -N` (about 35 sites) and `grep -m` have the same exposure; not checked by step 7.
+- Review notes 3-5 (9b19-2, not applied): cite GNU grep NEWS 2.27; list the step 7 regex edge cases (`grep -- -q`, `grep -e -q` false positives; `grep -q"a"`, `grep "-q" a` missed; none in the repo); `packaging/` is outside the scan set, so "the class cannot return" holds for the scan set only.
 - `check-script-compliance.ps1` step 7 skip message could say "bash-only; runs in the .sh twin (CI linux job)" (owner 38dc-23).

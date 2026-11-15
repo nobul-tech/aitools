@@ -168,8 +168,9 @@ fi
 #    (a) FAIL: a pipeline that ends in grep -q (q in any short-option bundle:
 #        -q, -qi, -qxF ...; or --quiet / --silent) in a bash file that runs
 #        under pipefail. grep -q exits at its first match without reading the
-#        rest of its input; the writer then gets SIGPIPE (exit 141) and, under
-#        pipefail, the pipeline returns 141, so a condition such as
+#        rest of its input; the writer then gets SIGPIPE (exit 141), or, where
+#        SIGPIPE is ignored (the GitHub linux runner), exits non-zero on the
+#        write error, and under pipefail the pipeline fails, so a condition such as
 #        "if writer, piped to grep -q P" can be false although P matched (CI
 #        runs 43640967140 and 43642017937; PR #164). The fix is the same grep
 #        without q, stdout to /dev/null (grep P >/dev/null): GNU grep then

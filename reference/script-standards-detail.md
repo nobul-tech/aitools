@@ -1021,8 +1021,8 @@ In a script that runs under `set -o pipefail` (every reusable script runs
 
 **Why it fails at random.** `grep -q` exits at its first match without reading
 the rest of its input. If the writer still has output to write, it is killed by
-SIGPIPE (exit status 141, 128 + 13), or, where SIGPIPE is ignored (GitHub
-Actions runners), its write fails and it exits non-zero (`seq`: 1). With
+SIGPIPE (exit status 141, 128 + 13), or, where SIGPIPE is ignored (the GitHub
+Actions linux runner), its write fails and it exits non-zero (`seq`: 1). With
 `pipefail` the pipeline's status is
 that of the last command that exited non-zero (Bash manual, "Pipelines"), so
 `if writer | grep -q P` is false although P matched, and `if ! writer | grep -q P`

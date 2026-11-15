@@ -123,7 +123,8 @@ See `@reference/script-standards-detail.md` for the full portability table.
 
 Never end a pipeline in `grep -q` in a script that runs under `pipefail` (or a
 library sourced by one): `grep -q` exits at its first match, the writer dies of
-SIGPIPE and the pipeline fails although the pattern matched. End it in
+SIGPIPE (or, where SIGPIPE is ignored, exits non-zero on the write error) and
+the pipeline fails although the pattern matched. End it in
 `grep PATTERN >/dev/null` instead. `check-script-compliance` step 7 fails on it.
 Detail: `@reference/script-standards-detail.md` "Pipelines into grep -q under pipefail".
 
