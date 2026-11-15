@@ -209,7 +209,7 @@ with `-File` and through `Invoke-Expression`).
 ## Git Bash PATH shadowing (Windows)
 
 Git for Windows bundles tools in its `usr/bin/` directory (notably `perl`).
-When Claude Code (Git Bash) spawns `pwsh`, the child process inherits Git
+When Claude Code's Bash tool (Git Bash) spawns `pwsh`, the child process inherits Git
 Bash's PATH where `usr/bin/` may appear before managed tool install
 directories (e.g., `C:\Strawberry\perl\bin`).
 

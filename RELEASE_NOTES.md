@@ -118,6 +118,35 @@ Not tagged. Branch `docs/m7-eof-spec`, mission M7-Menus under M7-Sweep (session 
 
 ---
 
+## v0.77.14 -- Claude Code ops reference reconciled: duplicate item numbers fixed, delegate probes answered, Windows shell and stale changelog facts corrected (2026-11-14)
+
+Not tagged. Branch `docs/38dc-25-tool-ops-registry`, mission 38dc-25 under M6-Polish (session 87795dc3). Commander, 2026-11-14, answering RFI 38dc-10: "yes, have that mission also update the /tool-registry and use its skill. find it resolve any and all conflicts it finds either directly or by running additional missions until all found issuess are resolved".
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 1 | `reference/tool-ops-claude-code.md` Version Dependencies: #28 and #29 were each used twice. The MEDIUM items numbered first (commit 261b9d9) keep them (#28 user-level rules, #29 skills); the HIGH items move: auto mode and allow rules #28 -> #33, hook output channel #29 -> #34. A new "Item numbers" note maps citations in older records. `scripts/check-path-refs-allow.txt` follows (#28 -> #33) |
+| 2 | "Delegate Identity, Transcripts and Control" v1.1, from probes on Claude Code 2.1.325 (Windows): an agent's `output_file` was observed to become a hard link to its transcript when the delegate was woken after it stopped (by SendMessage or its own background task), and not before; a second SubagentHandback is delivered after a resume of a finished delegate or a wake by its own Monitor's event, and refused after a resume while a background shell from before its first report runs or after that shell's completion; the main session stopped a level-1 delegate with TaskStop (and a failed one cannot be stopped); `<tool-use-id>` in a task notification names the call that started the run |
+| 3 | Items re-verified at 2.1.325: #1 Windows shell (partly obsolete: the Bash tool is Git Bash, but a PowerShell tool is in every session and is the primary shell), #5 what a sub-agent receives (CLAUDE.md and rules without `paths:` at launch, from the session's directory, not the delegate's worktree), #8 hook shell (Git Bash on Windows, per the hooks docs), #25 closed. New item #35: the SessionEnd hook time budget (1.5 s default) |
+| 4 | Changelog facts corrected from the changelog read in a browser: 2.1.59 never added an `effortLevel` setting; `InstructionsLoaded`, hook `agent_id` and `includeGitInstructions` came in 2.1.69, not 2.1.68; 2.1.74 is the SessionEnd timeout fix. CLAUDE.md levels are concatenated and none overrides another ("more specific wins" was wrong); 200 lines is a CLAUDE.md target and the auto memory load limit |
+| 5 | `registries/tool-registry.json` `claude-code` (through `/tool-registry`): Windows verified at 2.1.325 (2026-11-14) with the launcher path; health reasons, evaluation pending items, workarounds #1, #5, #25, #27 and a new #32 entry, the Windows auth check and the upstream risks updated |
+| 6 | `/delegate` v2.4 (what a sub-agent receives, which repeat hand-back is refused, TaskStop by the main session, level 3 re-verified; the "In the aitools repo" note no longer says project rules and skills are deployed at user level) and its test, which now lists the ten elements of the commander's table (1b34fa2); `/tool-ops` lookup rows for #5, #28/#29, #30/#34 and #33; `shared/rules/delegation.md` points to `/tool-ops`, not the retired `/aitool-ops`; `/planning` "Subagent context gap" says what a sub-agent receives |
+| 7 | Rules and references that stated stale Claude Code behaviour: `documentation-standards.md` (which project-skill copy a delegate loads), `hook-rollout.md`, `incident-governance.md` (what sub-agents get; Stop-hook stderr reaches Claude only on exit 2), `reference/rules.md`, `skills.md`, `framework-three-layer-governance.md`, `tool-support-decision-tree.md`, `managed-file-deployment.md`, `logging.md`, `cross-platform-detail.md`, and a dated status note in the macOS Claude Code evaluation |
+| 8 | `scripts/setup-user-claude.ps1`: the generated CLAUDE.md footer line reads "Shell: PowerShell and Git Bash (Claude Code on Windows: a PowerShell tool, and a Bash tool that runs Git Bash)" instead of "Claude Code requires Git Bash on Windows" |
+| 9 | `CLAUDE.md` (d21994b, pushed straight to main by the mission without an order to do so; the commander kept it, 2026-11-15, incident #181): rules with `paths:` frontmatter load once a matching file is read, not "always in context" |
+
+### Files created
+
+| File | Purpose |
+|------|---------|
+| `.aitools/channel/handoffs/2026-11-14_87795dc3-missions/38dc-25/38dc-25-report.md` | Mission report: conflict table, probe results, registry changes |
+| `.aitools/channel/handoffs/2026-11-14_87795dc3-missions/38dc-25/af14-04-sweep.md`, `af14-05-sweep.md`, `af14-08-docs.md` | Sub-mission evidence: the reference and rules/skills sweeps, the docs read with chrome-devtools |
+
+**Verified on:** Windows 11, Claude Code 2.1.325: five throwaway level-3 probes and a 2 s `output_file` link poller; the main session transcript for TaskStop; docs read with chrome-devtools (af14-08) and spot-checked (three hooks quotes, the 2.1.69 changelog entry); independent review af14-09 (2 blocking findings, fixed); the pwsh parser on `setup-user-claude.ps1`; `tool-registry.json` parses; `check-pre-commit.ps1` and `check-pre-push.ps1`. Not run: macOS and Linux (CI only); the CLAUDE.md footer in a real `aitools` run.
+
+---
+
 ## v0.77.13 -- OS guards on the [RELAY] prompt scripts; the Windows checks call Git Bash only for build-deploy.sh (2026-11-14)
 
 Not tagged. Branch `fix/38dc-23-relay-guards-no-gitbash`, mission 38dc-23 under M6-Polish (session 87795dc3). Commander, 2026-11-14, answer to RFI 38dc-7: "relay-outbound.sh/.ps1 need os guards they are not exempt, the aitools dependency needs to be resolved (how to resolve it and resolving it need to be part of same mission) ... for the check-*.ps1 can youj explain this further? id like to avoid calling git bash on thowse ps1 scripts."

@@ -513,7 +513,9 @@ menu including merge & adopt.
 
 **Content source**: `shared/hooks/` in the aitools repo (SD-2: one hook
 version, in `shared/hooks`). Hook scripts are bash-only on both platforms
-(Claude Code runs hooks in bash on all platforms). No platform-specific
+(each hook is registered as `bash "<path>"`; Claude Code passes hook
+commands to `sh -c` on macOS and Linux and to Git Bash on Windows:
+`@reference/tool-ops-claude-code.md` item #8). No platform-specific
 variants needed.
 
 **Scripts**:
@@ -615,8 +617,10 @@ Code + Cursor sessions. See the `/tool-registry` skill, entry
 
 **Path format in settings.json hooks**: PowerShell setup converts
 backslash paths to forward slashes (`-replace '\\', '/'`) for bash
-compatibility. This is intentional — Claude Code always runs hooks via
-bash, even on Windows.
+compatibility. This is intentional — each hook command is `bash "<path>"`,
+and Claude Code passes a hook command to Git Bash on Windows (to PowerShell
+only when Git Bash is not installed, which the harness requires;
+`@reference/tool-ops-claude-code.md` item #8).
 
 ## Shell Script Deployment Detail
 
