@@ -99,7 +99,7 @@ read_config_key() {
     local val
     val=$(tr -d '\357\273\277' < "$file" \
         | grep -o "\"$key\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" \
-        | head -1 \
+        | sed -n '1p' \
         | cut -d'"' -f4)
     [ -n "$val" ] || return 1
     # Unescape JSON backslashes: \\ -> \
@@ -419,7 +419,7 @@ tool_exception_get() {
     fi
     while IFS= read -r w; do if [ -n "$w" ]; then log_detail "tool exceptions: $w"; fi; done <<< "$(_aitlib_profile_lines warn)"
     if [ "$AITLIB_PROFILE_RC" -ne 0 ]; then
-        reason=$(_aitlib_profile_lines error | perl -ne 'print, exit if /\S/')
+        reason=$(_aitlib_profile_lines error | perl -ne 'next if $done; if (/\S/) { print; $done = 1 }')
         if [ "$AITLIB_PROFILE_RC" -eq 1 ]; then reason="no dotprofile"; fi
         log_warn "tool exceptions unavailable (${reason:-resolver failed})$(_aitlib_exit_note "$AITLIB_PROFILE_RC")"
         return 1
@@ -474,7 +474,7 @@ tool_exception_record() {
                     unchanged|dry-run)
                         log_detail "tool exceptions: $slug $AITLIB_TOOL_EXC_RESULT -- nothing written, nothing to push" ;;
                     *)
-                        msg=$(_aitlib_profile_lines warn | perl -ne 'print, exit if /commit|push|git repository/')
+                        msg=$(_aitlib_profile_lines warn | perl -ne 'next if $done; if (/commit|push|git repository/) { print; $done = 1 }')
                         log_warn "tool exception for $slug saved but not pushed (${msg:-see deploy.log})"
                         w=$(_aitlib_profile_tag profileFile)
                         if [ -n "$w" ]; then w=$(dirname "$(_aitlib_bash_path "$w")"); else w="your dotprofile"; fi
@@ -484,14 +484,14 @@ tool_exception_record() {
             return 0 ;;
         3)
             AITLIB_TOOL_EXC_RESULT=refused
-            msg=$(_aitlib_profile_lines error | perl -ne 'print, exit if /\S/')
+            msg=$(_aitlib_profile_lines error | perl -ne 'next if $done; if (/\S/) { print; $done = 1 }')
             log_warn "tool exception for $slug not saved (${msg:-refused})$(_aitlib_exit_note 3)"
             _aitlib_action_once "run aitools user init to remember tool choices"
             return 3 ;;
     esac
     # 2 (error), 4 (not a result of exception-set) and any other code: failed
     AITLIB_TOOL_EXC_RESULT=failed
-    msg=$(_aitlib_profile_lines error | perl -ne 'print, exit if /\S/')
+    msg=$(_aitlib_profile_lines error | perl -ne 'next if $done; if (/\S/) { print; $done = 1 }')
     log_warn "tool exception for $slug not saved (${msg:-resolver failed})$(_aitlib_exit_note "$AITLIB_PROFILE_RC")"
     _aitlib_action_once "see deploy.log -- a tool choice (tool exception) was not saved"
     return 1
@@ -1547,7 +1547,7 @@ validate_ai_merge_output() {
 
     # Check 1: conversational patterns (first non-empty line)
     local first_line
-    first_line=$(printf '%s' "$output" | perl -ne 'if (/\S/) { print; exit }')
+    first_line=$(printf '%s' "$output" | perl -ne 'next if $done; if (/\S/) { print; $done = 1 }')
     if printf '%s' "$first_line" | perl -ne 'exit 0 if /^(I |Here|Sure|Certainly|Let me)/i; exit 1'; then
         MERGE_REJECT_REASON="AI responded conversationally instead of producing merged content"
         return 1
@@ -1892,7 +1892,7 @@ _invoke_ai_merge() {
 
         # Show merge preview
         printf '\n  --- merged result preview (first 30 lines) ---\n' > /dev/tty
-        printf '%s\n' "$merged" | head -30 | while IFS= read -r line; do
+        printf '%s\n' "$merged" | sed -n '1,30p' | while IFS= read -r line; do
             printf '  | %s\n' "$line" > /dev/tty
         done
         local total_lines
