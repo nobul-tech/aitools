@@ -204,7 +204,7 @@ same_trees() {  # same_trees NAME -- six directories and exec bits identical
 no_fake_git() { [ ! -s "$TMP_ROOT/fakegit.calls" ]; }
 # Every recorded call is the review display's `git ... diff --no-index` (#81)
 only_review_diff_git() {
-    [ ! -s "$TMP_ROOT/fakegit.calls" ] || ! perl -pe 's/\r//g' "$TMP_ROOT/fakegit.calls" | grep -qv -e ' diff --no-index '
+    [ ! -s "$TMP_ROOT/fakegit.calls" ] || ! perl -pe 's/\r//g' "$TMP_ROOT/fakegit.calls" | grep -v -e ' diff --no-index ' >/dev/null
 }
 # rows_golden FILE OUT -- summary rows for the cross-language golden: order-free,
 # every number replaced by N (file counts follow this repo's sources)
@@ -267,7 +267,7 @@ size_gate_warned() {
             [ "$(grep -F -- '[warn]' "$2" | grep -cF -- "$line")" = 2 ] || return 1
             over=$((over + 1))
         else
-            if grep -F -- "[warn] deploy/$n is " "$2" | grep -qF "over the Intune script limit"; then
+            if grep -F -- "[warn] deploy/$n is " "$2" | grep -F "over the Intune script limit" >/dev/null; then
                 return 1
             fi
         fi
@@ -526,7 +526,7 @@ run mdm dup
 check "dotprofile rule named like a shared rule: both exit 0, no ERROR row, same rows" \
     "[ \"\$(rc_of dup-dev)\" = 0 ] && same_rc dup && ! grep -q '^ERROR|' '$TMP_ROOT/dup-mdm.summary' && same_summary dup"
 check "dotprofile rule named like a shared rule: shared copy deployed in MDM, same trees" \
-    "cmp -s '$P1' '$TMP_ROOT/dup-mdm/.aitools/rules/scratch.md' && ! ls '$TMP_ROOT/dup-mdm/.aitools/rules' | grep -qx 'Scratch.md' && same_trees dup"
+    "cmp -s '$P1' '$TMP_ROOT/dup-mdm/.aitools/rules/scratch.md' && ! ls '$TMP_ROOT/dup-mdm/.aitools/rules' | grep -x 'Scratch.md' >/dev/null && same_trees dup"
 
 # ---------------------------------------------------------------------------
 # Build from a non-git dotprofile (pre-push step 7 builds into a git-archive copy)

@@ -92,7 +92,7 @@ skip() { printf 'SKIP %s\n' "$1"; SKIP=$((SKIP + 1)); }
 # files .NET may leave in the temp dir are not this test's business)
 no_embed() { [ -d "$1" ] && [ -z "$(find "$1" -maxdepth 1 -name 'aitools-embed-*')" ]; }
 # has_line FILE LINE: FILE (CRs removed) holds LINE as a whole line
-has_line() { [ -f "$1" ] && perl -pe 's/\r//g' "$1" | grep -qxF -- "$2"; }
+has_line() { [ -f "$1" ] && perl -pe 's/\r//g' "$1" | grep -xF -- "$2" >/dev/null; }
 
 for t in perl git; do
     if ! command -v "$t" >/dev/null 2>&1; then
@@ -257,7 +257,7 @@ _a19_static() {
         n_fin=$(grep -cE "$FINALLY_RE" "$G/$f")
         last=$(perl -ne 'print if /\S/' "$G/$f" | tail -n 1 | perl -pe 's/\r?\n\z//')
         [ "$n_fin" = 1 ] || return 1
-        printf '%s\n' "$last" | grep -qE "$FINALLY_RE" || return 1
+        printf '%s\n' "$last" | grep -E "$FINALLY_RE" >/dev/null || return 1
         [ "$n_try" -ge 1 ] || return 1
     done
 }

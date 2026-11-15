@@ -171,7 +171,7 @@ rec_is() {
 }
 
 # mode_is <repo> <path> <mode>: the index mode of <path>
-mode_is() { git -C "$1" ls-files -s -- "$2" | grep -q "^$3 "; }
+mode_is() { git -C "$1" ls-files -s -- "$2" | grep "^$3 " >/dev/null; }
 
 # step6_checks <label> <repo> <fix true|false> <rec>: the step 6 assertions
 step6_checks() {
@@ -290,7 +290,7 @@ run_whole() {
     git -C "$clone" -c core.safecrlf=false add -- "$staged"
     git -C "$clone" update-index --chmod=-x -- "$staged"
     # A tracked aitools deploy/ file modified (the old step 3 staged deploy/)
-    dep=$(git -C "$clone" ls-files deploy | head -n 1)
+    dep=$(git -C "$clone" ls-files deploy | sed -n '1p')
     if [ -z "$dep" ]; then mkdir -p "$clone/deploy"; dep="deploy/m6b.txt"; printf 'x\n' > "$clone/$dep"; git -C "$clone" add -- "$dep"; git -C "$clone" $GIT_ID commit -q -m m6b-deploy; fi
     printf '# m6b\n' >> "$clone/$dep"
     # The fixture dotprofile (deploy/ gitignored and present, as on a real machine)
@@ -339,7 +339,7 @@ run_whole() {
     check "$label: step 4 still repairs line endings (staged file is LF)" \
         "! has_cr '$clone/$staged' && grep -q '^PASS 4 (fixed CRLF)' '$TMP_ROOT/run-rec'"
     check "$label: step 6 still repairs the exec bit (staged file is 100755)" \
-        "git -C '$clone' ls-files -s -- '$staged' | grep -q '^100755'"
+        "git -C '$clone' ls-files -s -- '$staged' | grep '^100755' >/dev/null"
 }
 
 case "$RUN_TWIN" in
