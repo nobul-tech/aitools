@@ -34,7 +34,7 @@ A third, parallel path, `scripts/build-package.sh` (v1.0 scaffolding: `--dry-run
 
 ### Install on a new machine
 
-**One-liner (recommended)** — installs prerequisites (package manager + git), clones the repo, runs the full installer, then (interactive only) `aitools user init` to load your dotprofile. Idempotent; re-run anytime.
+**One-liner (recommended)** — installs prerequisites (package manager + git; on Windows also PowerShell 7, which runs the installer even when the one-liner starts in Windows PowerShell 5.1), clones the repo, runs the full installer, then (interactive only) `aitools user init` to load your dotprofile. Idempotent; re-run anytime.
 
 macOS/Linux:
 ```bash
@@ -119,7 +119,7 @@ On an endpoint where `aitools-install` never ran, `deploy-harness` deploys the h
 
 - **`[RELAY]` prompt:** After **`aitools`** (or **`hh -n`**), if `.aitools/channel/relay.md` is uncommitted or **`main`** is ahead of **`origin/main`**, the harness may prompt (`scripts/relay-outbound-prompt.sh` / `.ps1`). Set **`AITOOLS_SKIP_RELAY_PROMPT=1`** to skip. Inbound pull is automatic; outbound commit/push is not.
 - **Install:** `aitools install` copies `hh` to `~/.local/bin` (macOS/Linux) and `hh.ps1` + a `hh` function in PowerShell (Windows). Requires `~/.local/bin` on `PATH` (installer usually wires this).
-- **Optional pre-commit** (`scripts/githooks/pre-commit`; enable with `bash scripts/init-hh-hooks.sh` or `git config core.hooksPath scripts/githooks`): when `shared/` or `scripts/build-deploy.sh` is staged, it runs `build-deploy.sh`, which rebuilds your **dotprofile** `deploy/` (backup + swap). Commit that change in the dotprofile repo. Do not enable it in agent worktrees: it runs against the real `HOME`.
+- **Optional pre-commit** (`scripts/githooks/pre-commit`; enable with `bash scripts/init-hh-hooks.sh` on macOS/Linux, or `git config core.hooksPath scripts/githooks` on any platform): when `shared/` or `scripts/build-deploy.sh` is staged, it runs `build-deploy.sh`, which rebuilds your **dotprofile** `deploy/` (backup + swap). Commit that change in the dotprofile repo. Do not enable it in agent worktrees: it runs against the real `HOME`.
 
 ### Develop / maintain configs
 
@@ -146,19 +146,19 @@ Run before commit, push, and after push -- replaces ad-hoc commands:
 
 macOS/Linux:
 ```bash
-bash scripts/check-pre-commit.sh         # 21 steps; --fix auto-repairs line endings, exec bits, build freshness
+bash scripts/check-pre-commit.sh         # 21 steps (3 and 10 retired); --fix repairs line endings and exec bits
 bash scripts/check-pre-push.sh           # 10 steps, read-only (step 7 rebuilds into a temp copy of the dotprofile)
-bash scripts/check-post-push.sh          # all post-push steps (1-32; 15 and 28 are retired SKIPs)
+bash scripts/check-post-push.sh          # all post-push steps (1-32; 2, 7, 15 and 28 always SKIP)
 ```
 
 Windows (PowerShell):
 ```powershell
-.\scripts\check-pre-commit.ps1           # 21 steps; -Fix auto-repairs
+.\scripts\check-pre-commit.ps1           # 21 steps (3 and 10 retired); -Fix repairs line endings and exec bits
 .\scripts\check-pre-push.ps1             # 10 steps, read-only
-.\scripts\check-post-push.ps1            # all post-push steps (1-32; 15 and 28 are retired SKIPs)
+.\scripts\check-post-push.ps1            # all post-push steps (1-32; 2, 7, 15 and 28 always SKIP)
 ```
 
-`--fix` / `-Fix` runs `build-deploy.sh` against the real `HOME` (it rebuilds the dotprofile `deploy/`): agents never pass it.
+`--fix` / `-Fix` never runs `build-deploy.sh` (incident #136): it only repairs line endings of staged `.sh` files (step 4) and exec bits of tracked `.sh` files outside the frozen aitools `deploy/` (step 6). The dotprofile `deploy/` is checked by `check-pre-push` step 7, which rebuilds into a temporary copy when a dotprofile is configured (it SKIPs without one). No step of the `check-*` scripts reads the frozen aitools `deploy/` (incidents #136, #176).
 
 See `reference/` for deeper setup notes and practices.
 

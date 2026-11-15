@@ -12,6 +12,57 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.77.12 -- On Windows the bash aitools hands off to aitools.ps1; OS guards on hh.sh, bootstrap.sh, init-hh-hooks.sh and analyze-session.sh (2026-11-14)
+
+Not tagged. Branch `fix/38dc-19-aitools-win-forwarder` (PR #162), mission 38dc-19 under M6-Polish (session 87795dc3). Commander, 2026-11-14, RFI 38dc-3 ("make the bash `aitools` a forwarder on Windows"): "agreed"; RFI 38dc-5: "add an OS guard to all of them".
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 1 | High | `aitools.ps1` ran `aitools dashboard ...` with an in-process array splat, which binds every string by position: `aitools dashboard --background` and `--status` failed in PowerShell with `Cannot convert value "--background" to type "System.Int32"` and exited 0. It now runs `aitools-dashboard.ps1` with `pwsh -File` (`[Environment]::ProcessPath`), which binds `--background` to `-Background` as the bash entry point's dispatch did, and leaves `--dry-run` / `--force` after `dashboard` to it. Without this fix the forward below would have broken the dashboard-serve SessionStart hook on Windows |
+| 2 | Medium | `aitools.ps1` rejects an unknown argument, and `--skip-gh-auth`, `--repos-path` or `--skip-drive-detection` without `install`, with `unknown argument '<arg>'` and exit 1, as the bash entry point does; before, a typo such as `aitools --forse` ran the whole sync. In a native pwsh call leading flags no longer take the place of the command or of the `--addmcp` list (`aitools --force install` ran the sync, not the install); an empty `--addmcp` list after them is reported |
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 3 | The bash entry point `scripts/aitools`, run in Git Bash on Windows (the dashboard-serve hook, a Git Bash terminal, an agent's Bash tool), now runs `exec pwsh -NoProfile -ExecutionPolicy Bypass -File <aitools.ps1> <arguments>` inside `main()` before it parses arguments or sources `aitools-lib.sh`, so no bash library code runs on Windows. `aitools.ps1` is the repo copy, else the one beside the entry point (`~/.local/bin`); the exit code and stdin are `aitools.ps1`'s, and `USERPROFILE` is set to this `HOME` (Windows form), so everything goes to the HOME the caller chose (the same directory in a normal Git Bash session); when HOME and USERPROFILE differ, a note on stderr says so. The flags `pwsh -File` cannot bind are rewritten (`--dry-run`, `--skip-gh-auth`, `--skip-drive-detection`, `--repos-path P` as a Windows path, `--addmcp A B` as `-AddMcp A,B`); dashboard arguments pass unchanged. No pwsh, or no `aitools.ps1`: exit 1 with a clear message. macOS and Linux are unchanged |
+| 4 | `aitools.ps1` splits `-AddMcp` values on commas (the form the forward and `pwsh -File -AddMcp a,b` deliver) and drops empty names, so an empty list reports "--addmcp requires at least one server name" |
+| 5 | `scripts/hh.sh`, `scripts/bootstrap.sh`, `scripts/init-hh-hooks.sh` and `scripts/analyze-session.sh` carry the POSIX OS guard (none of them runs on Windows: `hh.sh` is installed only by `aitools-install.sh`, Windows gets `hh.ps1`; `bootstrap.sh` already refused anything but Darwin/Linux). `init-hh-hooks.sh` and `analyze-session.sh` source aitools-lib and init-logging before the guard; `hh.sh` (installed alone) and `bootstrap.sh` (run from curl) print the structured `[<UTC>] [<name>] [error]` line themselves |
+| 6 | `tests/logging/test-logging.sh`: the seven cases that run `scripts/aitools` past its argument parsing run on macOS and Linux only (one SKIP line on Windows, where the entry point forwards); the rest of the suite still runs in all three CI jobs |
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 7 | `.claude/rules/cross-platform.md` (and `.cursor/rules/cross-platform.mdc`): "OS guard patterns" records the guard form of a script with no aitools-lib beside it; the exemptions table drops `bootstrap.sh`, `hh.sh`, `init-hh-hooks.sh` and the "Analysis tools" row (`analyze-session.sh`), and the `aitools` reason now says it forwards to `aitools.ps1`. `reference/tool-ops-claude-code.md` and `README.md` (init-hh-hooks is macOS/Linux) updated |
+| 8 | GitHub issue #163: serve the dashboard-serve hook through a cross-platform Python entry (`aitools.py`) with a Python logging library feature-identical to aitools-lib.sh / .ps1; it answers "can the hook itself be Python?" from the Claude Code hooks docs (exec form `command` + `args`, no shell) |
+
+### Files created
+
+| File | Purpose |
+|------|---------|
+| `tests/aitools-entry/test-win-forwarder.ps1` | Windows suite (CI windows job): placement of the forward; argument cases against a stub `aitools.ps1` with the real param block; exit codes 0/1/2/7; stdin; USERPROFILE from HOME; no pwsh; the `~/.local/bin` fallback; no `aitools.ps1`; the real `aitools.ps1` behind the forward with a stub dashboard, `--addmcp` and unknown arguments; native pwsh calls |
+
+**Verified on:** Windows 11 (Git for Windows bash 5.3.15, pwsh 7.6): `test-win-forwarder.ps1` 45/0, and 21 of 21 mutations of the forward and of `aitools.ps1` make it fail; the four guards refuse Git Bash (exit 1, message, only logs written) and the 38dc-13 guard classifier lists them `posix`; `bash -n` on every touched shell script; the pwsh parser on `aitools.ps1`; `check-ci-suites.pl` 42 suites. Independent review on PR #162: 2 blocking findings, fixed; the re-check found none. macOS and Linux: CI (no `.sh` suite was run locally). Not run: the dashboard-serve hook in a live Claude Code session after an `aitools` run installs the new entry point.
+
+---
+
+## v0.77.11 -- The bash compliance check no longer fails at random under pipefail (2026-11-14)
+
+Not tagged. Branch `fix/38dc-21-compliance-sigpipe`, mission M6-Polish (session 87795dc3), a fix-forward for the CI step added in v0.77.8 (PR #160).
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 1 | Medium | `scripts/check-script-compliance.sh` runs under `set -euo pipefail` and tested pipelines with `... | grep -q PATTERN`. `grep -q` exits at its first match; when the writer (`grep -A2` over `scripts/aitools-lib.sh`, or `echo` / `printf` of a captured block) still had output to write, it died of SIGPIPE, `pipefail` made the pipeline fail, and the check reported a violation that is not there. CI run 43640967140 (PR #154, linux job) failed steps 4 and 5 ("log_error does not increment ERRORS", "log_warn does not increment WARNINGS") on a library whose main CI run passed the same steps. The 12 pipelines now end in `grep PATTERN >/dev/null`, which reads its input to the end, so the writer never gets SIGPIPE; the match result is the same |
+
+**Verified on:** `bash -n` on the script (Windows 11, Git Bash, parse only); the diff is the 12 pipelines and nothing else. Not run locally: the `.sh` check (commander, 2026-11-14: tests and checks on Windows are `.ps1`); the linux CI job runs it on this PR.
+
+---
+
 ## v0.77.10 -- The 64 KB review-diff test no longer times out a slow macOS runner (2026-11-14)
 
 Not tagged. Branch `fix/38dc-17-mf-pty-timeout`, mission M6-Polish (session 87795dc3), a fix-forward for main CI run 43632383993.
@@ -26,6 +77,85 @@ Not tagged. Branch `fix/38dc-17-mf-pty-timeout`, mission M6-Polish (session 8779
 
 ---
 
+## v0.77.9 -- No check builds against the real HOME or inspects the frozen deploy/ (2026-11-14)
+
+Not tagged. Branch `fix/m6-checks` (PR #154), mission M6-Polish (session 87795dc3), items b and c (delegates M6-B and 38dc-09).
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 1 | High | `check-pre-commit` step 3 with `--fix` / `-Fix` ran `build-deploy.sh` under the caller's HOME, which rebuilds the real dotprofile `deploy/`, discarded its output and exit code, staged the frozen aitools `deploy/` and reported PASS; without the flag the step advised it. Steps 3 ("Build freshness") and 10 ("Deploy drift", which diffed the frozen aitools `deploy/`) are now SKIPs in both twins, `retired: check-pre-push step 7 rebuilds into a temp dotprofile copy`; no path of the script runs `build-deploy.sh`. `--fix` / `-Fix` repairs line endings and exec bits only, and the `.sh` line-ending repair uses perl (GNU `sed -i ''` ended the run on Linux). Step 6 (exec bits) no longer lists the frozen aitools `deploy/` (`git ls-files -s -- '*.sh' ':!deploy/'`), so neither twin reports it or, with the fix flag, stages a mode change under it (PR review B1). Resolves Incident #136 |
+| 2 | Medium | `check-post-push` steps 2, 6 and 14 read the frozen aitools `deploy/` (bash -n, PowerShell parse, line endings), which `build-deploy.sh` has not written since 2c0fd32, so they passed whatever the dotprofile build produced. Step 2 ("Smoke-test deploy scripts") is now a SKIP in both twins with the same text; steps 6 and 14 check `scripts/` and `shared/hooks/` only. Neither check script reads the aitools `deploy/` any more; step numbers are unchanged. Resolves Incident #176 |
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 3 | `.claude/rules/deploy-paths.md` and `.cursor/rules/deploy-paths.mdc` item 3, `reference/pre-commit-checklist.md`, `reference/post-push-checklist.md` (steps 2, 6, 11, 14), `README.md` and `scripts/README.md` describe the retired steps; pre-push step 7 is the check of the generated `deploy/`. Known gap, stated there: pre-push step 7 does not `bash -n` every generated `.sh` or check its line endings |
+
+### Files created
+
+| File | Purpose |
+|------|---------|
+| `tests/check-pre-commit/test-pre-commit-steps3-10.sh` | Steps 3 and 10 of both twins never run build-deploy.sh, stage deploy/ or advise the fix flag; step 6 never reports or stages a 100644 `deploy/` file; the whole script with the fix flag leaves a temporary HOME and dotprofile unchanged (CI: macOS bash 5 and /bin/bash 3.2, Linux, Windows) |
+| `tests/check-post-push/test-post-push-deploy-steps.sh` | Steps 2, 6 and 14 of both twins ignore problems planted in `deploy/` and still FAIL on the same problems in the sources; no line of either twin reads `deploy/`; the temporary HOME is unchanged (CI: macOS bash 5 and /bin/bash 3.2, Linux, Windows) |
+
+**Verified on:** Windows 11: `test-pre-commit-steps3-10.sh` 38/0 (22 cases fail against the origin/main twins); `test-post-push-deploy-steps.sh` 19/0 (6 fail against origin/main, mutants killed); `check-pre-commit.ps1` and `check-pre-push.ps1` 0 FAIL; one `check-post-push.ps1` run under an isolated HOME/USERPROFILE/APPDATA/LOCALAPPDATA and log dir with a scratch clone of the dotprofile left the real dotprofile `deploy/`, `~/.aitools/logs` and `~/.aitools/config.json` unchanged. CI on linux, macos and windows ran both new suites green. Review fix (38dc-16): the step 6 cases were added after those counts; a native pwsh mirror of the `.ps1` step 6 case passes on the new twin and fails both modes on the previous one, and CI runs the suite.
+
+---
+
+## v0.77.8 -- CI runs the script-compliance check; bootstrap.ps1 runs the installer under pwsh 7; the delegation rule ships as a shared rule (2026-11-14)
+
+Not tagged. Branch `fix/38dc-11-compliance-ci-bootstrap`, mission 38dc-11 (M6-Polish, session 87795dc3).
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 1 | High | `scripts/bootstrap.ps1` ran `aitools-install.ps1` with `powershell` (Windows PowerShell 5.1), against the PowerShell 7 baseline, and called `aitools` for the dotprofile step inside its own (possibly 5.1) host. It now finds `pwsh`, installs it when missing with the tool registry's preferred Windows method (`winget install --id Microsoft.PowerShell --source winget`, verified against learn.microsoft.com on 2026-11-14), refreshes PATH additively, and runs the installer and `%USERPROFILE%\.local\bin\aitools.ps1` (`user init`, then the rebuild) with `pwsh -NoProfile -ExecutionPolicy Bypass -File`; a non-zero installer exit is reported (bootstrap.sh parity). With no `pwsh` and no `winget` it stops with a message (`throw`, never `exit`). The body is one script block, so under `irm | iex` its `$ErrorActionPreference = 'Stop'`, variables and functions no longer leak into the caller's session. The file stays ASCII and parses under 5.1. Resolves Incident #179 |
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 2 | CI runs the script-standards compliance check (until now only check-post-push step 23, after a push) on every PR and push to main: `bash scripts/check-script-compliance.sh` in the linux job, `pwsh -NoProfile -File scripts/check-script-compliance.ps1` in the windows job. A FAIL check fails the job, so a #177-class line (an unchecked `-ErrorAction SilentlyContinue` in a setup script) fails CI before merge (CI is not a required check on main: a red PR can still be merged by hand). Each is the last step of its job, so a compliance failure skips no test step |
+| 3 | The delegation rule ships to user scope: `shared/rules/delegation.md`, a byte-identical copy of the dotprofile `claude/rules/delegation.md` (commander, 2026-11-14). deploy-harness copies it to `~/.aitools/rules`, setup-user-claude to `~/.claude/rules/delegation.md`, setup-user-cursor to `~/.cursor/rules/delegation.mdc` (`alwaysApply: true`), on the next `aitools` run. Until now `~/.claude/rules/delegation.md`, which CLAUDE.md and the `/delegate` skill cite, was not deployed (R-8 deploys `shared/rules` only) |
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 4 | `reference/post-push-checklist.md` step 23 (CI also runs it), `reference/cross-platform-detail.md` (new section "bootstrap.ps1: runs under 5.1, launches pwsh 7"), `reference/tool-registry.md` and the registry's `pwsh` entry (the bootstrap note; Windows install command verified 2026-11-14), `reference/rules.md` v1.4 and `reference/cursor-practices.md` (the new shared rule), the `/delegate` skill's cross-reference (rule source), README (the Windows one-liner also installs PowerShell 7) |
+| 5 | Incident registry (`/incident` skill): #179 filed and closed (bootstrap.ps1 ran the installer under 5.1; id reserved by the M6-Polish orchestrator) |
+
+### Files created
+
+| File | Purpose |
+|------|---------|
+| `shared/rules/delegation.md` | The delegation rule, deployed to every machine (copy of the dotprofile rule) |
+| `tests/bootstrap/test-bootstrap.ps1` | bootstrap.ps1 under Windows PowerShell 5.1 (run with `-File` and through `Invoke-Expression`) with stubbed git, winget, installer and aitools.ps1 (Windows CI job) |
+
+**Verified on:** Windows 11 (pwsh 7.6.10, Windows PowerShell 5.1): `tests/bootstrap/test-bootstrap.ps1` 26 passed (including the `irm | iex` form); against origin/main's bootstrap.ps1 15 checks fail; 8 of 8 one-line mutants killed. `check-script-compliance.ps1` on origin/main: exit 1 (`setup-pywinpty.ps1:151`, #177, fixed by PR #157); on a scratch copy with #157's file: exit 0; with a planted unchecked `SilentlyContinue`: exit 1. `check-ci-suites.pl` finds the new suite, and fails when its step is removed. macOS/Linux: the `.sh` twin of the compliance check runs in the linux CI job only (not run locally on Windows).
+
+---
+
+## v0.77.7 -- Delegate identity, transcripts and control documented (2026-11-14)
+
+Not tagged. Branch `docs/38dc-08-subagent-transcripts`, mission 38dc-08-subagent-transcripts (delegate of M6-Polish, session 87795dc3).
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 1 | `reference/tool-ops-claude-code.md`: new section "Delegate Identity, Transcripts and Control" (v1.0) and Version Dependencies items #31 and #32, tested on Claude Code 2.1.325 (Windows 11) with two throwaway probe delegates: where every delegate's transcript and `meta.json` live (`subagents/agent-<agentId>.*` under the main session, flat for all depths), `meta.json` fields, mapping a mission name to an agentId through the Agent call's `description`, the Agent launch result verbatim, why `output_file` is not a transcript copy (created empty; only some later become a hard link), how a delegate finds its own id (no environment variable; search `meta.json` descriptions, bash and PowerShell recipes), TaskStop (an orchestrator cannot stop its own delegate; an unknown id lists the running agents), SendMessage (queued to a running delegate, resumes a finished one, `to: "main"`), repeat hand-backs (usually delivered, refused once), background tasks that outlive a delegate's hand-back, forced hand-backs and classifier interruptions, and guidance for orchestrators |
+| 2 | `reference/tool-ops-claude-code.md`: current version 2.1.325; item #25 (SendMessage gap) tested end to end and closed; item #27 level-3 tool set re-verified; "Agent Continuation Gap" marked closed (history kept); session-storage tree shows `subagents/*.meta.json` and `tool-results/`; release-notes watch entry for 2.1.325 |
+| 3 | `/delegate` skill v2.2: "Environment limits" gains delegate identity and control; "Verifying what comes back" points to the delegate's transcript. `/tool-ops` skill: lookup row for the new section |
+
+**Verified on:** Windows 11 (Claude Code 2.1.325, Git Bash, pwsh 7): each fact observed in session 87795dc3 (probe delegates 2b10-01 and 2b10-02, the session's 42 `meta.json` files, the M6-Polish transcript); independent review by 2b10-03 (27 claims checked against the raw files; its five blocking findings fixed; its re-check finding on the repeat-hand-back counts fixed); `check-pre-commit.ps1` (no `-Fix`) and `check-pre-push.ps1`: 0 FAIL. macOS, Linux, Claude Code web, Cursor: not tested (documentation only).
+
+---
+
 ## v0.77.6 -- How tests run on Windows: the .ps1 suites; Git Bash only for cross-platform scripts (2026-11-14)
 
 Not tagged. Branch `docs/38dc-12-windows-test-practice`, mission 38dc-12 (M6-Polish, session 87795dc3).
@@ -36,7 +166,7 @@ Not tagged. Branch `docs/38dc-12-windows-test-practice`, mission 38dc-12 (M6-Pol
 |---|--------|
 | 1 | `reference/cross-platform-detail.md` "Running tests on Windows" (new): the commander's rule (2026-11-14), quoted: `.sh` scripts and tests run only on macOS and Linux, `.ps1` only on Windows, unless a script is explicitly marked cross-platform (his examples: `build-deploy.sh`, all Perl and Python scripts; where the marks are recorded is an open question); on Windows an agent runs the eight `.ps1` suites with `pwsh -NoProfile -File` and the tests of explicitly cross-platform scripts, and leaves `.ps1` code that has only a `.sh` driver to the Windows CI job. Eight known Git Bash issues, each with its source, five re-checked by a probe on the commander's workstation: Git's `usr/bin` first on PATH (a bare `find` in a `.cmd` stub walked C: and hung a suite), `bash` resolving to Git's or to the WSL launcher, `chmod 000` on a directory not enforced, `grep` dropping the line-end CR, MSYS argument rewriting (`/c/...`, `--opt=/tmp/...`, `origin/main:.aitools/...`), GNU tools not BSD, slow pseudo-terminal runs, a faked `uname`. What the Windows CI job runs today (42 suite steps: 8 `.ps1`, 2 Python, 32 `.sh` in Git Bash, in three groups) and that the bash AI merge has no Windows runtime path; follow-up mission 38dc-13 is changing that layout. "Git Bash PATH shadowing": `find`, `bash` and `sort.exe` added to the shadowed tools |
 | 2 | `CLAUDE.md` tests line: on Windows, the `.ps1` suites, and `.sh` suites in Git Bash only for scripts explicitly marked cross-platform, with a pointer to the new section |
-| 3 | `/delegate` skill v2.2 ("In the aitools repo", "Checks"): on Windows the `.ps1` check twins (the `.sh` checks refuse Windows), the same test rule, and the pointer to the new section |
+| 3 | `/delegate` skill v2.3 ("In the aitools repo", "Checks"): on Windows the `.ps1` check twins (the `.sh` checks refuse Windows), the same test rule, and the pointer to the new section |
 
 **Verified on:** Windows 11 (Git Bash 5.3.15, pwsh 7): the Git Bash probes cited in item 1; the CI step counts by a parse of `.github/workflows/check.yml`. Documentation only: no script or test changed.
 
