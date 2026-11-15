@@ -1,7 +1,15 @@
 # M7-Sweep email memo: the secondary Google account address in the public repo
 
-Version 1.0, 2026-11-14. Written by M7-Priv for M7-Sweep (item 7 of M7-Sweep,
-session 87795dc3). The address itself is never written here: it is called "the
+Version 1.1, 2026-11-14. Written by M7-Priv for M7-Sweep (item 7 of M7-Sweep,
+session 87795dc3).
+
+Changelog: v1.1 (2026-11-14, review notes N1, N2, N4 of M7-Rev-B on PR #173):
+section 7 gives counts only, with no file or line list for the private folder
+name or the other addresses; section 2.3 names the two other `.tar` files of
+2026-10-29, which hold no occurrence; the GitHub `Important` note is quoted as
+a label plus the sentence. v1.0 (2026-11-14): first version.
+
+The address itself is never written here: it is called "the
 secondary Google account address" throughout, and its path-sanitized form (the
 address with `@` and `.` turned into `-`, as Claude Code names its
 `~/.claude/projects/` directories) "the sanitized form".
@@ -71,6 +79,12 @@ snapshots of the same five files, so each contains 14 occurrences:
 | `harvesting/2026-10-29_session-ma106_main.tar` (33,617,920 bytes) | the same five members, same counts |
 | `harvesting/2026-10-29_session-ma106_merged.tar` (33,669,120 bytes) | the same five members, same counts |
 | `harvesting/2026-10-29_session-mg108_tree.tar` (32,583,680 bytes) | the same five members, same counts |
+
+The two other tracked archives of that date,
+`harvesting/2026-10-29_session-rccode_main.tar` (2,641,920 bytes) and
+`harvesting/2026-10-29_session-rccode_pr106.tar` (2,672,640 bytes), hold no
+occurrence (byte scan of each whole file, 2026-11-14). "The four `.tar` files"
+in this memo always means the four in the table above.
 
 ### 2.4 Every commit that changed the number of occurrences (`git log --all -S`)
 
@@ -155,9 +169,9 @@ mention BFG, and no BFG fact in this memo was verified.
   requests on GitHub. Deleting an entire pull request removes its conversation,
   reviews, and diffs.", "Run a garbage collection on the server to expunge the
   sensitive data from storage.", "Remove cached views."
-- "Important: GitHub Support won't remove non-sensitive data, and will only
-  assist in the removal of sensitive data in cases where we determine that the
-  risk can't be mitigated by rotating affected credentials."
+- Under an `Important` label: "GitHub Support won't remove non-sensitive data,
+  and will only assist in the removal of sensitive data in cases where we
+  determine that the risk can't be mitigated by rotating affected credentials."
 - "Collaborators must rebase, not merge, any branches they created off of your
   old (tainted) repository history. One merge commit could reintroduce some or
   all of the tainted history that you just went to the trouble of purging."
@@ -255,29 +269,25 @@ Either removal leaves the old blobs reachable through every commit since
 
 ## 7. Other findings for the commander (not edited)
 
-Counts only; no address or name is copied here. Source: an email-pattern scan
-of each file on 5f962b1.
+Counts only. This memo is public, so it copies no address or name and lists no
+file or line for these items: the per-file list is kept out of it and is
+available to the commander from the mission's private session record (M7-Priv,
+session 87795dc3). Source: an email-pattern scan and a text search of the
+tracked files on 5f962b1.
 
-| File | Distinct addresses (occurrences) | What they are |
-|------|----------------------------------|---------------|
-| `harvesting/2026-03-29_session-fbf7decb-9_1bc9fd30-full.md` | 9 (85) | the commander's work address, which also appears in tracked sources such as `scripts/setup-user-claude.sh` and `shared/cursor-rules/user-rules.md` (36); three addresses at two other company domains that appear to be the commander's (41; not verified); two colleagues' addresses at the commander's company domain (2 each); one third party's address at another company (2); two automated sender addresses of public services (1 each) |
-| `harvesting/2026-03-29_session-8a9efdbb-0_f5fa-latest4.txt` | 7 (13) | four personal-name addresses of individuals at a third-party company (7); one role address at that company (2); the commander's work address (1) and a Drive-path token built from it (3) |
-| `.aitools/channel/relay.md` | 1 (1) | one of the addresses at another company domain that appear to be the commander's |
+**Other email addresses.** 15 distinct addresses (99 occurrences) in 3 tracked
+text files. By kind: the commander's work address, which also appears in
+tracked setup sources; addresses at other company domains that appear to be the
+commander's (not verified); colleagues' addresses at the commander's company
+domain; personal-name addresses of individuals at third-party companies; role
+and automated-sender addresses of public services; and a Drive-path token built
+from the commander's work address. The third parties' personal addresses are
+the ones that most need a decision.
 
-**A private matter in a folder name.** The sanitized directory names in
-`harvesting/2026-03-29_session-fbf7decb-9_1bc9fd30-full.md` (the seven lines in
-section 2.1) continue with a Google Drive folder name that identifies a private
-personal matter of the commander (not quoted). This PR leaves that folder name
-in place (only the address part is redacted). The same folder name appears on
-20 lines in 8 tracked files: that file (10),
-`harvesting/2026-03-29_session-8a9efdbb-0_f5fa-latest4.txt` (1),
-`harvesting/2026-03-29_session-fbf7decb-9_1bc9fd30-text.md` (1),
-`harvesting/2026-03-29_session-fbf7decb-9_f078fb16-session.md` (1),
-`harvesting/2026-03-25_session-c0dc2ddc-f_consolidated-operational-learning.md`
-(1), `rfcs/0001-nobulai-tools-product-definition.md` (1),
-`rfcs/0001-v2-nobulai-tools-product-definition.md` (4) and
-`rfcs/rfc-0004-v3-harness-architecture.md` (1); the four `.tar` files hold
-copies of the harvested ones. This is likely more sensitive than the address.
+**A private matter in a folder name.** A Google Drive folder name that
+identifies a private personal matter of the commander (not quoted) appears on
+20 lines in 8 tracked text files, and inside the four `.tar` files. This PR
+does not change it. It is likely more sensitive than the address.
 
 ## 8. Harvester check
 
