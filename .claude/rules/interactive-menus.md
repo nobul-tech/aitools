@@ -81,13 +81,15 @@ Every menu function (`prompt_diff_review`, `review_json_fields`,
 - Non-terminal stdin: auto-select `overwrite`
 - EOF at a prompt (interactive, input ended): log a warning and take that
   prompt's documented default: `overwrite` at the text review menu
-  (`prompt_diff_review`) and at a JSON field present in both files
-  (`prompt_json_field_review`); `skip` at a JSON field only in LOCAL (no
-  overwrite is offered; LOCAL kept); `n` (reject, back to the review menu)
+  (`prompt_diff_review` / `Prompt-DiffReview`) and at every JSON field
+  prompt that offers `[o]verwrite` (`prompt_json_field_review` /
+  `Prompt-JsonFieldReview`: a field in SOURCE, whether or not LOCAL has it;
+  the settings.json sync included); `skip` at a JSON field only in LOCAL
+  (no overwrite offered; LOCAL kept); `n` (reject, back to the review menu)
   at the AI merge preview (`_invoke_ai_merge` / `Invoke-AiMerge`); empty
   feedback at the `[r]efine` feedback read, so the merge is refined once
-  more (a second AI call), then EOF at the preview rejects it and EOF at
-  the review menu overwrites
+  more (one more AI merge attempt), then EOF at the preview rejects it and
+  EOF at the review menu overwrites
 
 An empty or unrecognised answer at an interactive prompt is not a
 non-interactive case: it re-asks (see "Answers" above). No AI merge starts

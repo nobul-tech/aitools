@@ -96,9 +96,9 @@ merge.
 
 Only an offered letter is a choice (commander, 2026-11-13: "no default or
 other characters should re-ask"); EOF is not a choice and takes the
-prompt's default with a warning: overwrite at the review menu and at a JSON
-field in both files, skip at a JSON field only in LOCAL, reject at the
-merge preview (detail: `@.claude/rules/interactive-menus.md` "Non-interactive
+prompt's default with a warning: overwrite at the review menu and at any
+JSON field that offers overwrite, skip at a JSON field only in LOCAL (no
+overwrite offered), reject at the merge preview (detail: `@.claude/rules/interactive-menus.md` "Non-interactive
 fallback"). Every answer is logged at `detail` (`read_menu_choice` /
 `Read-MenuChoice`, `@.claude/rules/interactive-menus.md` "Answers").
 
