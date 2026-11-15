@@ -12,6 +12,27 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.77.17 -- Incident #180: an orchestrator re-asked the commander an RFI he had already answered (2026-11-14)
+
+Not tagged. Branch `docs/38dc-28-rfi-repeat-rca`, mission 38dc-28 under M6-Polish (session 87795dc3). Commander, 2026-11-14: "launch a mission to 1) file this as incident 2) use the investigate skill and other skills to determine RCA of why you asked me when i had previously given answer." Documentation only; no harness behaviour changes.
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 1 | Incident #180 filed (`registries/incidents.json`, medium): M6-Polish relayed its delegate's RFI 38dc-19-1 to the commander as RFI 38dc-11 (Windows OS guards on `bootstrap.ps1` and `hh.ps1`), which his answers 1, 5 and 7 had already decided. Root cause: session RFIs keep no ledger of the commander's answers, and no step makes an orchestrator check a delegate's RFI against them before relaying it (`/delegate` "Verifying what comes back" has no open-questions step). RFI 38dc-5 had the same shape the same day |
+| 2 | GitHub issue #171 records the root cause, the timeline with transcript locations, the barrier analysis and the proposed preventive changes: prompt-turn checklist items 4-5, a `/delegate` open-questions step, a session RFI ledger, and an observe-mode Stop/SubagentStop RFI hook |
+
+### Files created
+
+| File | Purpose |
+|------|---------|
+| `.aitools/channel/handoffs/2026-11-14_87795dc3-missions/38dc-28/38dc-28-report.md` | The full RCA (v1.0): the commander's answers verbatim, timeline, 5 Whys, Swiss cheese analysis, other instances, preventive actions with a barrier replay |
+
+**Verified on:** Windows 11 (documentation only; `check-pre-commit.ps1` and `check-pre-push.ps1`).
+
+---
+
 ## v0.77.12 -- On Windows the bash aitools hands off to aitools.ps1; OS guards on hh.sh, bootstrap.sh, init-hh-hooks.sh and analyze-session.sh (2026-11-14)
 
 Not tagged. Branch `fix/38dc-19-aitools-win-forwarder` (PR #162), mission 38dc-19 under M6-Polish (session 87795dc3). Commander, 2026-11-14, RFI 38dc-3 ("make the bash `aitools` a forwarder on Windows"): "agreed"; RFI 38dc-5: "add an OS guard to all of them".
