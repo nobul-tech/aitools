@@ -1,8 +1,8 @@
-# 08de-03 review of PR #166 (v1.1)
+# 08de-03 review of PR #166 (v1.2)
 
 **Intent**: **Purpose**: the independent review verdict on PR #166 (nobul-tech/aitools, "Windows CI runs .ps1 test suites only"), with blocking and non-blocking findings, each with file:line and evidence. **Scope**: the PR diff against origin/main at head `cc60a59dcad5915a793eef1fd8a18fac04020f15`: check.yml, check-ci-suites.pl, tests/ci-suites, tests/os-guards, cross-platform.md/.mdc, RELEASE_NOTES, the five check-suite ports, and a sample of the other ports. NOT fixes (the reviewer edited no repo file). NOT an approval or a request for changes through `gh pr review`. **Audience**: 38dc-27 (the author's orchestrator), then the commander.
 
-Version 1.1, 2026-11-14 (v1.0 same day, at cc60a59; v1.1 adds "Re-check at 87f0d31"). Reviewer: 08de-03-review-pr166, delegated by 38dc-27-windows-ci-finish (M6b-Finish, Session Commander 87795dc3). PR comment: https://github.com/nobul-tech/aitools/pull/166#issuecomment-6887485252
+Version 1.2, 2026-11-14 (v1.0 at cc60a59; v1.1 adds "Re-check at 87f0d31"; v1.2 adds "Re-check at 3fb6b02"). **Current verdict (v1.2): APPROVE-equivalent (no blocking findings).** The verdict below is the v1.0 verdict at cc60a59. Reviewer: 08de-03-review-pr166, delegated by 38dc-27-windows-ci-finish (M6b-Finish, Session Commander 87795dc3). PR comment: https://github.com/nobul-tech/aitools/pull/166#issuecomment-6887485252
 
 ## Verdict
 
@@ -133,6 +133,41 @@ At 38dc-27's request (PR comment 6887511088), I re-checked B1 and B2 only, on `g
 Non-blocking N1-N7 are unchanged; I did not re-check them.
 
 Note: 87f0d31 also committed this report at v1.0. This v1.1 is a working-tree change only, not committed (as briefed).
+
+## Re-check at 3fb6b02 (v1.2)
+
+At 38dc-27's request, I re-checked B2 only, on `git diff 87f0d31 3fb6b02`. Head verified as 3fb6b02d5e7f5a1158ff60f7f0a615483eba6bc7 (`gh pr view 166 --json headRefOid` and `git rev-parse HEAD`). Follow-up PR comment: https://github.com/nobul-tech/aitools/pull/166#issuecomment-6887545043
+
+**Updated verdict: APPROVE-equivalent (no blocking findings).**
+
+### B2: resolved
+
+- `.claude/rules/cross-platform.md:121-127` and `.cursor/rules/cross-platform.mdc:69-72` now say:
+  - the script-suite ports compare against golden files;
+  - the check-suite ports (check-pre-push, check-post-push, check-pre-commit) write the same expectations in each harness, with golden files as a follow-up;
+  - the older twins do not yet share cases.
+- This matches the code: `git grep -l -i golden` finds golden files in all 15 script-suite ports and none under `tests/check-pre-push`, `tests/check-post-push` or `tests/check-pre-commit`.
+- `test-os-guards.ps1` still passes 68/0/0 on Windows after the edit; it parses the exemption table of the same file.
+
+### New non-blocking finding N8
+
+I should have raised this at the first re-check.
+
+- "The harnesses ported in 2026-11 have the same cases" is approximate. Each side also has cases for its own platform only. Distinct case names, from my first-pass `case-parity.pl` output:
+
+  | Suite | `.sh` | `.ps1` |
+  |---|---|---|
+  | deploy-harness | 110 | 120 (Windows-only locked-file and ACL cases) |
+  | skills-fanout | 86 | 74 |
+  | rules-fanout-cursor | 135 | 122 |
+  | fanout-lib | 12 | 9 |
+
+- No pre-port case is lost. I did not classify every per-platform difference.
+- Suggested wording: "the same shared cases, plus platform-only cases on each side". Not blocking.
+
+N1-N7 are unchanged and were not re-checked.
+
+This v1.2 is a working-tree change only, not committed (as briefed). 3fb6b02 committed v1.1.
 
 ## Signals
 

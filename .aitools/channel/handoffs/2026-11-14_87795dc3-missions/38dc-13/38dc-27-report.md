@@ -1,4 +1,6 @@
-# 38dc-27 report: finish 38dc-13 (Windows CI runs .ps1 only) (v1.1, pre-merge)
+# 38dc-27 report: finish 38dc-13 (Windows CI runs .ps1 only) (v1.2, pre-merge)
+
+v1.2: the independent review and its two re-checks (section below).
 
 Mission 38dc-27-windows-ci-finish (agent id ends 08de), delegated by
 M6-Polish, then M6b-Finish (session 87795dc3). Branch
@@ -55,6 +57,20 @@ PASS, 4 WARN (release notes then missing, roadmap, commit count, checklist),
   3.2 step for pre-push step7 (added), N5 check-menu-parity.pl Tests: line
   (already fixed in 8c0d59f; the finding was stale). Report 08de-02-report.md.
 
+## Independent review (08de-03)
+
+- v1.0 at cc60a59: CHANGES NEEDED, 2 blocking, both rule text vs code
+  (PR comment 6887485252): B1 the guard placement wording vs `-Help` first
+  in every `.ps1` (and test-bootstrap.ps1's setup before its guard); B2
+  "same cases and golden files" for every pair. Fixed in 87f0d31 (author
+  response: comment 6887511088).
+- Re-check at 87f0d31 (comment 6887526163): B1 fixed; B2 still blocking (the
+  check-suite ports have no golden files). Fixed in 3fb6b02.
+- Re-check at 3fb6b02 (comment 6887545043): APPROVE-equivalent, no
+  blocking findings. New N8 (ports share cases plus platform-only cases on
+  each side): rule wording applied in the final batch.
+- Non-blocking N1-N7: follow-ups in the PR body.
+
 ## Orphaned delegates found
 
 38dc-13's delegates e9d6-21 (pre-push step7, post-push step7, menu-parity)
@@ -70,7 +86,7 @@ mutations). 08de-01's text kept at
 
 ## Remaining
 
-1. Independent reviewer (fresh delegate) posts its verdict with `gh pr comment`.
+1. (done) Independent review: no blocking findings at 3fb6b02.
 2. After #159 merges: cross-platform-detail.md "What CI runs on Windows".
 3. After M6b-Finish reports #168 merged: merge origin/main --no-ff (keep
    both sides; #168's test-step7-grepq.sh must pass check-ci-suites and

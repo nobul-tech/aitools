@@ -67,7 +67,7 @@ guard (plus a `${BASH_VERSINFO[5]:-}` case that a `uname` shim or an exported
 `OSTYPE` cannot fool), every `test-*.ps1` the Windows guard, both printing to
 stderr, first thing after `set` / `param` (a `.ps1` may print `-Help` first). A
 suite for a `.sh`/`.ps1` pair has a `.ps1` twin harness; the 2026-11 ports
-share cases (the script-suite ports also golden files; the check-suite ports
+share cases, plus platform-only cases on each side (the script-suite ports also golden files; the check-suite ports
 repeat the expectations in each harness), the older twins (managed-files,
 adopt-push, logging, menus, setup-user-shell, relay-outbound) do not yet. On Windows run only `.ps1` suites (and the listed
 cross-platform ones); never run a `.sh` suite past its guard or spoof

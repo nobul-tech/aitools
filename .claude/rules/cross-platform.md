@@ -119,7 +119,8 @@ is listed in the exemptions table below as cross-platform. A suite that tests a
 `.sh`/`.ps1` pair has two harnesses: the `.sh` runs the `.sh` scripts on macOS
 and Linux, the `.ps1` runs the `.ps1` scripts on Windows with native pwsh
 (helpers: `@tests/lib/platform-lib.ps1`). The harnesses ported in 2026-11
-(PR #166) have the same cases; the script-suite ports also compare against
+(PR #166) have the same shared cases, plus platform-only cases on each side
+(e.g. the Windows locked-file and ACL cases); the script-suite ports also compare against
 the same golden files, while the check-suite ports (check-pre-push,
 check-post-push, check-pre-commit) write the same expectations in each
 harness (golden files are a follow-up). The older twins (managed-files,
