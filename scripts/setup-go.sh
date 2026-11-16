@@ -37,8 +37,8 @@ case "$PROVENANCE" in
         log "Go at /usr/local/go/ ($PROVENANCE) will be replaced by Homebrew Go, then removed"
         ;;
     goenv)
-        log_warn "Go managed by goenv -- skipping cleanup (user-managed)"
-        log_warn "To switch to Homebrew: goenv uninstall <version>, then re-run this script"
+        # One warning, no ACTION: a goenv user may keep goenv on purpose
+        write_warn "go" "managed by goenv, not Homebrew -- to switch: goenv uninstall <version>, then re-run aitools install"
         ;;
 esac
 
@@ -46,28 +46,31 @@ esac
 if [ "$PROVENANCE" = "homebrew" ]; then
     GO_VERSION=$(go version 2>/dev/null || echo "version unknown")
     log "Go already installed via Homebrew ($GO_VERSION) -- upgrading..."
-    # brew upgrade exits non-zero when already up-to-date on some versions
-    UPGRADE_OUTPUT=$(brew upgrade go 2>&1) || true
+    # brew upgrade exits non-zero when already up-to-date on some versions: the
+    # output decides (Standard 3); the exit code only feeds the reason
+    UPGRADE_RC=0
+    UPGRADE_OUTPUT=$(brew upgrade go 2>&1) || UPGRADE_RC=$?
     if printf '%s\n' "$UPGRADE_OUTPUT" | grep -i 'already installed\|up.to.date\|No available upgrade' >/dev/null; then
         log_ok "Go already up to date"
         GO_VERSION=$(go version 2>/dev/null || echo "version unknown")
         write_summary OK "go" "$GO_VERSION"
+    elif printf '%s\n' "$UPGRADE_OUTPUT" | grep -i 'error\|fatal' >/dev/null; then
+        # The existing Go still works: a warning, not an error (Standard 3).
+        # error_reason logs the output as detail lines.
+        write_warn "go" "brew upgrade failed: $(error_reason "$UPGRADE_OUTPUT" "$UPGRADE_RC")"
+        GO_VERSION=$(go version 2>/dev/null || echo "version unknown")
+        write_summary OK "go" "$GO_VERSION"
     else
         printf '%s\n' "$UPGRADE_OUTPUT" | while IFS= read -r line; do log "$line"; done
-        if printf '%s\n' "$UPGRADE_OUTPUT" | grep -i 'error\|fatal' >/dev/null; then
-            log_error "brew upgrade go failed (see log above)"
-            write_summary ERROR "go" "brew upgrade failed"
-        else
-            GO_VERSION=$(go version 2>/dev/null || echo "version unknown")
-            log_ok "$GO_VERSION"
-            write_summary OK "go" "$GO_VERSION"
-        fi
+        GO_VERSION=$(go version 2>/dev/null || echo "version unknown")
+        log_ok "$GO_VERSION"
+        write_summary OK "go" "$GO_VERSION"
     fi
 elif [ "$PROVENANCE" = "goenv" ]; then
-    # goenv users manage their own Go -- just verify and report
+    # goenv users manage their own Go -- just verify and report (its warning is above)
     GO_VERSION=$(go version 2>/dev/null || echo "version unknown")
     log_ok "Go via goenv: $GO_VERSION"
-    write_summary WARN "go" "$GO_VERSION (goenv -- not Homebrew)"
+    write_summary OK "go" "$GO_VERSION"
 elif [ "$PROVENANCE" = "upstream" ]; then
     # go.dev tarball at /usr/local/go (Linux): the official install -- keep it.
     # 2>/dev/null: version probe only; falls back to a placeholder string
@@ -75,13 +78,15 @@ elif [ "$PROVENANCE" = "upstream" ]; then
     log_ok "Go via go.dev tarball at /usr/local/go ($GO_VERSION)"
     write_summary OK "go" "$GO_VERSION"
 elif ! command -v brew >/dev/null 2>&1; then
-    log_error "Homebrew not found -- cannot install Go via Homebrew (existing installs left untouched)"
-    write_summary ERROR "go" "Homebrew not found"
+    write_error "go" "Homebrew not found" "brew is not on PATH (existing installs left untouched)"
 else
     log "Installing Go via Homebrew..."
+    # Captured, not streamed: a failure takes its reason from the output (Standard 1)
     BREW_RC=0
-    # || records the pipeline status (pipefail) so set -e does not abort before it is reported
-    brew install go 2>&1 | while IFS= read -r line; do log "$line"; done || BREW_RC=$?
+    BREW_OUT=$(brew install go 2>&1) || BREW_RC=$?
+    if [ "$BREW_RC" -eq 0 ]; then
+        printf '%s\n' "$BREW_OUT" | while IFS= read -r line; do log "$line"; done
+    fi
     # Verify the formula's own prefix (opt/Cellar), not the shared bin dir: on Intel Macs
     # $(brew --prefix)/bin is /usr/local/bin, where a symlink into /usr/local/go could
     # pass for Homebrew Go and get its target deleted below.
@@ -90,29 +95,35 @@ else
     BREW_GO_PREFIX=$(brew --prefix go 2>/dev/null) || BREW_GO_PREFIX=""
     BREW_GO="${BREW_GO_PREFIX:+$BREW_GO_PREFIX/bin/go}"
     if [ "$BREW_RC" -ne 0 ] || [ -z "$BREW_GO" ] || [ ! -x "$BREW_GO" ]; then
-        log_error "brew install go failed (exit $BREW_RC) -- Homebrew Go not available"
-        write_summary ERROR "go" "brew install failed"
+        if [ "$BREW_RC" -ne 0 ]; then
+            # error_reason logs the output as detail lines
+            write_error "go" "brew install failed" "$(error_reason "$BREW_OUT" "$BREW_RC")"
+        else
+            write_error "go" "brew install failed" "Homebrew Go not found at ${BREW_GO:-the go formula prefix}"
+        fi
         if [ -n "$CLEANUP_TARGET" ]; then
-            log_warn "Kept existing Go at $CLEANUP_TARGET/ (replacement not verified)"
+            # Info: the install error above is the one red line for this failure
+            log "Kept existing Go at $CLEANUP_TARGET/ (replacement not verified)"
         fi
     else
         # 2>/dev/null: version probe only; falls back to a placeholder string
         GO_VERSION=$("$BREW_GO" version 2>/dev/null || echo "version unknown")
         log_ok "Go installed via Homebrew ($GO_VERSION)"
         if [ -n "$CLEANUP_TARGET" ]; then
-            log_warn "Removing non-preferred Go at $CLEANUP_TARGET/ ($PROVENANCE) -- Homebrew Go verified"
-            if sudo rm -rf "$CLEANUP_TARGET"; then
+            write_warn "go" "removing the non-preferred Go at $CLEANUP_TARGET/ ($PROVENANCE) -- Homebrew Go verified"
+            RM_RC=0
+            RM_OUT=$(sudo rm -rf "$CLEANUP_TARGET" 2>&1) || RM_RC=$?
+            if [ "$RM_RC" -eq 0 ]; then
                 log_ok "Removed $CLEANUP_TARGET/"
             else
-                log_warn "Failed to remove $CLEANUP_TARGET/ (sudo required) -- it may shadow Homebrew Go on PATH"
+                write_warn "go" "could not remove $CLEANUP_TARGET/ -- it may shadow Homebrew Go on PATH: $(error_reason "$RM_OUT" "$RM_RC")"
             fi
         fi
         hash -r
         if command -v go >/dev/null 2>&1; then
             write_summary OK "go" "$GO_VERSION"
         else
-            log_error "Go installed but 'go' not found in PATH"
-            write_summary ERROR "go" "installed but not on PATH"
+            write_error "go" "installed but not on PATH" "go not found on PATH after brew install"
         fi
     fi
 fi

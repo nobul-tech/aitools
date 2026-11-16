@@ -25,21 +25,22 @@ Log "Go install provenance: $provenance"
 # --- Cleanup non-preferred installs ---
 switch ($provenance) {
     "chocolatey" {
-        LogWarn "Go installed via Chocolatey -- attempting removal..."
+        Write-AitWarn "go" "installed via Chocolatey -- removing it, then installing with winget"
         $chocoOutput = choco uninstall golang -y 2>&1 | Out-String
         $chocoRc = $LASTEXITCODE
-        foreach ($l in $chocoOutput.Split("`n")) { if ($l.Trim()) { LogDetail "choco-uninstall-golang: $($l.TrimEnd())" } }
         if ($chocoRc -ne 0) {
-            LogWarn "choco uninstall golang failed (exit $chocoRc; may need admin) -- proceeding with winget install. See $logFile"
+            # Get-AitErrorReason logs the output as detail lines
+            Write-AitWarn "go" "choco uninstall golang failed (may need admin): $(Get-AitErrorReason -Output $chocoOutput -ExitCode $chocoRc) -- proceeding with winget install"
         } else {
+            foreach ($l in $chocoOutput.Split("`n")) { if ($l.Trim()) { LogDetail "choco-uninstall-golang: $($l.TrimEnd())" } }
             LogOk "Chocolatey Go removed"
             $provenance = "none"
         }
         Refresh-Path
     }
     "scoop" {
-        LogWarn "Go installed via Scoop -- skipping cleanup (user-managed)"
-        LogWarn "To switch to winget: scoop uninstall go, then re-run this script"
+        # One warning, no ACTION: a Scoop user may keep Scoop on purpose
+        Write-AitWarn "go" "managed by Scoop, not winget -- to switch: scoop uninstall go, then re-run aitools install"
     }
 }
 
@@ -51,16 +52,20 @@ if ($provenance -eq "winget") {
     Log "Go already installed via winget -- checking for updates..."
     $wingetOutput = winget upgrade $goWingetId --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
     $upgradeRc = $LASTEXITCODE
-    Log-WingetOutput $wingetOutput
     if ($wingetOutput -match 'No available upgrade|No newer package versions') {
+        Log-WingetOutput $wingetOutput
         LogOk "Go already up to date"
     } elseif ($upgradeRc -ne 0) {
-        LogError "winget upgrade Go failed (exit $upgradeRc) -- see $logFile"
-        Write-Summary "ERROR" "go" "winget upgrade failed (exit $upgradeRc)"
+        # The existing Go still works: a warning, not an error (Standard 3); the
+        # version check below still writes its OK record.
+        # Get-AitErrorReason logs the output as detail lines.
+        Write-AitWarn "go" "winget upgrade failed: $(Get-AitErrorReason -Output $wingetOutput -ExitCode $upgradeRc)"
+    } else {
+        Log-WingetOutput $wingetOutput
     }
     Refresh-Path
 
-    # After a failed upgrade its ERROR row stands alone (no OK row after it).
+    # A failed upgrade is a warning (above), so the version check runs after it too.
     if ($errors -eq 0) {
         # Get-Command exempt: command-existence check with if/else fallback
         $goCheck = Get-Command go -ErrorAction SilentlyContinue
@@ -71,43 +76,42 @@ if ($provenance -eq "winget") {
                 LogOk "$goVersion"
                 Write-Summary "OK" "go" "$goVersion"
             } else {
-                LogError "go found on PATH but 'go version' failed"
-                Write-Summary "ERROR" "go" "version check failed"
+                Write-AitError "go" "version check failed" "'go version' printed nothing"
             }
         } else {
-            LogError "winget upgrade completed but 'go' not found in PATH"
-            Write-Summary "ERROR" "go" "not on PATH after upgrade"
+            Write-AitError "go" "not on PATH after upgrade" "go not found on PATH after winget upgrade"
         }
     }
 } elseif ($provenance -eq "scoop") {
-    # Scoop users manage their own Go -- just verify and report
+    # Scoop users manage their own Go -- just verify and report (its warning is above)
     # Get-Command exempt: command-existence check with if/else fallback
     $goCheck = Get-Command go -ErrorAction SilentlyContinue
     if ($goCheck) {
-        # Suppress stderr: result checked immediately (empty -> WARN below)
+        # Suppress stderr: result checked immediately (empty -> warning below)
         $goVersion = go version 2>$null
         if ($goVersion) {
             LogOk "Go via Scoop: $goVersion"
-            Write-Summary "WARN" "go" "$goVersion (scoop -- not winget)"
+            Write-Summary "OK" "go" "$goVersion"
         } else {
-            LogWarn "Go found via Scoop but version check failed"
-            Write-Summary "WARN" "go" "scoop install (version unknown)"
+            Write-AitWarn "go" "Scoop Go: 'go version' printed nothing"
         }
     } else {
-        LogWarn "Go reported as Scoop but 'go' not found in PATH"
-        Write-Summary "WARN" "go" "scoop install not on PATH"
+        # Not on PATH is an error, not a warning (Standard 4)
+        Write-AitError "go" "not on PATH" "Go is reported as installed by Scoop, but 'go' is not on PATH"
     }
 } else {
     # Fresh install via winget
     Log "Installing Go via winget ($goWingetId)..."
     $wingetOutput = winget install $goWingetId --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
     $installRc = $LASTEXITCODE
-    Log-WingetOutput $wingetOutput
     if ($wingetOutput -match 'already installed') {
+        Log-WingetOutput $wingetOutput
         LogOk "Go already installed (winget)"
     } elseif ($installRc -ne 0) {
-        LogError "winget install Go failed (exit $installRc) -- see $logFile"
-        Write-Summary "ERROR" "go" "winget install failed (exit $installRc)"
+        # Get-AitErrorReason logs the output as detail lines
+        Write-AitError "go" "winget install failed" (Get-AitErrorReason -Output $wingetOutput -ExitCode $installRc)
+    } else {
+        Log-WingetOutput $wingetOutput
     }
     Refresh-Path
 
@@ -122,22 +126,20 @@ if ($provenance -eq "winget") {
                 LogOk "Go installed ($goVersion)"
                 Write-Summary "OK" "go" "$goVersion"
             } else {
-                LogError "go found on PATH but 'go version' failed"
-                Write-Summary "ERROR" "go" "version check failed"
+                Write-AitError "go" "version check failed" "'go version' printed nothing"
             }
         } else {
-            LogError "winget install completed but 'go' not found in PATH"
-            Write-Summary "ERROR" "go" "installed but not on PATH"
+            Write-AitError "go" "installed but not on PATH" "go not found on PATH after winget install"
         }
     }
 }
 
 # --- Ensure GOPATH\bin is on PATH ---
+# Fires once per machine: Ensure-GopathBinOnPath returns $true once the directory is there
 $pathResult = Ensure-GopathBinOnPath
 if (-not $pathResult) {
     $gopathBin = if ($env:GOPATH) { Join-Path $env:GOPATH "bin" } else { Join-Path $env:USERPROFILE "go\bin" }
-    LogWarn "Added $gopathBin to persistent User PATH"
-    Write-Summary "ACTION" "" "Restart terminal -- GOPATH\bin added to PATH"
+    Write-AitAction "go" "$gopathBin was added to the persistent user PATH -- restart the terminal to use it" "Restart terminal -- GOPATH\bin added to PATH"
 }
 
 # --- Exit ---
