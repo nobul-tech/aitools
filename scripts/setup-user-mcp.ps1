@@ -50,7 +50,7 @@ if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
 $mcpCurrent = @{}
 
 $savedClaudeCode = $env:CLAUDECODE
-Remove-Item Env:\CLAUDECODE -ErrorAction SilentlyContinue
+if (Test-Path Env:\CLAUDECODE) { Remove-Item Env:\CLAUDECODE }
 
 # stderr is captured with the output (2>&1) and split off by type: only stdout is
 # parsed by the `name: details - status` pattern below; stderr is the reason.
