@@ -102,28 +102,27 @@ else
     else
         if command -v brew &>/dev/null; then
             log "Installing ripgrep via brew..."
-            # Exit code decides (C-F2); the full output goes to the log as detail.
+            # Exit code decides (C-F2). On failure error_reason logs the output
+            # as detail (and takes the reason from it); on success it is logged here.
             if rg_out=$(brew install ripgrep 2>&1); then rg_rc=0; else rg_rc=$?; fi
-            write_output_detail "brew-install-ripgrep" "$rg_out"
             hash -r
 
             if [ "$rg_rc" -ne 0 ]; then
-                log_error "brew install ripgrep failed (exit $rg_rc) -- see $(display_path "$LOG_FILE")"
                 STATUS_ripgrep="FAILED (exit $rg_rc)"
-                write_summary ERROR "cursor cli" "ripgrep install failed (exit $rg_rc)"
+                write_error "cursor cli" "ripgrep install failed" "$(error_reason "$rg_out" "$rg_rc")"
             elif command -v rg &>/dev/null; then
+                write_output_detail "brew-install-ripgrep" "$rg_out"
                 RG_VERSION=$(rg --version | sed -n '1p')
                 log_ok "Installed: $RG_VERSION"
                 STATUS_ripgrep="installed ($RG_VERSION)"
             else
-                log_warn "brew install completed but 'rg' not found in PATH. Restart terminal to verify."
+                write_output_detail "brew-install-ripgrep" "$rg_out"
                 STATUS_ripgrep="installed (restart terminal to verify)"
-                write_summary WARN "cursor cli" "ripgrep not on PATH (restart terminal)"
+                write_action "cursor cli" "ripgrep installed but not on PATH -- restart the terminal" "Restart the terminal, then check: rg --version"
             fi
         else
-            log_warn "Homebrew not found. Install ripgrep manually: brew install ripgrep"
             STATUS_ripgrep="SKIPPED (brew not found)"
-            write_summary WARN "cursor cli" "ripgrep missing (Homebrew not found)"
+            write_action "cursor cli" "ripgrep missing (Homebrew not found) -- install ripgrep, then run aitools again" "Install ripgrep (rg), then run aitools again"
         fi
     fi
 fi
@@ -148,24 +147,24 @@ else
         STATUS_cursorCli="already installed ($AGENT_VERSION)"
     else
         log "Installing Cursor CLI..."
-        # Exit code decides (pipefail: a curl failure fails the pipeline); output logged as detail.
+        # Exit code decides (pipefail: a curl failure fails the pipeline). On
+        # failure error_reason logs the output as detail; on success it is logged here.
         cursor_rc=0
         cursor_out=$({ curl https://cursor.com/install -fsS | bash; } 2>&1) || cursor_rc=$?
-        write_output_detail "cursor-installer" "$cursor_out"
         hash -r
 
         if [ "$cursor_rc" -ne 0 ]; then
-            log_error "Cursor CLI installer failed (exit $cursor_rc) -- see $(display_path "$LOG_FILE")"
             STATUS_cursorCli="FAILED (exit $cursor_rc)"
-            write_summary ERROR "cursor cli" "installer failed (exit $cursor_rc)"
+            write_error "cursor cli" "Cursor CLI installer failed" "$(error_reason "$cursor_out" "$cursor_rc")"
         elif command -v agent &>/dev/null; then
+            write_output_detail "cursor-installer" "$cursor_out"
             AGENT_VERSION=$(agent --version)
             log_ok "Installed: $AGENT_VERSION"
             STATUS_cursorCli="installed ($AGENT_VERSION)"
         else
-            log_warn "Cursor CLI install completed but 'agent' not found in PATH. Restart terminal to verify."
+            write_output_detail "cursor-installer" "$cursor_out"
             STATUS_cursorCli="installed (restart terminal to verify)"
-            write_summary WARN "cursor cli" "agent not on PATH (restart terminal)"
+            write_action "cursor cli" "Cursor CLI installed but 'agent' not on PATH -- restart the terminal" "Restart the terminal, then check: agent --version"
         fi
     fi
 fi
@@ -185,8 +184,7 @@ if [ "$DRY_RUN" != "true" ]; then
     RESOLVED_AGENT="$(command -v agent 2>/dev/null || true)"
     case "$RESOLVED_AGENT" in
         "$HOME/.grok/"*)
-            log_warn "'agent' resolves to grok ($RESOLVED_AGENT), not Cursor -- ensure ~/.local/bin precedes ~/.grok/bin (run setup-user-shell.sh)"
-            write_summary WARN "cursor cli" "agent shadowed by grok" ;;
+            write_action "cursor cli" "'agent' resolves to grok ($RESOLVED_AGENT), not Cursor -- run aitools (puts ~/.local/bin before ~/.grok/bin)" "Run aitools so ~/.local/bin precedes ~/.grok/bin on PATH" ;;
     esac
 fi
 
@@ -201,15 +199,15 @@ fi
 mkdir -p "$CURSOR_DIR"
 
 if ! command -v node &>/dev/null; then
-    log_warn "node not found -- skipping cli-config.json merge"
     STATUS_cliConfig="SKIPPED (node not found)"
+    write_action "cursor cli" "node not found: cli-config.json not merged -- run: aitools install" "Run aitools install (installs node.js)"
 else
     # Read cursor.cli preferences from <dotprofile>/profile.json. The dotprofile
     # comes from the one resolver (reference/user-repo.md "Resolution"; SD-7) and
     # reaches node as arguments (path, rc); node never reads config.json itself.
     # rc is captured, not suppressed: 0 found, 1 no dotprofile (shared-only
-    # mode: default preferences), 3 resolver error (the lib already logged it:
-    # log_error + ERROR row "dotprofile"). On 3 the node preferences
+    # mode: default preferences), 3 resolver error (the library recorded it
+    # once: write_error "dotprofile"). On 3 the node preferences
     # block skips the merge rather than write defaults over the user's choices.
     # The generated deploy/ copy replaces that block with build-time values, so
     # there the arguments are unused (build-deploy follow-up: B5).
@@ -217,6 +215,11 @@ else
     resolve_user_repo_path || URP_RC=$?
     USER_REPO_PATH="$AITLIB_USER_REPO_PATH"
 
+    # node's stderr goes to a temp file (its stdout is the protocol below): an
+    # uncaught error's message is the reason of a failed merge. Without a temp
+    # file the reason falls back to the exit code.
+    merge_err=""
+    merge_err=$(mktemp) || merge_err=""
     merge_rc=0
     MERGE_RESULT=$(node -e "
 $SORT_KEYS_JS
@@ -254,12 +257,16 @@ if (userRepoPath) {
 // --- Read existing cli-config.json ---
 let config = {};
 let corrupt = false;
+let parseError = '';
 try {
     config = JSON.parse(fs.readFileSync(f, 'utf8'));
 } catch (e) {
     if (e.code !== 'ENOENT') {
         corrupt = true;
-        console.log('WARN: ' + f + ' is invalid JSON');
+        parseError = e.message;
+        // Recorded once below: as the error-corrupt reason, or as the
+        // --force warning (logging.md 8.3: one event, one record)
+        console.log('DETAIL: ' + f + ' is invalid JSON: ' + parseError);
     }
 }
 const beforeKeys = Object.keys(config);
@@ -298,32 +305,34 @@ const lostKeys = beforeKeys.filter(k => !afterKeys.includes(k));
 
 const after = JSON.stringify(sortKeys(config));
 
-// Diagnostics go to stdout with a prefix (MSG: info, WARN: warning, DETAIL: log only)
-// so bash can log them; the first unprefixed line is the status.
+// Diagnostics go to stdout with a prefix (MSG: info, WARN: warning, DETAIL: log
+// only, REASON: the reason of the error the status reports) so bash can log
+// and record them; the first unprefixed line is the status.
 if (dryRun) {
     console.log('MSG: [DRY RUN] ' + f + ': merge');
     console.log('MSG:   Managed fields: ' + managedKeys.join(', '));
-    if (lostKeys.length > 0) console.log('WARN: [DRY RUN] CLOBBER: would lose: ' + lostKeys.join(', '));
-    if (corrupt) console.log('WARN: [DRY RUN] File is corrupt -- --force required');
+    if (lostKeys.length > 0) console.log('WARN: dry run: merge would lose non-managed fields: ' + lostKeys.join(', '));
+    if (corrupt) console.log('WARN: dry run: cli-config.json is corrupt (--force required to overwrite)');
     console.log(before === after && !corrupt ? 'unchanged' : 'would-merge');
 } else if (corrupt && !force) {
-    console.log('DETAIL: ' + f + ' is corrupt. Use --force to overwrite, or fix manually.');
+    console.log('REASON: ' + f + ' is not valid JSON: ' + parseError);
     console.log('error-corrupt');
 } else if (lostKeys.length > 0 && !force) {
-    console.log('DETAIL: merge would lose fields: ' + lostKeys.join(', ') + '. Use --force to proceed.');
+    console.log('REASON: would drop ' + lostKeys.join(', '));
     console.log('error-clobber');
 } else {
     if (before === after) {
         console.log('unchanged');
     } else {
-        if (corrupt) console.log('WARN: proceeding with --force on corrupt file');
-        if (lostKeys.length > 0) console.log('WARN: proceeding with --force, losing fields: ' + lostKeys.join(', '));
+        // A --force write that loses data stays a warning (logging.md 8.3)
+        if (corrupt) console.log('WARN: cli-config.json was not valid JSON (' + parseError + '): rewritten under --force');
+        if (lostKeys.length > 0) console.log('WARN: --force dropped fields of cli-config.json: ' + lostKeys.join(', '));
         fs.writeFileSync(f, JSON.stringify(config, null, 2) + '\n');
 
         // Post-write validation
         const _v = JSON.parse(fs.readFileSync(f, 'utf8'));
         const _missing = ['version'].filter(k => !(k in _v));
-        if (_missing.length) { console.log('DETAIL: validation failed: missing ' + _missing.join(', ')); process.exit(1); }
+        if (_missing.length) { console.log('REASON: validation failed: missing ' + _missing.join(', ')); process.exit(1); }
 
         const changed = [];
         for (const k of snapshotKeys) {
@@ -335,15 +344,28 @@ if (dryRun) {
         changed.forEach(c => console.log('CHANGED: ' + c));
     }
 }
-" "$CLI_CONFIG" "$DRY_RUN" "$FORCE" "$USER_REPO_PATH" "$URP_RC") || merge_rc=$?
+" "$CLI_CONFIG" "$DRY_RUN" "$FORCE" "$USER_REPO_PATH" "$URP_RC" 2>"${merge_err:-/dev/null}") || merge_rc=$?
+    merge_stderr=""
+    if [ -n "$merge_err" ]; then
+        merge_stderr=$(<"$merge_err")
+        rm -f "$merge_err"
+    fi
+    # On a failure error_reason logs it; otherwise (node warnings) it goes to
+    # the log as detail here, so nothing node printed is lost
+    if [ "$merge_rc" -eq 0 ] && [ -n "$merge_stderr" ]; then
+        write_output_detail "cli-config node stderr" "$merge_stderr"
+    fi
 
-    # Log node's prefixed diagnostics; the first unprefixed line is the status.
+    # Log and record node's prefixed diagnostics; the first unprefixed line is
+    # the status. REASON: is the reason of the error the status reports.
     MERGE_STATUS=""
+    MERGE_REASON=""
     while IFS= read -r line; do
         case "$line" in
             "MSG: "*)    log "${line#MSG: }" ;;
-            "WARN: "*)   log_warn "${line#WARN: }" ;;
+            "WARN: "*)   write_warn "cursor cli" "${line#WARN: }" ;;
             "DETAIL: "*) log_detail "cli-config: ${line#DETAIL: }" ;;
+            "REASON: "*) MERGE_REASON="${line#REASON: }" ;;
             "CHANGED: "*) ;;
             *) if [ -z "$MERGE_STATUS" ]; then MERGE_STATUS="$line"; fi ;;
         esac
@@ -370,27 +392,26 @@ if (dryRun) {
             STATUS_cliConfig="would merge (dry-run)"
             write_summary OK "cursor cli" "dry-run: would update" ;;
         skipped-dotprofile)
-            # Counted (S3-M3Lead decision, as setup-user-settings and -skills): this
-            # step fails too, not only the resolver (the lib logged that one).
-            log_error "Dotprofile unresolved (resolver error above) -- $(display_path "$CLI_CONFIG") not merged, so defaults cannot replace the profile preferences"
-            STATUS_cliConfig="ERROR (dotprofile error)"
-            write_summary ERROR "cursor cli" "not merged: dotprofile error" ;;
+            # A consequence of the resolver error, which the library recorded
+            # once (write_error "dotprofile", counted here: the exit status is
+            # 1): logged at info, not recorded again (G3 policy P1, one cause one
+            # red line; it supersedes the S3-M3Lead decision that counted it).
+            log "Dotprofile unresolved (resolver error above) -- $(display_path "$CLI_CONFIG") not merged, so defaults cannot replace the profile preferences"
+            STATUS_cliConfig="ERROR (dotprofile error)" ;;
         error-corrupt)
-            log_error "$(display_path "$CLI_CONFIG") is corrupt. Use --force to overwrite."
             STATUS_cliConfig="ERROR (corrupt, needs --force)"
-            write_summary ERROR "cursor cli" "config corrupt" ;;
+            write_error "cursor cli" "config corrupt" "$MERGE_REASON"
+            log "Use --force to overwrite it, or fix it by hand" ;;
         error-clobber)
-            log_error "$(display_path "$CLI_CONFIG") merge would lose fields. Use --force to proceed."
             STATUS_cliConfig="ERROR (clobber, needs --force)"
-            write_summary ERROR "cursor cli" "merge would lose fields" ;;
+            write_error "cursor cli" "merge would lose fields" "$MERGE_REASON"
+            log "Use --force to proceed" ;;
         error-exit)
-            log_error "$(display_path "$CLI_CONFIG") merge failed (node exit $merge_rc) -- see $(display_path "$LOG_FILE")"
             STATUS_cliConfig="ERROR (merge failed)"
-            write_summary ERROR "cursor cli" "config merge failed (exit $merge_rc)" ;;
+            write_error "cursor cli" "config merge failed" "$(error_reason "${MERGE_REASON:-$merge_stderr}" "$merge_rc")" ;;
         *)
-            log_error "Unexpected merge result: $MERGE_STATUS"
             STATUS_cliConfig="ERROR"
-            write_summary ERROR "cursor cli" "unexpected error" ;;
+            write_error "cursor cli" "unexpected merge result" "node printed: ${MERGE_STATUS:-nothing}" ;;
     esac
 fi
 
@@ -528,8 +549,7 @@ if [ ! -d "$HARNESS_RULES_DIR" ]; then
     log "No harness rules at $(display_path "$HARNESS_RULES_DIR") (deploy-harness has not run) -- skipping"
     write_summary OK "cursor rules" "n/a (no harness rules)"
 elif [ ! -r "$HARNESS_RULES_DIR" ] || [ ! -x "$HARNESS_RULES_DIR" ]; then
-    log_error "Cannot list $(display_path "$HARNESS_RULES_DIR") (permission denied)"
-    write_summary ERROR "cursor rules" "cannot read harness rules"
+    write_error "cursor rules" "cannot read harness rules" "permission denied: $(display_path "$HARNESS_RULES_DIR")"
 else
     RULES_GO=true
 fi
@@ -537,7 +557,7 @@ fi
 # Rules manifest: the retired names (pruned) and the names Cursor expects.
 # Without one (deploy-harness before PR #100) every rule is fanned out and none
 # is removed, as setup-user-claude does (FAN-PLAN Q3).
-MANIFEST_FAILED=false   # unreadable: counted as a failed item, so the final row is ERROR
+MANIFEST_FAILED=false   # unreadable: one error, and a failed tracker item
 LISTED_NAMES=""     # manifest names not retired, one per line
 RETIRED_NAMES=""    # "<name><TAB>retired" for each retired name
 RETIRED_LC=""       # retired names, lower-cased
@@ -552,20 +572,22 @@ if [ "$RULES_GO" = "true" ]; then
         log "No rules manifest at $(display_path "$RULES_MANIFEST") -- every rule fanned out, none removed"
     else
         manifest_out=""
-        if ! manifest_out=$(read_rules_manifest "$RULES_MANIFEST" 2>&1); then
-            log_error "Cannot read the rules manifest $(display_path "$RULES_MANIFEST"): $manifest_out -- every rule fanned out, none removed"
-            write_summary ERROR "cursor rules" "cannot read rules manifest"
+        manifest_rc=0
+        manifest_out=$(read_rules_manifest "$RULES_MANIFEST" 2>&1) || manifest_rc=$?
+        if [ "$manifest_rc" -ne 0 ]; then
+            write_error "cursor rules" "cannot read rules manifest" "$(error_reason "$manifest_out" "$manifest_rc")"
+            log "every rule fanned out, none removed"
             MANIFEST_FAILED=true
         elif [ "$manifest_out" = "header-bad" ]; then
-            log_warn "Rules manifest $(display_path "$RULES_MANIFEST"): the first line is not \"$RULES_MANIFEST_HEADER\" -- every rule fanned out, none removed -- $RULES_REBUILD_HINT"
-            write_summary ACTION "" "$RULES_REBUILD_HINT"
+            log_detail "rules manifest $(display_path "$RULES_MANIFEST"): the first line is not \"$RULES_MANIFEST_HEADER\""
+            write_action "cursor rules" "bad rules manifest header -- run: aitools (every rule fanned out, none removed)" "$RULES_REBUILD_HINT"
         else
             while IFS= read -r m_line; do
                 [ -n "$m_line" ] || continue
                 case "$m_line" in
                     "invalid$TAB"*)
                         RULES_NEED_REBUILD=true
-                        log_warn "Rules manifest $(display_path "$RULES_MANIFEST"): line ignored: ${m_line#invalid"$TAB"} -- $RULES_REBUILD_HINT" ;;
+                        write_warn "cursor rules" "rules manifest line ignored: ${m_line#invalid"$TAB"} -- run: aitools" ;;
                     "rule$TAB"*)
                         m_rest="${m_line#rule"$TAB"}"
                         m_name="${m_rest%%"$TAB"*}"
@@ -635,7 +657,7 @@ if [ "$RULES_GO" = "true" ]; then
             RULE_SOURCES="${sort_out}
 "
         else
-            log_warn "Could not sort the harness rules (sort failed): deploying them in directory order"
+            write_warn "cursor rules" "could not sort the harness rules (sort failed): deploying them in directory order"
         fi
     fi
     if [ -n "$RULE_BROKEN" ]; then
@@ -643,7 +665,7 @@ if [ "$RULES_GO" = "true" ]; then
             RULE_BROKEN="${sort_out}
 "
         else
-            log_warn "Could not sort the dangling harness rules (sort failed): reporting them in directory order"
+            write_warn "cursor rules" "could not sort the dangling harness rules (sort failed): reporting them in directory order"
         fi
     fi
 
@@ -652,7 +674,7 @@ if [ "$RULES_GO" = "true" ]; then
         [ -n "$m_name" ] || continue
         if ! in_list "$(lower_name "$m_name")" "$FOUND_LC"; then
             RULES_NEED_REBUILD=true
-            log_warn "Not fanned out: $m_name is in the rules manifest but not in $(display_path "$HARNESS_RULES_DIR") -- $RULES_REBUILD_HINT"
+            write_warn "cursor rules" "not fanned out: $m_name is in the rules manifest but not in $(display_path "$HARNESS_RULES_DIR") -- run: aitools"
         fi
     done <<< "$LISTED_NAMES"
     if [ "$RULES_NEED_REBUILD" = "true" ]; then
@@ -661,7 +683,7 @@ if [ "$RULES_GO" = "true" ]; then
 
     if [ -z "$RULE_SOURCES" ] && [ -z "$RULE_BROKEN" ] && [ -z "$RETIRED_NAMES" ]; then
         log "No rules in $(display_path "$HARNESS_RULES_DIR") -- skipping"
-        # An unreadable manifest already wrote this tool's ERROR row
+        # An unreadable manifest already recorded this tool's error
         if [ "$MANIFEST_FAILED" != "true" ]; then
             write_summary OK "cursor rules" "n/a (no harness rules)"
         fi
@@ -670,17 +692,17 @@ if [ "$RULES_GO" = "true" ]; then
         # The dry run previews the error the real run reports: something that
         # is not a directory where ~/.cursor/rules goes
         if { [ -e "$CURSOR_RULES_DIR" ] || [ -L "$CURSOR_RULES_DIR" ]; } && [ ! -d "$CURSOR_RULES_DIR" ]; then
-            log_error "Cannot create $(display_path "$CURSOR_RULES_DIR"): not a directory (dry run)"
-            write_summary ERROR "cursor rules" "cannot create rules dir"
+            write_error "cursor rules" "cannot create rules dir" "$(display_path "$CURSOR_RULES_DIR") is not a directory (dry run)"
             RULES_GO=false
         fi
     else
         backup_dir "$CURSOR_RULES_DIR"
-        # stderr captured into the log line (not printed raw to the console)
+        # stderr captured: mkdir's message is the reason (not printed raw)
         mkdir_out=""
-        if ! mkdir_out=$(mkdir -p "$CURSOR_RULES_DIR" 2>&1) || [ ! -d "$CURSOR_RULES_DIR" ]; then
-            log_error "Cannot create $(display_path "$CURSOR_RULES_DIR"): ${mkdir_out:-not a directory}"
-            write_summary ERROR "cursor rules" "cannot create rules dir"
+        mkdir_rc=0
+        mkdir_out=$(mkdir -p "$CURSOR_RULES_DIR" 2>&1) || mkdir_rc=$?
+        if [ "$mkdir_rc" -ne 0 ] || [ ! -d "$CURSOR_RULES_DIR" ]; then
+            write_error "cursor rules" "cannot create rules dir" "$(error_reason "${mkdir_out:-$(display_path "$CURSOR_RULES_DIR") is not a directory}" "$mkdir_rc")"
             RULES_GO=false
         fi
     fi
@@ -692,9 +714,12 @@ if [ "$RULES_GO" = "true" ]; then
     if [ "$MANIFEST_FAILED" = "true" ]; then
         deploy_tracker_record "failed" "cursor rules" ".aitools-rules-manifest"
     fi
+    # Each failed item below is one error record (write_error "cursor rules"
+    # "failed: <item>" <cause>) and one tracker DETAIL item; the tracker's OK
+    # status counts them, with no aggregate error record (logging.md 8.3)
     while IFS= read -r broken_name; do
         [ -n "$broken_name" ] || continue
-        log_error "Failed: $broken_name: dangling symlink in $(display_path "$HARNESS_RULES_DIR")"
+        write_error "cursor rules" "failed: $broken_name" "dangling symlink in $(display_path "$HARNESS_RULES_DIR")"
         deploy_tracker_record "failed" "cursor rules" "$broken_name"
     done <<< "$RULE_BROKEN"
 
@@ -703,6 +728,11 @@ if [ "$RULES_GO" = "true" ]; then
     # tests [ -t 0 ]). [x]abort exits 2 from the library here: no "cursor rules"
     # row is written, and the calling installer or aitools loop records
     # "script failed (exit 2)".
+    # A temp file for the stderr of the converter and the parse check (their
+    # stdout is data); removed after the fan-out. Without one, a failure's
+    # reason falls back to the exit code.
+    RULES_ERR_FILE=""
+    RULES_ERR_FILE=$(mktemp) || RULES_ERR_FILE=""
     # Newline-separated name lists (bash 3.2: no associative arrays)
     RULE_DESTS=""       # deployed names
     RULE_DESTS_LC=""    # the same, lower-cased (duplicate and preserved checks)
@@ -716,7 +746,7 @@ if [ "$RULES_GO" = "true" ]; then
         # possible on a case-sensitive file system): the first wins
         dest_lc=$(lower_name "$dest_name")
         if in_list "$dest_lc" "$RULE_DESTS_LC"; then
-            log_error "Skipped duplicate: $rule_base -> $dest_name (already deployed from another harness rule)"
+            write_error "cursor rules" "failed: $rule_base" "$dest_name was already deployed from a harness rule whose name differs only in case"
             deploy_tracker_record "failed" "cursor rules" "$rule_base"
             continue
         fi
@@ -728,18 +758,24 @@ if [ "$RULES_GO" = "true" ]; then
         # The converter reads the file through a shell redirect, whose failure
         # reason would reach only the console: check readability first
         if [ ! -r "$rule_src" ]; then
-            log_error "Failed: $rule_base: cannot read $(display_path "$rule_src") -- permission denied"
+            write_error "cursor rules" "failed: $rule_base" "cannot read $(display_path "$rule_src"): permission denied"
             deploy_tracker_record "failed" "cursor rules" "$dest_name"
             continue
         fi
+        # The converter's stderr goes to a temp file (its stdout is the .mdc):
+        # on failure it is the reason
         rule_content=""
-        if ! rule_content=$(cursor_rule_from_md "$rule_src" "$rule_base"); then
-            log_error "Failed: $rule_base: conversion to .mdc failed"
+        conv_rc=0
+        rule_content=$(cursor_rule_from_md "$rule_src" "$rule_base" 2>"${RULES_ERR_FILE:-/dev/null}") || conv_rc=$?
+        if [ "$conv_rc" -ne 0 ]; then
+            conv_msg=""
+            if [ -n "$RULES_ERR_FILE" ]; then conv_msg=$(<"$RULES_ERR_FILE"); fi
+            write_error "cursor rules" "failed: $rule_base" "$(error_reason "$conv_msg" "$conv_rc")"
             deploy_tracker_record "failed" "cursor rules" "$dest_name"
             continue
         fi
         if [ -z "$rule_content" ]; then
-            log_error "Failed: $rule_base: empty after conversion -- nothing written"
+            write_error "cursor rules" "failed: $rule_base" "empty after conversion (nothing written)"
             deploy_tracker_record "failed" "cursor rules" "$dest_name"
             continue
         fi
@@ -747,14 +783,14 @@ if [ "$RULES_GO" = "true" ]; then
         deploy_managed_file "$rule_content" "$CURSOR_RULES_DIR/$dest_name" "cursor rules" "$dest_name" ""
         case "$MANAGED_FILE_RESULT" in
             created|updated|verified|skipped|failed)
-                # The library wrote (or left) LOCAL; the tracker records every
-                # outcome (failed -> ERROR row, skipped -> WARN row).
+                # The library wrote (or left) LOCAL and recorded a failed or
+                # skipped file once; the tracker counts every outcome.
                 ;;
             "accept & adopt")
                 # Not reachable: adopt is not offered without an adopt target
-                log_error "Unexpected accept & adopt for $dest_name (no adopt target)" ;;
+                write_error "cursor rules" "failed: $dest_name" "unexpected accept & adopt (no adopt target)" ;;
             *)
-                log_error "Unexpected deploy result for ${dest_name}: $MANAGED_FILE_RESULT"
+                write_error "cursor rules" "failed: $dest_name" "unexpected deploy result: $MANAGED_FILE_RESULT"
                 MANAGED_FILE_RESULT="failed" ;;
         esac
         deploy_tracker_record "$MANAGED_FILE_RESULT" "cursor rules" "$dest_name"
@@ -789,21 +825,26 @@ if [ "$RULES_GO" = "true" ]; then
         rm_dest=$(basename "$rm_path")
         rm_why=""
         rm_rc=0
-        cursor_rule_is_fanout "$rm_path" || rm_rc=$?
+        # stderr captured (the check prints nothing on stdout): its message is
+        # the reason when the file cannot be read
+        rm_err=$(cursor_rule_is_fanout "$rm_path" 2>&1) || rm_rc=$?
         if [ "$rm_rc" -eq 0 ]; then
             rm_why="aitools-fanout marker"
         elif [ "$rm_rc" -ne 1 ]; then
-            log_error "Cannot read $(display_path "$rm_path") -- not removed"
+            write_error "cursor rules" "retired rule $rm_dest not removed" "$(error_reason "$rm_err" "$rm_rc")"
             deploy_tracker_record "failed" "cursor rules" "$rm_dest"
             continue
         else
             # No marker (a PR #87 file): compare with the conversion of the
             # harness copy and of each backup deploy-harness left beside it
             # (it backs a rule up when it updates or retires it), so a rule
-            # edited or retired since the #87 run is still recognised
+            # edited or retired since the #87 run is still recognised.
+            # 2>&1: cat writes nothing to stderr when it succeeds.
             rm_current=""
-            if ! rm_current=$(cat "$rm_path"); then
-                log_error "Cannot read $(display_path "$rm_path") -- not removed"
+            rm_rc=0
+            rm_current=$(cat "$rm_path" 2>&1) || rm_rc=$?
+            if [ "$rm_rc" -ne 0 ]; then
+                write_error "cursor rules" "retired rule $rm_dest not removed" "$(error_reason "$rm_current" "$rm_rc")"
                 deploy_tracker_record "failed" "cursor rules" "$rm_dest"
                 continue
             fi
@@ -819,7 +860,7 @@ if [ "$RULES_GO" = "true" ]; then
         fi
         if [ -z "$rm_why" ]; then
             # Kept (it may be the user's own file), but Cursor still loads it
-            log_warn "Kept $rm_dest: the rules manifest retires $rm_name, but this file was not created by the fan-out (no aitools-fanout marker, no matching harness copy) -- Cursor still loads it; remove it if it is an old fan-out copy"
+            write_warn "cursor rules" "kept $rm_dest: the rules manifest retires $rm_name, but the fan-out did not create it -- delete it if it is an old fan-out copy"
             RM_KEPT="${RM_KEPT:+$RM_KEPT, }$rm_dest"
             continue
         fi
@@ -827,31 +868,36 @@ if [ "$RULES_GO" = "true" ]; then
             log "[DRY RUN] Would back up and remove $rm_dest (retired rule; $rm_why)"
             continue
         fi
-        backup_file "$rm_path"
-        # Belt and braces: remove only when a backup with the same text exists
-        # beside it (a backup step that reports success without a copy must not
-        # lose the file)
-        rm_backed=false
-        if [ "$BACKUP_FILE_OK" = "true" ]; then
-            for rm_bak in "$rm_path".bak.*; do
-                [ -f "$rm_bak" ] || continue
-                if fanout_text_equal "$rm_path" "$rm_bak"; then rm_backed=true; break; fi
-            done
-        fi
-        if [ "$rm_backed" != "true" ]; then
-            log_error "Not removed: $rm_dest (retired rule): backup failed"
+        # The file is removed only with a backup, so this script makes its own
+        # copy (not backup_file, which warns and proceeds): one failure is one
+        # error (the G3 rule for retired-rule backups). Belt and braces: the
+        # copy must exist and hold the same text (a copy that reports success
+        # without writing must not lose the file).
+        rm_bak="$rm_path.bak.$(date -u +%Y-%m-%dT%H%M%SZ)"
+        rm_rc=0
+        rm_out=$(cp "$rm_path" "$rm_bak" 2>&1) || rm_rc=$?
+        if [ "$rm_rc" -ne 0 ]; then
+            write_error "cursor rules" "retired rule $rm_dest not removed" "backup failed: $(error_reason "$rm_out" "$rm_rc")"
             deploy_tracker_record "failed" "cursor rules" "$rm_dest"
             continue
         fi
-        # stderr captured into the log line (not printed raw to the console)
+        if [ ! -f "$rm_bak" ] || ! fanout_text_equal "$rm_path" "$rm_bak"; then
+            write_error "cursor rules" "retired rule $rm_dest not removed" "backup failed: $(display_path "$rm_bak") missing or different after the copy"
+            deploy_tracker_record "failed" "cursor rules" "$rm_dest"
+            continue
+        fi
+        log "Backed up $(display_path "$rm_path")"
+        # stderr captured: rm's message is the reason (not printed raw)
         rm_out=""
-        if ! rm_out=$(rm -f "$rm_path" 2>&1); then
-            log_error "Cannot remove $(display_path "$rm_path") (retired rule): $rm_out"
+        rm_rc=0
+        rm_out=$(rm -f "$rm_path" 2>&1) || rm_rc=$?
+        if [ "$rm_rc" -ne 0 ]; then
+            write_error "cursor rules" "cannot remove retired rule $rm_dest" "$(error_reason "$rm_out" "$rm_rc")"
             deploy_tracker_record "failed" "cursor rules" "$rm_dest"
             continue
         fi
         if [ -e "$rm_path" ] || [ -L "$rm_path" ]; then
-            log_error "Cannot remove $(display_path "$rm_path") (retired rule): still present"
+            write_error "cursor rules" "cannot remove retired rule $rm_dest" "still present after rm"
             deploy_tracker_record "failed" "cursor rules" "$rm_dest"
             continue
         fi
@@ -863,14 +909,8 @@ if [ "$RULES_GO" = "true" ]; then
     fi
 
     if [ "$DRY_RUN" = "true" ]; then
-        if [ "$_DT_FAILED" -gt 0 ]; then
-            write_summary ERROR "cursor rules" "$_DT_FAILED failed (dry run)"
-        elif [ "$ERRORS" -ne "$ERRORS_BEFORE_CURSOR_RULES" ]; then
-            # An error not recorded as a failed item still makes the row ERROR
-            write_summary ERROR "cursor rules" "dry run failed"
-        else
-            write_summary OK "cursor rules" "dry run (no files written)"
-        fi
+        # Each error of the fan-out already recorded its own error record
+        write_summary OK "cursor rules" "dry run (no files written)"
     else
         # Preserved: files in ~/.cursor/rules not produced from ~/.aitools/rules
         # Ordinal order, as the .ps1 (see the RULE_SOURCES sort above)
@@ -884,7 +924,7 @@ if [ "$RULES_GO" = "true" ]; then
             if sort_out=$(printf '%s' "$preserved_list" | LC_ALL=C sort); then
                 preserved_list="$sort_out"
             else
-                log_warn "Could not sort $(display_path "$CURSOR_RULES_DIR") (sort failed): preserved rules reported in directory order"
+                write_warn "cursor rules" "could not sort $(display_path "$CURSOR_RULES_DIR") (sort failed): preserved rules reported in directory order"
             fi
         fi
         while IFS= read -r existing <&3; do
@@ -903,7 +943,7 @@ if [ "$RULES_GO" = "true" ]; then
             dest_path="$CURSOR_RULES_DIR/$dest_name"
             [ -f "$dest_path" ] || continue
             if [ ! -s "$dest_path" ]; then
-                log_error "Validation failed: $dest_name is empty after deploy"
+                write_error "cursor rules" "validation failed: $dest_name" "empty after deploy"
                 continue
             fi
             first_line=""
@@ -911,37 +951,41 @@ if [ "$RULES_GO" = "true" ]; then
             IFS= read -r first_line < "$dest_path" || true
             case "$first_line" in
                 ---*) ;;
-                *) log_error "Validation failed: $dest_name has no frontmatter (Cursor skips it)" ;;
+                *) write_error "cursor rules" "validation failed: $dest_name" "no frontmatter (Cursor skips it)" ;;
             esac
         done <<< "$RULE_DESTS"
 
         # Check each deployed rule as Cursor parses it (warn: the rule is
-        # deployed but Cursor would misread its frontmatter)
+        # deployed but Cursor would misread its frontmatter). The check's
+        # stderr goes to the temp file (its stdout is the problem text).
         while IFS= read -r dest_name; do
             [ -n "$dest_name" ] || continue
             dest_path="$CURSOR_RULES_DIR/$dest_name"
             [ -s "$dest_path" ] || continue
-            if ! parse_problem=$(cursor_rule_check "$dest_path"); then
-                log_error "Validation failed: cannot check $dest_name"
+            chk_rc=0
+            parse_problem=$(cursor_rule_check "$dest_path" 2>"${RULES_ERR_FILE:-/dev/null}") || chk_rc=$?
+            if [ "$chk_rc" -ne 0 ]; then
+                chk_msg=""
+                if [ -n "$RULES_ERR_FILE" ]; then chk_msg=$(<"$RULES_ERR_FILE"); fi
+                write_error "cursor rules" "validation failed: $dest_name" "$(error_reason "$chk_msg" "$chk_rc")"
             elif [ -n "$parse_problem" ]; then
-                log_warn "$dest_name: $parse_problem -- fix the source rule in ~/.aitools/rules"
+                log_detail "$dest_name: $parse_problem"
+                write_action "cursor rules" "$dest_name: Cursor would misread its frontmatter -- fix the source rule" "Fix the frontmatter of ${dest_name%.mdc}.md in its harness source (a --- inside a frontmatter value)"
             fi
         done <<< "$RULE_DESTS"
 
-        if [ "$_DT_FAILED" -gt 0 ]; then
-            # deploy_tracker_summary writes the ERROR row ("N failed")
-            deploy_tracker_summary "cursor rules"
-            log "Cursor rules: $DEPLOY_TRACKER_TEXT, $_DT_PRESERVED preserved in $(display_path "$CURSOR_RULES_DIR")"
-        elif [ "$ERRORS" -eq "$ERRORS_BEFORE_CURSOR_RULES" ]; then
-            # Only retired names, none of them here: the tracker's own text,
-            # "n/a (nothing to deploy)", the same row text the skills fan-out
-            # (step 5) writes in that case
-            deploy_tracker_summary "cursor rules"
+        # The tracker writes the OK status (its counts include "N failed";
+        # with only retired names, none of them here, its own text "n/a
+        # (nothing to deploy)", as the skills fan-out writes); every failure,
+        # validation included, is already its own error record
+        deploy_tracker_summary "cursor rules"
+        if [ "$_DT_FAILED" -eq 0 ] && [ "$ERRORS" -eq "$ERRORS_BEFORE_CURSOR_RULES" ]; then
             log_ok "Cursor rules: $DEPLOY_TRACKER_TEXT, $_DT_PRESERVED preserved in $(display_path "$CURSOR_RULES_DIR")"
         else
-            write_summary ERROR "cursor rules" "validation failed"
+            log "Cursor rules: $DEPLOY_TRACKER_TEXT, $_DT_PRESERVED preserved in $(display_path "$CURSOR_RULES_DIR")"
         fi
     fi
+    if [ -n "$RULES_ERR_FILE" ]; then rm -f "$RULES_ERR_FILE"; fi
 fi
 
 # --- 5. User skills fan-out: ~/.aitools/skills -> ~/.cursor/skills ---
