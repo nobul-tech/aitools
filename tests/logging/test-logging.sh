@@ -15,9 +15,9 @@
 # bash (the bash running this suite: /bin/bash gives 3.2 on macOS), in its own
 # directory, stdin from /dev/null ("needs pty" cases on a terminal through
 # tests/managed-files/pty-run.py; SKIP without python3), "external" cases are
-# listed, not run. Then cases the fixture does not cover (the I1 contract
-# addendum: summary_begin / summary_end, run_relay_sync, --no-mirror, --quiet,
-# nested aborts, one mirror per line, repair_uv_tool_env, the options).
+# listed, not run. Then cases the fixture does not cover (the I1 contract and
+# addendum: summary_begin / _end, run_relay_sync, relay options, nested aborts,
+# repair_uv_tool_env, options, push reasons, JSON non-interactive warnings).
 #
 # Usage: bash tests/logging/test-logging.sh [--help]
 
@@ -687,6 +687,103 @@ EOF
 xrun
 check "option jsonl: each log line is also one deploy.jsonl record" \
     "[ \"\$(count_lines '$C/logs/deploy.jsonl' '\"msg\":\"jsonl-line\"')\" = 1 ] && [ \"\$(count_lines '$C/logs/deploy.jsonl' '\"level\":\"warn\"')\" = 1 ]"
+
+# dotprofile_commit_push: a failed commit or push is one warning under TOOL whose
+# text carries "(exit N: <reason>)", the reason from git's output (logging.md
+# 8.3; the same text in Invoke-DotprofileCommitPush)
+xcase dp-push
+cat > "$C/main.sh" <<'EOF'
+set -euo pipefail
+source "$X_LIB"; logging_init t
+cd "$X_DIR"
+git init -q --bare remote.git
+git clone -q remote.git dp 2> /dev/null
+git -C dp config user.name t
+git -C dp config user.email t@example.invalid
+printf 'init\n' > dp/init.md
+git -C dp add init.md
+git -C dp commit -q -m init
+git -C dp push -q -u origin HEAD 2> /dev/null
+AITLIB_USER_REPO_PATH="$X_DIR/dp"
+# Commit failure: a pre-commit hook refuses the commit
+printf '#!/bin/sh\necho "error: blocked by hook" >&2\nexit 1\n' > dp/.git/hooks/pre-commit
+chmod +x dp/.git/hooks/pre-commit
+printf 'x\n' > dp/x.md
+dotprofile_commit_push "$X_DIR/dp/x.md" "add x" "dp tool"
+printf 'COMMIT=%s W=%s\n' "$AITLIB_DOTPROFILE_PUSH" "$WARNINGS"
+cp "$AITOOLS_SUMMARY_FILE" "$X_DIR/summary-commit.txt"
+: > "$AITOOLS_SUMMARY_FILE"
+rm dp/.git/hooks/pre-commit
+# Push failure: the remote is gone
+rm -rf remote.git
+printf 'y\n' > dp/y.md
+dotprofile_commit_push "$X_DIR/dp/y.md" "add y" "dp tool"
+printf 'PUSH=%s W=%s\n' "$AITLIB_DOTPROFILE_PUSH" "$WARNINGS"
+EOF
+if command -v git >/dev/null 2>&1; then
+    xrun
+    check "dotprofile_commit_push: a failed commit -> one warning under TOOL with git's error line as its reason" \
+        "grep -q 'COMMIT=commit-failed W=1' '$C/out' && [ \"\$(cat '$C/summary-commit.txt')\" = \"WARN|dp tool|dotprofile commit failed (exit 1: error: blocked by hook) -- commit and push x.md in $C/dp by hand
+ACTION||commit and push x.md in $C/dp\" ]"
+    check "dotprofile_commit_push: a failed push -> one warning under TOOL with git's error line as its reason" \
+        "grep -q 'PUSH=push-failed W=2' '$C/out' && [ \"\$(grep -c . '$C/summary.txt')\" = 2 ] && perl -ne 'BEGIN { \$n = 0 } \$n++ if m{^WARN\\|dp tool\\|dotprofile push failed \\(exit [1-9][0-9]*: fatal: .*\\) -- run git push in \\Q$C/dp\\E\$}; END { exit(\$n == 1 ? 0 : 1) }' '$C/summary.txt' && grep -qxF 'ACTION||run git push in $C/dp' '$C/summary.txt'"
+    check "dotprofile_commit_push: git's output is in deploy.log as detail lines" \
+        "grep -q '\[detail\] output: error: blocked by hook' '$C/logs/deploy.log'"
+else
+    printf 'SKIP dotprofile_commit_push cases: git not found\n'
+fi
+
+# The JSON field review and the settings sync: a field overwritten in a
+# non-interactive run is one warning under the caller's tool (logging.md 8.3
+# "What is a warning", as for a text file: L32b); under --force it is info; a
+# field only in LOCAL is kept, no warning; a live file that is created, none
+xcase json-overwrite
+cat > "$C/main.sh" <<'EOF'
+set -euo pipefail
+source "$X_LIB"; logging_init t
+local_json='{
+  "a": 1,
+  "b": 2,
+  "z": 9
+}'
+printf '%s\n' "$local_json" > "$X_DIR/x.json"
+deploy_managed_file '{"a": 5, "b": 2, "c": 3}' "$X_DIR/x.json" "json tool" "x.json"
+printf 'NI=%s W=%s\n' "$MANAGED_FILE_RESULT" "$WARNINGS"
+cp "$AITOOLS_SUMMARY_FILE" "$X_DIR/summary-ni.txt"
+: > "$AITOOLS_SUMMARY_FILE"
+printf '%s\n' "$local_json" > "$X_DIR/x.json"
+export AITOOLS_FORCE=1
+deploy_managed_file '{"a": 5, "b": 2, "c": 3}' "$X_DIR/x.json" "json tool" "x.json"
+unset AITOOLS_FORCE
+printf 'FORCE=%s W=%s\n' "$MANAGED_FILE_RESULT" "$WARNINGS"
+cp "$AITOOLS_SUMMARY_FILE" "$X_DIR/summary-force.txt"
+: > "$AITOOLS_SUMMARY_FILE"
+printf '{"theme": "dark"}\n' > "$X_DIR/settings.json"
+printf '{"claude": {"settings": {"theme": "light"}}}\n' > "$X_DIR/profile.json"
+sync_managed_json "$X_DIR/settings.json" "$X_DIR/profile.json" "claude.settings" "hooks" "" "claude settings"
+printf 'SYNC=%s W=%s\n' "$SYNC_MANAGED_JSON_RESULT" "$WARNINGS"
+cp "$AITOOLS_SUMMARY_FILE" "$X_DIR/summary-sync.txt"
+: > "$AITOOLS_SUMMARY_FILE"
+rm "$X_DIR/settings.json"
+sync_managed_json "$X_DIR/settings.json" "$X_DIR/profile.json" "claude.settings" "hooks" "" "claude settings"
+printf 'NEW=%s W=%s\n' "$SYNC_MANAGED_JSON_RESULT" "$WARNINGS"
+EOF
+if command -v node >/dev/null 2>&1; then
+    xrun
+    check "JSON field review, non-interactive: one warning per overwritten field under TOOL; a local-only field kept" \
+        "grep -q 'NI=updated W=2' '$C/out' && [ \"\$(cat '$C/summary-ni.txt')\" = 'WARN|json tool|Divergence in x.json: a -- overwriting from source (non-interactive)
+WARN|json tool|Divergence in x.json: c -- overwriting from source (non-interactive)' ] && grep -q '\"z\": 9' '$C/x.json'"
+    check "JSON field review, non-interactive: the warning is logged at warn" \
+        "grep -q '\[warn\] Divergence in x.json: a -- overwriting from source (non-interactive)' '$C/logs/deploy.log'"
+    check "JSON field review, --force: info, no warning, no record" \
+        "grep -q 'FORCE=updated W=2' '$C/out' && [ ! -s '$C/summary-force.txt' ] && grep -q '\[info\] Divergence in x.json: a -- overwriting from source (--force)' '$C/logs/deploy.log'"
+    check "settings sync, non-interactive: an overwritten leaf is one warning under TOOL" \
+        "grep -q 'SYNC=updated W=3' '$C/out' && [ \"\$(cat '$C/summary-sync.txt')\" = 'WARN|claude settings|Divergence in theme -- overwriting from profile.json (non-interactive)' ]"
+    check "settings sync: a live file created from the profile -> no warning" \
+        "grep -q 'NEW=created W=3' '$C/out' && [ ! -s '$C/summary.txt' ]"
+else
+    printf 'SKIP JSON field review cases: node not found\n'
+fi
 
 # ---------------------------------------------------------------------------
 # scripts/check-lib.sh -- checks.log / checks.jsonl writers (incident #174)
