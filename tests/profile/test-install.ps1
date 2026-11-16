@@ -1,11 +1,11 @@
-# test-install.ps1 -- the installer's Step 3 and Step 5 helpers and log override on
+# test-install.ps1 -- the installer's Step 3 and Step 5 helpers and log options on
 # the lib relay (M3-FINISH item 7, FIX-2; audit A-1, A-16, A-17, A-18), PowerShell
 # half: scripts/aitools-install.ps1 with scripts/aitools-lib.ps1. The Windows
 # harness of this suite; tests/profile/test-install.sh is the macOS/Linux harness
 # (scripts/aitools-install.sh with scripts/aitools-lib.sh).
 #
 # The full installer cannot run here (incident #89). Each case extracts the two
-# blocks "# --- BEGIN install log helpers" and "# --- BEGIN install log override"
+# blocks "# --- BEGIN install log helpers" and "# --- BEGIN install log options"
 # from the installer, dot-sources aitools-lib.ps1 with Initialize-Logging
 # "aitools-install" in a child pwsh under an isolated HOME, and runs one step
 # against a stub:
@@ -23,7 +23,7 @@
 #   step3-*        Step 3 (Resolve-ReposDir): a relative path made absolute and
 #                  created; a path that cannot be created is one error and one
 #                  ERROR row "aitools config"
-#   log-*          the log override's deploy.log write is fail-safe
+#   log-*          the library's deploy.log write is fail-safe
 #                  (reference/logging.md section 5; incident #174): with deploy.log
 #                  a directory, or held open with no sharing, under
 #                  $ErrorActionPreference = "Stop" and inside a try, the run goes
@@ -144,7 +144,7 @@ param([string]$Repo, [string]$Mode, [string]$ReposPath = "")
 . (Join-Path $Repo "scripts/aitools-lib.ps1")
 Initialize-Logging "aitools-install"
 $text = [IO.File]::ReadAllText((Join-Path $Repo "scripts/aitools-install.ps1"))
-$ms = [regex]::Matches($text, '(?ms)^# --- BEGIN install log (?:helpers|override)[^\n]*\n(.*?)^# --- END install log (?:helpers|override) ---')
+$ms = [regex]::Matches($text, '(?ms)^# --- BEGIN install log (?:helpers|options)[^\n]*\n(.*?)^# --- END install log (?:helpers|options) ---')
 if ($ms.Count -ne 2) { Write-Output "installer blocks: $($ms.Count), want 2"; exit 3 }
 foreach ($m in $ms) { Invoke-Expression $m.Groups[1].Value }
 Log "harness start"
@@ -221,6 +221,12 @@ Write-Output "END errors=$($script:errors) warnings=$($script:warnings)"
         if ($script:SUM -ceq $Want) { ok "${Name}: summary rows" }
         else { bad "${Name}: summary '$($script:SUM)', want '$Want'" }
     }
+    # want_sum_prefix NAME PREFIX -- one record, starting with PREFIX (its reason is the
+    # OS's or the exception's own message)
+    function want_sum_prefix([string]$Name, [string]$Prefix) {
+        if (-not $script:SUM.Contains("`n") -and $script:SUM.Length -gt $Prefix.Length -and $script:SUM.StartsWith($Prefix, [StringComparison]::Ordinal)) { ok "${Name}: summary record '$($script:SUM)'" }
+        else { bad "${Name}: summary '$($script:SUM)', want one record starting '$Prefix'" }
+    }
     function want_out([string]$Name, [string]$Text) {
         if (@(OutLines | Where-Object { $_.Contains($Text) }).Count -gt 0) { ok "${Name}: console has '$Text'" }
         else { bad "${Name}: console lacks '$Text'"; Show-Indented (ReadText $script:OUT) }
@@ -248,9 +254,10 @@ Write-Output "END errors=$($script:errors) warnings=$($script:warnings)"
         want_out $Name "[aitools-install] [error] probe-error"
         want_no_out $Name 'CAUGHT|Exception|Add-Content|tee:|Is a directory|Permission denied|cannot access|being used by another process'
     }
-    # The sync ran (marker), returned WANT_RC, and the installer went on
-    function want_sync([string]$Name, [string]$WantRc) {
-        want_end $Name "errors=0 warnings=0"
+    # The sync ran (marker), returned WANT_RC, and the installer went on (a failed
+    # sync is one warning of the installer: the library's Invoke-RelaySync)
+    function want_sync([string]$Name, [string]$WantRc, [int]$Warnings = 0) {
+        want_end $Name "errors=0 warnings=$Warnings"
         want_out $Name "SYNC-RC=$WantRc"
         if (Test-Path -LiteralPath "$H/sync.mark" -PathType Leaf) { ok "${Name}: the sync ran" } else { bad "${Name}: the sync did not run" }
         want_no_out $Name 'Exception|Add-Content|Is a directory|Permission denied|cannot access'
@@ -393,9 +400,10 @@ Write-Output "END errors=$($script:errors) warnings=$($script:warnings)"
     run_h step3 "$H/afile/repos"
     want_out "step3-uncreatable ($impl)" "REPOS_FAILED"
     want_end "step3-uncreatable ($impl)" "errors=1 warnings=0"
-    want_sum "step3-uncreatable ($impl)" "ERROR|aitools config|repos dir not created"
+    want_sum_prefix "step3-uncreatable ($impl)" "ERROR|aitools config|repos directory '$H/afile/repos' not created -- config.json will not be written|"
 
-    # Incident #174: the log override's deploy.log write is fail-safe. A writable
+    # Incident #174: the library's deploy.log write is fail-safe (the installer
+    # no longer overrides the logging functions; it sets the jsonl option). A writable
     # deploy.log still gets the lines ...
     fresh; run_h logprobe
     want_probe "log-written ($impl)"
@@ -406,14 +414,18 @@ Write-Output "END errors=$($script:errors) warnings=$($script:warnings)"
     run_h logprobe
     want_probe "log-blocked ($impl)"
 
-    # Step 22 relay sync: its output (stdout and stderr) reaches deploy.log ...
+    # Step 22 relay sync (the library's Invoke-RelaySync): its output (stdout and
+    # stderr) reaches deploy.log ...
     fresh; run_h relaysync
     want_sync "relaysync-ok ($impl)" 0
     log_has "relaysync-ok ($impl)" "sync-out-line"
     log_has "relaysync-ok ($impl)" "sync-err-line"
-    # ... its exit code comes back ...
+    want_sum "relaysync-ok ($impl)" ""
+    # ... its exit code comes back, and a failure is one warning "relay sync" with
+    # its reason ...
     fresh; run_h relaysync -Vars @{ SYNC_RC = "3" }
-    want_sync "relaysync-rc ($impl)" 3
+    want_sync "relaysync-rc ($impl)" 3 1
+    want_sum_prefix "relaysync-rc ($impl)" "WARN|relay sync|relay -> AGENTS.md sync failed (exit 3, non-fatal): "
     # ... and a deploy.log that cannot be written neither skips it nor ends the run
     fresh; New-Item -ItemType Directory -Path "$H/.aitools/logs/deploy.log" -Force | Out-Null
     run_h relaysync
