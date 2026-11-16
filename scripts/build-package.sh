@@ -19,14 +19,16 @@
 #   build-deploy.sh: no .ps1 twin and no OS guard (exemption row pending
 #   approval P-1 in .claude/rules/cross-platform.md). A kind builds only on its
 #   native host with its native tool (BP-4); `all` reports the other kinds as
-#   OK "n/a (<host>)".
+#   DETAIL lines "<kind>: n/a (<host>)".
 # Tools: pkgbuild + productbuild (macOS, OS-provided), IntuneWinAppUtil.exe
 #   (Windows; /tool-eval and the Phase 2 gate pending, P-4), dpkg-deb (Ubuntu,
 #   OS-provided). Nothing is installed here; managed tools: /tool-registry skill.
-# Logging: ~/.aitools/logs/deploy.log via logging_init (BP-16). Summary rows:
-#   one tool name per step, "build stage|pkg|intune|deb|dry-run" ("build-package"
-#   for argument errors), because show_summary keeps one row per tool name; the
-#   panel is shown when the caller did not set AITOOLS_SUMMARY_FILE.
+# Logging: ~/.aitools/logs/deploy.log via logging_init (BP-16). Run summary
+#   records (reference/logging.md 8.4): one tool name, "build-package", with the
+#   kind in the text. Each error is its own record (red line); a dry run writes
+#   one OK status ("dry-run: <steps done>") and each kind this host cannot build
+#   under `all` as a DETAIL line under it ("<kind>: n/a (<host>)"). The panel is
+#   shown when the caller did not set AITOOLS_SUMMARY_FILE.
 #
 # Usage: build-package.sh <command> [options]
 #   Commands:
@@ -57,11 +59,7 @@ logging_init "build-package"
 # (header). What this host can build is detected per kind (detect_kind).
 HOST="$AITOOLS_PLATFORM"   # macos | linux | windows | unknown
 
-TOOL="build-package"   # summary tool name for argument errors (the whole run)
-# Per-step summary tool names are "$STEP_TOOL <step>" (build stage, build pkg,
-# build intune, build deb, build dry-run): show_summary keeps one row per tool
-# name, and names of 16 characters or fewer keep the panel's columns aligned.
-STEP_TOOL="build"
+TOOL="build-package"   # the tool name of every run summary record (the kind is in the text)
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 PKG_ID="tech.nobul.aitools"   # BP-17
 ALL_KINDS="pkg intune deb"
@@ -80,7 +78,7 @@ usage_brief() {
     perl -ne 'next if $. == 1; last unless /^#/; $u = 1 if /^# Usage:/; next unless $u; s/^# ?//; print' "$SCRIPT_DIR/build-package.sh"
 }
 
-# short TEXT -- a summary detail of at most 30 characters (script-standards).
+# short TEXT -- OK status text of at most 30 characters (script-standards).
 short() {
     local s="$1"
     if [ "${#s}" -gt 30 ]; then s="${s:0:27}..."; fi
@@ -103,7 +101,8 @@ if [ -z "${AITOOLS_SUMMARY_FILE:-}" ]; then
         trap 'rm -f "$AITOOLS_SUMMARY_FILE"' EXIT
     else
         AITOOLS_SUMMARY_FILE=""
-        log_warn "Could not create a summary file in $TMP_BASE -- no summary panel"
+        # No summary file, so no record: mktemp's own message is on the console
+        write_warn "build-package" "could not create a summary file in $TMP_BASE -- no summary panel"
     fi
 fi
 
@@ -119,8 +118,10 @@ DRY_RUN=false
 BAD_ARGS=false
 if [ "${AITOOLS_DRY_RUN:-}" = "1" ]; then DRY_RUN=true; fi
 
+# bad_arg PROBLEM -- one error per bad argument, PROBLEM its reason; the usage
+# block is printed once, after validation
 bad_arg() {
-    log_error "$1 (see --help)"
+    write_error "$TOOL" "bad arguments" "$1"
     BAD_ARGS=true
 }
 
@@ -184,19 +185,21 @@ fi
 # The ref must name a commit in this repo (read-only check, also in a dry run).
 # Command-existence check with explicit fallback (the else branch).
 if command -v git >/dev/null 2>&1; then
-    if ! COMMIT=$(git -C "$REPO_DIR" rev-parse --verify --quiet "${REF}^{commit}" 2>&1); then
-        log_error "--ref '$REF' is not a commit in $(display_path "$REPO_DIR")${COMMIT:+: $COMMIT}"
-        BAD_ARGS=true
+    # --quiet: a bad ref in a repo prints nothing (the text is the reason); outside
+    # a repo git prints its fatal: line, added to the reason
+    _ref_rc=0
+    COMMIT=$(git -C "$REPO_DIR" rev-parse --verify --quiet "${REF}^{commit}" 2>&1) || _ref_rc=$?
+    if [ "$_ref_rc" -ne 0 ]; then
+        bad_arg "--ref '$REF' is not a commit in $(display_path "$REPO_DIR")${COMMIT:+: $(error_reason "$COMMIT" "$_ref_rc")}"
         COMMIT=""
     fi
 else
-    log_error "git not found -- the payload is a git archive of --ref (BP-1)"
-    BAD_ARGS=true
+    bad_arg "git not found -- the payload is a git archive of --ref (BP-1)"
 fi
 
+# Each bad argument is already its own error record (bad_arg)
 if $BAD_ARGS; then
     usage_brief >&2
-    write_summary ERROR "$TOOL" "bad arguments"
 fi
 
 # =========================================================================
@@ -255,8 +258,7 @@ detect_kind() {
 plan() { log "[DRY RUN] $1"; }
 
 not_implemented() {  # KIND BATCH
-    log_error "$1: not implemented in v1.0 scaffolding (batch $2, plans/build-package/implementation-plan.md)"
-    write_summary ERROR "$STEP_TOOL $1" "not implemented"
+    write_error "$TOOL" "$1: not implemented" "v1.0 scaffolding, batch $2 (plans/build-package/implementation-plan.md)"
     return 1
 }
 
@@ -356,11 +358,12 @@ if ! $BAD_ARGS; then
             BUILDABLE="${BUILDABLE:+$BUILDABLE }$kind"
             log "$kind: buildable on $HOST ($(display_path "$KIND_TOOL"))"
         elif $EXPLICIT; then
-            log_error "$kind: cannot build on this host ($HOST): $KIND_WHY"
-            write_summary ERROR "$STEP_TOOL $kind" "$(short "cannot build ($HOST)")"
+            write_error "$TOOL" "$kind: cannot build on this host ($HOST)" "$KIND_WHY"
         else
             log "$kind: n/a on $HOST: $KIND_WHY"
-            write_summary OK "$STEP_TOOL $kind" "$(short "n/a ($HOST)")"
+            # A DETAIL line under the one status record (the panel shows one green
+            # line per tool, its first OK record: logging.md 8.5)
+            write_summary DETAIL "$TOOL" "$kind: n/a ($HOST)"
         fi
     done
 
@@ -375,12 +378,13 @@ if ! $BAD_ARGS; then
             fi
         done
         if $DRY_RUN; then
-            write_summary OK "$STEP_TOOL dry-run" "$(short "$DONE")"
+            write_summary OK "$TOOL" "$(short "dry-run: $DONE")"
         fi
     else
+        # Info: a consequence of the staging error, which is the one record (its
+        # count makes the exit 1)
         for kind in $BUILDABLE; do
-            log_error "$kind: not built -- staging failed"
-            write_summary ERROR "$STEP_TOOL $kind" "not built (no stage)"
+            log "$kind: not built -- staging failed"
         done
     fi
 fi
