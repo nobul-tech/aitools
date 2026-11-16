@@ -21,6 +21,13 @@ case "$(uname -s)" in
 esac
 
 cd "$ROOT"
-git config core.hooksPath scripts/githooks
-echo "core.hooksPath = scripts/githooks (pre-commit regenerates deploy/ when shared/ changes)"
-echo "Disable: git config --unset core.hooksPath"
+# Captured, so a failure is reported with git's own message (reference/logging.md
+# 8.3); an empty TOOL records it under this script's name (8.2)
+GIT_RC=0
+GIT_OUT=$(git config core.hooksPath scripts/githooks 2>&1) || GIT_RC=$?
+if [ "$GIT_RC" -ne 0 ]; then
+    write_error "" "git config core.hooksPath failed" "$(error_reason "$GIT_OUT" "$GIT_RC")"
+    exit 1
+fi
+log_ok "core.hooksPath = scripts/githooks (pre-commit regenerates deploy/ when shared/ changes)"
+log "Disable: git config --unset core.hooksPath"
