@@ -308,7 +308,7 @@ printf '## shared s\nlocal edit\n' > "$(R)/s.md"
 rerun
 # Local edits overwritten in a non-interactive run: one warning, recorded by the
 # library (reference/logging.md 8.3 "What is a warning"); the status row stays OK
-check "fanout edited, non-interactive: overwritten, backup kept, OK row and one WARN record" "[ \"\$(nondetail)\" = 'OK|claude rules|1 updated, 3 verified' ] && [ \"\$(grep -c '^WARN|' '$C/$L.summary')\" = 1 ] && rows '$C/$L.summary' | grep -xF 'WARN|claude rules|Diff in <HOME>/.claude/rules/s.md -- overwriting (non-interactive)' >/dev/null && grep -qx '## shared s' '$(R)/s.md' && ls '$(R)' | grep '^s\.md\.bak\.' >/dev/null"
+check "fanout edited, non-interactive: overwritten, backup kept, OK row and one WARN record" "[ \"\$(nondetail)\" = 'OK|claude rules|1 updated, 3 verified' ] && [ \"\$(grep -c '^WARN|claude rules|' '$C/$L.summary')\" = 1 ] && rows '$C/$L.summary' | grep -xF 'WARN|claude rules|Diff in <HOME>/.claude/rules/s.md -- overwriting (non-interactive)' >/dev/null && grep -qx '## shared s' '$(R)/s.md' && ls '$(R)' | grep '^s\.md\.bak\.' >/dev/null"
 parity fanout-edited
 printf '## shared s\nlocal edit 2\n' > "$(R)/s.md"
 # The edited run's backup is checked above; removed so the tree holds one backup
@@ -317,7 +317,7 @@ rm -f "$(R)"/s.md.bak.*
 rerun --force
 # An overwrite the user asked for (--force) is logged at info, not a warning
 # (reference/logging.md 8.3 "What is a warning")
-check "fanout --force: overwritten, logged at info, OK row, no WARN record" "[ \"\$(rc)\" = 0 ] && grep -qx '## shared s' '$(R)/s.md' && [ \"\$(nondetail)\" = 'OK|claude rules|1 updated, 3 verified' ] && ! grep -q '^WARN|' '$C/$L.summary' && grep -q '\[info\] Diff in .*s\.md -- overwriting (--force)' '$C/$L.out'"
+check "fanout --force: overwritten, logged at info, OK row, no WARN record" "[ \"\$(rc)\" = 0 ] && grep -qx '## shared s' '$(R)/s.md' && [ \"\$(nondetail)\" = 'OK|claude rules|1 updated, 3 verified' ] && ! grep -q '^WARN|claude rules|' '$C/$L.summary' && grep -q '\[info\] Diff in .*s\.md -- overwriting (--force)' '$C/$L.out'"
 parity fanout-force
 
 # ---------------------------------------------------------------------------

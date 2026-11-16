@@ -347,7 +347,11 @@ try {
     Append "$Rules/scoped.mdc" "local edit 2`n"
     Run-Script @("-Force")
     Check "force: exit 0" { $rc -eq 0 }
-    Check "force: overwrite (-Force)" { (OutText).Contains('scoped.mdc -- overwriting (-Force)') }
+    # An overwrite the user asked for (-Force) is logged at info, not a warning
+    # (reference/logging.md 8.3 "What is a warning"); its text says (--force) in
+    # both languages. The summary still holds only the one WARN record of the
+    # edited run above
+    Check "force: overwrite (--force), logged at info, no WARN record" { (OutMatch '\[info\] Diff in .*scoped\.mdc -- overwriting \(--force\)') -and (@(SumLines | Where-Object { $_.StartsWith("WARN|cursor rules|") }).Count -eq 1) }
     Check "force: source content restored" { -not (FileMatch "$Rules/scoped.mdc" 'local edit 2') }
 
     # --- case: an x.mdc next to x.md is not a second source (contract: *.md only) -
@@ -373,7 +377,9 @@ try {
         Check "dupcase: exit 1" { $rc -eq 1 }
         Check "dupcase: duplicate reported" { OutMatch 'Skipped duplicate: foo\.md -> foo\.mdc' }
         Check "dupcase: Foo.md deployed (ordinal order)" { (Test-Path -LiteralPath "$H/.cursor/rules/Foo.mdc" -PathType Leaf) -and -not (Exists "$H/.cursor/rules/foo.mdc") }
-        Check "dupcase: ERROR row" { SumHas 'ERROR|cursor rules|1 failed' }
+        # The tracker writes the OK status with the counts; the failure is the
+        # script's own error (reference/logging.md 8.3 "Managed files")
+        Check "dupcase: OK row counts the failure" { SumHas 'OK|cursor rules|1 added, 1 failed' }
     }
 
     # --- dangling symlinks and chmod 000: not ported to this harness ---------------
@@ -393,7 +399,8 @@ try {
     Run-Script
     Check "descdash: exit 0 (warning only)" { $rc -eq 0 }
     Check "descdash: misparse warned" { OutMatch 'dd.mdc: Cursor would not see alwaysApply' }
-    Check "descdash: row promoted to WARN" { SumHas 'WARN|cursor rules|1 added' }
+    # The status row is never recoloured (reference/logging.md 8.3)
+    Check "descdash: row stays OK (no promotion)" { SumHas 'OK|cursor rules|1 added' }
 
     # --- case: dry run -> nothing written ------------------------------------------
     Setup-Case dry
@@ -471,7 +478,9 @@ try {
     Check "users: shared, dotprofile and aitools rules fanned out with the marker" { (FileContains "$Rules/s.mdc" "${Mark}s.md;") -and (FileContains "$Rules/d.mdc" "${Mark}d.md;") -and (FileContains "$Rules/p.mdc" "${Mark}p.md;") -and (FileContains "$Rules/u.mdc" "${Mark}u.md;") }
     Check "users: aitools rule PR #110 pruned is re-added" { (SumHas 'DETAIL|cursor rules|added: p.mdc') -and (FileHasLine "$Rules/p.mdc" '  - **/scripts/**') }
     Check "users: aitools rule already fanned out is verified" { -not (SumMatch '\|cursor rules\|.*: q.mdc') -and (FileContains "$Rules/q.mdc" "${Mark}q.md;") }
-    Check "users: row 3 added, 1 updated, 1 removed, 1 verified (WARN: a kept file still loads)" { SumHas 'WARN|cursor rules|3 added, 1 updated, 1 removed, 1 verified' }
+    # The status row stays OK: the kept file is reported by its own warning and
+    # the ACTION row, not by recolouring the row (reference/logging.md 8.3)
+    Check "users: row OK 3 added, 1 updated, 1 removed, 1 verified (a kept file: its own warning, not the row's)" { SumHas 'OK|cursor rules|3 added, 1 updated, 1 removed, 1 verified' }
     Check "users: ACTION row lists the kept retired file" { SumHas 'ACTION||Cursor still loads retired rules in ~/.cursor/rules: old.mdc -- delete them unless you wrote them' }
     Check "users: retired rule with the marker removed, backup kept" { -not (Exists "$Rules/gone.mdc") -and (LsAny $Rules '^gone\.mdc\.bak\.') -and (OutMatch 'Removed gone.mdc \(retired rule; aitools-fanout marker') }
     Check "users: removal is a tracker DETAIL row" { SumHas 'DETAIL|cursor rules|removed: gone.mdc' }
@@ -484,7 +493,7 @@ try {
     Parity users
     $baks = @(ListNames -Dir $Rules | Where-Object { $_ -cmatch '\.bak\.' }).Count
     Run-Script
-    Check "users rerun: row 5 verified" { SumHas 'WARN|cursor rules|5 verified' }
+    Check "users rerun: row 5 verified" { SumHas 'OK|cursor rules|5 verified' }
     Check "users rerun: nothing removed, no new backups" { -not (OutMatch '^Removed|\] Removed') -and (@(ListNames -Dir $Rules | Where-Object { $_ -cmatch '\.bak\.' }).Count -eq $baks) }
 
     # B: no manifest -> every rule fanned out, none removed, info log (Claude parity)
@@ -497,8 +506,10 @@ try {
     Run-Script
     Check "nomanifest: exit 0" { $rc -eq 0 }
     Check "nomanifest: info log" { OutMatch '\[info\] No rules manifest at .* -- every rule fanned out, none removed' }
-    # The row is WARN only because p.mdc was overwritten non-interactively (a warn)
-    Check "nomanifest: no manifest WARN, no ACTION; row 1 added, 1 updated" { -not (OutMatch '\[warn\] No rules manifest') -and -not (SumMatch '^ACTION') -and (SumHas 'WARN|cursor rules|1 added, 1 updated') -and (OutMatch 'p.mdc -- overwriting \(non-interactive\)') }
+    # The one warning is p.mdc overwritten non-interactively: its own WARN record,
+    # recorded by the library; the status row stays OK (reference/logging.md 8.3).
+    # The record names the file: compared with the temp root written <TMP>
+    Check "nomanifest: no manifest WARN, no ACTION; row OK 1 added, 1 updated; one WARN record for the overwrite" { -not (OutMatch '\[warn\] No rules manifest') -and -not (SumMatch '^ACTION') -and (SumHas 'OK|cursor rules|1 added, 1 updated') -and (OutMatch 'p.mdc -- overwriting \(non-interactive\)') -and (@(SumLines | Where-Object { $_.StartsWith("WARN|cursor rules|") }).Count -eq 1) -and (@(SumLines | ForEach-Object { ConvertTo-GoldenText $_ $GoldenTmp }) -ccontains 'WARN|cursor rules|Diff in <TMP>/nomanifest/home/.cursor/rules/p.mdc -- overwriting (non-interactive)') }
     Check "nomanifest: both rules fanned out with the marker" { (FileContains "$H/.cursor/rules/s.mdc" "${Mark}s.md;") -and (FileContains "$H/.cursor/rules/p.mdc" "${Mark}p.md;") }
     Parity nomanifest
 
@@ -511,7 +522,7 @@ try {
     Check "badheader: exit 0" { $rc -eq 0 }
     Check "badheader: warned, with the ACTION's instruction" { OutMatch '\[warn\] Rules manifest .*the first line is not.* -- Run aitools to rebuild ~/.aitools/rules and its manifest' }
     Check "badheader: ACTION row" { SumHas 'ACTION||Run aitools to rebuild ~/.aitools/rules and its manifest' }
-    Check "badheader: fanned out (its retired line not read), row WARN 1 added" { (Test-Path -LiteralPath "$H/.cursor/rules/s.mdc" -PathType Leaf) -and (SumHas 'WARN|cursor rules|1 added') }
+    Check "badheader: fanned out (its retired line not read), row OK 1 added" { (Test-Path -LiteralPath "$H/.cursor/rules/s.mdc" -PathType Leaf) -and (SumHas 'OK|cursor rules|1 added') }
     Parity badheader
 
     # C2: an unreadable manifest (a directory at its path) -> ERROR row, the
@@ -523,7 +534,7 @@ try {
     Check "badmanifest: exit 1" { $rc -eq 1 }
     Check "badmanifest: ERROR row cannot read rules manifest" { SumHas 'ERROR|cursor rules|cannot read rules manifest' }
     Check "badmanifest: fan-out continued" { (Test-Path -LiteralPath "$H/.cursor/rules/s.mdc" -PathType Leaf) -and (SumHas 'DETAIL|cursor rules|added: s.mdc') }
-    Check "badmanifest: manifest counted failed, final row ERROR 1 failed" { (SumHas 'DETAIL|cursor rules|failed: .aitools-rules-manifest') -and ((Row) -ceq 'ERROR|cursor rules|1 failed') }
+    Check "badmanifest: manifest counted failed, final row OK 1 added, 1 failed" { (SumHas 'DETAIL|cursor rules|failed: .aitools-rules-manifest') -and ((Row) -ceq 'OK|cursor rules|1 added, 1 failed') }
     Parity badmanifest
 
     # D: invalid lines ignored with a warning; case-insensitive names
@@ -534,7 +545,7 @@ try {
     Check "invalid: exit 0" { $rc -eq 0 }
     Check "invalid: 6 lines ignored with a warning" { ((OutCount 'line ignored') -eq 6) -and (OutMatch 'line ignored: ../x.md<TAB>shared') }
     Check "invalid: name matched case-insensitively" { (Test-Path -LiteralPath "$H/.cursor/rules/lower.mdc" -PathType Leaf) -and -not (OutMatch 'Not fanned out: Lower.md is in the rules manifest') }
-    Check "invalid: WARN row" { SumHas 'WARN|cursor rules|1 added' }
+    Check "invalid: OK row" { SumHas 'OK|cursor rules|1 added' }
     Check "invalid: one ACTION row to rebuild the manifest" { (SumCount 'ACTION||Run aitools to rebuild ~/.aitools/rules and its manifest') -eq 1 }
     Parity invalid
 
@@ -616,7 +627,7 @@ try {
     Check "bodymark: exit 0" { $rc -eq 0 }
     Check "bodymark: retired harness copy not fanned out" { OutMatch 'Not fanned out: p.md \(retired in the rules manifest\)' }
     Check "bodymark: user file kept" { (FileMatch "$H/.cursor/rules/p.mdc" '^mine') -and (OutMatch 'Kept p.mdc') }
-    Check "bodymark: WARN row (nothing to deploy) and ACTION" { (SumHas 'WARN|cursor rules|n/a (nothing to deploy)') -and (SumHas 'ACTION||Cursor still loads retired rules in ~/.cursor/rules: p.mdc -- delete them unless you wrote them') }
+    Check "bodymark: OK row (nothing to deploy) and ACTION" { (SumHas 'OK|cursor rules|n/a (nothing to deploy)') -and (SumHas 'ACTION||Cursor still loads retired rules in ~/.cursor/rules: p.mdc -- delete them unless you wrote them') }
     Parity bodymark
 
     # E5 (review finding 4): a manifest ending in a lone CR -- both scripts reject
@@ -628,7 +639,7 @@ try {
     Put "$H/.aitools/rules/b.md" "## b`n"
     Run-Script
     Check "lonecr: last line ignored with a warning (b.md not retired)" { (OutMatch 'line ignored: b.md<TAB>retired') -and (Test-Path -LiteralPath "$H/.cursor/rules/b.mdc" -PathType Leaf) }
-    Check "lonecr: WARN row 2 added" { SumHas 'WARN|cursor rules|2 added' }
+    Check "lonecr: OK row 2 added" { SumHas 'OK|cursor rules|2 added' }
     Parity lonecr
 
     # F: dry run -> removal only logged
@@ -647,7 +658,7 @@ try {
     Run-Script
     Check "missingsrc: exit 0" { $rc -eq 0 }
     Check "missingsrc: warned" { OutMatch 'Not fanned out: t.md is in the rules manifest but not in' }
-    Check "missingsrc: WARN row 1 added" { SumHas 'WARN|cursor rules|1 added' }
+    Check "missingsrc: OK row 1 added" { SumHas 'OK|cursor rules|1 added' }
     Check "missingsrc: ACTION row to rebuild the manifest" { SumHas 'ACTION||Run aitools to rebuild ~/.aitools/rules and its manifest' }
     Parity missingsrc
 
@@ -724,7 +735,9 @@ try {
         $PtyRules = "$H/.cursor/rules"
         Run-Pty 's\n'
         Check "pty ${lang}: the review menu prompted" { (ReadText (Join-Path $C "pty-$lang.out")).Contains('[s]kip') }
-        Check "pty ${lang}: [s]kip keeps the local edit, row WARN 1 skipped" { (FileHasLine "$PtyRules/s.mdc" 'my edit') -and ((Row (Join-Path $C "summary-$lang")) -ceq 'WARN|cursor rules|1 skipped (user review)') }
+        # A skipped review is one warning, recorded by the library; the status row
+        # stays OK with the counts (reference/logging.md 8.3 "Managed files")
+        Check "pty ${lang}: [s]kip keeps the local edit, row OK 1 verified, 1 skipped, one WARN record" { (FileHasLine "$PtyRules/s.mdc" 'my edit') -and ((Row (Join-Path $C "summary-$lang")) -ceq 'OK|cursor rules|1 verified, 1 skipped') -and (@(SumLines (Join-Path $C "summary-$lang") | Where-Object { $_.StartsWith("WARN|cursor rules|") }).Count -eq 1) -and (@(SumLines (Join-Path $C "summary-$lang")) -ccontains 'WARN|cursor rules|Skipped: s.mdc (local differs from source; reviewed again next run)') }
         Run-Pty 'x\n'
         Check "pty ${lang}: [x]abort exits 2, no cursor rules row, local file kept" { ($ptyRc -eq 2) -and ((Row (Join-Path $C "summary-$lang")) -eq "") -and (FileHasLine "$PtyRules/s.mdc" 'my edit') }
     } else {
