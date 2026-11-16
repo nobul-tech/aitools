@@ -40,10 +40,9 @@ foreach ($p in $gitBashPaths) {
 # No PATH / Get-Command fallback: `bash` may resolve to WSL or other shims —
 # not first-class for this harness. Managed Windows bash = Git for Windows only.
 if (-not $bashExe) {
-    LogError "Git Bash not found (expected under Program Files or %LOCALAPPDATA%\Programs\Git)."
+    Write-AitError "bash" "Git Bash not found" "not under Program Files or %LOCALAPPDATA%\Programs\Git"
     Log "Install Git for Windows (includes the managed bash): https://git-scm.com/downloads/win"
     Log "WSL bash is a separate environment — not the harness-managed bash on Windows."
-    Write-Summary "ERROR" "bash" "Git Bash not found"
     Write-Summary "ACTION" "" "Install Git for Windows; do not rely on WSL bash for harness DX"
     exit 1
 }
@@ -55,8 +54,7 @@ Log "Git Bash: $versionOutput"
 # Parse version number
 $versionMatch = [regex]::Match($versionOutput, 'version\s+(\d+)\.(\d+)')
 if (-not $versionMatch.Success) {
-    LogWarn "Could not parse bash version from: $versionOutput"
-    Write-Summary "WARN" "bash" "version unknown"
+    Write-AitWarn "bash" "version unknown: could not parse '$versionOutput'"
 } else {
     $major = [int]$versionMatch.Groups[1].Value
     $minor = [int]$versionMatch.Groups[2].Value
@@ -66,12 +64,12 @@ if (-not $versionMatch.Success) {
         LogOk "bash $fullVer at $bashExe (>= $minMajor.$minMinor)"
         Write-Summary "OK" "bash" "$fullVer (Git Bash)"
     } else {
-        LogWarn "bash $fullVer is below minimum $minMajor.$minMinor"
+        Write-Summary "OK" "bash" "$fullVer (Git Bash)"
+        Write-AitAction "bash" "bash $fullVer is below $minMajor.$minMinor -- update Git for Windows" `
+            "Update Git for Windows for bash >= $minMajor.$minMinor"
         Log "Update Git for Windows to get a newer bash:"
         Log "  winget upgrade Git.Git"
         Log "  or download from https://git-scm.com/downloads/win"
-        Write-Summary "WARN" "bash" "$fullVer (below minimum $minMajor.$minMinor)"
-        Write-Summary "ACTION" "" "Update Git for Windows for bash >= $minMajor.$minMinor"
     }
 }
 
