@@ -7,7 +7,7 @@
       "scope": "Framework entries and pending adoptions only. NOT the adoption process (framework-adoption.md). NOT framework documentation (framework-*.md files)",
       "audience": "/frameworks skill"
     },
-    "lastUpdated": "2026-11-15"
+    "lastUpdated": "2026-11-16"
   },
   "frameworks": [
     {
@@ -201,15 +201,18 @@
     },
     {
       "name": "Mission command",
-      "governs": "Fixing the meaning of an order before acting, and resolving what you can on your own initiative within the commander's intent, reporting every deviation (prompt-turn checklist items 2 and 4)",
+      "governs": "Fixing the meaning of an order before acting, and resolving what you can on your own initiative within the commander's intent, reporting every deviation (prompt-turn checklist items 2 and 4); the specified task, the block of work a plan or mission brief assigns to a mission (RFC 0011)",
       "discipline": "Military command and control (mission command; Auftragstaktik)",
-      "concepts": ["Disciplined initiative (ADP 6-0 Command and Control, 2026)", "Commander's intent", "Backbrief and confirmation brief (FM 1-02.1, 2026)", "Auftragstaktik / Führen mit Auftrag (Joint Force Quarterly 96, 2020; Handbuch Innere Führung, 2023)"],
+      "concepts": ["Disciplined initiative (ADP 6-0 Command and Control, 2026)", "Commander's intent", "Backbrief and confirmation brief (FM 1-02.1, 2026)", "Auftragstaktik / Führen mit Auftrag (Joint Force Quarterly 96, 2020; Handbuch Innere Führung, 2023)", "Specified task (FM 5-0, as defined in FM 1-02.1, 2026)"],
       "referenceFile": "reference/framework-mission-command.md",
       "artifacts": [
         "reference/prompt-turn-checklist.md (items 2 and 4)",
-        "reference/framework-mission-command.md"
+        "reference/framework-mission-command.md",
+        "rfcs/RFC-0011-structured-reports.md (section 2 and 3.8: the specified task and its id)",
+        "plans/structured-reports/implementation-plan.md (specified tasks ST874d-1 to ST874d-6)",
+        ".claude/rules/glossary.md (terms: specified task, ST)"
       ],
-      "lastUpdated": "2026-11-13"
+      "lastUpdated": "2026-11-16"
     },
     {
       "name": "Request for information",

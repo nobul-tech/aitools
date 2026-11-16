@@ -7,7 +7,7 @@
       "scope": "Definitions, facets, and abbreviation mappings only. NOT the word list (glossary rule). NOT the composition convention (framework-governed-vocabulary.md). NOT usage guidance (/glossary skill)",
       "audience": "/glossary skill, agents resolving terminology questions"
     },
-    "lastUpdated": "2026-11-15"
+    "lastUpdated": "2026-11-16"
   },
   "facets": {
     "scopeModifiers": {
@@ -427,6 +427,14 @@
       "definition": "The structured briefing a delegating agent writes for a delegate before launch, in the schema of issue #180: provenance, identity, intent, objectives, constraints, assumptions, decisions, ambiguities, operational learning, rules, skills, access, name prefix, duties, return. A Markdown file in the top-level session's scratch directory, named <sid4>_<mission name>-brief.md; the delegation prompt gives its path and the explicit instruction to read it in full, line by line, before any other work. Only structured content goes in it: anything unstructured, such as facts or background, stays in the body of the delegation prompt, and standing duties stay in /delegate and the delegation rule. It defines the delegate's mission objectives. Synonyms: brief, delegate briefing.",
       "source": "commander, 2026-11-15 (session 87795dc3, answer 6; session dbd05b0c: brief, mission brief and delegate briefing are synonymous; the brief is a file the prompt points to); /delegate skill element 10; issue #180",
       "sourceDiscipline": "Military doctrine: the order and the subordinate's confirmation brief (ADP 5-0, 2019, 3-27)"
+    },
+    "specified task": {
+      "definition": "A clearly defined block of work that the commander or a delegating agent assigns to a mission, and that the mission must accomplish. It groups the batches that ship together, and its deliverables say what it produces (in an aitools plan, one PR per specified task). Numbered ST<sid4>-<n>, like session RFIs (R<sid4>-<n>) and decisions (D<sid4>-<n>): <sid4> is the last four hex digits of the id of the session in which the specified task was created, and n rises through that session's specified tasks and is never reused. The id never changes, even when another session carries the task out (ST874d-2 was created in session dbd05b0c). For a mission brief the session agent writes, <sid4> is the four hex digits that begin the brief's file name (874d-2-structured-reports-brief.json). The number is an id, not a sequence: the order in which specified tasks run is stated where the plan states it. A batch of a specified task is numbered <specified task id>.<m> (ST874d-3.1). Written in full or as ST, never shortened to 'task', which in Claude Code also names the todo-list and background-task tools (TaskCreate, TaskList, TaskUpdate, TaskStop). Replaces work package (WP), which is not used (commander, 2026-11-16). Abbreviation: ST.",
+      "source": "commander, 2026-11-16 (session 86d6da03, L518: 'Specified task it is, thats a decisioin.  ST for short.  same ST<SID4>-<num> naming convention as session RFIs and Decisions.  the sid4 comes from the sessionid where that task was originally created, should match the briefing file name.'; L243: 'i hate WP, we are not using it'); rfcs/RFC-0011-structured-reports.md section 2 and 3.8; reference/framework-mission-command.md",
+      "sourceDiscipline": "US Army doctrine: specified task, 'A task specifically assigned to a unit by its higher headquarters' (FM 5-0); task, 'A clearly defined action or activity specifically assigned by an appropriate authority to an individual or organization, or derived during mission analysis, that must be accomplished' (JP 1, Volume 1); both as defined in FM 1-02.1 Operational Terms, 30 May 2026"
+    },
+    "ST": {
+      "abbreviationOf": "specified task"
     },
     "mission order": {
       "definition": "A mission-type order: the commander's intent expressed as the objective to achieve, not the method to use. Used informally in the harness as a thinking tool — not a formal framework. The delegating agent states the mission order; the accepting agent determines how to achieve it.",

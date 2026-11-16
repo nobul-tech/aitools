@@ -2,7 +2,7 @@
   "provenance": {
     "document": "mission-brief",
     "schema_version": 1,
-    "version": "v1.3",
+    "version": "v1.4",
     "mission": "874d-2-structured-reports",
     "session_id": "dbd05b0c-2365-4159-9976-bc64a2af874d",
     "session_db": "",
@@ -24,15 +24,15 @@
     "parallel_missions": []
   },
   "intent": {
-    "purpose": "Implement RFC 0011 (structured running estimates, mission briefs and AARs) through work packages WP-1 to WP-6 of the plan, each shipped as its own PR for the commander to merge",
-    "scope": "WP-1 to WP-6 of plans/structured-reports/implementation-plan.md v1.1, batch by batch, each verified as the plan says",
+    "purpose": "Implement RFC 0011 (structured running estimates, mission briefs and AARs) through specified tasks ST874d-1 to ST874d-6 of the plan, each shipped as its own PR for the commander to merge",
+    "scope": "ST874d-1 to ST874d-6 of plans/structured-reports/implementation-plan.md v1.4, batch by batch, each verified as the plan says",
     "out_of_scope": [
-      "changing the decisions of issue #180 (D874d-1 to D874d-70)",
+      "changing the decisions of issue #180 (D874d-1 to D874d-77) and of session 86d6da03 (D0036-1 to D0036-3, RFC 0011 appendix A)",
       "the /debrief, /brief and /channel skills (D874d-11)",
       "sharing estimates across sessions, and distributed sessions (D874d-9, D874d-10)",
       "harnesses other than Claude Code, beyond recording what is found when they are examined (D874d-33)",
       "the session content already in the public repo (D874d-54)",
-      "WP-0 (RFC 0011 and the plan, done by session dbd05b0c)"
+      "writing RFC 0011 and the plan themselves (done by sessions dbd05b0c and 86d6da03)"
     ],
     "audience": "the commander, reviewing and merging each PR; every agent that will write or read briefs, AARs and running estimates"
   },
@@ -50,103 +50,103 @@
     {
       "id": "OBJ-2",
       "type": "objective",
-      "text": "WP-1: reference, schemas, templates, validation",
+      "text": "ST874d-1: reference, schemas, templates, validation",
       "source": {
         "kind": "artifact",
-        "location": "/Users/new-jose/repos/aitools/plans/structured-reports/implementation-plan.md:79"
+        "location": "/Users/new-jose/repos/aitools/plans/structured-reports/implementation-plan.md:108"
       }
     },
     {
       "id": "OBJ-3",
       "type": "objective",
-      "text": "WP-2: the harness text, in line with RFC 0011 (D874d-49)",
+      "text": "ST874d-2: the harness text, in line with RFC 0011 (D874d-49)",
       "source": {
         "kind": "artifact",
-        "location": "/Users/new-jose/repos/aitools/plans/structured-reports/implementation-plan.md:91"
+        "location": "/Users/new-jose/repos/aitools/plans/structured-reports/implementation-plan.md:120"
       }
     },
     {
       "id": "OBJ-4",
       "type": "objective",
-      "text": "WP-3: session DB, schema 5 (RFC 0011 section 3.6)",
+      "text": "ST874d-3: session DB, schema 5 (RFC 0011 section 3.6)",
       "source": {
         "kind": "artifact",
-        "location": "/Users/new-jose/repos/aitools/plans/structured-reports/implementation-plan.md:111"
+        "location": "/Users/new-jose/repos/aitools/plans/structured-reports/implementation-plan.md:140"
       }
     },
     {
       "id": "OBJ-5",
       "type": "objective",
-      "text": "WP-4: hooks, the SessionEnd job, the harvester (RFC 0011 3.4, 3.5.5, 3.9.3, section 7)",
+      "text": "ST874d-4: hooks, the SessionEnd job, the harvester (RFC 0011 3.4, 3.5.5, 3.9.3, section 7)",
       "source": {
         "kind": "artifact",
-        "location": "/Users/new-jose/repos/aitools/plans/structured-reports/implementation-plan.md:124"
+        "location": "/Users/new-jose/repos/aitools/plans/structured-reports/implementation-plan.md:153"
       }
     },
     {
       "id": "OBJ-6",
       "type": "objective",
-      "text": "WP-5: the skills and readers that use the documents (D874d-61)",
+      "text": "ST874d-5: the skills and readers that use the documents (D874d-61)",
       "source": {
         "kind": "artifact",
-        "location": "/Users/new-jose/repos/aitools/plans/structured-reports/implementation-plan.md:135"
+        "location": "/Users/new-jose/repos/aitools/plans/structured-reports/implementation-plan.md:164"
       }
     },
     {
       "id": "OBJ-7",
       "type": "objective",
-      "text": "WP-6: release",
+      "text": "ST874d-6: release",
       "source": {
         "kind": "artifact",
-        "location": "/Users/new-jose/repos/aitools/plans/structured-reports/implementation-plan.md:144"
+        "location": "/Users/new-jose/repos/aitools/plans/structured-reports/implementation-plan.md:173"
       }
     }
   ],
   "constraints": [
     {
-      "text": "Ship every work package as its own PR, based on main, from your own worktree made with git worktree add off origin/main (<aitools>/.scratch/worktrees/874d-2-structured-reports), on the branch feature/874d-2-structured-reports-wp<n>; a later work package's branch merges the earlier one in with --no-ff. Commit and push after every batch, with git commit -F.",
+      "text": "Ship every specified task as its own PR, based on main, from your own worktree made with git worktree add off origin/main (<aitools>/.scratch/worktrees/874d-2-structured-reports), on the branch feature/874d-2-structured-reports-<specified task id in lowercase> (for example feature/874d-2-structured-reports-st874d-1); a later specified task's branch merges the earlier one in with --no-ff. Start each PR title with its specified task's id and each commit subject with its batch id (ST874d-1.1). Commit and push after every batch, with git commit -F.",
       "source": {
         "kind": "agent",
-        "location": "/Users/new-jose/repos/aitools/shared/rules/delegation.md D-DEL4; /Users/new-jose/repos/aitools/plans/structured-reports/implementation-plan.md:56"
+        "location": "/Users/new-jose/repos/aitools/shared/rules/delegation.md D-DEL4; /Users/new-jose/repos/aitools/plans/structured-reports/implementation-plan.md:83"
       }
     },
     {
-      "text": "Do not merge: the commander merges the PRs, in order. Hand back your AAR when every work package's PR is open with CI green, or at once when a blocker stops you, with a recommended course of action. This overrides the /delegate duty to self-merge (D-DEL6: the brief ranks above the skill).",
+      "text": "Do not merge: the commander merges the PRs, in order. Hand back your AAR when every specified task's PR is open with CI green, or at once when a blocker stops you, with a recommended course of action. This overrides the /delegate duty to self-merge (D-DEL6: the brief ranks above the skill).",
       "source": {
         "kind": "agent",
-        "location": "D-DEL5; D-DEL9; /Users/new-jose/repos/aitools/plans/structured-reports/implementation-plan.md:56"
+        "location": "D-DEL5; D-DEL9; /Users/new-jose/repos/aitools/plans/structured-reports/implementation-plan.md:83"
       }
     },
     {
-      "text": "Never push to main, force-push, or approve your own PR. Update the plan's status table after each batch in the work package's branch (D874d-60); do not write .aitools/channel/relay.md, a direct-to-main file.",
+      "text": "Never push to main, force-push, or approve your own PR. Update the plan's status table after each batch in the specified task's branch (D874d-60); do not write .aitools/channel/relay.md, a direct-to-main file.",
       "source": {
         "kind": "agent",
-        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl L3394 (D874d-60); /Users/new-jose/repos/aitools/plans/structured-reports/implementation-plan.md:56"
+        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl L3394 (D874d-60); /Users/new-jose/repos/aitools/plans/structured-reports/implementation-plan.md:83"
       }
     },
     {
       "text": "Launch an independent reviewer (a delegate that did not see your notes) for every PR; its verdict is a PR comment before the PR goes to the commander.",
       "source": {
         "kind": "agent",
-        "location": "/Users/new-jose/repos/aitools/plans/structured-reports/implementation-plan.md:56"
+        "location": "/Users/new-jose/repos/aitools/plans/structured-reports/implementation-plan.md:83"
       }
     },
     {
       "text": "Before every push run bash scripts/check-pre-commit.sh and bash scripts/check-pre-push.sh (on Windows the .ps1 twins with pwsh -NoProfile -File). Every new test suite gets a step in each job of .github/workflows/check.yml that runs it; watch CI until it passes on macOS, Linux and Windows.",
       "source": {
         "kind": "agent",
-        "location": "/Users/new-jose/repos/aitools/CLAUDE.md; /Users/new-jose/repos/aitools/plans/structured-reports/implementation-plan.md:56"
+        "location": "/Users/new-jose/repos/aitools/CLAUDE.md; /Users/new-jose/repos/aitools/plans/structured-reports/implementation-plan.md:83"
       }
     },
     {
-      "text": "WP-1 starts on your launch order (gate G0). Before WP-2, check that the six working-copy files of session dbd05b0c are on origin/main (gate G1); if they are not when WP-1 is done, raise an RFI and do not edit origin/main's versions of them.",
+      "text": "ST874d-1 starts on your launch order (gate G0). ST874d-2 needs G0 and gate G1, the six working-copy files of session dbd05b0c on origin/main; G1 is met (commit 311ad1ff, 2026-11-16). ST874d-3 to ST874d-6 follow in order. The ids are not the order; the plan's Gates section is.",
       "source": {
         "kind": "agent",
-        "location": "/Users/new-jose/repos/aitools/plans/structured-reports/implementation-plan.md:43"
+        "location": "/Users/new-jose/repos/aitools/plans/structured-reports/implementation-plan.md:72"
       }
     },
     {
-      "text": "Do not reopen the decisions of issue #180 section 1; a point you find unclear goes to the commander as an RFI with a suggested answer.",
+      "text": "Do not reopen the decisions of issue #180 section 1 or of session 86d6da03 (RFC 0011 appendix A); a point you find unclear goes to the commander as an RFI with a suggested answer.",
       "source": {
         "kind": "agent",
         "location": "/Users/new-jose/repos/aitools/rfcs/RFC-0011-structured-reports.md, Status of this memo"
@@ -184,7 +184,7 @@
       "text": "Never push to the real dotprofile: tests use a clone whose origin is a local bare repo in your scratch, checked before every push (git remote get-url origin must not contain github.com).",
       "source": {
         "kind": "agent",
-        "location": "/Users/new-jose/repos/aitools/plans/structured-reports/implementation-plan.md batch 4.3"
+        "location": "/Users/new-jose/repos/aitools/plans/structured-reports/implementation-plan.md batch ST874d-4.3"
       }
     },
     {
@@ -195,14 +195,14 @@
       }
     },
     {
-      "text": "This brief is a long-lifecycle brief in the briefs directory. If you are launched in a session other than dbd05b0c, the launching agent first writes a new version of it whose provenance describes that session (RFC 0011 3.3.1a); report into the session named in provenance.",
+      "text": "This brief is a long-lifecycle brief in the briefs directory. On the commander's order it keeps the provenance of session dbd05b0c, where it was written, when another session carries the mission out, and the session agent of that session may carry it out itself, with no delegate (D0036-2; RFC 0011 3.3.1a). Whoever carries it out reports to the agent that launched it, or, when it is the session agent itself, to the commander in its own session.",
       "source": {
         "kind": "agent",
-        "location": "/Users/new-jose/repos/aitools/rfcs/RFC-0011-structured-reports.md 3.3.1a"
+        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/86d6da03-bd3d-4a3b-9b47-bf0297936036.jsonl L95 (D0036-2); /Users/new-jose/repos/aitools/rfcs/RFC-0011-structured-reports.md 3.3.1a"
       }
     },
     {
-      "text": "Change the glossary only in batch 2.2 and only through /glossary; add no glossary entries for the schema's nodes and fields (D874d-66).",
+      "text": "Change the glossary only in batch ST874d-2.2 and only through /glossary; add no glossary entries for the schema's nodes and fields (D874d-66). The terms specified task and ST are already governed (session 86d6da03, D0036-3).",
       "source": {
         "kind": "agent",
         "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl L3479 (D874d-66, D874d-67)"
@@ -212,7 +212,7 @@
       "text": "Read every file in full before you change it. The files marked 'use as reference for answers' in artifacts are what you need to brief the delegates of your batches; give each such delegate its batch's files as 'read in full' artifacts, in a brief written by RFC 0011 3.3 into the top-level session's scratch directory, the default location (RFC 0011 3.3.1).",
       "source": {
         "kind": "agent",
-        "location": "/Users/new-jose/repos/aitools/rfcs/RFC-0011-structured-reports.md 3.3.3a; /Users/new-jose/repos/aitools/plans/structured-reports/implementation-plan.md:56"
+        "location": "/Users/new-jose/repos/aitools/rfcs/RFC-0011-structured-reports.md 3.3.3a; /Users/new-jose/repos/aitools/plans/structured-reports/implementation-plan.md:83"
       }
     },
     {
@@ -320,11 +320,17 @@
     {
       "id": "ASM-8",
       "type": "assumption",
-      "text": "The six working-copy files of session dbd05b0c reach origin/main before WP-2 starts",
-      "status": "unverified",
-      "confidence": "moderate",
-      "evidence": "the commander takes care of them (R874d-27: \"27) dont worry about it\")",
-      "impact_if_false": "gate G1 stays open: WP-2 waits; WP-1 does not (plan, Gates)",
+      "text": "The six working-copy files of session dbd05b0c reach origin/main before ST874d-2 starts",
+      "status": "verified",
+      "confidence": "high",
+      "evidence": "commit 311ad1ff, pushed to origin/main on 2026-11-16 on the commander's order (session 86d6da03, L95: \"commit/push the g1 files directly to main now.\")",
+      "impact_if_false": "gate G1 stays open: ST874d-2 waits; ST874d-1 does not (plan, Gates)",
+      "ref": "",
+      "version": 2,
+      "agent_id": "86d6da03-bd3d-4a3b-9b47-bf0297936036",
+      "agent_type": "session",
+      "mission": "",
+      "created_at": "2026-11-16T04:04:39Z",
       "source": {
         "kind": "agent",
         "location": "issue nobul-tech/aitools#180, comment \"Sections 5 and 6 (moved in v5.4)\", section 6"
@@ -909,7 +915,7 @@
     {
       "id": "D874d-49",
       "type": "decision",
-      "text": "Bringing the working copy (the delegation rule, `/delegate`, the glossary, the prompt-turn checklist) in line with this issue is part of the implementation, listed in section 7 (WP-2). The session agent does not do it",
+      "text": "Bringing the working copy (the delegation rule, `/delegate`, the glossary, the prompt-turn checklist) in line with this issue is part of the implementation, listed in section 7 (WP-2, now specified task ST874d-2). The session agent does not do it",
       "decided_by": "commander",
       "date": "2026-11-15",
       "source": {
@@ -1039,7 +1045,7 @@
     {
       "id": "D874d-60",
       "type": "decision",
-      "text": "The implementing mission updates the plan's status table inside each work package's PR, in its worktree",
+      "text": "The implementing mission updates the plan's status table inside each specified task's PR (a work package's, in the words of the time), in its worktree",
       "decided_by": "commander",
       "date": "2026-11-16",
       "source": {
@@ -1052,7 +1058,7 @@
     {
       "id": "D874d-61",
       "type": "decision",
-      "text": "The dashboards are repointed to the per-session export (WP-5), and `.claude/rules/aitools-workspace.md` is updated (WP-2)",
+      "text": "The dashboards are repointed to the per-session export (ST874d-5), and `.claude/rules/aitools-workspace.md` is updated (ST874d-2)",
       "decided_by": "commander",
       "date": "2026-11-16",
       "source": {
@@ -1117,7 +1123,7 @@
     {
       "id": "D874d-68",
       "type": "decision",
-      "text": "No separate WP-0 verdict is kept; the fixes the verifiers found are made",
+      "text": "No separate verdict on RFC 0011 and the plan (then called WP-0) is kept; the fixes the verifiers found are made",
       "decided_by": "commander",
       "date": "2026-11-16",
       "source": {
@@ -1204,6 +1210,42 @@
       },
       "quote": "47) ignore this, dont ask again its deferred",
       "status": "decided"
+    },
+    {
+      "id": "D0036-2",
+      "type": "decision",
+      "text": "The mission is carried out from this brief, which keeps the provenance of session dbd05b0c; the session agent of a later session may carry it out itself, with no delegate (answering R0036-1, which proposed a new version describing session 86d6da03)",
+      "decided_by": "commander",
+      "date": "2026-11-16",
+      "source": {
+        "kind": "commander",
+        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/86d6da03-bd3d-4a3b-9b47-bf0297936036.jsonl L95"
+      },
+      "quote": "we dont want to launch a new brief, we will be using the the same brief, we may be the executing agent on the mission (no delegate). rfc 1) no",
+      "status": "decided",
+      "version": 1,
+      "agent_id": "86d6da03-bd3d-4a3b-9b47-bf0297936036",
+      "agent_type": "session",
+      "mission": "",
+      "created_at": "2026-11-16T04:04:39Z"
+    },
+    {
+      "id": "D0036-3",
+      "type": "decision",
+      "text": "The specified task (ST) replaces the work package (WP); its id is ST<sid4>-<n>, with <sid4> from the session in which it was created, matching the brief's file name. This mission's specified tasks are ST874d-1 to ST874d-6 (RFC 0011 section 2, 3.8)",
+      "decided_by": "commander",
+      "date": "2026-11-16",
+      "source": {
+        "kind": "commander",
+        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/86d6da03-bd3d-4a3b-9b47-bf0297936036.jsonl L518 (and L243: \"i hate WP, we are not using it.\")"
+      },
+      "quote": "Specified task it is, thats a decisioin.  ST for short.  same ST<SID4>-<num> naming convention as session RFIs and Decisions.  the sid4 comes from the sessionid where that task was originally created, should match the briefing file name.",
+      "status": "decided",
+      "version": 1,
+      "agent_id": "86d6da03-bd3d-4a3b-9b47-bf0297936036",
+      "agent_type": "session",
+      "mission": "",
+      "created_at": "2026-11-16T04:04:39Z"
     }
   ],
   "operational_learning": [
@@ -1296,6 +1338,20 @@
         "kind": "agent",
         "location": "mission 874d-5-brief-verify OL-3"
       }
+    },
+    {
+      "id": "OL-11",
+      "type": "operational_learning",
+      "text": "chrome-devtools evaluate_script with filePath saves its output with a .json extension, which the harvester copies into the tracked harvesting/ of a public repo; rename such an extract to .tmp at once (OL-7)",
+      "source": {
+        "kind": "telemetry",
+        "location": "session 86d6da03, 2026-11-16: the FM 1-02.1 extract was saved as fm1-02-1.json and renamed fm1-02-1.tmp"
+      },
+      "version": 1,
+      "agent_id": "86d6da03-bd3d-4a3b-9b47-bf0297936036",
+      "agent_type": "session",
+      "mission": "",
+      "created_at": "2026-11-16T04:04:39Z"
     }
   ],
   "artifacts": [
@@ -1617,37 +1673,37 @@
       "kind": "pr",
       "ref": "nobul-tech/aitools, base main",
       "objective": "OBJ-2",
-      "text": "WP-1: one PR from feature/874d-2-structured-reports-wp1, CI green on macOS, Linux and Windows, with the reviewer's verdict as a PR comment"
+      "text": "ST874d-1: one PR, titled 'ST874d-1: reference, schemas, templates, validation', from feature/874d-2-structured-reports-st874d-1, CI green on macOS, Linux and Windows, with the reviewer's verdict as a PR comment"
     },
     {
       "kind": "pr",
       "ref": "nobul-tech/aitools, base main",
       "objective": "OBJ-3",
-      "text": "WP-2: one PR from feature/874d-2-structured-reports-wp2, CI green on macOS, Linux and Windows, with the reviewer's verdict as a PR comment"
+      "text": "ST874d-2: one PR, titled 'ST874d-2: the harness text, in line with RFC 0011', from feature/874d-2-structured-reports-st874d-2, CI green on macOS, Linux and Windows, with the reviewer's verdict as a PR comment"
     },
     {
       "kind": "pr",
       "ref": "nobul-tech/aitools, base main",
       "objective": "OBJ-4",
-      "text": "WP-3: one PR from feature/874d-2-structured-reports-wp3, CI green on macOS, Linux and Windows, with the reviewer's verdict as a PR comment"
+      "text": "ST874d-3: one PR, titled 'ST874d-3: session DB, schema 5', from feature/874d-2-structured-reports-st874d-3, CI green on macOS, Linux and Windows, with the reviewer's verdict as a PR comment"
     },
     {
       "kind": "pr",
       "ref": "nobul-tech/aitools, base main",
       "objective": "OBJ-5",
-      "text": "WP-4: one PR from feature/874d-2-structured-reports-wp4, CI green on macOS, Linux and Windows, with the reviewer's verdict as a PR comment"
+      "text": "ST874d-4: one PR, titled 'ST874d-4: hooks, the SessionEnd job, the harvester', from feature/874d-2-structured-reports-st874d-4, CI green on macOS, Linux and Windows, with the reviewer's verdict as a PR comment"
     },
     {
       "kind": "pr",
       "ref": "nobul-tech/aitools, base main",
       "objective": "OBJ-6",
-      "text": "WP-5: one PR from feature/874d-2-structured-reports-wp5, CI green on macOS, Linux and Windows, with the reviewer's verdict as a PR comment"
+      "text": "ST874d-5: one PR, titled 'ST874d-5: the skills and readers that use the documents', from feature/874d-2-structured-reports-st874d-5, CI green on macOS, Linux and Windows, with the reviewer's verdict as a PR comment"
     },
     {
       "kind": "pr",
       "ref": "nobul-tech/aitools, base main",
       "objective": "OBJ-7",
-      "text": "WP-6: one PR from feature/874d-2-structured-reports-wp6, CI green on macOS, Linux and Windows, with the reviewer's verdict as a PR comment"
+      "text": "ST874d-6: one PR, titled 'ST874d-6: release', from feature/874d-2-structured-reports-st874d-6, CI green on macOS, Linux and Windows, with the reviewer's verdict as a PR comment"
     },
     {
       "kind": "aar",

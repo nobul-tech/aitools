@@ -10,8 +10,8 @@ Settle the design points issue #180 left to this RFC. **Scope**: The schema
 rules, the schema 4 to 5 migration and version skew, validation,
 cross-platform and security requirements, the delegation duties, and the
 points settled here. NOT the commander's decisions themselves, which this
-RFC cites and does not reopen (issue #180 section 1; appendix A shows where
-each is carried). NOT the work packages and batches (the plan). NOT the
+RFC cites and does not reopen (issue #180 section 1 and session 86d6da03;
+appendix A shows where each is carried). NOT the specified tasks and their batches (the plan). NOT the
 doctrine research (the issue comment "Doctrine behind the design").
 **Audience**: Whoever implements issue #180; every agent that writes or
 reads a brief, an AAR or a running estimate; the commander, reviewing the
@@ -50,18 +50,26 @@ v1.5 (2026-11-16), session dbd05b0c: consistency and formal register,
 reviewed line by line by mission 874d-11 (the relaunch of 874d-8, which an
 API safeguard stopped); its proposals are applied, and the session agent's
 own pass. Decisions D874d-75 to D874d-77 (L4523).
+v1.6 (2026-11-16), session 86d6da03: the specified task (ST) replaces the
+work package (WP) (D0036-3): its definition, its id `ST<sid4>-<n>` and its
+provenance in the mission command framework (section 2), its batch ids
+(3.8, S-27), and every plan reference renamed. The brief of the
+implementing mission keeps its provenance when another session carries it
+out (3.3.1a, D0036-2), and the derived `missions[]` finds such a brief by
+its mission name (3.5.4). Appendix A lists the decisions of session
+86d6da03; R0036-7 and R0036-8 are open (section 9).
 
 | Field | Value |
 |-------|--------|
 | **RFC** | 0011 |
 | **Title** | Structured running estimates, mission briefs and after action reviews |
-| **Version** | v1.5 |
-| **Author(s)** | Session agent dbd05b0c, with the commander (Jose) |
+| **Version** | v1.6 |
+| **Author(s)** | Session agents dbd05b0c and 86d6da03, with the commander (Jose) |
 | **Status** | Proposed |
 | **Created** | 2026-11-16 |
 | **Updated** | 2026-11-16 |
 | **Issue** | [nobul-tech/aitools#180](https://github.com/nobul-tech/aitools/issues/180), body v5.6 |
-| **Session** | dbd05b0c-2365-4159-9976-bc64a2af874d |
+| **Session** | dbd05b0c-2365-4159-9976-bc64a2af874d (v1.0 to v1.5); 86d6da03-bd3d-4a3b-9b47-bf0297936036 (v1.6) |
 | **Plan** | `plans/structured-reports/implementation-plan.md` |
 | **Related** | RFC 0005-v2 (session intelligence), RFC 0006 (delegation), RFC 0010 (Python and SQLite engineering) |
 
@@ -81,14 +89,14 @@ It specifies:
 - the delegation duties that make delegates produce and read these documents;
 - which documents are kept out of a project repo, since the aitools repo is public.
 
-It states as normative text the commander's decisions recorded in issue #180 (D874d-1 to D874d-77), and settles the points that issue left to this RFC (section 4).
+It states as normative text the commander's decisions recorded in issue #180 (D874d-1 to D874d-77) and in session 86d6da03 (D0036-1 to D0036-3, appendix A), and settles the points that issue left to this RFC (section 4).
 
 ---
 
 ## Status of this memo
 
 **Proposed.** This RFC is normative for the implementation of issue #180.
-- **The commander's decisions** cited as `D874d-<n>` are fixed. This RFC does not reopen them, and appendix A shows where each one is carried. The implementer MUST raise each point it finds unclear with the commander as a session RFI with a suggested answer.
+- **The commander's decisions** cited as `D874d-<n>` (issue #180) and `D0036-<n>` (session 86d6da03, appendix A) are fixed. This RFC does not reopen them, and appendix A shows where each one is carried. The implementer MUST raise each point it finds unclear with the commander as a session RFI with a suggested answer.
 - **Points this RFC settles itself** are marked "Settled by this RFC" and listed in section 4. They are written as a version and listed under "Review after" for the commander's review (D-DEL5).
 - **Precedence.** A mission brief is part of the delegation prompt and briefing, which D-DEL6 ranks above harness documents such as this RFC. A delegating agent MUST write each brief to agree with this RFC. A delegate that finds its brief in conflict with this RFC MUST follow the brief, which D-DEL6 ranks higher, and MUST report the conflict in its AAR as an ambiguity (3.4.5).
 
@@ -109,7 +117,7 @@ It states as normative text the commander's decisions recorded in issue #180 (D8
 ## 2. Terminology
 
 - **Requirements language:** The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED", "MAY", and "OPTIONAL" in this document are to be interpreted as described in BCP 14 ([RFC 2119](https://www.rfc-editor.org/rfc/rfc2119), [RFC 8174](https://www.rfc-editor.org/rfc/rfc8174)) when, and only when, they appear in all capitals, as shown here. In lowercase, these words have their ordinary English meaning. The capitalized NOT in the intent statement at the head of this document follows the intent-statement convention (`/intent-writing` skill) and is not a key word.
-- **Governed terms:** the `/glossary` skill defines these terms: mission brief (synonyms: brief, delegate briefing; D874d-18), after action review (AAR), running estimate and deliverable (D874d-37), deviation, process deviation, observation, ambiguity, assumption, fact, operational learning, proposal, blocker, session RFI, delegating agent, delegate, provenance. This RFC uses them in their glossary meanings. Where this RFC changes a meaning (`mission brief`, `observation`, `assumption`, `artifact`, the session RFI's id), plan batch 2.2 brings the glossary in line. The schema's nodes and fields have no glossary entries at present (D874d-66).
+- **Governed terms:** the `/glossary` skill defines these terms: mission brief (synonyms: brief, delegate briefing; D874d-18), after action review (AAR), running estimate and deliverable (D874d-37), deviation, process deviation, observation, ambiguity, assumption, fact, operational learning, proposal, blocker, session RFI, delegating agent, delegate, provenance, specified task (ST; D0036-3). This RFC uses them in their glossary meanings. Where this RFC changes a meaning (`mission brief`, `observation`, `assumption`, `artifact`, the session RFI's id), plan batch ST874d-2.2 brings the glossary in line. The schema's nodes and fields have no glossary entries at present (D874d-66).
 - **Artifact:** in the brief's `artifacts[]` and in `source.kind` `artifact`, a file that the harness or a mission uses: a harness artifact (rule, skill, hook, reference, registry) or a mission's working file (plan, specification, transcript, a file it changes). This is wider than the glossary's `artifact`, a harness file (D874d-67).
 - **`ASM-<n>` and `AMB-<n>` without a prefix:** in this RFC, such an id names an assumption or an ambiguity of issue #180 section 6, not an item id of a document (3.2.4).
 - **Session:** one Claude Code session, identified by its session id. `/clear` starts a new session (a new id, DB and estimate); `/resume` continues the same session (S-25).
@@ -117,16 +125,17 @@ It states as normative text the commander's decisions recorded in issue #180 (D8
 - **Delegate:** the glossary's `delegate`, at any level of the chain of command: any agent launched by another agent.
 - **`<repo>`:** the session's project root, recorded in the session DB at session start (`session.project_dir`). It is not the current working directory, which can change during a session (S-22).
 - **`<project>`:** the project name under which the session's record is filed. When `<repo>` is in a git repository and the common directory that `git -C <repo> rev-parse --path-format=absolute --git-common-dir` prints is named `.git`, it is the base name of that directory's parent, the main worktree, so a session started in a linked git worktree uses its project's name (for example `aitools`). Otherwise (`<repo>` is not in a git repository, or the common directory is not named `.git`, as in a submodule or a bare repository), it is the base name of `<repo>`.
-- **`<sid4>`:** the last four hex digits of the top-level session id (for example `874d`).
+- **`<sid4>`:** the last four hex digits of the top-level session id (for example `874d`). In a specified task's id, they are those of the session in which the specified task was created, which can be an earlier session (below).
 - **Session id prefix:** the first 10 characters of the session id, hyphen included (for example `dbd05b0c-2`). In the name of a file, `<session id prefix>` stands for that value, except after a prefix collision (3.6.2), when it stands for the full session id. The session DB, the export and the record (3.8) use the same value.
 - **`<mission name>`:** `<commanderid>-<n>-<slug>`, where `<commanderid>` is the last four hex digits of the delegating agent's own id (its session id for the session agent, its agentId for a delegate), `<n>` is a positive integer, and `<slug>` is one or more of the characters `A-Z`, `a-z`, `0-9` and `-` (`/delegate` naming conventions).
+- **Specified task (ST):** a clearly defined block of work that the commander or a delegating agent assigns to a mission, and that the mission must accomplish (D0036-3; the glossary's `specified task`). It groups the batches that ship together; in an aitools plan, each specified task ships as one PR, its deliverable. Its id is `ST<sid4>-<n>`, numbered as session RFIs and decisions are: `<sid4>` is the last four hex digits of the id of the session in which the specified task was created, and `<n>` rises through that session's specified tasks and is never reused. The id does not change when another session carries the task out. For a brief the session agent writes, `<sid4>` equals the `<commanderid>` that begins the brief's mission name and file name: the specified tasks of `874d-2-structured-reports-brief.json` are `ST874d-1` to `ST874d-6`. The number is an id, not a sequence; the plan states the order. A batch of a specified task is numbered `<specified task id>.<m>` (3.8). The specified task replaces the work package (WP), which is not used (D0036-3). Provenance: US Army doctrine, "specified task – (Army) A task specifically assigned to a unit by its higher headquarters. (FM 5-0)" (FM 1-02.1, *Operational Terms*, 30 May 2026, p. 83), adopted through the mission command framework (`reference/framework-mission-command.md` v1.1; `/frameworks` skill). It is written in full or as ST, never shortened to "task", a word that in Claude Code also names the todo-list and background-task tools (`TaskCreate`, `TaskList`, `TaskUpdate`, `TaskStop`).
 - **Session scratch directory:** `<repo>/.scratch/session-<session id>/` of the top-level session, written `<session scratch dir>` in path patterns.
 - **Session DB:** the SQLite file of one top-level session, `<repo>/.aitools/sessions/<session id prefix>.db` (3.6.1).
 - **Briefs directory:** `<repo>/briefs/`, the tracked directory that holds the mission briefs whose missions outlive the session that wrote them (3.3.1).
 - **Hand-back:** the final message of a delegate to its delegating agent, which is its AAR (D874d-47); not a `handoff` of a session (glossary).
 - **Schema 5 ships:** `aitools` has deployed, on the machine where the session runs, a `harness-db.py` that writes schema 5, together with the hooks that call it (3.6.12).
-- **Abbreviations:** AAR, after action review; AMB, ambiguity (the issue's id prefix); ASM, assumption (the issue's id prefix); BCP, Best Current Practice; CLI, command-line interface; DB, database; DDL, data definition language; hex, hexadecimal; id, identifier; JSON, JavaScript Object Notation; OL, operational learning (an item id prefix); PR, pull request; RFC, Request for Comments; RFI, request for information (a session RFI, in the glossary's sense); SHA, Secure Hash Algorithm (the identifier of a commit); SITREP, situation report; SPOTREP, spot report; URL, uniform resource locator; UTC, Coordinated Universal Time; WAL, write-ahead logging; WP, a work package of the plan (section 8). The doctrine references TC, ADP, FM and AR are the US Army's Training Circular, Army Doctrine Publication, Field Manual and Army Regulation.
-- **Identifier families:** `D874d-<n>` is a decision of the commander recorded in issue #180 (appendix A); `D-DEL<n>` is a decision of the delegation rule (`shared/rules/delegation.md`); `S-<n>` is a point settled by this RFC (section 4); `R<sid4>-<n>` is a session RFI (3.2.4); `L<n>` is line `<n>` of the transcript of session dbd05b0c. In running text, an id that cites its record is plain text; a pattern or a field value is in code format.
+- **Abbreviations:** AAR, after action review; AMB, ambiguity (the issue's id prefix); ASM, assumption (the issue's id prefix); BCP, Best Current Practice; CLI, command-line interface; DB, database; DDL, data definition language; hex, hexadecimal; id, identifier; JSON, JavaScript Object Notation; OL, operational learning (an item id prefix); PR, pull request; RFC, Request for Comments; RFI, request for information (a session RFI, in the glossary's sense); SHA, Secure Hash Algorithm (the identifier of a commit); SITREP, situation report; SPOTREP, spot report; ST, specified task (above); URL, uniform resource locator; UTC, Coordinated Universal Time; WAL, write-ahead logging. The doctrine references TC, ADP, FM and AR are the US Army's Training Circular, Army Doctrine Publication, Field Manual and Army Regulation.
+- **Identifier families:** `D874d-<n>` is a decision of the commander recorded in issue #180, and `D0036-<n>` one he made in session 86d6da03 (both in appendix A); `D-DEL<n>` is a decision of the delegation rule (`shared/rules/delegation.md`); `S-<n>` is a point settled by this RFC (section 4); `R<sid4>-<n>` is a session RFI (3.2.4); `ST<sid4>-<n>` is a specified task (above), and `<specified task id>.<m>` one of its batches (3.8); `L<n>` is line `<n>` of the transcript of session dbd05b0c, or of session 86d6da03 where the citation names that session. In running text, an id that cites its record is plain text; a pattern or a field value is in code format.
 - **Empty:** a string described as empty holds `""`; `null` MAY appear only in `provenance.written_by.mission` (3.3.3). A list node with no entries is `[]`; 3.3.2, 3.4.2 and 3.5.2 require every top-level key to be present.
 
 ---
@@ -219,7 +228,8 @@ objective  OBJ-n
 
 deviation  DEV-n                 acted on: done differently from what was given (D874d-22)
   from.kind          brief | order | plan | rule | spec | standard     (3.2.3)
-  from.ref           where: OBJ-2, a brief constraint, plans/x.md step 3, a rule file and section
+  from.ref           where: OBJ-2, a brief constraint, plans/x.md step 3 or a batch such as
+                     ST874d-3.4, a rule file and section
   from.text          what it said, verbatim
   text               what was done instead
   cause              initiative | blocker | error                      (3.2.3)
@@ -300,7 +310,7 @@ rfi  R<sid4>-<n>                 (D874d-41; a delegate's provisional id: 3.2.4)
 | `blocker` | The given course could not be followed; a denied write is a blocker. The agent that meets a blocker MUST report it, with a recommended course of action, as soon as it meets it, not only in its AAR (D-DEL9): a delegate sends it to its delegating agent (in Claude Code, with `SendMessage`), and the session agent MUST report it to the commander in its reply |
 | `error` | Done differently by mistake, and found later |
 
-3.2.4. Item ids are `<TYPE>-<n>`, where `<TYPE>` stands for the item type: `OBJ` (objective), `DEV` (deviation), `OBS` (observation), `AMB` (ambiguity), `ASM` (assumption), `FACT` (fact), `OL` (operational learning) or `PRO` (proposal). Session RFIs are `R<sid4>-<n>` and decisions `D<sid4>-<n>` (D874d-41). *Settled by this RFC (S-7, S-23):*
+3.2.4. Item ids are `<TYPE>-<n>`, where `<TYPE>` stands for the item type: `OBJ` (objective), `DEV` (deviation), `OBS` (observation), `AMB` (ambiguity), `ASM` (assumption), `FACT` (fact), `OL` (operational learning) or `PRO` (proposal). Session RFIs are `R<sid4>-<n>` and decisions `D<sid4>-<n>` (D874d-41). A specified task's id, `ST<sid4>-<n>` (section 2; D0036-3), is not an item id: no document node lists specified tasks, `harness-db.py` assigns no ST ids, and a plan or a brief names them in text (S-27). *Settled by this RFC (S-7, S-23):*
 - In the session DB (schema 5), `harness-db.py` MUST assign the id on insert, inside the insert's `BEGIN IMMEDIATE` transaction (3.6.6), so parallel writers never collide: `<TYPE>-<n>`, `R<sid4>-<n>` for an item of type `rfi` and `D<sid4>-<n>` for an item of type `decision`, where `<n>` is one more than the highest `<n>` already in the DB with that prefix (1 for the first). A writer that records a decision already numbered elsewhere (its record id: a `D874d-<n>` of the issue, a `D-DEL<n>`) passes that id with `--id`; the insert exits 1 when the id is taken.
 - In a document, the writer MUST number the items of each type consecutively from 1 (`OBS-1`, `OBS-2`, ...), except that it MAY keep the ids of the record it copies items from, such as the issue's `ASM-<n>`, for traceability.
 - When a document's items are written into the DB (3.4.8), `harness-db.py` MUST assign each a new id, MUST keep the document's id in `fields.doc_id`, and MUST rewrite each ref that points to an item of the same document to that item's new id; it MUST keep unchanged a ref to an id outside the document (a brief's objective, a session RFI, a decision).
@@ -339,7 +349,7 @@ The file name is the same in both locations.
 
 3.3.1a. A brief in the briefs directory is subject to these additional rules:
 - The agent that changes it MUST write each change as a new version (D-DEL5) and commit it. Whether such a commit goes to `main` directly, as plans do, or through a PR is deferred by the commander (D874d-76); until the commander decides, the commit reaches `main` the way the commander orders for that change, or else through a PR (aitools `CLAUDE.md`, "Channel exception"). A version MUST reach `main` before any delegate is launched from it; if it cannot, the agent MUST NOT launch a delegate from it and MUST report the failure to the commander.
-- An agent that launches a delegate from it in a later session MUST first write a new version whose `provenance` (`session_id`, `session_db`, `session_scratch`, `written_by`, `chain_of_command`, `created_at`) describes the launching session, so that the delegate reports into that session.
+- An agent that launches a delegate from it in a later session MUST first write a new version whose `provenance` (`session_id`, `session_db`, `session_scratch`, `written_by`, `chain_of_command`, `created_at`) describes the launching session, so that the delegate reports into that session, unless the commander orders the brief to keep its provenance. He ordered this for `briefs/874d-2-structured-reports-brief.json`: its later versions keep the provenance of session dbd05b0c, and a later session may carry the mission out itself, with no delegate (D0036-2).
 - It carries the commander's words verbatim, and committing it to a public repository publishes them. The commander's order to place a brief there constitutes acceptance of that disclosure (section 7).
 
 3.3.2. The brief MUST be one JSON object whose top-level keys are exactly these, each present even when its list is empty (`[]`): `provenance`, `identity`, `intent`, `objectives`, `constraints`, `assumptions`, `decisions`, `operational_learning`, `artifacts`, `deliverables`.
@@ -471,10 +481,10 @@ operational_learning[], proposals[], rfis[]: every agent's items of these types,
 
 3.5.3. Once schema 5 ships, the session agent MUST review `intent`, `main_effort`, `assessment` and the session's `objectives` at each prompt turn and after each hand-back, and MUST write each one whose value has changed. *Settled by this RFC (S-2):*
 - `intent`, `main_effort` and `assessment` are columns of the `session` table (`main_effort` is stored in the v4 column `schwerpunkt`, the German word for the main effort, which keeps its name because RFC 0010 never removes columns; `intent` and `assessment` are added), set with `harness-db.py estimate set`, which writes nothing when the value is unchanged; each change adds a `version_history` row whose `version` is the highest plus 1 and whose `changes` names the column and its new value.
-- Plan batch 2.3 adds this duty to item 12 of the prompt-turn checklist.
+- Plan batch ST874d-2.3 adds this duty to item 12 of the prompt-turn checklist.
 - Before schema 5 ships, the session agent writes none of them to the DB (3.6.11).
 
-3.5.4. `missions[]` MUST be derived on export (`harness-db.py export`); writers MUST NOT write it. It has exactly one entry per mission name found in any of: each `*-brief.json` in the session scratch directory; each brief in the briefs directory whose `provenance.session_id` is the session's id (3.3.1a); each `*-brief.json` in any other `.scratch/session-*/` directory under `<repo>`, at any depth, whose `provenance.session_id` is the session's id (3.3.8); and each mission name on the session's rows. Each entry is `{mission, brief, agent_id, objectives[] {id, status}}`: `brief` is the path found (`""` when rows exist but no brief is found); `agent_id` and the statuses are read from the rows whose `mission` is that name (latest versions, 3.2.5), `agent_id` `""` when there are none.
+3.5.4. `missions[]` MUST be derived on export (`harness-db.py export`); writers MUST NOT write it. It has exactly one entry per mission name found in any of: each `*-brief.json` in the session scratch directory; each brief in the briefs directory whose `provenance.session_id` is the session's id (3.3.1a); each `*-brief.json` in any other `.scratch/session-*/` directory under `<repo>`, at any depth, whose `provenance.session_id` is the session's id (3.3.8); and each mission name on the session's rows. Each entry is `{mission, brief, agent_id, objectives[] {id, status}}`: `brief` is the path found, and for a mission name found only on the rows, `<repo>/briefs/<mission name>-brief.json` when that file exists, whatever its `provenance.session_id`, since a brief there can keep the provenance of the session that wrote it (3.3.1a, D0036-2); `brief` is `""` when rows exist but no brief is found; `agent_id` and the statuses are read from the rows whose `mission` is that name (latest versions, 3.2.5), `agent_id` `""` when there are none.
 
 3.5.5. At session end, one detached job, started by `harness-db-sessionend.sh`, MUST run these steps in this order; when the session DB is missing or below schema 5, it MUST run none of them and record that as a failed step (below):
 1. export the estimate to `<repo>/.aitools/channel/estimates/<session id prefix>.json`, untracked (D874d-44, D874d-52): the aitools `.gitignore` MUST list `.aitools/channel/estimates/`, and in other repos the exclude entry for `.aitools/` covers it (section 7);
@@ -488,7 +498,7 @@ The job MUST also:
 
 The next session's catch-up (`session-catchup.sh`) MUST, for every session DB in `<repo>/.aitools/sessions/` other than the starting session's, recover what is missing: the export when it is absent or older than the DB; the record when it differs from the export; the commit and the push when the record is uncommitted or the dotprofile's `main` is ahead of its upstream. The job and the catch-up MUST record each failed step, with the session id and the error, in `~/.aitools/logs/harness-db-sessionend.log`, and the next SessionStart output MUST print one line for each failed step the catch-up could not recover, in addition to the log entry. Because the date is the start date, a resumed session (`/resume`) rewrites the same record file. *Settled by this RFC (S-21, S-22).*
 
-3.5.6. When the SessionEnd hook switches to the per-session export (plan WP-3), it MUST stop writing the single `.aitools/channel/running-estimate.json`. That file and `.aitools/templates/mission-running-estimate.json` are retired (S-13). The implementer MUST repoint to the per-session export, or update, every reader and description of the old file: `scripts/generate-dashboard.py`, `scripts/aitools-dashboard.sh/.ps1`, `shared/hooks/dashboard-serve.sh`, the `/mission-control` and `/aitool-continue` skills, `.claude/rules/aitools-workspace.md` and `reference/artifact-harvesting.md` (D874d-61). The implementer MUST remove the tracked file and its template in plan WP-5, and MUST take no earlier action on the copy already published (D874d-54).
+3.5.6. When the SessionEnd hook switches to the per-session export (plan specified task ST874d-3), it MUST stop writing the single `.aitools/channel/running-estimate.json`. That file and `.aitools/templates/mission-running-estimate.json` are retired (S-13). The implementer MUST repoint to the per-session export, or update, every reader and description of the old file: `scripts/generate-dashboard.py`, `scripts/aitools-dashboard.sh/.ps1`, `shared/hooks/dashboard-serve.sh`, the `/mission-control` and `/aitool-continue` skills, `.claude/rules/aitools-workspace.md` and `reference/artifact-harvesting.md` (D874d-61). The implementer MUST remove the tracked file and its template in plan specified task ST874d-5, and MUST take no earlier action on the copy already published (D874d-54).
 
 ### 3.6 Store (session DB, schema 5)
 
@@ -606,6 +616,8 @@ The implementer MUST NOT add a third-party validator. For an AAR, `validate` rea
 | Record (dotprofile, tracked) | `<dotprofile>/running-estimates/<project>/<YYYY-MM-DD>_<session id prefix>.json` (session start date, UTC) | `running-estimates/aitools/2026-11-15_dbd05b0c-2.json` |
 | Session RFI | `R<sid4>-<n>`; a delegate's provisional RFI `R<mission name>-<n>` | `R874d-28` |
 | Decision | `D<sid4>-<n>` | `D874d-53` |
+| Specified task | `ST<sid4>-<n>`, where `<sid4>` comes from the session in which it was created (section 2; D0036-3) | `ST874d-3` |
+| Batch of a specified task | `<specified task id>.<m>`, where `<m>` is a number from 0 up, with a letter appended to a batch inserted between two others or split into parts | `ST874d-3.4b`, `ST874d-4.2a` |
 
 The directories and files the harness creates MUST NOT have spaces in their names (D874d-53). The roots it is given, `<repo>` and the dotprofile path, can contain spaces, so every script MUST quote them where it expands them. *Settled by this RFC (S-22).*
 
@@ -626,7 +638,7 @@ The directories and files the harness creates MUST NOT have spaces in their name
 
 3.9.3. The delegation guards (`delegation-duty-guard.sh`, `workflow-delegation-guard.sh`) MUST check that a delegation prompt contains an absolute path ending in `-brief.json` and the words "read your mission brief in full" (case-insensitive), the instruction of 3.3.5 (D874d-27), in observe mode first (`.claude/rules/hook-rollout.md`). When the prompt gives a brief path, they score `/delegate` elements 2 and 4 from the brief's `artifacts[]` and `operational_learning[]`.
 
-3.9.4. At v1.5 of this RFC, the working copies of `shared/rules/delegation.md` (D-DEL10) and `shared/skills/delegate/SKILL.md` name the brief `<sid4>_<mission name>-brief.md` in Markdown and do not say that the hand-back is JSON. Plan WP-2 brings them in line with this RFC (D874d-49).
+3.9.4. At v1.6 of this RFC, `shared/rules/delegation.md` (D-DEL10) and `shared/skills/delegate/SKILL.md`, on `main` since commit 311ad1ff (plan gate G1), name the brief `<sid4>_<mission name>-brief.md` in Markdown and do not say that the hand-back is JSON. Plan specified task ST874d-2 brings them in line with this RFC (D874d-49).
 
 ---
 
@@ -662,6 +674,7 @@ Each point below is decided here, not by the commander, and is listed under "Rev
 | S-24 | Credentials in verbatim quotes | Replaced by `[redacted]`, the one permitted change (3.2.1) | The verbatim rule and the no-secrets rule otherwise conflict |
 | S-25 | What a session is | One Claude Code session, identified by its session id; `/clear` starts a new session, `/resume` continues it (section 2) | SessionEnd fires on both |
 | S-26 | The structure of a deliverable (D874d-70: "structured and match the RFC") | One shape, `{kind, ref, text}`, in the brief (with the `objective` it serves) and in an objective's `deliverables[]`; the AAR is always one (3.2.6) | One definition serves what is asked and what is produced; a delegating agent checks each `ref` it receives |
+| S-27 | Specified task ids in the documents and the store, and batch ids | An `ST<sid4>-<n>` id is not an item id: no document node lists specified tasks, and the DB assigns no ST ids; a plan or a brief names them in text. A batch is `<specified task id>.<m>` (3.2.4, 3.8) | The commander fixed the specified task's id (D0036-3); the batches needed ids that carry their specified task's id, since the specified task's number no longer starts a bare batch number such as 2.2 |
 
 ---
 
@@ -690,7 +703,7 @@ Each point below is decided here, not by the commander, and is listed under "Rev
 - **`harness-db.py`:** standard library only. Its header requires Python 3.10 or later. RFC 0010 section 11 gives 3.8; the floor stated in the code, 3.10, applies. Hooks find Python as `python3`, then `python` (RFC 0010 section 6).
 - **Hooks:** bash on every platform (`.claude/rules/cross-platform.md`, "Hook portability"). A hook MUST exit 0 when Python or the DB is missing (RFC 0010 section 8).
 - **Paths:** the harness creates no names with spaces, and every script quotes the roots it is given (3.8).
-- **The detached SessionEnd job** uses the same detachment as `session-archive.sh`. The implementer MUST verify on Windows (plan batch 4.3) that it outlives Claude Code there, and MUST NOT assume it.
+- **The detached SessionEnd job** uses the same detachment as `session-archive.sh`. The implementer MUST verify on Windows (plan batch ST874d-4.3) that it outlives Claude Code there, and MUST NOT assume it.
 - **Finding a delegate's agentId:** verified for Claude Code only (D874d-33). In Claude Code web, delegates cannot delegate further (nesting depth 1), but briefs and AARs still apply. Cursor harnesses are not yet examined (section 8).
 
 ---
@@ -699,7 +712,7 @@ Each point below is decided here, not by the commander, and is listed under "Rev
 
 - **The aitools repo is public** (`gh repo view`: visibility PUBLIC). Briefs, AARs, running estimates and copies of transcripts, prompts and issue bodies carry the commander's words verbatim and the session's content. An agent MUST NOT commit them to a project repo, with one exception: a brief the commander orders into the briefs directory (3.3.1, 3.3.1a; D874d-72 to D874d-74).
 - **The project-repo export stays untracked; the record goes to the commander's dotprofile** (D874d-52). The dotprofile already receives the full session transcripts (`ait-harvest.py archive`), so the record adds no new kind of exposure there.
-- **Existing exposure.** At v1.5 of this RFC, the single export `.aitools/channel/running-estimate.json` is tracked: last committed in `5d8fa521` (2026-11-15), holding one observation. `harvesting/` holds tracked files whose names show session content, among them prompts, AARs, briefs and issue bodies. The commander decided that this work takes no action on them (D874d-54). The old export stops being written in plan WP-3 and is removed in WP-5 (3.5.6). A history rewrite is destructive, and an agent MUST NOT rewrite history without the commander's order.
+- **Existing exposure.** At v1.6 of this RFC, the single export `.aitools/channel/running-estimate.json` is tracked: last committed in `5d8fa521` (2026-11-15), holding one observation. `harvesting/` holds tracked files whose names show session content, among them prompts, AARs, briefs and issue bodies. The commander decided that this work takes no action on them (D874d-54). The old export stops being written in plan specified task ST874d-3 and is removed in ST874d-5 (3.5.6). A history rewrite is destructive, and an agent MUST NOT rewrite history without the commander's order.
 - **Harvester (S-14).** The SessionEnd and SessionStart harvester copies every non-ephemeral top-level file of a session's scratch directory into the tracked `harvesting/`. Among `.json` files it exempts only `package-lock*`, `node_modules*`, `tsconfig*` and `*.config.json` (`ait-harvest.py` `_is_ephemeral`).
   - It MUST treat `*-brief.json` and `*-aar.json` as ephemeral (`_is_ephemeral` already treats `*.tmp` so).
   - An agent that saves a copy of a transcript, a prompt or an issue body in a scratch directory MUST give it a name ending in `.tmp`.
@@ -711,19 +724,19 @@ Each point below is decided here, not by the commander, and is listed under "Rev
 
 ## 8. Implementation
 
-The plan, `plans/structured-reports/implementation-plan.md`, splits the work into batches of two or three files, each with its verification:
+The plan, `plans/structured-reports/implementation-plan.md`, splits the work into specified tasks (section 2), each shipped as one PR, and each specified task into batches of two or three files, each with its verification. The specified tasks were created in session dbd05b0c, so their ids carry `874d` (D0036-3):
 
-| WP | What |
+| Specified task | What |
 |---|---|
-| WP-0 | This RFC and the plan, on main (D874d-59, D874d-69); the findings of four verifiers (874d-3 to 874d-6) and three language reviewers (874d-7, 874d-9, 874d-11) applied; no separate verdict is kept (D874d-68) |
-| WP-1 | Reference, schemas, templates, and the `validate` verb |
-| WP-2 | The harness text brought in line (D874d-49) |
-| WP-3 | Session DB schema 5: migration, views, version skew, the hooks' switch to `--db` |
-| WP-4 | Delegation-guard checks, the AAR check, the SessionEnd job, the harvester exclusion |
-| WP-5 | The skills and readers that use the documents; the old export retired |
-| WP-6 | Release, the glossary check, and the doctrine adoption through `/frameworks` |
+| The RFC and the plan (done; no specified task id) | This RFC and the plan, on main (D874d-59, D874d-69); the findings of four verifiers (874d-3 to 874d-6) and three language reviewers (874d-7, 874d-9, 874d-11) applied; no separate verdict is kept (D874d-68) |
+| ST874d-1 | Reference, schemas, templates, and the `validate` verb |
+| ST874d-2 | The harness text brought in line (D874d-49) |
+| ST874d-3 | Session DB schema 5: migration, views, version skew, the hooks' switch to `--db` |
+| ST874d-4 | Delegation-guard checks, the AAR check, the SessionEnd job, the harvester exclusion |
+| ST874d-5 | The skills and readers that use the documents; the old export retired |
+| ST874d-6 | Release, the glossary check, and the doctrine adoption through `/frameworks` |
 
-The implementing mission's brief is `briefs/874d-2-structured-reports-brief.json`, placed in the briefs directory on the commander's order (D874d-71). The mission launches only on the commander's order (D874d-45).
+The implementing mission's brief is `briefs/874d-2-structured-reports-brief.json`, placed in the briefs directory on the commander's order (D874d-71). The mission launches only on the commander's order (D874d-45, D0036-1). The session agent of a later session may carry it out itself, with no delegate, from the same brief (D0036-2).
 
 **Out of scope:**
 - the `/debrief`, `/brief` and `/channel` skills (D874d-11);
@@ -734,24 +747,25 @@ The implementing mission's brief is `briefs/874d-2-structured-reports-brief.json
 
 ## 9. Open questions
 
-None open. R874d-29 to R874d-33 were answered on L3394 (D874d-54 to D874d-58), R874d-40 to R874d-43 on L3479 (D874d-66 to D874d-69), R874d-44 and R874d-45 on L4045 (D874d-71 to D874d-74), and R874d-46 to R874d-48 on L4523 (D874d-75 to D874d-77). The other points of section 4 remain subject to the commander's review (D-DEL5). The implementer MUST raise each point it finds unclear with the commander as a session RFI with a suggested answer.
+Two points of v1.6 are open with the commander (session 86d6da03): R0036-7, the `<sid4>` of a specified task created in a brief that a delegate writes, whose file name begins with the delegate's own four hex digits, not the session's; and R0036-8, whether the documents' schema records specified tasks (today a brief records each as an objective, S-27). Answered: R874d-29 to R874d-33 on L3394 (D874d-54 to D874d-58), R874d-40 to R874d-43 on L3479 (D874d-66 to D874d-69), R874d-44 and R874d-45 on L4045 (D874d-71 to D874d-74), and R874d-46 to R874d-48 on L4523 (D874d-75 to D874d-77); in session 86d6da03, R0036-1 on L95 (D0036-2), and R0036-3 to R0036-6, on the name that replaces the work package, on L243, L249, L288 and L518 (D0036-3). The other points of section 4 remain subject to the commander's review (D-DEL5). The implementer MUST raise each point it finds unclear with the commander as a session RFI with a suggested answer.
 
 ---
 
 ## 10. References
 
 - **Issue** nobul-tech/aitools#180, body v5.6: decisions D874d-1 to D874d-77 (section 1), naming (section 2), schema (section 3), store (section 4), implementation (section 7). Comments: the commander's answers (2026-11-15), the March history, "Doctrine behind the design", "Answers recorded", "Sections 5 and 6 (moved in v5.4)" (the standards and specs, and the assumptions and ambiguities), "Body version history (moved in v5.5)" and "Commander's decisions on the analysis type and the AAR node (2026-11-15)".
+- **Session 86d6da03:** its transcript, `~/.claude/projects/-Users-new-jose-repos-aitools/86d6da03-bd3d-4a3b-9b47-bf0297936036.jsonl` (macOS); the commander's prompts on L95, L243, L249, L288 and L518 (D0036-1 to D0036-3).
 - **RFCs:** 0005-v2 (session intelligence), 0006 (delegation, P1 briefing-first), 0010 (Python and SQLite engineering).
 - **Harness:** `shared/rules/delegation.md`, `shared/skills/delegate/SKILL.md`, `reference/framework-intelligence-types.md`, the glossary (`/glossary`), `reference/prompt-turn-checklist.md`, `reference/tool-ops-claude-code.md` (item #35).
 - **Code:** `scripts/harness-db.py`, `scripts/ait-harvest.py`, `scripts/generate-dashboard.py`, `shared/hooks/harness-db-sessionstart.sh`, `harness-db-sessionend.sh`, `session-archive.sh`, `session-catchup.sh`, `intelligence-stop.py`, `dashboard-serve.sh`, `delegation-duty-guard.sh`, `workflow-delegation-guard.sh`.
 - **Verifiers' reports** (session dbd05b0c, 2026-11-16), as AAR files in the session scratch directory (untracked, on the machine that ran the session, S-14): `874d-3-spec-verify-aar.json`, `874d-4-adversarial-aar.json`, `874d-5-brief-verify-aar.json`, `874d-6-standards-verify-aar.json`; the language reviewers' `874d-7-normative-language-aar.json`, `874d-9-implementer-read-aar.json` and `874d-11-consistency-aar.json`; and `874d-10-consistency-forensics-aar.json`, on why mission 874d-8 stopped.
-- **Doctrine:** TC 7-0.1 (2025), ADP 5-0 (2019), FM 5-0 (2024), ADP 6-0 (2026), FM 6-99 (2021), AR 11-33 (2022); report of mission 874d-1-aar-doctrine (`.aitools/channel/handoffs/2026-11-15_dbd05b0c-missions/874d-1-aar-doctrine/874d-1-aar-doctrine-report.md`, untracked at v1.4).
+- **Doctrine:** TC 7-0.1 (2025), ADP 5-0 (2019), FM 5-0 (2024), ADP 6-0 (2026), FM 6-99 (2021), AR 11-33 (2022), FM 1-02.1 (30 May 2026: `specified task`, `task`; read by session 86d6da03, quoted in `reference/framework-mission-command.md` v1.1); report of mission 874d-1-aar-doctrine (`.aitools/channel/handoffs/2026-11-15_dbd05b0c-missions/874d-1-aar-doctrine/874d-1-aar-doctrine-report.md`, untracked at v1.4).
 
 ---
 
 ## Appendix A. Where each decision is carried
 
-This table lists every decision of issue #180 section 1 (D874d-1 to D874d-77). A note writes "-22" for D874d-22. "Superseded" means a newer decision replaced it, in whole or in part. "Session only" means it governed the session's own work, not the implementation.
+The first table lists every decision of issue #180 section 1 (D874d-1 to D874d-77); the second, the decisions the commander made in session 86d6da03 (D0036-1 to D0036-3). A note writes "-22" for D874d-22. "Superseded" means a newer decision replaced it, in whole or in part. "Session only" means it governed the session's own work, not the implementation.
 
 | Decision | Carried in | Note |
 |---|---|---|
@@ -803,7 +817,7 @@ This table lists every decision of issue #180 section 1 (D874d-1 to D874d-77). A
 | D874d-46 | | Session only (issue v4.1) |
 | D874d-47 | 3.2.6, 3.4.1, 3.4.7 | |
 | D874d-48 | 3.6.1 | |
-| D874d-49 | 3.9.4, section 8 (WP-2) | |
+| D874d-49 | 3.9.4, section 8 (ST874d-2) | |
 | D874d-50 | 3.2.6, 3.4.1 | |
 | D874d-51 | 3.5.5 | |
 | D874d-52 | 3.5.5, 3.6.8, section 7 | |
@@ -813,17 +827,17 @@ This table lists every decision of issue #180 section 1 (D874d-1 to D874d-77). A
 | D874d-56 | 3.2.2 (S-19) | |
 | D874d-57 | 3.6.9, section 5 | |
 | D874d-58 | section 7 | |
-| D874d-59 | section 8 (WP-0) | Session only (commit 419d32dd) |
+| D874d-59 | section 8 (the RFC and the plan) | Session only (commit 419d32dd) |
 | D874d-60 | | The plan ("How every batch is shipped") |
-| D874d-61 | 3.5.6 | And plan WP-2, WP-5 |
+| D874d-61 | 3.5.6 | And plan ST874d-2, ST874d-5 |
 | D874d-62 | | Superseded by -66 |
 | D874d-63 | | Session only (issue body v5.3) |
 | D874d-64 | 3.1.3, 3.3.3, 3.3.5, 3.9.1, 3.9.2 | |
 | D874d-65 | 3.1.2, 3.1.3, 3.2.1a, 3.3.2, 3.3.3, 3.3.3a, 3.3.5, 3.7.2, section 5 | |
 | D874d-66 | section 2, D874d-30 above | |
-| D874d-67 | section 2 | And plan batch 2.2 |
-| D874d-68 | section 8 (WP-0) | |
-| D874d-69 | section 8 (WP-0) | Session only |
+| D874d-67 | section 2 | And plan batch ST874d-2.2 |
+| D874d-68 | section 8 (the RFC and the plan) | |
+| D874d-69 | section 8 (the RFC and the plan) | Session only |
 | D874d-70 | 3.1.2, 3.1.3, 3.2.1a, 3.2.6, 3.3.2, 3.3.3, 3.3.5, 3.4.7, 3.7.2, section 5 | |
 | D874d-71 | section 8 | |
 | D874d-72 | section 2, 3.3.1, 3.3.1a, 3.8, section 7 | |
@@ -832,3 +846,11 @@ This table lists every decision of issue #180 section 1 (D874d-1 to D874d-77). A
 | D874d-75 | | Session only (the relaunch of the consistency review) |
 | D874d-76 | 3.3.1a | |
 | D874d-77 | | Session only (the false-positive report) |
+
+Decisions of session 86d6da03, with the commander's words verbatim (`L<n>` is a line of that session's transcript):
+
+| Decision | Decision and the commander's words | Carried in |
+|---|---|---|
+| D0036-1 | The implementing mission is not launched yet. L95: "dont launch the missin yet." | section 8 |
+| D0036-2 | The mission is carried out from the same brief, `briefs/874d-2-structured-reports-brief.json`, which keeps the provenance of session dbd05b0c; the session agent of a later session may carry it out itself, with no delegate. L95: "we dont want to launch a new brief, we will be using the the same brief, we may be the executing agent on the mission (no delegate). rfc 1) no" (answering R0036-1, which proposed a new version describing session 86d6da03) | 3.3.1a, section 8 |
+| D0036-3 | The specified task (ST) replaces the work package (WP); its id is `ST<sid4>-<n>`, with `<sid4>` from the session in which it was created. L243: "i hate WP, we are not using it."; L518: "Specified task it is, thats a decisioin.  ST for short.  same ST<SID4>-<num> naming convention as session RFIs and Decisions.  the sid4 comes from the sessionid where that task was originally created, should match the briefing file name." | section 2, 3.2.4, 3.8, section 8, S-27 |

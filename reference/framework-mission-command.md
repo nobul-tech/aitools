@@ -3,17 +3,23 @@
 **Intent**: **Purpose**: Record the verified sources behind the mission
 command framework and how it maps to items 2 and 4 of the prompt-turn
 checklist (fix the meaning of the order; resolve what you can with
-disciplined initiative), so an agent can see where those items come from.
-**Scope**: Source discipline, verified citations with verbatim quotes, the
-mapping to items 2 and 4, what was not adopted, maintenance. NOT the checklist
-items themselves (`@reference/prompt-turn-checklist.md` items 2 and 4). NOT the
-surfacing of open points (`@reference/framework-request-for-information.md`).
+disciplined initiative) and to the specified task, the unit of work a plan
+or mission brief assigns to a mission, so an agent can see where those come
+from. **Scope**: Source discipline, verified citations with verbatim quotes,
+the mapping to items 2 and 4 and to the specified task, what was not
+adopted, maintenance. NOT the checklist items themselves
+(`@reference/prompt-turn-checklist.md` items 2 and 4). NOT the specified
+task's naming rules (RFC 0011 section 2 and 3.8; the `/glossary` skill). NOT
+the surfacing of open points (`@reference/framework-request-for-information.md`).
 NOT the registry entry (`/frameworks` skill). **Audience**: Agents running
-checklist items 2 and 4 who need the why; the agent that builds the
-prompt-turn hook; agents maintaining framework entries; the commander,
-reviewing the adoption.
+checklist items 2 and 4 who need the why; agents writing plans and mission
+briefs; the agent that builds the prompt-turn hook; agents maintaining
+framework entries; the commander, reviewing the adoption.
 
 v1.0 (2026-11-13)
+v1.1 (2026-11-16), session 86d6da03: the specified task adopted
+(commander, L518 of the session's transcript: "Specified task it is, thats
+a decisioin."), with its FM 1-02.1 citations.
 
 ## Source Discipline
 
@@ -97,6 +103,25 @@ https://armypubs.army.mil/epubs/DR_pubs/DR_a/ARN46659-FM_1-02.1-000-WEB-1.pdf
   commander immediately after the operation order is given to confirm
   understanding. (ADP 5-0)"
 
+### Specified task
+
+FM 1-02.1 *Operational Terms*, 30 May 2026 (the same PDF), read in a browser
+(chrome-devtools, text extracted with pdf.js) on 2026-11-16 by session
+86d6da03. Page numbers are the printed ones:
+
+- p. 90: "task – (DOD) A clearly defined action or activity specifically
+  assigned by an appropriate authority to an individual or organization, or
+  derived during mission analysis, that must be accomplished. (JP 1,
+  Volume 1)"
+- p. 83: "specified task – (Army) A task specifically assigned to a unit by
+  its higher headquarters. (FM 5-0)"
+- p. 47: "implied task – (Army) A task that must be performed to accomplish
+  a specified task or mission but is not stated in the higher headquarters’
+  order. (FM 5-0)"
+- p. 35: "essential task – (Army) A specified or implied task that must be
+  executed to accomplish the mission.. (FM 5-0)" (the double period is in
+  the source)
+
 ## How We Adopted It
 
 | Doctrine | Harness artifact |
@@ -106,6 +131,7 @@ https://armypubs.army.mil/epubs/DR_pubs/DR_a/ARN46659-FM_1-02.1-000-WEB-1.pdf
 | Report the new situation when able (1-77, 1-81, 1-90) | Item 4 "Report every deviation"; item 5 surfaces what stays open, with a suggested answer |
 | Act "without asking for further guidance" (1-78) | Item 4 "Do not ask what you can find out" |
 | Independence is not acting without authority (Handbuch, p. 49) | Item 4 "Some choices are not yours": intent, priority, preference and hard-to-reverse actions belong to the commander |
+| Specified task: assigned by the higher headquarters (FM 5-0, via FM 1-02.1) | The specified task (ST), the block of work a plan or mission brief assigns to a mission, numbered `ST<sid4>-<n>` (RFC 0011 section 2 and 3.8; glossary term `specified task`). It replaces the work package (WP) of the plans (commander, 2026-11-16) |
 
 The commander's direct order on the prompt turn supersedes every other order
 (checklist item 12, "How to respond").
@@ -114,13 +140,20 @@ Not adopted: the German *Rückfragepflicht* (duty to ask back). No public
 authoritative source was found (the Handbuch Innere Führung has no hit; HDv
 100/100 *Truppenführung* is not public), so it is not cited. Risk acceptance,
 competence and mutual trust, the other principles of mission command, are not
-mapped to a checklist item.
+mapped to a checklist item. The implied task and the essential task are
+recorded above as the doctrine around the specified task, and are not
+adopted as harness terms. The plain word "task" is not adopted either: in
+Claude Code it also names the todo-list and background-task tools
+(`TaskCreate`, `TaskList`, `TaskUpdate`, `TaskStop`).
 
 ## How It's Maintained
 
 - Re-verify the ADP 6-0 and FM 1-02.1 citations when a new edition supersedes
   them (armypubs.army.mil records the supersession).
 - When checklist items 2 or 4 change, update the table above and the
+  registry entry together.
+- When RFC 0011 changes the specified task or its id, update its row above,
+  the glossary terms `specified task` and `ST` (`/glossary` skill) and the
   registry entry together.
 - A source for *Rückfragepflicht* found later is added here first, then to
   item 2's "Adopted from" line.
@@ -129,6 +162,11 @@ mapped to a checklist item.
 
 - `@reference/prompt-turn-checklist.md` items 2 and 4 (and their "Adopted
   from" lines)
+- `@rfcs/RFC-0011-structured-reports.md` section 2 and 3.8 (the specified
+  task and its id)
+- `@plans/structured-reports/implementation-plan.md` (specified tasks
+  ST874d-1 to ST874d-6)
+- Glossary terms `specified task` and `ST` (`/glossary` skill)
 - This file
 - Registry entry "Mission command" (`/frameworks` skill)
 
@@ -139,4 +177,4 @@ mapped to a checklist item.
   `@reference/framework-perspective-based-reading.md`
 - Adoption lifecycle: `@reference/framework-adoption.md`
 - Governed terms: `/glossary` skill (disciplined initiative, thinking along,
-  mission order)
+  mission order, specified task)

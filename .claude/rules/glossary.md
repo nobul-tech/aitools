@@ -147,6 +147,8 @@ mission order
 removed
 retired
 situation assessment
+specified task
+ST
 thinking along
 trigger directive
 
