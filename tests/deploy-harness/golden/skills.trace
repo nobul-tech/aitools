@@ -214,7 +214,12 @@ s3	shared
 ./s3.bak.TS/SKILL.md
 ./s3/SKILL.md
 == invalid rc=0
-WARN|harness files|not a dir: zz
+WARN|harness files|retired skill zz: <TMP>/skills/home/.aitools/skills/zz is not a directory -- left alone
+WARN|harness files|Skills manifest <TMP>/skills/home/.aitools/skills/.aitools-skills-manifest: line ignored: ../evil<TAB>shared
+WARN|harness files|Skills manifest <TMP>/skills/home/.aitools/skills/.aitools-skills-manifest: line ignored: .hidden<TAB>shared
+WARN|harness files|Skills manifest <TMP>/skills/home/.aitools/skills/.aitools-skills-manifest: line ignored: x.bak.1<TAB>shared
+WARN|harness files|Skills manifest <TMP>/skills/home/.aitools/skills/.aitools-skills-manifest: line ignored: a/b<TAB>shared
+WARN|harness files|Skills manifest <TMP>/skills/home/.aitools/skills/.aitools-skills-manifest: line ignored: ok<TAB>bogus
 OK|harness files|15 verified
 -- manifest
 # aitools skills manifest v1
@@ -255,6 +260,7 @@ zz	retired
 ./s3/SKILL.md
 ./zz
 == header rc=0
+WARN|harness files|Skills manifest <TMP>/skills/home/.aitools/skills/.aitools-skills-manifest: the first line is not "# aitools skills manifest v1" -- nothing retired this run
 OK|harness files|15 verified
 -- manifest
 # aitools skills manifest v1
@@ -294,8 +300,8 @@ s3	shared
 ./s3/SKILL.md
 ./zz
 == mfdir rc=1
-ERROR|harness files|rules manifest not written
-ERROR|harness files|skills manifest not written
+ERROR|harness files|rules manifest not written|<TMP>/skills/home/.aitools/rules/.aitools-rules-manifest is a directory
+ERROR|harness files|skills manifest not written|<TMP>/skills/home/.aitools/skills/.aitools-skills-manifest is a directory
 OK|harness files|15 verified
 -- manifest
 -- tree
