@@ -23,8 +23,11 @@ param(
 $AITOOLS_INSTALLED_VERSION = "dev"
 
 # --- OS guard ---
+# It runs before the library loads (the library is found through repoPath below),
+# so it prints the structured line itself, to stderr (logging.md 8.1; the pattern
+# of relay-outbound-prompt.ps1)
 if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
-    Write-Error "This script is for Windows. On macOS/Linux, use the bash 'aitools' command instead."
+    [Console]::Error.WriteLine("[" + [DateTime]::UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", [Globalization.CultureInfo]::InvariantCulture) + "] [aitools] [error] This script is for Windows. On macOS/Linux, use the bash 'aitools' command instead.")
     exit 1
 }
 
@@ -130,18 +133,17 @@ function Invoke-ProfileCheck {
         "unconfigured" { return }
         "error" {
             $msg = if ($result.issues -and $result.issues.Count -gt 0) { $result.issues[0].message } else { "profile.json has issues" }
-            Write-Host "profile: $msg" -ForegroundColor Yellow
+            Write-AitWarn "profile.json" $msg
         }
         "warn" {
+            # One warning per issue, then one ACTION
             foreach ($issue in $result.issues) {
-                Write-Host "profile: $($issue.message)" -ForegroundColor Yellow
+                if ($issue.message) { Write-AitWarn "profile.json" $issue.message }
             }
-            if ($Mode -eq "interactive" -and [Environment]::UserInteractive) {
-                Write-Host "Run 'aitools user init' to fix." -ForegroundColor Yellow
-            }
+            Write-Summary "ACTION" "" "Run: aitools user init (fixes profile.json)"
         }
         "migrate" {
-            Write-Host "profile: profile.json is v1 (legacy). Migration to v2 recommended." -ForegroundColor Yellow
+            Write-AitAction "profile.json" "profile.json is v1 (legacy) -- migrate it to v2: aitools user init" "Run: aitools user init (migrates profile.json to v2)"
             if ($Mode -eq "interactive" -and (Test-UiCanAsk)) {
                 $answer = Read-MenuChoice -Valid @("y", "yes", "n", "no") -Default "n" -DefaultDesc "no" -Context "profile migrate" -Prompt "Migrate profile.json to v2 now? [y/n]: "
                 if ($answer -in @("y", "yes") -and $result.profilePath) {
@@ -182,17 +184,24 @@ function Get-RepoVersion {
 # below, before Step 2.
 
 # Invoke-DeployAbort SCRIPT -- deploy-harness exited 2: the user chose [x]abort at a
-# review menu (D-TS13; abort ends the whole run, T-Q3). The remaining deploy steps
-# are not run; the caller shows the summary and exits 2. Parity: deploy_abort in
-# scripts/aitools.
+# review menu (D-TS13; abort ends the whole run, T-Q3). The relay
+# (-AbortAsWarning) recorded the one warning, "harness files" "aborted by user";
+# this only logs it. The remaining deploy steps are not run; the caller shows the
+# summary and exits 2. Parity: deploy_abort in scripts/aitools.
 function Invoke-DeployAbort([string]$AbortedScript) {
     # Not $ScriptName: it would hide the lib's $scriptName, the [script] field Log writes
     $script:deployAborted = $true
     Log "${AbortedScript}: aborted by user at a review menu -- remaining deploy steps not run"
-    Write-Summary "WARN" "harness files" "aborted by user"
 }
 
-# Deploy all config scripts from the repo's scripts/ directory.
+# Deploy all config scripts from the repo's scripts/ directory. Each script is
+# checked with ParseFile and run in-process and relayed with its tool name
+# (Invoke-ChildRelayed): its lines reach the console and deploy.jsonl, the review
+# menus read and write the console directly, and a failed script (exit code or
+# throw) is one error of this run, recorded by the relay only when the script
+# recorded none (reference/logging.md 8.3). deploy-harness runs first with
+# -AbortAsWarning: its [x]abort is one warning and stops the run. Returns the
+# number of failed scripts. Parity: deploy_configs in scripts/aitools.
 function Deploy-Configs {
     param([string]$ScriptDir)
     # deploy-harness first: it fills .aitools and runs the config writer
@@ -205,8 +214,24 @@ function Deploy-Configs {
     if ($Force) { $env:AITOOLS_FORCE = "1" }
     foreach ($script in $deployScripts) {
         $scriptPath = Join-Path $ScriptDir $script
+        # The tool name the script records under (the tool name table,
+        # reference/script-standards-detail.md), the relay's summary tool; a script
+        # that records under several tools gets the first (A6 Q7). Parity:
+        # deploy_configs in scripts/aitools.
+        $tool = switch ($script -replace '\.ps1$', '') {
+            "deploy-harness"       { "harness files"; break }
+            "setup-user-claude"    { "claude.md"; break }
+            "setup-user-mcp"       { "claude mcp"; break }
+            "setup-user-skills"    { "skills"; break }
+            "setup-cursor-ide-mcp" { "cursor ide mcp"; break }
+            "setup-user-cursor"    { "cursor cli"; break }
+            "setup-user-settings"  { "claude settings"; break }
+            "setup-user-hooks"     { "claude hooks"; break }
+            default                { $script -replace '\.ps1$', '' }
+        }
         if (Test-Path $scriptPath) {
-            # Validate PS1 syntax before executing
+            # Validate PS1 syntax before executing: the first parse error is the
+            # reason, every one a detail line
             $parseErrors = $null
             $null = [System.Management.Automation.Language.Parser]::ParseFile(
                 $scriptPath, [ref]$null, [ref]$parseErrors)
@@ -214,53 +239,28 @@ function Deploy-Configs {
                 foreach ($err in $parseErrors) {
                     LogDetail "$script parse: line $($err.Extent.StartLineNumber): $($err.Message)"
                 }
-                LogError "$script has parse errors -- skipped (see $logFile)"
-                Write-Summary "ERROR" ($script -replace '\.ps1$', '') "parse errors -- skipped"
+                $first = $parseErrors[0]
+                Write-AitError $tool "$script parse check failed -- skipped" "line $($first.Extent.StartLineNumber): $($first.Message)"
                 $errors++
                 continue
             }
             if ($script -eq "deploy-harness.ps1") {
-                # In-process and relayed to deploy.jsonl (aitools-lib Invoke-ChildRelayed);
-                # the review menu reads and writes the console directly. The lib logs
-                # the error for a failed run (and the ERROR row for a throw).
-                $harnessRc = Invoke-ChildRelayed $script $scriptPath @{} "harness files"
-                if ($script:AitLibChildRc -eq 2) {
+                $childRc = Invoke-ChildRelayed $script $scriptPath @{} $tool -AbortAsWarning
+                if ($childRc -ne 0 -and $script:AitLibChildRc -eq 2) {
                     Invoke-DeployAbort $script
                     break
                 }
-                if ($harnessRc -ne 0) {
-                    # Exit 0 with error lines: the lib logged them and returned 1
-                    $harnessExit = if ($script:AitLibChildRc -eq 0) { 1 } else { $script:AitLibChildRc }
-                    Write-Summary "ERROR" "harness files" "script failed (exit $harnessExit)"
-                    $errors++
-                }
-                continue
+            } else {
+                $childRc = Invoke-ChildRelayed $script $scriptPath @{} $tool
             }
-            # Reset exit code before each script (prevents stale values from previous iteration)
-            $global:LASTEXITCODE = 0
-            # Run script without output redirection -- child scripts log to
-            # deploy.log via aitools-lib. PowerShell's 2>> holds a file lock
-            # that blocks the child's [IO.File]::AppendAllText on the same file.
-            try {
-                & $scriptPath
-            } catch {
-                LogError "$script failed: $_"
-                Write-Summary "ERROR" ($script -replace '\.ps1$', '') "script failed (exception)"
-                $errors++
-                continue
-            }
-            $scriptRc = $LASTEXITCODE
-            if ($scriptRc -and $scriptRc -ne 0) {
-                LogError "$script failed (exit $scriptRc) -- see $logFile"
-                Write-Summary "ERROR" ($script -replace '\.ps1$', '') "script failed (exit $scriptRc)"
-                $errors++
-            }
+            # Counted (and, when needed, recorded) by the relay: one error of this run
+            if ($childRc -ne 0) { $errors++ }
         } else {
-            LogWarn "$script not found -- skipping"
+            Write-AitWarn $tool "$script not found -- skipped"
         }
         # Show cloud MCP status after setup-user-mcp
         if ($script -eq "setup-user-mcp.ps1") {
-            Show-CloudMcp -Context "install" -ScriptName "setup-user-mcp"
+            Show-CloudMcp -Context "install"
         }
     }
 
@@ -281,13 +281,15 @@ function Deploy-Configs {
     return $errors
 }
 
-# Mirror .aitools/channel/relay.md into user Cursor AGENTS.md (non-fatal).
-# Parity with scripts/aitools deploy_configs tail + aitools-install.ps1 Step 22.
+# Mirror .aitools/channel/relay.md into user Cursor AGENTS.md (non-fatal) through
+# the library's Invoke-RelaySync, which logs the sync's output as detail lines and
+# records a failure as one "relay sync" warning, with its reason. Parity with
+# scripts/aitools deploy_configs tail + aitools-install.ps1 Step 22.
 function Sync-RelayToCursorAgents {
     param([string]$ScriptDir)
     $syncPy = Join-Path $ScriptDir "sync-relay-to-cursor-agents.py"
     if (-not (Test-Path $syncPy)) {
-        LogWarn "sync-relay-to-cursor-agents.py not found -- skipping relay→AGENTS sync"
+        Write-AitWarn "relay sync" "sync-relay-to-cursor-agents.py not found -- sync skipped"
         return
     }
     if (-not $DryRun) { $env:AITOOLS_SYNC_DEPLOY_LOG = "1" }
@@ -297,27 +299,16 @@ function Sync-RelayToCursorAgents {
     $exitCode = -1
     try {
         if (Get-Command python3 -ErrorAction SilentlyContinue) {
-            $out = & python3 @syncArgs 2>&1
-            $exitCode = $LASTEXITCODE
+            $exitCode = Invoke-RelaySync "python3" $syncArgs
         } elseif (Get-Command py -ErrorAction SilentlyContinue) {
             $pyArgs = @("-3") + $syncArgs
-            $out = & py @pyArgs 2>&1
-            $exitCode = $LASTEXITCODE
+            $exitCode = Invoke-RelaySync "py" $pyArgs
         } else {
-            LogWarn "Python not found -- skipping relay→AGENTS sync"
-            Remove-Item Env:\AITOOLS_SYNC_DEPLOY_LOG -ErrorAction SilentlyContinue
-            return
+            Write-AitWarn "relay sync" "Python not found -- relay -> AGENTS.md sync skipped"
         }
-        if ($null -ne $out) {
-            $out | Add-Content -Path $logFile -Encoding utf8
-        }
-        if ($exitCode -eq 0) {
-            if ($DryRun) { LogOk "relay→AGENTS sync (dry-run)" }
-        } else {
-            LogWarn "sync-relay-to-cursor-agents.py failed (non-fatal, exit $exitCode)"
-        }
+        if ($exitCode -eq 0 -and $DryRun) { LogOk "relay -> AGENTS.md sync (dry-run)" }
     } catch {
-        LogWarn "relay→AGENTS sync failed (non-fatal): $_"
+        Write-AitWarn "relay sync" "relay -> AGENTS.md sync failed: $($_.Exception.Message -replace '\s*\r?\n\s*', ' ')"
     }
     Remove-Item Env:\AITOOLS_SYNC_DEPLOY_LOG -ErrorAction SilentlyContinue
 }
@@ -336,13 +327,14 @@ function Get-McpServerUrl {
 }
 
 # Display cloud MCP servers from claude.ai configuration.
-# Usage: Show-CloudMcp -Context "mcp" or "install" [-ScriptName "setup-user-mcp"]
-# When ScriptName is provided, uses structured logging format for deploy sequence.
+# Usage: Show-CloudMcp -Context "mcp" or "install"
+#   mcp: `aitools mcp` (plain console lines); install: the deploy sequence (one
+#   info log line per server, through the library, under this script's name)
 # Silent no-op if claude CLI unavailable or no cloud servers found.
+# Parity: show_cloud_mcp in scripts/aitools.
 function Show-CloudMcp {
     param(
-        [string]$Context = "mcp",
-        [string]$ScriptName = ""
+        [string]$Context = "mcp"
     )
     if (-not (Get-Command claude -ErrorAction SilentlyContinue)) { return }
 
@@ -376,18 +368,16 @@ function Show-CloudMcp {
 
     if ($entries.Count -eq 0) { return }
 
-    if ($ScriptName) {
-        # Structured logging for deploy sequence
-        $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
-        Write-Host "[$ts] [$ScriptName] Cloud MCP servers (configured at claude.ai):"
+    if ($Context -eq "install") {
+        # Deploy sequence: info lines through the library (also in deploy.log)
+        Log "Cloud MCP servers (configured at claude.ai):"
         foreach ($entry in $entries) {
             if ($entry.Name.Length -lt 24) {
                 $pad = " " * (24 - $entry.Name.Length)
             } else {
                 $pad = " "
             }
-            $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
-            Write-Host "[$ts] [$ScriptName]   $($entry.Name)$pad$($entry.Status)"
+            Log "  $($entry.Name)$pad$($entry.Status)"
         }
     } else {
         Write-Host ""
@@ -1885,6 +1875,12 @@ if ($doSessions) {
                 exit 1
             }
             & $archivePy $archiveHelper archive --session $fullId --transcript $transcript.FullName
+            $archiveRc = $LASTEXITCODE
+            if ($archiveRc -ne 0) {
+                # The archiver logs its own cause in ait-harvest.log
+                LogError "session archive failed (exit $archiveRc) -- see ~/.aitools/logs/ait-harvest.log"
+                exit 1
+            }
             Write-Host "Archive requested for $fullId (see ~/.aitools/logs/ait-harvest.log)"
         }
         "move" {
@@ -1941,12 +1937,22 @@ if ($doSessions) {
 
 $env:AITOOLS_RUN_ID = -join ((1..6) | ForEach-Object { '{0:x2}' -f (Get-Random -Max 256) })
 
-# Init summary file for this run; child scripts append via AITOOLS_SUMMARY_FILE.
-# SUPPRESS=1 tells aitools-install.ps1 not to display it (we display after it returns).
-$env:AITOOLS_SUMMARY_FILE = Join-Path $env:USERPROFILE ".aitools\run-summary.txt"
-Remove-Item $env:AITOOLS_SUMMARY_FILE -ErrorAction SilentlyContinue
-New-Item -ItemType File -Path $env:AITOOLS_SUMMARY_FILE -Force | Out-Null
-$env:AITOOLS_SUPPRESS_SUMMARY_DISPLAY = "1"
+# The run summary file (reference/logging.md 8.4, 8.5): created and exported here
+# when no caller set one (Start-AitSummary); child scripts, the installer included,
+# record into it and draw nothing. Drawn once at the end, only by the script that
+# created it (Complete-AitSummary).
+# Smart reload (below): the reloaded entry point runs in-process and inherits the
+# file; this one exits right after it. The owner hands the ownership on
+# ($env:AITOOLS_SUMMARY_OWNER_HANDOFF = "1") and the reloaded one takes it: it
+# draws the panel, and the records written before the reload are kept.
+# (aitools-lib's Start-AitSummary has no hand-off of its own: this sets its owner
+# flag.)
+Start-AitSummary
+if ($env:AITOOLS_SUMMARY_OWNER_HANDOFF -eq "1" -and $env:AITOOLS_SUMMARY_FILE) {
+    $script:AitLibSummaryOwner = $true
+    LogDetail "run summary: ownership taken over after the reload ($($env:AITOOLS_SUMMARY_FILE))"
+}
+$env:AITOOLS_SUMMARY_OWNER_HANDOFF = $null
 
 
 Log "aitools $AITOOLS_INSTALLED_VERSION"
@@ -1984,23 +1990,18 @@ try {
     } else {
         $pullOut = git pull origin main 2>&1 | Out-String
     }
-    if ($LASTEXITCODE -ne 0) {
-        # Full output to the log first; the console keeps its preview.
-        foreach ($pullLine in $pullOut.Split("`n")) {
-            if ($pullLine.Trim()) { LogDetail "git-pull: $($pullLine.TrimEnd())" }
-        }
+    $pullRc = $LASTEXITCODE
+    if ($pullRc -ne 0) {
+        # Get-AitErrorReason logs git's output as detail lines
+        $pullWhy = Get-AitErrorReason -Output $pullOut -ExitCode $pullRc
         if ($doGitpull) {
-            LogError "git pull failed (see $logFile)"
-            Write-Host $pullOut
+            Write-AitError "source" "git pull failed" $pullWhy
+            Complete-AitSummary
             exit 1
         } else {
-            if ($pullOut -match "(?i)(could not resolve|unable to access|connection refused|connection timed out|no route to host)") {
-                LogWarn "Could not reach remote - deploying from local checkout"
-            } else {
-                LogWarn "git pull failed -- deploying from local checkout (see $logFile)"
-                $pullOut.Trim().Split("`n") | Select-Object -First 3 | ForEach-Object { Write-Host "    $_" }
-            }
-            Write-Summary "WARN" "source" "stale local checkout (git pull failed)"
+            # One warning; its reason is git's own (e.g. "fatal: unable to access
+            # ...: Could not resolve host")
+            Write-AitWarn "source" "git pull failed -- deploying from the local checkout: $pullWhy"
         }
     } elseif ($pullOut -match "Already up to date") {
         LogOk "Already up to date"
@@ -2021,9 +2022,10 @@ if ((Resolve-UserRepoPath) -eq 0) {
     $userRepoPath = $script:AitLibUserRepoPath
     if (Test-Path (Join-Path $userRepoPath ".git")) {
         $urPull = git -C $userRepoPath pull --ff-only --quiet 2>&1 | Out-String
-        if ($LASTEXITCODE -ne 0) {
-            LogWarn "user repo pull failed -- using local copy."
-            LogDetail "user-repo-pull: $($urPull.Trim())"
+        $urPullRc = $LASTEXITCODE
+        if ($urPullRc -ne 0) {
+            # Get-AitErrorReason logs git's output as detail lines
+            Write-AitWarn "dotprofile" "dotprofile pull failed -- using the local copy: $(Get-AitErrorReason -Output $urPull -ExitCode $urPullRc)"
         }
     }
     # Forward slashes (C:/Users/...), the form Git Bash and pwsh both read
@@ -2037,7 +2039,8 @@ Log "Step 2/$steps`: Rebuilding deploy scripts"
 # See .claude/rules/cross-platform.md "Approved exceptions" for why.
 $bashExe = "$env:ProgramFiles\Git\bin\bash.exe"
 if (-not (Test-Path $bashExe)) {
-    LogError "Git Bash not found at $bashExe (required for build)"
+    Write-AitError "build-deploy" "build not run" "Git Bash not found at $bashExe"
+    Complete-AitSummary
     exit 1
 }
 # Convert Windows path to Unix-style for Git Bash (C:\repos\... → /c/repos/...)
@@ -2051,23 +2054,28 @@ $prevUserRepoEnv = $env:AITOOLS_USER_REPO_PATH
 # Console input mode: with the console as stdin, the build's MSYS processes switch
 # the console input mode (0x1F7 -> 0x2E8/0xE7, dozens of times per build) and may
 # leave it raw; the review menus of the later steps read in that console. The build
-# reads no stdin, so it gets a pipe ($null |): MSYS then leaves the console alone.
-# Save-ConsoleInputMode / Restore-ConsoleInputMode (aitools-lib.ps1) also put the mode
-# back in case a process opens CONIN$ itself (no-op without a console).
+# reads no stdin, so it gets /dev/null: Invoke-NativeRelayed hands the child this
+# console's stdin, so bash runs the build with "< /dev/null" and every MSYS process
+# of the build inherits that, not the console. Save-ConsoleInputMode /
+# Restore-ConsoleInputMode (aitools-lib.ps1) put the mode back afterwards (the
+# outer bash.exe still starts on the console; no-op without a console).
+# Relayed (Invoke-NativeRelayed -SummaryTool "build-deploy" -Quiet): build-deploy
+# logs through the library itself (every line in deploy.log), the relay shows only
+# its warn and error lines, and a failed build is one error, recorded by the relay
+# when the build recorded none.
 $consoleInMode = Save-ConsoleInputMode
 try {
     if ($buildUserRepo) { $env:AITOOLS_USER_REPO_PATH = $buildUserRepo }
-    $buildResult = $null | & $bashExe "$unixRepoPath/scripts/build-deploy.sh" 2>&1 | Out-String
-    $buildRc = $LASTEXITCODE
+    $buildRelay = Invoke-NativeRelayed -Label "Step 2: build-deploy.sh" -FilePath $bashExe -ArgumentList @("-c", 'exec bash "$0" < /dev/null', "$unixRepoPath/scripts/build-deploy.sh") -SummaryTool "build-deploy" -Quiet
 } finally {
     $env:AITOOLS_USER_REPO_PATH = $prevUserRepoEnv
     $null = Restore-ConsoleInputMode $consoleInMode "build-deploy"
 }
-Add-Content -Path $logFile -Value $buildResult
-if ($buildRc -eq 0) {
+if ($buildRelay -eq 0) {
     LogOk "Rebuilt"
 } else {
-    LogError "build failed (see $logFile)"
+    # Counted and, when needed, recorded by the relay; the run stops here
+    Complete-AitSummary
     exit 1
 }
 
@@ -2091,6 +2099,9 @@ if (Test-Path $repoAitools) {
             [System.IO.File]::WriteAllText($installedPath, $stampedContent, [System.Text.UTF8Encoding]::new($false))
             $env:AITOOLS_PREBUILD_DONE = "1"
             if ($pulledUpdates) { $env:AITOOLS_PULLED_UPDATES = "1" }
+            # The reloaded entry point keeps this run's summary file and, when this
+            # script created it, draws it (X2: Start-AitSummary above)
+            if ($script:AitLibSummaryOwner) { $env:AITOOLS_SUMMARY_OWNER_HANDOFF = "1" }
             & $installedPath @PSBoundParameters
             exit $LASTEXITCODE
         } else {
@@ -2110,34 +2121,45 @@ $overallRc = 0
 if ($doInstall) {
     # --- install: pull + rebuild + run installer (includes deploy) ---
     Log "Step 3/$steps`: Running installer"
-    $installerArgs = @()
-    if ($SkipGhAuth) { $installerArgs += "-SkipGhAuth" }
-    if ($SkipDriveDetection) { $installerArgs += "-SkipDriveDetection" }
-    if ($ReposPath) { $installerArgs += "-ReposPath"; $installerArgs += $ReposPath }
+    $installerArgs = @{}
+    if ($SkipGhAuth) { $installerArgs["SkipGhAuth"] = $true }
+    if ($SkipDriveDetection) { $installerArgs["SkipDriveDetection"] = $true }
+    if ($ReposPath) { $installerArgs["ReposPath"] = $ReposPath }
     # Interactive iff run from a console: the installer and its setup scripts decide
     # for themselves. -Force makes every review prompt take the source version
     # (backup kept), console or not.
     if ($Force) { $env:AITOOLS_FORCE = "1" }
-    & "$repoPath\scripts\aitools-install.ps1" @installerArgs
-    $installerRc = $LASTEXITCODE
+    # In-process and relayed (Invoke-ChildRelayed "aitools install"
+    # -AbortAsWarning): its lines reach the console and, mirrored by this outermost
+    # relay, deploy.jsonl (inside the relay the installer writes no records of its
+    # own: logging.md 8.3); its prompts read and write the console directly (gh auth
+    # login through Start-Process); it records into this run's summary file and
+    # draws nothing. A failed installer (exit code or throw) is one error of this
+    # run (recorded by the relay only when the installer recorded none); its
+    # [x]abort (exit 2) was recorded inside it, once, as a warning.
+    $installerRc = 0
+    if ((Invoke-ChildRelayed "Step 3: aitools-install.ps1" "$repoPath\scripts\aitools-install.ps1" $installerArgs "aitools install" -AbortAsWarning) -ne 0) {
+        $installerRc = $script:AitLibChildRc
+        if ($installerRc -eq 0) { $installerRc = 1 }   # error lines with exit 0: a failure
+    }
     if (Test-Path Env:\AITOOLS_FORCE) { Remove-Item Env:\AITOOLS_FORCE }
     Write-Host ""
     # Exit 2 = the user chose [x]abort at a review menu (D-TS13): the run stops
     if ($installerRc -eq 2) {
         Log "Installer aborted by user at a review menu -- run stopped (exit 2)"
-        Show-Summary
+        Complete-AitSummary
         exit 2
     }
     if ($installerRc -eq 0) {
         LogOk "All up to date ($(Get-RepoVersion $repoPath))"
-        # Session archive hint (after final status line)
+        # Session archive hint (after final status line): a hint, not a warning
         $userRepo = Read-ConfigKey -File $configFile -Key "userRepoPath"
         if (-not $userRepo) {
-            Write-Host "hint: To archive sessions across machines, run 'aitools user init'." -ForegroundColor Yellow
+            Log "hint: To archive sessions across machines, run 'aitools user init'."
         }
         Invoke-ProfileCheck -Mode "interactive"
     } else {
-        Log "Completed with errors (see $logFile)" "error"
+        # Counted (and, when needed, recorded) by the relay
         $overallRc = 1
     }
 
@@ -2147,13 +2169,14 @@ if ($doInstall) {
     $deployRc = Deploy-Configs (Join-Path $repoPath "scripts")
     # [x]abort in deploy-harness (D-TS13): show what ran and stop with exit 2
     if ($script:deployAborted) {
-        Show-Summary
+        Complete-AitSummary
         exit 2
     }
     if ($deployRc -eq 0) {
         LogOk "Done"
     } else {
-        Log "Completed with $deployRc error(s)" "error"
+        # The errors were counted and recorded where they happened
+        Log "Completed with $deployRc error(s) (see $logFile)"
         $overallRc = 1
     }
 
@@ -2194,10 +2217,12 @@ if ($doInstall) {
         } else {
             git -C $repoPath tag $tag
             $pushResult = git -C $repoPath push origin $tag 2>&1 | Out-String
-            if ($LASTEXITCODE -eq 0) {
+            $pushRc = $LASTEXITCODE
+            if ($pushRc -eq 0) {
                 LogOk "Tagged $tag"
             } else {
-                LogWarn "Tagged $tag (local only -- push failed)"
+                # Get-AitErrorReason logs git's output as detail lines
+                LogWarn "Tagged $tag (local only -- push failed): $(Get-AitErrorReason -Output $pushResult -ExitCode $pushRc)"
             }
         }
     }
@@ -2218,13 +2243,14 @@ if ($doInstall) {
     $deployRc = Deploy-Configs (Join-Path $repoPath "scripts")
     # [x]abort in deploy-harness (D-TS13): show what ran and stop with exit 2
     if ($script:deployAborted) {
-        Show-Summary
+        Complete-AitSummary
         exit 2
     }
     if ($deployRc -eq 0) {
         LogOk "Done"
     } else {
-        Log "Completed with $deployRc error(s)" "error"
+        # The errors were counted and recorded where they happened
+        Log "Completed with $deployRc error(s) (see $logFile)"
         $overallRc = 1
     }
 
@@ -2232,7 +2258,7 @@ if ($doInstall) {
 
     Invoke-ProfileCheck -Mode "interactive"
 
-    # Session archive hint (after final status line)
+    # Session archive hook (after the final status line, before the panel)
     $settingsFile = Join-Path $env:USERPROFILE ".claude\settings.json"
     $hookInstalled = $false
     if (Test-Path $settingsFile) {
@@ -2244,10 +2270,11 @@ if ($doInstall) {
     if ($hookInstalled) {
         $userRepo = Read-ConfigKey -File $configFile -Key "userRepoPath"
         if (-not $userRepo) {
-            Write-Host "WARNING: session archive hook installed but inactive -- userRepoPath not configured. Run 'aitools user init'." -ForegroundColor Yellow
+            Write-AitAction "claude hooks" "session archive hook installed but inactive: userRepoPath not configured -- run: aitools user init" "Run: aitools user init (activates session archiving)"
         }
     } else {
-        Write-Host "hint: session archive hook not installed. Run 'aitools user init' to set up." -ForegroundColor Yellow
+        # A hint, not a warning
+        Log "hint: session archive hook not installed. Run 'aitools user init' to set up."
     }
 }
 
@@ -2281,7 +2308,8 @@ if (Test-Path $bashSrc) {
     [System.IO.File]::WriteAllText($bashDst, $bashStamped, [System.Text.UTF8Encoding]::new($false))
 }
 
-Show-Summary
+# The panel, only when this script created the run summary file (Start-AitSummary)
+Complete-AitSummary
 
 $relayPrompt = Join-Path $repoPath "scripts\relay-outbound-prompt.ps1"
 if (Test-Path $relayPrompt) {
@@ -2291,7 +2319,5 @@ if (Test-Path $relayPrompt) {
 }
 
 Remove-Item Env:\AITOOLS_RUN_ID -ErrorAction SilentlyContinue
-Remove-Item Env:\AITOOLS_SUMMARY_FILE -ErrorAction SilentlyContinue
-Remove-Item Env:\AITOOLS_SUPPRESS_SUMMARY_DISPLAY -ErrorAction SilentlyContinue
 
 exit $overallRc

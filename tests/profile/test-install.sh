@@ -30,9 +30,10 @@
 #                  console lines print and the counters count; a writable
 #                  deploy.log still gets the lines (the PowerShell lock case,
 #                  log-locked: tests/profile/test-install.ps1)
-#   relaysync-*    Step 22's run_relay_sync: the sync runs and its exit code is
-#                  returned whether or not deploy.log can be written; its output
-#                  (stdout and stderr) reaches a writable one
+#   relaysync-*    Step 22's run_relay_sync (aitools-lib): the sync runs and its
+#                  exit code is returned whether or not deploy.log can be written;
+#                  its output (stdout and stderr) reaches a writable one; a failed
+#                  sync is one "relay sync" warning with its reason
 #
 # Platform targeting (plans/ci-platform-targeting.md; commander 2026-11-14: "sh
 # scripts and tests should only run on linux/mac and ps1 on windows"): this
@@ -64,7 +65,7 @@ case "${BASH_VERSINFO[5]:-}" in
 esac
 
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
-    perl -ne 'print if $. >= 2 && $. <= 48' "$0"
+    perl -ne 'print if $. >= 2 && $. <= 49' "$0"
     exit 0
 fi
 

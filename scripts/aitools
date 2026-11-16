@@ -71,8 +71,9 @@ to_native_path() {
 # the repo copy (<repoPath>/scripts/aitools.ps1, repoPath read from
 # ~/.aitools/config.json as below), else the copy beside this script
 # (~/.local/bin/aitools.ps1, installed by aitools-install.ps1; it clones a missing
-# repo itself). The Windows branches further down are not reached on Windows.
-# aitools.ps1 does its own config migration, repo clone and argument checks.
+# repo itself). Nothing below this forwarder branches on Windows (A3-F2: the
+# unreachable Windows branches were removed). aitools.ps1 does its own config
+# migration, repo clone and argument checks.
 
 # aitools_ps1_args ARGS... -- AITOOLS_PS1_ARGS: ARGS as aitools.ps1 parameters.
 # pwsh -File binds a GNU-style flag to a parameter only when its name matches
@@ -206,23 +207,25 @@ check_profile() {
                     try{const r=JSON.parse(d);console.log((r.issues[0]&&r.issues[0].message)||'profile.json has issues')}catch{console.log('profile.json has issues')}
                 })
             " 2>/dev/null)
-            printf '\033[33mprofile: %s\033[0m\n' "$msg"
+            write_warn "profile.json" "${msg:-profile.json has issues}"
             ;;
         warn)
-            # Print each issue as a warning
-            printf '%s' "$result" | node -e "
+            # One warning per issue. The issues are read into a variable first: a
+            # write_warn inside a `| while read` subshell would lose its count.
+            local issues="" line
+            issues=$(printf '%s' "$result" | node -e "
                 let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{
-                    try{const r=JSON.parse(d);r.issues.forEach(i=>console.log(i.message))}catch(e){console.error('profile parse error: '+e.message)}
+                    try{const r=JSON.parse(d);r.issues.forEach(i=>console.log(i.message))}catch(e){console.log('profile-check output unreadable: '+e.message)}
                 })
-            " 2>/dev/null | while IFS= read -r line; do
-                printf '\033[33mprofile: %s\033[0m\n' "$line"
-            done
-            if [ "$mode" = "interactive" ] && [ -t 0 ]; then
-                printf '\033[33mRun '\''aitools user init'\'' to fix.\033[0m\n'
-            fi
+            " 2>/dev/null) || issues="profile-check output unreadable"
+            while IFS= read -r line; do
+                if [ -n "$line" ]; then write_warn "profile.json" "$line"; fi
+            done <<< "$issues"
+            write_summary ACTION "" "Run: aitools user init (fixes profile.json)"
             ;;
         migrate)
-            printf '\033[33mprofile: profile.json is v1 (legacy). Migration to v2 recommended.\033[0m\n'
+            write_action "profile.json" "profile.json is v1 (legacy) -- migrate it to v2: aitools user init" \
+                "Run: aitools user init (migrates profile.json to v2)"
             if [ "$mode" = "interactive" ] && ui_can_ask; then
                 local answer="" ppath=""
                 read_menu_choice answer "y yes n no" n "no" "profile migrate" "Migrate profile.json to v2 now? [y/n]: "
@@ -1149,19 +1152,23 @@ repo_version() {
 }
 
 # deploy_abort SCRIPT -- deploy-harness exited 2: the user chose [x]abort at a review
-# menu (D-TS13; abort ends the whole run, T-Q3). The remaining deploy steps are not
-# run; the caller shows the summary and returns 2. Parity: Invoke-DeployAbort in
-# aitools.ps1.
+# menu (D-TS13; abort ends the whole run, T-Q3). The relay (--abort-warn) recorded
+# the one warning, "harness files" "aborted by user"; this only logs it. The
+# remaining deploy steps are not run; the caller shows the summary and returns 2.
+# Parity: Invoke-DeployAbort in aitools.ps1.
 deploy_abort() {
     deploy_aborted=true
     log "$1: aborted by user at a review menu -- remaining deploy steps not run"
-    write_summary WARN "harness files" "aborted by user"
 }
 
-# Deploy all config scripts from the repo's scripts/ directory.
-# On Windows (Git Bash), calls .ps1 variants via pwsh.
-# Child scripts log to LOG_FILE themselves (via tee/Add-Content), so we
-# redirect stdout to /dev/null to prevent double-logging.
+# Deploy all config scripts from the repo's scripts/ directory. Each script is
+# checked with bash -n (a syntax error would exit 2, which reads as an abort) and
+# run relayed with its tool name (run_child_relayed --summary-tool): its lines reach
+# the console and deploy.jsonl, stdin stays the terminal (the review menus read
+# /dev/tty), and a failed script is one error of this run, recorded by the relay
+# only when the script recorded none (reference/logging.md 8.3). deploy-harness
+# runs first with --abort-warn: its [x]abort is one warning and stops the run.
+# Returns the number of failed scripts.
 deploy_configs() {
     local script_dir="$1"
     local errors=0
@@ -1169,121 +1176,52 @@ deploy_configs() {
     export AITOOLS_DEPLOY=1
     if $dry_run; then export AITOOLS_DRY_RUN=1; fi
     if $force; then export AITOOLS_FORCE=1; fi
-    case "$(uname -s)" in
-        MINGW*|MSYS*|CYGWIN*)
-            if ! command -v pwsh &>/dev/null; then
-                log_error "pwsh (PowerShell 7) not found. Install: winget install --id Microsoft.PowerShell --source winget"
-                return 1
+    # deploy-harness first: it fills ~/.aitools and runs the config writer
+    # (setup-user-config) itself, so the writer is not in this list (once per run)
+    local deploy_scripts="deploy-harness.sh setup-user-claude.sh setup-user-mcp.sh setup-user-skills.sh setup-cursor-ide-mcp.sh setup-user-cursor.sh setup-user-settings.sh setup-user-hooks.sh"
+    for script in $deploy_scripts; do
+        local script_path="$script_dir/$script" tool
+        # The tool name the script records under (the tool name table,
+        # reference/script-standards-detail.md), the relay's --summary-tool; a
+        # script that records under several tools gets the first (A6 Q7). Parity:
+        # Deploy-Configs in aitools.ps1.
+        case "${script%.sh}" in
+            deploy-harness)       tool="harness files" ;;
+            setup-user-claude)    tool="claude.md" ;;
+            setup-user-mcp)       tool="claude mcp" ;;
+            setup-user-skills)    tool="skills" ;;
+            setup-cursor-ide-mcp) tool="cursor ide mcp" ;;
+            setup-user-cursor)    tool="cursor cli" ;;
+            setup-user-settings)  tool="claude settings" ;;
+            setup-user-hooks)     tool="claude hooks" ;;
+            *)                    tool="${script%.sh}" ;;
+        esac
+        if [ -f "$script_path" ]; then
+            local syntax_out syntax_rc=0
+            syntax_out=$(bash -n "$script_path" 2>&1) || syntax_rc=$?
+            if [ "$syntax_rc" -ne 0 ]; then
+                write_error "$tool" "$script syntax check failed -- skipped" "$(error_reason "$syntax_out" "$syntax_rc")"
+                errors=$((errors + 1))
+                continue
             fi
-            # deploy-harness first: it fills ~/.aitools and runs the config writer
-            # (setup-user-config) itself, so the writer is not in this list (once per run)
-            local deploy_scripts="deploy-harness.ps1 setup-user-claude.ps1 setup-user-mcp.ps1 setup-user-skills.ps1 setup-cursor-ide-mcp.ps1 setup-user-cursor.ps1 setup-user-settings.ps1 setup-user-hooks.ps1"
-            for script in $deploy_scripts; do
-                local script_path="$script_dir/$script"
-                if [ -f "$script_path" ]; then
-                    # Validate PS1 syntax before executing; each parse error is
-                    # printed by the check and logged as detail.
-                    local parse_out parse_rc=0 parse_line
-                    parse_out=$(pwsh -NoProfile -Command "
-                        \$e = \$null
-                        \$null = [System.Management.Automation.Language.Parser]::ParseFile('$(cygpath -w "$script_path")', [ref]\$null, [ref]\$e)
-                        foreach (\$x in \$e) { 'line ' + \$x.Extent.StartLineNumber + ': ' + \$x.Message }
-                        if (\$e.Count -gt 0) { exit 1 }
-                    " 2>&1) || parse_rc=$?
-                    if [ "$parse_rc" -ne 0 ]; then
-                        while IFS= read -r parse_line; do
-                            if [ -n "$parse_line" ]; then log_detail "$script parse: $parse_line"; fi
-                        done <<< "$parse_out"
-                        log_error "$script has parse errors -- skipped (see $LOG_DISPLAY)"
-                        write_summary ERROR "${script%.ps1}" "parse errors -- skipped"
-                        errors=$((errors + 1))
-                        continue
-                    fi
-                    # Run without output redirection -- child PS1 scripts log to
-                    # deploy.log via [IO.File]::AppendAllText. PowerShell's 2>> holds
-                    # an exclusive file lock that blocks the child's AppendAllText.
-                    # deploy-harness.ps1 is not relayed here: a PS1 review prompt is
-                    # written to stdout without a newline, and a relay reading pwsh's
-                    # stdout line by line would hold it until the user answered.
-                    local script_rc=0 row_tool="${script%.ps1}"
-                    if [ "$script" = "deploy-harness.ps1" ]; then row_tool="harness files"; fi
-                    pwsh -NoProfile -ExecutionPolicy Bypass \
-                        -File "$(cygpath -w "$script_path")" || script_rc=$?
-                    if [ "$script" = "deploy-harness.ps1" ] && [ "$script_rc" -eq 2 ]; then
-                        deploy_abort "$script"
-                        break
-                    fi
-                    if [ "$script_rc" -ne 0 ]; then
-                        log_error "$script failed (exit $script_rc) -- see $LOG_DISPLAY"
-                        write_summary ERROR "$row_tool" "script failed (exit $script_rc)"
-                        errors=$((errors + 1))
-                    fi
-                else
-                    log_warn "$script not found -- skipping"
+            local abort_opt=()
+            if [ "$script" = "deploy-harness.sh" ]; then abort_opt=(--abort-warn); fi
+            if ! run_child_relayed --summary-tool "$tool" ${abort_opt[@]+"${abort_opt[@]}"} "$script" "${BASH:-bash}" "$script_path"; then
+                if [ "$script" = "deploy-harness.sh" ] && [ "$AITLIB_CHILD_RC" -eq 2 ]; then
+                    deploy_abort "$script"
+                    break
                 fi
-                # Show cloud MCP status after setup-user-mcp
-                case "$script" in
-                    setup-user-mcp.*) show_cloud_mcp install setup-user-mcp ;;
-                esac
-            done
-            ;;
-        *)
-            # deploy-harness first: it fills ~/.aitools and runs the config writer
-            # (setup-user-config) itself, so the writer is not in this list (once per run)
-            local deploy_scripts="deploy-harness.sh setup-user-claude.sh setup-user-mcp.sh setup-user-skills.sh setup-cursor-ide-mcp.sh setup-user-cursor.sh setup-user-settings.sh setup-user-hooks.sh"
-            for script in $deploy_scripts; do
-                local script_path="$script_dir/$script"
-                if [ -f "$script_path" ]; then
-                    # Validate bash syntax before executing; bash -n's messages
-                    # are logged as detail.
-                    local syntax_out syntax_rc=0 syntax_line
-                    syntax_out=$(bash -n "$script_path" 2>&1) || syntax_rc=$?
-                    if [ "$syntax_rc" -ne 0 ]; then
-                        while IFS= read -r syntax_line; do
-                            if [ -n "$syntax_line" ]; then log_detail "$script syntax: $syntax_line"; fi
-                        done <<< "$syntax_out"
-                        log_error "$script has syntax errors -- skipped (see $LOG_DISPLAY)"
-                        write_summary ERROR "${script%.sh}" "syntax errors -- skipped"
-                        errors=$((errors + 1))
-                        continue
-                    fi
-                    # Run without output redirection -- child scripts log to
-                    # deploy.log via >> append. Removing redirection ensures
-                    # parity with the Windows fix and lets errors surface.
-                    local script_rc=0
-                    if [ "$script" = "deploy-harness.sh" ]; then
-                        # Relayed (aitools-lib run_child_relayed): stdout to the console
-                        # and deploy.jsonl; stdin stays the terminal (the review menu
-                        # reads /dev/tty). The lib logs the error for a failed run.
-                        run_child_relayed "$script" "${BASH:-bash}" "$script_path" || script_rc="$AITLIB_CHILD_RC"
-                        # Exit 0 with error lines: the lib logged it; count it as a failure
-                        if [ "$script_rc" -eq 0 ] && [ "$AITLIB_CHILD_ERRORS" -gt 0 ]; then script_rc=1; fi
-                        if [ "$script_rc" -eq 2 ]; then
-                            deploy_abort "$script"
-                            break
-                        fi
-                        if [ "$script_rc" -ne 0 ]; then
-                            write_summary ERROR "harness files" "script failed (exit $script_rc)"
-                            errors=$((errors + 1))
-                        fi
-                        continue
-                    fi
-                    bash "$script_path" || script_rc=$?
-                    if [ "$script_rc" -ne 0 ]; then
-                        log_error "$script failed (exit $script_rc) -- see $LOG_DISPLAY"
-                        write_summary ERROR "${script%.sh}" "script failed (exit $script_rc)"
-                        errors=$((errors + 1))
-                    fi
-                else
-                    log_warn "$script not found -- skipping"
-                fi
-                # Show cloud MCP status after setup-user-mcp
-                case "$script" in
-                    setup-user-mcp.*) show_cloud_mcp install setup-user-mcp ;;
-                esac
-            done
-            ;;
-    esac
+                # Counted (and, when needed, recorded) by the relay: one error of this run
+                errors=$((errors + 1))
+            fi
+        else
+            write_warn "$tool" "$script not found -- skipped"
+        fi
+        # Show cloud MCP status after setup-user-mcp
+        case "$script" in
+            setup-user-mcp.*) show_cloud_mcp install ;;
+        esac
+    done
 
     # [x]abort in deploy-harness: the run stops here (the caller returns 2)
     if $deploy_aborted; then
@@ -1293,8 +1231,9 @@ deploy_configs() {
         return "$errors"
     fi
 
-    # Best-effort: mirror relay.md into ~/.cursor/AGENTS.md (Cursor IDE).
-    # Non-fatal if Python or sync fails.
+    # Best-effort: mirror relay.md into ~/.cursor/AGENTS.md (Cursor IDE). The
+    # library's run_relay_sync logs the sync's output as detail lines and records a
+    # failure as one "relay sync" warning, with its reason.
     local sync_py="$script_dir/sync-relay-to-cursor-agents.py"
     if [ -f "$sync_py" ]; then
         local sync_args=()
@@ -1302,21 +1241,19 @@ deploy_configs() {
         # Deploy-formatted line comes from Python when AITOOLS_SYNC_DEPLOY_LOG=1 (not --dry-run).
         if ! $dry_run; then export AITOOLS_SYNC_DEPLOY_LOG=1; fi
         if command -v python3 &>/dev/null; then
-            if python3 "$sync_py" "${sync_args[@]}" >>"$LOG_FILE" 2>&1; then
-                if $dry_run; then log_ok "relay→AGENTS sync (dry-run)"; fi
-            else
-                log_warn "sync-relay-to-cursor-agents.py failed (non-fatal)"
+            if run_relay_sync python3 "$sync_py" ${sync_args[@]+"${sync_args[@]}"}; then
+                if $dry_run; then log_ok "relay -> AGENTS.md sync (dry-run)"; fi
             fi
         elif command -v py &>/dev/null; then
-            if py -3 "$sync_py" "${sync_args[@]}" >>"$LOG_FILE" 2>&1; then
-                if $dry_run; then log_ok "relay→AGENTS sync (dry-run)"; fi
-            else
-                log_warn "sync-relay-to-cursor-agents.py failed (non-fatal)"
+            if run_relay_sync py -3 "$sync_py" ${sync_args[@]+"${sync_args[@]}"}; then
+                if $dry_run; then log_ok "relay -> AGENTS.md sync (dry-run)"; fi
             fi
         else
-            log_warn "Python not found — skipping relay→AGENTS sync"
+            write_warn "relay sync" "Python not found -- relay -> AGENTS.md sync skipped"
         fi
-        unset AITOOLS_SYNC_DEPLOY_LOG 2>/dev/null || true
+        unset AITOOLS_SYNC_DEPLOY_LOG
+    else
+        write_warn "relay sync" "sync-relay-to-cursor-agents.py not found -- sync skipped"
     fi
 
     unset AITOOLS_DEPLOY
@@ -1339,13 +1276,13 @@ mcp_server_url() {
 }
 
 # Display cloud MCP servers from claude.ai configuration.
-# Usage: show_cloud_mcp <context> [script_name]
-#   context: "mcp" (concise header) or "install" (descriptive header)
-#   script_name: if set, uses structured logging with [timestamp] [script_name] prefix
+# Usage: show_cloud_mcp <context>
+#   context: "mcp" (`aitools mcp`: plain console lines) or "install" (the deploy
+#   sequence: one info log line per server, through the library, under this
+#   script's name)
 # Silent no-op if claude CLI unavailable or no cloud servers found.
 show_cloud_mcp() {
     local context="${1:-mcp}"
-    local script_name="${2:-}"
     command -v claude &>/dev/null || return 0
 
     local saved_claudecode="${CLAUDECODE:-}"
@@ -1372,13 +1309,12 @@ show_cloud_mcp() {
 
     [ -n "$parsed" ] || return 0
 
-    if [ -n "$script_name" ]; then
-        # Structured logging for deploy sequence
-        local ts
-        ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-        printf '[%s] [%s] Cloud MCP servers (configured at claude.ai):\n' "$ts" "$script_name"
+    if [ "$context" = "install" ]; then
+        # Deploy sequence: info lines through the library (also in deploy.log)
+        local line
+        log "Cloud MCP servers (configured at claude.ai):"
         while IFS= read -r line; do
-            printf '[%s] [%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$script_name" "$line"
+            log "$line"
         done <<< "$parsed"
     else
         echo ""
@@ -1755,22 +1691,9 @@ fi
 # ---------------------------------------------------------------------------
 
 if $do_dashboard; then
-    # Dashboard is a standalone script that handles its own logging and summary.
-    # Dispatch to aitools-dashboard.sh (macOS) or aitools-dashboard.ps1 (Windows).
-    case "$(uname -s)" in
-        MINGW*|MSYS*|CYGWIN*)
-            if ! command -v pwsh &>/dev/null; then
-                log_error "pwsh (PowerShell 7) not found"
-                return 1
-            fi
-            pwsh -NoProfile -ExecutionPolicy Bypass \
-                -File "$(cygpath -w "$repo_path/scripts/aitools-dashboard.ps1")" \
-                "${dashboard_args[@]}"
-            ;;
-        *)
-            bash "$repo_path/scripts/aitools-dashboard.sh" "${dashboard_args[@]}"
-            ;;
-    esac
+    # Dashboard is a standalone script that handles its own logging and summary
+    # (aitools-dashboard.sh; on Windows aitools.ps1 runs aitools-dashboard.ps1).
+    bash "$repo_path/scripts/aitools-dashboard.sh" ${dashboard_args[@]+"${dashboard_args[@]}"}
     return $?
 fi
 
@@ -2001,8 +1924,14 @@ if $do_sessions; then
             fi
             # No git push for a manual CLI archive (do_git left to the helper's
             # default; --no-op-on-missing handled inside). Pass the transcript.
+            archive_rc=0
             "$archive_py" "$archive_helper" archive \
-                --session "$full_id" --transcript "$transcript"
+                --session "$full_id" --transcript "$transcript" || archive_rc=$?
+            if [ "$archive_rc" -ne 0 ]; then
+                # The archiver logs its own cause in ait-harvest.log
+                log_error "session archive failed (exit $archive_rc) -- see ~/.aitools/logs/ait-harvest.log"
+                return 1
+            fi
             echo "Archive requested for $full_id (see ~/.aitools/logs/ait-harvest.log)"
             ;;
         move)
@@ -2059,13 +1988,22 @@ fi
 
 export AITOOLS_RUN_ID=$(head -c 6 /dev/urandom | od -An -tx1 | tr -d ' \n')
 
-# Init summary file for this run; child scripts append via AITOOLS_SUMMARY_FILE.
-# SUPPRESS=1 tells aitools-install.sh not to display it (we display after it returns).
-AITOOLS_SUMMARY_FILE="$HOME/.aitools/run-summary.txt"
-rm -f "$AITOOLS_SUMMARY_FILE"
-touch "$AITOOLS_SUMMARY_FILE"
-export AITOOLS_SUMMARY_FILE
-export AITOOLS_SUPPRESS_SUMMARY_DISPLAY=1
+# The run summary file (reference/logging.md 8.4, 8.5): created and exported here
+# when no caller set one (summary_begin); child scripts, the installer included,
+# record into it and draw nothing. Drawn once at the end, only by the process that
+# created it (summary_end).
+# Smart reload (below): the re-executed entry point inherits the file. The process
+# that created it is gone (exec), so it hands the ownership on
+# (AITOOLS_SUMMARY_OWNER_HANDOFF=1, exported only by the owner) and the reloaded
+# one takes it: it draws the panel, and the records written before the reload are
+# kept. (aitools-lib's summary_begin has no hand-off of its own: this sets its
+# owner flag.)
+summary_begin
+if [ "${AITOOLS_SUMMARY_OWNER_HANDOFF:-}" = "1" ] && [ -n "${AITOOLS_SUMMARY_FILE:-}" ]; then
+    AITLIB_SUMMARY_OWNER=true
+    log_detail "run summary: ownership taken over after the reload ($AITOOLS_SUMMARY_FILE)"
+fi
+unset AITOOLS_SUMMARY_OWNER_HANDOFF
 
 log "aitools $AITOOLS_INSTALLED_VERSION"
 
@@ -2096,7 +2034,9 @@ if $do_gitpull; then
     pulled_updates=false
     # Reset generated files before pull (line-ending diffs, mode changes)
     git -C "$repo_path" checkout HEAD -- deploy/ 2>/dev/null || true
-    if pull_out=$(cd "$repo_path" && git pull --tags origin main 2>&1); then
+    pull_rc=0
+    pull_out=$(cd "$repo_path" && git pull --tags origin main 2>&1) || pull_rc=$?
+    if [ "$pull_rc" -eq 0 ]; then
         if echo "$pull_out" | grep -q "Already up to date"; then
             log_ok "Already up to date"
         else
@@ -2104,11 +2044,9 @@ if $do_gitpull; then
             log_ok "Updated"
         fi
     else
-        while IFS= read -r _pull_line; do
-            if [ -n "$_pull_line" ]; then log_detail "git-pull: $_pull_line"; fi
-        done <<< "$pull_out"
-        log_error "git pull failed (see $LOG_DISPLAY)"
-        printf '%s\n' "$pull_out" >&2
+        # error_reason logs git's output as detail lines
+        write_error "source" "git pull failed" "$(error_reason "$pull_out" "$pull_rc")"
+        summary_end
         return 1
     fi
 else
@@ -2117,7 +2055,9 @@ else
     pulled_updates=false
     # Reset generated files before pull (line-ending diffs, mode changes)
     git -C "$repo_path" checkout HEAD -- deploy/ 2>/dev/null || true
-    if pull_out=$(cd "$repo_path" && git pull origin main 2>&1); then
+    pull_rc=0
+    pull_out=$(cd "$repo_path" && git pull origin main 2>&1) || pull_rc=$?
+    if [ "$pull_rc" -eq 0 ]; then
         if echo "$pull_out" | grep -q "Already up to date"; then
             log_ok "Already up to date"
         else
@@ -2125,17 +2065,9 @@ else
             log_ok "Updated"
         fi
     else
-        # Full output to the log first; the console keeps a 3-line preview.
-        while IFS= read -r _pull_line; do
-            if [ -n "$_pull_line" ]; then log_detail "git-pull: $_pull_line"; fi
-        done <<< "$pull_out"
-        if echo "$pull_out" | grep -qiE "could not resolve|unable to access|connection refused|connection timed out|no route to host"; then
-            log_warn "Could not reach remote — deploying from local checkout"
-        else
-            log_warn "git pull failed -- deploying from local checkout (see $LOG_DISPLAY)"
-            printf '%s\n' "$pull_out" | head -3 | sed 's/^/    /' >&2
-        fi
-        write_summary WARN "source" "stale local checkout (git pull failed)"
+        # One warning; its reason is git's own (e.g. "fatal: unable to access ...:
+        # Could not resolve host"); error_reason logs git's output as detail lines
+        write_warn "source" "git pull failed -- deploying from the local checkout: $(error_reason "$pull_out" "$pull_rc")"
     fi
 fi
 
@@ -2150,26 +2082,26 @@ if resolve_user_repo_path; then
         ur_pull_exit=0
         ur_pull_out=$(git -C "$user_repo_path" pull --ff-only --quiet 2>&1) || ur_pull_exit=$?
         if [ "$ur_pull_exit" -ne 0 ]; then
-            log_warn "user repo pull failed -- using local copy."
-            log_detail "user-repo-pull: $ur_pull_out"
+            # error_reason logs git's output as detail lines
+            write_warn "dotprofile" "dotprofile pull failed -- using the local copy: $(error_reason "$ur_pull_out" "$ur_pull_exit")"
         fi
     fi
-    # Forward slashes on Windows (C:/Users/...), the form Git Bash and pwsh both read
-    case "$(uname -s)" in
-        MINGW*|MSYS*|CYGWIN*)
-            if _urp_m=$(cygpath -m "$user_repo_path"); then user_repo_path="$_urp_m"
-            else log_detail "cygpath -m failed for $user_repo_path -- passed to build-deploy unchanged"; fi ;;
-    esac
     build_env=(AITOOLS_USER_REPO_PATH="$user_repo_path")
 fi
 
 # [2/N] Rebuild deploy scripts. The dotprofile resolved above reaches the build as
-# AITOOLS_USER_REPO_PATH, scoped to this one call (B5a Q1; PR #95 follow-up)
+# AITOOLS_USER_REPO_PATH, scoped to this one call (B5a Q1; PR #95 follow-up).
+# Relayed (run_child_relayed --summary-tool "build-deploy" --quiet): build-deploy
+# logs through the library itself (every line in deploy.log), the relay shows only
+# its warn and error lines, and a failed build is one error, recorded by the relay
+# when the build recorded none.
 log "Step 2/$STEPS: Rebuilding deploy scripts"
-if env ${build_env[@]+"${build_env[@]}"} bash "$repo_path/scripts/build-deploy.sh" >> "$LOG_FILE" 2>&1; then
+if run_child_relayed --summary-tool "build-deploy" --quiet "Step 2: build-deploy.sh" \
+    env ${build_env[@]+"${build_env[@]}"} "${BASH:-bash}" "$repo_path/scripts/build-deploy.sh"; then
     log_ok "Rebuilt"
 else
-    log_error "build failed (see $LOG_DISPLAY)"
+    # Counted and, when needed, recorded by the relay; the run stops here
+    summary_end
     return 1
 fi
 
@@ -2177,10 +2109,7 @@ fi
 # If so, self-update and re-exec so deploy_configs uses the current list.
 # Cost when lists match: one perl comparison (~1ms). No extra work.
 if [ -f "$repo_path/scripts/aitools" ]; then
-    case "$(uname -s)" in
-        MINGW*|MSYS*|CYGWIN*) _lp='local deploy_scripts=".*\.ps1"' ;;
-        *) _lp='local deploy_scripts=".*\.sh"' ;;
-    esac
+    _lp='local deploy_scripts=".*\.sh"'
     _repo_list=$(perl -ne "print if /^\s+$_lp/" "$repo_path/scripts/aitools" | tail -1)
     _self_list=$(perl -ne "print if /^\s+$_lp/" "$0" | tail -1)
     if [ -n "$_repo_list" ] && [ "$_repo_list" != "$_self_list" ]; then
@@ -2194,6 +2123,9 @@ if [ -f "$repo_path/scripts/aitools" ]; then
             chmod +x "$HOME/.local/bin/aitools"
             export AITOOLS_PREBUILD_DONE=1
             [ "$pulled_updates" = "true" ] && export AITOOLS_PULLED_UPDATES=1
+            # The reloaded entry point keeps this run's summary file and, when this
+            # process created it, draws it (X2: summary_begin above)
+            if [ "${AITLIB_SUMMARY_OWNER:-false}" = "true" ]; then export AITOOLS_SUMMARY_OWNER_HANDOFF=1; fi
             # Replay the ORIGINAL args (parse loop already shifted "$@" empty);
             # otherwise `install` degrades to the sync path on reload.
             exec "$HOME/.local/bin/aitools" ${_ORIG_ARGS[@]+"${_ORIG_ARGS[@]}"}
@@ -2218,50 +2150,36 @@ if $do_install; then
     # inherit this stdin and decide for themselves. --force makes every review
     # prompt take the source version (backup kept), terminal or not.
     if $force; then export AITOOLS_FORCE=1; fi
-    case "$(uname -s)" in
-        MINGW*|MSYS*|CYGWIN*)
-            # Windows: forward to PowerShell installer with translated flags
-            ps_args=()
-            local i=0
-            while [ $i -lt ${#passthrough[@]} ]; do
-                case "${passthrough[$i]}" in
-                    --skip-gh-auth)         ps_args+=("-SkipGhAuth") ;;
-                    --skip-drive-detection) ps_args+=("-SkipDriveDetection") ;;
-                    --repos-path)
-                        ps_args+=("-ReposPath")
-                        i=$((i + 1))
-                        ps_args+=("$(cygpath -w "${passthrough[$i]}")")
-                        ;;
-                    *) ps_args+=("${passthrough[$i]}") ;;
-                esac
-                i=$((i + 1))
-            done
-            pwsh -NoProfile -ExecutionPolicy Bypass \
-                -File "$(cygpath -w "$repo_path/scripts/aitools-install.ps1")" \
-                "${ps_args[@]}"
-            ;;
-        *)
-            bash "$repo_path/scripts/aitools-install.sh" "${passthrough[@]}"
-            ;;
-    esac
-    installer_rc=$?
+    # Relayed (run_child_relayed --summary-tool "aitools install" --abort-warn): its
+    # lines reach the console and, mirrored by this outermost relay, deploy.jsonl
+    # (inside the relay the installer writes no records of its own: logging.md
+    # 8.3); stdin stays the terminal (its prompts read /dev/tty); it records into
+    # this run's summary file and draws nothing. A failed installer is one error of
+    # this run (recorded by the relay only when the installer recorded none); its
+    # [x]abort (exit 2) was recorded inside it, once, as a warning.
+    installer_rc=0
+    if ! run_child_relayed --summary-tool "aitools install" --abort-warn "Step 3: aitools-install.sh" \
+        "${BASH:-bash}" "$repo_path/scripts/aitools-install.sh" ${passthrough[@]+"${passthrough[@]}"}; then
+        installer_rc="$AITLIB_CHILD_RC"
+        if [ "$installer_rc" -eq 0 ]; then installer_rc=1; fi   # error lines with exit 0: a failure
+    fi
     unset AITOOLS_FORCE
     echo ""
     # Exit 2 = the user chose [x]abort at a review menu (D-TS13): the run stops
-    if [ $installer_rc -eq 2 ]; then
+    if [ "$installer_rc" -eq 2 ]; then
         log "Installer aborted by user at a review menu -- run stopped (exit 2)"
-        show_summary
+        summary_end
         return 2
     fi
-    if [ $installer_rc -eq 0 ]; then
+    if [ "$installer_rc" -eq 0 ]; then
         log_ok "All up to date ($(repo_version "$repo_path"))"
-        # Session archive hint (after final status line)
+        # Session archive hint (after final status line): a hint, not a warning
         if ! read_config_key "$config" "userRepoPath" >/dev/null 2>&1; then
-            printf '\033[33mhint: To archive sessions across machines, run '\''aitools user init'\''.\033[0m\n'
+            log "hint: To archive sessions across machines, run 'aitools user init'."
         fi
         check_profile interactive
     else
-        log "Completed with errors (see $LOG_DISPLAY)" "error"
+        # Counted (and, when needed, recorded) by the relay
         overall_rc=1
     fi
 
@@ -2272,13 +2190,14 @@ elif $do_gitpull; then
     deploy_rc=$?
     # [x]abort in deploy-harness (D-TS13): show what ran and stop with exit 2
     if $deploy_aborted; then
-        show_summary
+        summary_end
         return 2
     fi
     if [ $deploy_rc -eq 0 ]; then
         log_ok "Done"
     else
-        log "Completed with $deploy_rc error(s)" "error"
+        # The errors were counted and recorded where they happened
+        log "Completed with $deploy_rc error(s) (see $LOG_DISPLAY)"
         overall_rc=1
     fi
 
@@ -2311,10 +2230,13 @@ elif $do_gitpull; then
             tag="(skipped)"
         else
             git -C "$repo_path" tag "$tag"
-            if git -C "$repo_path" push origin "$tag" 2>/dev/null; then
+            push_rc=0
+            push_out=$(git -C "$repo_path" push origin "$tag" 2>&1) || push_rc=$?
+            if [ "$push_rc" -eq 0 ]; then
                 log_ok "Tagged $tag"
             else
-                log_warn "Tagged $tag (local only -- push failed)"
+                # error_reason logs git's output as detail lines
+                log_warn "Tagged $tag (local only -- push failed): $(error_reason "$push_out" "$push_rc")"
             fi
         fi
     fi
@@ -2334,13 +2256,14 @@ else
     deploy_rc=$?
     # [x]abort in deploy-harness (D-TS13): show what ran and stop with exit 2
     if $deploy_aborted; then
-        show_summary
+        summary_end
         return 2
     fi
     if [ $deploy_rc -eq 0 ]; then
         log_ok "Done"
     else
-        log "Completed with $deploy_rc error(s)" "error"
+        # The errors were counted and recorded where they happened
+        log "Completed with $deploy_rc error(s) (see $LOG_DISPLAY)"
         overall_rc=1
     fi
 
@@ -2348,7 +2271,7 @@ else
 
     check_profile interactive
 
-    # Session archive hint (after final status line)
+    # Session archive hook (after the final status line, before the panel)
     settings_file="$HOME/.claude/settings.json"
     hook_installed=false
     if [ -f "$settings_file" ] && grep -q "session-archive.sh" "$settings_file" 2>/dev/null; then
@@ -2356,10 +2279,12 @@ else
     fi
     if [ "$hook_installed" = true ]; then
         if ! read_config_key "$config" "userRepoPath" >/dev/null 2>&1; then
-            printf '\033[33mWARNING: session archive hook installed but inactive -- userRepoPath not configured. Run '\''aitools user init'\''.\033[0m\n'
+            write_action "claude hooks" "session archive hook installed but inactive: userRepoPath not configured -- run: aitools user init" \
+                "Run: aitools user init (activates session archiving)"
         fi
     else
-        printf '\033[33mhint: session archive hook not installed. Run '\''aitools user init'\'' to set up.\033[0m\n'
+        # A hint, not a warning
+        log "hint: session archive hook not installed. Run 'aitools user init' to set up."
     fi
 fi
 
@@ -2381,33 +2306,10 @@ if [ -f "$repo_path/scripts/aitools" ]; then
         done <<< "$_syntax_out"
         log_warn "skipping bash self-update (new aitools has syntax errors; see $LOG_DISPLAY)"
     fi
-
-    # On Windows, also self-update aitools.ps1 (validate with current PS version first)
-    case "$(uname -s)" in
-        MINGW*|MSYS*|CYGWIN*)
-            if [ -f "$repo_path/scripts/aitools.ps1" ]; then
-                _parse_rc=0
-                _parse_out=$(pwsh -NoProfile -Command "
-                    \$e = \$null
-                    \$null = [System.Management.Automation.Language.Parser]::ParseFile('$(cygpath -w "$repo_path/scripts/aitools.ps1")', [ref]\$null, [ref]\$e)
-                    foreach (\$x in \$e) { 'line ' + \$x.Extent.StartLineNumber + ': ' + \$x.Message }
-                    if (\$e.Count -gt 0) { exit 1 }
-                " 2>&1) || _parse_rc=$?
-                if [ "$_parse_rc" -eq 0 ]; then
-                    sed 's/^\$AITOOLS_INSTALLED_VERSION = ".*"/$AITOOLS_INSTALLED_VERSION = "'"$new_version"'"/' \
-                        "$repo_path/scripts/aitools.ps1" > "$HOME/.local/bin/aitools.ps1"
-                else
-                    while IFS= read -r _parse_line; do
-                        if [ -n "$_parse_line" ]; then log_detail "aitools.ps1 parse: $_parse_line"; fi
-                    done <<< "$_parse_out"
-                    log_warn "skipping PS1 self-update (parse errors on this PowerShell version; see $LOG_DISPLAY)"
-                fi
-            fi
-            ;;
-    esac
 fi
 
-show_summary
+# The panel, only when this process created the run summary file (summary_begin)
+summary_end
 
 # Relay outbound: prompt if relay.md is dirty or main is ahead of origin (cross-machine OL)
 _rob="$repo_path/scripts/relay-outbound-prompt.sh"
@@ -2419,8 +2321,6 @@ if [ -f "$_rob" ]; then
 fi
 
 unset AITOOLS_RUN_ID
-unset AITOOLS_SUMMARY_FILE
-unset AITOOLS_SUPPRESS_SUMMARY_DISPLAY
 
 return "$overall_rc"
 }
