@@ -112,8 +112,9 @@ fi
 step3_fail=0
 step3_details=""
 for f in "${SH_SCRIPTS[@]}"; do
-    # Find lines with 'exit 1' (not in comments)
-    exit_lines=$(grep -n 'exit 1' "$f" 2>/dev/null | grep -v '^\s*#' | grep -v 'esac' || true)
+    # Find lines with 'exit 1' (not in comments: grep -n puts "N:" before the
+    # line, so the comment filter matches after that prefix)
+    exit_lines=$(grep -n 'exit 1' "$f" 2>/dev/null | grep -v '^[0-9]*:[[:space:]]*#' | grep -v 'esac' || true)
     while IFS= read -r eline; do
         [ -z "$eline" ] && continue
         lineno=$(echo "$eline" | cut -d: -f1)

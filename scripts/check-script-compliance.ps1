@@ -117,9 +117,11 @@ if ($step3Fail -eq 0) {
 }
 
 # ---------------------------------------------------------------------------
-# 4. Error counter tracking -- LogError increments $script:errors in lib
+# 4. Error counter tracking -- LogError increments $script:errors in lib.
+#    Steps 4 and 5 match the function's body across lines ((?s), up to its
+#    first "}"): the body starts on the line after "function LogError($msg) {"
 # ---------------------------------------------------------------------------
-if ($libContent -match 'LogError.*errors\+\+') {
+if ($libContent -match '(?s)function\s+LogError\b[^}]*\$script:errors\+\+') {
     StepPass "4" "Error counter tracking (PS1)" "LogError increments errors"
 } else {
     StepFail "4" "Error counter tracking (PS1)" "LogError does not increment errors"
@@ -128,7 +130,7 @@ if ($libContent -match 'LogError.*errors\+\+') {
 # ---------------------------------------------------------------------------
 # 5. Warning counter tracking -- LogWarn increments $script:warnings in lib
 # ---------------------------------------------------------------------------
-if ($libContent -match 'LogWarn.*warnings\+\+') {
+if ($libContent -match '(?s)function\s+LogWarn\b[^}]*\$script:warnings\+\+') {
     StepPass "5" "Warning counter tracking (PS1)" "LogWarn increments warnings"
 } else {
     StepFail "5" "Warning counter tracking (PS1)" "LogWarn does not increment warnings"

@@ -539,7 +539,8 @@ tool_exception_record() {
 #   = the summary tool, else the base name of the first argument ending in
 #   .sh / .ps1, else LABEL; WHAT "<label> failed (exit N)"; REASON
 #   error_reason over the child's last 20 stderr lines, else over its last
-#   stdout line) only when the child wrote no ERROR record while it ran;
+#   stdout line that is not a warning line, or its last warning line when it
+#   printed nothing else) only when the child wrote no ERROR record while it ran;
 #   otherwise the error is logged and counted, not recorded again.
 # - A user abort (exit 2) is recorded once, by the innermost relay: only when
 #   the child wrote no WARN or ERROR record while it ran. With --abort-warn it
@@ -635,6 +636,7 @@ _aitlib_relay_reset() {
     AITLIB_CHILD_WARNINGS=0; AITLIB_CHILD_ERRORS=0
     _AITLIB_RELAY_QUIET="${1:-false}"; _AITLIB_RELAY_MIRROR="${2:-true}"
     _AITLIB_RELAY_LAST=""; _AITLIB_RELAY_LAST_SCRIPT=""; _AITLIB_RELAY_ERR_SCRIPTS=""
+    _AITLIB_RELAY_LAST_OTHER=false
 }
 
 # _aitlib_relay_line LINE -- print one child console line (with --quiet only its
@@ -642,7 +644,9 @@ _aitlib_relay_reset() {
 # line (unless --no-mirror), count its warn/error level in the child counts
 # (never in the parent's WARNINGS / ERRORS), and keep it as the child's last
 # stdout line (not an exit footer, which only restates the counts: a failed
-# child's reason comes from the line before it)
+# child's reason comes from the line before it). A warning line is kept only
+# while no other line has been: the kept line is a warning line only when the
+# child printed nothing else (reference/logging.md 8.3, RFI 5899-31)
 _aitlib_relay_line() {
     local line="$1" clean esc=$'\033' f_ts f_script f_level f_msg last
     local re='^\[([^]]+)\] \[([^]]+)\] \[([a-z]+)\] (.*)$'
@@ -664,14 +668,21 @@ _aitlib_relay_line() {
         case "$f_msg" in
             "COMPLETED with "*|"FAILED with "*) return 0 ;;   # the exit footer restates the counts
         esac
-        _AITLIB_RELAY_LAST="$last"
+        if [ "$f_level" != "warn" ]; then
+            _AITLIB_RELAY_LAST="$last"; _AITLIB_RELAY_LAST_OTHER=true
+        elif [ "${_AITLIB_RELAY_LAST_OTHER:-false}" != "true" ]; then
+            _AITLIB_RELAY_LAST="$last"
+        fi
         case "$f_level" in
             warn)  AITLIB_CHILD_WARNINGS=$((AITLIB_CHILD_WARNINGS + 1)) ;;
             error) _AITLIB_RELAY_ERR_SCRIPTS="${_AITLIB_RELAY_ERR_SCRIPTS}${f_script}"$'\n' ;;
         esac
         return 0
     fi
-    _AITLIB_RELAY_LAST="$last"
+    case "$clean" in
+        # a blank line is not kept (as Send-AitLibChildLine)
+        *[![:space:]]*) _AITLIB_RELAY_LAST="$last"; _AITLIB_RELAY_LAST_OTHER=true ;;
+    esac
     if [ "${_AITLIB_RELAY_QUIET:-false}" != "true" ]; then
         printf '%s\n' "$line"
     fi
@@ -1170,26 +1181,41 @@ OpenSSL	openssl.*not found|OPENSSL_DIR	brew install openssl / apt-get install li
 #      any case (letters, digits, - and _), at the start of the line or after a
 #      space; "fatal:", any case, at the start or after a space; "E: " at the
 #      start; "syntax error", any case, anywhere;
-#   4. the last non-empty line;
-#   5. "no output (exit <EXIT_CODE>)".
+#   4. the last non-empty line that is not a warning line;
+#   5. "exit <EXIT_CODE>" when the output has a warning line (every non-empty
+#      line is one);
+#   6. "no output (exit <EXIT_CODE>)".
 # Before matching, CR, ANSI CSI sequences and a leading "[<time>] [<script>]
 # [<level>] " are removed from each line; whitespace-only lines are empty; the
-# reason printed is that line with its leading and trailing blanks trimmed.
+# reason printed is that line with its leading and trailing blanks trimmed. A
+# warning line is one whose prefix has the level warn ("[<time>] [<script>]
+# [warn] "), decided after CR and ANSI are removed and before the prefix is
+# removed (RFI 5899-31: rule 4 never takes a warning line as the reason).
 # OUTPUT is logged to deploy.log as detail lines ("output: <line>", CR and ANSI
 # removed, empty lines skipped), so a caller does not log it as well (8.2). One
-# perl process; no grep -P, no early-exit pipeline (bash 3.2 safe). Returns 0.
+# perl process; no grep -P, no early-exit pipeline (bash 3.2 safe). Without
+# perl (setup-perl runs before perl exists), or when perl fails, the reason
+# comes from _aitlib_error_reason_noperl: rules 3-6 in bash, no build-failure
+# signatures (rule 1), and a detail line says so. Always prints one reason and
+# returns 0.
 error_reason() {
-    local ts
+    local ts r rc=0
+    if ! command -v perl >/dev/null 2>&1; then
+        log_detail "error_reason: perl not found -- reason taken without the build-failure signatures"
+        _aitlib_error_reason_noperl "${1:-}" "${2:-}" true
+        return 0
+    fi
     ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-    printf '%s' "${1:-}" | AITLIB_ER_CODE="${2:-}" AITLIB_ER_SIGS="$AITLIB_BUILD_SIGNATURES" \
+    r=$(printf '%s' "${1:-}" | AITLIB_ER_CODE="${2:-}" AITLIB_ER_SIGS="$AITLIB_BUILD_SIGNATURES" \
         AITLIB_ER_LOG="${LOG_FILE:-}" AITLIB_ER_PREFIX="[$ts] [${SCRIPT_NAME:-unknown}] [detail] output: " perl -e '
         my $in = do { local $/; <STDIN> };
         $in = "" unless defined $in;
-        my (@raw, @clean);
+        my (@raw, @clean, @warn);
         for my $l (split /\n/, $in, -1) {
             $l =~ s/\r//g;
             $l =~ s/\e\[[\x30-\x3f]*[\x20-\x2f]*[\x40-\x7e]//g;
             push @raw, $l;
+            push @warn, ($l =~ /^\[[^\]]*\] \[[^\]]*\] \[warn\] / ? 1 : 0);
             (my $c = $l) =~ s/^\[[^\]]*\] \[[^\]]*\] \[[a-z]+\] //;
             push @clean, $c;
         }
@@ -1213,11 +1239,104 @@ error_reason() {
             }
         }
         if (!defined $out) {
-            for my $c (reverse @clean) { if ($c =~ /\S/) { $out = trim($c); last } }
+            for my $i (reverse 0 .. $#clean) {
+                next if $warn[$i];
+                if ($clean[$i] =~ /\S/) { $out = trim($clean[$i]); last }
+            }
         }
+        $out = "exit $ENV{AITLIB_ER_CODE}" if !defined $out && grep { $_ } @warn;
         $out = "no output (exit $ENV{AITLIB_ER_CODE})" unless defined $out;
         print $out, "\n";
-    '
+    ') || rc=$?
+    if [ "$rc" -ne 0 ] || [ -z "$r" ]; then
+        # perl failed: its detail lines may be in the log already, so not again
+        log_detail "error_reason: perl failed (exit $rc) -- reason taken without the build-failure signatures"
+        _aitlib_error_reason_noperl "${1:-}" "${2:-}" false
+        return 0
+    fi
+    printf '%s\n' "$r"
+    return 0
+}
+
+# _aitlib_strip_csi TEXT -- set _AITLIB_CSI_OUT to TEXT without its ANSI CSI
+# sequences (ESC [, bytes 0x30-0x3f, bytes 0x20-0x2f, one byte 0x40-0x7e: the
+# pattern error_reason's perl removes), found by byte value (printf -v, bash
+# 3.1+), so no locale-dependent range is used. No subshell.
+_AITLIB_CSI_OUT=""
+_aitlib_strip_csi() {
+    local s="${1:-}" out="" rest ch n i esc=$'\033'
+    while :; do
+        case "$s" in *"$esc["*) ;; *) break ;; esac
+        out="$out${s%%"$esc["*}"
+        rest="${s#*"$esc["}"
+        i=0
+        while [ "$i" -lt "${#rest}" ]; do
+            ch="${rest:$i:1}"; printf -v n '%d' "'$ch"
+            if [ "$n" -ge 48 ] && [ "$n" -le 63 ]; then i=$((i + 1)); else break; fi
+        done
+        while [ "$i" -lt "${#rest}" ]; do
+            ch="${rest:$i:1}"; printf -v n '%d' "'$ch"
+            if [ "$n" -ge 32 ] && [ "$n" -le 47 ]; then i=$((i + 1)); else break; fi
+        done
+        if [ "$i" -lt "${#rest}" ]; then
+            ch="${rest:$i:1}"; printf -v n '%d' "'$ch"
+            if [ "$n" -ge 64 ] && [ "$n" -le 126 ]; then
+                s="${rest:$((i + 1))}"
+                continue
+            fi
+        fi
+        # not a complete CSI sequence: ESC [ is kept, the scan goes on after it
+        out="$out$esc["
+        s="$rest"
+    done
+    _AITLIB_CSI_OUT="$out$s"
+}
+
+# _aitlib_error_reason_noperl OUTPUT EXIT_CODE LOG -- error_reason without perl:
+# rules 3-6 of error_reason (the first error-marker line; the last non-empty
+# line that is not a warning line; "exit <N>"; "no output (exit <N>)"), with the
+# same line cleaning (CR, ANSI CSI, the "[<time>] [<script>] [<level>] "
+# prefix), in bash 3.2 (ERE through [[ =~ ]], no subprocess). Character classes
+# are spelled out, never ranges (a range in [[ =~ ]] depends on the locale: bash
+# 5 under UTF-8 rejects [ -/]), and a CSI sequence is found by byte value. The
+# build-failure signatures (rule 1, Perl regular expressions) are not tried.
+# LOG=true logs each non-empty line as a detail line, as the perl path does.
+# Prints one reason; returns 0.
+_aitlib_error_reason_noperl() {
+    local in="${1:-}" code="${2:-}" dolog="${3:-true}" l c
+    local lc='abcdefghijklmnopqrstuvwxyz' uc='ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+    local wre='^\[[^]]*\] \[[^]]*\] \[warn\] '
+    local pfx="^\\[[^]]*\\] \\[[^]]*\\] \\[[$lc]+\\] (.*)\$"
+    local mk1="(^| )[${uc}${lc}0123456789_-]*[Ee][Rr][Rr][Oo][Rr]:"
+    local mk2='(^| )[Ff][Aa][Tt][Aa][Ll]:'
+    local mk3='^E: '
+    local mk4='[Ss][Yy][Nn][Tt][Aa][Xx] [Ee][Rr][Rr][Oo][Rr]'
+    local marker="" last="" sawwarn=false iswarn
+    while IFS= read -r l || [ -n "$l" ]; do
+        l="${l//$'\r'/}"
+        _aitlib_strip_csi "$l"; l="$_AITLIB_CSI_OUT"
+        case "$l" in *[![:space:]]*) ;; *) continue ;; esac
+        if [ "$dolog" = "true" ]; then log_detail "output: $l"; fi
+        iswarn=false
+        if [[ "$l" =~ $wre ]]; then iswarn=true; sawwarn=true; fi
+        c="$l"
+        if [[ "$l" =~ $pfx ]]; then c="${BASH_REMATCH[1]}"; fi
+        if [ -z "$marker" ]; then
+            if [[ "$c" =~ $mk1 ]] || [[ "$c" =~ $mk2 ]] || [[ "$c" =~ $mk3 ]] || [[ "$c" =~ $mk4 ]]; then
+                marker="$c"
+            fi
+        fi
+        c="${c#"${c%%[![:space:]]*}"}"; c="${c%"${c##*[![:space:]]}"}"
+        if [ "$iswarn" = "false" ] && [ -n "$c" ]; then last="$c"; fi
+    done <<< "$in"
+    if [ -n "$marker" ]; then
+        marker="${marker#"${marker%%[![:space:]]*}"}"; marker="${marker%"${marker##*[![:space:]]}"}"
+        printf '%s\n' "$marker"
+    elif [ -n "$last" ]; then printf '%s\n' "$last"
+    elif [ "$sawwarn" = "true" ]; then printf 'exit %s\n' "$code"
+    else printf 'no output (exit %s)\n' "$code"
+    fi
+    return 0
 }
 
 # ---------------------------------------------------------------------------
@@ -4606,7 +4725,10 @@ SYNC_NODE_EOF
     # --- Plan pass ---
     local plan_stderr
     plan_stderr=$(node "$nodescript" plan "$live_file" "$profile_file" "$subpath" "$exclude_keys" "$deprecated_rules" "$plan_json" 2>&1 1>"$decisions_tsv") || {
-        write_error "$tool" "settings sync failed" "plan pass: $plan_stderr"
+        local plan_rc=$?
+        # node's stderr is multi-line (a stack, a temp path): one reason line,
+        # the whole of it logged as detail lines by error_reason (8.3)
+        write_error "$tool" "settings sync failed" "plan pass: $(error_reason "$plan_stderr" "$plan_rc")"
         rm -f "$nodescript" "$plan_json" "$decisions_tsv" "$choices_tsv" "$applyerr"
         return 1
     }
