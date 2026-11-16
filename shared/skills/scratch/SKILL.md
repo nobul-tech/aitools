@@ -182,8 +182,10 @@ Nothing in `.scratch/` is deleted by the harness.
 - Old session dirs accumulate until someone removes them by hand (with
   a cleanup script, not an inline `rm` glob).
 
-**Never put carry-forward artifacts in scratch.** Handoffs, plans,
-running estimates, mission reports and anything another session or
+**Never put carry-forward artifacts in scratch.** Handoff files (by
+default `/handoff` prints the handoff in the terminal and writes no file;
+tested on Claude Code, other harnesses not yet tested), plans, running
+estimates, mission reports and anything another session or
 machine needs go to a tracked location (`plans/`, `reference/`,
 `.aitools/channel/`) and are committed. A harvested copy is renamed
 and only reaches other machines once someone commits `harvesting/`;

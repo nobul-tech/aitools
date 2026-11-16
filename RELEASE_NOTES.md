@@ -66,6 +66,30 @@ Unchanged, covered by #187: the hooks, the Python tools, the Perl helpers, `shar
 
 ---
 
+## v0.77.26 -- /handoff v2.1: the session agent writes the handoff itself and prints it in the terminal, with no delegates or artifacts unless asked; Claude Code compaction recorded as item #36 (2026-11-15)
+
+Not tagged. Two direct commits to main from the main checkout, on the commander's order (session a9074793-c, 2026-11-15): "do it yourself for any and all shared/rules and shared/skills, dont use worktrees, edit in place, when done, commit and push to main branch". Orders for the skill: "change handoff skill so that the handoff happens at the terminal just like we did in this round and is not delegated" (v2.0), then "unless otherwise asked to do so, handoff skill should not produce any delegates or artifacts" (v2.1). On the dotprofile copy of the delegation rule: "the dotprofile handoff file is legacy, we working only off the one in shared/rules/ now".
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 1 | `shared/skills/handoff/SKILL.md` v2.0: the session agent writes the handoff itself, in its own context, and prints it in full in the terminal. No step is delegated (the v1 S2 audit, S2 assessment, S3 writer, Verifier and amendment subagents are retired); the agent reviews it against the same 9 criteria and says it was not independently verified. Before a `/compact` the handoff is the last reply. A file (`.aitools/channel/handoffs/`) is written only when the commander asks for one. New sections: "Harness support" (tested on Claude Code 2.1.325, macOS; Cursor CLI, IDE and cloud agents not yet tested), "Rules", "After `/compact`: the accepting agent", "When the commander asks for a file or a delegate" |
+| 2 | `/handoff` v2.1: no delegates and no artifacts (no handoff file, scratch file or commit) unless the commander asks; the accepting agent's transcript check reads the search output in the tool result instead of saving it to scratch; a delegate he asks for (e.g. a verifier) is launched under `/delegate` with the full draft. The same wording replaces "never delegated" in `shared/rules/delegation.md`, `shared/skills/delegate/SKILL.md`, `reference/tool-ops-claude-code.md` and the governed terms `handoff` and `delegating agent` |
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 3 | `reference/tool-ops-claude-code.md` item #36 (HIGH) and section "Compaction and the Terminal Handoff": after `/compact`, Claude Code kept the last reply (the handoff) word for word after its summary and summarised everything before it; the resumed session confirmed it against the transcript. Marked Claude Code only: other harnesses are not tested and may behave differently. `/compact` added to "Session Management Commands", the 2.1.325 release-notes watch and the cross-references; the next free item number is after #36 |
+| 4 | `shared/skills/tool-ops/SKILL.md`: a lookup row for item #36 |
+| 5 | References to how a handoff works now say it is printed in the terminal, written by the session agent, a file only on request, tested on Claude Code and not yet on other harnesses: `shared/rules/delegation.md` and `shared/skills/delegate/SKILL.md` (cross-reference "Handoff delegations" -> "Handoffs"), `shared/rules/scratch.md`, `shared/skills/scratch/SKILL.md`, `shared/skills/aitool-continue/SKILL.md` (where to find a terminal handoff), `.claude/rules/aitools-workspace.md` (`channel/handoffs/` row), and the governed terms `handoff`, `situation assessment` (the `/handoff` step is now step 2) and `delegating agent` (`/glossary`) |
+| 6 | `shared/rules/delegation.md` is the only maintained delegation rule; the dotprofile `claude/rules/delegation.md` is legacy (commander, 2026-11-15). Pointers that called the shared rule "a copy of the dotprofile" now say so: `shared/skills/delegate/SKILL.md` (cross-references), `reference/rules.md` v1.5 (sections 4 and 10), `reference/tool-ops-claude-code.md` item #26 |
+
+**Verified on:** macOS (Claude Code 2.1.325). Documentation and skill text only; no script changed. Not tested: the handoff on Claude Code for Windows, Claude Code web, and every Cursor harness.
+
+---
+
 ## v0.77.25 -- No pipefail script, hook or test suite ends a pipeline in a reader that exits early; compliance step 7 fails on every such reader (2026-11-15)
 
 Not tagged. Branch `fix/fa81-02-tests-pipes`, mission fa81-02-tests-pipes (session 87795dc3). Commander, 2026-11-15: "24-2) sure 24-3) yes 27-1) yes the fallback should fail and it should be logged and work should stop right?"; RFI fa81-02-1 (the `head` sites are in `scripts/` and `shared/hooks/` too): "32) yes it should, and it should expand the scope of the tests to include this test case. do it in one PR".

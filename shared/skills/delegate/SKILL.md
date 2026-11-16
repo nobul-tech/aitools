@@ -634,11 +634,13 @@ names so provenance survives the chain (`S4-A`, prefix `S4-A-`).
 ## Cross-references
 
 - Governing rule: `~/.claude/rules/delegation.md` (source: aitools
-  `shared/rules/delegation.md`, a copy of the dotprofile
-  `claude/rules/delegation.md`)
+  `shared/rules/delegation.md`, the only maintained copy; the dotprofile
+  `claude/rules/delegation.md` is legacy: commander, 2026-11-15)
 - Detection hook: `delegation-duty-guard.sh` (aitools `shared/hooks/`)
 - Claude Code limits: `/tool-ops` skill
-- Handoff delegations: `/handoff` skill
+- Handoffs: `/handoff` skill (written by the session agent itself and
+  printed in the terminal, with no delegates and no artifacts unless the
+  commander asks; tested on Claude Code, other harnesses not yet tested)
 - Mission monitoring: `/mission-control` skill
 - Session strategy: `/planning` skill
 - Ephemeral files: `/scratch` skill

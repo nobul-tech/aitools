@@ -424,7 +424,7 @@
       "source": "shared/skills/handoff/SKILL.md"
     },
     "delegating agent": {
-      "definition": "The agent that launches a subagent or produces a handoff for a future session. The delegating agent bears the delegation duty: inspecting output, verifying assumptions, ensuring lifecycle survival of artifacts. Recursive per decision #7 — when the delegating agent is itself a subagent, it inherits the duty from its parent. Replaces the fixed 'S3' reference in delegation contexts.",
+      "definition": "The agent that launches a subagent or produces a handoff for a future session (since /handoff v2.0 the session agent writes the handoff itself and uses no delegate for it unless the commander asks). The delegating agent bears the delegation duty: inspecting output, verifying assumptions, ensuring lifecycle survival of artifacts. Recursive per decision #7 — when the delegating agent is itself a subagent, it inherits the duty from its parent. Replaces the fixed 'S3' reference in delegation contexts.",
       "source": "shared/skills/handoff/SKILL.md"
     },
     "delegate": {
@@ -436,11 +436,11 @@
       "source": "dotprofile claude/rules/delegation.md; /delegate skill; decisions D-DEL1, D-DEL2, D-DEL3 (2026-10-05)"
     },
     "handoff": {
-      "definition": "Two distinct meanings distinguished by context: (1) handoff prompt — the self-contained document written at session end that enables a fresh agent to continue work. A file artifact written to a permanent tracked location. (2) handoff process — the 8-step workflow (main effort declaration through commit) governed by the /handoff skill. The process produces the prompt. When ambiguous, use 'handoff prompt' or 'handoff process' explicitly.",
-      "source": "shared/skills/handoff/SKILL.md"
+      "definition": "Two distinct meanings distinguished by context: (1) handoff prompt — the self-contained handoff the session agent writes at session end, or before a /compact the session will resume from, so that the accepting session (the same session after compaction, or a fresh one) can continue the work. Printed in full in the terminal by default; written to a permanent tracked location only when the commander asks for a file. (2) handoff process — the workflow governed by the /handoff skill (main effort declaration, re-read and assessment, full draft, self-review, printing), done by the session agent itself, with no delegates and no artifacts (files, scratch files, commits) unless the commander asks. The process produces the prompt. Tested on Claude Code; other harnesses not yet tested. When ambiguous, use 'handoff prompt' or 'handoff process' explicitly.",
+      "source": "shared/skills/handoff/SKILL.md (v2.1); commander, 2026-11-15 (session a9074793-c: 'change handoff skill so that the handoff happens at the terminal just like we did in this round and is not delegated'; 'unless otherwise asked to do so, handoff skill should not produce any delegates or artifacts')"
     },
     "situation assessment": {
-      "definition": "An assessment with fixed categories examined every time, even if nothing changed. Categories adapted per transition type: Forces (artifacts, state, decisions), Terrain (transition mechanism, constraints), Time (deadlines, imminence), Logistics (what must survive). Used in the /handoff skill (step 3) and generalizable to any transition point: incident response, session end, delegation, batch boundaries, session start.",
+      "definition": "An assessment with fixed categories examined every time, even if nothing changed. Categories adapted per transition type: Forces (artifacts, state, decisions), Terrain (transition mechanism, constraints), Time (deadlines, imminence), Logistics (what must survive). Used in the /handoff skill (step 2, done by the session agent itself) and generalizable to any transition point: incident response, session end, delegation, batch boundaries, session start.",
       "source": "shared/skills/handoff/SKILL.md",
       "sourceDiscipline": "German military doctrine (Bundeswehr): Lagebeurteilung (situation assessment)"
     },

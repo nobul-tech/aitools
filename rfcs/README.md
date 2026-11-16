@@ -5,5 +5,6 @@ Specifications and proposals for aitools, using an RFC-style format (RFC 2119 ke
 | RFC | Title | Status |
 |-----|--------|--------|
 | [0001](RFC-0001-workspace-tool-requests.md) | Workspace tool-requests file convention | Proposed |
+| [0011](RFC-0011-structured-reports.md) | Structured running estimates, mission briefs and after action reviews | Proposed |
 
 **Process:** Proposals are added as new files `RFC-NNNN-short-title.md`. Status is updated in the RFC front matter and in this index when a proposal is accepted, withdrawn, or superseded.

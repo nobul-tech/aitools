@@ -39,6 +39,13 @@ dotprofile `claude/rules/delegation.md` (commander, 2026-11-14: "it lives in
 dotprofile. make a copy and put it in shared/rule/delegation.md"); sections 4,
 5, 8 and 10 updated.
 
+v1.5 (2026-11-15, Session Commander a9074793-c): `shared/rules/delegation.md`
+is the only maintained delegation rule; the dotprofile
+`claude/rules/delegation.md` is legacy (commander, 2026-11-15: "the
+dotprofile handoff file is legacy, we working only off the one in
+shared/rules/ now"); sections 4 and 10 updated. The v1.4 note above is
+history.
+
 v1.1 changes: R-2 superseded by R-6 (Cursor gets every rule minus retired);
 R-7 (skills deploy like rules); sections 5, 6.1 and 7 describe the fan-out
 as built by the FO batches; the Claude Code rule-loading facts are verified
@@ -130,10 +137,10 @@ snapshots only drifted from their sources.
 Built from the approved exemplars: `@shared/rules/tool-lifecycle.md`,
 `@.claude/rules/frameworks.md`, `@.claude/rules/glossary.md`,
 `@shared/rules/scratch.md`, `@.claude/rules/hook-lifecycle.md`, and the user
-rule `delegation.md` (aitools `shared/rules/delegation.md`, a copy of the
-dotprofile `claude/rules/delegation.md`, deployed to
-`~/.claude/rules/delegation.md`), which the mission names as the model of a
-user rule.
+rule `delegation.md` (aitools `shared/rules/delegation.md`, the only
+maintained copy, deployed to `~/.claude/rules/delegation.md`; the
+dotprofile `claude/rules/delegation.md` is legacy), which the mission names
+as the model of a user rule.
 
 1. **Frontmatter `paths:`** (optional). A list of globs; the rule applies when
    the agent works on matching files (section 5). 9 of the 24
@@ -403,4 +410,4 @@ Carried:
   fan-out plan: `@plans/skills-and-rules-fanout.md`
 - Skills: `@reference/skills.md`
 - Cursor: `@reference/cursor-practices.md`; `scripts/setup-user-cursor.sh` / `.ps1`
-- Model user rule: `shared/rules/delegation.md` (copy of the dotprofile `claude/rules/delegation.md`)
+- Model user rule: `shared/rules/delegation.md` (the only maintained copy; the dotprofile `claude/rules/delegation.md` is legacy)

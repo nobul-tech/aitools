@@ -1,0 +1,1659 @@
+{
+  "provenance": {
+    "document": "mission-brief",
+    "schema_version": 1,
+    "version": "v1.3",
+    "mission": "874d-2-structured-reports",
+    "session_id": "dbd05b0c-2365-4159-9976-bc64a2af874d",
+    "session_db": "",
+    "session_scratch": "/Users/new-jose/repos/aitools/.scratch/session-dbd05b0c-2365-4159-9976-bc64a2af874d",
+    "written_by": {
+      "agent_id": "dbd05b0c-2365-4159-9976-bc64a2af874d",
+      "agent_type": "session",
+      "mission": null
+    },
+    "chain_of_command": [
+      "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl"
+    ],
+    "created_at": "2026-11-16T02:46:42Z"
+  },
+  "identity": {
+    "name": "874d-2-structured-reports",
+    "level": 1,
+    "delegated_by": "session agent dbd05b0c-2365-4159-9976-bc64a2af874d",
+    "parallel_missions": []
+  },
+  "intent": {
+    "purpose": "Implement RFC 0011 (structured running estimates, mission briefs and AARs) through work packages WP-1 to WP-6 of the plan, each shipped as its own PR for the commander to merge",
+    "scope": "WP-1 to WP-6 of plans/structured-reports/implementation-plan.md v1.1, batch by batch, each verified as the plan says",
+    "out_of_scope": [
+      "changing the decisions of issue #180 (D874d-1 to D874d-70)",
+      "the /debrief, /brief and /channel skills (D874d-11)",
+      "sharing estimates across sessions, and distributed sessions (D874d-9, D874d-10)",
+      "harnesses other than Claude Code, beyond recording what is found when they are examined (D874d-33)",
+      "the session content already in the public repo (D874d-54)",
+      "WP-0 (RFC 0011 and the plan, done by session dbd05b0c)"
+    ],
+    "audience": "the commander, reviewing and merging each PR; every agent that will write or read briefs, AARs and running estimates"
+  },
+  "objectives": [
+    {
+      "id": "OBJ-1",
+      "type": "objective",
+      "text": "implement structured running estimates, briefings, aars",
+      "source": {
+        "kind": "commander",
+        "location": "issue nobul-tech/aitools#180, Objective; session 87795dc3 (transcript not on this machine)"
+      },
+      "quote": "implement structured running estimates, briefings, aars"
+    },
+    {
+      "id": "OBJ-2",
+      "type": "objective",
+      "text": "WP-1: reference, schemas, templates, validation",
+      "source": {
+        "kind": "artifact",
+        "location": "/Users/new-jose/repos/aitools/plans/structured-reports/implementation-plan.md:79"
+      }
+    },
+    {
+      "id": "OBJ-3",
+      "type": "objective",
+      "text": "WP-2: the harness text, in line with RFC 0011 (D874d-49)",
+      "source": {
+        "kind": "artifact",
+        "location": "/Users/new-jose/repos/aitools/plans/structured-reports/implementation-plan.md:91"
+      }
+    },
+    {
+      "id": "OBJ-4",
+      "type": "objective",
+      "text": "WP-3: session DB, schema 5 (RFC 0011 section 3.6)",
+      "source": {
+        "kind": "artifact",
+        "location": "/Users/new-jose/repos/aitools/plans/structured-reports/implementation-plan.md:111"
+      }
+    },
+    {
+      "id": "OBJ-5",
+      "type": "objective",
+      "text": "WP-4: hooks, the SessionEnd job, the harvester (RFC 0011 3.4, 3.5.5, 3.9.3, section 7)",
+      "source": {
+        "kind": "artifact",
+        "location": "/Users/new-jose/repos/aitools/plans/structured-reports/implementation-plan.md:124"
+      }
+    },
+    {
+      "id": "OBJ-6",
+      "type": "objective",
+      "text": "WP-5: the skills and readers that use the documents (D874d-61)",
+      "source": {
+        "kind": "artifact",
+        "location": "/Users/new-jose/repos/aitools/plans/structured-reports/implementation-plan.md:135"
+      }
+    },
+    {
+      "id": "OBJ-7",
+      "type": "objective",
+      "text": "WP-6: release",
+      "source": {
+        "kind": "artifact",
+        "location": "/Users/new-jose/repos/aitools/plans/structured-reports/implementation-plan.md:144"
+      }
+    }
+  ],
+  "constraints": [
+    {
+      "text": "Ship every work package as its own PR, based on main, from your own worktree made with git worktree add off origin/main (<aitools>/.scratch/worktrees/874d-2-structured-reports), on the branch feature/874d-2-structured-reports-wp<n>; a later work package's branch merges the earlier one in with --no-ff. Commit and push after every batch, with git commit -F.",
+      "source": {
+        "kind": "agent",
+        "location": "/Users/new-jose/repos/aitools/shared/rules/delegation.md D-DEL4; /Users/new-jose/repos/aitools/plans/structured-reports/implementation-plan.md:56"
+      }
+    },
+    {
+      "text": "Do not merge: the commander merges the PRs, in order. Hand back your AAR when every work package's PR is open with CI green, or at once when a blocker stops you, with a recommended course of action. This overrides the /delegate duty to self-merge (D-DEL6: the brief ranks above the skill).",
+      "source": {
+        "kind": "agent",
+        "location": "D-DEL5; D-DEL9; /Users/new-jose/repos/aitools/plans/structured-reports/implementation-plan.md:56"
+      }
+    },
+    {
+      "text": "Never push to main, force-push, or approve your own PR. Update the plan's status table after each batch in the work package's branch (D874d-60); do not write .aitools/channel/relay.md, a direct-to-main file.",
+      "source": {
+        "kind": "agent",
+        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl L3394 (D874d-60); /Users/new-jose/repos/aitools/plans/structured-reports/implementation-plan.md:56"
+      }
+    },
+    {
+      "text": "Launch an independent reviewer (a delegate that did not see your notes) for every PR; its verdict is a PR comment before the PR goes to the commander.",
+      "source": {
+        "kind": "agent",
+        "location": "/Users/new-jose/repos/aitools/plans/structured-reports/implementation-plan.md:56"
+      }
+    },
+    {
+      "text": "Before every push run bash scripts/check-pre-commit.sh and bash scripts/check-pre-push.sh (on Windows the .ps1 twins with pwsh -NoProfile -File). Every new test suite gets a step in each job of .github/workflows/check.yml that runs it; watch CI until it passes on macOS, Linux and Windows.",
+      "source": {
+        "kind": "agent",
+        "location": "/Users/new-jose/repos/aitools/CLAUDE.md; /Users/new-jose/repos/aitools/plans/structured-reports/implementation-plan.md:56"
+      }
+    },
+    {
+      "text": "WP-1 starts on your launch order (gate G0). Before WP-2, check that the six working-copy files of session dbd05b0c are on origin/main (gate G1); if they are not when WP-1 is done, raise an RFI and do not edit origin/main's versions of them.",
+      "source": {
+        "kind": "agent",
+        "location": "/Users/new-jose/repos/aitools/plans/structured-reports/implementation-plan.md:43"
+      }
+    },
+    {
+      "text": "Do not reopen the decisions of issue #180 section 1; a point you find unclear goes to the commander as an RFI with a suggested answer.",
+      "source": {
+        "kind": "agent",
+        "location": "/Users/new-jose/repos/aitools/rfcs/RFC-0011-structured-reports.md, Status of this memo"
+      }
+    },
+    {
+      "text": "Python is standard library only, at the floor scripts/harness-db.py states (Python 3.10 or later).",
+      "source": {
+        "kind": "agent",
+        "location": "/Users/new-jose/repos/aitools/rfcs/0010-python-sqlite-engineering.md section 2; /Users/new-jose/repos/aitools/rfcs/RFC-0011-structured-reports.md section 6"
+      }
+    },
+    {
+      "text": "A new or widened hook check starts in observe mode and passes the syntax, smoke and violation tests of .claude/rules/hook-rollout.md.",
+      "source": {
+        "kind": "agent",
+        "location": "/Users/new-jose/repos/aitools/.claude/rules/hook-rollout.md"
+      }
+    },
+    {
+      "text": "Never run aitools, aitools install, setup-user-*, deploy-harness or scripts/build-deploy.sh against the real HOME; tests use an isolated HOME.",
+      "source": {
+        "kind": "agent",
+        "location": "/Users/new-jose/.claude/skills/delegate/SKILL.md 'In the aitools repo'"
+      }
+    },
+    {
+      "text": "Never open a live session DB or the harness DB with a branch's or worktree's harness-db.py: tests and probes use throwaway copies (sqlite3 backup API).",
+      "source": {
+        "kind": "agent",
+        "location": "/Users/new-jose/repos/aitools/rfcs/RFC-0011-structured-reports.md 3.6.12"
+      }
+    },
+    {
+      "text": "Never push to the real dotprofile: tests use a clone whose origin is a local bare repo in your scratch, checked before every push (git remote get-url origin must not contain github.com).",
+      "source": {
+        "kind": "agent",
+        "location": "/Users/new-jose/repos/aitools/plans/structured-reports/implementation-plan.md batch 4.3"
+      }
+    },
+    {
+      "text": "Never commit a mission brief, an AAR, a running-estimate export, or a harvested copy of one (harvesting/*-brief.json, harvesting/*-aar.json), to a project repo, except a brief the commander orders into the briefs directory, as he ordered this one (D874d-71 to D874d-74). The briefs of your batch delegates stay in the session scratch directory. How a new version of a brief in the briefs directory reaches main is deferred by the commander (D874d-76): until he decides, it reaches main through a PR, unless he orders otherwise for that change (RFC 0011 3.3.1a). Citing the commander's decisions in rules, references and the glossary is allowed, as the repo already does.",
+      "source": {
+        "kind": "agent",
+        "location": "/Users/new-jose/repos/aitools/rfcs/RFC-0011-structured-reports.md section 7, 3.3.1"
+      }
+    },
+    {
+      "text": "This brief is a long-lifecycle brief in the briefs directory. If you are launched in a session other than dbd05b0c, the launching agent first writes a new version of it whose provenance describes that session (RFC 0011 3.3.1a); report into the session named in provenance.",
+      "source": {
+        "kind": "agent",
+        "location": "/Users/new-jose/repos/aitools/rfcs/RFC-0011-structured-reports.md 3.3.1a"
+      }
+    },
+    {
+      "text": "Change the glossary only in batch 2.2 and only through /glossary; add no glossary entries for the schema's nodes and fields (D874d-66).",
+      "source": {
+        "kind": "agent",
+        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl L3479 (D874d-66, D874d-67)"
+      }
+    },
+    {
+      "text": "Read every file in full before you change it. The files marked 'use as reference for answers' in artifacts are what you need to brief the delegates of your batches; give each such delegate its batch's files as 'read in full' artifacts, in a brief written by RFC 0011 3.3 into the top-level session's scratch directory, the default location (RFC 0011 3.3.1).",
+      "source": {
+        "kind": "agent",
+        "location": "/Users/new-jose/repos/aitools/rfcs/RFC-0011-structured-reports.md 3.3.3a; /Users/new-jose/repos/aitools/plans/structured-reports/implementation-plan.md:56"
+      }
+    },
+    {
+      "text": "Where the deployed /delegate (~/.claude/skills/delegate/SKILL.md) differs from the aitools working copy (shared/skills/delegate/SKILL.md) or from RFC 0011, follow RFC 0011 and issue #180 (D-DEL6: the commander's newest words).",
+      "source": {
+        "kind": "agent",
+        "location": "/Users/new-jose/.claude/rules/delegation.md D-DEL6"
+      }
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "ASM-1",
+      "type": "assumption",
+      "text": "A running delegate can learn its own agentId (D874d-33)",
+      "status": "unverified",
+      "confidence": "moderate",
+      "evidence": "/delegate 'Claude Code specifics': a TaskStop error, the parent transcript; and subagents/agent-<agentId>.meta.json, which existed while the background verifiers 874d-3 to 874d-6 ran (2026-11-16). Foreground delegates are not probed",
+      "impact_if_false": "its rows carry no agent_id; the delegating agent fills it from the agentId the launch returned (RFC 0011 3.4.9)",
+      "source": {
+        "kind": "agent",
+        "location": "issue nobul-tech/aitools#180, comment \"Sections 5 and 6 (moved in v5.4)\", section 6"
+      }
+    },
+    {
+      "id": "ASM-2",
+      "type": "assumption",
+      "text": "SQLite in WAL mode with a 5-second busy timeout takes the session agent and several parallel delegates writing at once, without errors",
+      "status": "unverified",
+      "confidence": "moderate",
+      "evidence": "partly verified: WAL, busy_timeout=5000 and BEGIN IMMEDIATE are in scripts/harness-db.py; no load test",
+      "impact_if_false": "'database is locked'; agents retry, hooks do not (RFC 0011 3.6.6)",
+      "source": {
+        "kind": "agent",
+        "location": "issue nobul-tech/aitools#180, comment \"Sections 5 and 6 (moved in v5.4)\", section 6"
+      }
+    },
+    {
+      "id": "ASM-3",
+      "type": "assumption",
+      "text": "Every delegate can run ~/.aitools/bin/harness-db.py and write the session DB in the main checkout",
+      "status": "unverified",
+      "confidence": "low",
+      "evidence": "/delegate 'Environment limits': worktree isolation confines writes to the worktree",
+      "impact_if_false": "the delegating agent records the delegate's items from its AAR (RFC 0011 3.4.8)",
+      "source": {
+        "kind": "agent",
+        "location": "issue nobul-tech/aitools#180, comment \"Sections 5 and 6 (moved in v5.4)\", section 6"
+      }
+    },
+    {
+      "id": "ASM-4",
+      "type": "assumption",
+      "text": "A delegating agent at level 2 or deeper can write its delegates' briefs into the top-level session's scratch directory",
+      "status": "unverified",
+      "confidence": "low",
+      "evidence": "the same isolation limit",
+      "impact_if_false": "the brief goes in the delegating agent's own scratch directory (RFC 0011 3.3.8)",
+      "source": {
+        "kind": "agent",
+        "location": "issue nobul-tech/aitools#180, comment \"Sections 5 and 6 (moved in v5.4)\", section 6"
+      }
+    },
+    {
+      "id": "ASM-5",
+      "type": "assumption",
+      "text": "The session agent knows its session id and its DB path from the start",
+      "status": "verified",
+      "confidence": "high",
+      "evidence": "scripts/harness-db.py prints 'Session started:' and 'Session DB:'; the SessionStart hook shows them",
+      "impact_if_false": "the session agent cannot pass --db or --agent-id",
+      "ref": "scripts/harness-db.py session start output",
+      "source": {
+        "kind": "agent",
+        "location": "issue nobul-tech/aitools#180, comment \"Sections 5 and 6 (moved in v5.4)\", section 6"
+      }
+    },
+    {
+      "id": "ASM-6",
+      "type": "assumption",
+      "text": "The first 10 characters of a session id are unique within one repo",
+      "status": "unverified",
+      "confidence": "high",
+      "evidence": "36 bits makes a collision unlikely; not tested",
+      "impact_if_false": "two sessions would share a DB; checked at session start, and the second uses its full id (RFC 0011 3.6.2)",
+      "source": {
+        "kind": "agent",
+        "location": "issue nobul-tech/aitools#180, comment \"Sections 5 and 6 (moved in v5.4)\", section 6"
+      }
+    },
+    {
+      "id": "ASM-7",
+      "type": "assumption",
+      "text": "The brief, the AAR and the export can be checked against JSON Schemas with tools aitools already manages",
+      "status": "falsified",
+      "confidence": "high",
+      "evidence": "Python's standard library has no JSON Schema validator",
+      "impact_if_false": "a new dependency, or hand-written checks",
+      "ref": "RFC 0011 S-6: a standard-library validator of the schema subset, plus coded rules (3.7.2)",
+      "source": {
+        "kind": "agent",
+        "location": "issue nobul-tech/aitools#180, comment \"Sections 5 and 6 (moved in v5.4)\", section 6"
+      }
+    },
+    {
+      "id": "ASM-8",
+      "type": "assumption",
+      "text": "The six working-copy files of session dbd05b0c reach origin/main before WP-2 starts",
+      "status": "unverified",
+      "confidence": "moderate",
+      "evidence": "the commander takes care of them (R874d-27: \"27) dont worry about it\")",
+      "impact_if_false": "gate G1 stays open: WP-2 waits; WP-1 does not (plan, Gates)",
+      "source": {
+        "kind": "agent",
+        "location": "issue nobul-tech/aitools#180, comment \"Sections 5 and 6 (moved in v5.4)\", section 6"
+      }
+    }
+  ],
+  "decisions": [
+    {
+      "id": "D874d-1",
+      "type": "decision",
+      "text": "An AAR is a JSON document with top-level nodes; its last node is `proposals` (not `decisions`), and each proposal carries a barrier analysis. *The node set is superseded by D874d-19, -22 and -29; the barrier analysis stands*",
+      "decided_by": "commander",
+      "date": "2026-03-16",
+      "source": {
+        "kind": "commander",
+        "location": "/Users/new-jose/repos/aitools-nobul-jose/sessions/aitools/2026-03-16_79b05dd0.jsonl L419"
+      },
+      "quote": "ok so the aar is a json file with 3 top level nodes, but we need to change the name of the last one from decisions to proposals.  this is also where we need to formalize \"barrier analsis\"",
+      "status": "decided",
+      "superseded_by": [
+        {
+          "decision": "D874d-19",
+          "part": "the node set"
+        },
+        {
+          "decision": "D874d-22",
+          "part": "the node set"
+        },
+        {
+          "decision": "D874d-29",
+          "part": "the node set"
+        }
+      ]
+    },
+    {
+      "id": "D874d-5",
+      "type": "decision",
+      "text": "What a delegate learns after its merge goes in its AAR, as observations or operational learning, in governed vocabulary. The intelligence types have a schema (PR #181)",
+      "decided_by": "commander",
+      "date": "2026-11-15",
+      "source": {
+        "kind": "commander",
+        "location": "session 87795dc3 L8030 (transcript not on this machine; verified through issue #180 section 1 and its comment \"Commander's answers (2026-11-15)\")"
+      },
+      "quote": "in the AAR.  dont call them post-merge facts, they are either observations or operational learning.  use the governed vocabulary.  there should be a schema for defined intelligence types",
+      "status": "decided"
+    },
+    {
+      "id": "D874d-6",
+      "type": "decision",
+      "text": "The SALUTE FINDING of planning-brief #23 is retired: what it reported is an observation with a severity, sent as a SPOTREP. `insight` is deprecated",
+      "decided_by": "mission fa81-04, under the commander's order",
+      "date": "2026-11-15",
+      "source": {
+        "kind": "commander",
+        "location": "session 87795dc3, order 43 (transcript not on this machine; verified through issue #180 section 1)"
+      },
+      "quote": "have this mission decide on rfi 44 as well. having intelligence types we dont use is not a big deal but i agree with you that FINDING is redundant.",
+      "status": "decided"
+    },
+    {
+      "id": "D874d-7",
+      "type": "decision",
+      "text": "Each structure gets a schema and a template. *The format choice (JSON or Markdown) is superseded by D874d-35 (the store is SQLite) and D874d-42 (the brief and AAR files are JSON)*",
+      "decided_by": "commander",
+      "date": "2026-11-15",
+      "source": {
+        "kind": "commander",
+        "location": "session 87795dc3 L8030 (transcript not on this machine; verified through issue #180 section 1 and its comment \"Commander's answers (2026-11-15)\")"
+      },
+      "quote": "json or markdown not sure, for either we need schema and template/defined structure",
+      "status": "decided",
+      "superseded_by": [
+        {
+          "decision": "D874d-35",
+          "part": "the format choice"
+        },
+        {
+          "decision": "D874d-42",
+          "part": "the format choice"
+        }
+      ]
+    },
+    {
+      "id": "D874d-8",
+      "type": "decision",
+      "text": "One running estimate per session; the session agent and every delegate write to it directly. *\"as json\" is superseded by D874d-35*",
+      "decided_by": "commander",
+      "date": "2026-11-15",
+      "source": {
+        "kind": "commander",
+        "location": "session 87795dc3 L8030 (transcript not on this machine; verified through issue #180 section 1 and its comment \"Commander's answers (2026-11-15)\")"
+      },
+      "quote": "one per session, as json, all delegates edit directly, json allows for this right? the multi-writer, without issue? its the main reason to do json",
+      "status": "decided",
+      "superseded_by": [
+        {
+          "decision": "D874d-35",
+          "part": "\"as json\""
+        }
+      ]
+    },
+    {
+      "id": "D874d-9",
+      "type": "decision",
+      "text": "Running estimates are not shared across sessions, for now. The commander may tell one session to read another session's estimate, but that is not built now",
+      "decided_by": "commander",
+      "date": "2026-11-15",
+      "source": {
+        "kind": "commander",
+        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl L79"
+      },
+      "quote": "41) running estimates, for now, will NOT be shared across sessions, lets just not worry about that.  the user/commander MAY instruct one session to look at the running estimate of another session and vice versa, but that is not something we are implementing today.",
+      "status": "decided"
+    },
+    {
+      "id": "D874d-10",
+      "type": "decision",
+      "text": "Roadmap: several sessions work in a distributed way, with no root session, coordinating through running estimates and channels; the commander answers RFIs and steers every running session. In `ROADMAP.md` (Planned)",
+      "decided_by": "commander",
+      "date": "2026-11-15",
+      "source": {
+        "kind": "commander",
+        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl L79"
+      },
+      "quote": "think of it like a roadmap item, the ability for multiple sessions to be working in a distributed fassion without a root, all being able too communicate/coordinate through running estimates and channels, and the user/commander with the ability to answer RFIs and steer as necessary for all running sessions.  that roadmap item is a decision.",
+      "status": "decided"
+    },
+    {
+      "id": "D874d-11",
+      "type": "decision",
+      "text": "No `/debrief`, `/brief` or `/channel` skill is built now",
+      "decided_by": "commander",
+      "date": "2026-11-15",
+      "source": {
+        "kind": "commander",
+        "location": "session 87795dc3 L8030 (transcript not on this machine; verified through issue #180 section 1 and its comment \"Commander's answers (2026-11-15)\")"
+      },
+      "quote": "not now, dont do anything on this yet",
+      "status": "decided"
+    },
+    {
+      "id": "D874d-12",
+      "type": "decision",
+      "text": "The planning brief defines the delegate's mission objectives",
+      "decided_by": "commander",
+      "date": "2026-11-15",
+      "source": {
+        "kind": "commander",
+        "location": "session 87795dc3 L8030 (transcript not on this machine; verified through issue #180 section 1 and its comment \"Commander's answers (2026-11-15)\")"
+      },
+      "quote": "The planning brief should define the mission objectives for the delegate.",
+      "status": "decided"
+    },
+    {
+      "id": "D874d-13",
+      "type": "decision",
+      "text": "The delegating agent writes the mission objectives verbatim and explicitly in the delegation prompt; the duty is recursive through the chain of command (D-DEL8)",
+      "decided_by": "commander",
+      "date": "2026-11-15",
+      "source": {
+        "kind": "commander",
+        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl L289"
+      },
+      "quote": "the missio objective should be verbatim explicit in the delegation prompot.  it is the delegator's duty for the mission to be in the context of the delegate, and this duty is recusrive through the entire chain of command.",
+      "status": "decided"
+    },
+    {
+      "id": "D874d-14",
+      "type": "decision",
+      "text": "A delegate's AAR states up front the ambiguities it found in its brief and how it resolved them",
+      "decided_by": "commander",
+      "date": "2026-11-15",
+      "source": {
+        "kind": "commander",
+        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl L289"
+      },
+      "quote": "A delegate should, as part of the AAR, state upfront if it found any ambiguities in its prief/prompt and how it resolved them.",
+      "status": "decided"
+    },
+    {
+      "id": "D874d-15",
+      "type": "decision",
+      "text": "A delegate records its assumptions as an intelligence type in its AAR",
+      "decided_by": "commander",
+      "date": "2026-11-15",
+      "source": {
+        "kind": "commander",
+        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl L289"
+      },
+      "quote": "it should record its assumptions as a type of intelligence, the assumptions informed how the delegate executed its mission.",
+      "status": "decided"
+    },
+    {
+      "id": "D874d-16",
+      "type": "decision",
+      "text": "A delegate reports a blocker at once, with a recommended course of action (D-DEL9, generalized for any repo). *The list of conditions in the prompt was dropped by D874d-26*",
+      "decided_by": "commander",
+      "date": "2026-11-15",
+      "source": {
+        "kind": "commander",
+        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl L565"
+      },
+      "quote": "8) add it directly yourself, generalize it for any repo not just aitools, dont quote me etc, just put the effet in there, no worktrees/commits",
+      "status": "decided",
+      "superseded_by": [
+        {
+          "decision": "D874d-26",
+          "part": "the list of conditions in the prompt"
+        }
+      ]
+    },
+    {
+      "id": "D874d-17",
+      "type": "decision",
+      "text": "`ambiguity` is a governed term again, and an intelligence type used in running estimates, briefs and AARs",
+      "decided_by": "commander",
+      "date": "2026-11-15",
+      "source": {
+        "kind": "commander",
+        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl L565"
+      },
+      "quote": "we need to un-deprecate ambiguity, that is a decisioin, ambiguity is a governed vocabulary term.  we will use it in our intelligence schema for running estimates, briefs and aars.",
+      "status": "decided"
+    },
+    {
+      "id": "D874d-18",
+      "type": "decision",
+      "text": "\"Brief\", \"mission brief\" and \"delegate briefing\" are one thing: the schema of the briefing a delegating agent gives its delegate",
+      "decided_by": "commander",
+      "date": "2026-11-15",
+      "source": {
+        "kind": "commander",
+        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl L565"
+      },
+      "quote": "when i say \"brief schema\" i mean the schema for the mission brief/delegate briefing, all of those terms are synonymous.",
+      "status": "decided"
+    },
+    {
+      "id": "D874d-19",
+      "type": "decision",
+      "text": "The objectives sit at the top level. No `meta` node: the word is ambiguous",
+      "decided_by": "commander",
+      "date": "2026-11-15",
+      "source": {
+        "kind": "commander",
+        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl L565"
+      },
+      "quote": "5) objectives should sit top level, i like that.  i dont like meta.  what is meta exactly? its an ambiguous word.",
+      "status": "decided"
+    },
+    {
+      "id": "D874d-20",
+      "type": "decision",
+      "text": "What the agent acted on and what it only observed are two separate categories",
+      "decided_by": "commander",
+      "date": "2026-11-15",
+      "source": {
+        "kind": "commander",
+        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl L565"
+      },
+      "quote": "whether we stick with those top level names: observations, findings, is sitll tbd, but the differention on acted upon vs passive observation are the 2 categories id like to keep seperate.",
+      "status": "decided"
+    },
+    {
+      "id": "D874d-21",
+      "type": "decision",
+      "text": "`process deviation` stays a governed term and is one kind of deviation (a deviation from a plan)",
+      "decided_by": "commander",
+      "date": "2026-11-15",
+      "source": {
+        "kind": "commander",
+        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl L565"
+      },
+      "quote": "i like process deviation as a governed term, i accept your suggestion on process deviation, that is a decision, add to glossary now directly yourself /glossary, no need for worktrees/commits etc.",
+      "status": "decided"
+    },
+    {
+      "id": "D874d-22",
+      "type": "decision",
+      "text": "`deviations` replaces the `findings` node, and `deviation` is a governed term",
+      "decided_by": "commander",
+      "date": "2026-11-15",
+      "source": {
+        "kind": "commander",
+        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl L565"
+      },
+      "quote": "just read what came back from your delegate, i agree deviations is better than findings, that is a decision, deviation replaces the top level node of findings and also becomes a governed word.",
+      "status": "decided"
+    },
+    {
+      "id": "D874d-23",
+      "type": "decision",
+      "text": "An objective's status is accomplished, partly or not accomplished (no `blocked`). Each objective cites deviations or observations, or gives a brief summary of how it was done, or both",
+      "decided_by": "commander",
+      "date": "2026-11-15",
+      "source": {
+        "kind": "commander",
+        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl L565"
+      },
+      "quote": "10) drop blocked, just the 3 suggested.  each objective should cite findings/observations and/or provide brief summary on the how of each.",
+      "status": "decided"
+    },
+    {
+      "id": "D874d-24",
+      "type": "decision",
+      "text": "Proposals carry no owner and no timeline",
+      "decided_by": "commander",
+      "date": "2026-11-15",
+      "source": {
+        "kind": "commander",
+        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl L565"
+      },
+      "quote": "11) no.",
+      "status": "decided"
+    },
+    {
+      "id": "D874d-25",
+      "type": "decision",
+      "text": "Every row records the agent that wrote it, in a column that can be queried directly: the session agent's id or the subagent's id (`agent_id`)",
+      "decided_by": "commander",
+      "date": "2026-11-15",
+      "source": {
+        "kind": "commander",
+        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl L907"
+      },
+      "quote": "for each row, i want to be able to quickly query the session agent id or subagent id, we need a column for that.",
+      "status": "decided"
+    },
+    {
+      "id": "D874d-26",
+      "type": "decision",
+      "text": "The mission brief has no `report_at_once_if` node. Reporting a blocker at once is part of every mission, documented in the skill and the delegation rule (D-DEL9)",
+      "decided_by": "commander",
+      "date": "2026-11-15",
+      "source": {
+        "kind": "commander",
+        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl L907"
+      },
+      "quote": "for mission brief, get rid of report_at_once_field element.  it should be part of every mission that if a blocker is encountered it should be reported at once.  this does not need to be redundant in the brief if we document in the skill/delegation rule.",
+      "status": "decided"
+    },
+    {
+      "id": "D874d-27",
+      "type": "decision",
+      "text": "The mission brief is the schema specified so far. The delegating agent must include it in the delegation prompt, as part of its delegation duty: the prompt gives the brief's path and explicit instructions to read it in full. The delegation hook must be updated to check this. `/delegate` tells the prompt writer what the delegate reads in full, line by line, and what it uses as reference material (sessions). In the rule as D-DEL10",
+      "decided_by": "commander",
+      "date": "2026-11-15",
+      "source": {
+        "kind": "commander",
+        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl L907"
+      },
+      "quote": "12) the mission brief is as we have spec'ed so far.  the mission brief is another item that needs to be included iin the delegation prompt by the delegating agent as delegation duty (our hook needs to be updated, this should be noted in gh issue.  the delegation prompt should provide the path of the brief and explicit instructions for the delegate to read the brief in full.  the delegate skill should instruct the prompt writer on explicit instructions on what to do with the brief, ie, what to read in full line by line, what to use as reference material (sessions).",
+      "status": "decided"
+    },
+    {
+      "id": "D874d-28",
+      "type": "decision",
+      "text": "The `finding` type is retired: deprecated in the glossary, `replacedBy: deviation`; the harness DB keeps it until schema 5",
+      "decided_by": "commander",
+      "date": "2026-11-15",
+      "source": {
+        "kind": "commander",
+        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl L907"
+      },
+      "quote": "13) yes, do it directly no worktreest/commits",
+      "status": "decided"
+    },
+    {
+      "id": "D874d-29",
+      "type": "decision",
+      "text": "`provenance` replaces `meta`. `observations` keeps its name. `operational_learning` is its own top-level node. The objectives, ambiguities and assumptions are each a top-level node. `deviation.from.kind` and `deviation.cause` take the values in section 3. The hand-back's free-text lines fold into the AAR nodes (D-DEL11)",
+      "decided_by": "commander",
+      "date": "2026-11-15",
+      "source": {
+        "kind": "commander",
+        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl L907"
+      },
+      "quote": "14) 1 confirmed, 2 confirmed 3 confirmed 4 confirmed 5 yes 6 yes, document in the gh issue that the delegate skill and rule need to change to account for this and suggest changes",
+      "status": "decided"
+    },
+    {
+      "id": "D874d-30",
+      "type": "decision",
+      "text": "A schema field is adopted only as a governed term; `artifact_refs` is not adopted (replaced by `deliverables`, D874d-34). *The glossary requirement is set aside for now by D874d-66*",
+      "decided_by": "commander",
+      "date": "2026-11-15",
+      "source": {
+        "kind": "commander",
+        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl L907"
+      },
+      "quote": "7 explain further? how do artifact_refs align with objectives and proposals? what is an agent supposed to do with that? artifact_refs needs to be a governed term if we are going to adopt it, i haev no idea what it means though, its ambiguous.",
+      "status": "decided",
+      "superseded_by": [
+        {
+          "decision": "D874d-66",
+          "part": "the glossary requirement, for now"
+        }
+      ]
+    },
+    {
+      "id": "D874d-31",
+      "type": "decision",
+      "text": "No `--session` argument and no session-id column. Every writer gets the session DB's path, and the DB's file name carries the session-id prefix",
+      "decided_by": "commander",
+      "date": "2026-11-15",
+      "source": {
+        "kind": "commander",
+        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl L1275"
+      },
+      "quote": "the --session parameter is unnecessary isnt it? session/delegate/hook session id entries would all be the same for any one session.  we can drop that column and argument all together, they just need to know the path to the session db.  the session db name, its file, should carry the sessionid prefix.",
+      "status": "decided"
+    },
+    {
+      "id": "D874d-32",
+      "type": "decision",
+      "text": "The `facts` node is erased from the brief and the running estimate. Anything unstructured, such as facts, goes in the body of the delegation prompt, outside the brief. Documented in `/delegate` and the rule (D-DEL12)",
+      "decided_by": "commander",
+      "date": "2026-11-15",
+      "source": {
+        "kind": "commander",
+        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl L1275"
+      },
+      "quote": "For facts, i think we can erase that element in the briefs/running estimates or wherever they are.  its too ambiguous and vague what should be recorded.  lets leave anything that is not structured such as facts in the body of the delegation prompt, outside of the brief, and document that in the delegate skill/rule  thats a decision.",
+      "status": "decided"
+    },
+    {
+      "id": "D874d-33",
+      "type": "decision",
+      "text": "Each subagent finds its own agentId, as `/delegate` documents (\"Claude Code specifics\"). This holds for the Claude Code harness; other harnesses need to be examined",
+      "decided_by": "commander",
+      "date": "2026-11-15",
+      "source": {
+        "kind": "commander",
+        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl L1275"
+      },
+      "quote": "each subagent is responsible for figuring out its own agentid, how to do that is already documented in the delegate skill, we should make note of that in the gh issue and specifiy this is for the claude code harness and other harnesses need to be examined.",
+      "status": "decided"
+    },
+    {
+      "id": "D874d-34",
+      "type": "decision",
+      "text": "Objectives get `deliverables`, a governed term. Done directly in the glossary",
+      "decided_by": "commander",
+      "date": "2026-11-15",
+      "source": {
+        "kind": "commander",
+        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl L1275"
+      },
+      "quote": "i like your suggestion that objectives get deliverables as governed term, thats a decision, do it now directly without worktree/commit/push.",
+      "status": "decided"
+    },
+    {
+      "id": "D874d-35",
+      "type": "decision",
+      "text": "SQLite is the store",
+      "decided_by": "commander",
+      "date": "2026-11-15",
+      "source": {
+        "kind": "commander",
+        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl L1275"
+      },
+      "quote": "rfis 4) yes sqlite is the store, remove --session, change filename per the feedback in this prompt",
+      "status": "decided"
+    },
+    {
+      "id": "D874d-36",
+      "type": "decision",
+      "text": "The brief file lives in `.scratch`, named with the session's four hex digits and the mission name: `<sid4>_<mission name>-brief.md`. The naming convention is documented in `/delegate` and the rule (D-DEL10). *The name and the format are superseded by D874d-42; the location in `.scratch` stands*",
+      "decided_by": "commander",
+      "date": "2026-11-15",
+      "source": {
+        "kind": "commander",
+        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl L1275"
+      },
+      "quote": "the brief file should live in .scratch and it should be named with the 4 hex id session suffix - mission name-brief.md or something like that.  propose a well defined structured naming convention, this needs to be documented in skill and rule.",
+      "status": "decided",
+      "superseded_by": [
+        {
+          "decision": "D874d-42",
+          "part": "the name and the format"
+        }
+      ]
+    },
+    {
+      "id": "D874d-37",
+      "type": "decision",
+      "text": "`mission brief`, `after action review` (AAR), `running estimate` and `deliverable` are governed terms",
+      "decided_by": "commander",
+      "date": "2026-11-15",
+      "source": {
+        "kind": "commander",
+        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl L1275"
+      },
+      "quote": "17) yes",
+      "status": "decided"
+    },
+    {
+      "id": "D874d-41",
+      "type": "decision",
+      "text": "Session RFIs are numbered `R<sid4>-<n>` and decisions `D<sid4>-<n>` (supersedes the format of D874d-39, and the `RFI <sid4>-<n>` of the prompt-turn checklist item 5.1)",
+      "decided_by": "commander",
+      "date": "2026-11-15",
+      "source": {
+        "kind": "commander",
+        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl L1665"
+      },
+      "quote": "session rfis should be updated to R<SID4>-n and decisions should be D<SID4>-num.",
+      "status": "decided"
+    },
+    {
+      "id": "D874d-42",
+      "type": "decision",
+      "text": "The mission brief file is `<session scratch dir>/<mission name>-brief.json`; the AAR file is `<session scratch dir>/<mission name>-aar.json` (supersedes the name and format of D874d-36; JSON files, D874d-7). *For the AAR, superseded by D874d-47: the file is written only on request*",
+      "decided_by": "commander",
+      "date": "2026-11-15",
+      "source": {
+        "kind": "commander",
+        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl L1665"
+      },
+      "quote": "for mission brief file, lets do <session scratch dir>/<delegate/mission name>-brief.json for aar, <delegate/mission name>-aar.json.",
+      "status": "decided",
+      "superseded_by": [
+        {
+          "decision": "D874d-47",
+          "part": "the AAR file"
+        }
+      ]
+    },
+    {
+      "id": "D874d-43",
+      "type": "decision",
+      "text": "`fact` stays as it is: a governed term and a harness-DB type. No brief, AAR or running-estimate node uses it (D874d-32)",
+      "decided_by": "commander",
+      "date": "2026-11-15",
+      "source": {
+        "kind": "commander",
+        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl L1665"
+      },
+      "quote": "19) leave as is",
+      "status": "decided"
+    },
+    {
+      "id": "D874d-44",
+      "type": "decision",
+      "text": "The session DB is `<repo>/.aitools/sessions/<first 10 characters of the session id>.db`, and the running-estimate export is `<repo>/.aitools/channel/estimates/<same prefix>.json`. *Reaffirmed by D874d-48. That export stays untracked; the record is the dotprofile copy (D874d-52)*",
+      "decided_by": "commander",
+      "date": "2026-11-15",
+      "source": {
+        "kind": "commander",
+        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl L1665"
+      },
+      "quote": "20) confirmed.",
+      "status": "decided"
+    },
+    {
+      "id": "D874d-47",
+      "type": "decision",
+      "text": "The AAR stays the delegate's hand-back message, for now. An AAR file is written only when one is requested, and then at `<session scratch dir>/<mission name>-aar.json` (supersedes D874d-42 for the AAR; the brief file stands)",
+      "decided_by": "commander",
+      "date": "2026-11-15",
+      "source": {
+        "kind": "commander",
+        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl L1921"
+      },
+      "quote": "22) your right lets keep the AAR as a handback for now.  if a file is requested, it should follow the naming convention specific",
+      "status": "decided"
+    },
+    {
+      "id": "D874d-48",
+      "type": "decision",
+      "text": "The session DB keeps the 10-character prefix (`dbd05b0c-2.db`); D874d-44 stands",
+      "decided_by": "commander",
+      "date": "2026-11-15",
+      "source": {
+        "kind": "commander",
+        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl L1921"
+      },
+      "quote": "23) thats fine, i didnt realise hyphens were counted as part of the session id",
+      "status": "decided"
+    },
+    {
+      "id": "D874d-49",
+      "type": "decision",
+      "text": "Bringing the working copy (the delegation rule, `/delegate`, the glossary, the prompt-turn checklist) in line with this issue is part of the implementation, listed in section 7 (WP-2). The session agent does not do it",
+      "decided_by": "commander",
+      "date": "2026-11-15",
+      "source": {
+        "kind": "commander",
+        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl L1921"
+      },
+      "quote": "24) add this update to the gh issue body, dont do it yourself.  whoever implements gh issue will take care of it.",
+      "status": "decided"
+    },
+    {
+      "id": "D874d-50",
+      "type": "decision",
+      "text": "The AAR hand-back is JSON in the AAR schema, in one fenced block. An AAR file, when one is requested, is the same JSON",
+      "decided_by": "commander",
+      "date": "2026-11-15",
+      "source": {
+        "kind": "commander",
+        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl L2160"
+      },
+      "quote": "25) json",
+      "status": "decided"
+    },
+    {
+      "id": "D874d-51",
+      "type": "decision",
+      "text": "The SessionEnd hook commits and pushes the running-estimate record to `main` of the commander's dotprofile repo (no session agent commit; no Channel exception needed)",
+      "decided_by": "commander",
+      "date": "2026-11-15",
+      "source": {
+        "kind": "commander",
+        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl L2160"
+      },
+      "quote": "26) the sessionend hook should commit and push to main.  the stored json estimate should actually live in my dotprofile repo actually, thats a decision.  there should be a directory called \"running estimates\" and thats where they should live.  the session end hook should commit/push the user dotprofile repo.",
+      "status": "decided"
+    },
+    {
+      "id": "D874d-52",
+      "type": "decision",
+      "text": "The stored JSON running estimate lives in the commander's dotprofile repo, in a running-estimates directory, as a copy. The export inside the project repo stays untracked (supersedes \"tracked\" in section 2 of v5.0)",
+      "decided_by": "commander",
+      "date": "2026-11-15",
+      "source": {
+        "kind": "commander",
+        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl L2160"
+      },
+      "quote": "the stored json estimate should actually live in my dotprofile repo actually, thats a decision.  there should be a directory called \"running estimates",
+      "status": "decided"
+    },
+    {
+      "id": "D874d-53",
+      "type": "decision",
+      "text": "The dotprofile's directory is `running-estimates/`, laid out like the session archives: `<dotprofile>/running-estimates/<project>/<YYYY-MM-DD>_<session id prefix>.json` (for example `running-estimates/aitools/2026-11-15_dbd05b0c-2.json`)",
+      "decided_by": "commander",
+      "date": "2026-11-16",
+      "source": {
+        "kind": "commander",
+        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl L2442"
+      },
+      "quote": "love it agreed for rfi 28 with your suggestion",
+      "status": "decided"
+    },
+    {
+      "id": "D874d-54",
+      "type": "decision",
+      "text": "The session content already in the public repo (the tracked `.aitools/channel/running-estimate.json`, harvested files) needs no action from this work",
+      "decided_by": "commander",
+      "date": "2026-11-16",
+      "source": {
+        "kind": "commander",
+        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl L3394"
+      },
+      "quote": "29) dont worry about it",
+      "status": "decided"
+    },
+    {
+      "id": "D874d-55",
+      "type": "decision",
+      "text": "Items in a brief or an AAR inherit `version`, `agent_id`, `agent_type`, `mission` and `created_at` from `provenance`; every DB row carries them (RFC 0011 S-18)",
+      "decided_by": "commander",
+      "date": "2026-11-16",
+      "source": {
+        "kind": "commander",
+        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl L3394"
+      },
+      "quote": "30) accepted",
+      "status": "decided"
+    },
+    {
+      "id": "D874d-56",
+      "type": "decision",
+      "text": "A decision's status gains `superseded`, with `superseded_by[]` naming the superseding decision and the part (RFC 0011 S-19)",
+      "decided_by": "commander",
+      "date": "2026-11-16",
+      "source": {
+        "kind": "commander",
+        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl L3394"
+      },
+      "quote": "31)yes",
+      "status": "decided"
+    },
+    {
+      "id": "D874d-57",
+      "type": "decision",
+      "text": "`harness-db.py` keeps no deprecated `--session` alias",
+      "decided_by": "commander",
+      "date": "2026-11-16",
+      "source": {
+        "kind": "commander",
+        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl L3394"
+      },
+      "quote": "32) no",
+      "status": "decided"
+    },
+    {
+      "id": "D874d-58",
+      "type": "decision",
+      "text": "At session start, the harness adds `.aitools/` and `.scratch/` to `.git/info/exclude` in any repo where nothing ignores them, and reports it once",
+      "decided_by": "commander",
+      "date": "2026-11-16",
+      "source": {
+        "kind": "commander",
+        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl L3394"
+      },
+      "quote": "33)yes",
+      "status": "decided"
+    },
+    {
+      "id": "D874d-60",
+      "type": "decision",
+      "text": "The implementing mission updates the plan's status table inside each work package's PR, in its worktree",
+      "decided_by": "commander",
+      "date": "2026-11-16",
+      "source": {
+        "kind": "commander",
+        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl L3394"
+      },
+      "quote": "35) inside each work package's PR (worktree",
+      "status": "decided"
+    },
+    {
+      "id": "D874d-61",
+      "type": "decision",
+      "text": "The dashboards are repointed to the per-session export (WP-5), and `.claude/rules/aitools-workspace.md` is updated (WP-2)",
+      "decided_by": "commander",
+      "date": "2026-11-16",
+      "source": {
+        "kind": "commander",
+        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl L3394"
+      },
+      "quote": "36) sure",
+      "status": "decided"
+    },
+    {
+      "id": "D874d-64",
+      "type": "decision",
+      "text": "Standing duties are documented in `/delegate`, never in the brief",
+      "decided_by": "commander",
+      "date": "2026-11-16",
+      "source": {
+        "kind": "commander",
+        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl L3394"
+      },
+      "quote": "39) the standing duties should be documented in the skill, not included in the brief.",
+      "status": "decided"
+    },
+    {
+      "id": "D874d-65",
+      "type": "decision",
+      "text": "The brief's `rules[]` and `skills[]` become `artifacts[]`: the absolute path of every file the delegate needs, each with an explicit instruction, `read in full` or `use as reference for answers`",
+      "decided_by": "commander",
+      "date": "2026-11-16",
+      "source": {
+        "kind": "commander",
+        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl L3394"
+      },
+      "quote": "the rules[] and skills[] elements in the brief, change that to be an element type artifacts and have that list the absolute path of all files delegates need and there should be explicit instructions to read in full, or to use as reference for answers.",
+      "status": "decided"
+    },
+    {
+      "id": "D874d-66",
+      "type": "decision",
+      "text": "The schema's nodes and fields get no glossary entries for now; the glossary requirement of D874d-30 is set aside",
+      "decided_by": "commander",
+      "date": "2026-11-16",
+      "source": {
+        "kind": "commander",
+        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl L3479"
+      },
+      "quote": "40) no means no,  ignore this entirely for now",
+      "status": "decided"
+    },
+    {
+      "id": "D874d-67",
+      "type": "decision",
+      "text": "`artifacts[]` is a plain node. RFC 0011 and the plan define `artifact` as any file the harness or a mission uses; the glossary is left alone for now",
+      "decided_by": "commander",
+      "date": "2026-11-16",
+      "source": {
+        "kind": "commander",
+        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl L3479"
+      },
+      "quote": "41) ignore the glossary for now, the rfc/plan should address this, and i like your suggestion",
+      "status": "decided"
+    },
+    {
+      "id": "D874d-68",
+      "type": "decision",
+      "text": "No separate WP-0 verdict is kept; the fixes the verifiers found are made",
+      "decided_by": "commander",
+      "date": "2026-11-16",
+      "source": {
+        "kind": "commander",
+        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl L3479"
+      },
+      "quote": "42) ignore preserving wp-0;s verdict, just make the fixes/changes that it needs",
+      "status": "decided"
+    },
+    {
+      "id": "D874d-70",
+      "type": "decision",
+      "text": "The brief drops `ambiguities`, `access`, `name_prefix` and `duties`; `return` becomes `deliverables[]`, structured to match the RFC",
+      "decided_by": "commander",
+      "date": "2026-11-16",
+      "source": {
+        "kind": "commander",
+        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl L3589"
+      },
+      "quote": "hey in the brief schema lets get rid of ambiguities, access, name_prefix, duties.   lets also rename return to deliverables[] aand have it be structured and match the RFC.  update all documents",
+      "status": "decided"
+    },
+    {
+      "id": "D874d-71",
+      "type": "decision",
+      "text": "Only the implementing mission's brief moves to the briefs directory: `briefs/874d-2-structured-reports-brief.json`",
+      "decided_by": "commander",
+      "date": "2026-11-16",
+      "source": {
+        "kind": "commander",
+        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl L4045"
+      },
+      "quote": "44) just this one",
+      "status": "decided"
+    },
+    {
+      "id": "D874d-72",
+      "type": "decision",
+      "text": "The briefs directory is tracked in git, as plans are",
+      "decided_by": "commander",
+      "date": "2026-11-16",
+      "source": {
+        "kind": "commander",
+        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl L4045"
+      },
+      "quote": "45) add briefs to git, plans too.",
+      "status": "decided"
+    },
+    {
+      "id": "D874d-73",
+      "type": "decision",
+      "text": "A mission brief resides in the session scratch directory by default, since most briefs are ephemeral; it resides in the briefs directory only on the commander's order",
+      "decided_by": "commander",
+      "date": "2026-11-16",
+      "source": {
+        "kind": "commander",
+        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl L4045"
+      },
+      "quote": "briefs should live in scratch by default because most of othem are ephemeral, but if i order them to live in briefs they can live there.",
+      "status": "decided"
+    },
+    {
+      "id": "D874d-74",
+      "type": "decision",
+      "text": "The briefs directory, `<repo>/briefs/`, is the location for briefs with a long lifecycle, such as the brief of a mission that implements a roadmap item",
+      "decided_by": "commander",
+      "date": "2026-11-16",
+      "source": {
+        "kind": "commander",
+        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl L4045"
+      },
+      "quote": "document the locatino of briefs/ as a location where briefs that have a long lifecycle need to live, like roadmap items.",
+      "status": "decided"
+    },
+    {
+      "id": "D874d-76",
+      "type": "decision",
+      "text": "Whether a brief in the briefs directory goes to `main` directly, as plans do, is deferred; the question is not raised again",
+      "decided_by": "commander",
+      "date": "2026-11-16",
+      "source": {
+        "kind": "commander",
+        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl L4523"
+      },
+      "quote": "47) ignore this, dont ask again its deferred",
+      "status": "decided"
+    }
+  ],
+  "operational_learning": [
+    {
+      "id": "OL-1",
+      "type": "operational_learning",
+      "text": "The deployed /delegate (~/.claude/skills/delegate/SKILL.md) can be older than the aitools working copy (shared/skills/delegate/SKILL.md v2.6), and RFC 0011 and issue #180 are newer than both; where they differ, follow the commander's newest words (D-DEL6)",
+      "source": {
+        "kind": "agent",
+        "location": "session dbd05b0c, /Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl"
+      }
+    },
+    {
+      "id": "OL-2",
+      "type": "operational_learning",
+      "text": "A delegate's subagents/agent-<agentId>.meta.json, whose description starts with its mission name, existed while the four background verifiers 874d-3 to 874d-6 ran (2026-11-16); for 874d-1-aar-doctrine it was seen only at finish, a file time that is rewritten then. Look for it first; fall back to a TaskStop error or the parent transcript",
+      "source": {
+        "kind": "telemetry",
+        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d/subagents/ (ls, 2026-11-16)"
+      }
+    },
+    {
+      "id": "OL-3",
+      "type": "operational_learning",
+      "text": "ait-harvest.py archive copies transcripts into the dotprofile and commits and pushes them, detached, because Claude Code gives SessionEnd hooks a 1.5-second default window; but it takes no lock, and ~/.aitools/logs/ait-harvest.log holds about 60 git failures, mostly index.lock contention. RFC 0011 3.5.5 requires one detached job with a lock and a rebase",
+      "source": {
+        "kind": "telemetry",
+        "location": "/Users/new-jose/.aitools/logs/ait-harvest.log; mission 874d-4-adversarial OBS-4"
+      }
+    },
+    {
+      "id": "OL-4",
+      "type": "operational_learning",
+      "text": "A schema-4 harness-db.py crashes on a schema-5 DB: migrate_v4 runs before the version check, and on a throwaway DB the probe hit 'use DROP VIEW to delete view observations'. Batch 3.0 ships the version check first",
+      "source": {
+        "kind": "telemetry",
+        "location": "mission 874d-4-adversarial OBS-1 (probe on a throwaway DB, SQLite 3.53.1)"
+      }
+    },
+    {
+      "id": "OL-5",
+      "type": "operational_learning",
+      "text": "Another session can edit the same working-copy files at the same time (commit 3893c908 staged only its own lines with git update-index); run git log and git diff on a shared file before editing it",
+      "source": {
+        "kind": "agent",
+        "location": "session dbd05b0c, /Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl"
+      }
+    },
+    {
+      "id": "OL-6",
+      "type": "operational_learning",
+      "text": "The 10-character session id prefix includes the UUID's first hyphen (dbd05b0c-2.db)",
+      "source": {
+        "kind": "artifact",
+        "location": "/Users/new-jose/repos/aitools/scripts/harness-db.py session_prefix; D874d-48"
+      }
+    },
+    {
+      "id": "OL-7",
+      "type": "operational_learning",
+      "text": "The harvester copies every non-ephemeral top-level file of a session scratch directory into the tracked harvesting/ of a public repo; *.json files are ephemeral only when named package-lock*, node_modules*, tsconfig* or *.config.json. Until batch 4.5 ships, save copies of transcripts, prompts and issue bodies as *.tmp",
+      "source": {
+        "kind": "artifact",
+        "location": "/Users/new-jose/repos/aitools/scripts/ait-harvest.py _is_ephemeral; /Users/new-jose/.claude/skills/scratch/SKILL.md"
+      }
+    },
+    {
+      "id": "OL-8",
+      "type": "operational_learning",
+      "text": "A message the commander sends while a turn is running is recorded in the transcript as a queue-operation record with a content field, not as a user record; a quote check must read both",
+      "source": {
+        "kind": "telemetry",
+        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl L3589"
+      }
+    },
+    {
+      "id": "OL-9",
+      "type": "operational_learning",
+      "text": "A GitHub issue body holds at most 65,536 characters; issue #180 moved sections to comments in v5.1 and v5.4",
+      "source": {
+        "kind": "agent",
+        "location": "session dbd05b0c, issue #180 v5.1 and v5.4"
+      }
+    },
+    {
+      "id": "OL-10",
+      "type": "operational_learning",
+      "text": "A mechanical schema check (keys, enums, quotes) passed the v1.0 brief completely; every substantive defect came from reading its constraints and access against the repo's rules. Pair any validate step with a sufficiency read",
+      "source": {
+        "kind": "agent",
+        "location": "mission 874d-5-brief-verify OL-3"
+      }
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "/Users/new-jose/.claude/CLAUDE.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/.claude/rules/delegation.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/.claude/rules/prompt-turn.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/.claude/rules/scratch.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/.claude/rules/tool-evaluation.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/.claude/rules/tool-lifecycle.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/.claude/rules/tool-ops.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/.claude/rules/web-sources.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/CLAUDE.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/.aitools/channel/CLAUDE.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/.claude/rules/agentic-standards.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/.claude/rules/aitools-workspace.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/.claude/rules/config-file-safety.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/.claude/rules/cross-platform.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/.claude/rules/deploy-paths.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/.claude/rules/documentation-standards.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/.claude/rules/frameworks.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/.claude/rules/git-safety.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/.claude/rules/glossary.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/.claude/rules/governed-data-access.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/.claude/rules/hook-lifecycle.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/.claude/rules/hook-rollout.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/.claude/rules/incident-governance.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/.claude/rules/interactive-menus.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/.claude/rules/managed-file-deployment.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/.claude/rules/script-standards.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/.claude/rules/smoke-test-pattern.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/shared/skills/delegate/SKILL.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/shared/rules/delegation.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/shared/skills/scratch/SKILL.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/.claude/skills/glossary/SKILL.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/shared/skills/intent-writing/SKILL.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/shared/skills/intent-audit/SKILL.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/shared/skills/tool-ops/SKILL.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/.claude/skills/frameworks/SKILL.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/rfcs/RFC-0011-structured-reports.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/plans/structured-reports/implementation-plan.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/rfcs/0010-python-sqlite-engineering.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/reference/script-standards-detail.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/reference/cross-platform-detail.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/reference/logging.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/reference/managed-file-deployment.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/reference/plan-execution-detail.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/reference/rules.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/reference/skills.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl",
+      "instruction": "use as reference for answers"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/.scratch/session-dbd05b0c-2365-4159-9976-bc64a2af874d/874d-3-spec-verify-aar.json",
+      "instruction": "use as reference for answers"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/.scratch/session-dbd05b0c-2365-4159-9976-bc64a2af874d/874d-4-adversarial-aar.json",
+      "instruction": "use as reference for answers"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/.scratch/session-dbd05b0c-2365-4159-9976-bc64a2af874d/874d-5-brief-verify-aar.json",
+      "instruction": "use as reference for answers"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/.scratch/session-dbd05b0c-2365-4159-9976-bc64a2af874d/874d-6-standards-verify-aar.json",
+      "instruction": "use as reference for answers"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/.aitools/channel/handoffs/2026-11-15_dbd05b0c-missions/874d-1-aar-doctrine/874d-1-aar-doctrine-report.md",
+      "instruction": "use as reference for answers"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/rfcs/0005-v2-session-intelligence-architecture.md",
+      "instruction": "use as reference for answers"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/rfcs/0006-delegation-architecture.md",
+      "instruction": "use as reference for answers"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/reference/framework-mission-command.md",
+      "instruction": "use as reference for answers"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/reference/framework-intelligence-types.md",
+      "instruction": "use as reference for answers"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/reference/prompt-turn-checklist.md",
+      "instruction": "use as reference for answers"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/reference/README.md",
+      "instruction": "use as reference for answers"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/reference/harness-db-schema.sql",
+      "instruction": "use as reference for answers"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/reference/artifact-harvesting.md",
+      "instruction": "use as reference for answers"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/scripts/harness-db.py",
+      "instruction": "use as reference for answers"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/scripts/ait-harvest.py",
+      "instruction": "use as reference for answers"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/scripts/generate-dashboard.py",
+      "instruction": "use as reference for answers"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/scripts/aitools-dashboard.sh",
+      "instruction": "use as reference for answers"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/scripts/aitools-dashboard.ps1",
+      "instruction": "use as reference for answers"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/shared/hooks/harness-db-sessionstart.sh",
+      "instruction": "use as reference for answers"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/shared/hooks/harness-db-sessionend.sh",
+      "instruction": "use as reference for answers"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/shared/hooks/session-archive.sh",
+      "instruction": "use as reference for answers"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/shared/hooks/session-catchup.sh",
+      "instruction": "use as reference for answers"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/shared/hooks/intelligence-stop.py",
+      "instruction": "use as reference for answers"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/shared/hooks/delegation-duty-guard.sh",
+      "instruction": "use as reference for answers"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/shared/hooks/workflow-delegation-guard.sh",
+      "instruction": "use as reference for answers"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/shared/hooks/dashboard-serve.sh",
+      "instruction": "use as reference for answers"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/shared/hooks/hooks-manifest.json",
+      "instruction": "use as reference for answers"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/shared/skills/handoff/SKILL.md",
+      "instruction": "use as reference for answers"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/shared/skills/mission-control/SKILL.md",
+      "instruction": "use as reference for answers"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/shared/skills/aitool-continue/SKILL.md",
+      "instruction": "use as reference for answers"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/shared/skills/tool-eval/SKILL.md",
+      "instruction": "use as reference for answers"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/.github/workflows/check.yml",
+      "instruction": "use as reference for answers"
+    }
+  ],
+  "deliverables": [
+    {
+      "kind": "pr",
+      "ref": "nobul-tech/aitools, base main",
+      "objective": "OBJ-2",
+      "text": "WP-1: one PR from feature/874d-2-structured-reports-wp1, CI green on macOS, Linux and Windows, with the reviewer's verdict as a PR comment"
+    },
+    {
+      "kind": "pr",
+      "ref": "nobul-tech/aitools, base main",
+      "objective": "OBJ-3",
+      "text": "WP-2: one PR from feature/874d-2-structured-reports-wp2, CI green on macOS, Linux and Windows, with the reviewer's verdict as a PR comment"
+    },
+    {
+      "kind": "pr",
+      "ref": "nobul-tech/aitools, base main",
+      "objective": "OBJ-4",
+      "text": "WP-3: one PR from feature/874d-2-structured-reports-wp3, CI green on macOS, Linux and Windows, with the reviewer's verdict as a PR comment"
+    },
+    {
+      "kind": "pr",
+      "ref": "nobul-tech/aitools, base main",
+      "objective": "OBJ-5",
+      "text": "WP-4: one PR from feature/874d-2-structured-reports-wp4, CI green on macOS, Linux and Windows, with the reviewer's verdict as a PR comment"
+    },
+    {
+      "kind": "pr",
+      "ref": "nobul-tech/aitools, base main",
+      "objective": "OBJ-6",
+      "text": "WP-5: one PR from feature/874d-2-structured-reports-wp5, CI green on macOS, Linux and Windows, with the reviewer's verdict as a PR comment"
+    },
+    {
+      "kind": "pr",
+      "ref": "nobul-tech/aitools, base main",
+      "objective": "OBJ-7",
+      "text": "WP-6: one PR from feature/874d-2-structured-reports-wp6, CI green on macOS, Linux and Windows, with the reviewer's verdict as a PR comment"
+    },
+    {
+      "kind": "aar",
+      "ref": "",
+      "objective": "",
+      "text": "your AAR, the hand-back: JSON in the AAR schema of RFC 0011 3.4, the last fenced json block of your final message (D874d-47, D874d-50); no file is requested"
+    }
+  ]
+}
