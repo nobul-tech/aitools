@@ -1,6 +1,6 @@
 exit 0
 -- summary rows
-WARN|aitools config|verified
+OK|aitools config|verified
 -- config.json
 {
   "version": 3,
