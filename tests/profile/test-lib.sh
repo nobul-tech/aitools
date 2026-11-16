@@ -43,6 +43,8 @@
 # ERROR, a warning line is never a failed child's reason (RFI 5899-31), and a
 # user abort is recorded once: by the child when it recorded it, else by the
 # relay.
+# Fix-forward 5899-6-L2-P1: only an abort record the child wrote counts as the
+# child recording it; its earlier warnings do not (case 9).
 #
 # Platform targeting (plans/ci-platform-targeting.md; commander 2026-11-14:
 # "sh scripts and tests should only run on linux/mac and ps1 on windows"):
@@ -561,13 +563,18 @@ printf '  skip via-pwsh-* (the Git Bash -> pwsh branch runs on Windows only)\n'
 #      outside the library prints it: logging.md 8.1), exit 0 anyway (a child bug)
 #   3  dies before any row or footer: `false` under set -e
 #   4  exit 127: runs a missing command
-#   5  a user abort the child records itself (log_error "Aborted by user"
-#      records), exit 2 (D-TS13)
+#   5  a user abort the child records itself, as a relay inside it would: one
+#      abort record (write_error "child tool" "child step aborted" "aborted by
+#      user": an ERROR whose reason is "aborted by user", logging.md 8.3), exit 2
+#      (D-TS13)
 #   7  makes RO_DIR read-only (it holds the relay's exit-code file, made by the
 #      mktemp stub in $WORK/mkro: the file cannot be removed), then footer, exit 0
 #   8  a user abort through the library's abort path (_managed_abort: logged and
 #      counted, not recorded) right after "child info", before the warnings, so
 #      the child records nothing and the relay records the abort (8.3)
+#   9  its two warnings (recorded), then a user abort through the library's
+#      abort path: its warnings are not abort records, so the relay records
+#      the abort (8.3 "A user abort")
 # (The PowerShell child, which also throws (6), is in test-lib.ps1.)
 cat > "$WORK/child.sh" <<'CHILD'
 set -euo pipefail
@@ -582,8 +589,9 @@ case "${CHILD_FAIL:-0}" in
     2) printf '[2026-01-01T00:00:00Z] [child-sh] [error] child error\n' ;;
     3) false ;;
     4) aitools-test-no-such-command ;;
-    5) log_error "Aborted by user"; exit 2 ;;
+    5) write_error "child tool" "child step aborted" "aborted by user"; exit 2 ;;
     7) chmod 555 "$RO_DIR" ;;
+    9) _managed_abort ;;
 esac
 if [ "$ERRORS" -gt 0 ] && [ "${CHILD_FAIL:-0}" = "1" ]; then log "FAILED with $ERRORS error(s)" "error"; exit 1
 elif [ "$WARNINGS" -gt 0 ]; then log "COMPLETED with $WARNINGS warning(s)" "warn"; exit 0
@@ -725,12 +733,18 @@ relay_case relay-run-exit127 run 4 "rc=1 child_rc=127
 cw=2 ce=0 warnings=0 errors=1" "records=3 invalid=0
 msg-ok" "$W_CHILD
 ERROR|child tool|child step failed (exit 127)|$WORK/child.sh: line 12: aitools-test-no-such-command: command not found"
-# A user abort (exit 2) the child recorded itself: the relay counts it and
-# records nothing more (8.3 "A user abort": recorded once)
+# A user abort (exit 2) the child recorded itself (an abort record): the relay
+# counts it and records nothing more (8.3 "A user abort": recorded once)
 relay_case relay-run-abort run 5 "rc=1 child_rc=2
 cw=2 ce=1 warnings=0 errors=1" "records=4 invalid=0
 msg-ok" "$W_CHILD
-ERROR|child-sh|Aborted by user|"
+ERROR|child tool|child step aborted|aborted by user"
+# Its warnings (recorded), then an abort through the library's abort path: the
+# warnings are not abort records, so the relay records the abort once (8.3)
+relay_case relay-run-abort-after-warn run 9 "rc=1 child_rc=2
+cw=2 ce=1 warnings=0 errors=1" "records=4 invalid=0
+msg-ok" "$W_CHILD
+ERROR|child tool|child step failed (exit 2)|aborted by user"
 # A user abort through the library's abort path (logged, not recorded) by a child
 # that recorded nothing: the relay records it once, ERROR "<label> failed (exit 2)"
 # with the reason "aborted by user" (8.3). The child printed no warning line.

@@ -459,8 +459,9 @@ function Set-ToolException([string]$Slug, [string]$Method, [string]$Path, [strin
 # $script:warnings. A failed child (non-zero exit, a throw, or error lines with
 # exit 0) is one error of the parent ($script:errors +1), logged at error level
 # as "<WHAT>: <REASON>". It is recorded, ERROR|<name>|<WHAT>|<REASON>, only when
-# the child wrote no ERROR record while it ran; otherwise it is logged and
-# counted, not recorded (the non-recording path, 8.2).
+# the child wrote no ERROR record while it ran; otherwise it is logged as
+# "<WHAT> -- the child recorded its error" (no reason derived) and counted, not
+# recorded (the non-recording path, 8.2).
 #   <name>   the summary tool; else the base name of the first .sh / .ps1 among
 #            the command and its arguments; else LABEL
 #   <WHAT>   "<label> failed (exit N)" (N may be 0: error lines with exit 0), or
@@ -470,9 +471,11 @@ function Set-ToolException([string]$Slug, [string]$Method, [string]$Path, [strin
 #            else over its last stdout line (the exit footer excluded) that is
 #            not a warning line, or its last warning line when it printed
 #            nothing else
-# A user abort (exit 2) is recorded once, and only when the child recorded no
-# WARN or ERROR record while it ran (an abort inside a relayed installer is
-# recorded by the innermost relay). With -AbortAsWarning (the runner's request,
+# A user abort (exit 2) is recorded once: unless the child wrote an abort record
+# while it ran (WARN|<name>|aborted by user, or an ERROR record whose reason is
+# "aborted by user": an abort inside a relayed installer is recorded by the
+# innermost relay). Its other WARN or ERROR records do not count. With
+# -AbortAsWarning (the runner's request,
 # for deploy-harness): WARN|<name>|aborted by user and one parent warning, no
 # error. Without it: ERROR|<name>|<label> failed (exit 2)|aborted by user and one
 # parent error. Not recorded: logged at its level and counted all the same.
@@ -656,17 +659,43 @@ function Get-AitLibSummaryCount([string[]]$Kinds) {
 # Get-AitLibSummaryErrorCount -- the number of ERROR records (kept for callers)
 function Get-AitLibSummaryErrorCount { return (Get-AitLibSummaryCount @("ERROR")) }
 
-# Write-AitLibChildRow NAME BEFORE WHAT REASON -- a failed child: one parent
-# error, logged "WHAT: REASON" at error level through the non-recording path,
-# and recorded ERROR|NAME|WHAT|REASON unless the child wrote an ERROR record of
-# its own while it ran (the run summary now holds more than BEFORE ERROR
-# records). Parity: the failed-child branch of run_child_relayed.
-function Write-AitLibChildRow([string]$Name, [int]$Before, [string]$What, [string]$Reason) {
-    Write-AitLibUnrecordedError "${What}: $Reason"
-    if ((Get-AitLibSummaryCount @("ERROR")) -gt $Before) {
-        LogDetail "${Name}: the child recorded its own error -- the relay records none"
-        return
+# Get-AitLibAbortRecordCount -- the number of abort records in the run summary
+# (logging.md 8.3 "A user abort"): WARN records whose text is "aborted by user"
+# and ERROR records whose reason is "aborted by user"; 0 outside a run. An
+# unreadable summary counts 0 and is a detail line. Parity:
+# _aitlib_summary_abort_count.
+function Get-AitLibAbortRecordCount {
+    if (-not $env:AITOOLS_SUMMARY_FILE) { return 0 }
+    $sf = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($env:AITOOLS_SUMMARY_FILE)
+    if (-not (Test-Path -LiteralPath $sf -PathType Leaf)) { return 0 }
+    try {
+        return @([IO.File]::ReadAllLines($sf, [System.Text.UTF8Encoding]::new($false)) | Where-Object {
+            $_ -cmatch '^WARN\|.*\|aborted by user$' -or $_ -cmatch '^ERROR\|.*\|.*\|aborted by user$'
+        }).Count
+    } catch {
+        LogDetail "run summary unreadable ($($_.Exception.Message)) -- its abort records are not counted"
+        return 0
     }
+}
+
+# Test-AitLibChildErrorRecorded BEFORE WHAT -- $true when the child wrote an
+# ERROR record of its own while it ran (the run summary now holds more than
+# BEFORE ERROR records): then the failed child is one parent error, logged
+# "WHAT -- the child recorded its error" through the non-recording path, with
+# no reason derived (the child's own record has it). $false otherwise (nothing
+# logged). Parity: the failed-child branch of run_child_relayed.
+function Test-AitLibChildErrorRecorded([int]$Before, [string]$What) {
+    if ((Get-AitLibSummaryCount @("ERROR")) -le $Before) { return $false }
+    Write-AitLibUnrecordedError "$What -- the child recorded its error"
+    return $true
+}
+
+# Write-AitLibChildRow NAME WHAT REASON -- a failed child that recorded no error
+# of its own: one parent error, logged "WHAT: REASON" at error level through
+# the non-recording path, and recorded ERROR|NAME|WHAT|REASON (call
+# Test-AitLibChildErrorRecorded first). Parity: run_child_relayed's write_error.
+function Write-AitLibChildRow([string]$Name, [string]$What, [string]$Reason) {
+    Write-AitLibUnrecordedError "${What}: $Reason"
     Write-AitLibRecord "ERROR" $Name $What $Reason
 }
 
@@ -675,21 +704,24 @@ function Write-AitLibChildRow([string]$Name, [int]$Before, [string]$What, [strin
 # (success) or 1.
 function Complete-AitLibChildRun {
     param(
-        [string]$Label, [string]$Name, [int]$ErrBefore, [int]$AnyBefore,
+        [string]$Label, [string]$Name, [int]$ErrBefore, [int]$AbortBefore,
         [bool]$Threw, [string]$Exception, [object[]]$ReasonLines, [bool]$AbortAsWarning
     )
     Resolve-AitLibChildCounts
     $rc = $script:AitLibChildRc
     if ($Threw) {
+        $what = "$Label failed (exception)"
+        if (Test-AitLibChildErrorRecorded $ErrBefore $what) { return 1 }
         $why = ("$Exception" -replace '\s*\r?\n\s*', ' ').Trim()
         if (-not $why) { $why = "no message" }
-        Write-AitLibChildRow $Name $ErrBefore "$Label failed (exception)" $why
+        Write-AitLibChildRow $Name $what $why
         return 1
     }
     if ($rc -eq 2) {
-        # A user abort (8.3): recorded once, only when the child recorded no WARN
-        # or ERROR record while it ran
-        $recorded = (Get-AitLibSummaryCount @("WARN", "ERROR")) -gt $AnyBefore
+        # A user abort (8.3): recorded once, unless the child wrote an abort
+        # record while it ran (a relay inside it recorded the abort); its other
+        # WARN or ERROR records do not count
+        $recorded = (Get-AitLibAbortRecordCount) -gt $AbortBefore
         LogDetail "${Label}: exited 2 (user abort)"
         $what = "$Label failed (exit 2)"
         if ($recorded) {
@@ -704,6 +736,8 @@ function Complete-AitLibChildRun {
         return 1
     }
     if ($rc -ne 0 -or $script:AitLibChildErrors -gt 0) {
+        $what = "$Label failed (exit $rc)"
+        if (Test-AitLibChildErrorRecorded $ErrBefore $what) { return 1 }
         $lines = @($ReasonLines | Where-Object { "$_".Trim() })
         $reason = if ($lines.Count -gt 0) {
             Get-AitErrorReason -Output $lines -ExitCode $rc
@@ -758,7 +792,7 @@ function Invoke-ChildRelayed(
         return 1
     }
     $AitLibErrBefore = Get-AitLibSummaryCount @("ERROR")
-    $AitLibAnyBefore = Get-AitLibSummaryCount @("WARN", "ERROR")
+    $AitLibAbortBefore = Get-AitLibAbortRecordCount
     Set-AitLibRelayState $AitLibOwn ([bool]$AitLibNoMirror) ([bool]$AitLibQuiet)
     $AitLibErrRecs = [System.Collections.Generic.List[string]]::new()
     $AitLibThrew = $false; $AitLibExc = ""
@@ -785,7 +819,7 @@ function Invoke-ChildRelayed(
         $env:AITLIB_RELAYED = $AitLibRelayedBefore
     }
     return (Complete-AitLibChildRun -Label $AitLibLabel -Name $AitLibName -ErrBefore $AitLibErrBefore `
-        -AnyBefore $AitLibAnyBefore -Threw $AitLibThrew -Exception $AitLibExc `
+        -AbortBefore $AitLibAbortBefore -Threw $AitLibThrew -Exception $AitLibExc `
         -ReasonLines @($AitLibErrRecs) -AbortAsWarning ([bool]$AitLibAbortAsWarning))
 }
 
@@ -826,7 +860,7 @@ function Invoke-NativeRelayed {
         return 1
     }
     $errBefore = Get-AitLibSummaryCount @("ERROR")
-    $anyBefore = Get-AitLibSummaryCount @("WARN", "ERROR")
+    $abortBefore = Get-AitLibAbortRecordCount
     Set-AitLibRelayState $own ([bool]$NoMirror) ([bool]$Quiet)
     $psi = [System.Diagnostics.ProcessStartInfo]::new($exe)
     foreach ($a in @($ArgumentList)) { $psi.ArgumentList.Add([string]$a) }
@@ -883,7 +917,7 @@ function Invoke-NativeRelayed {
     }
     $tail = @($errQueue.ToArray())
     if ($tail.Count -gt 20) { $tail = $tail[($tail.Count - 20)..($tail.Count - 1)] }
-    return (Complete-AitLibChildRun -Label $Label -Name $name -ErrBefore $errBefore -AnyBefore $anyBefore `
+    return (Complete-AitLibChildRun -Label $Label -Name $name -ErrBefore $errBefore -AbortBefore $abortBefore `
         -Threw $false -Exception "" -ReasonLines $tail -AbortAsWarning ([bool]$AbortAsWarning))
 }
 

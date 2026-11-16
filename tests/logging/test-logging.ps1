@@ -238,7 +238,8 @@ exit 0
     $r = Invoke-LibScript "relay-othername" '$rc = Invoke-ChildRelayed "on" "{DIR}/othername.ps1" @{} ""; Write-Output "RC=$rc CE=$($script:AitLibChildErrors)"' "" @{ "othername.ps1" = $other }
     Check "relay: a child logging under another name -- its error line counts (exit 0 with errors fails)" ($r.Out -match 'RC=1 CE=1')
 
-    # An abort is recorded only when the child recorded no WARN or ERROR record
+    # An abort is recorded unless the child wrote an abort record itself; the
+    # child's other warnings and errors do not count (8.3 "A user abort")
     $ab = @'
 . '{LIB}'
 Initialize-Logging "abchild"
@@ -247,7 +248,30 @@ Invoke-ManagedAbort
 '@
     $s = Join-Path $tmpRoot "relay-abort.txt"; [IO.File]::WriteAllText($s, "")
     $r = Invoke-LibScript "relay-abort" '$rc = Invoke-ChildRelayed "ab" "{DIR}/abchild.ps1" @{} "ab tool"; Write-Output "RC=$rc CHILD=$($script:AitLibChildRc) COUNTS=$($script:errors)/$($script:warnings)"' $s @{ "abchild.ps1" = $ab }
-    Check "relay: an abort after the child recorded a warning -- not recorded again, one parent error" ((($r.Summary -join '//') -ceq 'WARN|ab tool|first a warning') -and ($r.Out -match 'RC=1 CHILD=2 COUNTS=1/0'))
+    Check "relay: a warning, then an abort -- the relay records the abort, one parent error" ((($r.Summary -join '//') -ceq 'WARN|ab tool|first a warning//ERROR|ab tool|ab failed (exit 2)|aborted by user') -and ($r.Out -match 'RC=1 CHILD=2 COUNTS=1/0') -and -not ($r.Log -match 'the child recorded it'))
+    $s = Join-Path $tmpRoot "relay-abort-warn.txt"; [IO.File]::WriteAllText($s, "")
+    $r = Invoke-LibScript "relay-abort-warn" '$rc = Invoke-ChildRelayed "ab" "{DIR}/abchild.ps1" @{} "ab tool" -AbortAsWarning; Write-Output "RC=$rc CHILD=$($script:AitLibChildRc) COUNTS=$($script:errors)/$($script:warnings)"' $s @{ "abchild.ps1" = $ab }
+    Check "relay -AbortAsWarning: a warning, then an abort -- the relay records the abort as a warning, one parent warning" ((($r.Summary -join '//') -ceq 'WARN|ab tool|first a warning//WARN|ab tool|aborted by user') -and ($r.Out -match 'RC=1 CHILD=2 COUNTS=0/1'))
+    $abRec = @'
+. '{LIB}'
+Initialize-Logging "abrec"
+Write-AitWarn "ab tool" "aborted by user"
+exit 2
+'@
+    $s = Join-Path $tmpRoot "relay-abort-rec.txt"; [IO.File]::WriteAllText($s, "")
+    $r = Invoke-LibScript "relay-abort-rec" '$rc = Invoke-ChildRelayed "ab" "{DIR}/abrec.ps1" @{} "ab tool" -AbortAsWarning; Write-Output "RC=$rc CHILD=$($script:AitLibChildRc) COUNTS=$($script:errors)/$($script:warnings)"' $s @{ "abrec.ps1" = $abRec }
+    Check "relay -AbortAsWarning: an abort record the child wrote is counted, not recorded again" ((($r.Summary -join '//') -ceq 'WARN|ab tool|aborted by user') -and ($r.Out -match 'RC=1 CHILD=2 COUNTS=0/1') -and ($r.Log -match 'ab aborted by user -- the child recorded it'))
+    # A failed child that recorded its own error: no reason derived from its last line
+    $frec = @'
+. '{LIB}'
+Initialize-Logging "frec"
+Write-AitError "fr tool" "fr step" "the real cause"
+Log "an unrelated last line"
+exit 1
+'@
+    $s = Join-Path $tmpRoot "relay-fail-rec.txt"; [IO.File]::WriteAllText($s, "")
+    $r = Invoke-LibScript "relay-fail-rec" '$rc = Invoke-ChildRelayed "fr run" "{DIR}/frec.ps1" @{} "fr tool"; Write-Output "RC=$rc COUNTS=$($script:errors)"' $s @{ "frec.ps1" = $frec }
+    Check "relay: a failed child that recorded its error -- logged '<label> failed (exit N) -- the child recorded its error', no derived reason" ((($r.Summary -join '//') -ceq 'ERROR|fr tool|fr step|the real cause') -and ($r.Out -match 'RC=1 COUNTS=1') -and ($r.Log -match '\[error\] fr run failed \(exit 1\) -- the child recorded its error') -and -not ($r.Log -match 'unrelated last line --'))
 
     # Not run: a native command that does not exist
     $s = Join-Path $tmpRoot "relay-notrun.txt"; [IO.File]::WriteAllText($s, "")

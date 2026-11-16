@@ -1057,3 +1057,69 @@ call error_reason|[2026-11-16T10:00:00Z] [fx-child] [INFO] Done here\r\n|1
 expect reason Done here
 expect logsub detail output: [2026-11-16T10:00:00Z] [fx-child] [INFO] Done here
 note before I5 bash removed the prefix only for a lower-case level (the reason kept the prefix), and PowerShell logged the detail line without its prefix
+
+# ===========================================================================
+# L35: a child's abort after its other records (fix-forward 5899-6-L2-P1)
+# ===========================================================================
+
+case L35a
+plan I5 fix-forward
+title a child that recorded a warning, then aborts (exit 2): the relay records the abort (one ERROR record), one parent error
+spec 8.3 A user abort (exit 2); 8.6 A child aborts
+child fx-abort call write_warn|fx tool|skipped one file
+child fx-abort call managed_abort
+relay fx-abort.sh|fx tool|fx-abort
+expect record WARN|fx tool|skipped one file
+expect record ERROR|fx tool|fx-abort.sh failed (exit 2)|aborted by user
+expect count errors 1
+expect count warnings 0
+expect relay-rc 1
+expect child-rc 2
+render
+panel blank
+panel rule
+panel yellow   [!]   fx tool          skipped one file
+panel red   [ERR] fx tool          fx-abort.sh failed (exit 2): aborted by user
+panel rule
+note before this fix the child's warning suppressed the abort record and the relay logged a false "-- the child recorded it"
+
+case L35b
+plan I5 fix-forward
+title deploy-harness records a warning, then aborts: the relay records the abort as one warning (abort-warn), one parent warning
+spec 8.3 A user abort (exit 2); 8.6 A child aborts
+child deploy-harness call write_warn|harness files|something odd
+child deploy-harness call managed_abort
+relay deploy-harness|harness files|deploy-harness|abort-warn
+expect record WARN|harness files|something odd
+expect record WARN|harness files|aborted by user
+expect count warnings 1
+expect count errors 0
+expect child-rc 2
+
+case L35c
+plan I5 fix-forward
+title a child that wrote an abort record itself (its own relay recorded it) and exits 2: not recorded again, one parent error
+spec 8.3 A user abort (exit 2): recorded once, by the innermost relay
+child fx-inner call write_error|inner tool|gc step failed (exit 2)|aborted by user
+child fx-inner exit 2
+relay fx-inner.sh|fx tool|fx-inner
+expect record ERROR|inner tool|gc step failed (exit 2)|aborted by user
+expect count errors 1
+expect relay-rc 1
+expect child-rc 2
+expect logsub error fx-inner.sh failed (exit 2): aborted by user -- the child recorded it
+
+case L35d
+plan I5 fix-forward
+title a failed child that recorded its own error: the relay logs "<label> failed (exit N) -- the child recorded its error", with no reason taken from the child's last line
+spec 8.3 Recording that error
+child fx-rec call write_error|fx tool|fx step|the real cause
+child fx-rec call log|an unrelated last line
+child fx-rec exit 1
+relay fx-rec.sh|fx tool|fx-rec
+expect record ERROR|fx tool|fx step|the real cause
+expect count errors 1
+expect relay-rc 1
+expect child-rc 1
+expect logsub error fx-rec.sh failed (exit 1) -- the child recorded its error
+note before this fix the logged line took a reason from the child's last line ("an unrelated last line"), unrelated to the recorded error

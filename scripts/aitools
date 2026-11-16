@@ -1103,7 +1103,7 @@ user_init() {
     # Session archive hook. Exit 2 = the user aborted in the review menu (D-TS13):
     # stop with exit 2 (the relay records it once: ERROR "claude hooks" "user init:
     # setup-user-hooks failed (exit 2)" "aborted by user", unless the hook script
-    # recorded a warning or an error); any other failure is counted by the relay.
+    # recorded an abort record itself); any other failure is counted by the relay.
     log "user init: deploying the session archive hook"
     hook_setup="$repo_path/scripts/setup-user-hooks.sh"
     hook_cmd=("${BASH:-bash}" "$hook_setup")
