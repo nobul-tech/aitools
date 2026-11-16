@@ -355,28 +355,42 @@ try {
         [Array]::Sort($lines, [StringComparer]::Ordinal)
         $lines
     }
-    # Rows FILE: the ACTION and claude rules rows, ordinal sort; the temp root
-    # written <TMP> (ConvertTo-GoldenText), then the case HOME (<TMP>/<case>/<L>/,
-    # which holds the language: ps here, sh on macOS/Linux) written <HOME>/ so both
-    # languages give one golden line (a WARN record names the file it is about)
-    function Rows([string]$File) {
+    # Rows FILE [WHATS]: the ACTION and claude rules rows, ordinal sort; the temp
+    # root written <TMP> (ConvertTo-GoldenText), then the case HOME
+    # (<TMP>/<case>/<L>/, which holds the language: ps here, sh on macOS/Linux)
+    # written <HOME>/ so both languages give one golden line (a WARN record names
+    # the file it is about). WHATS: the ERROR records whose reason is the
+    # platform's own text (the .NET exception message here, an OS message on
+    # macOS/Linux) have that reason written <platform reason>; an empty reason
+    # stays empty, so the golden line still requires one. The inline checks pin
+    # the reason each platform gives.
+    function Rows([string]$File, [string[]]$PlatformWhat = @()) {
         $caseHome = "<TMP>/" + (Split-Path -Leaf $script:C) + "/$L/"
-        $r = [string[]]@(Get-Lines $File | Where-Object { $_ -cmatch '^(ACTION\||[A-Z]+\|claude rules\|)' } | ForEach-Object { (ConvertTo-GoldenText $_ $GoldenTmp).Replace($caseHome, "<HOME>/") })
+        $r = [string[]]@(Get-Lines $File | Where-Object { $_ -cmatch '^(ACTION\||[A-Z]+\|claude rules\|)' } | ForEach-Object {
+            $row = (ConvertTo-GoldenText $_ $GoldenTmp).Replace($caseHome, "<HOME>/")
+            foreach ($w in $PlatformWhat) { $row = $row -creplace ('^(ERROR\|[^|]*\|' + [regex]::Escape($w) + ')\|.+$'), '$1|<platform reason>' }
+            $row
+        })
         [Array]::Sort($r, [StringComparer]::Ordinal)
         $r
     }
-    # Parity CASE: this run's exit code, ~/.claude/rules tree and summary rows equal
-    # the golden result tests/rules-fanout/golden/CASE.result, which the .sh run
-    # (macOS/Linux) and the .ps1 run (Windows) must both give. GOLDEN: compare
-    # with another case's golden result (a Windows-only case with the same
-    # outcome); CHECKNAME: the check line's name then
-    function Parity([string]$Case, [string]$Golden = "", [string]$CheckName = "") {
+    # HasReason PREFIX: a summary row is PREFIX ("<KIND>|<name>|<what>|") followed
+    # by a non-empty reason (a reason that is the platform's own text)
+    function HasReason([string]$Prefix) { [bool](SumLines | Where-Object { $_.StartsWith($Prefix, [StringComparison]::Ordinal) -and $_.Length -gt $Prefix.Length }) }
+    # Parity CASE [GOLDEN] [CHECKNAME] [-PlatformWhat WHAT...]: this run's exit
+    # code, ~/.claude/rules tree and summary rows equal the golden result
+    # tests/rules-fanout/golden/CASE.result, which the .sh run (macOS/Linux) and
+    # the .ps1 run (Windows) must both give. GOLDEN: compare with another case's
+    # golden result (a Windows-only case with the same outcome); CHECKNAME: the
+    # check line's name then. PLATFORMWHAT: the ERROR records whose reason is the
+    # platform's own text (see Rows)
+    function Parity([string]$Case, [string]$Golden = "", [string]$CheckName = "", [string[]]$PlatformWhat = @()) {
         if (-not $Golden) { $Golden = $Case }
         if (-not $CheckName) { $CheckName = "parity: ${Case}: exit code, ~/.claude/rules and summary rows match golden (sh and ps share it)" }
         $text = "exit code: $($script:rc)`n# ~/.claude/rules (path md5)`n"
         foreach ($line in @(TreeSig (RulesDir))) { $text += "$line`n" }
         $text += "# summary rows`n"
-        foreach ($line in @(Rows (Join-Path $script:C "$L.summary"))) { $text += "$line`n" }
+        foreach ($line in @(Rows (Join-Path $script:C "$L.summary") $PlatformWhat)) { $text += "$line`n" }
         $f = Join-Path $script:C "$Case.result"
         WriteLf $f $text
         Check $CheckName (Test-GoldenMatch "$Golden.result" $f)
@@ -408,7 +422,10 @@ foreach ($n in @("a.md", "A.MD", "b.Md", "x.md.bak.1", "X.MD.BAK.2026", "odd.bak
     $libOut = @(OutLines)
     Check "lib ${L}: removed outcome: DETAIL row and count" ((Row 'DETAIL|t|removed: x.md') -and ($libOut -ccontains 'TEXT=1 removed, 1 failed'))
     # The tracker writes the tool's OK status only (reference/logging.md 8.3
-    # "Managed files"): the failure is a count in it, never an ERROR row of its own
+    # "Managed files"): the failure is a count in it, never an ERROR row of the
+    # tool. The unknown outcome itself is one error of
+    # the script (LogError records it under the script name, 8.2): that record
+    # is in golden lib.summary
     Check "lib ${L}: unknown outcome: logged, counted as failed in the OK status, no tracker ERROR row" ((Row 'DETAIL|t|failed: y.md') -and (Row 'OK|t|1 removed, 1 failed') -and -not (SumLines | Where-Object { $_.StartsWith("ERROR|t|") }) -and (OutHas 'unknown outcome "bogus"'))
     Check "lib ${L}: rule_name_kind is case-insensitive" (($libOut -ccontains 'A.MD=rule') -and ($libOut -ccontains 'b.Md=rule') -and ($libOut -ccontains 'X.MD.BAK.2026=backup') -and ($libOut -ccontains 'odd.bak.2026.md=backup') -and ($libOut -ccontains '.hidden.md=hidden') -and ($libOut -ccontains 'notes.txt=other'))
     # Parity (was: sh and ps output compared on one machine): both match the golden files
@@ -487,7 +504,7 @@ foreach ($n in @("a.md", "A.MD", "b.Md", "x.md.bak.1", "X.MD.BAK.2026", "odd.bak
     Check "retired: copies removed, backups kept" (-not (Exists (Join-Path (RulesDir) "gone.md")) -and -not (Exists (Join-Path (RulesDir) "old.md")) -and (LsHas (RulesDir) '^gone\.md\.bak\.') -and (LsHas (RulesDir) '^old\.md\.bak\.'))
     Check "retired: removals in DETAIL rows" ((Row 'DETAIL|claude rules|removed: gone.md') -and (Row 'DETAIL|claude rules|removed: old.md'))
     Check "retired: a retired rule still in ~/.aitools/rules is not fanned out" ((OutHas 'Not fanned out: old.md \(retired in the rules manifest\)') -and -not (Row 'DETAIL|claude rules|added: old.md'))
-    Check "retired: user file with a retired name kept, ACTION row" ((FileHasLine (Join-Path (RulesDir) "mine2.md") 'my own') -and (Row 'ACTION||Claude Code still loads retired rules in ~/.claude/rules: mine2.md -- delete them unless you wrote them'))
+    Check "retired: user file with a retired name kept, its WARN record and the ACTION row" ((FileHasLine (Join-Path (RulesDir) "mine2.md") 'my own') -and (Row 'WARN|claude rules|kept mine2.md: the rules manifest retires mine2.md, but it matches no harness copy -- delete it if it is an old fan-out copy') -and (Row 'ACTION||Claude Code still loads retired rules in ~/.claude/rules: mine2.md -- delete them unless you wrote them'))
     Parity retired
     Case-Run retired-dry $seedRetired "-DryRun"
     Check "retired dry run: nothing written, row dry run, removal previewed" ($script:rc -eq 0 -and (Nondetail) -ceq 'OK|claude rules|dry run (no files written)' -and (IsFile (Join-Path (RulesDir) "gone.md")) -and (IsFile (Join-Path (RulesDir) "old.md")) -and -not (Exists (Join-Path (RulesDir) "a.md")) -and (OutHas 'DRY RUN\] Would back up and remove gone.md'))
@@ -525,11 +542,11 @@ foreach ($n in @("a.md", "A.MD", "b.Md", "x.md.bak.1", "X.MD.BAK.2026", "odd.bak
         WriteLf (Join-Path $script:H ".aitools/rules/.aitools-rules-manifest") "# aitools rules manifest v2`nx.md`tretired`n"
         Harness a.md 'rule a'; Harness x.md.bak.2026-10-25T000000Z 'x rule'; Deployed x.md 'x rule'
     }
-    Check "bad header: fanned out, nothing retired, OK row + ACTION" ($script:rc -eq 0 -and (Nondetail) -ceq 'OK|claude rules|1 added' -and (IsFile (Join-Path (RulesDir) "x.md")) -and (Row 'ACTION||Run aitools to rebuild ~/.aitools/rules and its manifest'))
+    Check "bad header: fanned out, nothing retired, OK row + one warning with its ACTION" ($script:rc -eq 0 -and (Nondetail) -ceq 'OK|claude rules|1 added' -and (IsFile (Join-Path (RulesDir) "x.md")) -and (Row 'WARN|claude rules|bad rules manifest header -- run: aitools (every rule fanned out, none retired, adopt not offered)') -and (Row 'ACTION||Run aitools to rebuild ~/.aitools/rules and its manifest'))
     Parity badheader
 
     Case-Run invalid { Manifest @('bad.txt|shared', 'a.md|unknown', 'b.md|shared'); Harness a.md 'rule a'; Harness b.md 'rule b' }
-    Check "invalid lines: warned, rules still fanned out, OK row" ($script:rc -eq 0 -and (Nondetail) -ceq 'OK|claude rules|2 added' -and (OutHas 'line ignored: bad.txt<TAB>shared') -and (Logged 'claude rules: a.md source=unknown adopt=none'))
+    Check "invalid lines: warned (one WARN record each), rules still fanned out, OK row" ($script:rc -eq 0 -and (Nondetail) -ceq 'OK|claude rules|2 added' -and (OutHas 'line ignored: bad.txt<TAB>shared') -and (Row 'WARN|claude rules|rules manifest line ignored: bad.txt<TAB>shared') -and (Row 'WARN|claude rules|rules manifest line ignored: a.md<TAB>unknown') -and (Logged 'claude rules: a.md source=unknown adopt=none'))
     Parity invalid
 
     # ---------------------------------------------------------------------------
@@ -607,14 +624,15 @@ foreach ($n in @("a.md", "A.MD", "b.Md", "x.md.bak.1", "X.MD.BAK.2026", "odd.bak
     if ($denyBlocksList -and $denyBlocksRead) {
         Case-Run unreadable { Harness a.md 'rule a'; Deny-Access (Join-Path $script:H ".aitools/rules") ([Security.AccessControl.FileSystemRights]::ListDirectory) }
         Undo-Deny (Join-Path $script:C "$L/.aitools/rules")
-        Check "unreadable harness dir: ERROR row, exit 1" ($script:rc -eq 1 -and (Nondetail) -ceq 'ERROR|claude rules|cannot read harness rules')
-        Parity unreadable
+        # The reason is the exception message (the .sh: "permission denied: <dir>")
+        Check "unreadable harness dir: ERROR row with its reason, exit 1" ($script:rc -eq 1 -and (Nondetail).StartsWith('ERROR|claude rules|cannot read harness rules|', [StringComparison]::Ordinal) -and (HasReason 'ERROR|claude rules|cannot read harness rules|'))
+        Parity unreadable -PlatformWhat 'cannot read harness rules'
 
         # Unreadable manifest (review RC-2): the fan-out still runs, the final row is ERROR
         Case-Run manifest-unreadable { Manifest @('a.md|shared'); Harness a.md 'rule a'; Deny-Access (Join-Path $script:H ".aitools/rules/.aitools-rules-manifest") ([Security.AccessControl.FileSystemRights]::ReadData) }
         Undo-Deny (Join-Path $script:C "$L/.aitools/rules/.aitools-rules-manifest")
-        Check "unreadable manifest: rules fanned out, ERROR row, final row OK with 1 failed, exit 1" ($script:rc -eq 1 -and (IsFile (Join-Path (RulesDir) "a.md")) -and (Row 'ERROR|claude rules|cannot read rules manifest') -and (Row 'DETAIL|claude rules|failed: .aitools-rules-manifest') -and (Nondetail) -ceq 'OK|claude rules|1 added, 1 failed')
-        Parity manifest-unreadable
+        Check "unreadable manifest: rules fanned out, ERROR row with its reason, final row OK with 1 failed, exit 1" ($script:rc -eq 1 -and (IsFile (Join-Path (RulesDir) "a.md")) -and (HasReason 'ERROR|claude rules|cannot read rules manifest|') -and (Row 'DETAIL|claude rules|failed: .aitools-rules-manifest') -and (Nondetail) -ceq 'OK|claude rules|1 added, 1 failed')
+        Parity manifest-unreadable -PlatformWhat 'cannot read rules manifest'
     } else {
         Skip "unreadable harness dir and manifest (a deny ACE does not block listing or reads here)"
     }
@@ -670,9 +688,9 @@ foreach ($n in @("a.md", "A.MD", "b.Md", "x.md.bak.1", "X.MD.BAK.2026", "odd.bak
         } finally {
             if ($script:Held) { $script:Held.Dispose(); $script:Held = $null }
         }
-        Check "$L locked: manifest held open with no sharing -- rules fanned out, ERROR row, final row OK with 1 failed, exit 1" ($script:rc -eq 1 -and (IsFile (Join-Path (RulesDir) "a.md")) -and (Row 'ERROR|claude rules|cannot read rules manifest') -and (Row 'DETAIL|claude rules|failed: .aitools-rules-manifest') -and (Nondetail) -ceq 'OK|claude rules|1 added, 1 failed' -and (Logged '[error] Cannot read the rules manifest '))
+        Check "$L locked: manifest held open with no sharing -- rules fanned out, ERROR row with its reason, final row OK with 1 failed, exit 1" ($script:rc -eq 1 -and (IsFile (Join-Path (RulesDir) "a.md")) -and (HasReason 'ERROR|claude rules|cannot read rules manifest|') -and (Row 'DETAIL|claude rules|failed: .aitools-rules-manifest') -and (Nondetail) -ceq 'OK|claude rules|1 added, 1 failed' -and (Logged '[error] cannot read rules manifest: '))
         Check "$L locked: the manifest unchanged byte for byte" (SameBytes (Join-Path $script:C "manifest.before") (Join-Path $script:H ".aitools/rules/.aitools-rules-manifest"))
-        Parity manifest-locked manifest-unreadable "$L locked: exit code, ~/.claude/rules and summary rows match golden manifest-unreadable (same outcome)"
+        Parity manifest-locked manifest-unreadable "$L locked: exit code, ~/.claude/rules and summary rows match golden manifest-unreadable (same outcome)" -PlatformWhat 'cannot read rules manifest'
         Rerun
         Check "$L locked: released -- the next run is clean (verified, exit 0)" ($script:rc -eq 0 -and (Nondetail) -ceq 'OK|claude rules|1 verified' -and -not (SumLines | Where-Object { $_.StartsWith("ERROR|") }))
     } else {
@@ -683,18 +701,19 @@ foreach ($n in @("a.md", "A.MD", "b.Md", "x.md.bak.1", "X.MD.BAK.2026", "odd.bak
     # the script still reaches its exit footer
     $seedNocreate = { Harness a.md 'rule a'; WriteLf (Join-Path $script:H ".claude/rules") "not a dir`n" }
     Case-Run nocreate $seedNocreate
-    Check "cannot create rules dir: ERROR row, exit 1, file untouched" ($script:rc -eq 1 -and (Nondetail) -ceq 'ERROR|claude rules|cannot create rules dir' -and (FileHasLine (Join-Path $script:C "$L/.claude/rules") 'not a dir') -and (OutHas 'FAILED with'))
-    Parity nocreate
+    # The reason is the exception message (the .sh: mkdir's own message)
+    Check "cannot create rules dir: ERROR row with its reason, exit 1, file untouched" ($script:rc -eq 1 -and (Nondetail).StartsWith('ERROR|claude rules|cannot create rules dir|', [StringComparison]::Ordinal) -and (HasReason 'ERROR|claude rules|cannot create rules dir|') -and (FileHasLine (Join-Path $script:C "$L/.claude/rules") 'not a dir') -and (OutHas 'FAILED with'))
+    Parity nocreate -PlatformWhat 'cannot create rules dir'
     # The dry run previews that error (audit B N3): same row, exit 1, nothing written
     Case-Run nocreate-dry $seedNocreate "-DryRun"
-    Check "cannot create rules dir, dry run: same ERROR row, exit 1, file untouched" ($script:rc -eq 1 -and (Nondetail) -ceq 'ERROR|claude rules|cannot create rules dir' -and (FileHasLine (Join-Path $script:C "$L/.claude/rules") 'not a dir') -and (OutHas 'not a directory \(dry run\)'))
+    Check "cannot create rules dir, dry run: same ERROR row, exit 1, file untouched" ($script:rc -eq 1 -and (Nondetail) -cmatch '^ERROR\|claude rules\|cannot create rules dir\|.+ is not a directory \(dry run\)$' -and (FileHasLine (Join-Path $script:C "$L/.claude/rules") 'not a dir') -and (OutHas 'not a directory \(dry run\)'))
     Parity nocreate-dry
 
     # A directory at the manifest path is unreadable, not absent (audit B N5): the
     # fan-out runs, the manifest is a failed item, the final row is ERROR
     Case-Run manifest-dir { Harness a.md 'rule a'; New-Item -ItemType Directory -Path (Join-Path $script:H ".aitools/rules/.aitools-rules-manifest") -Force | Out-Null }
-    Check "manifest is a directory: unreadable, rules fanned out, final row OK with 1 failed, exit 1" ($script:rc -eq 1 -and (IsFile (Join-Path (RulesDir) "a.md")) -and (Row 'ERROR|claude rules|cannot read rules manifest') -and (Row 'DETAIL|claude rules|failed: .aitools-rules-manifest') -and (Nondetail) -ceq 'OK|claude rules|1 added, 1 failed' -and -not (OutHas 'No rules manifest'))
-    Parity manifest-dir
+    Check "manifest is a directory: unreadable, ERROR row with its reason, rules fanned out, final row OK with 1 failed, exit 1" ($script:rc -eq 1 -and (IsFile (Join-Path (RulesDir) "a.md")) -and (HasReason 'ERROR|claude rules|cannot read rules manifest|') -and (Row 'DETAIL|claude rules|failed: .aitools-rules-manifest') -and (Nondetail) -ceq 'OK|claude rules|1 added, 1 failed' -and -not (OutHas 'No rules manifest'))
+    Parity manifest-dir -PlatformWhat 'cannot read rules manifest'
 } finally {
     # A file handle still held (the locked case threw inside its hold): closed first
     if ($script:Held) { $script:Held.Dispose() }
