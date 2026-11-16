@@ -244,7 +244,9 @@ function Write-AitLibActionOnce([string]$Text) {
 function Resolve-UserRepoPath {
     $script:AitLibUserRepoPath = ""; $script:AitLibUserRepoVia = "none"
     if (-not (Invoke-AitLibProfile @("user-repo-path"))) {
-        Write-AitError "dotprofile" "resolver missing" "aitools-profile.ps1 not found next to aitools-lib.ps1"
+        # The reason is the runner's error line ("resolver <file> not found (<dir>)"),
+        # right also when AITOOLS_PROFILE_PS1 names another path (parity: bash)
+        Write-AitError "dotprofile" "resolver missing" (Get-AitLibResolverReason)
         Write-AitLibActionOnce "see deploy.log -- the dotprofile could not be resolved"
         return 3
     }
@@ -299,7 +301,8 @@ function Resolve-MachineProfile {
     $script:AitLibMachineKey = ""; $script:AitLibMachineOwner = "absent"; $script:AitLibMachineLegacy = $false
     $script:AitLibMachineHostname = ""
     if (-not (Invoke-AitLibProfile @("resolve", "--environment", $script:AitoolsEnvironment))) {
-        Write-AitError "machine profile" "resolver missing" "aitools-profile.ps1 not found next to aitools-lib.ps1"
+        # The runner's error line, as Resolve-UserRepoPath (parity: bash)
+        Write-AitError "machine profile" "resolver missing" (Get-AitLibResolverReason)
         # Same text as Resolve-UserRepoPath's: one ACTION per run for a missing resolver
         Write-AitLibActionOnce "see deploy.log -- the dotprofile could not be resolved"
         return 3
