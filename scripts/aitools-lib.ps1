@@ -678,15 +678,16 @@ function Complete-AitLibChildRun {
         # A user abort (8.3): recorded once, only when the child recorded no WARN
         # or ERROR record while it ran
         $recorded = (Get-AitLibSummaryCount @("WARN", "ERROR")) -gt $AnyBefore
-        if ($AbortAsWarning) {
-            Log "${Label}: aborted by user" "warn"; $script:warnings++
-            if ($recorded) { LogDetail "${Name}: the child recorded a warning or error -- the abort is not recorded again" }
-            else { Write-AitLibRecord "WARN" $Name "aborted by user" }
+        LogDetail "${Label}: exited 2 (user abort)"
+        $what = "$Label failed (exit 2)"
+        if ($recorded) {
+            # Parity with run_child_relayed: logged and counted, not recorded again
+            if ($AbortAsWarning) { Write-AitLibUnrecordedWarn "$Label aborted by user -- the child recorded it" }
+            else { Write-AitLibUnrecordedError "${what}: aborted by user -- the child recorded it" }
+        } elseif ($AbortAsWarning) {
+            Write-AitWarn $Name "aborted by user"
         } else {
-            $what = "$Label failed (exit 2)"
-            Write-AitLibUnrecordedError "${what}: aborted by user"
-            if ($recorded) { LogDetail "${Name}: the child recorded a warning or error -- the abort is not recorded again" }
-            else { Write-AitLibRecord "ERROR" $Name $what "aborted by user" }
+            Write-AitError $Name $what "aborted by user"
         }
         return 1
     }
@@ -1051,6 +1052,13 @@ function LogDetail($msg) {
 # use it.
 function Write-AitLibUnrecordedError($msg) {
     Log $msg "error"; $script:errors++
+}
+
+# Write-AitLibUnrecordedWarn TEXT -- the same for a warning: the relay's
+# -AbortAsWarning abort that the child already recorded (logged, counted, not
+# recorded again). Used only by the relay. Parity: _aitlib_warn_norecord.
+function Write-AitLibUnrecordedWarn($msg) {
+    Log $msg "warn"; $script:warnings++
 }
 
 # ---------------------------------------------------------------------------
