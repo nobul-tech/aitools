@@ -17,13 +17,20 @@ v1.1 (2026-11-16), session dbd05b0c: the plan findings of the four
 verifiers (missions 874d-3 to 874d-6) and the commander's answers
 D874d-54 to D874d-70. WP-0 is done: RFC 0011 v1.2 and this plan are on
 main (D874d-59, D874d-69), with no separate verdict (D874d-68).
+v1.2 (2026-11-16), session dbd05b0c: the implementing mission's brief
+resides in the briefs directory, `briefs/874d-2-structured-reports-brief.json`
+(D874d-71 to D874d-74); the briefs of batch delegates remain in the
+session scratch directory; batch 4.1 scores the elements a brief carries.
+v1.3 (2026-11-16), session dbd05b0c: RFC 0011 v1.5 (the language review
+of missions 874d-7, 874d-9 and 874d-11): batch 3.4b removes the hooks' fallbacks to
+repo copies of `harness-db.py`; the exclude rule covers linked worktrees.
 
 ## Sources of truth
 
 | Rank | What | Where |
 |---|---|---|
 | 1 | The commander's decisions, newest first | Issue nobul-tech/aitools#180, section 1 (`D874d-<n>`), and the session transcripts they quote |
-| 2 | The mission brief and the delegation prompt | `<session scratch dir of dbd05b0c>/874d-2-structured-reports-brief.json`; the prompt that launches the mission |
+| 2 | The mission brief and the delegation prompt | `briefs/874d-2-structured-reports-brief.json`, a long-lifecycle brief placed in the briefs directory on the commander's order (RFC 0011 3.3.1, D874d-71); the prompt that launches the mission |
 | 3 | The specification | `rfcs/RFC-0011-structured-reports.md` (normative; its section 4 points are review-after) |
 | 4 | This plan | `plans/structured-reports/implementation-plan.md` (sequencing only) |
 
@@ -50,7 +57,7 @@ dropped (D874d-68).
 
 - **Worktree and branches.** One worktree made with `git worktree add` off `origin/main`: `<aitools>/.scratch/worktrees/874d-2-structured-reports`. One branch and one PR per work package, each based on `main` and named `feature/874d-2-structured-reports-wp<n>` (`/delegate`: `<type>/<mission name>`). A later work package's branch merges the earlier one in with `--no-ff`; a PR is never based on another PR's branch.
 - **Merging and hand-back.** The mission does not merge; the commander merges the PRs, in order (D-DEL5: a merge needs his order). The mission hands back its AAR when every work package's PR is open with CI green, or at once when a blocker stops it (D-DEL9).
-- **Orchestration.** The mission may run each batch through a delegate of its own. It writes that delegate's brief by RFC 0011 3.3, in the session scratch directory of dbd05b0c, with the batch's files as `read in full` artifacts, and it verifies each batch before the next.
+- **Orchestration.** The mission may run each batch through a delegate of its own. It writes that delegate's brief by RFC 0011 3.3, in the top-level session's scratch directory (the default location, RFC 0011 3.3.1), with the batch's files as `read in full` artifacts, and it verifies each batch before the next.
 - **Commits.** Commit and push after every batch, with `git commit -F` from the scratch directory.
 - **Status table.** After each batch, update the status table of this plan in the work package's branch, so it ships in that PR (D874d-60). Nothing is pushed to `main`, so `.aitools/channel/relay.md`, a direct-to-main file, is not written.
 - **Checks before every push.** `bash scripts/check-pre-commit.sh` and `bash scripts/check-pre-push.sh` on macOS or Linux; `pwsh -NoProfile -File scripts/check-pre-commit.ps1` and `pwsh -NoProfile -File scripts/check-pre-push.ps1` on Windows.
@@ -109,7 +116,8 @@ data (located through `/glossary`).
 | 3.1 | `scripts/harness-db.py` (schema 5: `items` keyed by (`id`, `version`); `refs`; the `session` columns `intent`, `main_effort`, `assessment`; the views `observations`, `decisions` and `deviations` with the v4 columns; the migration of RFC 0011 3.6.7; the version check first), `reference/harness-db-schema.sql` (generated) | The `.sql` matches the generated output (`tests/harness-db/test-schema.py`) |
 | 3.2 | `scripts/harness-db.py` (CLI: `--db`, `--agent-id`, `--mission`, with `agent_type` derived and no flag for it; `item add\|update\|list`; `estimate set`; `aar --agent-id`; the per-session `export`; the verbs of RFC 0011 3.6.10; the lock retry for agents and none for hooks; `ensure_schema` at session start only; the prefix check of 3.6.2) | Each verb's `--help`, and smoke runs on a throwaway DB: `item add` then `item list`, `estimate set`, `aar --agent-id`, `export`; a locked DB prints the retry message; a prefix mismatch uses the full-id DB |
 | 3.3 | `tests/harness-db/test-schema.py` (v5, with a v4 fixture), `tests/harness-db/test-concurrency.py` (new: parallel writers, ASM-2; the prefix collision, ASM-6), `.github/workflows/check.yml` (the new suite in all three jobs) | All harness-db suites pass on macOS, Linux and Windows. Every v4 column value of a fixture row is found in its v5 row or its `fields`. The migration runs on copies of the live DBs (sqlite3 backup API, as in PR #181) with no row lost |
-| 3.4 | `shared/hooks/harness-db-sessionend.sh` (`--db`; the export goes to `.aitools/channel/estimates/<prefix>.json`, and no longer to `channel/running-estimate.json`), `shared/hooks/harness-db-sessionstart.sh` (adds `.aitools/` and `.scratch/` to `.git/info/exclude` where nothing ignores them, reported once per repo: D874d-58), `.gitignore` (`.aitools/channel/estimates/`) | The hook checks of `.claude/rules/hook-rollout.md` (syntax, smoke, violation); `tests/hooks/` pass; the exclude case in a temporary repo |
+| 3.4 | `shared/hooks/harness-db-sessionend.sh` (`--db`; the export goes to `.aitools/channel/estimates/<prefix>.json`, and no longer to `channel/running-estimate.json`; it resolves only `~/.aitools/bin/harness-db.py`, without the repo fallbacks: RFC 0011 3.6.12), `shared/hooks/harness-db-sessionstart.sh` (the same resolution; appends `.aitools/` and `.scratch/` to the file `git rev-parse --git-path info/exclude` names where `git check-ignore` reports them not ignored: RFC 0011 section 7, D874d-58) | The hook checks of `.claude/rules/hook-rollout.md` (syntax, smoke, violation); `tests/hooks/` pass; the exclude case in a temporary repo and in a linked worktree |
+| 3.4b | `shared/hooks/scratch-init.sh` and `shared/hooks/command-channel-stop.sh` (resolve only the deployed helper: RFC 0011 3.6.12), `.gitignore` (`.aitools/channel/estimates/`: RFC 0011 3.5.5) | The hook checks of `.claude/rules/hook-rollout.md`; `tests/hooks/` pass; `grep -rn 'scripts/harness-db.py' shared/hooks/` finds no fallback |
 | 3.5 | `shared/hooks/intelligence-stop.py` (reads the v5 views; its silent `except` blocks log), its test in `tests/hooks/` | A v5 decision and deviation appear in its output; a DB error is logged, not swallowed |
 | 3.6 | Probes, no file changes, on throwaway DB copies only: ASM-1 (a background and a foreground delegate each find their own agentId by the `.meta.json`, a `TaskStop` error and the parent transcript; record when the `.meta.json` appears); ASM-3 (a delegate in a worktree made with `git worktree add`, and one under the Agent tool's isolation, each write a DB copy in the main checkout); ASM-4 (a level-2 delegating agent writes a brief into the top-level session's scratch directory) | Results in the PR body. A probe that fails puts its fallback (RFC 0011 3.3.8, 3.4.8, 3.4.9) into `/delegate` in a follow-up batch of WP-2 |
 
@@ -117,7 +125,7 @@ data (located through `/glossary`).
 
 | Batch | Files | Verify |
 |---|---|---|
-| 4.1 | `shared/hooks/delegation-duty-guard.sh`, `shared/hooks/workflow-delegation-guard.sh` (their shared element block): element 10 is scored by a brief path and an instruction to read the brief in full (RFC 0011 3.9.3) | Observe mode. The syntax, smoke, violation and parity tests in `tests/hooks/` pass |
+| 4.1 | `shared/hooks/delegation-duty-guard.sh`, `shared/hooks/workflow-delegation-guard.sh` (their shared element block): element 10 is scored by a brief path and an instruction to read the brief in full (RFC 0011 3.9.3); when the prompt gives a brief path, elements 2 (rules and CLAUDE.md files) and 4 (operational learning) are scored from the brief's `artifacts[]` and `operational_learning[]` (observed on 2026-11-16: three launches whose briefs carried both were scored 6 of 8) | Observe mode. The syntax, smoke, violation and parity tests in `tests/hooks/` pass |
 | 4.2a | A probe first: which event sees a background delegate's final hand-back (`SubagentStop`; `PostToolUse` on `Agent` sees only the launch)? Then the AAR check hook (`shared/hooks/aar-check.sh`, or a named existing hook), validating the last fenced JSON block with `harness-db.py validate --kind aar`, and `shared/hooks/hooks-manifest.json` | Observe mode; the syntax, smoke and violation tests |
 | 4.2b | `.claude/rules/hook-rollout.md` and `.cursor/rules/hook-rollout.mdc` (a state row), the hook's tests in `tests/hooks/` | The manifest's parity check passes; `tests/hooks/` pass |
 | 4.3 | `shared/hooks/harness-db-sessionend.sh` (starts one detached job: export, copy, commit, push; RFC 0011 3.5.5), `scripts/ait-harvest.py` (the copy to `<dotprofile>/running-estimates/<project>/<YYYY-MM-DD>_<session id prefix>.json`; one lock shared with `archive`; pull with rebase before the push; push only from `main`) | Under an isolated `HOME`, with a clone of the dotprofile whose `origin` is a local bare repo (checked before any push: the URL does not contain `github.com`): the copy lands at the right path, dated by the session's start, and is committed and pushed to the bare repo; two archive jobs and one copy started together all commit; a remote one commit ahead is pulled and the push succeeds; the hook returns well within 1.5 seconds. On Windows 11, the detached job finishes after Claude Code exits (`ait-harvest.log`) |
@@ -157,10 +165,10 @@ data (located through `/glossary`).
 
 | WP | Batch | State | PR | Notes |
 |---|---|---|---|---|
-| WP-0 | RFC 0011, this plan | done | | On main: commit 419d32dd (RFC v1.1, plan v1.0) and the commit that adds RFC v1.2 and plan v1.1. Verifiers 874d-3 to 874d-6 |
+| WP-0 | RFC 0011, this plan | done | | On main: commits 419d32dd (RFC v1.1, plan v1.0), 72ebefbc (RFC v1.2, plan v1.1), and the commit that adds RFC v1.5, this plan v1.3 and the brief in the briefs directory. Verifiers 874d-3 to 874d-6; language reviewers 874d-7, 874d-9 and 874d-11 (874d-8 was stopped by an API safeguard; 874d-10 examined why) |
 | WP-1 | 1.1 to 1.5 | not started | | Waits for G0 |
 | WP-2 | 2.1 to 2.5 | not started | | Waits for G1 |
-| WP-3 | 3.0 to 3.6 | not started | | |
+| WP-3 | 3.0 to 3.6 (with 3.4b) | not started | | |
 | WP-4 | 4.1 to 4.5 | not started | | |
 | WP-5 | 5.1 to 5.4 | not started | | |
 | WP-6 | 6.1, 6.2 | not started | | |
