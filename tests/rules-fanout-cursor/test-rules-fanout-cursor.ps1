@@ -451,13 +451,13 @@ try {
     # ParityRows FILE [WHATS]: the "cursor rules" and ACTION rows, without DETAIL
     # verified. WHATS: the ERROR records whose reason is the platform's own text
     # (the .NET exception message here, an OS message on macOS/Linux) have that
-    # reason written <platform reason>; an empty reason stays empty, so the
+    # reason written <OS error>; an empty reason stays empty, so the
     # golden line still requires one. The inline checks pin the reason each
     # platform gives.
     function ParityRows([string]$File, [string[]]$PlatformWhat = @()) {
         @(SumLines $File | Where-Object { $_ -cmatch '^(ACTION\||[A-Z]+\|cursor rules\|)' -and $_ -cnotmatch '^DETAIL\|cursor rules\|verified' } | ForEach-Object {
             $row1 = $_
-            foreach ($w in $PlatformWhat) { $row1 = $row1 -creplace ('^(ERROR\|[^|]*\|' + [regex]::Escape($w) + ')\|.+$'), '$1|<platform reason>' }
+            foreach ($w in $PlatformWhat) { $row1 = $row1 -creplace ('^(ERROR\|[^|]*\|' + [regex]::Escape($w) + ')\|.+$'), '$1|<OS error>' }
             $row1
         })
     }

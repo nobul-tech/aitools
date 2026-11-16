@@ -413,14 +413,14 @@ tree_sig() {
 # rows FILE [WHATS]: the cursor rules and ACTION rows, without DETAIL verified.
 # WHATS (one per line): the ERROR records whose reason is the platform's own
 # text (an OS message on macOS/Linux, the .NET exception message on Windows)
-# have that reason written <platform reason>; an empty reason stays empty, so
+# have that reason written <OS error>; an empty reason stays empty, so
 # the golden line still requires one. The inline checks pin the reason each
 # platform gives.
 rows() {
     grep -E '^(ACTION\||[A-Z]+\|cursor rules\|)' "$1" | grep -v '^DETAIL|cursor rules|verified' \
         | RF_PW="${2:-}" perl -pe '
             BEGIN { @w = grep { length } split /\n/, $ENV{RF_PW} }
-            for my $w (@w) { s{^(ERROR\|[^|]*\|\Q$w\E)\|.+$}{$1|<platform reason>} }'
+            for my $w (@w) { s{^(ERROR\|[^|]*\|\Q$w\E)\|.+$}{$1|<OS error>} }'
 }
 
 # parity <case> [WHAT...]: this run's exit code, ~/.cursor/rules tree and

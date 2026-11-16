@@ -361,14 +361,14 @@ try {
     # written <HOME>/ so both languages give one golden line (a WARN record names
     # the file it is about). WHATS: the ERROR records whose reason is the
     # platform's own text (the .NET exception message here, an OS message on
-    # macOS/Linux) have that reason written <platform reason>; an empty reason
+    # macOS/Linux) have that reason written <OS error>; an empty reason
     # stays empty, so the golden line still requires one. The inline checks pin
     # the reason each platform gives.
     function Rows([string]$File, [string[]]$PlatformWhat = @()) {
         $caseHome = "<TMP>/" + (Split-Path -Leaf $script:C) + "/$L/"
         $r = [string[]]@(Get-Lines $File | Where-Object { $_ -cmatch '^(ACTION\||[A-Z]+\|claude rules\|)' } | ForEach-Object {
             $row = (ConvertTo-GoldenText $_ $GoldenTmp).Replace($caseHome, "<HOME>/")
-            foreach ($w in $PlatformWhat) { $row = $row -creplace ('^(ERROR\|[^|]*\|' + [regex]::Escape($w) + ')\|.+$'), '$1|<platform reason>' }
+            foreach ($w in $PlatformWhat) { $row = $row -creplace ('^(ERROR\|[^|]*\|' + [regex]::Escape($w) + ')\|.+$'), '$1|<OS error>' }
             $row
         })
         [Array]::Sort($r, [StringComparer]::Ordinal)

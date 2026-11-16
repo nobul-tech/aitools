@@ -231,7 +231,7 @@ tree_sig() {
 # so both languages give one golden line (a WARN record names the file it is
 # about). WHATS (one per line): the ERROR records whose reason is the
 # platform's own text (an OS message on macOS/Linux, the .NET exception message
-# on Windows) have that reason written <platform reason>; an empty reason stays
+# on Windows) have that reason written <OS error>; an empty reason stays
 # empty, so the golden line still requires one. The inline checks pin the
 # reason each platform gives.
 rows() {
@@ -239,7 +239,7 @@ rows() {
         | RF_HOME="$C/$L/" RF_PW="${2:-}" perl -pe '
             BEGIN { @w = grep { length } split /\n/, $ENV{RF_PW} }
             s{\Q$ENV{RF_HOME}\E}{<HOME>/}g;
-            for my $w (@w) { s{^(ERROR\|[^|]*\|\Q$w\E)\|.+$}{$1|<platform reason>} }' \
+            for my $w (@w) { s{^(ERROR\|[^|]*\|\Q$w\E)\|.+$}{$1|<OS error>} }' \
         | LC_ALL=C sort
 }
 
