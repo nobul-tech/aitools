@@ -8,15 +8,17 @@
 # blocks "# --- BEGIN install log helpers" and "# --- BEGIN install log override"
 # from the installer, sources aitools-lib with logging_init "aitools-install"
 # under an isolated HOME, and runs one step against a stub config writer:
-#   step5-warn     a writer warning is counted in the installer's WARNINGS, its
-#                  lines reach deploy.jsonl (one run_id with the installer's own)
-#                  and the console; its own OK row is kept
+#   step5-warn     a writer warning is the writer's own, not counted in the
+#                  installer's WARNINGS (reference/logging.md 8.3); its lines
+#                  reach deploy.jsonl (one run_id with the installer's own) and
+#                  the console; its own OK row is kept
 #   step5-crash    a writer that dies without a row: one error and the relay's
-#                  "ERROR|aitools config|script failed (exit 1)"
+#                  "ERROR|aitools config|<label> failed (exit 1)|<reason>"
 #   step5-ownrow   a writer that wrote its own ERROR row and exits 1: one error,
 #                  no second row
-#   jsonl-blocked  deploy.jsonl cannot be written: one warning, the installer
-#                  goes on to the end (set -euo pipefail in bash)
+#   jsonl-blocked  deploy.jsonl cannot be written: one warning of the installer
+#                  (the writer's warning stays the writer's), the installer goes
+#                  on to the end (set -euo pipefail in bash)
 #   step3-*        Step 3 (resolve_repos_dir / Resolve-ReposDir): a relative path
 #                  made absolute; a path that cannot be created, or (bash) not
 #                  resolved, is one error and one ERROR row "aitools config"
@@ -62,7 +64,7 @@ case "${BASH_VERSINFO[5]:-}" in
 esac
 
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
-    perl -ne 'print if $. >= 2 && $. <= 46' "$0"
+    perl -ne 'print if $. >= 2 && $. <= 48' "$0"
     exit 0
 fi
 
@@ -225,9 +227,10 @@ want_sync() {  # want_sync NAME WANT_RC
 IMPLS="bash"
 printf 'installer Step 3 / Step 5 on the lib relay (%s: %s)\n' "$TEST_PLATFORM" "$IMPLS"
 for impl in $IMPLS; do
-    # A-1: a writer warning is counted, its lines reach deploy.jsonl and the console
+    # A-1: a writer warning is the writer's (8.3: not added to the installer's
+    # count); its lines reach deploy.jsonl and the console
     fresh; WRITER_MODE=warn run_h "$impl" step5
-    want_end "step5-warn ($impl)" "errors=0 warnings=1"
+    want_end "step5-warn ($impl)" "errors=0 warnings=0"
     want_sum "step5-warn ($impl)" "OK|aitools config|stub"
     want_out "step5-warn ($impl)" "[setup-user-config] [warn] stub warning"
     got=$(perl "$WORK/jsonl-check.pl" "$H/.aitools/logs/deploy.jsonl")
@@ -247,10 +250,12 @@ for impl in $IMPLS; do
     if [ "$got" = "same" ]; then ok "step5-runid ($impl): the child's AITOOLS_RUN_ID is every record's run_id"
     else bad "step5-runid ($impl): $got"; fi
 
-    # A-18 / A-3: a writer that dies without a row gets the relay's ERROR row
+    # A-18 / A-3: a writer that dies without a row gets the relay's ERROR row: WHAT
+    # "<label> failed (exit 1)", REASON from its output (no stderr: its last stdout
+    # line, 8.3)
     fresh; WRITER_MODE=crash run_h "$impl" step5
-    want_end "step5-crash ($impl)" "errors=1 warnings=1"
-    want_sum "step5-crash ($impl)" "ERROR|aitools config|script failed (exit 1)"
+    want_end "step5-crash ($impl)" "errors=1 warnings=0"
+    want_sum "step5-crash ($impl)" "ERROR|aitools config|Step 5: setup-user-config.sh failed (exit 1)|stub warning"
     want_out "step5-crash ($impl)" "Step 5: setup-user-config"
 
     # ... and a writer that wrote its own ERROR row gets no second one
@@ -258,11 +263,12 @@ for impl in $IMPLS; do
     want_end "step5-ownrow ($impl)" "errors=1 warnings=0"
     want_sum "step5-ownrow ($impl)" "ERROR|aitools config|stub failed"
 
-    # A-16: deploy.jsonl cannot be written (a directory in its place): one warning,
-    # the installer goes on (bash: set -euo pipefail), the writer still runs
+    # A-16: deploy.jsonl cannot be written (a directory in its place): one warning
+    # of the installer (the writer's is not added), the installer goes on (bash:
+    # set -euo pipefail), the writer still runs
     fresh; mkdir -p "$H/.aitools/logs/deploy.jsonl"
     WRITER_MODE=warn run_h "$impl" step5
-    want_end "jsonl-blocked ($impl)" "errors=0 warnings=2"
+    want_end "jsonl-blocked ($impl)" "errors=0 warnings=1"
     count_out "jsonl-blocked ($impl)" "deploy.jsonl: cannot write" 1
     want_out "jsonl-blocked ($impl)" "[aitools-install] [info] harness end"
     want_sum "jsonl-blocked ($impl)" "OK|aitools config|stub"
