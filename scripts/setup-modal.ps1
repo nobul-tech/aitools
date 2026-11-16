@@ -73,27 +73,27 @@ if ($pythonCmd) {
         $pyMajor = [int]$Matches[1]
         $pyMinor = [int]$Matches[2]
         if ($pyMajor -lt 3 -or ($pyMajor -eq 3 -and $pyMinor -lt 10)) {
-            LogError "Python 3.10+ required. Found Python $pyVersionStr"
-            Write-Summary "ERROR" "modal cli" "Python 3.10+ required (found $pyVersionStr)"
+            Write-AitError "modal cli" "Python 3.10+ required" "found Python $pyVersionStr"
             exit 1
         }
         Log "Python $pyVersionStr found ($pythonCmd)"
     } else {
-        Write-OutputDetail "python-version (exit $pyRc)" $pyOutput
         # Get-Command exempt: command-existence check with if/else fallback
         if (Get-Command uv -ErrorAction SilentlyContinue) {
+            Write-OutputDetail "python-version (exit $pyRc)" $pyOutput
             # uv provisions its own Python for the tool; only the pip fallback needs this one
             Log "Could not read the $pythonCmd version (exit $pyRc) -- continuing with uv"
         } else {
-            LogError "Could not read the $pythonCmd version (exit $pyRc) -- see $logFile"
-            Write-Summary "ERROR" "modal cli" "Python version check failed"
+            # Get-AitErrorReason logs the output as detail lines
+            Write-AitError "modal cli" "Python version check failed" (Get-AitErrorReason -Output $pyOutput -ExitCode $pyRc)
             exit 1
         }
     }
 }
 
 # --- Install/update ---
-# Exit codes decide (C-F2); each command's full output goes to the log as detail.
+# Exit codes decide (C-F2). A command's output goes to the log as detail; a failed
+# command's output is passed to Get-AitErrorReason instead, which logs it (logging.md 8.2).
 # Get-Command exempt: command-existence check with if/else fallback
 if (Get-Command uv -ErrorAction SilentlyContinue) {
     # Get-Command exempt: command-existence check with if/else fallback
@@ -103,38 +103,44 @@ if (Get-Command uv -ErrorAction SilentlyContinue) {
         Log "Upgrading via uv tool..."
         $toolOutput = & uv tool upgrade modal 2>&1 | Out-String
         $toolRc = $LASTEXITCODE
-        Write-OutputDetail "uv-tool-upgrade" $toolOutput
-        if ($toolRc -ne 0 -and $toolOutput -match 'is not installed') {
-            LogWarn "Modal was not installed via uv -- migrating to uv tool..."
+        # Repair-UvToolEnv: 0 repaired, 1 not applicable, 3 failed and already recorded
+        $repairRc = 1
+        if ($toolRc -eq 0) {
+            Write-OutputDetail "uv-tool-upgrade" $toolOutput
+        } elseif ($toolOutput -match 'is not installed') {
+            Write-OutputDetail "uv-tool-upgrade (exit $toolRc)" $toolOutput
+            Write-AitWarn "modal cli" "not installed with uv -- migrating to uv tool"
             $toolOutput = & uv tool install modal 2>&1 | Out-String
             $toolRc = $LASTEXITCODE
-            Write-OutputDetail "uv-tool-install" $toolOutput
-        } elseif ($toolRc -ne 0 -and (Repair-UvToolEnv -ToolName "modal" -UpgradeOutput $toolOutput)) {
-            $toolRc = 0
+            if ($toolRc -eq 0) { Write-OutputDetail "uv-tool-install" $toolOutput }
+        } else {
+            $repairRc = Repair-UvToolEnv -ToolName "modal" -UpgradeOutput $toolOutput -Tool "modal cli"
+            if ($repairRc -ne 1) { Write-OutputDetail "uv-tool-upgrade (exit $toolRc)" $toolOutput }
+            if ($repairRc -eq 0) { $toolRc = 0 }
         }
         Refresh-Path
         # Get-Command exempt: command-existence check with if/else fallback
         if ($toolRc -ne 0) {
-            LogError "uv tool install/upgrade modal failed (exit $toolRc) -- see $logFile"
-            Write-Summary "ERROR" "modal cli" "uv tool install/upgrade failed (exit $toolRc)"
+            # A failed repair (3) is already recorded by the library: no second record
+            if ($repairRc -ne 3) {
+                Write-AitError "modal cli" "uv tool install/upgrade failed" (Get-AitErrorReason -Output $toolOutput -ExitCode $toolRc)
+            }
         } elseif (Get-Command modal -ErrorAction SilentlyContinue) {
             $modalVersion = Get-ModalVersion
             LogOk "Modal CLI upgraded ($modalVersion)"
             Write-Summary "OK" "modal cli" "$modalVersion"
         } else {
-            LogError "uv tool upgrade completed but 'modal' not found in PATH"
-            Write-Summary "ERROR" "modal cli" "not on PATH after upgrade"
+            Write-AitError "modal cli" "not on PATH after upgrade" "modal not found on PATH after uv tool upgrade"
         }
     } else {
         Log "Installing Modal CLI via uv tool..."
         $toolOutput = & uv tool install modal 2>&1 | Out-String
         $toolRc = $LASTEXITCODE
-        Write-OutputDetail "uv-tool-install" $toolOutput
+        if ($toolRc -eq 0) { Write-OutputDetail "uv-tool-install" $toolOutput }
         Refresh-Path
         # Get-Command exempt: command-existence check with if/else fallback
         if ($toolRc -ne 0) {
-            LogError "uv tool install modal failed (exit $toolRc) -- see $logFile"
-            Write-Summary "ERROR" "modal cli" "uv tool install failed (exit $toolRc)"
+            Write-AitError "modal cli" "uv tool install failed" (Get-AitErrorReason -Output $toolOutput -ExitCode $toolRc)
         } elseif (Get-Command modal -ErrorAction SilentlyContinue) {
             $modalVersion = Get-ModalVersion
             $modalPath = (Get-Command modal).Source
@@ -142,9 +148,9 @@ if (Get-Command uv -ErrorAction SilentlyContinue) {
             Log "Install path: $modalPath"
             Write-Summary "OK" "modal cli" "$modalVersion"
         } else {
-            LogError "uv tool install completed but 'modal' not found in PATH"
-            LogWarn "Ensure ~/.local/bin is in PATH"
-            Write-Summary "ERROR" "modal cli" "installed but not on PATH"
+            # Not on PATH is an error, with the remedy as an ACTION (Standard 4)
+            Write-AitError "modal cli" "installed but not on PATH" "modal not found after uv tool install"
+            Write-Summary "ACTION" "" "Add the directory 'uv tool dir --bin' prints to PATH -- modal not accessible"
         }
     }
 } elseif (Get-Command pip -ErrorAction SilentlyContinue) {
@@ -152,54 +158,48 @@ if (Get-Command uv -ErrorAction SilentlyContinue) {
     Log "uv not found -- installing Modal CLI via pip (--user)..."
     $pipOutput = & $pipCmd install --user modal 2>&1 | Out-String
     $pipRc = $LASTEXITCODE
-    Write-OutputDetail "pip-install" $pipOutput
+    if ($pipRc -eq 0) { Write-OutputDetail "pip-install" $pipOutput }
     Refresh-Path
     Ensure-PythonUserScriptsOnPath
     # Get-Command exempt: command-existence check with if/else fallback
     if ($pipRc -ne 0) {
-        LogError "pip install --user modal failed (exit $pipRc) -- see $logFile"
-        Write-Summary "ERROR" "modal cli" "pip install failed (exit $pipRc)"
+        Write-AitError "modal cli" "pip install failed" (Get-AitErrorReason -Output $pipOutput -ExitCode $pipRc)
     } elseif (Get-Command modal -ErrorAction SilentlyContinue) {
         $modalVersion = Get-ModalVersion
         LogOk "Modal CLI installed ($modalVersion)"
         Write-Summary "OK" "modal cli" "$modalVersion"
     } else {
-        LogError "pip install completed but 'modal' not found in PATH"
-        Write-Summary "ERROR" "modal cli" "installed but not on PATH"
+        Write-AitError "modal cli" "installed but not on PATH" "modal not found after pip install --user"
     }
 } elseif ($pythonCmd) {
     # PEP 773: standalone pip deprecated on Windows; try python -m pip
     Log "uv and pip not found -- trying python -m pip (--user)..."
     $pipOutput = & $pythonCmd -m pip install --user modal 2>&1 | Out-String
     $pipRc = $LASTEXITCODE
-    Write-OutputDetail "python-m-pip-install" $pipOutput
+    if ($pipRc -eq 0) { Write-OutputDetail "python-m-pip-install" $pipOutput }
     Refresh-Path
     Ensure-PythonUserScriptsOnPath
     # Get-Command exempt: command-existence check with if/else fallback
     if ($pipRc -ne 0) {
-        LogError "python -m pip install --user modal failed (exit $pipRc) -- see $logFile"
-        Write-Summary "ERROR" "modal cli" "pip module install failed (exit $pipRc)"
+        Write-AitError "modal cli" "pip module install failed" (Get-AitErrorReason -Output $pipOutput -ExitCode $pipRc)
     } elseif (Get-Command modal -ErrorAction SilentlyContinue) {
         $modalVersion = Get-ModalVersion
         LogOk "Modal CLI installed ($modalVersion)"
         Write-Summary "OK" "modal cli" "$modalVersion"
     } else {
-        LogError "python -m pip install completed but 'modal' not found in PATH"
-        Write-Summary "ERROR" "modal cli" "installed but not on PATH"
+        Write-AitError "modal cli" "installed but not on PATH" "modal not found after python -m pip install --user"
     }
 } else {
-    LogError "No package installer found. Install uv or pip first."
-    Write-Summary "ERROR" "modal cli" "no package installer (uv/pip) found"
+    Write-AitError "modal cli" "no package installer" "neither uv nor pip is on PATH"
 }
 
-# Only suggest auth if modal is installed but not yet authenticated
+# Only suggest auth if modal is installed, this run had no error, and modal is not yet
+# authenticated
 # Get-Command exempt: command-existence check with if/else fallback
-if (Get-Command modal -ErrorAction SilentlyContinue) {
+if ((Get-Command modal -ErrorAction SilentlyContinue) -and $errors -eq 0) {
     $modalToml = Join-Path $HOME ".modal.toml"
     if (-not (Test-Path $modalToml)) {
-        LogWarn "Authentication required: run 'modal setup' to authenticate (browser flow)"
-        Write-Summary "WARN" "modal cli" "not authenticated"
-        Write-Summary "ACTION" "" "modal setup -- authenticate modal (browser flow)"
+        Write-AitAction "modal cli" "not authenticated -- run: modal setup (browser flow)" "modal setup -- authenticate modal (browser flow)"
     }
 }
 
