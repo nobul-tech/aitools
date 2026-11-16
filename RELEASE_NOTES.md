@@ -12,6 +12,60 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.78.0 -- The end-of-run panel lists each warning and error once, every error with its reason; every script logs through aitools-lib (2026-11-16)
+
+Not tagged. PR #184, branch `fix/summary-warn-reporting`, plan `plans/summary-warn-reporting.md` v4.5 (session a9074793-c, mission 5899-6). Commander, 2026-11-15: "node.js, claude code, and some of the managed claude artifacts show as yellow warning in the summary but i dont see a reason why? also if they are yellow, the summary should state what went wrong"; "build-deploy.sh and all other scripts should be using the helpers to write their log entries"; "can we change the spec to capture the reason for errors?". Fixes #186, fixes #185, refs #187 (unified logging roadmap: filed, not implemented).
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 1 | High | A tool with no problem showed yellow with only its version (`node.js`, `claude code`, `claude rules`, `claude skills` in the reported run): `write_summary` / `Write-Summary` turned an OK row into WARN whenever the script's warning count was above 0, and the relay added a child's warnings to its parent's count. Warnings logged after a row was written never showed (`setup-cursor-ide-mcp`'s two). A tool's OK record is now never recoloured; each warning and error is its own record, written once where it is logged; a tool with one moves from green to yellow or red. The PowerShell entry points no longer write two records for one deploy-harness failure, or an ERROR plus a WARN for an abort |
+| 2 | Medium | Red lines said which step failed, not why (`brew install failed`, `script failed (exit 1)`); the cause reached only deploy.log, or nothing captured it. Every error is now `<what>: <reason>`, and a failed child's line carries its own stderr (`setup-crash.sh failed (exit 3): boom`) |
+| 3 | Medium | #186: `setup-cursor-ide-mcp.sh` ran `agent mcp remove`, which the Cursor CLI does not have: every run failed (`too many arguments for 'mcp'`), vercel and webflow stayed enabled on macOS and Linux, and two warnings were logged. It now runs `agent mcp disable`, as the `.ps1` and the Cursor docs; a failure is one warning with the CLI's output as reason |
+| 4 | Medium | #185: `setup-go.sh` warned on every run that Go's bin directory was not on PATH, with an escaped `export PATH="$GOPATH_BIN:$PATH"` and an ACTION, because the managed PATH block added `$HOME/go/bin` only once it existed. The block's Go line is now `export PATH="$PATH:${GOPATH:-$HOME/go}/bin"`, unconditionally; setup-go logs the session PATH addition at info. No zsh change; the `.ps1` twins are unchanged |
+| 5 | Medium | Found along the way: `setup-user-hooks.sh` under `--force` could never repair a corrupt settings.json (node crashed on the re-parse), and the script wrote the merged settings.json without a backup and validated it only after writing (now validated, backed up, then written); `setup-modal.ps1` took `Repair-UvToolEnv`'s "not applicable" as repaired; `build-deploy.sh` discarded the PowerShell parse errors of the generated scripts on Windows |
+
+### New features
+
+| # | Change |
+|---|--------|
+| 6 | Helpers in `aitools-lib.sh` / `.ps1`: `write_warn TOOL TEXT`, `write_action TOOL TEXT ACTION` (one warning that says what to do, plus its ACTION: `not authenticated -- run: vercel login`), `write_error TOOL WHAT REASON`, and `error_reason OUTPUT EXIT_CODE`, which takes the reason from captured output (build-failure signature, exception, error marker, last non-warning line, `exit <N>`, `no output (exit <N>)`); PowerShell `Write-AitWarn`, `Write-AitAction`, `Write-AitError`, `Get-AitErrorReason`. `log_warn` / `log_error` record under the script name. `write_summary` takes only OK, DETAIL and ACTION: `WARN` / `ERROR` are retired, and any other category is one warning, not a record |
+| 7 | The relay (`run_child_relayed`, `Invoke-ChildRelayed`, new `Invoke-NativeRelayed`): a failed child is one error of the parent, recorded only when the child recorded none, its reason from the child's stderr; an abort is recorded once (deploy-harness's as a warning); a child's warnings stay the child's. Options `--summary-tool`, `--abort-warn`, `--no-mirror`, `--quiet`; only the outermost relay mirrors to deploy.jsonl. `run_relay_sync` / `Invoke-RelaySync` and `summary_begin` / `summary_end` (`Start-AitSummary` / `Complete-AitSummary`) move into the library |
+| 8 | The panel has four sections: green (tools with an OK record and no warning or error), yellow (every warning, in log order), red (`<name> <what>: <reason>`), purple (ACTION lines, each once). Identical lines collapse with `(xN)`; yellow and red text is cut at 70 code points (an error's WHAT is cut first, so the reason survives), at most 20 lines each, then `+N more in deploy.log` |
+| 9 | `tests/replay/test-replay.sh` replays the reported run on a pseudo-terminal through the real relay (the real `setup-user-claude.sh` review menu, `gh auth login` on the terminal, a crashing child) and checks the panel line by line |
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 10 | Every bash and PowerShell script under `scripts/` logs through aitools-lib: the setup scripts, the entry points (`aitools`, `aitools.ps1`, `aitools user init`), the installers, `deploy-harness`, `aitools-profile`, `build-deploy.sh` (its `blog*` functions and its generated code), `build-package.sh` and the helper scripts. No script defines a logging function or appends to a log or the run summary file; `logging.md` 8.1 lists the exceptions. The entry points' console-only warnings (profile.json, the session-archive hint) are recorded; `~/.aitools/run-summary.txt` and `AITOOLS_SUPPRESS_SUMMARY_DISPLAY` are gone |
+| 11 | Demoted to info: a step the user asked for that completed as asked (a plain `--force` overwrite), and a consequence error after a failed step (one cause, one red line). Skips and `--force` steps that lose data stay warnings (`claude.md` stays yellow). `build-deploy`'s 25 per-script Intune size warnings are one warning per limit, each script a detail line in deploy.log |
+| 12 | Severity follows the standards: an upgrade that fails while a working version is installed is yellow and exits 0 (datadog, gh-cli, go, pandoc, rust, typst, uv, vercel cli; was red, exit 1); a tool left unusable is red (Scoop Go not on PATH, a shadowed python, Claude Code not on PATH after install on Windows; was yellow) |
+| 13 | `check-script-compliance` (both twins, strict): step 13 (no category change in `write_summary`, a reason on every `write_error`, no relay touching the warning count, no `write_summary WARN` / `ERROR`), new step 14 (no log writer outside the library and the 8.1 exceptions), steps 3 and 12 updated |
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 14 | `reference/logging.md` v2.0-v2.4, section 8: terms, writers and their exceptions, each helper's effect on deploy.log, counts and records, the rules (recorded at the source, children and aborts, every error's reason, what is a warning), the run summary file format and the panel grammar as generalized templates, state and events |
+| 15 | Script standards (`.claude/rules/script-standards.md`, `reference/script-standards-detail.md`, Cursor twin): when to use each helper; the 30-character limit is for OK status text only; the old pairing rules (ACTION with `log_warn`, `log_error` with `write_summary ERROR`) are superseded. Aligned with section 8: `interactive-menus` and `managed-file-deployment` (rules, Cursor twins, reference), `tool-support-decision-tree.md`, `harness.md`, `managed-context.md`, `managed-configuration.md`, `artifact-manifests.md`, `ait-shellintegration.md` (the Go line), `cross-platform-detail.md`, `smoke-test-pattern-detail.md`, `plan-execution-detail.md`, `framework-managed-file-deployment.md`. Tool registry: `agent mcp disable` applies to the project (git root) of the current directory |
+
+### Files created
+
+| File | Purpose |
+|------|---------|
+| `tests/replay/test-replay.sh`, `tests/replay/fixtures/` | The reported run replayed on a pty, panel checked against `logging.md` 8.5 (CI: macOS bash 5 and /bin/bash 3.2, Linux) |
+| `tests/check-script-compliance/test-logging-spec.sh` / `.ps1` | Compliance steps 3, 12, 13, 14 on planted scripts, strict and report mode |
+| `tests/logging/fixtures/summary-cases.txt`, `tests/logging/fixture-runner.ps1` | One fixture of records and panel lines (cases L1-L34) run by the bash and PowerShell logging suites |
+| `plans/summary-warn-reporting.md` | The plan this release executes (v4.5) |
+
+Unchanged, covered by #187: the hooks, the Python tools, the Perl helpers, `shared/shell/aliases.*` and `checks.log`.
+
+**Verified on:** macOS: all 40 `tests/*/test-*.sh` suites exit 0 at `cee5ee5d` under an isolated HOME (bash 5.3); the logging, replay and logging-spec suites also under /bin/bash 3.2 when they were written. Linux and Windows (the `.ps1` suites): CI on PR #184.
+
+---
+
 ## v0.77.25 -- No pipefail script, hook or test suite ends a pipeline in a reader that exits early; compliance step 7 fails on every such reader (2026-11-15)
 
 Not tagged. Branch `fix/fa81-02-tests-pipes`, mission fa81-02-tests-pipes (session 87795dc3). Commander, 2026-11-15: "24-2) sure 24-3) yes 27-1) yes the fallback should fail and it should be logged and work should stop right?"; RFI fa81-02-1 (the `head` sites are in `scripts/` and `shared/hooks/` too): "32) yes it should, and it should expand the scope of the tests to include this test case. do it in one PR".
