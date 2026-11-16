@@ -147,13 +147,19 @@ try {
     Setup-Case "tracker"
     Run-Lib 'Initialize-DeployTracker; Record-DeployOutcome -Outcome failed -ToolName tool -ItemName x.md; Write-DeployTrackerSummary -ToolName tool'
     $sum = Get-Content "$C/summary" -Raw
-    Check "tracker: failed -> DETAIL + ERROR row" ($sum -match "DETAIL\|tool\|failed: x.md" -and $sum -match "ERROR\|tool\|1 failed")
+    # The tracker writes the OK status (its counts) and DETAIL records only; the
+    # failure itself is recorded where it happened (reference/logging.md 8.3
+    # "Managed files")
+    Check "tracker: failed -> DETAIL row, counted in the OK status, no ERROR row" ($sum -match "(?m)^DETAIL\|tool\|failed: x\.md$" -and $sum -match "(?m)^OK\|tool\|1 failed$" -and $sum -notmatch "(?m)^ERROR\|")
 
     # --- JSON ---
     Setup-Case "json-noninteractive"; W "repo/c.json" '{"a":1,"b":2}'; W "dest/c.json" '{"z":0,"b":3,"a":1}'
     Run-Lib "`$src='$C/repo/c.json'; `$dest='$C/dest/c.json'; `$adopt='$C/repo/c.json'; $dmf"
     Check "json non-interactive: field written, LOCAL-only kept, order kept" ((Result) -eq "updated" -and (JsonCompact "dest/c.json") -eq '{"z":0,"b":2,"a":1}')
     Check "json non-interactive: repo untouched" ((Txt "repo/c.json") -eq '{"a":1,"b":2}')
+    # A field overwritten without the user's choice is one warning under the
+    # tool; the LOCAL-only field kept is none (reference/logging.md 8.3 "What is a warning")
+    Check "json non-interactive: one WARN record for the overwritten field, none for the kept one" (((Txt "summary") -ceq 'WARN|tool|Divergence in item: b -- overwriting from source (non-interactive)') -and (Log).Contains("[warn] Divergence in item: b"))
 
     Setup-Case "json-invalid"; W "src.json" '{"a":1}'; W "dest/c.json" 'not json'
     Run-Lib "`$src='$C/src.json'; `$dest='$C/dest/c.json'; `$adopt=''; $dmf"
@@ -185,7 +191,7 @@ try {
     Check "json label: Created names the item" ((Result) -eq "created" -and (Log).Contains("Created: registries/c.json -> "))
     W "dest/c.json" '{"a":2,"b":[2]}'
     Run-Lib "`$src='$C/repo/c.json'; `$dest='$C/dest/c.json'; `$adopt='$C/repo/c.json'; $dmfLabel"
-    Check "json label: Divergence and Updated name the item" ((Result) -eq "updated" -and (Log).Contains("Divergence in registries/c.json: a -- overwriting from source (non-interactive)") -and (Log).Contains("Updated: registries/c.json -> "))
+    Check "json label: Divergence (a warning, one record per field) and Updated name the item" ((Result) -eq "updated" -and (Log).Contains("[warn] Divergence in registries/c.json: a -- overwriting from source (non-interactive)") -and (Log).Contains("Updated: registries/c.json -> ") -and ((@((Txt "summary") -split "\r?\n") -join '//') -ceq 'WARN|tool|Divergence in registries/c.json: a -- overwriting from source (non-interactive)//WARN|tool|Divergence in registries/c.json: b -- overwriting from source (non-interactive)'))
 
     # --- Write-JsonFieldDetail: the element lines of an array field ---
     $detailCall = "Write-JsonFieldDetail -What 'registries/c.json: t' -Detail ('2 local, 1 source element(s)' + [char]0x1f + '- [1] 2' + [char]0x1f + '+ [0] 3' + [char]0x1f + '~ order differs (same elements)') -LocalLabel local -SourceLabel source"

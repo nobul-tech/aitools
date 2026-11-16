@@ -14,8 +14,8 @@
 # tests/logging/fixtures/summary-cases.txt (L1-L32; run by
 # tests/logging/fixture-runner.ps1, shared with scratch harnesses), then this
 # suite's own cases: the library's log writers, options and counters, the
-# summary file lifecycle, the relay options, Invoke-RelaySync, check-lib.ps1,
-# aitools-profile.ps1 and the entry point.
+# summary file lifecycle, the relay options, Invoke-RelaySync, the dotprofile push
+# reasons, JSON non-interactive warnings, check-lib.ps1, aitools-profile.ps1, entry.
 #
 # Usage: pwsh -NoProfile -File tests/logging/test-logging.ps1 [-Help]
 
@@ -278,6 +278,93 @@ exit 4
     # Repair-UvToolEnv: not applicable returns 1 and logs nothing
     $r = Invoke-LibScript "uv-na" '$rc = Repair-UvToolEnv -ToolName "modal" -UpgradeOutput "some other failure" -Tool "modal cli"; Write-Output "RC=$rc COUNTS=$($script:errors)/$($script:warnings)"'
     Check "lib: Repair-UvToolEnv on other output -- returns 1, nothing logged" ($r.Out -match 'RC=1 COUNTS=0/0')
+
+    # Invoke-DotprofileCommitPush: a failed commit or push is one warning under
+    # -Tool whose text carries "(exit N: <reason>)", the reason from git's output
+    # (logging.md 8.3; the same text as dotprofile_commit_push in bash)
+    # Get-Command exempt: command-existence check; the else branch reports the skip
+    if (Get-Command git -ErrorAction SilentlyContinue) {
+        $dpBody = @'
+Set-Location -LiteralPath '{DIR}'
+& git init -q --bare remote.git
+& git clone -q remote.git dp 2>&1 | Out-Null
+& git -C dp config user.name t
+& git -C dp config user.email t@example.invalid
+[IO.File]::WriteAllText('{DIR}/dp/init.md', "init`n")
+& git -C dp add init.md
+& git -C dp commit -q -m init
+& git -C dp push -q -u origin HEAD 2>&1 | Out-Null
+$script:AitLibUserRepoPath = '{DIR}/dp'
+# Commit failure: a pre-commit hook refuses the commit
+[IO.File]::WriteAllText('{DIR}/dp/.git/hooks/pre-commit', "#!/bin/sh`necho `"error: blocked by hook`" >&2`nexit 1`n")
+[IO.File]::WriteAllText('{DIR}/dp/x.md', "x`n")
+Invoke-DotprofileCommitPush -File '{DIR}/dp/x.md' -Message "add x" -Tool "dp tool"
+Write-Output "COMMIT=$($script:AitLibDotprofilePush) W=$($script:warnings)"
+Copy-Item -LiteralPath $env:AITOOLS_SUMMARY_FILE -Destination '{DIR}/summary-commit.txt'
+[IO.File]::WriteAllText($env:AITOOLS_SUMMARY_FILE, "")
+Remove-Item -LiteralPath '{DIR}/dp/.git/hooks/pre-commit'
+# Push failure: the remote is gone
+Remove-Item -LiteralPath '{DIR}/remote.git' -Recurse -Force
+[IO.File]::WriteAllText('{DIR}/dp/y.md', "y`n")
+Invoke-DotprofileCommitPush -File '{DIR}/dp/y.md' -Message "add y" -Tool "dp tool"
+Write-Output "PUSH=$($script:AitLibDotprofilePush) W=$($script:warnings)"
+'@
+        $s = Join-Path $tmpRoot "dp-push.txt"; [IO.File]::WriteAllText($s, "")
+        $r = Invoke-LibScript "dp-push" $dpBody $s
+        $dpDir = "$($r.Dir)/dp"
+        $commitRecs = @([IO.File]::ReadAllLines((Join-Path $r.Dir "summary-commit.txt")) | Where-Object { $_ })
+        Check "lib: Invoke-DotprofileCommitPush, a failed commit -- one warning under -Tool with git's error line as its reason" (($r.Out -match 'COMMIT=commit-failed W=1') -and (($commitRecs -join '//') -ceq "WARN|dp tool|dotprofile commit failed (exit 1: error: blocked by hook) -- commit and push x.md in $dpDir by hand//ACTION||commit and push x.md in $dpDir"))
+        $pushRe = '^WARN\|dp tool\|dotprofile push failed \(exit [1-9][0-9]*: fatal: .*\) -- run git push in ' + [regex]::Escape($dpDir) + '$'
+        Check "lib: Invoke-DotprofileCommitPush, a failed push -- one warning under -Tool with git's error line as its reason" (($r.Out -match 'PUSH=push-failed W=2') -and ($r.Summary.Count -eq 2) -and (@($r.Summary | Where-Object { $_ -cmatch $pushRe }).Count -eq 1) -and ($r.Summary -ccontains "ACTION||run git push in $dpDir"))
+        Check "lib: Invoke-DotprofileCommitPush, git's output is in deploy.log as detail lines" ($r.Log -match '\[detail\] output: error: blocked by hook')
+    } else {
+        Write-Output "SKIP Invoke-DotprofileCommitPush cases: git not found"; $script:skip++
+    }
+
+    # The JSON field review and the settings sync: a field overwritten in a
+    # non-interactive run is one warning under the caller's tool (logging.md 8.3
+    # "What is a warning", as for a text file: L32b); under -Force it is info; a
+    # field only in LOCAL is kept, no warning; a live file that is created, none
+    # Get-Command exempt: command-existence check; the else branch reports the skip
+    if (Get-Command node -ErrorAction SilentlyContinue) {
+        $localJson = "{`n  `"a`": 1,`n  `"b`": 2,`n  `"z`": 9`n}`n"
+        $jsonBody = @'
+$src = '{"a": 5, "b": 2, "c": 3}'
+Copy-Item -LiteralPath '{DIR}/local.json' -Destination '{DIR}/x.json'
+$res = Deploy-ManagedFile -Content $src -DestPath '{DIR}/x.json' -ToolName "json tool" -ItemName "x.json"
+Write-Output "NI=$res W=$($script:warnings)"
+Copy-Item -LiteralPath $env:AITOOLS_SUMMARY_FILE -Destination '{DIR}/summary-ni.txt'
+[IO.File]::WriteAllText($env:AITOOLS_SUMMARY_FILE, "")
+Copy-Item -LiteralPath '{DIR}/local.json' -Destination '{DIR}/x.json' -Force
+$env:AITOOLS_FORCE = "1"
+$res = Deploy-ManagedFile -Content $src -DestPath '{DIR}/x.json' -ToolName "json tool" -ItemName "x.json"
+$env:AITOOLS_FORCE = $null
+Write-Output "FORCE=$res W=$($script:warnings)"
+Copy-Item -LiteralPath $env:AITOOLS_SUMMARY_FILE -Destination '{DIR}/summary-force.txt'
+[IO.File]::WriteAllText($env:AITOOLS_SUMMARY_FILE, "")
+[IO.File]::WriteAllText('{DIR}/settings.json', "{`"theme`": `"dark`"}`n")
+[IO.File]::WriteAllText('{DIR}/profile.json', "{`"claude`": {`"settings`": {`"theme`": `"light`"}}}`n")
+Sync-ManagedJson -LiveFile '{DIR}/settings.json' -ProfileFile '{DIR}/profile.json' -SubPath "claude.settings" -Tool "claude settings"
+Write-Output "SYNC=$($script:SyncManagedJsonResult) W=$($script:warnings)"
+Copy-Item -LiteralPath $env:AITOOLS_SUMMARY_FILE -Destination '{DIR}/summary-sync.txt'
+[IO.File]::WriteAllText($env:AITOOLS_SUMMARY_FILE, "")
+Remove-Item -LiteralPath '{DIR}/settings.json'
+Sync-ManagedJson -LiveFile '{DIR}/settings.json' -ProfileFile '{DIR}/profile.json' -SubPath "claude.settings" -Tool "claude settings"
+Write-Output "NEW=$($script:SyncManagedJsonResult) W=$($script:warnings)"
+'@
+        $s = Join-Path $tmpRoot "json-overwrite.txt"; [IO.File]::WriteAllText($s, "")
+        $r = Invoke-LibScript "json-overwrite" $jsonBody $s @{ "local.json" = $localJson }
+        $niRecs = @([IO.File]::ReadAllLines((Join-Path $r.Dir "summary-ni.txt")) | Where-Object { $_ })
+        $forceRecs = @([IO.File]::ReadAllLines((Join-Path $r.Dir "summary-force.txt")) | Where-Object { $_ })
+        $syncRecs = @([IO.File]::ReadAllLines((Join-Path $r.Dir "summary-sync.txt")) | Where-Object { $_ })
+        Check "lib: JSON field review, non-interactive -- one warning per overwritten field under -ToolName; a local-only field kept" (($r.Out -match 'NI=updated W=2') -and (($niRecs -join '//') -ceq 'WARN|json tool|Divergence in x.json: a -- overwriting from source (non-interactive)//WARN|json tool|Divergence in x.json: c -- overwriting from source (non-interactive)') -and ([IO.File]::ReadAllText((Join-Path $r.Dir "x.json")) -match '"z": 9'))
+        Check "lib: JSON field review, non-interactive -- the warning is logged at warn" ($r.Log -match '\[warn\] Divergence in x\.json: a -- overwriting from source \(non-interactive\)')
+        Check "lib: JSON field review, -Force -- info, no warning, no record" (($r.Out -match 'FORCE=updated W=2') -and ($forceRecs.Count -eq 0) -and ($r.Log -match '\[info\] Divergence in x\.json: a -- overwriting from source \(--force\)'))
+        Check "lib: settings sync, non-interactive -- an overwritten leaf is one warning under -Tool" (($r.Out -match 'SYNC=updated W=3') -and (($syncRecs -join '//') -ceq 'WARN|claude settings|Divergence in theme -- overwriting from profile.json (non-interactive)'))
+        Check "lib: settings sync -- a live file created from the profile, no warning" (($r.Out -match 'NEW=created W=3') -and ($r.Summary.Count -eq 0))
+    } else {
+        Write-Output "SKIP JSON field review cases: node not found"; $script:skip++
+    }
 
     $rotDir = Join-Path $tmpRoot "rotate" "logs"
     New-Item -ItemType Directory -Path $rotDir -Force | Out-Null

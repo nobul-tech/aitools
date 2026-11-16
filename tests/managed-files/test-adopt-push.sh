@@ -171,6 +171,10 @@ run_lib "$(dcp "$DP/claude/rules/r.md" "Adopt r.md")"
 check "push failure: push-failed, committed locally" "[ \"\$(push_state)\" = push-failed ] && [ \"\$(commits)\" = 2 ]"
 check "push failure: WARN logged, ACTION 'run git push in <dotprofile>'" "grep -q '\[warn\] dotprofile push failed' '$LOG' && grep -qxF 'ACTION||run git push in $DP' '$C/summary'"
 check "push failure: exit 0 (the run continues)" "[ \"\$(cat '$C/rc')\" = 0 ]"
+# The warning carries git's error line as its reason (reference/logging.md 8.3;
+# the same record in test-adopt-push.ps1)
+check "push failure: the WARN record carries '(exit N: <git's error line>)'" \
+    "grep -qxF 'WARN|dotprofile|dotprofile push failed (exit 128: fatal: No configured push destination.) -- run git push in $DP' '$C/summary'"
 
 setup_case direct-push-rejected
 git clone -q -b main "$REMOTE" "$C/elsewhere"
@@ -179,12 +183,16 @@ printf 'from elsewhere\n' > "$C/elsewhere/notes.md"; g "$C/elsewhere" commit -q 
 printf 'edited rule\n' > "$DP/claude/rules/r.md"
 run_lib "$(dcp "$DP/claude/rules/r.md" "Adopt r.md")"
 check "push rejected: push-failed, ACTION pull --rebase" "[ \"\$(push_state)\" = push-failed ] && grep -q '\[warn\] dotprofile push rejected' '$LOG' && grep -qxF 'ACTION||git pull --rebase, then git push in $DP' '$C/summary'"
+check "push rejected: the WARN record carries '(exit N: <git's error line>)'" \
+    "perl -ne 'BEGIN { \$n = 0 } \$n++ if m{^WARN\\|dotprofile\\|dotprofile push rejected \\(exit 1: error: failed to push some refs to .*\\): the remote has newer commits -- run git pull --rebase, then git push in \\Q$DP\\E\$}; END { exit(\$n == 1 ? 0 : 1) }' '$C/summary'"
 
 setup_case direct-commit-fail
 printf '#!/bin/sh\nexit 1\n' > "$DP/.git/hooks/pre-commit"; chmod +x "$DP/.git/hooks/pre-commit"
 printf 'edited rule\n' > "$DP/claude/rules/r.md"
 run_lib "$(dcp "$DP/claude/rules/r.md" "Adopt r.md")"
 check "commit failure: commit-failed, WARN + ACTION, nothing pushed" "[ \"\$(push_state)\" = commit-failed ] && grep -q '\[warn\] dotprofile commit failed' '$LOG' && grep -qxF 'ACTION||commit and push claude/rules/r.md in $DP' '$C/summary' && remote_has claude/rules/r.md 'source rule'"
+check "commit failure, git printed nothing: the WARN record's reason is the exit code" \
+    "grep -qxF 'WARN|dotprofile|dotprofile commit failed (exit 1: no output (exit 1)) -- commit and push claude/rules/r.md in $DP by hand' '$C/summary'"
 
 setup_case direct-action-once
 g "$DP" remote remove origin

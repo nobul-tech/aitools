@@ -244,7 +244,9 @@ function Write-AitLibActionOnce([string]$Text) {
 function Resolve-UserRepoPath {
     $script:AitLibUserRepoPath = ""; $script:AitLibUserRepoVia = "none"
     if (-not (Invoke-AitLibProfile @("user-repo-path"))) {
-        Write-AitError "dotprofile" "resolver missing" "aitools-profile.ps1 not found next to aitools-lib.ps1"
+        # The reason is the runner's error line ("resolver <file> not found (<dir>)"),
+        # right also when AITOOLS_PROFILE_PS1 names another path (parity: bash)
+        Write-AitError "dotprofile" "resolver missing" (Get-AitLibResolverReason)
         Write-AitLibActionOnce "see deploy.log -- the dotprofile could not be resolved"
         return 3
     }
@@ -299,7 +301,8 @@ function Resolve-MachineProfile {
     $script:AitLibMachineKey = ""; $script:AitLibMachineOwner = "absent"; $script:AitLibMachineLegacy = $false
     $script:AitLibMachineHostname = ""
     if (-not (Invoke-AitLibProfile @("resolve", "--environment", $script:AitoolsEnvironment))) {
-        Write-AitError "machine profile" "resolver missing" "aitools-profile.ps1 not found next to aitools-lib.ps1"
+        # The runner's error line, as Resolve-UserRepoPath (parity: bash)
+        Write-AitError "machine profile" "resolver missing" (Get-AitLibResolverReason)
         # Same text as Resolve-UserRepoPath's: one ACTION per run for a missing resolver
         Write-AitLibActionOnce "see deploy.log -- the dotprofile could not be resolved"
         return 3
@@ -1623,11 +1626,15 @@ function Write-ManagedStateNotice {
 # Sets $script:AitLibDotprofilePush (never empty after the call):
 #   committed-pushed  committed and pushed (LogOk)
 #   unchanged         FILE matches HEAD: nothing committed, no push, no warning
-#   commit-failed     Write-AitAction "commit and push <file> in <dotprofile>"
-#   push-failed       committed, not pushed: Write-AitAction "git pull --rebase,
-#                     then git push in <dotprofile>" (remote has newer commits)
-#                     or "run git push in <dotprofile>" (any other failure)
+#   commit-failed     Write-AitAction -Tool, ACTION "commit and push <file> in
+#                     <dotprofile>" (git's output: detail lines)
+#   push-failed       committed, not pushed: Write-AitAction -Tool, ACTION "git
+#                     pull --rebase, then git push in <dotprofile>" (remote has
+#                     newer commits) or "run git push in <dotprofile>" (any other
+#                     failure)
 #   not-dotprofile    FILE is not in the dotprofile, or there is none: nothing done
+# A failed commit or push's warning text carries "(exit N: <reason>)", the reason
+# from Get-AitErrorReason over git's output (reference/logging.md 8.3), as bash.
 # Writes nothing to the output stream (it is called inside Deploy-ManagedFile,
 # whose output is its result): a failed commit or push is a warning, the
 # caller's own outcome (e.g. "accept & adopt") is unchanged and the run continues.
@@ -1693,12 +1700,14 @@ function Invoke-DotprofileCommitPush {
         $out = (& git -C $dir commit -m $Message -- $base 2>&1 | Out-String).Trim()
         $rc = $LASTEXITCODE
     }
-    if ($out) { LogDetail "git commit in ${dp}: $out" }
     if ($rc -ne 0) {
         $script:AitLibDotprofilePush = "commit-failed"
-        Write-AitAction $dpTool "dotprofile commit failed (exit $rc) -- commit and push $rel in $dp by hand" "commit and push $rel in $dp"
+        # Get-AitErrorReason logs git's output as detail lines (reference/logging.md 8.2)
+        $why = Get-AitErrorReason -Output $out -ExitCode $rc
+        Write-AitAction $dpTool "dotprofile commit failed (exit ${rc}: $why) -- commit and push $rel in $dp by hand" "commit and push $rel in $dp"
         return
     }
+    if ($out) { LogDetail "git commit in ${dp}: $out" }
     $prevPrompt = $env:GIT_TERMINAL_PROMPT
     $prevSsh = $env:GIT_SSH_COMMAND
     try {
@@ -1710,16 +1719,18 @@ function Invoke-DotprofileCommitPush {
         $env:GIT_TERMINAL_PROMPT = $prevPrompt
         $env:GIT_SSH_COMMAND = $prevSsh
     }
-    if ($out) { LogDetail "git push in ${dp}: $out" }
     if ($rc -ne 0) {
         $script:AitLibDotprofilePush = "push-failed"
+        # Get-AitErrorReason logs git's output as detail lines (reference/logging.md 8.2)
+        $why = Get-AitErrorReason -Output $out -ExitCode $rc
         if ($out -match 'rejected|non-fast-forward|fetch first') {
-            Write-AitAction $dpTool "dotprofile push rejected (exit $rc): the remote has newer commits -- run git pull --rebase, then git push in $dp" "git pull --rebase, then git push in $dp"
+            Write-AitAction $dpTool "dotprofile push rejected (exit ${rc}: $why): the remote has newer commits -- run git pull --rebase, then git push in $dp" "git pull --rebase, then git push in $dp"
         } else {
-            Write-AitAction $dpTool "dotprofile push failed (exit $rc) -- run git push in $dp" "run git push in $dp"
+            Write-AitAction $dpTool "dotprofile push failed (exit ${rc}: $why) -- run git push in $dp" "run git push in $dp"
         }
         return
     }
+    if ($out) { LogDetail "git push in ${dp}: $out" }
     $script:AitLibDotprofilePush = "committed-pushed"
     LogOk "dotprofile: $rel committed and pushed ($Message)"
 }
@@ -3018,7 +3029,9 @@ function Deploy-ManagedFile {
 # restored, Write-AitError), "accept & adopt" (a field was adopted into AdoptPath;
 # overwrites chosen in the same run are written too), "skipped" (a field was
 # left differing), "updated" (fields overwritten from SOURCE), "verified"
-# (nothing written). Requires node. Exits 2 on [x]abort.
+# (nothing written). A field overwritten in a non-interactive run is one
+# Write-AitWarn -ToolName (Prompt-JsonFieldReview; info under -Force).
+# Requires node. Exits 2 on [x]abort.
 # ---------------------------------------------------------------------------
 $script:ReviewJsonNode = @'
 // review_json_fields / Review-JsonFields: SOURCE against LOCAL, field by field.
@@ -3303,14 +3316,14 @@ function Review-JsonFields {
             # Without an adopt target or a console it is kept, no prompt.
             if ($adoptOk -eq "1" -and $canPrompt) {
                 $choice = Prompt-JsonFieldReview -Leaf $key -Current $lDisp -Proposed "(not in source)" `
-                    -SourceLabel "source" -AdoptAllowed "1" -LocalLabel "local" -OverwriteAllowed "0" -FileLabel $fileLabel
+                    -SourceLabel "source" -AdoptAllowed "1" -LocalLabel "local" -OverwriteAllowed "0" -FileLabel $fileLabel -Tool $ToolName
             } else {
                 LogDetail "${item}: $key only in local -- kept"
                 $choice = "keep"
             }
         } else {
             $choice = Prompt-JsonFieldReview -Leaf $key -Current $lDisp -Proposed $sDisp `
-                -SourceLabel "source" -AdoptAllowed $adoptOk -LocalLabel "local" -FileLabel $fileLabel -Detail $detail
+                -SourceLabel "source" -AdoptAllowed $adoptOk -LocalLabel "local" -FileLabel $fileLabel -Detail $detail -Tool $ToolName
         }
         $choices.Add("$idx`t$choice")
     }
@@ -4421,9 +4434,16 @@ function Write-JsonFieldDetail([string]$What, [string]$Detail, [string]$LocalLab
 # -Detail: element lines for an array field, joined by U+001F (the plan's
 # detail column, Review-JsonFields); shown colour-coded instead of the two
 # value lines ("" = show the two value lines).
+# -Tool: the record name of its warning (the caller's tool: Review-JsonFields,
+# Sync-ManagedJson; "" = the script name).
 # Returns "overwrite", "adopt", or "skip".
 # -Force / AITOOLS_FORCE / non-interactive -> "overwrite" (source wins), or
-# "skip" when overwrite is not allowed.
+# "skip" when overwrite is not allowed. A non-interactive overwrite replaces
+# the local value without the user's choice: one Write-AitWarn -Tool per field
+# ("Divergence in <field> -- overwriting from <source> (non-interactive)",
+# reference/logging.md 8.3 "What is a warning"), as Prompt-DiffReview does for
+# a text file. Under -Force it is info (the user asked for it); a field only in
+# the local file is kept (skip) and logged at info.
 # ---------------------------------------------------------------------------
 function Prompt-JsonFieldReview {
     param(
@@ -4435,7 +4455,8 @@ function Prompt-JsonFieldReview {
         [string]$LocalLabel = "settings.json",
         [string]$OverwriteAllowed = "1",
         [string]$FileLabel = "",
-        [string]$Detail = ""
+        [string]$Detail = "",
+        [string]$Tool = ""
     )
 
     $defaultChoice = "overwrite"
@@ -4451,7 +4472,13 @@ function Prompt-JsonFieldReview {
         return $defaultChoice
     }
     if (-not (Test-InteractiveConsole)) {
-        Log "Divergence in $what -- $defaultDesc (non-interactive)"
+        # Overwriting the local value without the user's choice is a warning
+        # (8.3); keeping a local-only field is not
+        if ($defaultChoice -eq "overwrite") {
+            Write-AitWarn $Tool "Divergence in $what -- $defaultDesc (non-interactive)"
+        } else {
+            Log "Divergence in $what -- $defaultDesc (non-interactive)"
+        }
         return $defaultChoice
     }
 
@@ -4509,7 +4536,10 @@ function Prompt-JsonFieldReview {
 #
 # Sets $script:SyncManagedJsonResult to "unchanged"/"updated"/"created".
 # -Tool: the record name of its warnings and errors ("" = the script name): a
-# skipped leaf is one Write-AitWarn, a failure one Write-AitError.
+# skipped leaf is one Write-AitWarn, a leaf of an existing live file
+# overwritten in a non-interactive run one Write-AitWarn (Prompt-JsonFieldReview;
+# info under -Force; no warning when the live file is created), a failure one
+# Write-AitError.
 # Requires node. Honors $DryRun. Exits 2 on user abort.
 # ---------------------------------------------------------------------------
 $script:SyncManagedJsonResult = ""
@@ -4709,7 +4739,7 @@ if (mode === 'plan') {
         $cols = $line -split "`t"
         $id = $cols[0]; $cur = $cols[2]; $prop = $cols[3]; $adoptf = $cols[4]
         if ($liveExisted) {
-            $action = Prompt-JsonFieldReview -Leaf $id -Current $cur -Proposed $prop -SourceLabel "profile.json" -AdoptAllowed $adoptf
+            $action = Prompt-JsonFieldReview -Leaf $id -Current $cur -Proposed $prop -SourceLabel "profile.json" -AdoptAllowed $adoptf -Tool $Tool
             # A skipped leaf stays different: one warning (logging.md 8.3)
             if ($action -eq "skip") { Write-AitWarn $Tool "Skipped: $id in $LiveFile (differs from profile.json; reviewed again next run)" }
         } else {

@@ -1685,8 +1685,10 @@ _managed_state_notice() {
 #   push-failed       committed, not pushed: write_action TOOL, ACTION "git pull
 #                     --rebase, then git push in <dotprofile>" (remote has newer
 #                     commits) or "run git push in <dotprofile>" (any other
-#                     failure); the warning text carries git's error line
+#                     failure)
 #   not-dotprofile    FILE is not in the dotprofile, or there is none: nothing done
+# A failed commit or push's warning text carries "(exit N: <reason>)", the reason
+# from error_reason over git's output (reference/logging.md 8.3), as PowerShell.
 # Always returns 0: a failed commit or push is a warning, the caller's own
 # outcome (e.g. "accept & adopt") is unchanged and the run continues.
 # ---------------------------------------------------------------------------
@@ -2920,7 +2922,9 @@ deploy_managed_file() {
 # "accept & adopt" (a field was adopted into
 # ADOPT_PATH; overwrites chosen in the same run are written too), "skipped"
 # (a field was left differing; one write_warn TOOL), "updated" (fields
-# overwritten from SOURCE), "verified" (nothing written). Requires node.
+# overwritten from SOURCE), "verified" (nothing written). A field overwritten
+# in a non-interactive run is one write_warn TOOL (prompt_json_field_review;
+# info under --force). Requires node.
 # Exits 2 on [x]abort.
 # ---------------------------------------------------------------------------
 review_json_fields() {
@@ -3192,14 +3196,14 @@ REVIEW_JSON_NODE_EOF
             # A field only in LOCAL: [a]dopt / [s]kip / [x]abort, no overwrite.
             # Without an adopt target or a terminal it is kept, no prompt.
             if [ "$adopt_ok" = "1" ] && [ "$can_prompt" = "1" ]; then
-                prompt_json_field_review "$key" "$ldisp" "(not in source)" "source" "1" "local" "0" "$file_label" ""
+                prompt_json_field_review "$key" "$ldisp" "(not in source)" "source" "1" "local" "0" "$file_label" "" "$tool"
                 choice="$JSON_FIELD_REVIEW_RESULT"
             else
                 log_detail "$item: $key only in local -- kept"
                 choice="keep"
             fi
         else
-            prompt_json_field_review "$key" "$ldisp" "$sdisp" "source" "$adopt_ok" "local" "1" "$file_label" "$detail"
+            prompt_json_field_review "$key" "$ldisp" "$sdisp" "source" "$adopt_ok" "local" "1" "$file_label" "$detail" "$tool"
             choice="$JSON_FIELD_REVIEW_RESULT"
         fi
         printf '%s\t%s\n' "$idx" "$choice" >> "$work/choices.tsv"
@@ -4323,15 +4327,23 @@ _json_field_detail() {
 #   $9 = detail: element lines for an array field, joined by \x1f (the
 #        plan's detail column, review_json_fields); shown colour-coded instead
 #        of the two value lines ("" = show the two value lines)
+#   $10 = TOOL, optional: the record name of its warning (the caller's tool:
+#        review_json_fields, sync_managed_json); default the script's name
 #
 # Sets JSON_FIELD_REVIEW_RESULT to "overwrite", "adopt", or "skip".
 # --force / AITOOLS_FORCE / non-interactive -> "overwrite" (source wins), or
-# "skip" when overwrite is not allowed.
+# "skip" when overwrite is not allowed. A non-interactive overwrite replaces
+# the local value without the user's choice: one write_warn TOOL per field
+# ("Divergence in <field> -- overwriting from <source> (non-interactive)",
+# reference/logging.md 8.3 "What is a warning"), as prompt_diff_review does for
+# a text file. Under --force it is info (the user asked for it); a field only in
+# the local file is kept (skip) and logged at info.
 # ---------------------------------------------------------------------------
 JSON_FIELD_REVIEW_RESULT=""
 prompt_json_field_review() {
     local leaf="$1" current="$2" proposed="$3" source_label="${4:-profile.json}" adopt_allowed="${5:-1}"
     local local_label="${6:-settings.json}" overwrite_allowed="${7:-1}" file_label="${8:-}" detail="${9:-}"
+    local tool="${10:-}"
     local default_choice="overwrite" default_desc="overwriting from $source_label" what="$leaf"
     if [ "$overwrite_allowed" != "1" ]; then
         default_choice="skip"; default_desc="skipping (only in $local_label)"
@@ -4345,9 +4357,14 @@ prompt_json_field_review() {
         log "Divergence in $what -- $default_desc (--force)"
         return 0
     fi
-    # Non-interactive: source wins
+    # Non-interactive: source wins. Overwriting the local value without the
+    # user's choice is a warning (8.3); keeping a local-only field is not.
     if ! tty_interactive; then
-        log "Divergence in $what -- $default_desc (non-interactive)"
+        if [ "$default_choice" = "overwrite" ]; then
+            write_warn "$tool" "Divergence in $what -- $default_desc (non-interactive)"
+        else
+            log "Divergence in $what -- $default_desc (non-interactive)"
+        fi
         return 0
     fi
 
@@ -4416,7 +4433,10 @@ prompt_json_field_review() {
 # Sets SYNC_MANAGED_JSON_RESULT to "unchanged", "updated", or "created".
 # A leaf the user skipped at its prompt is left differing: one write_warn TOOL
 # per skipped leaf ("Skipped: <leaf> in <file> (differs from profile.json;
-# reviewed again next run)"). A failure is one write_error TOOL "settings sync
+# reviewed again next run)"); a leaf of an existing live file overwritten in a
+# non-interactive run is one write_warn TOOL (prompt_json_field_review; info
+# under --force; no warning when the live file is created). A failure is one
+# write_error TOOL "settings sync
 # failed" with its reason ("plan pass: ...", "apply pass: ...", "<file> is not
 # valid JSON after write -- ..."), and returns 1. Parity: Sync-ManagedJson.
 # Requires node. Honors DRY_RUN (plan only, no writes). Exits 2 on user abort.
@@ -4631,7 +4651,7 @@ SYNC_NODE_EOF
             if [ "$live_existed" = "false" ]; then
                 JSON_FIELD_REVIEW_RESULT="overwrite"
             else
-                prompt_json_field_review "$id" "$cur" "$prop" "profile.json" "$adoptf"
+                prompt_json_field_review "$id" "$cur" "$prop" "profile.json" "$adoptf" "settings.json" "1" "" "" "$tool"
             fi
             # A skipped leaf is left differing: one warning per leaf
             # (reference/logging.md 8.3). Parity: Sync-ManagedJson.
