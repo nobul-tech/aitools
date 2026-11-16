@@ -178,6 +178,8 @@ check "stray lines: left in place, one block" \
     "grep -qF 'Owned by aitools (scripts/setup-user-shell.sh). Placed last so it re-asserts' '$D/.bash_profile' && [ \"\$(cl '$D/.bash_profile' '$PS')\" = 1 ]"
 check "stray lines: ACTION names the newest clean backup (01; 02 two blocks, 03 a stray line)" \
     "summary_has stray 'ACTION||Restore $D/.bash_profile from $D/.bash_profile.bak.2026-01-01T000000Z'"
+check "stray lines: one warning, saying what to do (logging.md 8.2 write_action)" \
+    "summary_has stray 'WARN|shell|profile damage left in place -- restore $D/.bash_profile from $D/.bash_profile.bak.2026-01-01T000000Z' && [ \"\$(grep -c '^WARN|' '$TMP_ROOT/stray/summary.txt')\" = 1 ]"
 
 D=$(new_dir nobak)
 { cat "$BLOCK_TEXT"; printf '__aitoolsLocalBin=1\n'; } > "$D/.bash_profile"
@@ -202,6 +204,8 @@ cp "$D/.bash_profile" "$TMP_ROOT/guard.before"
 run_setup guard "$D"
 check "breaking splice: exit 1, ERROR row, profile unchanged" \
     "[ \"\$(rc_of guard)\" = 1 ] && summary_has guard 'ERROR|shell|managed block splice failed parse check' && cmp -s '$D/.bash_profile' '$TMP_ROOT/guard.before'"
+check "breaking splice: the error's reason is the bash -n syntax error (logging.md 8.3)" \
+    "grep -q '^ERROR|shell|managed block splice failed parse check|.*syntax error' '$TMP_ROOT/guard/summary.txt'"
 
 # --- rc files: .zshrc when present, legacy pair migrated, user lines kept ---
 D=$(new_dir rc)
@@ -224,6 +228,31 @@ D=$(new_dir mdm)
 run_setup mdm "$D" "$NO_ALIASES"
 check "MDM: exit 0, WARN aliases.sh not found, block still written, no .bashrc" \
     "[ \"\$(rc_of mdm)\" = 0 ] && summary_has mdm 'WARN|shell|aliases.sh not found' && [ \"\$(cl '$D/.bash_profile' '$PS')\" = 1 ] && [ ! -e '$D/.bashrc' ]"
+check "MDM: the warning names the missing path" \
+    "summary_has mdm 'WARN|shell|aliases.sh not found ($NO_ALIASES) -- shell integration skipped (MDM deploy)'"
+
+# --- An rc file that cannot be written: one error with its reason, no OK status ---
+# (chmod does not block writes for root: skipped there)
+if [ "$(id -u)" != 0 ]; then
+    D=$(new_dir rcro)
+    printf 'export A=1\n' > "$D/.bashrc"
+    chmod 444 "$D/.bashrc"
+    run_setup rcro "$D"
+    chmod 644 "$D/.bashrc"
+    check "read-only .bashrc: exit 1, ERROR with the write error as its reason, no integration OK record" \
+        "[ \"\$(rc_of rcro)\" = 1 ] && grep -q '^ERROR|shell|cannot add shell integration to $D/.bashrc|.' '$TMP_ROOT/rcro/summary.txt' && ! grep -q '^OK|shell|integration' '$TMP_ROOT/rcro/summary.txt'"
+    check "read-only .bashrc: the PATH block is still written (OK managed block added)" \
+        "summary_has rcro 'OK|shell|managed block added'"
+else
+    printf 'SKIP read-only .bashrc case (running as root)\n'; SKIP=$((SKIP + 1))
+fi
+
+# --- zsh-only lines in the bash login profile: one warning with its ACTION ---
+D=$(new_dir zsh)
+printf 'autoload -Uz compinit\ncompinit\n' > "$D/.bash_profile"
+run_setup zsh "$D"
+check "zsh-only lines: exit 0, one WARN saying what to do, the ACTION" \
+    "[ \"\$(rc_of zsh)\" = 0 ] && summary_has zsh 'WARN|shell|zsh-only lines (autoload/compinit) in $D/.bash_profile error under bash -- remove them' && summary_has zsh 'ACTION||Remove autoload/compinit from .bash_profile (zsh-only)'"
 
 printf '\n%d passed, %d failed, %d skipped (bash: %s)\n' "$PASS" "$FAIL" "$SKIP" "$("$BASH_BIN" -c 'echo $BASH_VERSION')"
 if [ "$FAIL" -gt 0 ]; then exit 1; fi

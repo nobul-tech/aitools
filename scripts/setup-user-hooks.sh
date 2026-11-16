@@ -43,8 +43,7 @@ esac
 
 # --- Require node for JSON manipulation ---
 if ! command -v node &>/dev/null; then
-    log_error "node required for JSON manipulation"
-    write_summary ERROR "claude hooks" "node not found"
+    write_error "claude hooks" "hooks not deployed" "node not found (run aitools install)"
     exit 1
 fi
 
@@ -56,10 +55,32 @@ REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 # Manifest = single source of truth for which hooks exist + how they register.
 MANIFEST="$REPO_DIR/shared/hooks/hooks-manifest.json"
 if [ ! -f "$MANIFEST" ]; then
-    log_error "Hook manifest not found: $MANIFEST"
-    write_summary ERROR "claude hooks" "hook manifest not found"
+    write_error "claude hooks" "hooks not deployed" "hook manifest not found: $MANIFEST"
     exit 1
 fi
+
+# node's stderr for the manifest reads goes to a temp file (stdout is the data),
+# so a failed read carries its reason (reference/logging.md 8.3).
+MANIFEST_ERR=""
+# 2>/dev/null: a mktemp failure is checked on the next line (fallback /dev/null)
+if ! MANIFEST_ERR=$(mktemp 2>/dev/null); then MANIFEST_ERR=""; fi
+if [ -z "$MANIFEST_ERR" ] || [ ! -f "$MANIFEST_ERR" ]; then
+    log_detail "mktemp failed -- node's stderr for the manifest reads is not captured"
+    MANIFEST_ERR=/dev/null
+fi
+# manifest_err_text -- print what node wrote to stderr (nothing when not captured)
+manifest_err_text() {
+    if [ "$MANIFEST_ERR" != "/dev/null" ]; then printf '%s' "$(<"$MANIFEST_ERR")"; fi
+}
+# manifest_fail WHAT RC -- record a failed manifest read with node's stderr as its
+# reason, remove the temp file and end the script with status 1
+manifest_fail() {
+    local reason
+    reason=$(error_reason "$(manifest_err_text)" "$2")
+    if [ "$MANIFEST_ERR" != "/dev/null" ]; then rm -f "$MANIFEST_ERR"; fi
+    write_error "claude hooks" "$1" "$reason"
+    exit 1
+}
 
 # User repo: home of user-created (non-manifest) hooks only (SD-2, incident #80).
 # Manifest hooks have one version, in shared/hooks; a dotprofile copy is never
@@ -88,19 +109,23 @@ resolve_hook() {
 }
 
 # Files to deploy = registered hooks + deploy-only helpers, from the manifest.
-HOOK_FILES=()
-while IFS= read -r _f; do
-    [ -n "$_f" ] && HOOK_FILES+=("$_f")
-done < <(node -e '
+# Captured with its exit code (a process substitution would lose a failed read).
+list_rc=0
+HOOK_LIST=$(node -e '
 const fs = require("fs");
 const m = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
 const files = [...m.hooks.map(h => h.file), ...((m.deploy) || [])];
 console.log(files.join("\n"));
-' "$MANIFEST")
+' "$MANIFEST" 2>"$MANIFEST_ERR") || list_rc=$?
+if [ "$list_rc" -ne 0 ]; then manifest_fail "hook manifest unreadable" "$list_rc"; fi
+HOOK_FILES=()
+while IFS= read -r _f; do
+    if [ -n "$_f" ]; then HOOK_FILES+=("$_f"); fi
+done <<< "$HOOK_LIST"
 
 if [ "${#HOOK_FILES[@]}" -eq 0 ]; then
-    log_error "Manifest produced no hook files -- aborting"
-    write_summary ERROR "claude hooks" "manifest lists no hooks"
+    if [ "$MANIFEST_ERR" != "/dev/null" ]; then rm -f "$MANIFEST_ERR"; fi
+    write_error "claude hooks" "hooks not deployed" "manifest lists no hooks"
     exit 1
 fi
 
@@ -113,26 +138,25 @@ REGS_JSON=$(node -e '
 const fs = require("fs");
 const m = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
 console.log(JSON.stringify(m.hooks.map(h => ({event: h.event, file: h.file, matcher: h.matcher || ""}))));
-' "$MANIFEST") || regs_rc=$?
+' "$MANIFEST" 2>"$MANIFEST_ERR") || regs_rc=$?
 if [ "$regs_rc" -ne 0 ] || [ -z "$REGS_JSON" ]; then
-    log_error "Failed to build registration list from manifest (node exit $regs_rc)"
-    write_summary ERROR "claude hooks" "registration list failed"
-    exit 1
+    # An empty list with exit 0 gives the reason "no output (exit 0)"
+    manifest_fail "registration list not built" "$regs_rc"
 fi
+if [ "$MANIFEST_ERR" != "/dev/null" ]; then rm -f "$MANIFEST_ERR"; fi
 
 # Existence check (resolve every manifest file before deploying any).
 for hook_name in "${HOOK_FILES[@]}"; do
     src=$(resolve_hook "$hook_name")
     if [ ! -f "$src" ]; then
-        log_error "Hook script not found: $src"
-        write_summary ERROR "claude hooks" "hook script missing: $hook_name"
+        write_error "claude hooks" "hooks not deployed" "hook script not found: $src"
         exit 1
     fi
     # A dotprofile copy of a manifest hook is ignored (SD-2): say so, so the
-    # user can delete it instead of believing their edit is live.
+    # user can delete it instead of believing their edit is live. One warning
+    # per copy, named.
     if [ -n "$DOTPROFILE_HOOKS" ] && [ -f "$DOTPROFILE_HOOKS/$hook_name" ]; then
-        log_warn "Ignoring dotprofile copy of managed hook $hook_name ($(display_path "$DOTPROFILE_HOOKS/$hook_name")): shared/hooks is the only source -- delete the copy"
-        write_summary WARN "claude hooks" "dotprofile copy ignored"
+        write_warn "claude hooks" "dotprofile copy of $hook_name ignored -- delete $(display_path "$DOTPROFILE_HOOKS/$hook_name")"
     fi
 done
 
@@ -169,14 +193,16 @@ else
             created|updated|"accept & adopt")
                 # accept & adopt: the library also wrote the source file in the
                 # repo; a merge rewrote the deployed hook, so keep it executable.
-                if ! chmod +x "$hook_dst"; then
-                    log_error "Failed: $hook_name: chmod +x $(display_path "$hook_dst")"
-                    write_summary ERROR "claude hooks" "chmod failed: $hook_name"
+                ch_rc=0
+                ch_out=$(chmod +x "$hook_dst" 2>&1) || ch_rc=$?
+                if [ "$ch_rc" -ne 0 ]; then
+                    write_error "claude hooks" "chmod +x $hook_name failed" "$(error_reason "$ch_out" "$ch_rc")"
                 fi
                 HOOKS_CHANGED=true
                 ;;
             skipped|verified|failed)
-                # The tracker records the outcome (failed -> ERROR row).
+                # The library recorded a skipped (warning) or failed (error)
+                # deploy once; the tracker writes the OK status and DETAIL only.
                 ;;
         esac
         deploy_tracker_record "$MANAGED_FILE_RESULT" "claude hooks" "$hook_name"
@@ -231,10 +257,15 @@ else
                 case "$choice" in
                     a|adopt)
                         # Net-new user hook -> dotprofile only (not a managed
-                        # shared/ hook). Same helper for consistent backups.
+                        # shared/ hook). Same helper for consistent backups. The
+                        # library records each failure once under --tool; a
+                        # failure it did not record (no file adopted) is
+                        # recorded here.
                         _errors_before=$ERRORS
-                        if ! adopt_managed_file "$hook_file" "$USER_REPO_PATH/claude/hooks/$hook_name" || [ "$ERRORS" -gt "$_errors_before" ]; then
-                            write_summary ERROR "claude hooks" "adopt failed: $hook_name"
+                        if ! adopt_managed_file --tool "claude hooks" "$hook_file" "$USER_REPO_PATH/claude/hooks/$hook_name"; then
+                            if [ "$ERRORS" -eq "$_errors_before" ]; then
+                                write_error "claude hooks" "adopt failed: $hook_name" "no file adopted"
+                            fi
                         fi
                         ;;
                     s|skip)
@@ -243,7 +274,7 @@ else
                     *)
                         # Unreachable: read_menu_choice returns only a VALID
                         # answer. Skip (writes nothing) and say so.
-                        log_warn "Unexpected answer \"$choice\" at adopt hook $hook_name -- skipped adoption of $hook_name"
+                        write_warn "claude hooks" "unexpected answer \"$choice\" at adopt hook $hook_name -- adoption skipped"
                         ;;
                 esac
             else
@@ -261,8 +292,32 @@ fi
 SETTINGS_FILE="$HOME/.claude/settings.json"
 mkdir -p "$HOME/.claude"
 
-# node prints diagnostics on stdout as MSG:/WARN:/DETAIL: lines (logged below) and the
-# status as the first unprefixed line; its exit code is captured (validation exits 1).
+# node does not write settings.json itself: it writes the merged JSON to a staging
+# file and validates it there; the shell then backs settings.json up (backup_file,
+# config-file-safety.md "Backup before overwrite") and copies the staged file in, so
+# a backup is made only when the file changes and invalid content is never
+# written. node's stderr goes to a temp file: a crash then carries its reason.
+# Both temp files are made here, not above: build-deploy replaces the hook
+# deployment section and extracts this one.
+MERGE_STAGE=""
+MERGE_ERR=""
+# 2>/dev/null: a mktemp failure is checked below (the staging file is required;
+# node's stderr falls back to /dev/null)
+if ! MERGE_STAGE=$(mktemp 2>/dev/null); then MERGE_STAGE=""; fi
+if ! MERGE_ERR=$(mktemp 2>/dev/null); then MERGE_ERR=""; fi
+if [ -z "$MERGE_ERR" ] || [ ! -f "$MERGE_ERR" ]; then
+    log_detail "mktemp failed -- node's stderr for the settings merge is not captured"
+    MERGE_ERR=/dev/null
+fi
+if [ -z "$MERGE_STAGE" ] || [ ! -f "$MERGE_STAGE" ]; then
+    if [ "$MERGE_ERR" != "/dev/null" ]; then rm -f "$MERGE_ERR"; fi
+    write_error "claude hooks" "settings.json hooks not merged" "cannot create a temp file for the merged settings"
+    exit 1
+fi
+
+# node prints diagnostics on stdout as MSG:/WARN:/DETAIL:/REASON: lines (logged
+# below; a REASON: line is the reason of the error that follows) and the status
+# as the first unprefixed line; its exit code is captured (validation exits 1).
 merge_rc=0
 MERGE_RESULT=$(node -e "
 $SORT_KEYS_JS
@@ -272,6 +327,7 @@ const settingsFile = process.argv[1];
 const regsJson = process.argv[2];
 const dryRun = process.argv[3] === 'true';
 const force = process.argv[4] === 'true';
+const stageFile = process.argv[5];
 const home = process.env.HOME || process.env.USERPROFILE;
 
 // --- Registrations from the manifest (computed in bash -> REGS_JSON argv) ---
@@ -289,12 +345,15 @@ const regs = JSON.parse(regsJson).map(r => ({
 // --- Read existing settings.json ---
 let settings = {};
 let corrupt = false;
+let corruptReason = '';
 try {
     settings = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
 } catch (e) {
     if (e.code !== 'ENOENT') {
+        // Recorded once, below: an error, or a warning under --force
         corrupt = true;
-        console.log('WARN: ' + settingsFile + ' is invalid JSON');
+        corruptReason = String(e.message).replace(/\\s+/g, ' ');
+        console.log('REASON: ' + corruptReason);
     }
 }
 const beforeKeys = Object.keys(settings);
@@ -371,33 +430,37 @@ if (dryRun) {
     console.log('DETAIL: ' + settingsFile + ' is corrupt. Use --force to overwrite, or fix manually.');
     console.log('error-corrupt');
 } else if (lostKeys.length > 0 && !force) {
-    console.log('DETAIL: merge would lose fields: ' + lostKeys.join(', ') + '. Use --force to proceed.');
+    console.log('REASON: would lose: ' + lostKeys.join(', '));
     console.log('error-clobber');
 } else {
-    if (corrupt) console.log('WARN: proceeding with --force on corrupt file');
-    if (lostKeys.length > 0) console.log('WARN: proceeding with --force, losing fields: ' + lostKeys.join(', '));
+    // --force writes that lose data stay warnings (reference/logging.md 8.3)
+    if (corrupt) console.log('WARN: settings.json was invalid JSON (' + corruptReason + ') -- overwritten (--force)');
+    if (lostKeys.length > 0) console.log('WARN: fields dropped (--force): ' + lostKeys.join(', '));
     // Preserve key order on write (no sort); sortKeys is used only for the
     // order-independent unchanged comparison so reordering alone never rewrites.
     const newJson = JSON.stringify(settings, null, 2) + '\n';
     let existingJson = '';
     try { existingJson = fs.readFileSync(settingsFile, 'utf8'); } catch(e) { /* file may not exist */ }
-    const existingNorm = existingJson ? JSON.stringify(sortKeys(JSON.parse(existingJson))) : '';
+    // A corrupt file (rewritten under --force) is never equal to the merge and is
+    // not parsed again (it would throw).
+    const existingNorm = (existingJson && !corrupt) ? JSON.stringify(sortKeys(JSON.parse(existingJson))) : '';
     const mergedNorm = JSON.stringify(sortKeys(settings));
     if (mergedNorm === existingNorm) {
         console.log('unchanged');
     } else {
-        fs.writeFileSync(settingsFile, newJson);
+        // Written to the staging file and validated there; the shell backs
+        // settings.json up and copies it in.
+        fs.writeFileSync(stageFile, newJson);
 
-        // Post-write validation
-        const _v = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
+        const _v = JSON.parse(fs.readFileSync(stageFile, 'utf8'));
         const _required = ['hooks'];
         const _missing = _required.filter(k => !(k in _v));
-        if (_missing.length) { console.log('DETAIL: validation failed: missing ' + _missing.join(', ')); process.exit(1); }
+        if (_missing.length) { console.log('REASON: validation failed: missing ' + _missing.join(', ')); process.exit(1); }
 
         // Validate: every manifest hook registered exactly once (generated check).
         for (const r of regs) {
             const c = (_v.hooks[r.event] || []).filter(rule => rule.hooks && rule.hooks.some(h => h.command && h.command.includes(r.hookId))).length;
-            if (c !== 1) { console.log('DETAIL: validation failed: expected 1 ' + r.event + ' ' + r.hookId + ' hook, got ' + c); process.exit(1); }
+            if (c !== 1) { console.log('REASON: validation failed: expected 1 ' + r.event + ' ' + r.hookId + ' hook, got ' + c); process.exit(1); }
         }
 
         // Validate hook schema: command-type must have command field,
@@ -406,16 +469,16 @@ if (dryRun) {
             for (const rule of (rules || [])) {
                 for (const h of (rule.hooks || [])) {
                     if (h.type === 'command' && !h.command) {
-                        console.log('DETAIL: validation failed: ' + event + ' hook has type \"command\" but no command field');
+                        console.log('REASON: validation failed: ' + event + ' hook has type \"command\" but no command field');
                         process.exit(1);
                     }
                     if (h.type === 'prompt') {
                         if (!h.prompt) {
-                            console.log('DETAIL: validation failed: ' + event + ' hook has type \"prompt\" but no prompt field.');
+                            console.log('REASON: validation failed: ' + event + ' hook has type \"prompt\" but no prompt field.');
                             process.exit(1);
                         }
                         if (h.command) {
-                            console.log('DETAIL: validation failed: ' + event + ' hook has type \"prompt\" with a command field.');
+                            console.log('REASON: validation failed: ' + event + ' hook has type \"prompt\" with a command field.');
                             process.exit(1);
                         }
                     }
@@ -423,29 +486,48 @@ if (dryRun) {
             }
         }
 
-        console.log('ok');
+        console.log('write');
     }
 }
-" "$SETTINGS_FILE" "$REGS_JSON" "$DRY_RUN" "$FORCE") || merge_rc=$?
+" "$SETTINGS_FILE" "$REGS_JSON" "$DRY_RUN" "$FORCE" "$MERGE_STAGE" 2>"$MERGE_ERR") || merge_rc=$?
 
-# Log node's prefixed diagnostics; the first unprefixed line is the status.
+# Log node's prefixed diagnostics; the first unprefixed line is the status. The
+# first REASON: line is the reason of the error recorded below.
 MERGE_STATUS=""
+MERGE_REASON=""
 while IFS= read -r line; do
     case "$line" in
         "MSG: "*)    log "${line#MSG: }" ;;
-        "WARN: "*)   log_warn "${line#WARN: }" ;;
+        "WARN: "*)   write_warn "claude hooks" "${line#WARN: }" ;;
         "DETAIL: "*) log_detail "settings-merge: ${line#DETAIL: }" ;;
+        "REASON: "*) if [ -z "$MERGE_REASON" ]; then MERGE_REASON="${line#REASON: }"; fi ;;
         "CHANGED: "*) ;;
         *) if [ -z "$MERGE_STATUS" ]; then MERGE_STATUS="$line"; fi ;;
     esac
 done <<< "$MERGE_RESULT"
-# A non-zero node exit (post-write validation, uncaught error) overrides the status.
+MERGE_ERR_TEXT=""
+if [ "$MERGE_ERR" != "/dev/null" ]; then
+    MERGE_ERR_TEXT=$(<"$MERGE_ERR")
+    rm -f "$MERGE_ERR"
+fi
+# A non-zero node exit (validation, uncaught error) overrides the status.
 if [ "$merge_rc" -ne 0 ]; then MERGE_STATUS="error-exit"; fi
 
 case "$MERGE_STATUS" in
-    ok)
-        log_ok "Hooks deployed to $(display_path "$SETTINGS_FILE")"
-        HOOKS_CHANGED=true
+    write)
+        # Back up only now that the file changes; then copy the validated
+        # content in and check that the file holds it.
+        backup_file "$SETTINGS_FILE"
+        cp_rc=0
+        cp_out=$(cp "$MERGE_STAGE" "$SETTINGS_FILE" 2>&1) || cp_rc=$?
+        if [ "$cp_rc" -ne 0 ]; then
+            write_error "claude hooks" "could not write $(display_path "$SETTINGS_FILE")" "$(error_reason "$cp_out" "$cp_rc")"
+        elif ! cmp -s "$MERGE_STAGE" "$SETTINGS_FILE"; then
+            write_error "claude hooks" "could not write $(display_path "$SETTINGS_FILE")" "the written file differs from the merged settings"
+        else
+            log_ok "Hooks deployed to $(display_path "$SETTINGS_FILE")"
+            HOOKS_CHANGED=true
+        fi
         ;;
     unchanged)
         log_ok "Settings unchanged: $(display_path "$SETTINGS_FILE")"
@@ -454,22 +536,25 @@ case "$MERGE_STATUS" in
         log "[DRY RUN] Would merge settings"
         ;;
     error-corrupt)
-        log_error "$(display_path "$SETTINGS_FILE") is corrupt. Use --force to overwrite."
-        write_summary ERROR "claude hooks" "settings corrupt"
+        write_error "claude hooks" "settings.json is corrupt -- use --force to overwrite" "$MERGE_REASON"
         ;;
     error-clobber)
-        log_error "$(display_path "$SETTINGS_FILE") merge would lose fields. Use --force to proceed."
-        write_summary ERROR "claude hooks" "merge would lose fields"
+        write_error "claude hooks" "merge would lose fields -- use --force to proceed" "$MERGE_REASON"
         ;;
     error-exit)
-        log_error "$(display_path "$SETTINGS_FILE") hooks merge failed (node exit $merge_rc) -- see $(display_path "$LOG_FILE")"
-        write_summary ERROR "claude hooks" "settings merge failed (exit $merge_rc)"
+        # A validation failure: node's REASON: line (same WHAT as the .ps1). A
+        # crash: its stderr, and the exit code in WHAT.
+        if [ -n "$MERGE_REASON" ]; then
+            write_error "claude hooks" "settings.json hooks merge failed" "$MERGE_REASON"
+        else
+            write_error "claude hooks" "settings.json hooks merge failed (node exit $merge_rc)" "$(error_reason "$MERGE_ERR_TEXT" "$merge_rc")"
+        fi
         ;;
     *)
-        log_error "Unexpected merge result: $MERGE_RESULT"
-        write_summary ERROR "claude hooks" "unexpected error"
+        write_error "claude hooks" "settings.json hooks merge failed" "$(error_reason "$MERGE_RESULT" "$merge_rc")"
         ;;
 esac
+rm -f "$MERGE_STAGE"
 
 # --- END hooks body (extracted by build-deploy) ---
 

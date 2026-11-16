@@ -32,15 +32,10 @@ if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
 
 if ($DryRun) { Log "[DRY RUN] Preview mode -- no files will be written" }
 
-# Log captured command output to the log file as detail lines (blank lines skipped).
-function Write-OutputDetail([string]$Label, [string]$Output) {
-    foreach ($l in $Output.Split("`n")) { if ($l.Trim()) { LogDetail "${Label}: $($l.TrimEnd())" } }
-}
-
 # --- Require node ---
+# Get-Command exempt: command-existence check; the branch is the fallback
 if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
-    LogError "node required for settings sync"
-    Write-Summary "ERROR" "claude settings" "node not found"
+    Write-AitError "claude settings" "settings not synced" "node not found (run aitools install)"
     exit 1
 }
 
@@ -49,22 +44,22 @@ $deprecatedRules = "MCP(vercel),MCP(webflow),Agent(claude-code-guide)"
 
 # --- Resolve profile.json (source of truth): the one dotprofile resolver ---
 # (reference/user-repo.md "Resolution"; SD-7). Return: 0 found, 1 no dotprofile
-# (shared-only mode, expected), 3 resolver error (the lib already logged it:
-# LogError + ERROR row "dotprofile").
+# (shared-only mode, expected), 3 resolver error (the lib already logged,
+# counted and recorded it once: Write-AitError "dotprofile").
 $urpRc = Resolve-UserRepoPath
 $userRepoPath = $script:AitLibUserRepoPath
 $profileFile = if ($userRepoPath) { Join-Path $userRepoPath "profile.json" } else { "" }
 
 if ($urpRc -ne 0 -and $urpRc -ne 1) {
-    # Counted (S3-M3Lead decision): this step fails too, not only the resolver.
-    LogError "Dotprofile unresolved (resolver error above) -- settings not synced"
-    Write-Summary "ERROR" "claude settings" "not synced: dotprofile error"
+    # A consequence of the resolver's error, which the lib already counted and
+    # recorded: logged at info, so one cause is one red line (reference/logging.md
+    # 8.3; supersedes the earlier S3-M3Lead choice to count it again). The exit
+    # status stays 1 through the resolver's counted error.
+    Log "Dotprofile unresolved (resolver error above) -- settings not synced"
 } elseif (-not $userRepoPath -or -not (Test-Path -LiteralPath $userRepoPath -PathType Container)) {
-    LogWarn "No dotprofile found (shared-only mode; run 'aitools user init'; details in deploy.log) -- skipping settings sync"
-    Write-Summary "WARN" "claude settings" "not synced: no dotprofile"
+    Write-AitWarn "claude settings" "not synced: no dotprofile (shared-only mode) -- run: aitools user init"
 } elseif (-not (Test-Path $profileFile)) {
-    LogWarn "profile.json not found at $profileFile -- skipping settings sync"
-    Write-Summary "WARN" "claude settings" "profile.json missing"
+    Write-AitWarn "claude settings" "not synced: profile.json not found at $profileFile"
 } else {
     # A missing settings.json is not skipped: Sync-ManagedJson creates it from the
     # profile without prompting (#31, C-F5).
@@ -78,8 +73,10 @@ if ($urpRc -ne 0 -and $urpRc -ne 1) {
       $legacyOut = & node -e 'try { const c=(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).claude)||{}; process.exit(["autoMemory","alwaysThinking","effortLevel"].some(k=>Object.prototype.hasOwnProperty.call(c,k))?0:1) } catch (e) { console.log(e.message); process.exit(2) }' $profileFile 2>&1 | Out-String
       $legacyRc = $LASTEXITCODE
       if ($legacyRc -ge 2) {
-        Write-OutputDetail "legacy-probe (exit $legacyRc)" $legacyOut
-        LogWarn "Could not read $profileFile for the legacy preference check -- skipped"
+        # Logged at info, not a warning: the sync below reads the same file and
+        # records the same failure as its error, and one cause is recorded once
+        # (reference/logging.md 8.3). Get-AitErrorReason logs the output as detail.
+        Log "Legacy preference check skipped: $profileFile unreadable: $(Get-AitErrorReason -Output $legacyOut -ExitCode $legacyRc) (the settings sync reports it)"
       }
       if ($legacyRc -eq 0) {
         Backup-File -FilePath $profileFile
@@ -107,8 +104,8 @@ process.stdout.write(migrated.join(", "));
         # ErrorAction exempt: temp file cleanup; the file may already be gone
         Remove-Item $migrateFile -ErrorAction SilentlyContinue
         if ($migrateRc -ne 0) {
-            Write-OutputDetail "legacy-migration (exit $migrateRc)" $migrated
-            LogWarn "Legacy preference migration failed (exit $migrateRc, non-fatal) -- see $logFile"
+            # Get-AitErrorReason logs the migration's output as detail lines
+            Write-AitWarn "claude settings" "legacy preference migration failed (non-fatal): $(Get-AitErrorReason -Output $migrated -ExitCode $migrateRc)"
         } elseif ($migrated.Trim()) {
             LogOk "Migrated legacy prefs into claude.settings: $($migrated.Trim())"
         }
@@ -116,12 +113,13 @@ process.stdout.write(migrated.join(", "));
     }
 
     # --- Sync settings.json <-> profile.json (granular per-leaf review) ---
-    # Sync-ManagedJson reports failure through LogError only: compare the error
-    # count so a failed sync writes an ERROR row instead of OK (#26b).
+    # Sync-ManagedJson records a failure once, under -Tool (Write-AitError;
+    # reference/logging.md 8.3): compare the error count so a failed sync writes
+    # no OK record (#26b) and no second ERROR record.
     $errorsBeforeSync = $errors
-    Sync-ManagedJson -LiveFile $settingsFile -ProfileFile $profileFile -SubPath "claude.settings" -ExcludeKeys "hooks" -DeprecatedRules $deprecatedRules
+    Sync-ManagedJson -LiveFile $settingsFile -ProfileFile $profileFile -SubPath "claude.settings" -ExcludeKeys "hooks" -DeprecatedRules $deprecatedRules -Tool "claude settings"
     if ($errors -gt $errorsBeforeSync) {
-        Write-Summary "ERROR" "claude settings" "sync failed"
+        Log "Settings sync failed (recorded above) -- no status record"
     } elseif ($DryRun) {
         Write-Summary "OK" "claude settings" "dry-run"
     } else {
