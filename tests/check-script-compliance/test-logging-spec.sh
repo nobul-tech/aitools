@@ -5,27 +5,30 @@
 #   step 13  the summary rules: rule 1 write_summary / Write-Summary never
 #            change the category; rule 2 every write_error / Write-AitError
 #            passes a non-empty reason; rule 3 the relay changes no parent
-#            warning count; rule 4 legacy write_summary WARN / ERROR calls are
-#            reported while STRICT_SUMMARY is false and FAIL when it is true
+#            warning count; rule 4 legacy write_summary WARN / ERROR calls
+#            FAIL (STRICT_SUMMARY true, since plan step I5), and are reported
+#            when it is false
 #   step 14  log writers outside aitools-lib (logging.md 8.1): logging
 #            functions defined outside the library, appends to a log or the
 #            run summary file, calls of the library's raw writers, direct
 #            CLAUDE_CODE_REMOTE reads; the 8.1 exceptions are never listed
-#   step 12  with STRICT_SUMMARY true, only OK, DETAIL and ACTION
+#   step 12  with STRICT_SUMMARY true, only OK, DETAIL and ACTION, upper case
 #   step 3   an exit 1 after write_error / write_warn / write_action is covered
+#   steps 7 and 11  a comment line is not listed (the grep -n "N:" prefix)
 #
 # Steps 13 and 14 run one perl program that both twins embed. Case P checks
 # that the program in check-script-compliance.sh and the one in
 # check-script-compliance.ps1 are the same text (CR removed) and that both
-# twins have the switch off. Cases L, R2, R4 and W run that program on small
-# synthetic repo roots under the temp dir (synthetic libraries, planted
-# scripts). Case E copies this checkout's scripts/ into a temp repo root,
-# plants scripts/setup-zz.sh, and runs the copied check twice: as it is
-# (STRICT_SUMMARY=false) and with the copy switched to true.
+# twins have the switch on (plan step I5). Cases L, R2, R4 and W run that
+# program on small synthetic repo roots under the temp dir (synthetic
+# libraries, planted scripts). Case E copies this checkout's scripts/ into a
+# temp repo root, plants scripts/setup-zz.sh and scripts/setup-zz.ps1, and runs
+# the copied check twice: as it is (STRICT_SUMMARY=true) and with the copy
+# switched to false.
 #
 # Cases:
 #   P   parity     the program text is identical in the two twins; both have
-#                  STRICT_SUMMARY / $StrictSummary off
+#                  STRICT_SUMMARY / $StrictSummary on
 #   L1  old lib    the promotion (write_summary reads WARNINGS, sets cat=WARN;
 #                  Write-Summary reads $script:warnings, sets $cat = "WARN")
 #                  and the relay's WARNINGS=... / $script:warnings++: step 13
@@ -58,11 +61,13 @@
 #                  line), while relay-outbound-prompt.ps1 and another
 #                  build-deploy.sh append are; STRICT false: WARN, true: FAIL
 #   E   end to end the copied check: step 3 does not list the exit 1 after
-#                  write_error and lists the uncovered one; with STRICT false
-#                  step 12 accepts WARN and step 14 is not FAIL; with STRICT
-#                  true step 12 FAILs on write_summary WARN, step 13 FAILs
-#                  (rule 4), and step 14 is FAIL when it was WARN, PASS when it
-#                  was PASS
+#                  write_error and lists the uncovered one; steps 7 and 11 do
+#                  not list a comment line and list the code line; as shipped
+#                  (STRICT true) step 12 FAILs on write_summary WARN and on a
+#                  lower-case ok, step 13 FAILs (rule 4) and step 14 PASSes
+#                  (every script's writers go through aitools-lib); with
+#                  STRICT false step 12 accepts WARN and ok, rule 4 is
+#                  reported and step 14 is PASS
 #
 # AITOOLS_TEST_BASH runs the copied check with another bash (macOS /bin/bash
 # 3.2). TEST_KEEP_TMP=1 keeps the temp dir. Nothing outside the temp dir
@@ -151,8 +156,8 @@ perl -ne 's/\r$//; if (/^\x27@$/) { $in = 0 } print if $in; $in = 1 if /^\$logSp
 check "P: the .sh twin embeds the program" "[ -s '$PROG' ]"
 check "P: the .ps1 twin embeds the program" "[ -s '$TMP_ROOT/logspec-ps1.pl' ]"
 check "P: the program is the same text in both twins" "cmp -s '$PROG' '$TMP_ROOT/logspec-ps1.pl'"
-check "P: the .sh twin has STRICT_SUMMARY=false" "perl -ne '\$f = 1 if /^STRICT_SUMMARY=false\r?\$/; END { exit(\$f ? 0 : 1) }' '$SH_TWIN'"
-check "P: the .ps1 twin has \$StrictSummary = \$false" "perl -ne '\$f = 1 if /^\\\$StrictSummary = \\\$false\r?\$/; END { exit(\$f ? 0 : 1) }' '$PS_TWIN'"
+check "P: the .sh twin has STRICT_SUMMARY=true" "perl -ne '\$f = 1 if /^STRICT_SUMMARY=true\r?\$/; END { exit(\$f ? 0 : 1) }' '$SH_TWIN'"
+check "P: the .ps1 twin has \$StrictSummary = \$true" "perl -ne '\$f = 1 if /^\\\$StrictSummary = \\\$true\r?\$/; END { exit(\$f ? 0 : 1) }' '$PS_TWIN'"
 
 # prog <root> <mode> <strict>: run the program; output -> $OUT
 prog() {
@@ -532,7 +537,17 @@ true
 exit 1  # X3
 # a comment that names exit 1  # X4C
     # an indented comment that names exit 1  # X5C
+write_summary ok "t" "y"  # X9
+    # v=$(grep x /dev/null | sort)  # X6C
+v=$(grep x /dev/null | sort)  # X6
 E_SH
+cat > "$FIX/scripts/setup-zz.ps1" <<'E_PS'
+    # Get-Item x -ErrorAction SilentlyContinue  # X7C
+$v = Get-Item x -ErrorAction SilentlyContinue  # X7
+$a = 1
+$a = 2
+$a = 3
+E_PS
 
 # run_check <label>: the copied check under a temp HOME and log dir; output ->
 # $OUT, its step <n> line (colour codes removed) -> $TMP_ROOT/step<n>-<label>
@@ -542,7 +557,7 @@ run_check() {
     env -u AITOOLS_SUMMARY_FILE -u AITOOLS_USER_REPO_PATH -u AITOOLS_PROFILE_FILE -u AITOOLS_MACHINE_ALIAS \
         HOME="$TMP_ROOT/home-$label" AITOOLS_LOG_DIR="$TMP_ROOT/home-$label/logs" \
         "$TB" "$FIX/scripts/check-script-compliance.sh" < /dev/null > "$OUT" 2>&1 || rc=$?
-    for s in 3 12 13 14; do
+    for s in 3 7 11 12 13 14; do
         LS_N="$s" perl -ne 's/\e\[[0-9;]*m//g; print if /^\s*\Q$ENV{LS_N}\E\.\s/' "$OUT" > "$TMP_ROOT/step$s-$label"
     done
     printf 'INFO %s: check exit %d; step 13: %s; step 14: %s\n' "$label" "$rc" \
@@ -553,30 +568,33 @@ step_result() {
     perl -ne 'print $1 if /\[(PASS|FAIL|WARN|SKIP)\]/' "$1"
 }
 
-run_check off
+run_check on
 X1E=$(line_of X1E "$FIX/scripts/setup-zz.sh")
 X2=$(line_of X2 "$FIX/scripts/setup-zz.sh")
 X3=$(line_of X3 "$FIX/scripts/setup-zz.sh")
-check "E step 3: the exit 1 after write_error (setup-zz.sh:$X1E) is not listed" "! listed 'setup-zz.sh:$X1E' '$TMP_ROOT/step3-off'"
-check "E step 3: the uncovered exit 1 (setup-zz.sh:$X3) is listed" "listed 'setup-zz.sh:$X3' '$TMP_ROOT/step3-off'"
+X9=$(line_of X9 "$FIX/scripts/setup-zz.sh")
+X7=$(line_of X7 "$FIX/scripts/setup-zz.ps1")
+X7C=$(line_of X7C "$FIX/scripts/setup-zz.ps1")
+check "E step 3: the exit 1 after write_error (setup-zz.sh:$X1E) is not listed" "! listed 'setup-zz.sh:$X1E' '$TMP_ROOT/step3-on'"
+check "E step 3: the uncovered exit 1 (setup-zz.sh:$X3) is listed" "listed 'setup-zz.sh:$X3' '$TMP_ROOT/step3-on'"
 X4C=$(line_of X4C "$FIX/scripts/setup-zz.sh")
 X5C=$(line_of X5C "$FIX/scripts/setup-zz.sh")
-check "E step 3: a comment naming exit 1 (setup-zz.sh:$X4C) is not listed" "[ -n '$X4C' ] && ! listed 'setup-zz.sh:$X4C' '$TMP_ROOT/step3-off'"
-check "E step 3: an indented comment naming exit 1 (setup-zz.sh:$X5C) is not listed" "[ -n '$X5C' ] && ! listed 'setup-zz.sh:$X5C' '$TMP_ROOT/step3-off'"
-check "E STRICT false: step 12 does not list write_summary WARN (setup-zz.sh:$X2)" "[ -s '$TMP_ROOT/step12-off' ] && ! listed 'setup-zz.sh:$X2' '$TMP_ROOT/step12-off'"
-check "E STRICT false: step 13 is there, with rule 4 counting setup-zz.sh" "has 'scripts/setup-zz.sh(1)' '$TMP_ROOT/step13-off'"
-S14_OFF=$(step_result "$TMP_ROOT/step14-off")
-check "E STRICT false: step 14 is PASS or WARN (it is $S14_OFF)" "[ '$S14_OFF' = PASS ] || [ '$S14_OFF' = WARN ]"
+check "E step 3: a comment naming exit 1 (setup-zz.sh:$X4C) is not listed" "[ -n '$X4C' ] && ! listed 'setup-zz.sh:$X4C' '$TMP_ROOT/step3-on'"
+check "E step 3: an indented comment naming exit 1 (setup-zz.sh:$X5C) is not listed" "[ -n '$X5C' ] && ! listed 'setup-zz.sh:$X5C' '$TMP_ROOT/step3-on'"
+check "E step 7: the pipeline grep counts once, its commented copy not (setup-zz.sh(1))" "has 'setup-zz.sh(1)' '$TMP_ROOT/step7-on'"
+check "E step 11: the unchecked SilentlyContinue (setup-zz.ps1:$X7) is listed" "[ -n '$X7' ] && listed 'setup-zz.ps1:$X7' '$TMP_ROOT/step11-on'"
+check "E step 11: a comment naming SilentlyContinue (setup-zz.ps1:$X7C) is not listed" "[ -n '$X7C' ] && ! listed 'setup-zz.ps1:$X7C' '$TMP_ROOT/step11-on'"
+check "E STRICT true (shipped): step 12 is FAIL and lists setup-zz.sh:$X2(WARN) and setup-zz.sh:$X9(ok)" \
+    "[ \"\$(step_result '$TMP_ROOT/step12-on')\" = FAIL ] && listed 'setup-zz.sh:$X2(WARN)' '$TMP_ROOT/step12-on' && listed 'setup-zz.sh:$X9(ok)' '$TMP_ROOT/step12-on'"
+check "E STRICT true (shipped): step 13 is FAIL with rule 4 FAIL" "[ \"\$(step_result '$TMP_ROOT/step13-on')\" = FAIL ] && has 'rule 4 FAIL, ' '$TMP_ROOT/step13-on'"
+check "E STRICT true (shipped): step 14 is PASS (no log writer outside aitools-lib)" "[ \"\$(step_result '$TMP_ROOT/step14-on')\" = PASS ]"
 
-perl -i -pe 's/^STRICT_SUMMARY=false$/STRICT_SUMMARY=true/' "$FIX/scripts/check-script-compliance.sh"
-run_check on
-check "E STRICT true: step 12 is FAIL and lists setup-zz.sh:$X2(WARN)" "[ \"\$(step_result '$TMP_ROOT/step12-on')\" = FAIL ] && listed 'setup-zz.sh:$X2(WARN)' '$TMP_ROOT/step12-on'"
-check "E STRICT true: step 13 is FAIL with rule 4 FAIL" "[ \"\$(step_result '$TMP_ROOT/step13-on')\" = FAIL ] && has 'rule 4 FAIL, ' '$TMP_ROOT/step13-on'"
-if [ "$S14_OFF" = WARN ]; then
-    check "E STRICT true: step 14 is FAIL (it was WARN)" "[ \"\$(step_result '$TMP_ROOT/step14-on')\" = FAIL ]"
-else
-    check "E STRICT true: step 14 is PASS (it was PASS)" "[ \"\$(step_result '$TMP_ROOT/step14-on')\" = PASS ]"
-fi
+perl -i -pe 's/^STRICT_SUMMARY=true$/STRICT_SUMMARY=false/' "$FIX/scripts/check-script-compliance.sh"
+run_check off
+check "E STRICT false: step 12 lists neither write_summary WARN (setup-zz.sh:$X2) nor ok (setup-zz.sh:$X9)" \
+    "[ -s '$TMP_ROOT/step12-off' ] && ! listed 'setup-zz.sh:$X2' '$TMP_ROOT/step12-off' && ! listed 'setup-zz.sh:$X9' '$TMP_ROOT/step12-off'"
+check "E STRICT false: step 13 is WARN, with rule 4 reporting setup-zz.sh" "[ \"\$(step_result '$TMP_ROOT/step13-off')\" = WARN ] && has 'scripts/setup-zz.sh(1)' '$TMP_ROOT/step13-off'"
+check "E STRICT false: step 14 is PASS" "[ \"\$(step_result '$TMP_ROOT/step14-off')\" = PASS ]"
 
 # --- A program that cannot read a file is a FAIL, never a pass --------------------
 R="$TMP_ROOT/unreadable"

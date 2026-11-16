@@ -4,13 +4,15 @@
 #   step 13  the summary rules: rule 1 write_summary / Write-Summary never
 #            change the category; rule 2 every write_error / Write-AitError
 #            passes a non-empty reason; rule 3 the relay changes no parent
-#            warning count; rule 4 legacy write_summary WARN / ERROR calls are
-#            reported while $StrictSummary is $false and FAIL when it is $true
+#            warning count; rule 4 legacy write_summary WARN / ERROR calls
+#            FAIL ($StrictSummary $true, since plan step I5), and are
+#            reported when it is $false
 #   step 14  log writers outside aitools-lib (logging.md 8.1); the 8.1
 #            exceptions are never listed
-#   step 12  with $StrictSummary on, only OK, DETAIL and ACTION
+#   step 12  with $StrictSummary on, only OK, DETAIL and ACTION, upper case
 #   step 3   an exit 1 after Write-AitError / Write-AitWarn / Write-AitAction
 #            is covered
+#   step 11  a comment line is not listed
 #
 # Platform targeting (commander, 2026-11-14: "sh scripts and tests should only
 # run on linux/mac and ps1 on windows"): this harness runs on Windows only and
@@ -21,7 +23,7 @@
 # Cases (the same as the .sh harness):
 #   P   parity     the perl program embedded in check-script-compliance.ps1 is
 #                  the same text (CR removed) as the one in the .sh twin; both
-#                  twins have the switch off
+#                  twins have the switch on (plan step I5)
 #   L1  old lib    the promotion and the relay increment in synthetic
 #                  libraries: rule 1 and rule 3 FAIL, each line listed
 #   L2  new lib    rules 1-4 ok, step 13 and step 14 PASS
@@ -33,8 +35,10 @@
 #   W   writers    each writer kind listed; look-alikes and the 8.1 exceptions
 #                  not; WARN with the switch off, FAIL with it on
 #   E   end to end the copied check-script-compliance.ps1 with a planted
-#                  scripts/setup-zz.ps1: step 3, then steps 12, 13 and 14 with
-#                  the switch off and on
+#                  scripts/setup-zz.ps1: steps 3 and 11, then steps 12, 13 and
+#                  14 with the switch on (as shipped: 12 and 13 FAIL on the
+#                  planted calls, 14 PASS) and off (12 accepts them, 13 WARN,
+#                  14 PASS). Step 7 is bash only (SKIP in this twin)
 # The program runs from the text this harness extracts from the .ps1 twin
 # (here-string $logSpecProg), through perl, the way the twin runs it. The
 # planted .ps1 files keep this file's CRLF line ends, the planted .sh files get
@@ -48,7 +52,7 @@
 # Usage: pwsh -NoProfile -File tests/check-script-compliance/test-logging-spec.ps1 [-Help]
 
 param([switch]$Help)
-if ($Help) { Get-Content $PSCommandPath -TotalCount 48 | ForEach-Object { $_ -replace '^# ?', '' }; exit 0 }
+if ($Help) { Get-Content $PSCommandPath -TotalCount 52 | ForEach-Object { $_ -replace '^# ?', '' }; exit 0 }
 
 if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
     [Console]::Error.WriteLine("This script is for Windows. On macOS/Linux, run tests/check-script-compliance/test-logging-spec.sh with bash.")
@@ -125,8 +129,8 @@ try {
     Check "P: the .sh twin embeds the program" ($progSh.Length -gt 0)
     Check "P: the .ps1 twin embeds the program" ($progPs.Length -gt 0)
     Check "P: the program is the same text in both twins" ($progSh -ceq $progPs)
-    Check "P: the .sh twin has STRICT_SUMMARY=false" ([regex]::IsMatch((ReadText $shTwin), '(?m)^STRICT_SUMMARY=false\r?$'))
-    Check "P: the .ps1 twin has `$StrictSummary = `$false" ([regex]::IsMatch((ReadText $psTwin), '(?m)^\$StrictSummary = \$false\r?$'))
+    Check "P: the .sh twin has STRICT_SUMMARY=true" ([regex]::IsMatch((ReadText $shTwin), '(?m)^STRICT_SUMMARY=true\r?$'))
+    Check "P: the .ps1 twin has `$StrictSummary = `$true" ([regex]::IsMatch((ReadText $psTwin), '(?m)^\$StrictSummary = \$true\r?$'))
     $havePerl = [bool](Get-Command perl -ErrorAction SilentlyContinue)
     Check "P: perl is on PATH" $havePerl
 
@@ -496,7 +500,9 @@ BLOCK
     Copy-Item -Recurse -Path (Join-Path $root "scripts") -Destination (Join-Path $fix "scripts")
     $zz = Join-Path $fix "scripts/setup-zz.ps1"
     $fill = (1..11 | ForEach-Object { '$a = 1' }) -join "`n"
-    WritePs $zz ("Write-AitError `"t`" `"w`" `$r  # X1`nexit 1  # X1E`nWrite-Summary `"WARN`" `"t`" `"x`"  # X2`n" + $fill + "`nexit 1  # X3")
+    WritePs $zz ("Write-AitError `"t`" `"w`" `$r  # X1`nexit 1  # X1E`nWrite-Summary `"WARN`" `"t`" `"x`"  # X2`n" + $fill + "`nexit 1  # X3" +
+        "`nWrite-Summary `"ok`" `"t`" `"y`"  # X9" +
+        "`n    # Get-Item x -ErrorAction SilentlyContinue  # X7C`n`$v = Get-Item x -ErrorAction SilentlyContinue  # X7`n`$a = 1`n`$a = 2`n`$a = 3")
     $copy = Join-Path $fix "scripts/check-script-compliance.ps1"
     # RunCheck LABEL: the copied check in a child pwsh; output -> $outFile, the
     # step lines (colour codes removed) in $script:stepLines
@@ -529,25 +535,23 @@ BLOCK
     }
     function InLine([string]$Site, [string]$N) { return [regex]::IsMatch((StepLine $N), '(?<![\w/.-])' + [regex]::Escape($Site) + '(?![0-9])') }
 
-    RunCheck "off"
-    $x1e = LineOf "X1E" $zz; $x2 = LineOf "X2" $zz; $x3 = LineOf "X3" $zz
+    RunCheck "on"
+    $x1e = LineOf "X1E" $zz; $x2 = LineOf "X2" $zz; $x3 = LineOf "X3" $zz; $x9 = LineOf "X9" $zz
+    $x7 = LineOf "X7" $zz; $x7c = LineOf "X7C" $zz
     Check "E step 3: the exit 1 after Write-AitError (setup-zz.ps1:$x1e) is not listed" (-not (InLine "setup-zz.ps1:$x1e" "3"))
     Check "E step 3: the uncovered exit 1 (setup-zz.ps1:$x3) is listed" (InLine "setup-zz.ps1:$x3" "3")
-    Check "E STRICT false: step 12 does not list Write-Summary WARN (setup-zz.ps1:$x2)" ((StepLine "12") -and -not (InLine "setup-zz.ps1:$x2" "12"))
-    Check "E STRICT false: step 13 is there, with rule 4 counting setup-zz.ps1" ((StepLine "13").Contains("scripts/setup-zz.ps1(1)"))
-    $s14Off = StepResult "14"
-    Check "E STRICT false: step 14 is PASS or WARN (it is $s14Off)" ($s14Off -eq "PASS" -or $s14Off -eq "WARN")
+    Check "E step 11: the unchecked SilentlyContinue (setup-zz.ps1:$x7) is listed" ($x7 -and (InLine "setup-zz.ps1:$x7" "11"))
+    Check "E step 11: a comment naming SilentlyContinue (setup-zz.ps1:$x7c) is not listed" ($x7c -and -not (InLine "setup-zz.ps1:$x7c" "11"))
+    Check "E STRICT true (shipped): step 12 is FAIL and lists setup-zz.ps1:$x2(WARN) and setup-zz.ps1:$x9(ok)" ((StepResult "12") -eq "FAIL" -and (InLine "setup-zz.ps1:$x2(WARN)" "12") -and (InLine "setup-zz.ps1:$x9(ok)" "12"))
+    Check "E STRICT true (shipped): step 13 is FAIL with rule 4 FAIL" ((StepResult "13") -eq "FAIL" -and (StepLine "13").Contains("rule 4 FAIL, "))
+    Check "E STRICT true (shipped): step 14 is PASS (no log writer outside aitools-lib)" ((StepResult "14") -eq "PASS")
 
     $t = ReadText $copy
-    WriteText $copy ([regex]::Replace($t, '(?m)^\$StrictSummary = \$false', '$StrictSummary = $true'))
-    RunCheck "on"
-    Check "E STRICT true: step 12 is FAIL and lists setup-zz.ps1:$x2(WARN)" ((StepResult "12") -eq "FAIL" -and (InLine "setup-zz.ps1:$x2(WARN)" "12"))
-    Check "E STRICT true: step 13 is FAIL with rule 4 FAIL" ((StepResult "13") -eq "FAIL" -and (StepLine "13").Contains("rule 4 FAIL, "))
-    if ($s14Off -eq "WARN") {
-        Check "E STRICT true: step 14 is FAIL (it was WARN)" ((StepResult "14") -eq "FAIL")
-    } else {
-        Check "E STRICT true: step 14 is PASS (it was PASS)" ((StepResult "14") -eq "PASS")
-    }
+    WriteText $copy ([regex]::Replace($t, '(?m)^\$StrictSummary = \$true', '$StrictSummary = $false'))
+    RunCheck "off"
+    Check "E STRICT false: step 12 lists neither Write-Summary WARN (setup-zz.ps1:$x2) nor ok (setup-zz.ps1:$x9)" ((StepLine "12") -and -not (InLine "setup-zz.ps1:$x2" "12") -and -not (InLine "setup-zz.ps1:$x9" "12"))
+    Check "E STRICT false: step 13 is WARN, with rule 4 reporting setup-zz.ps1" ((StepResult "13") -eq "WARN" -and (StepLine "13").Contains("scripts/setup-zz.ps1(1)"))
+    Check "E STRICT false: step 14 is PASS" ((StepResult "14") -eq "PASS")
 } finally {
     if (-not $keepTmp) { Remove-TestTempRoot $tmpRoot }
 }
