@@ -65,18 +65,15 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/aitools-lib.sh"
-# stdout carries data: console log lines go to stderr (deploy.log unchanged).
-# Defined before logging_init, whose environment check may already log a warning.
-# The deploy.log line goes through the lib's _aitlib_log_append: a failed write is
-# swallowed (reference/logging.md section 5; incident #174), so set -e does not end
-# the resolver and the stderr line still prints.
-log() {
-    local level="${2:-info}"
-    local ts; ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-    local line="[$ts] [$SCRIPT_NAME] [$level] $1"
-    _aitlib_log_append "$line" "$LOG_FILE"
-    printf '%s\n' "$line" >&2
-}
+# stdout carries data: the library's stderr console option sends the console log
+# lines to stderr (deploy.log unchanged) and turns recording off, so this
+# library-style tool writes no run summary record; its callers record the
+# warn/error lines it returns (reference/logging.md sections 7 and 8.2). Set
+# before logging_init, whose environment check may already log a warning. The
+# colour option keeps the stderr lines plain when stderr is not a terminal (a
+# caller that captures them gets no ANSI codes, as before the option existed).
+AITLIB_OPT_CONSOLE_STDERR=true
+AITLIB_OPT_COLOR_AUTO=true
 logging_init "aitools-profile"
 
 case "$(uname -s)" in
@@ -1414,10 +1411,11 @@ cmd_register() {
         if [ -n "$hh" ] && [ "$(short_host "$hh")" = "$THIS_HOST" ]; then hmatch=true; break; fi
     done <<< "$hnames"
     if ! $hmatch && [ -n "$THIS_HOST" ]; then edit_set string "$THIS_HOST" profiles "$key" machine hostname; fi
-    case "$(uname -s)" in
-        Darwin*) os="darwin" ;;
-        Linux*)  os="linux" ;;
-        *)       os=$(lc "$(uname -s)") ;;
+    # The platform comes from the library (cross-platform.md "Environment branches")
+    case "$AITOOLS_PLATFORM" in
+        macos) os="darwin" ;;
+        linux) os="linux" ;;
+        *)     os="$AITOOLS_PLATFORM" ;;
     esac
     case "$(uname -m)" in
         x86_64|amd64)  arch="x64" ;;
