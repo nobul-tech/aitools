@@ -384,7 +384,9 @@ try {
     } else {
         Run-Script
         Check "dupcase: exit 1" { $rc -eq 1 }
-        Check "dupcase: duplicate reported" { OutMatch 'Skipped duplicate: foo\.md -> foo\.mdc' }
+        # The duplicate is an error, logged and recorded once by Write-AitError (WHAT
+        # the failed item, REASON the clash: reference/logging.md 8.2)
+        Check "dupcase: duplicate reported" { (OutMatch '\[error\] failed: foo\.md: foo\.mdc was already deployed from a harness rule whose name differs only in case') -and (SumHas 'ERROR|cursor rules|failed: foo.md|foo.mdc was already deployed from a harness rule whose name differs only in case') -and (@(SumLines | Where-Object { $_.StartsWith('ERROR|', [StringComparison]::Ordinal) }).Count -eq 1) }
         Check "dupcase: Foo.md deployed (ordinal order)" { (Test-Path -LiteralPath "$H/.cursor/rules/Foo.mdc" -PathType Leaf) -and -not (Exists "$H/.cursor/rules/foo.mdc") }
         # The tracker writes the OK status with the counts; the failure is the
         # script's own error (reference/logging.md 8.3 "Managed files")

@@ -312,8 +312,10 @@ else
     run_script
     check "dupcase: exit 1" "[ \"\$(rc)\" = 1 ]"
     # Ordinal (byte) order on every locale: Foo.md (0x46) is deployed, foo.md
-    # (0x66) is the duplicate (until the fix the glob's LC_COLLATE order decided)
-    check "dupcase: duplicate reported" "grep -q 'Skipped duplicate: foo\.md -> foo\.mdc' '$C/out'"
+    # (0x66) is the duplicate (until the fix the glob's LC_COLLATE order decided).
+    # The duplicate is an error, logged and recorded once by write_error (WHAT the
+    # failed item, REASON the clash: reference/logging.md 8.2)
+    check "dupcase: duplicate reported" "grep -q '\[error\] failed: foo\.md: foo\.mdc was already deployed from a harness rule whose name differs only in case' '$C/out' && grep -qxF 'ERROR|cursor rules|failed: foo.md|foo.mdc was already deployed from a harness rule whose name differs only in case' '$C/summary' && [ \"\$(grep -c '^ERROR|' '$C/summary')\" = 1 ]"
     check "dupcase: Foo.md deployed (ordinal order)" "[ -f '$H/.cursor/rules/Foo.mdc' ] && [ ! -e '$H/.cursor/rules/foo.mdc' ]"
     # The tracker writes the OK status with the counts; the failure is the
     # script's own error (reference/logging.md 8.3 "Managed files")
