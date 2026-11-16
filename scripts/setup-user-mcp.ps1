@@ -30,14 +30,16 @@ if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
 if ($DryRun) { Log "[DRY RUN] Preview mode -- no files will be written" }
 
 # Check that claude CLI is available
+# Get-Command exempt: command-existence check; the branch is the fallback
 if (-not (Get-Command claude -ErrorAction SilentlyContinue)) {
-    LogError "'claude' CLI not found in PATH. Install Claude Code first: https://claude.ai/download"
+    Write-AitError "claude mcp" "MCP servers not registered" "'claude' CLI not found in PATH -- install Claude Code first: https://claude.ai/download"
     exit 1
 }
 
 # Check that Node.js is available (required for Chrome DevTools MCP and settings merge)
+# Get-Command exempt: command-existence check; the branch is the fallback
 if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
-    LogError "Node.js not found. Install via 'aitools install' or manually: https://nodejs.org"
+    Write-AitError "claude mcp" "MCP servers not registered" "Node.js not found -- install it with aitools install or from https://nodejs.org"
     exit 1
 } else {
     $nodeVersion = (node --version)
@@ -50,12 +52,19 @@ $mcpCurrent = @{}
 $savedClaudeCode = $env:CLAUDECODE
 Remove-Item Env:\CLAUDECODE -ErrorAction SilentlyContinue
 
+# stderr is captured with the output (2>&1) and split off by type: only stdout is
+# parsed by the `name: details - status` pattern below; stderr is the reason.
+$mcpListErr = $null
+$mcpListErrRecord = $null
 try {
-    $mcpListOutput = claude mcp list 2>$null
+    $listAll = @(& claude mcp list 2>&1)
     $mcpListRc = $LASTEXITCODE
+    $mcpListOutput = @($listAll | Where-Object { $_ -isnot [System.Management.Automation.ErrorRecord] })
+    $mcpListErr = @($listAll | Where-Object { $_ -is [System.Management.Automation.ErrorRecord] })
 } catch {
     $mcpListOutput = $null
     $mcpListRc = 1
+    $mcpListErrRecord = $_
 }
 
 if ($savedClaudeCode) {
@@ -74,7 +83,10 @@ if ($mcpListRc -eq 0 -and $mcpListOutput) {
     }
     LogOk "Checked existing MCP config ($($mcpCurrent.Count) servers found)"
 } else {
-    LogWarn "Could not check existing MCP config; will re-add all servers"
+    # The reason: the exception, else the command's stderr, else its stdout
+    # (Get-AitErrorReason logs it as detail)
+    $listReasonOut = if ($mcpListErr) { $mcpListErr } else { $mcpListOutput }
+    Write-AitWarn "claude mcp" "could not read the MCP server list -- re-adding all servers: $(Get-AitErrorReason -Output $listReasonOut -ExitCode $mcpListRc -ErrorRecord $mcpListErrRecord)"
 }
 
 function Test-ServerConfigMatches {
@@ -102,13 +114,15 @@ function Add-McpServer {
     }
 
     Log "Adding $Name..."
-    $addResult = & claude mcp add @AddArgs 2>&1
-    if ($LASTEXITCODE -eq 0) {
+    $addResult = @(& claude mcp add @AddArgs 2>&1)
+    $addRc = $LASTEXITCODE
+    if ($addRc -eq 0) {
+        foreach ($l in $addResult) { if ("$l".Trim()) { LogDetail "claude mcp add $Name`: $l" } }
         LogOk "$Name configured"
         $script:mcpChanged = $true
     } else {
-        LogError "Failed to add $Name`: $addResult"
-        Write-Summary "ERROR" "claude mcp" "failed to add $Name"
+        # Get-AitErrorReason logs the output as detail lines
+        Write-AitError "claude mcp" "claude mcp add $Name failed" (Get-AitErrorReason -Output $addResult -ExitCode $addRc)
     }
 
     # Restore CLAUDECODE
