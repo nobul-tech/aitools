@@ -4,4 +4,4 @@ a.md da3250eb6bb5d78d74f8c21e209d6e9c
 # summary rows
 DETAIL|claude rules|added: a.md
 DETAIL|claude rules|failed: broken.md
-ERROR|claude rules|1 failed
+OK|claude rules|1 added, 1 failed

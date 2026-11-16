@@ -6,4 +6,4 @@ b.mdc e97ad098e0d65bdb9469ba47abdc7f82
 ACTION||Run aitools to rebuild ~/.aitools/rules and its manifest
 DETAIL|cursor rules|added: a.mdc
 DETAIL|cursor rules|added: b.mdc
-WARN|cursor rules|2 added
+OK|cursor rules|2 added

@@ -4,4 +4,4 @@ s.mdc bc72d5ec505f3be28e37bd6f5577f018
 # summary rows
 ACTION||Run aitools to rebuild ~/.aitools/rules and its manifest
 DETAIL|cursor rules|added: s.mdc
-WARN|cursor rules|1 added
+OK|cursor rules|1 added
