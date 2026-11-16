@@ -83,9 +83,9 @@ case "$AITOOLS_PLATFORM" in
                     # the first error line of the output, else its last non-empty
                     # line, else the exit code (logging.md 8.3 rules 3-5); the
                     # output itself is already in deploy.log (streamed above)
-                    # || CMD_REASON="": grep exits 1 when no line matches (pipefail);
-                    # the empty result is checked on the next line
-                    CMD_REASON=$(printf '%s\n' "$CMD_OUT" | grep -i -E '(^| )[A-Za-z0-9_-]*error:|(^| )fatal:' | sed -n -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e '1p') || CMD_REASON=""
+                    # || true: grep exits 1 when no line matches (pipefail); the
+                    # empty result is checked on the next line
+                    CMD_REASON=$(printf '%s\n' "$CMD_OUT" | grep -i -E '(^| )[A-Za-z0-9_-]*error:|(^| )fatal:' | sed -n -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e '1p') || true
                     if [ -z "$CMD_REASON" ]; then
                         CMD_REASON=$(printf '%s\n' "$CMD_OUT" | sed -n -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e '/./h' -e '${x;p;}')
                     fi
