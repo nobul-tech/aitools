@@ -880,26 +880,11 @@ function Write-UiLogLines([string]$Prefix, [string]$Text) {
     foreach ($l in ($Text -split "`r?`n")) { if ($l) { LogDetail "$Prefix$l" } }
 }
 
-# Write-UiAction TEXT -- one ACTION row TEXT per run (Show-Summary does not dedupe
-# ACTIONs). The caller's LogWarn / LogError line carries the same instruction.
-function Write-UiAction([string]$Text) {
-    if ($env:AITOOLS_SUMMARY_FILE -and (Test-Path -LiteralPath $env:AITOOLS_SUMMARY_FILE -PathType Leaf)) {
-        $have = $false
-        try {
-            $have = @([IO.File]::ReadAllLines($env:AITOOLS_SUMMARY_FILE, [System.Text.UTF8Encoding]::new($false)) | Where-Object { $_ -ceq "ACTION||$Text" }).Count -gt 0
-        } catch {
-            LogDetail "run summary unreadable ($($_.Exception.Message)) -- ACTION written without the duplicate check"
-        }
-        if ($have) { LogDetail "ACTION already in the run summary: $Text"; return }
-    }
-    Write-Summary "ACTION" "" $Text
-}
-
 # Remove-UiTmp FILE -- remove a temp file; a failure is a warning, never silent
 function Remove-UiTmp([string]$Path) {
     if (Test-Path -LiteralPath $Path) {
         try { Remove-Item -LiteralPath $Path -Force -ErrorAction Stop }
-        catch { LogWarn "could not remove $Path" }
+        catch { Write-AitWarn "machine profile" "could not remove the temporary file $Path" }
     }
 }
 
@@ -948,27 +933,30 @@ function Test-UiHandled([string]$Msg) {
     return $false
 }
 
-# Write-UiResolverWarnings -- log the last resolver call's warn lines (handled: info)
+# Write-UiResolverWarnings -- the last resolver call's warn lines: handled ones at
+# info, every other one a warning of "machine profile" (logging.md section 7: the
+# caller logs a resolver warning with Write-AitWarn <tool>)
 function Write-UiResolverWarnings {
     foreach ($w in (Get-UiLines "warn")) {
         if (-not $w) { continue }
         if (Test-UiHandled $w) { Log "machine profile: $w (user init handles this)" }
-        else { LogWarn "machine profile: $w" }
+        else { Write-AitWarn "machine profile" $w }
     }
 }
 
 # Write-UiPushAction DIR -- the ACTION for a commit or push the resolver reported
-# as failed (its warning, logged by Write-UiResolverWarnings, says why)
+# as failed (its warning, recorded by Write-UiResolverWarnings, says why;
+# identical ACTIONs show once in the panel)
 function Write-UiPushAction([string]$Dir) {
-    if ((Get-UiTag "committed") -cne "true") { Write-UiAction "commit and push profile.json in $Dir" }
-    elseif (@(Get-UiLines "warn" | Where-Object { $_ -like "*pull --rebase*" }).Count -gt 0) { Write-UiAction "git pull --rebase, then git push in $Dir" }
-    else { Write-UiAction "run git push in $Dir" }
+    if ((Get-UiTag "committed") -cne "true") { Write-Summary "ACTION" "" "commit and push profile.json in $Dir" }
+    elseif (@(Get-UiLines "warn" | Where-Object { $_ -like "*pull --rebase*" }).Count -gt 0) { Write-Summary "ACTION" "" "git pull --rebase, then git push in $Dir" }
+    else { Write-Summary "ACTION" "" "run git push in $Dir" }
 }
 
 # Invoke-UiPush DIR -- push DIR. Without a console git may not prompt
 # (GIT_TERMINAL_PROMPT=0; ssh BatchMode unless GIT_SSH_COMMAND is set). A push the
 # remote rejected (it has newer commits) is told to pull --rebase first (Review3
-# #82 minor 4). Returns $true pushed, $false not pushed (LogWarn + ACTION).
+# #82 minor 4). Returns $true pushed, $false not pushed (one Write-AitAction).
 function Invoke-UiPush([string]$Dir) {
     $prevPrompt = $env:GIT_TERMINAL_PROMPT
     $prevSsh = $env:GIT_SSH_COMMAND
@@ -987,11 +975,9 @@ function Invoke-UiPush([string]$Dir) {
     Write-UiLogLines "git push: " $out
     if ($rc -eq 0) { return $true }
     if ($out -match 'rejected|non-fast-forward|fetch first') {
-        LogWarn "dotprofile push rejected (exit $rc): the remote has newer commits -- run git pull --rebase, then git push in $Dir"
-        Write-UiAction "git pull --rebase, then git push in $Dir"
+        Write-AitAction "dotprofile" "dotprofile push rejected (exit $rc): the remote has newer commits -- run git pull --rebase, then git push in $Dir" "git pull --rebase, then git push in $Dir"
     } else {
-        LogWarn "dotprofile push failed (exit $rc) -- run git push in $Dir"
-        Write-UiAction "run git push in $Dir"
+        Write-AitAction "dotprofile" "dotprofile push failed (exit $rc) -- run git push in $Dir" "run git push in $Dir"
     }
     return $false
 }
@@ -999,7 +985,7 @@ function Invoke-UiPush([string]$Dir) {
 # Invoke-UiCommit DIR MESSAGE FILE... -- commit only FILE... in DIR, then push
 # (N-Q2). No git identity on this machine yet: commits as the profile's
 # identity.git. Returns 0 committed and pushed, 1 commit failed, 2 committed but
-# not pushed; each failure is a LogWarn + one ACTION.
+# not pushed; each failure is one Write-AitAction.
 function Invoke-UiCommit([string]$Dir, [string]$Message, [string[]]$Files) {
     $who = @()
     $curName = (& git -C $Dir config user.name 2>&1 | Out-String).Trim()
@@ -1023,8 +1009,7 @@ function Invoke-UiCommit([string]$Dir, [string]$Message, [string[]]$Files) {
     Write-UiLogLines "git commit: " $out
     $fileList = $Files -join " "
     if ($rc -ne 0) {
-        LogWarn "dotprofile commit failed (exit $rc) -- commit and push $fileList in $Dir by hand"
-        Write-UiAction "commit and push $fileList in $Dir"
+        Write-AitAction "dotprofile" "dotprofile commit failed (exit $rc) -- commit and push $fileList in $Dir by hand" "commit and push $fileList in $Dir"
         return 1
     }
     if (-not (Invoke-UiPush $Dir)) { return 2 }
@@ -1081,14 +1066,13 @@ function Get-UiEntries([string]$Pf, [string]$ThisId) {
 
 # Read-UiChoose PF SUGGESTED_KEY THIS_ID -- ask which profile this machine is
 # (parity: ui_choose). Sets $script:UiChoiceKind (claim | new) and
-# $script:UiChoice. Returns 0 chosen; 1 no console to ask (LogError + ERROR row +
-# ACTION); 2 skipped at the prompt (LogWarn; the caller writes the row).
+# $script:UiChoice. Returns 0 chosen; 1 no console to ask (one error + ACTION); 2
+# skipped at the prompt (one warning, recorded here).
 function Read-UiChoose([string]$Pf, [string]$Suggested, [string]$ThisId) {
     $script:UiChoiceKind = ""; $script:UiChoice = ""
     if (-not (Test-UiCanAsk)) {
-        LogError "machine profile: this machine has no profile and there is no terminal to ask -- run: aitools user init --alias <name> (or aitools user init on a terminal)"
-        Write-Summary "ERROR" "machine profile" "not registered (no terminal)"
-        Write-UiAction "Run: aitools user init --alias <name> (or on a terminal)"
+        Write-AitError "machine profile" "not registered" "this machine has no profile and there is no terminal to ask"
+        Write-Summary "ACTION" "" "Run: aitools user init --alias <name> (or on a terminal)"
         return 1
     }
     $entries = @(Get-UiEntries $Pf $ThisId)
@@ -1117,14 +1101,14 @@ function Read-UiChoose([string]$Pf, [string]$Suggested, [string]$ThisId) {
     $valid += @("n", "s")
     $choice = Read-MenuChoice -Valid $valid -Default "s" -DefaultDesc "skip" -Context "which profile" -Prompt "Choice: "
     if ($choice -eq "s") {
-        LogWarn "machine profile: registration skipped -- deploys will report no machine match"
+        Write-AitWarn "machine profile" "registration skipped -- deploys will report no machine match"
         return 2
     }
     if ($choice -eq "n") {
         [Console]::Write("New alias (e.g., laptop, workstation): ")
         $script:UiChoice = Read-ConsoleChoice "skip"
         if (-not $script:UiChoice) {
-            LogWarn "machine profile: no alias entered -- registration skipped"
+            Write-AitWarn "machine profile" "no alias entered -- registration skipped"
             return 2
         }
         $script:UiChoiceKind = "new"
@@ -1148,9 +1132,9 @@ function Read-UiNameCompany([string]$AliasName) {
 
 # Invoke-UiRegister DIR MODE VALUE COMMIT [NAME COMPANY EMAIL] -- register this
 # machine (parity: ui_register; see there for MODE and the exit-4 rules). Sets
-# $script:UiKey, UiAlias, UiOwner. Writes the "machine profile" row. Returns 0
-# registered or verified, 1 failed (LogError + ERROR row), 2 skipped at the
-# confirm (LogWarn + WARN row).
+# $script:UiKey, UiAlias, UiOwner. Writes the "machine profile" OK record.
+# Returns 0 registered or verified, 1 failed (one error), 2 skipped at the
+# confirm (one warning).
 function Invoke-UiRegister([string]$Dir, [string]$Mode, [string]$Value, [bool]$Commit, [string]$Name = "", [string]$Company = "", [string]$Email = "") {
     $pf = Join-Path $Dir "profile.json"
     $tmp = "$pf.tmp.$PID"
@@ -1176,9 +1160,8 @@ function Invoke-UiRegister([string]$Dir, [string]$Mode, [string]$Value, [bool]$C
             continue
         }
         if (-not (Test-UiCanAsk)) {
-            LogError "machine profile: alias `"$Value`" is used by another machine's profile ($okey) -- not registered without a confirm on a terminal; run: aitools user init --alias <another name>"
-            Write-Summary "ERROR" "machine profile" "alias used by another machine"
-            Write-UiAction "Run: aitools user init --alias <another name> (or confirm on a terminal)"
+            Write-AitError "machine profile" "not registered" "alias `"$Value`" is used by another machine's profile ($okey) and there is no terminal to confirm"
+            Write-Summary "ACTION" "" "Run: aitools user init --alias <another name> (or confirm on a terminal)"
             return 1
         }
         $ans = Read-MenuChoice -Valid @("y", "yes", "n", "no") -Default "n" -DefaultDesc "no" -Context "alias $Value" -Prompt "Alias `"$Value`" is used by another machine's profile ($okey). Use it for this machine too? [y/n]: "
@@ -1187,22 +1170,19 @@ function Invoke-UiRegister([string]$Dir, [string]$Mode, [string]$Value, [bool]$C
             $extra += @("--allow-duplicate-alias")
             continue
         }
-        LogWarn "machine profile: alias `"$Value`" is used by another machine's profile ($okey) -- registration skipped"
-        Write-Summary "WARN" "machine profile" "skipped"
+        Write-AitWarn "machine profile" "registration skipped: alias `"$Value`" is used by another machine's profile ($okey)"
         return 2
     }
     if ($rc -ne 0) {
         Remove-UiTmp $tmp
         $errText = Get-UiFirstError
-        if (-not $errText) { $errText = "see deploy.log" }
+        if (-not $errText) { $errText = "no error line from the resolver" }
         if ($rc -eq 3 -or $rc -eq 4) {
-            LogError "machine profile: registration refused (resolver exit $rc): $errText"
-            Write-Summary "ERROR" "machine profile" "registration refused"
+            Write-AitError "machine profile" "registration refused (resolver exit $rc)" $errText
         } else {
-            LogError "machine profile: register failed (resolver exit $rc): $errText"
-            Write-Summary "ERROR" "machine profile" "register failed"
+            Write-AitError "machine profile" "register failed (resolver exit $rc)" $errText
         }
-        Write-UiAction "see deploy.log -- fix profile.json, then run: aitools user init"
+        Write-Summary "ACTION" "" "see deploy.log -- fix profile.json, then run: aitools user init"
         return 1
     }
     $result = Get-UiTag "result"
@@ -1217,23 +1197,22 @@ function Invoke-UiRegister([string]$Dir, [string]$Mode, [string]$Value, [bool]$C
     $check = Read-JsonFile $tmp
     if ($check.State -ne "valid") {
         Remove-UiTmp $tmp
-        LogError "machine profile: register wrote an invalid file ($($check.Message)) -- profile.json left untouched"
-        Write-Summary "ERROR" "machine profile" "register validation failed"
+        Write-AitError "machine profile" "register wrote an invalid file -- profile.json left untouched" $check.Message
         return 1
     }
     Backup-File $pf
     try {
         Move-Item -LiteralPath $tmp -Destination $pf -Force -ErrorAction Stop
     } catch {
+        $mvWhy = Get-AitErrorReason -Output "" -ExitCode 1 -ErrorRecord $_
         Remove-UiTmp $tmp
-        LogError "machine profile: could not replace $pf"
-        Write-Summary "ERROR" "machine profile" "write failed"
+        Write-AitError "machine profile" "could not replace $pf" $mvWhy
         return 1
     }
     $from = if ($claimed) { ", claimed from $claimed" } else { "" }
     LogOk "machine profile: registered this machine as '$($script:UiAlias)' ($result, profile $($script:UiKey)$from)"
     if ($Commit -and (Test-Path -LiteralPath (Join-Path $Dir ".git"))) {
-        $null = Invoke-UiCommit $Dir "Register machine profile: $($script:UiAlias)" @("profile.json")   # failures: LogWarn + ACTION inside
+        $null = Invoke-UiCommit $Dir "Register machine profile: $($script:UiAlias)" @("profile.json")   # failures: Write-AitAction inside
     }
     Write-Summary "OK" "machine profile" "$result ($($script:UiAlias))"
     return 0
@@ -1246,11 +1225,15 @@ function Invoke-UiMigrate([string]$Dir) {
     $rc = $script:UiProfRc
     Write-UiResolverWarnings
     if ($rc -ne 0) {
-        $errs = @(Get-UiLines "error" | Where-Object { $_ })
-        foreach ($e1 in $errs) { LogError "machine profile: re-key failed: $e1" }
-        if ($errs.Count -eq 0) { LogError "machine profile: re-key failed (resolver exit $rc)" }
-        Write-Summary "ERROR" "profile keys" "re-key failed"
-        Write-UiAction "see deploy.log -- fix profile.json, then run: aitools user init"
+        # One error: the resolver's first error line is its reason, the others are
+        # detail lines (lead decision for the resolver wrappers)
+        $first = Get-UiFirstError
+        foreach ($e1 in @(Get-UiLines "error" | Where-Object { $_ })) {
+            if ($e1 -cne $first) { LogDetail "machine profile: re-key: $e1" }
+        }
+        if (-not $first) { $first = "no error line from the resolver" }
+        Write-AitError "profile keys" "re-key failed (resolver exit $rc)" $first
+        Write-Summary "ACTION" "" "see deploy.log -- fix profile.json, then run: aitools user init"
         return 1
     }
     if ((Get-UiTag "result") -ceq "migrated") {
@@ -1266,7 +1249,8 @@ function Invoke-UiMigrate([string]$Dir) {
 # Invoke-UiResolve DIR -- which profile this machine is (parity: ui_resolve; no
 # override is passed: -Alias goes to register, Review3 #82 M1). Sets
 # $script:UiVia, UiKey, UiAlias, UiOwner, UiThisId. Returns 0, or 1 on a resolver
-# error user init cannot resolve (LogError + ERROR row + ACTION).
+# error user init cannot resolve (one error, its reason the first such resolver
+# error line, the others detail lines; plus an ACTION).
 function Invoke-UiResolve([string]$Dir) {
     $null = Invoke-UiProfile @("resolve", "--profile", (Join-Path $Dir "profile.json"), "--environment", $script:AitoolsEnvironment)
     $script:UiVia = Get-UiTag "via"; $script:UiKey = Get-UiTag "key"; $script:UiAlias = Get-UiTag "alias"
@@ -1278,16 +1262,18 @@ function Invoke-UiResolve([string]$Dir) {
     $oShown = if ($script:UiOwner) { $script:UiOwner } else { "absent" }
     Log "machine profile: alias=$aShown via=$($script:UiVia) key=$kShown owner=$oShown"
     if ($script:UiProfRc -eq 0) { return 0 }
-    $real = $false
+    $real = $false; $first = ""
     foreach ($e1 in (Get-UiLines "error")) {
         if (-not $e1) { continue }
         if (Test-UiHandled $e1) { Log "machine profile: $e1 (user init handles this)" }
-        else { LogError "machine profile: $e1"; $real = $true }
+        elseif (-not $real) { $first = $e1; $real = $true }
+        else { LogDetail "machine profile: resolver error: $e1" }
     }
-    if (-not (Get-UiFirstError)) { LogError "machine profile: resolver failed (exit $($script:UiProfRc))"; $real = $true }
+    if (-not (Get-UiFirstError)) { $real = $true }
     if (-not $real) { return 0 }
-    Write-Summary "ERROR" "machine profile" "resolver error"
-    Write-UiAction "see deploy.log -- fix profile.json, then run: aitools user init"
+    if (-not $first) { $first = "no error line from the resolver" }
+    Write-AitError "machine profile" "resolver error (exit $($script:UiProfRc))" $first
+    Write-Summary "ACTION" "" "see deploy.log -- fix profile.json, then run: aitools user init"
     return 1
 }
 
@@ -1341,14 +1327,11 @@ function Invoke-UiRegisterFlow([string]$Dir, [bool]$Commit) {
         if ((Invoke-UiResolve $Dir) -ne 0) { return 1 }
         if ($script:UiOwner -ceq "this" -and ($script:UiVia -ceq "id" -or $script:UiVia -ceq "environment")) {
             $script:UiMachineKey = $script:UiKey; $script:UiMachineAlias = $script:UiAlias; $script:UiMachineOwner = "this"
-            LogWarn "machine profile: profile.json in $Dir has uncommitted changes -- this machine's profile ('$($script:UiAlias)') was not refreshed; commit or discard them, then run: aitools user init"
-            Write-Summary "WARN" "machine profile" "not refreshed (local edits)"
-            Write-UiAction "commit or discard the changes to profile.json in $Dir, then run: aitools user init"
+            Write-AitAction "machine profile" "profile.json in $Dir has uncommitted changes -- this machine's profile was not refreshed; commit or discard them, then run: aitools user init" "commit or discard the changes to profile.json in $Dir, then run: aitools user init"
             return 0
         }
-        LogError "machine profile: profile.json in $Dir has uncommitted changes -- not registered (they would be committed with it); commit or discard them, then run: aitools user init"
-        Write-Summary "ERROR" "machine profile" "not registered (local edits)"
-        Write-UiAction "commit or discard the changes to profile.json in $Dir, then run: aitools user init"
+        Write-AitError "machine profile" "not registered" "profile.json in $Dir has uncommitted changes (they would be committed with it)"
+        Write-Summary "ACTION" "" "commit or discard the changes to profile.json in $Dir, then run: aitools user init"
         return 1
     } else {
         $null = Invoke-UiMigrate $Dir   # failure: logged + ERROR row; resolution still reads legacy profiles
@@ -1370,8 +1353,7 @@ function Invoke-UiRegisterFlow([string]$Dir, [bool]$Commit) {
                 "config" {
                     # This machine's id cannot be detected: config.json's cached key vouches for
                     # the profile, but register needs the id (it would refuse with exit 3)
-                    LogWarn "machine profile: this machine's id cannot be detected -- profile '$($script:UiAlias)' (from config.json machineId) was not refreshed"
-                    Write-Summary "WARN" "machine profile" "not refreshed (no machine id)"
+                    Write-AitWarn "machine profile" "profile '$($script:UiAlias)' not refreshed: this machine's id cannot be detected (key from config.json machineId)"
                     # owner "config": the key is NOT passed to setup-user-config, which re-derives it
                     # (via=config) and keeps the cached machineId (review M2)
                     $script:UiMachineKey = $script:UiKey; $script:UiMachineAlias = $script:UiAlias; $script:UiMachineOwner = "config"
@@ -1398,9 +1380,8 @@ function Invoke-UiRegisterFlow([string]$Dir, [bool]$Commit) {
                         Read-UiNameCompany $script:UiChoice
                         $rc = Invoke-UiRegister $Dir "alias" $script:UiChoice $Commit $script:UiName $script:UiCompany ""
                     }
-                } elseif ($rc -eq 2) {
-                    Write-Summary "WARN" "machine profile" "skipped"
                 }
+                # 2: skipped at the prompt -- Read-UiChoose recorded its warning
             }
         }
     }
@@ -1421,14 +1402,11 @@ function Invoke-UiV1Migrate([string]$Dir) {
     $r = Read-JsonFile $pf
     if ($r.State -eq "valid" -and (Get-JText $r.Value @("version")) -ceq "2") { return 0 }
     if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
-        LogWarn "profile.json in $Dir is v1 (legacy) -- node is needed to migrate it; install node, then run: aitools user init"
-        Write-Summary "WARN" "machine profile" "v1 profile not migrated"
+        Write-AitAction "machine profile" "profile.json in $Dir is v1 and was not migrated -- install node, then run: aitools user init" "install node, then run: aitools user init"
         return 0
     }
     if (Test-UiProfileDirty $Dir) {
-        LogWarn "profile.json in $Dir is v1 and has uncommitted changes -- not migrated; commit or discard them, then run: aitools user init"
-        Write-Summary "WARN" "machine profile" "v1 profile not migrated"
-        Write-UiAction "commit or discard the changes to profile.json in $Dir, then run: aitools user init"
+        Write-AitAction "machine profile" "profile.json in $Dir is v1 and has uncommitted changes -- not migrated; commit or discard them, then run: aitools user init" "commit or discard the changes to profile.json in $Dir, then run: aitools user init"
         return 0
     }
     Log "profile.json in $Dir is v1 (legacy) -- migrating to v2 (profiles keyed by machine id)"
@@ -1461,20 +1439,25 @@ fs.writeFileSync(dst, JSON.stringify(v2, null, 2) + "\n");
 '@
     $out = (& node -e $js $pf $tmp $hostName 2>&1 | Out-String)
     $nodeRc = $LASTEXITCODE
-    if ($nodeRc -ne 0 -or (Read-JsonFile $tmp).State -ne "valid") {
-        Write-UiLogLines "v1 migration: " $out
+    $check = if ($nodeRc -eq 0) { Read-JsonFile $tmp } else { $null }
+    if ($nodeRc -ne 0 -or $check.State -ne "valid") {
+        # The reason from node's output, with the check's message when node succeeded
+        # (Get-AitErrorReason logs it as detail lines)
+        $why = $out
+        $whyRc = $nodeRc
+        if ($nodeRc -eq 0) { $why = "$out`n$($check.Message)"; $whyRc = 1 }
+        $reason = Get-AitErrorReason -Output $why -ExitCode $whyRc
         Remove-UiTmp $tmp
-        LogError "profile.json in $Dir could not be migrated from v1 (see deploy.log) -- left untouched"
-        Write-Summary "ERROR" "machine profile" "v1 migration failed"
+        Write-AitError "machine profile" "v1 migration failed -- profile.json left untouched" $reason
         return 1
     }
     Backup-File $pf
     try {
         Move-Item -LiteralPath $tmp -Destination $pf -Force -ErrorAction Stop
     } catch {
+        $mvWhy = Get-AitErrorReason -Output "" -ExitCode 1 -ErrorRecord $_
         Remove-UiTmp $tmp
-        LogError "profile.json in $Dir could not be replaced -- v1 migration not written"
-        Write-Summary "ERROR" "machine profile" "v1 migration failed"
+        Write-AitError "machine profile" "v1 migration not written: could not replace profile.json in $Dir" $mvWhy
         return 1
     }
     LogOk "profile.json in $Dir migrated to v2"
@@ -1483,7 +1466,7 @@ fs.writeFileSync(dst, JSON.stringify(v2, null, 2) + "\n");
         [Console]::Write("Alias for this machine (Enter = hostname): ")
         $aliasName = Read-ConsoleChoice "the hostname"
     }
-    $reg = Invoke-UiRegister $Dir "alias" $aliasName $false   # failure or skip: logged + row inside; the migration is committed either way
+    $reg = Invoke-UiRegister $Dir "alias" $aliasName $false   # failure or skip: recorded inside; the migration is committed either way
     if (Test-Path -LiteralPath (Join-Path $Dir ".git")) { $null = Invoke-UiCommit $Dir "Migrate profile.json from v1 to v2" @("profile.json") }
     if ($reg -eq 1) { return 1 }
     return 0
@@ -1491,46 +1474,43 @@ fs.writeFileSync(dst, JSON.stringify(v2, null, 2) + "\n");
 
 # Invoke-UiCreateDotprofile DIR -- Path 3: a new local dotprofile, committed, then
 # a private GitHub repo created and pushed (parity: ui_create_dotprofile). Writes
-# the "dotprofile" row. Returns 0, 1 failed (ERROR row).
+# the "dotprofile" OK record. Returns 0, 1 failed (one error).
 function Invoke-UiCreateDotprofile([string]$Dir) {
     Log "user init: creating the dotprofile $Dir"
     try {
         $null = New-Item -ItemType Directory -Path (Join-Path $Dir "sessions") -Force -ErrorAction Stop
     } catch {
-        LogError "user init: could not create $Dir"
-        Write-Summary "ERROR" "dotprofile" "create failed"
+        Write-AitError "dotprofile" "could not create $Dir" (Get-AitErrorReason -Output "" -ExitCode 1 -ErrorRecord $_)
         return 1
     }
     $reg = 0
-    if ((Invoke-UiRegisterFlow $Dir $false) -ne 0) { $reg = 1 }   # failure: logged + ERROR row inside; the repo is still created
+    if ((Invoke-UiRegisterFlow $Dir $false) -ne 0) { $reg = 1 }   # failure: recorded inside; the repo is still created
     $utf8 = [System.Text.UTF8Encoding]::new($false)
     try {
         [IO.File]::WriteAllText((Join-Path $Dir ".gitattributes"), "* text=auto eol=lf`n*.jsonl text eol=lf`n", $utf8)
         [IO.File]::WriteAllText((Join-Path $Dir ".gitignore"), ".scratch/`n*.bak.*`n.DS_Store`n", $utf8)
         [IO.File]::WriteAllText((Join-Path $Dir "README.md"), "# $($script:UiRepoName)`n`nPrivate user repo for session archives and profile data.`nSee [aitools](https://github.com/$($script:UiGhUser)/aitools) for details.`n", $utf8)
     } catch {
-        LogError "user init: could not write the dotprofile files in $Dir"
-        Write-Summary "ERROR" "dotprofile" "create failed"
+        Write-AitError "dotprofile" "could not write the dotprofile files in $Dir" (Get-AitErrorReason -Output "" -ExitCode 1 -ErrorRecord $_)
         return 1
     }
+    # The chain stops at the first failing git command, so $out holds its output
     $out = (& git -C $Dir init -b main 2>&1 | Out-String); $grc = $LASTEXITCODE
     if ($grc -eq 0 -and $script:UiIdName) { $out = (& git -C $Dir config user.name $script:UiIdName 2>&1 | Out-String); $grc = $LASTEXITCODE }
     if ($grc -eq 0 -and $script:UiIdEmail) { $out = (& git -C $Dir config user.email $script:UiIdEmail 2>&1 | Out-String); $grc = $LASTEXITCODE }
     if ($grc -eq 0) { $out = (& git -C $Dir add -A 2>&1 | Out-String); $grc = $LASTEXITCODE }
     if ($grc -eq 0) { $out = (& git -C $Dir commit -m "Initial commit: profile and session archive structure" 2>&1 | Out-String); $grc = $LASTEXITCODE }
-    Write-UiLogLines "git: " $out
     if ($grc -ne 0) {
-        LogError "user init: git init / first commit failed in $Dir (exit $grc, see deploy.log) -- commit it by hand, then run: aitools user init"
-        Write-Summary "ERROR" "dotprofile" "first commit failed"
-        Write-UiAction "commit the dotprofile in $Dir, then run: aitools user init"
+        # Get-AitErrorReason logs git's output as detail lines
+        Write-AitError "dotprofile" "git init / first commit failed in $Dir (exit $grc)" (Get-AitErrorReason -Output $out -ExitCode $grc)
+        Write-Summary "ACTION" "" "commit the dotprofile in $Dir, then run: aitools user init"
         return 1
     }
+    Write-UiLogLines "git: " $out
     LogOk "user init: dotprofile created and committed"
     $create = "Run: gh repo create $($script:UiRepoName) --private --source $Dir --push"
     if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
-        LogWarn "user init: gh not found -- the dotprofile was not pushed; create the private GitHub repo $($script:UiRepoName) and push it"
-        Write-Summary "WARN" "dotprofile" "created, not pushed"
-        Write-UiAction $create
+        Write-AitAction "dotprofile" "dotprofile created, not pushed: gh not found -- create the private GitHub repo $($script:UiRepoName) and push it" $create
         return $reg
     }
     $ans = "y"
@@ -1538,9 +1518,8 @@ function Invoke-UiCreateDotprofile([string]$Dir) {
         $ans = Read-MenuChoice -Valid @("y", "yes", "n", "no") -Default "y" -DefaultDesc "yes" -Context "create dotprofile $($script:UiRepoName)" -Prompt "Create the private GitHub repo '$($script:UiRepoName)' and push? [y/n]: "
     }
     if ($ans -notin @("y", "yes")) {
-        LogWarn "user init: GitHub repo not created -- the dotprofile stays local; create it and push: gh repo create $($script:UiRepoName) --private --source $Dir --push"
-        Write-Summary "WARN" "dotprofile" "created, not pushed"
-        Write-UiAction $create
+        # A decline stays a warning: it leaves the dotprofile unpushed
+        Write-AitAction "dotprofile" "dotprofile created, not pushed (you answered no) -- create it and push: gh repo create $($script:UiRepoName) --private --source $Dir --push" $create
         return $reg
     }
     $prevPrompt = $env:GIT_TERMINAL_PROMPT; $prevSsh = $env:GIT_SSH_COMMAND
@@ -1555,13 +1534,13 @@ function Invoke-UiCreateDotprofile([string]$Dir) {
     } finally {
         $env:GIT_TERMINAL_PROMPT = $prevPrompt; $env:GIT_SSH_COMMAND = $prevSsh
     }
-    Write-UiLogLines "gh repo create: " $out
     if ($grc -ne 0) {
-        LogWarn "user init: gh repo create failed (exit $grc, see deploy.log) -- the dotprofile stays local; run: gh repo create $($script:UiRepoName) --private --source $Dir --push"
-        Write-Summary "WARN" "dotprofile" "created, not pushed"
-        Write-UiAction $create
+        # A failed optional step: a warning, with its reason (Get-AitErrorReason logs
+        # gh's output as detail lines)
+        Write-AitAction "dotprofile" "gh repo create failed (exit $grc): $(Get-AitErrorReason -Output $out -ExitCode $grc) -- the dotprofile stays local" $create
         return $reg
     }
+    Write-UiLogLines "gh repo create: " $out
     LogOk "user init: private GitHub repo $($script:UiGhUser)/$($script:UiRepoName) created and pushed"
     Write-Summary "OK" "dotprofile" "created"
     return $reg
@@ -1575,16 +1554,14 @@ function Invoke-UiScaffoldClaudeMd([string]$Dir) {
     $src = Join-Path $repoPath "shared" "claude-shared.md"
     if (Test-Path -LiteralPath $dest) { return 0 }
     if (-not (Test-Path -LiteralPath $src)) {
-        LogWarn "user init: $src not found -- claude/CLAUDE.md not created in the dotprofile"
-        Write-Summary "WARN" "claude template" "template missing"
+        Write-AitWarn "claude template" "$src not found -- claude/CLAUDE.md not created in the dotprofile"
         return 0
     }
     try {
         $null = New-Item -ItemType Directory -Path (Join-Path $Dir "claude") -Force -ErrorAction Stop
         Copy-Item -LiteralPath $src -Destination $dest -ErrorAction Stop
     } catch {
-        LogError "user init: could not create $dest"
-        Write-Summary "ERROR" "claude template" "create failed"
+        Write-AitError "claude template" "could not create claude/CLAUDE.md in the dotprofile" (Get-AitErrorReason -Output "" -ExitCode 1 -ErrorRecord $_)
         return 1
     }
     LogOk "user init: created claude/CLAUDE.md in the dotprofile (template with placeholders)"
@@ -1617,9 +1594,8 @@ function Invoke-UserInit {
         $script:UiGhUser = Read-ConsoleChoice "none"
     }
     if (-not $script:UiGhUser) {
-        LogError "user init: GitHub username unknown (gh not signed in, no githubUser in config.json, no terminal to ask) -- run: gh auth login, then aitools user init"
-        Write-Summary "ERROR" "dotprofile" "GitHub user unknown"
-        Write-UiAction "Run: gh auth login, then aitools user init"
+        Write-AitError "dotprofile" "GitHub username unknown" "gh not signed in, no githubUser in config.json, no terminal to ask"
+        Write-Summary "ACTION" "" "Run: gh auth login, then aitools user init"
         return 1
     }
     Log "user init: GitHub user $($script:UiGhUser)"
@@ -1633,9 +1609,8 @@ function Invoke-UserInit {
     # A relative reposPath would put the dotprofile (and its GitHub repo) under the
     # current directory, and setup-user-config refuses it anyway (review M1): refused
     if (-not [IO.Path]::IsPathRooted($reposDir)) {
-        LogError "user init: reposPath in $configFile is not an absolute path ($reposDir) -- set an absolute reposPath (or run: aitools install --repos-path <absolute path>), then run: aitools user init"
-        Write-Summary "ERROR" "dotprofile" "reposPath not absolute"
-        Write-UiAction "Set an absolute reposPath in $configFile, then run: aitools user init"
+        Write-AitError "dotprofile" "reposPath not absolute" "'$reposDir' in $configFile"
+        Write-Summary "ACTION" "" "Set an absolute reposPath in $configFile, then run: aitools user init"
         return 1
     }
     $userRepoDir = Join-Path $reposDir $script:UiRepoName
@@ -1664,13 +1639,13 @@ function Invoke-UserInit {
             Log "user init: cloning $($script:UiGhUser)/$($script:UiRepoName) to $userRepoDir"
             $out = (& gh repo clone "$($script:UiGhUser)/$($script:UiRepoName)" $userRepoDir 2>&1 | Out-String)
             $crc = $LASTEXITCODE
-            Write-UiLogLines "gh repo clone: " $out
             if ($crc -ne 0) {
-                LogError "user init: gh repo clone $($script:UiGhUser)/$($script:UiRepoName) failed (exit $crc, see deploy.log) -- clone it, then run: aitools user init"
-                Write-Summary "ERROR" "dotprofile" "clone failed"
-                Write-UiAction "Run: gh repo clone $($script:UiGhUser)/$($script:UiRepoName) $userRepoDir, then aitools user init"
+                # Get-AitErrorReason logs gh's output as detail lines
+                Write-AitError "dotprofile" "gh repo clone $($script:UiGhUser)/$($script:UiRepoName) failed (exit $crc)" (Get-AitErrorReason -Output $out -ExitCode $crc)
+                Write-Summary "ACTION" "" "Run: gh repo clone $($script:UiGhUser)/$($script:UiRepoName) $userRepoDir, then aitools user init"
                 return 1
             }
+            Write-UiLogLines "gh repo clone: " $out
             Write-Summary "OK" "dotprofile" "cloned"
             # Git identity for this clone from the profile (Review3 #82 minor 8: results checked)
             $pr = Read-JsonFile (Join-Path $userRepoDir "profile.json")
@@ -1680,7 +1655,7 @@ function Invoke-UserInit {
                 if ($dn -and $de) {
                     $out = (& git -C $userRepoDir config user.name $dn 2>&1 | Out-String); $crc = $LASTEXITCODE
                     if ($crc -eq 0) { $out = (& git -C $userRepoDir config user.email $de 2>&1 | Out-String); $crc = $LASTEXITCODE }
-                    if ($crc -ne 0) { LogWarn "user init: could not set the git identity of the clone (exit ${crc}: $($out.Trim())) -- commits use git's own identity" }
+                    if ($crc -ne 0) { Write-AitWarn "dotprofile" "could not set the git identity of the clone (exit ${crc}: $($out.Trim())) -- commits use git's own identity" }
                 }
             }
             if ((Invoke-UiV1Migrate $userRepoDir) -ne 0) { $rc = 1 }
@@ -1694,8 +1669,9 @@ function Invoke-UserInit {
     # is one outcome with one exit code, 1 (Review3 #82 minor 3)
     $noMachine = $false
     if (-not $script:UiMachineKey) {
-        # A skip at a prompt wrote a WARN row only: name the reason for the exit code (review n1)
-        if ($rc -eq 0) { LogError "machine profile: this machine is not registered (skipped) -- run: aitools user init" }
+        # A skip at a prompt recorded its warning: name the reason for the exit code
+        # (review n1), at info (lead decision: the skip already has its warning)
+        if ($rc -eq 0) { Log "machine profile: this machine is not registered (skipped) -- run: aitools user init" }
         $rc = 1
         # Reported here: setup-user-config gets -NoMachine, so it adds no second
         # machine-profile ERROR / ACTION (M3-FINISH item 2). Decided here, not from an
@@ -1724,8 +1700,8 @@ function Invoke-UserInit {
         LogDetail "user init: machine id undetectable -- -MachineId not passed (the writer keeps the cached machineId)"
         $machineKey = ""
     } elseif ($machineKey -and $script:UiMachineOwner -cne "this") {
-        LogError "user init: profile $machineKey is not this machine's (owner $($script:UiMachineOwner)) -- not passed to setup-user-config"
-        Write-Summary "ERROR" "machine profile" "not this machine's profile"
+        $ownerShown = if ($script:UiMachineOwner) { $script:UiMachineOwner } else { "unknown" }
+        Write-AitError "machine profile" "profile $machineKey not passed to setup-user-config" "it is not this machine's (owner $ownerShown)"
         $machineKey = ""; $rc = 1
     }
     $configWriter = Join-Path $repoPath "scripts" "setup-user-config.ps1"
@@ -1733,19 +1709,19 @@ function Invoke-UserInit {
     if ($machineKey) { $writerArgs["MachineId"] = $machineKey }
     elseif ($noMachine) { $writerArgs["NoMachine"] = $true }
     $writerRelay = Invoke-ChildRelayed "user init: setup-user-config" $configWriter $writerArgs "aitools config"
-    if ($writerRelay -ne 0) { $rc = 1 }   # the relay logged the failure and its row
+    if ($writerRelay -ne 0) { $rc = 1 }   # the relay counted the failure and, when needed, recorded it
 
     # Session archive hook. Exit 2 = the user aborted in the review menu (D-TS13):
-    # stop with exit 2 (the relay records it: one error, ERROR "claude hooks"
-    # "aborted (exit 2)" unless the hook script wrote a row); any other failure is
-    # logged by the relay.
+    # stop with exit 2 (the relay records it once: ERROR "claude hooks" "user init:
+    # setup-user-hooks failed (exit 2)" "aborted by user", unless the hook script
+    # recorded a warning or an error); any other failure is counted by the relay.
     Log "user init: deploying the session archive hook"
     $hookSetup = Join-Path $repoPath "scripts" "setup-user-hooks.ps1"
     $hookRc = 0
     if (-not (Test-Path -LiteralPath $hookSetup)) {
         $hookRc = 127
     } else {
-        $hookRelay = Invoke-ChildRelayed "user init: setup-user-hooks.ps1" $hookSetup @{} "claude hooks"
+        $hookRelay = Invoke-ChildRelayed "user init: setup-user-hooks" $hookSetup @{} "claude hooks"
         if ($hookRelay -ne 0) {
             $hookRc = $script:AitLibChildRc
             if ($hookRc -eq 0) { $hookRc = 1 }   # error lines with exit 0: a failure
@@ -1756,11 +1732,10 @@ function Invoke-UserInit {
         return 2
     }
     if ($hookRc -eq 127) {
-        LogError "user init: $hookSetup not found -- the session archive hook was not deployed"
-        Write-Summary "ERROR" "claude hooks" "setup script missing"
+        Write-AitError "claude hooks" "session archive hook not deployed" "$hookSetup not found"
         $rc = 1
     } elseif ($hookRc -ne 0) {
-        $rc = 1   # the relay logged the failure and its row
+        $rc = 1   # the relay counted the failure and, when needed, recorded it
     }
     if ($rc -eq 0) {
         LogOk "user init: done -- sessions will be archived to $(Join-Path $userRepoDir 'sessions')"
@@ -1769,25 +1744,19 @@ function Invoke-UserInit {
 }
 
 # Invoke-UserInitCommand -- decision 3: user init has its own run summary, created
-# before the user block (its rows and those of its child scripts) and shown
-# before it returns. Returns Invoke-UserInit's exit code.
+# before the user block (its records and those of its child scripts) when no
+# caller set one, and drawn before it returns only when it created it
+# (reference/logging.md 8.4, 8.5: Start-AitSummary / Complete-AitSummary; a new
+# temp file per run). Returns Invoke-UserInit's exit code.
 function Invoke-UserInitCommand {
-    $env:AITOOLS_SUMMARY_FILE = Join-Path $HOME ".aitools" "run-summary.txt"
-    try {
-        $null = New-Item -ItemType Directory -Path (Join-Path $HOME ".aitools") -Force -ErrorAction Stop
-        $null = New-Item -ItemType File -Path $env:AITOOLS_SUMMARY_FILE -Force -ErrorAction Stop
-    } catch {
-        LogWarn "user init: could not create the run summary $($env:AITOOLS_SUMMARY_FILE) -- the summary panel is not shown"
-    }
+    Start-AitSummary
     $initOut = @(Invoke-UserInit)
     # The exit code is the last value; anything before it leaked into the output stream
     $initRc = 1
     if ($initOut.Count -gt 0 -and $initOut[-1] -is [int]) { $initRc = $initOut[-1] }
     else { LogError "user init: no exit code returned (internal error) -- exit 1" }
     if ($initOut.Count -gt 1) { LogDetail "user init: $($initOut.Count - 1) stray output value(s) before the exit code" }
-    Show-Summary
-    Remove-Item Env:\AITOOLS_SUMMARY_FILE -ErrorAction SilentlyContinue
-    if (Test-Path Env:\AITOOLS_SUMMARY_FILE) { LogDetail "AITOOLS_SUMMARY_FILE could not be cleared" }
+    Complete-AitSummary
     return $initRc
 }
 # --- END user init ---
