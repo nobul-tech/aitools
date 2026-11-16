@@ -99,26 +99,22 @@ Exit: 0 done (warnings possible), 1 any error.
 }
 if ($env:AITOOLS_DRY_RUN -eq "1") { $DryRun = $true }
 if ($Rest -and $Rest.Count -gt 0) {
-    LogError "Unknown option: $($Rest[0]) (see -Help)"
-    Write-Summary "ERROR" "aitools config" "bad arguments"
+    Write-AitError "aitools config" "bad arguments" "Unknown option: $($Rest[0]) (see -Help)"
     exit 1
 }
 foreach ($v in @($ReposPath, $RepoPath, $DrivesJson, $GithubUser, $UserRepoPath, $MachineAlias, $MachineId)) {
     if ($v -match "[`t`r`n]") {
-        LogError "option values must be one line (no tab or newline)"
-        Write-Summary "ERROR" "aitools config" "bad arguments"
+        Write-AitError "aitools config" "bad arguments" "option values must be one line (no tab or newline) (see -Help)"
         exit 1
     }
 }
 $deprecatedAlias = $PSBoundParameters.ContainsKey("MachineAlias")
 if ($MachineId -and $deprecatedAlias) {
-    LogError "pass -MachineId or -MachineAlias, not both (see -Help)"
-    Write-Summary "ERROR" "aitools config" "bad arguments"
+    Write-AitError "aitools config" "bad arguments" "pass -MachineId or -MachineAlias, not both (see -Help)"
     exit 1
 }
 if ($NoMachine -and ($MachineId -or $deprecatedAlias)) {
-    LogError "-NoMachine leaves the machine to the caller: not with -MachineId or -MachineAlias (see -Help)"
-    Write-Summary "ERROR" "aitools config" "bad arguments"
+    Write-AitError "aitools config" "bad arguments" "-NoMachine leaves the machine to the caller: not with -MachineId or -MachineAlias (see -Help)"
     exit 1
 }
 if ($NoMachine) {
@@ -132,8 +128,7 @@ if ($deprecatedAlias) {
 }
 foreach ($v in @($ReposPath, $RepoPath, $UserRepoPath)) {
     if ($v -and -not [IO.Path]::IsPathRooted($v)) {
-        LogError "paths must be absolute: $v (see -Help)"
-        Write-Summary "ERROR" "aitools config" "bad arguments"
+        Write-AitError "aitools config" "bad arguments" "paths must be absolute: $v (see -Help)"
         exit 1
     }
 }
@@ -148,8 +143,7 @@ $profilePs1 = Join-Path $PSScriptRoot "aitools-profile.ps1"
 $jsonPs1 = Join-Path $PSScriptRoot "aitools-json.ps1"
 foreach ($f in @($profilePs1, $jsonPs1)) {
     if (-not (Test-Path -LiteralPath $f -PathType Leaf)) {
-        LogError "Failed: $f not found next to setup-user-config.ps1 -- config.json not written"
-        Write-Summary "ERROR" "aitools config" "resolver missing"
+        Write-AitError "aitools config" "config.json not written" "$f not found next to setup-user-config.ps1"
         exit 1
     }
 }
@@ -157,16 +151,17 @@ foreach ($f in @($profilePs1, $jsonPs1)) {
 if (-not $DryRun -and -not (Test-Path -LiteralPath $configDir)) {
     try { New-Item -ItemType Directory -Path $configDir -Force -ErrorAction Stop | Out-Null }
     catch {
-        LogError "Failed: could not create ${configDir}: $($_.Exception.Message) -- config.json not written"
-        Write-Summary "ERROR" "aitools config" "write failed"
+        Write-AitError "aitools config" "cannot create $configDir -- config.json not written" (Get-AitErrorReason -ErrorRecord $_)
         exit 1
     }
 }
 
+# Remove-ConfigTmp -- remove a merge result that was not moved into place; a failed
+# removal is one warning, with the removal's message (bash remove_config_tmp says the same)
 function Remove-ConfigTmp {
     if (Test-Path -LiteralPath $configTmp) {
         try { Remove-Item -LiteralPath $configTmp -Force -ErrorAction Stop }
-        catch { LogWarn "Could not remove temp file ${configTmp}: $($_.Exception.Message)" }
+        catch { Write-AitWarn "aitools config" "could not remove temp file ${configTmp}: $($_.Exception.Message)" }
     }
 }
 
@@ -178,11 +173,14 @@ if ($UserRepoPath) { $deriveArgs += @("--user-repo-path", $UserRepoPath) }
 if ($choiceArg) { $deriveArgs += @("--alias", $choiceArg) }
 $global:LASTEXITCODE = 0
 $deriveOut = @()
+$deriveErr = $null
 try {
     # In-process: the resolver writes data to the success stream, logs to stderr
     $deriveOut = @(& $profilePs1 @deriveArgs)
     $deriveRc = $LASTEXITCODE
 } catch {
+    # Kept for the reason of the derivation error below
+    $deriveErr = $_
     LogDetail "derive-config threw: $($_.Exception.Message)"
     $deriveRc = 99
 }
@@ -191,41 +189,69 @@ $seen = $false
 $script:NeedInit = $false
 $script:NeedMigrate = $false
 $script:NeedUpdate = $false
+# The warning text of each advice kind (section 3 records it, once per event)
+$script:NeedInitText = ""
+$script:NeedMigrateText = ""
+$script:NeedUpdateText = ""
 $script:ProfileBad = $false
+$script:MachineErr = $false
+$script:DeriveErrs = 0   # resolver errors recorded here (one Write-AitError each)
 # Route one resolver warning (the resolver returns its warnings; this caller logs
-# them at their level and owns the rows):
+# them at their level and records them, reference/logging.md 7):
 #   handled  -- about the cached config.json or the expected shared-only state; this
-#               write corrects or records it: info, so a successful write stays OK (D-TS12)
-#   advisory -- this machine's values are right and the only follow-up is the command
-#               that the single ACTION row (section 3) names: info here; section 3 logs
-#               one warning with the ACTION
+#               write corrects or records it: info (D-TS12). An invalid config.json
+#               ("... -- resolving without it") is one of them: this write rebuilds the
+#               file, and the rebuild is the event's one warning (section 2)
+#   advisory -- the follow-up is `aitools user init`: info here; section 3 records the
+#               event once, as one warning that says what to do, with its ACTION
 #   real     -- something is off for this run (a clone, a duplicate alias, a hostname
-#               guess, an undetectable id): LogWarn, counted; the config row becomes WARN
+#               guess, an undetectable id): one warning, recorded under aitools config
 #   caller   -- -NoMachine only: advice whose follow-up is machine registration (it
 #               names aitools user init or aitools-profile migrate) belongs to the
 #               caller: detail only, not counted, no ACTION
 $script:NmUnreg = $false      # -NoMachine: the resolver reported this machine as unregistered
 $script:NmOtherErr = $false   # -NoMachine: the resolver reported another error (still an ERROR)
 function Write-DeriveWarning([string]$w) {
-    if ($w.StartsWith("config.json ") -or $w.Contains("not saved to config.json") -or $w.StartsWith("no dotprofile found") -or $w.StartsWith("githubUser unknown")) {
+    if ($w.StartsWith("config.json ") -or $w.Contains("not saved to config.json") -or $w.StartsWith("no dotprofile found") -or $w.StartsWith("githubUser unknown") -or $w.EndsWith(" -- resolving without it")) {
         Log "config: $w (handled by this write)"
-    } elseif ($NoMachine -and ($w.Contains("run: aitools user init") -or $w.Contains("run: aitools-profile migrate"))) {
-        LogDetail "config: $w (-NoMachine: left to the caller)"
-    } elseif ($w.Contains("has no machine.id -- run: aitools user init")) {
-        Log "config: $w (see ACTION)"
-        $script:NeedInit = $true
-    } elseif ($w.Contains("run: aitools-profile migrate")) {
-        Log "config: $w (see ACTION)"
-        $script:NeedMigrate = $true
+    } elseif ($w.Contains("run: aitools user init") -or $w.Contains("run: aitools-profile migrate")) {
+        if ($NoMachine) {
+            LogDetail "config: $w (-NoMachine: left to the caller)"
+        } else {
+            Write-DeriveMachineAdvice $w
+        }
     } else {
-        LogWarn "config: $w"
-        if ($w.Contains("renamed (run: aitools user init")) { $script:NeedUpdate = $true }
-        elseif ($w.Contains("run: aitools user init")) { $script:NeedInit = $true }
+        Write-AitWarn "aitools config" $w
     }
 }
-# One resolver error. With -NoMachine, "this machine is not registered" (no profile
-# matches it; profile.json has no machine profiles) is the caller's to report: detail
-# only. Every other error stays an error.
+# Advice whose follow-up is aitools user init: logged here, recorded once in section 3
+# (one warning with its ACTION); the text kept for that record says what is wrong and
+# what to run
+function Write-DeriveMachineAdvice([string]$w) {
+    Log "config: $w (see ACTION)"
+    $first = $w
+    $cut = $w.IndexOf(" -- ")
+    if ($cut -ge 0) { $first = $w.Substring(0, $cut) }
+    if ($w.Contains("has no machine.id -- run: aitools user init")) {
+        $script:NeedInit = $true
+        if (-not $script:NeedInitText) { $script:NeedInitText = "$first (matched by $($d.mvia)) -- run: aitools user init" }
+    } elseif ($w.Contains("run: aitools-profile migrate")) {
+        $script:NeedMigrate = $true
+        if (-not $script:NeedMigrateText) { $script:NeedMigrateText = "$first -- run: aitools user init" }
+    } elseif ($w.Contains("renamed (run: aitools user init")) {
+        $script:NeedUpdate = $true
+        if (-not $script:NeedUpdateText) { $script:NeedUpdateText = "$first -- renamed or cloned -- run: aitools user init" }
+    } else {
+        $script:NeedInit = $true
+        if (-not $script:NeedInitText) { $script:NeedInitText = "machine $first -- run: aitools user init" }
+    }
+}
+# One resolver error, recorded once here with the resolver's line as the reason
+# (section 1's ACTION follows; no second record). With -NoMachine, "this machine is
+# not registered" (no profile matches it; profile.json has no machine profiles) is the
+# caller's to report: detail only. Every other error stays an error. The
+# machine-profile WHAT is the library wrapper's (Resolve-MachineProfile: "no machine
+# match"), so the same failure seen by both is one panel line (x2).
 function Write-DeriveError([string]$e) {
     if ($NoMachine) {
         if ($e.StartsWith("no profile matches this machine") -or $e.StartsWith("profile.json has no machine profiles")) {
@@ -235,9 +261,17 @@ function Write-DeriveError([string]$e) {
         }
         $script:NmOtherErr = $true
     }
-    LogError "config: $e"
-    # profile.json itself is unusable: invalid JSON, not version 2, or no profiles object
-    if ($e.Contains("is invalid JSON") -or $e.Contains("is not v2") -or $e.Contains("has no profiles object")) { $script:ProfileBad = $true }
+    $script:DeriveErrs++
+    if ($e.Contains("is invalid JSON") -or $e.Contains("is not v2") -or $e.Contains("has no profiles object")) {
+        # profile.json itself is unusable: invalid JSON, not version 2, or no profiles object
+        $script:ProfileBad = $true
+        Write-AitError "profile.json" "profile.json unusable" $e
+    } elseif ($e.StartsWith("AITOOLS_USER_REPO_PATH does not exist") -or $e.StartsWith("--user-repo-path does not exist")) {
+        Write-AitError "dotprofile" "dotprofile not found" $e
+    } else {
+        $script:MachineErr = $true
+        Write-AitError "machine profile" "no machine match" $e
+    }
 }
 foreach ($line in $deriveOut) {
     $kv = ([string]$line) -split "`t", 2
@@ -258,8 +292,10 @@ foreach ($line in $deriveOut) {
     }
 }
 if (-not $seen -or $deriveRc -gt 2) {
-    LogError "Failed: profile derivation produced no result (exit $deriveRc) -- see $($script:logFile)"
-    Write-Summary "ERROR" "aitools config" "derivation failed"
+    # The resolver's early exits print one "aitools-profile: <reason>" line on stderr; in
+    # process, a throw is the reason (its message), else the last line it returned
+    $deriveReason = if ($deriveErr) { Get-AitErrorReason -ErrorRecord $deriveErr } else { Get-AitErrorReason -Output ($deriveOut -join "`n") -ExitCode $deriveRc }
+    Write-AitError "aitools config" "profile derivation produced no result (exit $deriveRc)" $deriveReason
     $d.gh = ""; $d.urp = ""; $d.mid = ""; $d.alias = ""; $deriveRc = 2
 } else {
     $show = { param($v, $dflt) if ($v) { $v } else { $dflt } }
@@ -267,20 +303,22 @@ if (-not $seen -or $deriveRc -gt 2) {
     if ($deriveRc -eq 1) {
         Log "config: no dotprofile yet -- writing bootstrap keys only (shared-only mode)"
     } elseif ($deriveRc -ne 0) {
-        # Each ACTION has a log line that names its row and carries the instruction,
-        # at the row's level (error; audit A-10)
+        # Each resolver error was recorded once (Write-DeriveError); one ACTION names the
+        # fix. The advice line is logged at info: the error line above is the event (P1:
+        # one cause, one red line)
         if ($script:ProfileBad) {
             $rowAdvice = "Fix profile.json in the dotprofile (details in deploy.log)"
-            LogError "config: profile.json invalid -- $rowAdvice"
-            Write-Summary "ERROR" "profile.json" "invalid (see log)"
+            Log "config: $rowAdvice"
             Write-Summary "ACTION" "" $rowAdvice
         } elseif ($NoMachine -and $script:NmUnreg -and -not $script:NmOtherErr) {
             LogDetail "config: no machine match not reported (-NoMachine: the caller reports registration)"
-        } else {
+        } elseif ($script:MachineErr) {
             $rowAdvice = "Run: aitools user init (profiles: $(& $show $d.aliases 'none'))"
-            LogError "config: machine profile: no machine match -- $rowAdvice"
-            Write-Summary "ERROR" "machine profile" "no machine match"
+            Log "config: $rowAdvice"
             Write-Summary "ACTION" "" $rowAdvice
+        } elseif ($script:DeriveErrs -eq 0) {
+            # exit 2 with no error line: still one error, with the resolver's last line as the reason
+            Write-AitError "aitools config" "profile derivation failed (exit $deriveRc)" (Get-AitErrorReason -Output ($deriveOut -join "`n") -ExitCode $deriveRc)
         }
     }
 }
@@ -350,16 +388,18 @@ try {
     Set-JValue $cfg $meta @("meta")
     [IO.File]::WriteAllText($configTmp, (ConvertTo-NodeJson $cfg) + "`n", $script:Utf8NoBom)
 } catch {
-    LogDetail "merge: $($_.Exception.Message)"
     # A key that differs only in case from a managed key (the JSON engines refuse to add
     # its twin, aitools-json.ps1): name both keys, so the user knows what to fix (PR #108 n-2)
     $mergeWhy = ""
     $twin = [regex]::Match([string]$_.Exception.Message, "set: '(.*?)' differs only in case from existing key '(.*)'")
     if ($twin.Success) {
-        $mergeWhy = " -- key `"$($twin.Groups[2].Value)`" differs only in case from the managed key `"$($twin.Groups[1].Value)`": rename or remove it"
+        $mergeWhy = "key `"$($twin.Groups[2].Value)`" differs only in case from the managed key `"$($twin.Groups[1].Value)`": rename or remove it"
+        LogDetail "merge: $($_.Exception.Message)"
+    } else {
+        # Get-AitErrorReason logs the exception message as its reason
+        $mergeWhy = Get-AitErrorReason -ErrorRecord $_
     }
-    LogError "Failed: ${configFile}: config merge failed$mergeWhy -- existing file left untouched"
-    Write-Summary "ERROR" "aitools config" "merge failed"
+    Write-AitError "aitools config" "config merge failed -- existing file left untouched" $mergeWhy
     Remove-ConfigTmp
     $failed = $true
 }
@@ -386,12 +426,10 @@ if (-not $failed) {
     try { $tmpText = [IO.File]::ReadAllText($configTmp) } catch { LogDetail "could not re-read ${configTmp}: $($_.Exception.Message)" }
     $double = [regex]::Match($tmpText, '"[^"]*(?<!http:)(?<!https:)//[^"]*"')
     if ($double.Success) {
-        LogError "Failed: ${configFile}: double slash in a path value: $($double.Value) -- existing file left untouched"
-        Write-Summary "ERROR" "aitools config" "validation failed"
+        Write-AitError "aitools config" "merged config rejected -- existing file left untouched" "double slash in a path value: $($double.Value)"
         Remove-ConfigTmp
     } elseif ($missing.Count -gt 0) {
-        LogError "Failed: ${configFile}: missing bootstrap $($missing -join ', ') (run aitools install) -- existing file left untouched"
-        Write-Summary "ERROR" "aitools config" "missing bootstrap values"
+        Write-AitError "aitools config" "merged config rejected -- existing file left untouched" "missing bootstrap $($missing -join ', ') (run aitools install)"
         Remove-ConfigTmp
     } elseif ($same) {
         LogOk "Verified: $configFile (unchanged)"
@@ -405,17 +443,18 @@ if (-not $failed) {
     } else {
         Backup-File $configFile
         $moved = $true
+        $moveErr = $null
         try { Move-Item -LiteralPath $configTmp -Destination $configFile -Force -ErrorAction Stop }
-        catch { $moved = $false; LogDetail "move: $($_.Exception.Message)" }
+        catch { $moved = $false; $moveErr = $_ }
         if (-not $moved) {
-            LogError "Failed: ${configFile}: could not replace the config file"
-            Write-Summary "ERROR" "aitools config" "write failed"
+            Write-AitError "aitools config" "could not replace $configFile" (Get-AitErrorReason -ErrorRecord $moveErr)
             Remove-ConfigTmp
         } else {
             switch ($configState) {
                 "recovered" {
-                    LogWarn "$configFile was not valid JSON ($corruptReason) -- rebuilt; the invalid copy was backed up"
-                    Write-Summary "WARN" "aitools config" "rebuilt (was invalid)"
+                    # The event's one warning (the resolver's "-- resolving without it" is
+                    # logged at info: this write corrects it)
+                    Write-AitWarn "aitools config" "$configFile was not valid JSON ($corruptReason) -- rebuilt; the invalid copy was backed up"
                 }
                 "created" { LogOk "Created: $configFile"; Write-Summary "OK" "aitools config" "created" }
                 default { LogOk "Updated: $configFile"; Write-Summary "OK" "aitools config" "updated" }
@@ -428,20 +467,26 @@ if (-not $failed) {
     }
 }
 
-# --- 3. One ACTION for the advice. It must stay after the config row: Write-Summary
-# promotes an OK row to WARN once a warning is counted, and the LogWarn paired with
-# the ACTION (script-standards-detail "Severity decision guide") is counted. The row
-# reports the write; the footer still counts this warning. ---
+# --- 3. The advice: each event the resolver reported (section 1) is one warning whose
+# text says what is wrong and what to run (reference/logging.md 7, 8.2). The event that
+# sets the ACTION (priority: register, then re-key, then update) is one Write-AitAction;
+# any other advice event of this run is one Write-AitWarn. The config status record
+# above stays as written (no record is recoloured, logging.md 8.3). ---
 # The re-key advice assumes user init calls aitools-profile migrate (re-key batch 5).
 # -NoMachine: no Need* flag is set (the advice is the caller's), so no ACTION.
 if ($deriveRc -eq 0) {
-    $advice = ""
-    if ($script:NeedInit) { $advice = "Run: aitools user init (registers this machine)" }
-    elseif ($script:NeedMigrate) { $advice = "Run: aitools user init (re-keys machine profiles by machine id)" }
-    elseif ($script:NeedUpdate) { $advice = "Run: aitools user init (updates this machine's profile)" }
-    if ($advice) {
-        LogWarn "config: $advice"
-        Write-Summary "ACTION" "" $advice
+    $advice = ""; $adviceKind = ""
+    if ($script:NeedInit) { $advice = "Run: aitools user init (registers this machine)"; $adviceKind = "init" }
+    elseif ($script:NeedMigrate) { $advice = "Run: aitools user init (re-keys machine profiles by machine id)"; $adviceKind = "migrate" }
+    elseif ($script:NeedUpdate) { $advice = "Run: aitools user init (updates this machine's profile)"; $adviceKind = "update" }
+    if ($script:NeedInit) {
+        if ($adviceKind -eq "init") { Write-AitAction "aitools config" $script:NeedInitText $advice } else { Write-AitWarn "aitools config" $script:NeedInitText }
+    }
+    if ($script:NeedMigrate) {
+        if ($adviceKind -eq "migrate") { Write-AitAction "aitools config" $script:NeedMigrateText $advice } else { Write-AitWarn "aitools config" $script:NeedMigrateText }
+    }
+    if ($script:NeedUpdate) {
+        if ($adviceKind -eq "update") { Write-AitAction "aitools config" $script:NeedUpdateText $advice } else { Write-AitWarn "aitools config" $script:NeedUpdateText }
     }
 }
 

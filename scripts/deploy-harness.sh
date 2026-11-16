@@ -31,8 +31,8 @@
 #                                     "<skill name><TAB><source>" line per skill (section 5b)
 #                                     Source: shared | retired (a previous manifest's
 #                                     "aitools" or "dotprofile" lines are retired).
-# Name conflicts: the first source wins; each skipped duplicate is log_error +
-#   an ERROR row. Unit: file name (rules, hooks), skill directory name (skills);
+# Name conflicts: the first source wins; each skipped duplicate is one error
+#   (write_error, reason: the source kept). Unit: file name (rules, hooks), skill directory name (skills);
 #   compared case-insensitively. Files named *.bak.* are never deployed, nor
 #   skill directories whose name starts with "." or contains ".bak." (".bak."
 #   matched case-insensitively).
@@ -97,8 +97,7 @@ while [ $# -gt 0 ]; do
         --skip-config) SKIP_CONFIG="written by installer" ;;
         --help|-h) usage; exit 0 ;;
         *)
-            log_error "Unknown option: $1 (see --help)"
-            write_summary ERROR "$TOOL" "bad arguments"
+            write_error "$TOOL" "bad arguments" "unknown option: $1 (see --help)"
             exit 1 ;;
     esac
     shift
@@ -110,9 +109,11 @@ if $DRY_RUN; then log "[DRY RUN] Preview mode -- no files will be written"; fi
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 HARNESS_DIR="$HOME/.aitools"
 
-if ! WORK=$(mktemp -d); then
-    log_error "Could not create a work directory -- nothing deployed"
-    write_summary ERROR "$TOOL" "no work directory"
+# On failure WORK holds mktemp's message (the reason), on success only the path
+rc=0
+WORK=$(mktemp -d 2>&1) || rc=$?
+if [ "$rc" -ne 0 ]; then
+    write_error "$TOOL" "no work directory -- nothing deployed" "$(error_reason "$WORK" "$rc")"
     exit 1
 fi
 cleanup() { rm -rf "$WORK"; }
@@ -139,19 +140,20 @@ if [ -n "$SKIP_CONFIG" ]; then
     log "config.json: setup-user-config.sh not run ($SKIP_CONFIG)"
     write_summary OK "config.json" "$(short "n/a ($SKIP_CONFIG)")"
 elif [ ! -f "$CONFIG_WRITER" ]; then
-    log_error "config.json: writer not found at $(display_path "$CONFIG_WRITER") -- config.json not generated"
-    write_summary ERROR "$TOOL" "config.json not generated"
+    write_error "config.json" "config.json not generated" "setup-user-config.sh not found at $(display_path "$CONFIG_WRITER")"
 else
     log "config.json: generating from profile.json (setup-user-config.sh)"
+    # Relayed (reference/logging.md 8.3): the writer records its own warnings and
+    # errors; a failure is counted here as one error (exit 1) and recorded under
+    # "aitools config" only when the writer recorded none
     CW_RC=0
     if $DRY_RUN; then
-        "${BASH:-bash}" "$CONFIG_WRITER" --dry-run || CW_RC=$?
+        run_child_relayed --summary-tool "aitools config" "setup-user-config.sh" "${BASH:-bash}" "$CONFIG_WRITER" --dry-run || CW_RC="$AITLIB_CHILD_RC"
     else
-        "${BASH:-bash}" "$CONFIG_WRITER" || CW_RC=$?
+        run_child_relayed --summary-tool "aitools config" "setup-user-config.sh" "${BASH:-bash}" "$CONFIG_WRITER" || CW_RC="$AITLIB_CHILD_RC"
     fi
     if [ "$CW_RC" -ne 0 ]; then
-        log_error "config.json: setup-user-config.sh failed (exit $CW_RC) -- see its log lines above"
-        write_summary ERROR "$TOOL" "config.json not generated"
+        log_detail "config.json: setup-user-config.sh exited $CW_RC"
     fi
 fi
 
@@ -171,11 +173,14 @@ for kind in $KINDS; do
     if [ -d "$d" ]; then continue; fi
     if $DRY_RUN; then
         log "[DRY RUN] Would create $(display_path "$d")"
-    elif mkdir -p "$d"; then
+        continue
+    fi
+    rc=0
+    out=$(mkdir -p "$d" 2>&1) || rc=$?
+    if [ "$rc" -eq 0 ]; then
         log "Created $(display_path "$d")"
     else
-        log_error "Cannot create $(display_path "$d")"
-        write_summary ERROR "$TOOL" "$(short "cannot create $kind/")"
+        write_error "$TOOL" "cannot create $(display_path "$d")" "$(error_reason "$out" "$rc")"
     fi
 done
 
@@ -215,21 +220,26 @@ add_source() {
         log "Source $label not found ($(display_path "$src_dir")) -- skipped"
         return 0
     fi
-    # 2>/dev/null: rev-parse fails outside a git work tree; that failure is the answer.
-    if ! git -C "$src_dir" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-        log_error "Source $label ($(display_path "$src_dir")) is not in a git work tree -- skipped (only git-tracked files are deployed)"
-        write_summary ERROR "$TOOL" "$(short "$label: not a git checkout")"
+    # rev-parse fails outside a git work tree: the exit code is the answer, and its
+    # message (fatal: not a git repository ...) the reason
+    local rc=0 out=""
+    out=$(git -C "$src_dir" rev-parse --is-inside-work-tree 2>&1) || rc=$?
+    if [ "$rc" -ne 0 ]; then
+        write_error "$TOOL" "$label: not a git checkout -- skipped (only git-tracked files are deployed)" "$(error_reason "$out" "$rc")"
         return 0
     fi
     local ls="$WORK/ls.z"
-    if ! git -C "$src_dir" ls-files -z > "$ls" 2> "$WORK/ls.err"; then
-        log_error "Source $label: git ls-files failed in $(display_path "$src_dir"): $(cat "$WORK/ls.err")"
-        write_summary ERROR "$TOOL" "$(short "$label: git ls-files failed")"
+    rc=0
+    git -C "$src_dir" ls-files -z > "$ls" 2> "$WORK/ls.err" || rc=$?
+    if [ "$rc" -ne 0 ]; then
+        write_error "$TOOL" "$label: git ls-files failed in $(display_path "$src_dir")" "$(error_reason "$(cat "$WORK/ls.err")" "$rc")"
         return 0
     fi
-    if ! printf '%s\t%s\n' "$kind" "$label" >> "$LISTED"; then
-        log_error "Source $label: cannot record it as listed -- its retired $kind are kept this run"
-        write_summary ERROR "$TOOL" "$(short "$label: not recorded")"
+    rc=0
+    { printf '%s\t%s\n' "$kind" "$label" >> "$LISTED"; } 2> "$WORK/listed.err" || rc=$?
+    if [ "$rc" -ne 0 ]; then
+        # 2>/dev/null: $WORK itself may be unwritable; an empty output gives "no output (exit N)"
+        write_error "$TOOL" "$label: not recorded as listed -- its retired $kind are kept this run" "$(error_reason "$(cat "$WORK/listed.err" 2>/dev/null)" "$rc")"
     fi
     local rel base unit lc winner w_label w_unit last_unit="" keep_unit=true n=0
     while IFS= read -r -d '' rel <&4; do
@@ -263,9 +273,10 @@ add_source() {
         if [ -n "$unit" ] && [ "$unit" != "$last_unit" ]; then
             last_unit="$unit"
             lc=$(printf '%s' "$unit" | tr '[:upper:]' '[:lower:]')
-            if ! winner=$(seen_winner "$kind" "$lc"); then
-                log_error "Source $label: conflict lookup failed for $unit -- skipped"
-                write_summary ERROR "$TOOL" "$(short "$unit: lookup failed")"
+            rc=0
+            winner=$(seen_winner "$kind" "$lc" 2> "$WORK/seen.err") || rc=$?
+            if [ "$rc" -ne 0 ]; then
+                write_error "$TOOL" "$unit: conflict lookup failed -- skipped" "$(error_reason "$(cat "$WORK/seen.err")" "$rc")"
                 keep_unit=false
                 continue
             fi
@@ -280,14 +291,14 @@ add_source() {
                 else
                     keep_unit=false
                     DUPLICATES=$((DUPLICATES + 1))
-                    log_error "Duplicate $kind name: $unit in $label ($(display_path "$src_dir/$unit")) skipped; kept $w_unit from $w_label (first source wins)"
-                    write_summary ERROR "$TOOL" "$(short "$unit: dup in $label")"
+                    log_detail "duplicate $kind name: $(display_path "$src_dir/$unit")"
+                    write_error "$TOOL" "duplicate $kind name $unit in $label skipped" "kept $w_unit from $w_label (first source wins)"
                 fi
             fi
         fi
         if [ -n "$unit" ] && ! $keep_unit; then continue; fi
         if [ ! -f "$src_dir/$rel" ]; then
-            log_warn "Source $label: $rel is tracked but missing on disk -- skipped"
+            write_warn "$TOOL" "$label: $rel is tracked but missing on disk -- skipped"
             continue
         fi
         printf '%s\t%s\t%s\t%s\n' "$kind" "$src_dir/$rel" "$dest_dir/$rel" "$kind/$rel" >> "$PLAN"
@@ -308,7 +319,7 @@ for cli in harness-db.py read-session.py read-session-full.py; do
     if [ -f "$SCRIPT_DIR/$cli" ]; then
         printf '%s\t%s\t%s\t%s\n' bin "$SCRIPT_DIR/$cli" "$HARNESS_DIR/bin/$cli" "bin/$cli" >> "$PLAN"
     else
-        log_warn "bin: $cli not found at $(display_path "$SCRIPT_DIR/$cli") -- skipped"
+        write_warn "$TOOL" "bin: $cli not found at $(display_path "$SCRIPT_DIR/$cli") -- skipped"
     fi
 done
 
@@ -321,20 +332,22 @@ N_WOULD_CREATE=0; N_WOULD_UPDATE=0
 # fix_exec SRC DEST -- a deployed copy of an executable source is executable too
 fix_exec() {
     if [ -x "$1" ] && [ -f "$2" ] && [ ! -x "$2" ]; then
-        if chmod +x "$2"; then
+        local rc=0 out=""
+        out=$(chmod +x "$2" 2>&1) || rc=$?
+        if [ "$rc" -eq 0 ]; then
             log "Set executable: $(display_path "$2")"
         else
-            log_error "Cannot set the executable bit on $(display_path "$2")"
-            write_summary ERROR "$TOOL" "$(short "chmod failed: ${2##*/}")"
+            write_error "$TOOL" "chmod failed: $(display_path "$2")" "$(error_reason "$out" "$rc")"
         fi
     fi
 }
 
 # deploy_one SRC DEST ITEM. Not run in a subshell: [x]abort exits 2 from here.
 deploy_one() {
-    local src="$1" dest="$2" item="$3" content
-    if ! content=$(cat "$src"); then
-        log_error "Failed: $item: cannot read $(display_path "$src")"
+    local src="$1" dest="$2" item="$3" content rc=0 cur=""
+    content=$(cat "$src" 2> "$WORK/cat.err") || rc=$?
+    if [ "$rc" -ne 0 ]; then
+        write_error "$TOOL" "failed: $item" "$(error_reason "$(cat "$WORK/cat.err")" "$rc")"
         N_FAILED=$((N_FAILED + 1))
         write_summary DETAIL "$TOOL" "$(short "failed: $item")"
         return 0
@@ -343,8 +356,16 @@ deploy_one() {
         # Count what the library's dry run reports (same newline normalization).
         if [ ! -f "$dest" ]; then
             N_WOULD_CREATE=$((N_WOULD_CREATE + 1))
-        elif [ "$(perl -0777 -pe 's/[\r\n]+$/\n/' "$dest")" != "$(printf '%s' "$content" | perl -0777 -pe 's/[\r\n]+$/\n/')" ]; then
-            N_WOULD_UPDATE=$((N_WOULD_UPDATE + 1))
+        else
+            rc=0
+            cur=$(perl -0777 -pe 's/[\r\n]+$/\n/' "$dest" 2>&1) || rc=$?
+            if [ "$rc" -ne 0 ]; then
+                # Unreadable: one warning, and counted as would-update (deploy-harness.ps1 does the same)
+                write_warn "$TOOL" "cannot read $(display_path "$dest") for the dry-run comparison: $cur"
+                N_WOULD_UPDATE=$((N_WOULD_UPDATE + 1))
+            elif [ "$cur" != "$(printf '%s' "$content" | perl -0777 -pe 's/[\r\n]+$/\n/')" ]; then
+                N_WOULD_UPDATE=$((N_WOULD_UPDATE + 1))
+            fi
         fi
     fi
     # reference/ and registries/ are read-only copies: the source wins, no menu
@@ -368,11 +389,11 @@ deploy_one() {
             N_SKIPPED=$((N_SKIPPED + 1))
             write_summary DETAIL "$TOOL" "$(short "skipped: $item")" ;;
         failed)
-            # The library logged the reason with log_error and restored the files.
+            # The library recorded the error once, with its reason, and restored the files.
             N_FAILED=$((N_FAILED + 1))
             write_summary DETAIL "$TOOL" "$(short "failed: $item")" ;;
         *)
-            log_error "Failed: $item: unexpected deploy result '$MANAGED_FILE_RESULT'"
+            write_error "$TOOL" "failed: $item" "unexpected deploy result '$MANAGED_FILE_RESULT'"
             N_FAILED=$((N_FAILED + 1))
             write_summary DETAIL "$TOOL" "$(short "failed: $item")" ;;
     esac
@@ -507,15 +528,25 @@ retire_rule_file() {
         log "[DRY RUN] Would back up and remove $(display_path "$f") (retired rule)"
         return 0
     fi
-    backup_file "$f"
-    if ! $BACKUP_FILE_OK; then
-        log_error "Retired rule $name: backup failed -- $(display_path "$f") not removed"
-        write_summary ERROR "$TOOL" "$(short "retire failed: $name")"
-        return 0
+    # The backup is this script's own copy, as deploy-harness.ps1 makes it: a failure
+    # here is one error (backup_file would add a warning of its own for the same event)
+    # (as backup_file: a path that is not a regular file -- a dangling link -- has
+    # nothing to back up)
+    local bak rc=0 out=""
+    if [ -f "$f" ]; then
+        bak="$f.bak.$(date -u +%Y-%m-%dT%H%M%SZ)"
+        out=$(cp "$f" "$bak" 2>&1) || rc=$?
+        if [ "$rc" -ne 0 ] || [ ! -f "$bak" ]; then
+            if [ "$rc" -eq 0 ]; then out="$(display_path "$bak") not found after the copy"; rc=1; fi
+            write_error "$TOOL" "retire failed: $name" "backup failed: $(error_reason "$out" "$rc") -- $(display_path "$f") not removed"
+            return 0
+        fi
+        log "Backed up $(display_path "$f") to $(display_path "$bak")"
     fi
-    if ! rm -f "$f"; then
-        log_error "Retired rule $name: cannot remove $(display_path "$f")"
-        write_summary ERROR "$TOOL" "$(short "retire failed: $name")"
+    rc=0
+    out=$(rm -f "$f" 2>&1) || rc=$?
+    if [ "$rc" -ne 0 ]; then
+        write_error "$TOOL" "retire failed: $name" "$(error_reason "$out" "$rc")"
         return 0
     fi
     N_RETIRED=$((N_RETIRED + 1))
@@ -544,7 +575,7 @@ prune_skill_backups() {
         closedir $d;
         print "$_\n" for @b[0 .. $#b - $keep];
     ' "$HARNESS_DIR/skills" "$name" "$SKILL_BACKUPS_KEEP" > "$WORK/skill-prune.txt" 2> "$WORK/skill-prune.err"; then
-        log_warn "Retired skill $name: cannot list old backups: $(cat "$WORK/skill-prune.err")"
+        write_warn "$TOOL" "retired skill $name: cannot list old backups: $(cat "$WORK/skill-prune.err")"
         return 0
     fi
     while IFS= read -r old <&6; do
@@ -552,7 +583,7 @@ prune_skill_backups() {
         if rm -rf "$HARNESS_DIR/skills/$old" && [ ! -e "$HARNESS_DIR/skills/$old" ]; then
             log "Pruned old backup: $(display_path "$HARNESS_DIR/skills/$old")"
         else
-            log_warn "Retired skill $name: cannot prune old backup $(display_path "$HARNESS_DIR/skills/$old")"
+            write_warn "$TOOL" "retired skill $name: cannot prune old backup $(display_path "$HARNESS_DIR/skills/$old")"
         fi
     done 6< "$WORK/skill-prune.txt"
 }
@@ -565,7 +596,7 @@ discard_skill_backup() {
     # cp -R copies directory modes: a read-only (555) subdirectory in the copy
     # would block rm -rf. Make the copy writable first.
     if ! chmod -R u+w "$bak" > "$WORK/skill-bak-chmod.err" 2>&1; then
-        log_warn "Retired skill $name: cannot make the incomplete backup writable ($(head -n 1 "$WORK/skill-bak-chmod.err"))"
+        write_warn "$TOOL" "retired skill $name: cannot make the incomplete backup writable ($(head -n 1 "$WORK/skill-bak-chmod.err"))"
     fi
     # 2>&1 to /dev/null: rm's own messages are replaced by the logged outcome below
     # (checked: the exit code and that the path is gone).
@@ -578,11 +609,10 @@ discard_skill_backup() {
     # and the deploy from treating it as a skill.
     inc="$HARNESS_DIR/skills/$name.bak.incomplete.$(date -u +%Y-%m-%dT%H%M%SZ)"
     if [ ! -e "$inc" ] && mv "$bak" "$inc"; then
-        log_error "Retired skill $name: cannot remove the incomplete backup -- renamed to $(display_path "$inc"); delete it by hand"
+        write_error "$TOOL" "bak cleanup failed: $name" "cannot remove the incomplete backup -- renamed to $(display_path "$inc"); delete it by hand"
     else
-        log_error "Retired skill $name: cannot remove or rename the incomplete backup $(display_path "$bak"); delete it by hand"
+        write_error "$TOOL" "bak cleanup failed: $name" "cannot remove or rename the incomplete backup $(display_path "$bak"); delete it by hand"
     fi
-    write_summary ERROR "$TOOL" "$(short "bak cleanup failed: $name")"
 }
 
 # retire_skill_dir NAME -- copy ~/.aitools/skills/NAME to NAME.bak.<UTC> (cp -R; any
@@ -598,26 +628,33 @@ retire_skill_dir() {
     fi
     bak="$d.bak.$(date -u +%Y-%m-%dT%H%M%SZ)"
     if [ -e "$bak" ] || [ -L "$bak" ]; then
-        log_error "Retired skill $name: backup failed ($(display_path "$bak") already exists) -- $(display_path "$d") not removed"
-        write_summary ERROR "$TOOL" "$(short "retire failed: $name")"
+        write_error "$TOOL" "retire failed: $name" "backup $(display_path "$bak") already exists -- $(display_path "$d") not removed"
         return 0
     fi
-    if ! cp -R "$d" "$bak" > "$WORK/skill-bak.err" 2>&1; then
-        log_error "Retired skill $name: backup failed ($(head -n 1 "$WORK/skill-bak.err")) -- $(display_path "$d") not removed"
-        write_summary ERROR "$TOOL" "$(short "retire failed: $name")"
+    local rc=0 out=""
+    cp -R "$d" "$bak" > "$WORK/skill-bak.err" 2>&1 || rc=$?
+    if [ "$rc" -ne 0 ]; then
+        write_error "$TOOL" "retire failed: $name" "backup failed: $(error_reason "$(cat "$WORK/skill-bak.err")" "$rc") -- $(display_path "$d") not removed"
         discard_skill_backup "$name" "$bak"
         return 0
     fi
     # diff exits 1 on a difference, 2 on trouble: either way the backup is not proven.
+    # The reason is the first difference (error_reason would take the last line); the
+    # whole diff goes to deploy.log at detail
     if ! diff -r -q "$d" "$bak" > "$WORK/skill-bak.diff" 2>&1; then
-        log_error "Retired skill $name: backup $(display_path "$bak") differs from the directory ($(head -n 1 "$WORK/skill-bak.diff")) -- $(display_path "$d") not removed"
-        write_summary ERROR "$TOOL" "$(short "retire failed: $name")"
+        while IFS= read -r out; do log_detail "backup diff: $out"; done < "$WORK/skill-bak.diff"
+        write_error "$TOOL" "retire failed: $name" "backup $(display_path "$bak") differs from the directory: $(head -n 1 "$WORK/skill-bak.diff") -- $(display_path "$d") not removed"
         discard_skill_backup "$name" "$bak"
         return 0
     fi
-    if ! rm -rf "$d" || [ -e "$d" ]; then
-        log_error "Retired skill $name: cannot remove $(display_path "$d")"
-        write_summary ERROR "$TOOL" "$(short "retire failed: $name")"
+    rc=0
+    out=$(rm -rf "$d" 2>&1) || rc=$?
+    if [ "$rc" -ne 0 ] || [ -e "$d" ]; then
+        if [ "$rc" -ne 0 ]; then
+            write_error "$TOOL" "retire failed: $name" "$(error_reason "$out" "$rc")"
+        else
+            write_error "$TOOL" "retire failed: $name" "$(display_path "$d") still exists after rm"
+        fi
         return 0
     fi
     N_RETIRED=$((N_RETIRED + 1))
@@ -636,16 +673,16 @@ write_harness_manifest() {
     esac
     local manifest="$HARNESS_DIR/$kind/.aitools-$kind-manifest"
     local new="$WORK/$kind-manifest.new" actions="$WORK/$kind-manifest.actions"
-    local tmp="$manifest.tmp" act name extra n p
-    if ! harness_manifest_plan "$kind" "$header" "$manifest" "$new" "$actions" 2> "$WORK/$kind-manifest.err"; then
-        log_error "$title manifest: $(cat "$WORK/$kind-manifest.err") -- manifest not written, nothing retired"
-        write_summary ERROR "$TOOL" "$kind manifest not written"
+    local tmp="$manifest.tmp" act name extra n p rc=0 out=""
+    harness_manifest_plan "$kind" "$header" "$manifest" "$new" "$actions" 2> "$WORK/$kind-manifest.err" || rc=$?
+    if [ "$rc" -ne 0 ]; then
+        write_error "$TOOL" "$kind manifest not written, nothing retired" "$(error_reason "$(cat "$WORK/$kind-manifest.err")" "$rc")"
         return 0
     fi
     while IFS=$'\t' read -r act name extra <&5; do
         case "$act" in
             warn)
-                log_warn "$title manifest $(display_path "$manifest"): $name" ;;
+                write_warn "$TOOL" "$title manifest $(display_path "$manifest"): $name" ;;
             keep)
                 log "$title manifest: $name kept as $extra (source not listed this run -- not retired)" ;;
             retire|stale)
@@ -662,8 +699,7 @@ write_harness_manifest() {
                 elif [ -d "$p" ] && [ ! -L "$p" ]; then
                     retire_skill_dir "$name"
                 elif [ -e "$p" ] || [ -L "$p" ]; then
-                    log_warn "Retired skill $name: $(display_path "$p") is not a directory -- left alone"
-                    write_summary WARN "$TOOL" "$(short "not a dir: $name")"
+                    write_warn "$TOOL" "retired skill $name: $(display_path "$p") is not a directory -- left alone"
                 fi ;;
         esac
     done 5< "$actions"
@@ -675,19 +711,20 @@ write_harness_manifest() {
     # A directory at the manifest path: mv would move the file into it (the .ps1's
     # File.Move fails); fail the same way here.
     if [ -d "$manifest" ] && [ ! -L "$manifest" ]; then
-        log_error "$title manifest: $(display_path "$manifest") is a directory -- manifest not written"
-        write_summary ERROR "$TOOL" "$kind manifest not written"
+        write_error "$TOOL" "$kind manifest not written" "$(display_path "$manifest") is a directory"
         return 0
     fi
-    if ! cp "$new" "$tmp"; then
-        log_error "$title manifest: cannot write $(display_path "$tmp") -- manifest not written"
-        write_summary ERROR "$TOOL" "$kind manifest not written"
+    rc=0
+    out=$(cp "$new" "$tmp" 2>&1) || rc=$?
+    if [ "$rc" -ne 0 ]; then
+        write_error "$TOOL" "$kind manifest not written" "$(error_reason "$out" "$rc")"
         return 0
     fi
-    if ! mv -f "$tmp" "$manifest"; then
-        log_error "$title manifest: cannot move $(display_path "$tmp") to $(display_path "$manifest") -- manifest not written"
-        write_summary ERROR "$TOOL" "$kind manifest not written"
-        if ! rm -f "$tmp"; then log_warn "Cannot remove $(display_path "$tmp")"; fi
+    rc=0
+    out=$(mv -f "$tmp" "$manifest" 2>&1) || rc=$?
+    if [ "$rc" -ne 0 ]; then
+        write_error "$TOOL" "$kind manifest not written" "$(error_reason "$out" "$rc")"
+        if ! rm -f "$tmp"; then write_warn "$TOOL" "cannot remove $(display_path "$tmp")"; fi
         return 0
     fi
     log "$title manifest: wrote $(display_path "$manifest") ($n $noun line(s))"
@@ -705,7 +742,7 @@ for kind in $KINDS; do
     d="$HARNESS_DIR/$kind"
     [ -d "$d" ] || continue
     if ! find "$d" -type f > "$WORK/found.txt"; then
-        log_warn "Cannot list $(display_path "$d") -- preserved files not checked"
+        write_warn "$TOOL" "cannot list $(display_path "$d") -- preserved files not checked"
         continue
     fi
     if ! perl -e '
@@ -727,7 +764,7 @@ for kind in $KINDS; do
             print "$_\n" unless $d{lc $_};
         }
     ' "$WORK/dests.txt" "$WORK/found.txt" "$d" > "$WORK/preserved.txt"; then
-        log_warn "Cannot compare $(display_path "$d") with the plan -- preserved files not checked"
+        write_warn "$TOOL" "cannot compare $(display_path "$d") with the plan -- preserved files not checked"
         continue
     fi
     while IFS= read -r p; do
@@ -745,15 +782,16 @@ if $DRY_RUN; then
     # Pending retirements ($N_WOULD_RETIRE) are logged, not in this row: the row is
     # at least 27 characters, so ", N retire" never fits in 30.
     write_summary OK "$TOOL" "$(short "dry-run: $N_WOULD_CREATE create, $N_WOULD_UPDATE update")"
-elif [ "$N_FAILED" -gt 0 ]; then
-    write_summary ERROR "$TOOL" "$(short "$N_FAILED failed")"
-elif [ "$N_SKIPPED" -gt 0 ]; then
-    write_summary WARN "$TOOL" "$(short "$N_SKIPPED skipped (user review)")"
 else
+    # The status record only: each failed file is its own error and each skipped
+    # file its own warning (the library's or this script's, reference/logging.md 8.3);
+    # the counts are part of the status, as the deploy tracker writes them
     PARTS=""
     if [ "$N_ADDED" -gt 0 ]; then PARTS="$N_ADDED added"; fi
     if [ "$N_UPDATED" -gt 0 ]; then PARTS="${PARTS:+$PARTS, }$N_UPDATED updated"; fi
     if [ "$N_ACCEPTED" -gt 0 ]; then PARTS="${PARTS:+$PARTS, }$N_ACCEPTED accepted"; fi
+    if [ "$N_SKIPPED" -gt 0 ]; then PARTS="${PARTS:+$PARTS, }$N_SKIPPED skipped"; fi
+    if [ "$N_FAILED" -gt 0 ]; then PARTS="${PARTS:+$PARTS, }$N_FAILED failed"; fi
     if [ -z "$PARTS" ]; then
         PARTS="$N_VERIFIED verified"
     elif [ "${#PARTS}" -le 18 ] && [ "$N_VERIFIED" -gt 0 ]; then

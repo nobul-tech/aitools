@@ -69,17 +69,15 @@ if ($PSVersionTable.PSVersion.Major -lt 7) {
     exit 1
 }
 . (Join-Path $PSScriptRoot "aitools-lib.ps1")
-# The success stream carries data: console log lines go to stderr (deploy.log unchanged).
-# Defined before Initialize-Logging, whose environment check may already log a warning.
-# The deploy.log line goes through the lib's Add-AitLibLogText: a failed write is
-# swallowed (reference/logging.md section 5; incident #174), so it no longer reaches
-# the trap below (exit 2) and the stderr line still prints.
-function Log($msg, $level = "info") {
-    $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
-    $line = "[$ts] [$scriptName] [$level] $msg"
-    Add-AitLibLogText $line
-    [Console]::Error.WriteLine($line)
-}
+# The success stream carries data: the library's stderr console option sends the
+# console log lines to stderr (deploy.log unchanged) and turns recording off, so
+# this library-style tool writes no run summary record; its callers record the
+# warn/error lines it returns (reference/logging.md sections 7 and 8.2). Set
+# before Initialize-Logging, whose environment check may already log a warning.
+# The colour option keeps the stderr lines plain when stderr is redirected (a
+# caller that captures them gets no ANSI codes, as before the option existed).
+$script:AitLibOptConsoleStderr = $true
+$script:AitLibOptColorAuto = $true
 Initialize-Logging "aitools-profile"
 
 # Any exception that escapes a command is an error (exit 2), never "not found" (1)
@@ -1244,7 +1242,9 @@ function Invoke-Register {
     # matches: a renamed machine clears the clone warning on its next registration
     $hmatch = @($srcHosts | Where-Object { (ConvertTo-ShortHost $_) -ceq $script:ThisHost }).Count -gt 0
     if (-not $hmatch -and $script:ThisHost) { Set-JValue $p $script:ThisHost @("profiles", $key, "machine", "hostname") }
-    $os = switch ($script:AitoolsPlatform) { "windows" { "win32" } "macos" { "darwin" } default { $script:AitoolsPlatform } }
+    # Below the Windows guard the platform is always windows (cross-platform.md
+    # "Dead code from platform guards")
+    $os = "win32"
     $arch = ([string][System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture).ToLowerInvariant()
     Set-JValue $p $os @("profiles", $key, "machine", "os")
     Set-JValue $p $arch @("profiles", $key, "machine", "arch")
