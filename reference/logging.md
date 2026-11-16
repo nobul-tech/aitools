@@ -511,7 +511,7 @@ action-line   = "  >>  " <instruction>
 | `WARNINGS` / `$script:warnings` | each script process | `log_warn`, `write_warn`, `write_action`, the relay (a child's abort recorded as a warning) | exit footer; `read_menu_choice` end-of-input fallback |
 | `ERRORS` / `$script:errors` | each script process | `log_error`, `write_error`, the relay (a failed child) | exit footer (exit 1); fan-out validation |
 | `AITLIB_CHILD_WARNINGS` / `AITLIB_CHILD_ERRORS` (`$script:AitLibChildWarnings` / `$script:AitLibChildErrors`) | the parent, per relayed child | the relay | the relay's failure decision (the error count and the exit code) |
-| Run summary file | the run | the helpers of 8.2; the writers of 8.1 | the panel; the relay (ERROR records written while a child was executing); ACTION de-duplication; checks that inspect it |
+| Run summary file | the run | the helpers of 8.2; the writers of 8.1 | the panel; the relay (ERROR records and abort records written while a child was executing); ACTION de-duplication; checks that inspect it |
 | `deploy.log`, `deploy.jsonl` | the log directory (`~/.aitools/logs/`, or `AITOOLS_LOG_DIR`) | the helpers of 8.2; the writers of 8.1 | people, telemetry |
 
 | Event | Effect |
