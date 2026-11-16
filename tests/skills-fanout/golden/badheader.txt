@@ -6,4 +6,5 @@ x/SKILL.md 401b30e3b8b5d629635a5c613cdb7919
 # summary rows (ACTION and skills, sorted)
 ACTION||Run aitools to rebuild ~/.aitools/skills and its manifest
 DETAIL|claude skills|added: a/SKILL.md
-WARN|claude skills|1 added
+OK|claude skills|1 added
+WARN|claude skills|Skills manifest HOME/.aitools/skills/.aitools-skills-manifest: the first line is not "# aitools skills manifest v1" -- every skill fanned out, none retired, adopt not offered -- Run aitools to rebuild ~/.aitools/skills and its manifest

@@ -307,6 +307,21 @@ try {
         $l = @(SummaryLines | Where-Object { $_.Contains("|$Tool|") -and -not $_.StartsWith("DETAIL") })
         if ($l.Count) { $l[-1] } else { "" }
     }
+    # Status [TOOL]: the tool's status, its last OK record (reference/logging.md 8.3:
+    # warnings and errors are records of their own, never the status); status in the .sh
+    function Status([string]$Tool = "claude skills") {
+        $l = @(SummaryLines | Where-Object { $_.StartsWith("OK|$Tool|", [StringComparison]::Ordinal) })
+        if ($l.Count) { $l[-1] } else { "" }
+    }
+    # NRows KIND [TOOL]: how many KIND (WARN, ERROR) records TOOL has: each warning
+    # and each error is recorded once (nrows in the .sh)
+    function NRows([string]$Kind, [string]$Tool = "claude skills") {
+        @(SummaryLines | Where-Object { $_.StartsWith("$Kind|$Tool|", [StringComparison]::Ordinal) }).Count
+    }
+    # SlashRows: the summary rows with every backslash a slash (the lib joins Windows
+    # paths with backslashes; the expected texts use Mixed paths)
+    function SlashRows { @(SummaryLines | ForEach-Object { $_.Replace('\', '/') }) }
+    function RowSlash([string]$Row) { [bool](@(SlashRows) -ccontains $Row) }   # exact row, slashes
     function S { PJ $script:C $L ".claude" "skills" }      # the deployed skills dir
     function CS { PJ $script:C $L ".cursor" "skills" }     # the deployed cursor skills dir
     # LogNorm: the run's *.log files, CR removed, every backslash a slash, the temp
@@ -375,6 +390,15 @@ try {
             "# skills tree (path md5 [x]; symlinks not listed)`n" + (TreeSig $Dir) +
             "# summary rows (ACTION and skills, sorted)`n" + (Rows $Tool)
         foreach ($h in @((Mixed $script:H), ($script:H -replace '/', '\'))) { $t = $t.Replace($h, "HOME") }
+        # The same rules as golden_record in test-skills-fanout.sh:
+        # a path under HOME with slashes (this lib joins with backslashes)
+        $t = [regex]::Replace($t, 'HOME([\\/][^\s|"]*)', { param($m) "HOME" + ($m.Groups[1].Value -replace '\\', '/') })
+        # the backup directory the run creates beside the skills dir
+        $t = [regex]::Replace($t, '(skills\.bak\.)[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{6}Z(?:-[0-9]+)?', '$1<UTC>')
+        # an error reason that is an OS message (BSD, GNU and .NET texts differ;
+        # the inline checks assert it per platform): <OS error>
+        $t = [regex]::Replace($t, '(?m)^(ERROR\|[^|\n]*\|cannot create skills dir\|HOME/[^|:\n]*): .*$', '$1: <OS error>')
+        $t = [regex]::Replace($t, '(?m)^(ERROR\|[^|\n]*\|Cannot remove [^|\n]*)\|.*$', '$1|<OS error>')
         [IO.File]::WriteAllText($f, $t)
         Check "golden ${L}: ${Name}: exit code, tree, summary rows" (Test-GoldenMatch "$Name.txt" $f)
     }
@@ -439,11 +463,14 @@ try {
     Parity fanout-rerun
     WriteText (PJ (S) s1 SKILL.md) "## shared s1`nlocal edit`n"
     Run-One
-    Check "fanout edited, non-interactive: overwritten, backup kept, WARN row" ((NonDetail) -ceq 'WARN|claude skills|1 updated, 5 verified' -and (HasLine (PJ (S) s1 SKILL.md) '## shared s1') -and [bool](@(LsNames (PJ (S) s1)) -cmatch '^SKILL\.md\.bak\.'))
+    # Local edits overwritten in a non-interactive run: a warning (logging.md 8.3), its
+    # own WARN record; the status stays OK (never recoloured)
+    Check "fanout edited, non-interactive: overwritten, backup kept, OK status, one WARN record" ((Status) -ceq 'OK|claude skills|1 updated, 5 verified' -and (RowSlash ('WARN|claude skills|Diff in ' + (Mixed (S)) + '/s1/SKILL.md -- overwriting (non-interactive)')) -and (NRows WARN) -eq 1 -and (HasLine (PJ (S) s1 SKILL.md) '## shared s1') -and [bool](@(LsNames (PJ (S) s1)) -cmatch '^SKILL\.md\.bak\.'))
     Parity fanout-edited
     WriteText (PJ (S) s1 SKILL.md) "## shared s1`nlocal edit 2`n"
     Run-One "-Force"
-    Check "fanout --force: overwritten" ((Rc) -eq "0" -and (HasLine (PJ (S) s1 SKILL.md) '## shared s1') -and (NonDetail) -ceq 'WARN|claude skills|1 updated, 5 verified')
+    # An overwrite the user asked for (-Force) is info, not a warning (logging.md 8.3)
+    Check "fanout --force: overwritten, OK status, no WARN record" ((Rc) -eq "0" -and (HasLine (PJ (S) s1 SKILL.md) '## shared s1') -and (Status) -ceq 'OK|claude skills|1 updated, 5 verified' -and (NRows WARN) -eq 0 -and (OutMatch 'Diff in .*s1[\\/]SKILL\.md -- overwriting \(--force\)'))
     Parity fanout-force
     # The .sh clears the bit (chmod 644) first; Windows has no mode to clear, and
     # under Git Bash the chmod did not change test -x either (IsExecLike)
@@ -476,7 +503,8 @@ try {
         dskill '[r]' SKILL.md 'r'
     }
     Case-Run retired $seedRetired
-    Check "retired: exit 0, row 1 added, 3 removed (WARN: a kept dir still loads)" ((Rc) -eq "0" -and (NonDetail) -ceq 'WARN|claude skills|1 added, 3 removed')
+    $keptMine2 = 'WARN|claude skills|Kept mine2: the skills manifest retires mine2, but this directory matches no harness copy (it may be your own) -- Claude Code still loads it; delete it if it is an old fan-out copy'
+    Check "retired: exit 0, OK status 1 added, 3 removed; the kept dir is one WARN record" ((Rc) -eq "0" -and (Status) -ceq 'OK|claude skills|1 added, 3 removed' -and (Row $keptMine2) -and (NRows WARN) -eq 1)
     Check "retired: copies removed from ~/.claude/skills" (-not (Exists (PJ (S) gone)) -and -not (Exists (PJ (S) old)) -and -not (Exists (PJ (S) '[r]')))
     $b = NewestBak
     Check "retired: OS junk files did not block the prune; the backup keeps them" ($b -and (IsFile (PJ $b gone .DS_Store)) -and (IsFile (PJ $b gone tests Thumbs.db)))
@@ -487,7 +515,7 @@ try {
     Check "retired: user dir with a retired name kept, ACTION row" ((HasLine (PJ (S) mine2 SKILL.md) 'my own') -and (Row 'ACTION||Claude Code still loads retired skills in ~/.claude/skills: mine2 -- delete them unless you wrote them'))
     Parity retired
     Case-Run retired-dry $seedRetired "-DryRun"
-    Check "retired dry run: nothing removed, row dry run, removal previewed" ((Rc) -eq "0" -and (NonDetail) -ceq 'WARN|claude skills|dry run (no files written)' -and (IsDir (PJ (S) gone)) -and (IsDir (PJ (S) old)) -and -not (Exists (PJ (S) a)) -and (BakDirs) -eq 6 -and (OutHas 'DRY RUN] Would back up and remove gone'))
+    Check "retired dry run: nothing removed, OK status dry run, the kept dir one WARN record, removal previewed" ((Rc) -eq "0" -and (Status) -ceq 'OK|claude skills|dry run (no files written)' -and (Row $keptMine2) -and (NRows WARN) -eq 1 -and (IsDir (PJ (S) gone)) -and (IsDir (PJ (S) old)) -and -not (Exists (PJ (S) a)) -and (BakDirs) -eq 6 -and (OutHas 'DRY RUN] Would back up and remove gone'))
     Parity retired-dry
 
     # A retired name whose copy differs only in case (Gone for gone)
@@ -509,7 +537,7 @@ try {
         dskill gone SKILL.md 'gone, edited by me'
     }
     Case-Run retired-mod $seedRetiredMod
-    Check "retired, user-modified: kept, ACTION row" ((Rc) -eq "0" -and (NonDetail) -ceq 'WARN|claude skills|1 added' -and (HasLine (PJ (S) gone SKILL.md) 'gone, edited by me') -and (Row 'ACTION||Claude Code still loads retired skills in ~/.claude/skills: gone -- delete them unless you wrote them'))
+    Check "retired, user-modified: kept, OK status, one WARN record, ACTION row" ((Rc) -eq "0" -and (Status) -ceq 'OK|claude skills|1 added' -and (Row 'WARN|claude skills|Kept gone: the skills manifest retires gone, but this directory matches no harness copy (it may be your own) -- Claude Code still loads it; delete it if it is an old fan-out copy') -and (NRows WARN) -eq 1 -and (HasLine (PJ (S) gone SKILL.md) 'gone, edited by me') -and (Row 'ACTION||Claude Code still loads retired skills in ~/.claude/skills: gone -- delete them unless you wrote them'))
     Check "retired, user-modified: not counted again as preserved" (-not (OutHas 'Preserved unmanaged skill: gone') -and (OutHas 'Skills (claude skills): 1 added, 0 preserved'))
     Parity retired-mod
 
@@ -530,12 +558,14 @@ try {
         hskill a SKILL.md 'skill a'; hskill x.bak.2026-10-25T000000Z SKILL.md 'x'; dskill x SKILL.md 'x'
     }
     Case-Run badheader $seedBadHeader
-    Check "bad header: fanned out, nothing retired, WARN + ACTION" ((Rc) -eq "0" -and (NonDetail) -ceq 'WARN|claude skills|1 added' -and (IsDir (PJ (S) x)) -and (Row 'ACTION||Run aitools to rebuild ~/.aitools/skills and its manifest'))
+    $mfShown = Mixed (PJ $script:H .aitools skills .aitools-skills-manifest)
+    Check "bad header: fanned out, nothing retired, OK status, one WARN record + ACTION" ((Rc) -eq "0" -and (Status) -ceq 'OK|claude skills|1 added' -and (IsDir (PJ (S) x)) -and (NRows WARN) -eq 1 -and (RowSlash ("WARN|claude skills|Skills manifest ${mfShown}: the first line is not `"# aitools skills manifest v1`" -- every skill fanned out, none retired, adopt not offered -- Run aitools to rebuild ~/.aitools/skills and its manifest")) -and (Row 'ACTION||Run aitools to rebuild ~/.aitools/skills and its manifest'))
     Parity badheader
 
     $seedInvalid = { manifest '.dot|shared' 'a|unknown' 'b|shared'; hskill a SKILL.md 'skill a'; hskill b SKILL.md 'skill b' }
     Case-Run invalid $seedInvalid
-    Check "invalid lines: warned, skills still fanned out" ((Rc) -eq "0" -and (NonDetail) -ceq 'WARN|claude skills|2 added' -and (OutHas 'line ignored: .dot<TAB>shared') -and (Logged 'claude skills: a/SKILL.md source=unknown adopt=none'))
+    $mfShown = Mixed (PJ $script:H .aitools skills .aitools-skills-manifest)
+    Check "invalid lines: one WARN record per ignored line, the ACTION once, OK status, skills still fanned out" ((Rc) -eq "0" -and (Status) -ceq 'OK|claude skills|2 added' -and (NRows WARN) -eq 2 -and (RowSlash "WARN|claude skills|Skills manifest ${mfShown}: line ignored: .dot<TAB>shared -- Run aitools to rebuild ~/.aitools/skills and its manifest") -and (RowSlash "WARN|claude skills|Skills manifest ${mfShown}: line ignored: a<TAB>unknown -- Run aitools to rebuild ~/.aitools/skills and its manifest") -and @(SummaryLines | Where-Object { $_.StartsWith("ACTION|", [StringComparison]::Ordinal) }).Count -eq 1 -and (OutHas 'line ignored: .dot<TAB>shared') -and (Logged 'claude skills: a/SKILL.md source=unknown adopt=none'))
     Parity invalid
 
     if ($canChmodRead) { throw "chmod cases are not built on Windows" } else { Skip "unreadable harness dir and manifest (no chmod on Windows)" }
@@ -658,14 +688,14 @@ try {
         dskill anthropic-skills-old SKILL.md 'o'
     }
     Case-Run reserved $seedReserved
-    Check "reserved: exit 1, row 2 failed, failed DETAIL rows" ((Rc) -eq "1" -and (NonDetail) -ceq 'ERROR|claude skills|2 failed' -and (Row 'DETAIL|claude skills|failed: synced') -and (Row 'DETAIL|claude skills|failed: Anthropic-Skills-pack'))
+    Check "reserved: exit 1, one ERROR record per name, OK status 1 added, 2 failed, failed DETAIL rows" ((Rc) -eq "1" -and (Status) -ceq 'OK|claude skills|1 added, 2 failed' -and (NRows ERROR) -eq 2 -and (Row 'ERROR|claude skills|Not fanned out: synced|a reserved skills directory name (synced and anthropic-skills* belong to Claude Code) -- rename the harness skill') -and (Row 'ERROR|claude skills|Not fanned out: Anthropic-Skills-pack|a reserved skills directory name (synced and anthropic-skills* belong to Claude Code) -- rename the harness skill') -and (Row 'DETAIL|claude skills|failed: synced') -and (Row 'DETAIL|claude skills|failed: Anthropic-Skills-pack'))
     Check "reserved: nothing written into or removed from them" (-not (Exists (PJ (S) synced SKILL.md)) -and (HasLine (PJ (S) synced keep.txt) theirs) -and -not (Exists (PJ (S) Anthropic-Skills-pack)) -and (HasLine (PJ (S) anthropic-skills-old SKILL.md) o) -and (IsFile (PJ (S) a SKILL.md)) -and -not (Row 'DETAIL|claude skills|removed: anthropic-skills-old'))
     Parity reserved
 
     if ($caseSensitiveFs) {
         $seedDupCase = { hskill a SKILL.md 'lower'; hskill A SKILL.md 'upper' }
         Case-Run dupcase $seedDupCase
-        Check "case-only duplicate: the first wins, the second failed" ((Rc) -eq "1" -and (NonDetail) -ceq 'ERROR|claude skills|1 failed')
+        Check "case-only duplicate: the first wins, the second one ERROR record, OK status 1 added, 1 failed" ((Rc) -eq "1" -and (Status) -ceq 'OK|claude skills|1 added, 1 failed' -and (NRows ERROR) -eq 1 -and [bool](@(SummaryLines) -cmatch '^ERROR\|claude skills\|Skipped duplicate: [aA]\|a harness skill whose name differs only in case was already fanned out$'))
         # No golden record: only a case-sensitive file system builds this fixture
     } else {
         Skip "case-only duplicate (case-insensitive file system)"
@@ -677,10 +707,14 @@ try {
     # the script still reaches its exit footer
     $seedNoCreate = { hskill a SKILL.md 'skill a'; WriteText (PJ $script:H .claude skills) "not a dir`n" }
     Case-Run nocreate $seedNoCreate
-    Check "cannot create skills dir: ERROR row, exit 1, file untouched" ((Rc) -eq "1" -and (NonDetail) -ceq 'ERROR|claude skills|cannot create skills dir' -and (HasLine (PJ $script:C $L .claude skills) 'not a dir') -and (OutHas 'FAILED with'))
+    # The reason is the path and the .NET message of CreateDirectory (the golden
+    # record holds <OS error>; the .sh asserts mkdir's text per platform)
+    $ncPrefix = 'ERROR|claude skills|cannot create skills dir|' + (Mixed (S)) + ': '
+    $ncRow = @(SlashRows | Where-Object { $_.StartsWith($ncPrefix, [StringComparison]::Ordinal) })
+    Check "cannot create skills dir: one ERROR record, the path and a reason, exit 1, file untouched" ((Rc) -eq "1" -and (NRows ERROR) -eq 1 -and -not (Status) -and $ncRow.Count -eq 1 -and $ncRow[0].Length -gt $ncPrefix.Length -and (HasLine (PJ $script:C $L .claude skills) 'not a dir') -and (OutHas 'FAILED with'))
     Parity nocreate
     Case-Run nocreate-dry $seedNoCreate "-DryRun"
-    Check "cannot create skills dir, dry run: the same ERROR row as the real run" ((Rc) -eq "1" -and (NonDetail) -ceq 'ERROR|claude skills|cannot create skills dir' -and (HasLine (PJ $script:C $L .claude skills) 'not a dir'))
+    Check "cannot create skills dir, dry run: the same error (WHAT) as the real run, the reason marked DRY RUN" ((Rc) -eq "1" -and (NonDetail).Replace('\', '/') -ceq ('ERROR|claude skills|cannot create skills dir|' + (Mixed (S)) + ' (a file is in the way) [DRY RUN]') -and (NRows ERROR) -eq 1 -and (HasLine (PJ $script:C $L .claude skills) 'not a dir'))
     Parity nocreate-dry
 
     # -----------------------------------------------------------------------------
@@ -758,7 +792,8 @@ try {
         # the firecrawl symlink of the .sh needs symlinks ($canSymlink)
     }
     Cursor-Case cursor $seedCursor
-    Check "cursor: exit 0, row 4 added, 1 removed (WARN: a kept dir still loads)" ((Rc) -eq "0" -and (NonDetail "cursor skills") -ceq 'WARN|cursor skills|4 added, 1 removed')
+    $cKeptMine2 = 'WARN|cursor skills|Kept mine2: the skills manifest retires mine2, but this directory matches no harness copy (it may be your own) -- Cursor still loads it; delete it if it is an old fan-out copy'
+    Check "cursor: exit 0, OK status 4 added, 1 removed; the kept dir is one WARN record" ((Rc) -eq "0" -and (Status "cursor skills") -ceq 'OK|cursor skills|4 added, 1 removed' -and (Row $cKeptMine2) -and (NRows WARN "cursor skills") -eq 1)
     Check "cursor: shared, aitools, dotprofile skills in ~/.cursor/skills, x bit kept" ((HasLine (PJ (CS) s1 SKILL.md) '## shared s1') -and (HasLine (PJ (CS) p1 SKILL.md) '## project p1') -and (HasLine (PJ (CS) d1 SKILL.md) '## dot d1') -and (IsExecLike (PJ (CS) s1 scripts run.sh)))
     Check "cursor: nothing written to ~/.claude/skills" (-not (Exists (PJ $script:C $L .claude skills)))
     Check "cursor ${L}: adopt=none for every source" ((Logged 'cursor skills: s1/SKILL.md source=shared adopt=none') -and (Logged 'cursor skills: p1/SKILL.md source=aitools adopt=none') -and (Logged 'cursor skills: d1/SKILL.md source=dotprofile adopt=none'))
@@ -770,7 +805,7 @@ try {
     Check "cursor: step 5 logged after step 4" (OutHas 'Step 5: Cursor user skills')
     CParity cursor
     Run-Cursor
-    Check "cursor rerun: 4 verified (WARN: the kept dir)" ((NonDetail "cursor skills") -ceq 'WARN|cursor skills|4 verified')
+    Check "cursor rerun: OK status 4 verified; the kept dir is one WARN record" ((Status "cursor skills") -ceq 'OK|cursor skills|4 verified' -and (Row $cKeptMine2) -and (NRows WARN "cursor skills") -eq 1)
     CParity cursor-rerun
 
     $seedCursorNone = { cskill mine SKILL.md 'mine' }

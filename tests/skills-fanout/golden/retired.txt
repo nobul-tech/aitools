@@ -9,4 +9,5 @@ DETAIL|claude skills|added: a/SKILL.md
 DETAIL|claude skills|removed: [r]
 DETAIL|claude skills|removed: gone
 DETAIL|claude skills|removed: old
-WARN|claude skills|1 added, 3 removed
+OK|claude skills|1 added, 3 removed
+WARN|claude skills|Kept mine2: the skills manifest retires mine2, but this directory matches no harness copy (it may be your own) -- Claude Code still loads it; delete it if it is an old fan-out copy

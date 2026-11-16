@@ -2,4 +2,4 @@
 1
 # skills tree (path md5 [x]; symlinks not listed)
 # summary rows (ACTION and skills, sorted)
-ERROR|claude skills|cannot create skills dir
+ERROR|claude skills|cannot create skills dir|HOME/.claude/skills: <OS error>

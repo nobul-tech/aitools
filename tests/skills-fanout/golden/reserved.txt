@@ -8,4 +8,6 @@ synced/keep.txt 4b60e63c902af33ad002c798dc6b91e6
 DETAIL|claude skills|added: a/SKILL.md
 DETAIL|claude skills|failed: Anthropic-Skills-pack
 DETAIL|claude skills|failed: synced
-ERROR|claude skills|2 failed
+ERROR|claude skills|Not fanned out: Anthropic-Skills-pack|a reserved skills directory name (synced and anthropic-skills* belong to Claude Code) -- rename the harness skill
+ERROR|claude skills|Not fanned out: synced|a reserved skills directory name (synced and anthropic-skills* belong to Claude Code) -- rename the harness skill
+OK|claude skills|1 added, 2 failed
