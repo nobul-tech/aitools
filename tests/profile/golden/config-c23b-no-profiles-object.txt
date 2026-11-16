@@ -1,6 +1,6 @@
 exit 1
 -- summary rows
-ERROR|profile.json|invalid (see log)
+ERROR|profile.json|profile.json unusable|profile.json has no profiles object
 ACTION||Fix profile.json in the dotprofile (details in deploy.log)
 OK|aitools config|updated
 DETAIL|aitools config|version updated

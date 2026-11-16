@@ -1,6 +1,6 @@
 exit 1
 -- summary rows
-ERROR|machine profile|no machine match
+ERROR|machine profile|no machine match|override alias "aaaaaaaa-1111-2222-3333-444444444444" not in profiles (nobul-mac, laptop)
 ACTION||Run: aitools user init (profiles: nobul-mac, laptop)
 OK|aitools config|updated
 DETAIL|aitools config|version updated
