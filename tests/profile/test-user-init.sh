@@ -226,10 +226,15 @@ log_subjects() {
 # remote commits) must equal the golden file userinit-NAME.txt (sh and ps1 share it;
 # NAME defaults to this case's name). A case that only compares with another
 # case's golden (NAME given) never writes it under AITOOLS_TEST_UPDATE_GOLDEN=1.
+# In the summary rows a relay label's script extension is <EXT>: the bash entry
+# point labels a child "user init: setup-user-hooks.sh", aitools.ps1
+# "user init: setup-user-hooks.ps1" (the WHAT of a failed child's ERROR record,
+# reference/logging.md 8.3); the inline has_row checks keep the real name.
 result_golden() {
     local g="${1:-$CASE}" f="$D/result.txt"
     {
-        printf 'exit %s\n-- summary rows\n' "$RC"; cat "$SUM"
+        printf 'exit %s\n-- summary rows\n' "$RC"
+        perl -pe 's/(user init: [\w.-]+?)\.(?:sh|ps1)\b/$1.<EXT>/g' "$SUM"
         printf -- '-- profile.json\n'
         if [ -f "$DP/profile.json" ]; then norm_pj "$DP/profile.json"; else printf '(none)\n'; fi
         printf -- '-- remote.git commits\n'; log_subjects "$D/remote.git"
@@ -465,13 +470,19 @@ fx_ahead() {
 case_run push-rejected 0 fx_ahead --alias spare
 out_has "git pull --rebase, then git push"
 has_row "ACTION||git pull --rebase, then git push in <D>/home/repos/aitools-$GH_USER"
-has_row "WARN|machine profile|created (spare)"
+# The status stays OK: a warning of the run never turns a tool's OK record into a
+# WARN (reference/logging.md 8.3: a WARN record is one warning, never a status).
+# This asserted the old promotion (OK -> WARN after any warning) before I1.
+has_row "OK|machine profile|created (spare)"
+no_row_like "WARN|machine profile|created"
 
 echo "== D-TS13: the hooks review aborted (exit 2) -> user init exits 2"
 CASE_ENV=(HOOK_RC=2)
 case_run hook-abort 2 fx_two --alias spare
-# FIX-2 (A-13): the relay records the abort (the stub wrote no ERROR row)
-has_row "ERROR|claude hooks|aborted (exit 2)"
+# FIX-2 (A-13): the relay records the abort (the stub wrote no ERROR row), as
+# reference/logging.md 8.3 "A user abort": WHAT "<label> failed (exit 2)",
+# REASON "aborted by user"
+has_row "ERROR|claude hooks|user init: setup-user-hooks.sh failed (exit 2)|aborted by user"
 CASE_ENV=()
 
 # jsonl_count CASE SCRIPT [LEVEL MSG] -- valid records of SCRIPT (with LEVEL and
@@ -490,10 +501,11 @@ jsonl_count() {
 }
 
 echo "== FIX-2 (A-12, A-13): user init runs setup-user-config and setup-user-hooks through the lib relay"
-# A hooks script that dies (exit 3) without an ERROR row: the relay's row, one error, exit 1
+# A hooks script that dies (exit 3) without an ERROR row: the relay's row, one error, exit 1.
+# The stub prints nothing, so the reason is "no output (exit 3)" (reference/logging.md 8.3)
 CASE_ENV=(HOOK_RC=3)
 case_run hook-crash 1 fx_two --alias spare
-has_row "ERROR|claude hooks|script failed (exit 3)"
+has_row "ERROR|claude hooks|user init: setup-user-hooks.sh failed (exit 3)|no output (exit 3)"
 row_count "ERROR|claude hooks|" 1
 CASE_ENV=()
 # The children's lines reach deploy.jsonl and the console; a hooks warning is relayed

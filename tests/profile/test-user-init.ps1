@@ -322,12 +322,17 @@ try {
     }
     # Result-Golden [NAME] -- this case's result (exit code, summary rows, profile.json,
     # remote commits) must equal the golden file userinit-NAME.txt (sh and ps1 share
-    # it; NAME defaults to this case's name)
+    # it; NAME defaults to this case's name). In the summary rows a relay label's
+    # script extension is <EXT>: aitools.ps1 labels a child "user init:
+    # setup-user-hooks.ps1", the bash entry point "user init: setup-user-hooks.sh"
+    # (the WHAT of a failed child's ERROR record, reference/logging.md 8.3); the
+    # inline Has-Row checks keep the real name.
     function Result-Golden([string]$Name = "") {
         $g = if ($Name) { $Name } else { $script:CASE }
         $f = Join-Path $script:D "result.txt"
         $pjf = Join-Path $script:DP "profile.json"
-        $text = "exit $($script:RC)`n-- summary rows`n" + (ReadText $script:SUM) + "-- profile.json`n"
+        $rows = (ReadText $script:SUM) -creplace '(user init: [\w.-]+?)\.(?:sh|ps1)\b', '$1.<EXT>'
+        $text = "exit $($script:RC)`n-- summary rows`n" + $rows + "-- profile.json`n"
         $text += if (Test-Path -LiteralPath $pjf -PathType Leaf) { Norm-Pj $pjf } else { "(none)`n" }
         $text += "-- remote.git commits`n" + (Log-Subjects (Join-Path $script:D "remote.git"))
         $text += "-- gh-remote.git commits`n" + (Log-Subjects (Join-Path $script:D "gh-remote.git"))
@@ -605,13 +610,19 @@ try {
     Case-Run "push-rejected" 0 $fx_ahead @("--alias", "spare")
     Out-Has "git pull --rebase, then git push"
     Has-Row "ACTION||git pull --rebase, then git push in <D>/home/repos/aitools-$GH_USER"
-    Has-Row "WARN|machine profile|created (spare)"
+    # The status stays OK: a warning of the run never turns a tool's OK record into a
+    # WARN (reference/logging.md 8.3: a WARN record is one warning, never a status).
+    # This asserted the old promotion (OK -> WARN after any warning) before I1.
+    Has-Row "OK|machine profile|created (spare)"
+    No-RowLike "WARN|machine profile|created"
 
     say "== D-TS13: the hooks review aborted (exit 2) -> user init exits 2"
     $script:CaseEnv = @{ HOOK_RC = "2" }
     Case-Run "hook-abort" 2 $fx_two @("--alias", "spare")
-    # FIX-2 (A-13): the relay records the abort (the stub wrote no ERROR row)
-    Has-Row "ERROR|claude hooks|aborted (exit 2)"
+    # FIX-2 (A-13): the relay records the abort (the stub wrote no ERROR row), as
+    # reference/logging.md 8.3 "A user abort": WHAT "<label> failed (exit 2)",
+    # REASON "aborted by user"
+    Has-Row "ERROR|claude hooks|user init: setup-user-hooks.ps1 failed (exit 2)|aborted by user"
     $script:CaseEnv = @{}
 
     # Jsonl-Count CASE SCRIPT [LEVEL MSG] -- valid records of SCRIPT (with LEVEL and
@@ -636,10 +647,11 @@ try {
     }
 
     say "== FIX-2 (A-12, A-13): user init runs setup-user-config and setup-user-hooks through the lib relay"
-    # A hooks script that dies (exit 3) without an ERROR row: the relay's row, one error, exit 1
+    # A hooks script that dies (exit 3) without an ERROR row: the relay's row, one error, exit 1.
+    # The stub prints nothing, so the reason is "no output (exit 3)" (reference/logging.md 8.3)
     $script:CaseEnv = @{ HOOK_RC = "3" }
     Case-Run "hook-crash" 1 $fx_two @("--alias", "spare")
-    Has-Row "ERROR|claude hooks|script failed (exit 3)"
+    Has-Row "ERROR|claude hooks|user init: setup-user-hooks.ps1 failed (exit 3)|no output (exit 3)"
     Row-Count "ERROR|claude hooks|" 1
     $script:CaseEnv = @{}
     # The children's lines reach deploy.jsonl and the console; a hooks warning is relayed

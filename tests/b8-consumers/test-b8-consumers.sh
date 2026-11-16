@@ -94,7 +94,10 @@ rc() { cat "$C/rc"; }
 rows() { grep -v '^DETAIL' "$C/summary" | perl -pe 's/\r//' | LC_ALL=C sort; }  # summary rows, order-free
 has_row() { perl -pe 's/\r//' "$C/summary" | grep -xF "$1" >/dev/null; }
 in_log() { perl -pe 's/\e\[[0-9;]*m//g; s/\r//' "$C/out" "$C/logs/deploy.log" 2>/dev/null | grep -F -- "$1" >/dev/null; }
-nowhere() { printf 'AITOOLS_USER_REPO_PATH=%s/nowhere' "$C"; }
+# A dotprofile path that does not exist: under the temp root, not the case directory
+# (named -sh / -ps1 per harness), because the resolver's error line, which names it,
+# is the reason of the shared golden's ERROR|dotprofile|resolver failed record.
+nowhere() { printf 'AITOOLS_USER_REPO_PATH=%s/nowhere' "$TMP_ROOT"; }
 
 lang=sh
 

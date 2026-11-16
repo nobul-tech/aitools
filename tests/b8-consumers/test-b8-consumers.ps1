@@ -93,7 +93,10 @@ function SummaryMatch([string]$Pattern) { [bool](@(SummaryLines) | Where-Object 
 function InLog([string]$Text) {
     (Strip ((ReadText (Join-Path $script:C "out")) + "`n" + (ReadText (Join-Path $script:C "logs/deploy.log")))).Contains($Text)
 }
-function Nowhere { @{ AITOOLS_USER_REPO_PATH = (($script:C -replace '\\', '/') + "/nowhere") } }
+# A dotprofile path that does not exist: under the temp root, not the case directory
+# (named -sh / -ps1 per harness), because the resolver's error line, which names it,
+# is the reason of the shared golden's ERROR|dotprofile|resolver failed record.
+function Nowhere { @{ AITOOLS_USER_REPO_PATH = (($tmpRoot -replace '\\', '/') + "/nowhere") } }
 
 try {
     # --- A-22: setup-user-skills on a resolver error (rc 3) ------------------------

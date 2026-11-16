@@ -9,7 +9,7 @@ DETAIL|aitools config|userRepoPath updated
 DETAIL|aitools config|machineId updated
 DETAIL|aitools config|machineAlias updated
 OK|claude hooks|stub
-ERROR|claude hooks|script failed (exit 3)
+ERROR|claude hooks|user init: setup-user-hooks.<EXT> failed (exit 3)|no output (exit 3)
 -- profile.json
 {
   "version": 2,

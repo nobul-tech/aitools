@@ -1,4 +1,4 @@
 ACTION||see deploy.log -- the dotprofile could not be resolved
 ERROR|claude skills|not deployed: dotprofile error
 ERROR|cursor skills|not deployed: dotprofile error
-ERROR|dotprofile|resolver failed
+ERROR|dotprofile|resolver failed|AITOOLS_USER_REPO_PATH does not exist: <TMP>/nowhere
