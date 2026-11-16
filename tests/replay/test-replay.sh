@@ -397,7 +397,7 @@ else
     bad "replay: gh auth login did not get the terminal or the answer"
     if [ -f "$H1/gh-stub.log" ]; then show "$H1/gh-stub.log"; else printf '       | (gh stub never ran)\n'; fi
 fi
-if perl -ne 'BEGIN { $f = 0 } $f = 1 if /\? Paste your authentication token:/; END { exit($f ? 0 : 1) }' "$WORK/replay.out"; then
+if perl -ne 'BEGIN { $f = 0 } $f = 1 if /\? Paste your gh login code here >/; END { exit($f ? 0 : 1) }' "$WORK/replay.out"; then
     ok "replay: the gh auth login prompt is shown on the terminal"
 else
     bad "replay: no gh auth login prompt on the terminal"

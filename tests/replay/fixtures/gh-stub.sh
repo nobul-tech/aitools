@@ -14,7 +14,7 @@ case "${1:-} ${2:-}" in
         i=not-tty; o=not-tty
         if [ -t 0 ]; then i=tty; fi
         if [ -t 1 ]; then o=tty; fi
-        printf '? Paste your authentication token: '
+        printf '? Paste your gh login code here > '
         answer=""
         if ! IFS= read -r answer; then answer="<EOF>"; fi
         printf 'stdin=%s stdout=%s answer=%s\n' "$i" "$o" "$answer" >> "${GH_STUB_LOG:?GH_STUB_LOG is not set}"
