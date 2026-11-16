@@ -10,3 +10,4 @@ DETAIL|claude rules|added: a.md
 DETAIL|claude rules|removed: gone.md
 DETAIL|claude rules|removed: old.md
 OK|claude rules|1 added, 2 removed
+WARN|claude rules|kept mine2.md: the rules manifest retires mine2.md, but it matches no harness copy -- delete it if it is an old fan-out copy
