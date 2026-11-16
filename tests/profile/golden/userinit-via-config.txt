@@ -1,8 +1,10 @@
 exit 0
 -- summary rows
 OK|dotprofile|verified
-WARN|machine profile|not refreshed (no machine id)
-WARN|aitools config|updated
+WARN|machine profile|machine id unavailable: no machine id (test value)
+WARN|machine profile|profile 'mine' not refreshed: this machine's id cannot be detected (key from config.json machineId)
+WARN|aitools config|machine id unavailable: no machine id (test value)
+OK|aitools config|updated
 DETAIL|aitools config|googleDrives updated
 DETAIL|aitools config|githubUser updated
 DETAIL|aitools config|userRepoPath updated

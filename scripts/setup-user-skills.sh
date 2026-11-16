@@ -20,7 +20,9 @@
 # failed adopt, an unreadable directory) then use the tool "skills" too. A
 # resolver error, or an unreadable ~/.aitools/skills, manifest or
 # ~/.claude/skills, means reverse discovery does not run (its adopt target is
-# the dotprofile): ERROR "skills" "no adopt: <reason>". Without
+# the dotprofile): a resolver error is recorded once by the library (under
+# "dotprofile") and only logged here; an unreadable directory or manifest is
+# ERROR "skills" "no adopt: <what>" with its reason. Without
 # ~/.aitools/skills it deploys as before (an MDM endpoint run before
 # deploy-harness, or a machine where deploy-harness failed). The check sits in
 # the extracted body, so the generated MDM script (build-deploy) carries it.
@@ -80,10 +82,13 @@ SKILLS_SRC="$REPO_DIR/shared/skills"
 # User repo for dotprofile overrides and adopt target: the one dotprofile
 # resolver (reference/user-repo.md "Resolution"; SD-7). The rc is captured, not
 # suppressed: 0 found, 1 no dotprofile (shared-only mode, expected), 3 resolver
-# error (the lib already logged it: log_error + ERROR row "dotprofile").
+# error (the library recorded it once: write_error "dotprofile", counted in
+# this script's errors, so the exit status is 1).
 # On 1 USER_REPO_PATH is empty: shared skills only, no adopt offer. On 3 the
 # deploy is skipped (S3-M3Lead decision): shared copies must never overwrite
-# deployed dotprofile versions while the dotprofile cannot be read.
+# deployed dotprofile versions while the dotprofile cannot be read. What is
+# not run because of it is logged at info, not recorded again (one cause, one
+# red line: reference/logging.md 8.3 "Recorded at the source").
 URP_RC=0
 resolve_user_repo_path || URP_RC=$?
 USER_REPO_PATH="$AITLIB_USER_REPO_PATH"
@@ -92,13 +97,10 @@ if [ "$URP_RC" -ne 0 ] && [ "$URP_RC" -ne 1 ]; then
     SKILLS_BLOCKED=true
     if [ "$SKILLS_FANNED_OUT" = "true" ]; then
         # The fan-out deploys; reverse discovery adopts into the dotprofile, so
-        # it cannot run. Reported under "skills": the two fan-out rows are not ours.
-        log_error "Dotprofile unresolved (resolver error above) -- reverse discovery not run, so no skill can be adopted to the dotprofile"
-        write_summary ERROR "skills" "no adopt: dotprofile error"
+        # it cannot run.
+        log "Dotprofile unresolved (resolver error above) -- reverse discovery not run, so no skill can be adopted to the dotprofile"
     else
-        log_error "Dotprofile unresolved (resolver error above) -- skills not deployed, so shared copies cannot replace dotprofile versions"
-        write_summary ERROR "claude skills" "not deployed: dotprofile error"
-        write_summary ERROR "cursor skills" "not deployed: dotprofile error"
+        log "Dotprofile unresolved (resolver error above) -- skills not deployed, so shared copies cannot replace dotprofile versions"
     fi
 fi
 DOTPROFILE_SKILLS=""
@@ -139,8 +141,7 @@ fi
 SKILL_NAMES="${SKILL_NAMES# }"
 
 if [ -z "$SKILL_NAMES" ] && [ "$SKILLS_BLOCKED" != "true" ] && [ "$SKILLS_FANNED_OUT" != "true" ]; then
-    log_warn "No skills found in shared/skills/ or dotprofile"
-    write_summary WARN "claude skills" "no skills found"
+    write_warn "claude skills" "no skills found in shared/skills/ or the dotprofile -- nothing deployed"
 fi
 
 # --- Deploy function ---
@@ -156,41 +157,55 @@ deploy_skill() {
     elif [ -f "$SKILLS_SRC/$skill_name/SKILL.md" ]; then
         src="$SKILLS_SRC/$skill_name/SKILL.md"
     else
-        log_error "Skill source not found: $skill_name"
+        write_error "$tool_name" "cannot deploy $skill_name" "SKILL.md not found in the dotprofile or shared/skills"
+        deploy_tracker_record failed "$tool_name" "$skill_name"
         return
     fi
 
     local dest_dir="$dest_base/$skill_name"
     local dest="$dest_dir/SKILL.md"
 
+    # Read the source first: an unreadable file is one error with cat's
+    # message, not an empty deploy that fails later for another reason.
+    # 2>&1: cat writes nothing to stderr when it succeeds.
+    local src_content src_rc=0
+    src_content=$(cat "$src" 2>&1) || src_rc=$?
+    if [ "$src_rc" -ne 0 ]; then
+        write_error "$tool_name" "cannot read the source of $skill_name" "$(error_reason "$src_content" "$src_rc")"
+        deploy_tracker_record failed "$tool_name" "$skill_name"
+        return
+    fi
+
     # Adopt target: the file actually read (the dotprofile copy when that was
     # the source, else shared/skills in the aitools repo). The library writes it.
-    deploy_managed_file "$(cat "$src")" "$dest" "$tool_name" "$skill_name" "$src"
+    deploy_managed_file "$src_content" "$dest" "$tool_name" "$skill_name" "$src"
 
     case "$MANAGED_FILE_RESULT" in
         "accept & adopt")
             # Copy the adopted content to the other deploy targets too, so their
             # deploy sees LOCAL == SOURCE instead of asking again.
-            local _other_base _other
+            local _other_base _other _sync_out _sync_rc
             for _other_base in $ALL_SKILL_DESTS; do
                 [ "$_other_base" = "$dest_base" ] && continue
                 _other="$_other_base/$skill_name/SKILL.md"
-                if ! mkdir -p "$_other_base/$skill_name"; then
-                    log_error "Failed: $skill_name: cannot create $(display_path "$_other_base/$skill_name")"
-                    write_summary ERROR "$tool_name" "sync failed: $skill_name"
+                _sync_rc=0
+                _sync_out=$(mkdir -p "$_other_base/$skill_name" 2>&1) || _sync_rc=$?
+                if [ "$_sync_rc" -ne 0 ]; then
+                    write_error "$tool_name" "sync failed: $skill_name" "$(error_reason "$_sync_out" "$_sync_rc")"
                     continue
                 fi
                 backup_file "$_other"
-                if cp "$dest" "$_other"; then
+                _sync_out=$(cp "$dest" "$_other" 2>&1) || _sync_rc=$?
+                if [ "$_sync_rc" -eq 0 ]; then
                     log "Synced adopted skill to $(display_path "$_other")"
                 else
-                    log_error "Failed: $skill_name: could not copy the adopted skill to $(display_path "$_other")"
-                    write_summary ERROR "$tool_name" "sync failed: $skill_name"
+                    write_error "$tool_name" "sync failed: $skill_name" "$(error_reason "$_sync_out" "$_sync_rc")"
                 fi
             done
             ;;
         created|updated|skipped|verified|failed)
-            # The tracker records the outcome (failed -> ERROR row).
+            # The library recorded a failed or skipped file itself; the
+            # tracker writes the DETAIL item and counts it.
             ;;
     esac
     deploy_tracker_record "$MANAGED_FILE_RESULT" "$tool_name" "$skill_name"
@@ -198,30 +213,24 @@ deploy_skill() {
 
 # --- Deploy to Claude Code ---
 if [ -n "$SKILL_NAMES" ]; then
+    # Each failed item is its own ERROR record (the library's or this
+    # script's write_error); the tracker writes the OK status with its counts
+    # ("N failed" among them) and the DETAIL items, so there is no aggregate
+    # error record (reference/logging.md 8.3 "Managed files").
     log "Deploying skills to $(display_path "$SKILLS_DEST")..."
-    ERRORS_BEFORE_CLAUDE=$ERRORS
     deploy_tracker_init
     for skill_name in $SKILL_NAMES; do
         deploy_skill "$skill_name" "$SKILLS_DEST" "claude skills"
     done
-    if [ "$ERRORS" -eq "$ERRORS_BEFORE_CLAUDE" ]; then
-        deploy_tracker_summary "claude skills"
-    else
-        write_summary ERROR "claude skills" "deploy failed"
-    fi
+    deploy_tracker_summary "claude skills"
 
     # --- Deploy to Cursor ---
     log "Deploying skills to $(display_path "$SKILLS_DEST_CURSOR")..."
-    ERRORS_BEFORE_CURSOR=$ERRORS
     deploy_tracker_init
     for skill_name in $SKILL_NAMES; do
         deploy_skill "$skill_name" "$SKILLS_DEST_CURSOR" "cursor skills"
     done
-    if [ "$ERRORS" -eq "$ERRORS_BEFORE_CURSOR" ]; then
-        deploy_tracker_summary "cursor skills"
-    else
-        write_summary ERROR "cursor skills" "deploy failed"
-    fi
+    deploy_tracker_summary "cursor skills"
 fi
 
 # --- Reverse discovery ---
@@ -244,8 +253,7 @@ reverse_discover_skills() {
     [ -n "$USER_REPO_PATH" ] || return 0
     # An unreadable directory would leave the glob below empty: report it
     if [ ! -r "$dest_base" ] || [ ! -x "$dest_base" ]; then
-        log_error "Cannot read ~/.claude/skills -- reverse discovery not run, so no user-created skill is offered for adoption: not readable"
-        write_summary ERROR "$SKILLS_ROW_TOOL" "no adopt: target unreadable"
+        write_error "$SKILLS_ROW_TOOL" "no adopt: target unreadable" "~/.claude/skills is not readable -- reverse discovery not run"
         # return 0: the error is counted in ERRORS (the exit footer exits 1);
         # a non-zero return would end the script under set -e before the footer
         return 0
@@ -292,9 +300,11 @@ reverse_discover_skills() {
                 read_menu_choice choice "a adopt s skip" "s" "skip" "adopt skill $skill_name" "  > "
                 case "$choice" in
                     a|adopt)
-                        local _errors_before=$ERRORS
-                        if ! adopt_managed_file "$skill_dir/SKILL.md" "$USER_REPO_PATH/claude/skills/$skill_name/SKILL.md" || [ "$ERRORS" -gt "$_errors_before" ]; then
-                            write_summary ERROR "$SKILLS_ROW_TOOL" "adopt failed: $skill_name"
+                        # The library records a failure once (write_error
+                        # under SKILLS_ROW_TOOL, with its reason); the if keeps
+                        # set -e from ending the script on its return 1
+                        if ! adopt_managed_file --tool "$SKILLS_ROW_TOOL" "$skill_dir/SKILL.md" "$USER_REPO_PATH/claude/skills/$skill_name/SKILL.md"; then
+                            log "Adoption of $skill_name not completed (error above)"
                         fi
                         ;;
                     s|skip)
@@ -303,7 +313,7 @@ reverse_discover_skills() {
                     *)
                         # Unreachable: read_menu_choice returns only a VALID
                         # answer. Skip (writes nothing) and say so.
-                        log_warn "Unexpected answer \"$choice\" at adopt skill $skill_name -- skipped adoption of $skill_name"
+                        write_warn "$SKILLS_ROW_TOOL" "unexpected answer \"$choice\" at adopt skill $skill_name -- adoption skipped"
                         ;;
                 esac
             else
@@ -318,7 +328,7 @@ reverse_discover_skills() {
 # source, retired included), is a harness skill: the fan-out put it in
 # ~/.claude/skills, so it is never offered for adoption. Lower-cased (APFS and
 # NTFS are case-insensitive), one per line, each line ending in a newline
-# (in_list). Returns 1 after log_error + ERROR "skills" when ~/.aitools/skills
+# (in_list). Returns 1 after one write_error "skills" when ~/.aitools/skills
 # or its manifest cannot be read: reverse discovery is then not run, so a
 # harness skill is never mistaken for a user-created one. A manifest with a bad
 # header adds no names (the fan-out reports it); its directory names still count.
@@ -329,8 +339,7 @@ collect_harness_skill_names() {
     local tab entry name out line rc=0
     tab=$(printf '\t')
     if [ ! -r "$dir" ] || [ ! -x "$dir" ]; then
-        log_error "Cannot read ~/.aitools/skills -- reverse discovery not run, so no harness skill is offered for adoption: not readable"
-        write_summary ERROR "skills" "no adopt: harness unreadable"
+        write_error "skills" "no adopt: harness unreadable" "~/.aitools/skills is not readable -- reverse discovery not run"
         return 1
     fi
     for entry in "$dir"/*; do
@@ -345,10 +354,9 @@ collect_harness_skill_names() {
         # rc captured: 1 = unreadable (message in out), 2 = caller bug
         out=$(read_harness_manifest "$manifest" skills 2>&1) || rc=$?
         if [ "$rc" -ne 0 ]; then
-            # out is "cannot read <file>: <reason>": the reason goes last, as in the .ps1
-            log_error "Cannot read the skills manifest ~/.aitools/skills/.aitools-skills-manifest -- reverse discovery not run, so no harness skill is offered for adoption: ${out##*: }"
-            log_detail "read_harness_manifest exit $rc: $out"
-            write_summary ERROR "skills" "no adopt: manifest unreadable"
+            # out is "cannot read <file>: <reason>", which states the cause;
+            # error_reason logs it as detail (reverse discovery is not run)
+            write_error "skills" "no adopt: manifest unreadable" "$(error_reason "$out" "$rc")"
             return 1
         fi
         if [ "$out" = "header-bad" ]; then
@@ -373,7 +381,7 @@ collect_harness_skill_names() {
 }
 
 if [ "$SKILLS_BLOCKED" = "true" ]; then
-    :  # resolver error: no adopt target (logged and reported above)
+    :  # resolver error: no adopt target (recorded by the library, logged above)
 elif [ "$SKILLS_FANNED_OUT" != "true" ]; then
     reverse_discover_skills "$SKILLS_DEST"
 elif [ -n "$USER_REPO_PATH" ]; then

@@ -6,4 +6,6 @@ p1 b3e656f8b0828a31f3ed396a1c868786
 # summary rows (ACTION and skills, sorted)
 ACTION||Claude Code skills in ~/.claude/skills not updated (a symlink or a file, not a directory the fan-out owns): p1, s1 -- move them aside to get the aitools copy
 DETAIL|claude skills|added: d1/SKILL.md
-WARN|claude skills|1 added
+OK|claude skills|1 added
+WARN|claude skills|Kept p1: not a directory this fan-out owns (HOME/.claude/skills/p1 is a symlink or a file) -- the harness copy is not deployed; move it aside to get the aitools copy
+WARN|claude skills|Kept s1: not a directory this fan-out owns (HOME/.claude/skills/s1 is a symlink or a file) -- the harness copy is not deployed; move it aside to get the aitools copy

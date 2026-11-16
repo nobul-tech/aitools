@@ -20,7 +20,6 @@ case "$(uname -s)" in
         exit 1 ;;
 esac
 
-OS_NAME="$(uname -s)"
 MIN_MAJOR=5
 MIN_MINOR=0
 
@@ -53,14 +52,17 @@ get_bash_version() {
 }
 
 # --- Install/verify ---
-case "$OS_NAME" in
-    Darwin)
+# The platform comes from the library (AITOOLS_PLATFORM: macos / linux),
+# never from a direct uname read (.claude/rules/cross-platform.md).
+case "$AITOOLS_PLATFORM" in
+    macos)
         # macOS: system bash is 3.2 (GPLv2-frozen). Homebrew bash is 5.x.
         if ! command -v brew &>/dev/null; then
-            log_error "Homebrew not found. Install bash manually:"
-            log_error "  1. Install Homebrew: https://brew.sh"
-            log_error "  2. brew install bash"
-            write_summary ERROR "bash" "Homebrew not found"
+            write_error "bash" "Homebrew not found" "brew is not on PATH"
+            log "Install bash manually:"
+            log "  1. Install Homebrew: https://brew.sh"
+            log "  2. brew install bash"
+            write_summary ACTION "" "Install Homebrew (https://brew.sh), then: brew install bash"
             exit 1
         fi
 
@@ -80,24 +82,32 @@ case "$OS_NAME" in
             if [ -x "$brew_bash" ] && check_bash_version "$brew_bash"; then
                 brew_ver=$(get_bash_version "$brew_bash")
                 log_ok "Homebrew bash $brew_ver already installed at $brew_bash"
-                log_warn "Homebrew bash is not first in PATH -- #!/usr/bin/env bash resolves to system bash"
-                log "Ensure $brew_prefix/bin is before /usr/bin in PATH"
-                write_summary WARN "bash" "$brew_ver (PATH ordering issue)"
+                log "#!/usr/bin/env bash resolves to the system bash"
+                write_summary OK "bash" "$brew_ver"
+                write_action "bash" "Homebrew bash is not first in PATH -- put $brew_prefix/bin before /usr/bin" \
+                    "Put $brew_prefix/bin before /usr/bin in PATH"
             else
-                # Fresh install
+                # Fresh install. The output is captured (not streamed) so that a
+                # failure has a reason (reference/logging.md 8.3)
                 log "Installing bash via Homebrew..."
-                if ! brew install bash 2>&1 | while IFS= read -r line; do log "$line"; done; then
-                    log_error "brew install bash failed"
-                    write_summary ERROR "bash" "brew install failed"
+                BREW_RC=0
+                BREW_OUT=$(brew install bash 2>&1) || BREW_RC=$?
+                if [ "$BREW_RC" -ne 0 ]; then
+                    write_error "bash" "brew install failed" "$(error_reason "$BREW_OUT" "$BREW_RC")"
+                else
+                    printf '%s\n' "$BREW_OUT" | while IFS= read -r line; do log "$line"; done
                 fi
 
-                if [ -x "$brew_bash" ] && check_bash_version "$brew_bash"; then
+                if [ "$BREW_RC" -ne 0 ]; then
+                    # One failure, one red line: the install error above is it
+                    log "bash not checked: brew install failed"
+                elif [ -x "$brew_bash" ] && check_bash_version "$brew_bash"; then
                     brew_ver=$(get_bash_version "$brew_bash")
                     log_ok "bash installed ($brew_ver) at $brew_bash"
                     write_summary OK "bash" "$brew_ver"
                 else
-                    log_error "brew install completed but bash >= ${MIN_MAJOR}.${MIN_MINOR} not found"
-                    write_summary ERROR "bash" "installed but version check failed"
+                    write_error "bash" "installed but version check failed" \
+                        "no bash >= ${MIN_MAJOR}.${MIN_MINOR} at $brew_bash"
                 fi
             fi
         fi
@@ -112,16 +122,15 @@ case "$OS_NAME" in
                 write_summary OK "bash" "$bash_ver"
             else
                 bash_ver=$(get_bash_version bash)
-                log_warn "bash $bash_ver is below minimum ${MIN_MAJOR}.${MIN_MINOR}"
+                write_summary OK "bash" "$bash_ver"
+                write_action "bash" "bash $bash_ver is below ${MIN_MAJOR}.${MIN_MINOR} -- upgrade it with the distribution's package manager" \
+                    "Upgrade bash to >= ${MIN_MAJOR}.${MIN_MINOR}"
                 log "Upgrade via your distribution's package manager:"
                 log "  Debian/Ubuntu: sudo apt-get install -y bash"
                 log "  Fedora/RHEL:   sudo dnf install bash"
-                write_summary WARN "bash" "$bash_ver (below minimum ${MIN_MAJOR}.${MIN_MINOR})"
-                write_summary ACTION "" "Upgrade bash to >= ${MIN_MAJOR}.${MIN_MINOR}"
             fi
         else
-            log_error "bash not found"
-            write_summary ERROR "bash" "not found"
+            write_error "bash" "not found" "bash is not on PATH"
         fi
         ;;
 esac

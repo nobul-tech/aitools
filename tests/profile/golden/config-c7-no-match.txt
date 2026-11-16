@@ -1,6 +1,6 @@
 exit 1
 -- summary rows
-ERROR|machine profile|no machine match
+ERROR|machine profile|no machine match|no profile matches this machine (machine.id 3D4DF2A5-7D91-5AF9-9944-4FEEBAAE3CF5, hostname nobul-mac) -- run: aitools user init
 ACTION||Run: aitools user init (profiles: nobul-mac, laptop)
 OK|aitools config|updated
 DETAIL|aitools config|version updated

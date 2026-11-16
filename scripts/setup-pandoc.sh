@@ -21,33 +21,32 @@ case "$(uname -s)" in
         exit 1 ;;
 esac
 
-OS_NAME="$(uname -s)"
-
 # Remove a non-preferred install: output goes to the log; a failed removal is a
-# warning (non-blocking -- the Homebrew install below proceeds).
+# warning (non-blocking -- the Homebrew install below proceeds) whose reason is
+# taken from the output (error_reason logs that output as detail lines).
 remove_package() {  # label, command...
     local label="$1"; shift
     local out rc=0 line
     out=$("$@" 2>&1) || rc=$?
-    while IFS= read -r line; do
-        if [ -n "${line// /}" ]; then log_detail "$label: $line"; fi
-    done <<< "$out"
     if [ "$rc" -eq 0 ]; then
+        while IFS= read -r line; do
+            if [ -n "${line// /}" ]; then log_detail "$label: $line"; fi
+        done <<< "$out"
         log "Removed non-preferred install ($label)"
     else
-        log_warn "$label failed (exit $rc) -- see $(display_path "$LOG_FILE")"
+        write_warn "pandoc" "$label failed: $(error_reason "$out" "$rc")"
     fi
 }
 
 # --- Install/update ---
-case "$OS_NAME" in
-    Darwin)
+case "$AITOOLS_PLATFORM" in
+    macos)
         # macOS: Homebrew is the preferred method
         if ! command -v brew &>/dev/null; then
-            log_error "Homebrew not found. Install pandoc manually:"
-            log_error "  1. Install Homebrew: https://brew.sh"
-            log_error "  2. brew install pandoc"
-            write_summary ERROR "pandoc" "Homebrew not found"
+            write_error "pandoc" "Homebrew not found" "brew is not on PATH"
+            log "Install pandoc manually:"
+            log "  1. Install Homebrew: https://brew.sh"
+            log "  2. brew install pandoc"
             exit 1
         fi
 
@@ -64,32 +63,31 @@ case "$OS_NAME" in
                 if [ "$upgrade_rc" -eq 0 ] && printf '%s\n' "$UPGRADE_OUTPUT" | grep -i 'already installed\|up.to.date\|No available upgrade' >/dev/null; then
                     log_ok "Pandoc already up to date"
                     write_summary OK "pandoc" "$(pandoc --version | sed -n '1p')"
+                elif [ "$upgrade_rc" -ne 0 ] || printf '%s\n' "$UPGRADE_OUTPUT" | grep -i 'error\|fatal' >/dev/null; then
+                    # Exit code first (C-F2); the output grep stays for brew upgrade (Standard 3).
+                    # The installed pandoc still works: a warning plus its OK status
+                    # (script-standards-detail Standard 3); error_reason logs the output
+                    write_warn "pandoc" "brew upgrade failed: $(error_reason "$UPGRADE_OUTPUT" "$upgrade_rc")"
+                    write_summary OK "pandoc" "$(pandoc --version | sed -n '1p')"
                 else
                     while IFS= read -r line; do log "$line"; done <<< "$UPGRADE_OUTPUT"
-                    # Exit code first (C-F2); the output grep stays for brew upgrade (Standard 3).
-                    if [ "$upgrade_rc" -ne 0 ] || printf '%s\n' "$UPGRADE_OUTPUT" | grep -i 'error\|fatal' >/dev/null; then
-                        log_error "brew upgrade pandoc failed (exit $upgrade_rc) -- see $(display_path "$LOG_FILE")"
-                        write_summary ERROR "pandoc" "brew upgrade failed (exit $upgrade_rc)"
-                    else
-                        log_ok "Pandoc $(pandoc --version | sed -n '1p')"
-                        write_summary OK "pandoc" "$(pandoc --version | sed -n '1p')"
-                    fi
+                    log_ok "Pandoc $(pandoc --version | sed -n '1p')"
+                    write_summary OK "pandoc" "$(pandoc --version | sed -n '1p')"
                 fi
             else
                 # Not Homebrew — migrate
-                log_warn "Pandoc installed via non-preferred method at $pandoc_path"
+                write_warn "pandoc" "installed via a non-preferred method at $pandoc_path -- migrating to Homebrew"
                 log "Migrating to Homebrew..."
 
                 # Detect and clean up known non-preferred installs (only those present;
-                # the probes' output goes to the log so a failed probe is visible).
+                # a failed probe is a warning whose reason comes from its output).
                 if command -v conda &>/dev/null; then
                     conda_rc=0
                     conda_list=$(conda list pandoc 2>&1) || conda_rc=$?
                     if [ "$conda_rc" -ne 0 ]; then
-                        log_detail "conda-list-pandoc: $conda_list"
-                        log_warn "conda list pandoc failed (exit $conda_rc) -- skipping conda cleanup"
+                        write_warn "pandoc" "conda list pandoc failed, conda cleanup skipped: $(error_reason "$conda_list" "$conda_rc")"
                     elif printf '%s\n' "$conda_list" | grep '^pandoc ' >/dev/null; then
-                        log_warn "Removing conda pandoc..."
+                        log "Removing conda pandoc..."
                         remove_package "conda remove -y pandoc" conda remove -y pandoc
                     fi
                 fi
@@ -97,47 +95,75 @@ case "$OS_NAME" in
                     port_rc=0
                     port_list=$(port installed pandoc 2>&1) || port_rc=$?
                     if [ "$port_rc" -ne 0 ]; then
-                        log_detail "port-installed-pandoc: $port_list"
-                        log_warn "port installed pandoc failed (exit $port_rc) -- skipping MacPorts cleanup"
+                        write_warn "pandoc" "port installed pandoc failed, MacPorts cleanup skipped: $(error_reason "$port_list" "$port_rc")"
                     elif printf '%s\n' "$port_list" | grep '^ *pandoc ' >/dev/null; then
-                        log_warn "Removing MacPorts pandoc..."
+                        log "Removing MacPorts pandoc..."
                         remove_package "sudo port uninstall pandoc" sudo port uninstall pandoc
                     fi
                 fi
                 if [ -f "$HOME/.cabal/bin/pandoc" ]; then
-                    log_warn "Removing Cabal pandoc..."
+                    log "Removing Cabal pandoc..."
                     remove_package "rm ~/.cabal/bin/pandoc" rm -f "$HOME/.cabal/bin/pandoc"
                 fi
 
-                if ! brew install pandoc 2>&1 | while IFS= read -r line; do log "$line"; done; then
-                    log_error "brew install pandoc failed"
-                    write_summary ERROR "pandoc" "brew install failed"
+                # Stream the install to the console and tee it to a file, so a
+                # failure has output to take its reason from (logging.md 8.2: on a
+                # failure the output is in deploy.log twice, streamed and as detail).
+                # Under pipefail the pipeline's status is brew's: tee and the loop exit 0.
+                CMD_OUT=""
+                CMD_RC=0
+                CMD_FILE=$(mktemp "${TMPDIR:-/tmp}/setup-pandoc.XXXXXX") || CMD_FILE=""
+                if [ -n "$CMD_FILE" ]; then
+                    brew install pandoc 2>&1 | tee "$CMD_FILE" | while IFS= read -r line; do log "$line"; done || CMD_RC=$?
+                    CMD_OUT=$(cat "$CMD_FILE")
+                    rm -f "$CMD_FILE"
+                else
+                    # mktemp failed: stream as before; the reason falls back to "no output (exit N)"
+                    brew install pandoc 2>&1 | while IFS= read -r line; do log "$line"; done || CMD_RC=$?
+                fi
+                if [ "$CMD_RC" -ne 0 ]; then
+                    write_error "pandoc" "brew install failed" "$(error_reason "$CMD_OUT" "$CMD_RC")"
                 fi
 
                 if command -v pandoc &>/dev/null; then
                     log_ok "Migrated to Homebrew: Pandoc $(pandoc --version | sed -n '1p')"
                     log_ok "Install path: $(command -v pandoc)"
                     write_summary OK "pandoc" "$(pandoc --version | sed -n '1p')"
+                elif [ "$CMD_RC" -ne 0 ]; then
+                    # One failed install, one red line: the brew error above is the cause
+                    log "pandoc not on PATH after the failed install"
                 else
-                    log_error "Homebrew install succeeded but 'pandoc' not found in PATH"
-                    write_summary ERROR "pandoc" "installed but not on PATH"
+                    write_error "pandoc" "installed but not on PATH" "command -v pandoc found nothing after brew install"
                 fi
             fi
         else
             # Fresh install
             log "Installing Pandoc via Homebrew..."
-            if ! brew install pandoc 2>&1 | while IFS= read -r line; do log "$line"; done; then
-                log_error "brew install pandoc failed"
-                write_summary ERROR "pandoc" "brew install failed"
+            # Streamed and teed, as in the migration above
+            CMD_OUT=""
+            CMD_RC=0
+            CMD_FILE=$(mktemp "${TMPDIR:-/tmp}/setup-pandoc.XXXXXX") || CMD_FILE=""
+            if [ -n "$CMD_FILE" ]; then
+                brew install pandoc 2>&1 | tee "$CMD_FILE" | while IFS= read -r line; do log "$line"; done || CMD_RC=$?
+                CMD_OUT=$(cat "$CMD_FILE")
+                rm -f "$CMD_FILE"
+            else
+                # mktemp failed: stream as before; the reason falls back to "no output (exit N)"
+                brew install pandoc 2>&1 | while IFS= read -r line; do log "$line"; done || CMD_RC=$?
+            fi
+            if [ "$CMD_RC" -ne 0 ]; then
+                write_error "pandoc" "brew install failed" "$(error_reason "$CMD_OUT" "$CMD_RC")"
             fi
 
             if command -v pandoc &>/dev/null; then
                 log_ok "Pandoc installed ($(pandoc --version | sed -n '1p'))"
                 log_ok "Install path: $(command -v pandoc)"
                 write_summary OK "pandoc" "$(pandoc --version | sed -n '1p')"
+            elif [ "$CMD_RC" -ne 0 ]; then
+                # One failed install, one red line: the brew error above is the cause
+                log "pandoc not on PATH after the failed install"
             else
-                log_error "brew install completed but 'pandoc' not found in PATH"
-                write_summary ERROR "pandoc" "installed but not on PATH"
+                write_error "pandoc" "installed but not on PATH" "command -v pandoc found nothing after brew install"
             fi
         fi
         ;;
@@ -150,21 +176,34 @@ case "$OS_NAME" in
                 write_summary OK "pandoc" "$(pandoc --version | sed -n '1p')"
             else
                 log "Installing Pandoc via apt..."
-                if ! { sudo apt-get update -qq && sudo apt-get install -y pandoc; } 2>&1 | while IFS= read -r line; do log "$line"; done; then
-                    log_error "apt-get install pandoc failed"
-                    write_summary ERROR "pandoc" "apt-get install failed"
+                # Streamed and teed, as in the macOS branch; the brace group's
+                # status is the first failing apt-get's
+                CMD_OUT=""
+                CMD_RC=0
+                CMD_FILE=$(mktemp "${TMPDIR:-/tmp}/setup-pandoc.XXXXXX") || CMD_FILE=""
+                if [ -n "$CMD_FILE" ]; then
+                    { sudo apt-get update -qq && sudo apt-get install -y pandoc; } 2>&1 | tee "$CMD_FILE" | while IFS= read -r line; do log "$line"; done || CMD_RC=$?
+                    CMD_OUT=$(cat "$CMD_FILE")
+                    rm -f "$CMD_FILE"
+                else
+                    # mktemp failed: stream as before; the reason falls back to "no output (exit N)"
+                    { sudo apt-get update -qq && sudo apt-get install -y pandoc; } 2>&1 | while IFS= read -r line; do log "$line"; done || CMD_RC=$?
+                fi
+                if [ "$CMD_RC" -ne 0 ]; then
+                    write_error "pandoc" "apt-get install failed" "$(error_reason "$CMD_OUT" "$CMD_RC")"
                 fi
                 if command -v pandoc &>/dev/null; then
                     log_ok "Pandoc installed ($(pandoc --version | sed -n '1p'))"
                     write_summary OK "pandoc" "$(pandoc --version | sed -n '1p')"
+                elif [ "$CMD_RC" -ne 0 ]; then
+                    # One failed install, one red line: the apt-get error above is the cause
+                    log "pandoc not on PATH after the failed install"
                 else
-                    log_error "apt install completed but 'pandoc' not found in PATH"
-                    write_summary ERROR "pandoc" "installed but not on PATH"
+                    write_error "pandoc" "installed but not on PATH" "command -v pandoc found nothing after apt-get install"
                 fi
             fi
         else
-            log_error "No supported package manager found (apt). Install pandoc manually: https://pandoc.org/installing.html"
-            write_summary ERROR "pandoc" "no supported package manager"
+            write_error "pandoc" "no supported package manager" "apt-get not found -- install pandoc manually: https://pandoc.org/installing.html"
         fi
         ;;
 esac

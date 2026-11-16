@@ -210,10 +210,16 @@ function Remove-LegacyIntegration([string]$Text, [string]$Slot) {
     return @{ Text = (-join $out); Count = $count }
 }
 
-function Get-ParseErrorCount([string]$Text) {
+# The parser's error objects for Text (empty when it parses); the first one is
+# the reason of the parse-check error below.
+function Get-ParseErrors([string]$Text) {
     $errs = $null
     $null = [System.Management.Automation.Language.Parser]::ParseInput($Text, [ref]$null, [ref]$errs)
-    return @($errs).Count
+    return ,@($errs | Where-Object { $_ })
+}
+
+function Get-ParseErrorCount([string]$Text) {
+    return (Get-ParseErrors $Text).Count
 }
 
 # Lines outside our marked blocks that hold stray block text or a marker.
@@ -286,8 +292,7 @@ if ($profileExists) {
         $offset = if ($hasBom) { 3 } else { 0 }
         $content = [System.Text.UTF8Encoding]::new($false, $true).GetString($bytes, $offset, $bytes.Length - $offset)
     } catch {
-        LogError "Cannot read $profilePath as UTF-8 -- left unchanged: $_"
-        Write-Summary "ERROR" "shell" "profile not readable as UTF-8"
+        Write-AitError "shell" "profile not readable as UTF-8" (Get-AitErrorReason -ErrorRecord $_)
         exit 1
     }
 }
@@ -309,26 +314,29 @@ if ($integBlock) {
 
 # --- Never write a profile that parses worse than the one it replaces ---
 $parseErrorsBefore = Get-ParseErrorCount $content
-$parseErrorsAfter = Get-ParseErrorCount $newContent
+$newParseErrors = Get-ParseErrors $newContent
+$parseErrorsAfter = $newParseErrors.Count
 Log "Profile $profilePath : parse errors before $parseErrorsBefore, after $parseErrorsAfter"
 
-# Damage left in place: reported after the outcome rows (WARN + ACTION).
+# Damage left in place: one warning with its ACTION (Write-AitAction).
 function Write-DamageReport([string]$Text, [int]$ParseErrors) {
     $stray = Get-StrayLineCount $Text
     if ($ParseErrors -eq 0 -and $stray -eq 0) { return }
-    LogWarn "$profilePath is damaged ($ParseErrors parse error(s), $stray stray aitools line(s) outside the blocks) -- left in place, not guessed at"
-    Write-Summary "WARN" "shell" "profile damage left in place"
+    # Write-AitAction logs only its TEXT: the counts go to a detail line
+    LogDetail "$profilePath : $ParseErrors parse error(s), $stray stray aitools line(s) outside the blocks -- left in place, not guessed at"
     $clean = Find-CleanBackup $backupsBefore
     if ($clean) {
-        Write-Summary "ACTION" "" "Restore $profilePath from $clean"
+        Write-AitAction "shell" "profile damage left in place -- restore $profilePath from $clean" "Restore $profilePath from $clean"
     } else {
-        Write-Summary "ACTION" "" "Repair $profilePath by hand (no clean backup)"
+        Write-AitAction "shell" "profile damage left in place -- repair $profilePath by hand (no clean backup)" "Repair $profilePath by hand (no clean backup)"
     }
 }
 
 if ($parseErrorsAfter -gt $parseErrorsBefore) {
-    LogError "Managed block splice would add parse errors to $profilePath -- left unchanged"
-    Write-Summary "ERROR" "shell" "managed block splice failed parse check"
+    # The reason: the parser's first error in the new profile (the file is left
+    # unchanged; the exit and the damage report say so)
+    $e = $newParseErrors[0]
+    Write-AitError "shell" "managed block splice failed parse check" "line $($e.Extent.StartLineNumber): $($e.Message)"
     Write-DamageReport $content $parseErrorsBefore
     exit 1
 }
@@ -344,8 +352,7 @@ if ($profileExists -and ($newContent -ceq $content)) {
         try {
             New-Item -ItemType Directory -Path $profileDir -Force -ErrorAction Stop | Out-Null
         } catch {
-            LogError "Cannot create $profileDir : $_"
-            Write-Summary "ERROR" "shell" "profile directory not created"
+            Write-AitError "shell" "profile directory not created" (Get-AitErrorReason -ErrorRecord $_)
             exit 1
         }
     }
@@ -353,23 +360,26 @@ if ($profileExists -and ($newContent -ceq $content)) {
     try {
         [IO.File]::WriteAllText($profilePath, $newContent, [System.Text.UTF8Encoding]::new($hasBom))
     } catch {
-        LogError "Failed to write $profilePath : $_"
-        Write-Summary "ERROR" "shell" "managed block write failed"
+        Write-AitError "shell" "managed block write failed" (Get-AitErrorReason -ErrorRecord $_)
         exit 1
     }
     $written = [IO.File]::ReadAllText($profilePath)
-    $ok = ($written -ceq $newContent) -and (Test-OneBlock $written $pathStart $pathEnd)
+    if ($written -cne $newContent) {
+        Write-AitError "shell" "profile check after write failed" "the written file differs from the computed profile"
+        exit 1
+    }
+    $ok = Test-OneBlock $written $pathStart $pathEnd
     if ($integBlock) { $ok = $ok -and (Test-OneBlock $written $integStart $integEnd) }
     if (-not $ok) {
-        LogError "Profile check after write failed (content or block markers) -- $profilePath"
-        Write-Summary "ERROR" "shell" "managed block markers missing"
+        Write-AitError "shell" "managed block markers missing" "not exactly one managed block (or integration block) in $profilePath"
         exit 1
     }
     LogOk "Wrote $profilePath"
 }
 
 # ---------------------------------------------------------------------------
-# Outcome rows (OK rows first: a warning promotes later OK rows to WARN)
+# Outcome rows: the OK status records; each warning and error is its own record
+# (reference/logging.md 8.3), so their order changes no colour
 # ---------------------------------------------------------------------------
 if ($pathResult.Blocks -eq 0) {
     LogOk "Added managed block to $profilePath"
@@ -403,8 +413,7 @@ if ($integResult) {
         Write-Summary "OK" "shell" "integration refreshed"
     }
 } else {
-    LogWarn "aliases.ps1 not found ($aliasesPath) -- skipping shell integration (MDM deploy)"
-    Write-Summary "WARN" "shell" "aliases.ps1 not found"
+    Write-AitWarn "shell" "aliases.ps1 not found ($aliasesPath) -- shell integration skipped (MDM deploy)"
 }
 
 Write-DamageReport $newContent $parseErrorsAfter

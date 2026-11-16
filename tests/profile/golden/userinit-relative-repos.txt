@@ -1,6 +1,6 @@
 exit 1
 -- summary rows
-ERROR|dotprofile|reposPath not absolute
+ERROR|dotprofile|reposPath not absolute|'repos' in <D>/home/.aitools/config.json
 ACTION||Set an absolute reposPath in <D>/home/.aitools/config.json, then run: aitools user init
 -- profile.json
 {

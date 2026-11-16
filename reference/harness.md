@@ -161,10 +161,12 @@ The fan-out consumers read the manifest and prune retired names.
   skipped. Only `hooks/` has two sources today; rules and skills have one,
   so a rule or skill of the same name in aitools `.claude/` or the
   dotprofile is not a duplicate (it is not read at all).
-- **Each skipped duplicate is an error**: `log_error` naming both
-  sources, plus one ERROR row under `harness files`. The run continues
-  and exits 1. The duplicate stays an error on every run until it is
-  renamed or removed in one of the sources.
+- **Each skipped duplicate is an error**: one `write_error "harness
+  files"` per duplicate, WHAT naming the skipped duplicate and its source,
+  REASON naming the source that kept the name (first source wins;
+  `@reference/logging.md` section 8.2). The run continues and exits 1.
+  The duplicate stays an error on every run until it is renamed or
+  removed in one of the sources.
 - **Case-insensitive.** Names that differ only in case are duplicates
   (the macOS and Windows file systems are case-insensitive).
 - **Skills are whole directories.** The winning source's skill directory
@@ -225,10 +227,10 @@ read it to learn each rule's source and which rules to retire.
   withdrawn sources. Only `*.md` names; never `*.bak.*`. The name has no
   `.md` extension, so a consumer that copies `*.md` never copies it.
 - **The winning source is recorded** (first source wins; a skipped
-  duplicate is still a `log_error` + ERROR row, as above).
+  duplicate is still an error, `write_error`, as above).
 - **Written every run**, temp file then move. A write failure is
-  `log_error` + an ERROR row (`rules manifest not written`); the run
-  continues and exits 1.
+  `write_error "harness files" "rules manifest not written" REASON`, REASON
+  being the write error; the run continues and exits 1.
 - **Retiring.** A name in the previous manifest that no source has this
   run (names compared case-insensitively) becomes `retired`; its copy in
   `~/.aitools/rules` is backed up (`backup_file()`) and removed, with an
@@ -236,7 +238,7 @@ read it to learn each rule's source and which rules to retire.
   line stays in later manifests until a source has the name again; while
   it is retired, a file with that name found in `~/.aitools/rules` is
   backed up and removed on each run. A failed backup leaves the file in
-  place (`log_error` + ERROR row).
+  place (`write_error`, REASON being why the backup failed).
 - **Only a listed source retires.** A name whose source was not listed
   this run (directory not found, not a git work tree, `git ls-files`
   failed) keeps its previous line and its file; it is not retired. A
@@ -308,10 +310,12 @@ manifest; one planner and one writer serve both kinds
   `<name>.bak.<UTC>` backups are kept (`prune_skill_backups`, names matched
   literally). A failed or unproven copy is removed again; when it cannot be
   removed it is renamed `<name>.bak.incomplete.<UTC>` (never counted by the
-  prune; `.bak.` keeps it from being deployed or fanned out) with an ERROR
-  row. Any failure is `log_error` + an ERROR row and the directory stays
-  (the next run tries again). A file or symlink with a retired name is left
-  alone with a warning. Dry run: logged only.
+  prune; `.bak.` keeps it from being deployed or fanned out) with an
+  error. Any failure is `write_error "harness files"`, REASON being the
+  failed step's error (the copy, the `diff -r -q` difference or the
+  removal), and the directory stays (the next run tries again). A file
+  or symlink with a retired name is left alone with a warning. Dry run:
+  logged only.
 - **A skill that moves into `shared/skills/`** (e.g. from `.claude/skills/`)
   changes its manifest source to `shared` and is not retired; one that
   moves out of `shared/skills/` (into `.claude/skills/`) is retired.

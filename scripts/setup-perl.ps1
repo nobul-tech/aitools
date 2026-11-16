@@ -23,35 +23,37 @@ if (Get-Command perl -ErrorAction SilentlyContinue) {
     LogOk "Perl already installed (version $perlVersion)"
     Log "Install path: $perlPath"
 
-    # Version minimum check: require 5.010+
+    # Version minimum check: require 5.010+ (a warning when below or unparsable;
+    # the perl still works, so its OK status is written either way)
     try {
         $numericVersion = [double]$perlVersion
         if ($numericVersion -lt 5.010) {
-            LogWarn "Perl version $perlVersion is below minimum 5.010"
-            Write-Summary "WARN" "perl" "$perlVersion (below minimum 5.010)"
-        } else {
-            Write-Summary "OK" "perl" "$perlVersion"
+            Write-AitWarn "perl" "version $perlVersion is below the minimum 5.010"
         }
     } catch {
-        LogWarn "Could not parse Perl version: $perlVersion"
-        Write-Summary "WARN" "perl" "$perlVersion (version parse failed)"
+        Write-AitWarn "perl" "could not parse version '$perlVersion': $($_.Exception.Message)"
     }
+    Write-Summary "OK" "perl" "$perlVersion"
 } else {
     Log "Installing Perl (Strawberry Perl) via winget..."
     $wingetOutput = winget install --exact --id StrawberryPerl.StrawberryPerl --accept-source-agreements --accept-package-agreements 2>&1 | Out-String
-    Log-WingetOutput $wingetOutput
-    if ($LASTEXITCODE -ne 0) {
-        LogError "winget install failed (exit code $LASTEXITCODE)"
-        Write-Summary "ERROR" "perl" "winget install failed (exit $LASTEXITCODE)"
+    $installRc = $LASTEXITCODE
+    if ($installRc -ne 0) {
+        # Get-AitErrorReason logs the output as detail lines
+        Write-AitError "perl" "winget install failed" (Get-AitErrorReason -Output $wingetOutput -ExitCode $installRc)
+    } else {
+        Log-WingetOutput $wingetOutput
     }
     Refresh-Path
 
     $found = Ensure-ToolOnPath "perl" @(
         "C:\Strawberry\perl\bin\perl.exe"  # Verified: 2026-03-12 (v5.42.0.1)
     )
-    if (-not $found) {
-        LogError "Perl not found on PATH after install"
-        Write-Summary "ERROR" "perl" "installed but not on PATH"
+    if (-not $found -and $installRc -ne 0) {
+        # One failed install, one red line: the winget error above is the cause
+        Log "perl not found after the failed winget install"
+    } elseif (-not $found) {
+        Write-AitError "perl" "installed but not on PATH" "found neither on PATH nor at C:\Strawberry\perl\bin\perl.exe"
         Write-Summary "ACTION" "" "Add Strawberry Perl bin to PATH -- perl not accessible"
     } else {
         $perlVersion = (perl -e "print $];" 2>&1)
@@ -63,24 +65,21 @@ if (Get-Command perl -ErrorAction SilentlyContinue) {
         $perlDir = Split-Path $perlPath -Parent
         $persistentPath = [Environment]::GetEnvironmentVariable("Path", "User") + ";" + [Environment]::GetEnvironmentVariable("Path", "Machine")
         if ($persistentPath -notlike "*$perlDir*") {
-            LogError "Perl install dir not in persistent PATH: $perlDir"
-            Write-Summary "ERROR" "perl" "installed but not on PATH"
-            LogWarn "Add $perlDir to PATH -- tool not accessible to Claude Code"
+            # Standard 4: one error, plus the remedy as an ACTION
+            Write-AitError "perl" "installed but not on PATH" "$perlDir is not in the persistent PATH"
             Write-Summary "ACTION" "" "Add $perlDir to PATH -- perl not accessible"
         } else {
-            # Version minimum check: require 5.010+
+            # Version minimum check: require 5.010+ (a warning when below or
+            # unparsable; the OK status either way)
             try {
                 $numericVersion = [double]$perlVersion
                 if ($numericVersion -lt 5.010) {
-                    LogWarn "Perl version $perlVersion is below minimum 5.010"
-                    Write-Summary "WARN" "perl" "$perlVersion (below minimum 5.010)"
-                } else {
-                    Write-Summary "OK" "perl" "$perlVersion"
+                    Write-AitWarn "perl" "version $perlVersion is below the minimum 5.010"
                 }
             } catch {
-                LogWarn "Could not parse Perl version: $perlVersion"
-                Write-Summary "WARN" "perl" "$perlVersion (version parse failed)"
+                Write-AitWarn "perl" "could not parse version '$perlVersion': $($_.Exception.Message)"
             }
+            Write-Summary "OK" "perl" "$perlVersion"
         }
     }
 }

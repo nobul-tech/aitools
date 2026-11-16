@@ -5,4 +5,5 @@ x.md c60bd8b984903d51ec21168ccf8b5414
 # summary rows
 ACTION||Run aitools to rebuild ~/.aitools/rules and its manifest
 DETAIL|claude rules|added: a.md
-WARN|claude rules|1 added
+OK|claude rules|1 added
+WARN|claude rules|bad rules manifest header -- run: aitools (every rule fanned out, none retired, adopt not offered)

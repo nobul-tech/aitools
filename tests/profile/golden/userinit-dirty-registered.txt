@@ -1,7 +1,7 @@
 exit 0
 -- summary rows
 OK|dotprofile|verified
-WARN|machine profile|not refreshed (local edits)
+WARN|machine profile|profile.json in <D>/home/repos/aitools-nobul-jose has uncommitted changes -- this machine's profile was not refreshed; commit or discard them, then run: aitools user init
 ACTION||commit or discard the changes to profile.json in <D>/home/repos/aitools-nobul-jose, then run: aitools user init
 OK|aitools config|updated
 DETAIL|aitools config|googleDrives updated

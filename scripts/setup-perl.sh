@@ -20,31 +20,31 @@ case "$(uname -s)" in
         exit 1 ;;
 esac
 
-OS_NAME="$(uname -s)"
-
 # --- Version check helper ---
-# Checks perl version >= 5.010. Returns 0 if OK, 1 if below minimum.
+# Checks perl version >= 5.010 and writes a warning when it is below. Always
+# returns 0: a perl below the minimum still works, so the caller writes its OK
+# status either way (script-standards-detail "Severity decision guide").
 check_perl_version() {
     local ver
     ver=$(perl -e 'print $];' 2>&1)
     # perl $] returns a numeric version like 5.040000
-    if perl -e 'exit($] >= 5.010 ? 0 : 1)' 2>/dev/null; then
-        return 0
-    else
-        log_warn "Perl version $ver is below minimum 5.010"
-        return 1
+    # 2>/dev/null: only the exit status is read; a perl that cannot run the
+    # comparison is reported as below the minimum
+    if ! perl -e 'exit($] >= 5.010 ? 0 : 1)' 2>/dev/null; then
+        write_warn "perl" "version $ver is below the minimum 5.010"
     fi
+    return 0
 }
 
 # --- Install/update ---
-case "$OS_NAME" in
-    Darwin)
+case "$AITOOLS_PLATFORM" in
+    macos)
         # macOS: Homebrew is the preferred method
         if ! command -v brew &>/dev/null; then
-            log_error "Homebrew not found. Install perl manually:"
-            log_error "  1. Install Homebrew: https://brew.sh"
-            log_error "  2. brew install perl"
-            write_summary ERROR "perl" "Homebrew not found"
+            write_error "perl" "Homebrew not found" "brew is not on PATH"
+            log "Install perl manually:"
+            log "  1. Install Homebrew: https://brew.sh"
+            log "  2. brew install perl"
             exit 1
         fi
 
@@ -53,18 +53,45 @@ case "$OS_NAME" in
             perl_version="$(perl -e 'print $];')"
             log "Perl $perl_version found at $perl_path"
 
-            # Version minimum check
-            if check_perl_version; then
-                write_summary OK "perl" "$perl_version"
-            else
-                write_summary WARN "perl" "$perl_version (below minimum 5.010)"
-            fi
+            # Version minimum check (a warning when below; the OK status either way)
+            check_perl_version
+            write_summary OK "perl" "$perl_version"
         else
             # Fresh install
             log "Installing Perl via Homebrew..."
-            if ! brew install perl 2>&1 | while IFS= read -r line; do log "$line"; done; then
-                log_error "brew install perl failed"
-                write_summary ERROR "perl" "brew install failed"
+            # Stream the install to the console and tee it to a file, so a
+            # failure has output to take its reason from (logging.md 8.2: on a
+            # failure the output is in deploy.log twice, streamed and as detail).
+            # Under pipefail the pipeline's status is brew's: tee and the loop exit 0.
+            CMD_OUT=""
+            CMD_RC=0
+            CMD_FILE=$(mktemp "${TMPDIR:-/tmp}/setup-perl.XXXXXX") || CMD_FILE=""
+            if [ -n "$CMD_FILE" ]; then
+                brew install perl 2>&1 | tee "$CMD_FILE" | while IFS= read -r line; do log "$line"; done || CMD_RC=$?
+                CMD_OUT=$(cat "$CMD_FILE")
+                rm -f "$CMD_FILE"
+            else
+                # mktemp failed: stream as before; the reason falls back to "no output (exit N)"
+                brew install perl 2>&1 | while IFS= read -r line; do log "$line"; done || CMD_RC=$?
+            fi
+            if [ "$CMD_RC" -ne 0 ]; then
+                # || CMD_REASON="": error_reason runs perl, and exits 127 when perl
+                # is missing (this branch); the empty result is checked next
+                CMD_REASON=$(error_reason "$CMD_OUT" "$CMD_RC") || CMD_REASON=""
+                if [ -z "$CMD_REASON" ]; then
+                    # No perl, so no reason from error_reason:
+                    # the first error line of the output, else its last non-empty
+                    # line, else the exit code (logging.md 8.3 rules 3-5); the
+                    # output itself is already in deploy.log (streamed above)
+                    # || true: grep exits 1 when no line matches (pipefail); the
+                    # empty result is checked on the next line
+                    CMD_REASON=$(printf '%s\n' "$CMD_OUT" | grep -i -E '(^| )[A-Za-z0-9_-]*error:|(^| )fatal:' | sed -n -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e '1p') || true
+                    if [ -z "$CMD_REASON" ]; then
+                        CMD_REASON=$(printf '%s\n' "$CMD_OUT" | sed -n -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e '/./h' -e '${x;p;}')
+                    fi
+                    if [ -z "$CMD_REASON" ]; then CMD_REASON="no output (exit $CMD_RC)"; fi
+                fi
+                write_error "perl" "brew install failed" "$CMD_REASON"
             fi
 
             if command -v perl &>/dev/null; then
@@ -72,14 +99,13 @@ case "$OS_NAME" in
                 log_ok "Perl installed (version $perl_version)"
                 log_ok "Install path: $(command -v perl)"
 
-                if check_perl_version; then
-                    write_summary OK "perl" "$perl_version"
-                else
-                    write_summary WARN "perl" "$perl_version (below minimum 5.010)"
-                fi
+                check_perl_version
+                write_summary OK "perl" "$perl_version"
+            elif [ "$CMD_RC" -ne 0 ]; then
+                # One failed install, one red line: the brew error above is the cause
+                log "perl not on PATH after the failed install"
             else
-                log_error "brew install completed but 'perl' not found in PATH"
-                write_summary ERROR "perl" "installed but not on PATH"
+                write_error "perl" "installed but not on PATH" "command -v perl found nothing after brew install"
             fi
         fi
         ;;
@@ -91,16 +117,13 @@ case "$OS_NAME" in
             log_ok "Perl already installed (version $perl_version)"
             log "Install path: $(command -v perl)"
 
-            if check_perl_version; then
-                write_summary OK "perl" "$perl_version"
-            else
-                write_summary WARN "perl" "$perl_version (below minimum 5.010)"
-            fi
+            check_perl_version
+            write_summary OK "perl" "$perl_version"
         else
-            log_error "Perl not found. Install via your distribution's package manager:"
-            log_error "  Debian/Ubuntu: sudo apt-get install -y perl"
-            log_error "  Fedora/RHEL:   sudo dnf install perl"
-            write_summary ERROR "perl" "not found"
+            write_error "perl" "not found" "perl is not on PATH (this script installs perl only on macOS)"
+            log "Install perl via your distribution's package manager:"
+            log "  Debian/Ubuntu: sudo apt-get install -y perl"
+            log "  Fedora/RHEL:   sudo dnf install perl"
             write_summary ACTION "" "Install perl via package manager"
         fi
         ;;

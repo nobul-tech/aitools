@@ -90,8 +90,7 @@ NO_MACHINE=false
 DRY_RUN=false
 if [ "${AITOOLS_DRY_RUN:-}" = "1" ]; then DRY_RUN=true; fi
 bad_args() {
-    log_error "$1 (see --help)"
-    write_summary ERROR "aitools config" "bad arguments"
+    write_error "aitools config" "bad arguments" "$1 (see --help)"
     exit 1
 }
 while [ $# -gt 0 ]; do
@@ -140,20 +139,26 @@ CONFIG_FILE="$CONFIG_DIR/config.json"
 PROFILE_SH="$SCRIPT_DIR/aitools-profile.sh"
 JSON_PL="$SCRIPT_DIR/aitools-json.pl"
 WORK_DIR=""
-if ! WORK_DIR=$(mktemp -d) || [ -z "$WORK_DIR" ]; then
-    log_error "Failed: could not create a temp directory -- config.json not written"
-    write_summary ERROR "aitools config" "temp dir failed"
+mk_rc=0
+mk_out=$(mktemp -d 2>&1) || mk_rc=$?
+if [ "$mk_rc" -ne 0 ] || [ ! -d "$mk_out" ]; then
+    write_error "aitools config" "temp directory not created -- config.json not written" "$(error_reason "$mk_out" "$mk_rc")"
     exit 1
 fi
+WORK_DIR="$mk_out"
 # The merge result goes next to config.json (same filesystem, so mv replaces it in
 # one step); a dry run merges into the temp directory and never touches ~/.aitools.
 CONFIG_TMP="${CONFIG_FILE}.tmp.$$"
 if $DRY_RUN; then CONFIG_TMP="$WORK_DIR/config.json"; fi
 # remove_config_tmp -- remove a merge result that was not moved into place; a failed
-# removal is a counted warning (PowerShell Remove-ConfigTmp says the same)
+# removal is one warning, with rm's message (PowerShell Remove-ConfigTmp says the same)
 remove_config_tmp() {
-    if [ -e "$CONFIG_TMP" ] && ! rm -f "$CONFIG_TMP"; then
-        log_warn "Could not remove temp file $CONFIG_TMP"
+    local rm_rc=0 rm_out=""
+    if [ -e "$CONFIG_TMP" ]; then
+        rm_out=$(rm -f "$CONFIG_TMP" 2>&1) || rm_rc=$?
+        if [ "$rm_rc" -ne 0 ]; then
+            write_warn "aitools config" "could not remove temp file $(display_path "$CONFIG_TMP"): $(error_reason "$rm_out" "$rm_rc")"
+        fi
     fi
 }
 # EXIT trap: the last safety net. A failure here is logged at detail: a warning this
@@ -169,22 +174,23 @@ cleanup() {
 trap cleanup EXIT
 
 if ! command -v perl >/dev/null 2>&1; then
-    log_error "perl not found -- config.json cannot be written (the harness manages perl: run aitools install)"
-    write_summary ERROR "aitools config" "perl not found"
+    write_error "aitools config" "config.json not written" "perl not found (the harness manages perl: run aitools install)"
     exit 1
 fi
 for f in "$PROFILE_SH" "$JSON_PL"; do
     if [ ! -f "$f" ]; then
-        log_error "Failed: $(display_path "$f") not found next to setup-user-config.sh -- config.json not written"
-        write_summary ERROR "aitools config" "resolver missing"
+        write_error "aitools config" "config.json not written" "$(display_path "$f") not found next to setup-user-config.sh"
         exit 1
     fi
 done
 pj() { perl "$JSON_PL" "$@"; }
-if ! $DRY_RUN && ! mkdir -p "$CONFIG_DIR"; then
-    log_error "Failed: could not create $(display_path "$CONFIG_DIR") -- config.json not written"
-    write_summary ERROR "aitools config" "write failed"
-    exit 1
+if ! $DRY_RUN; then
+    mk_rc=0
+    mk_out=$(mkdir -p "$CONFIG_DIR" 2>&1) || mk_rc=$?
+    if [ "$mk_rc" -ne 0 ]; then
+        write_error "aitools config" "cannot create $(display_path "$CONFIG_DIR") -- config.json not written" "$(error_reason "$mk_out" "$mk_rc")"
+        exit 1
+    fi
 fi
 
 # --- 1. Derive values from profile.json (aitools-profile.sh derive-config) ---
@@ -204,16 +210,23 @@ SEEN=false
 NEED_INIT=false
 NEED_MIGRATE=false
 NEED_UPDATE=false
+# The warning text of each advice kind (section 3 records it, once per event)
+NEED_INIT_TEXT=""
+NEED_MIGRATE_TEXT=""
+NEED_UPDATE_TEXT=""
 PROFILE_BAD=false
+MACHINE_ERR=false
+D_ERRS=0            # resolver errors recorded here (one write_error each)
 # derive_warn TEXT -- route one resolver warning (the resolver returns its warnings;
-# this caller logs them at their level and owns the rows):
+# this caller logs them at their level and records them, reference/logging.md 7):
 #   handled  -- about the cached config.json or the expected shared-only state; this
-#               write corrects or records it: info, so a successful write stays OK (D-TS12)
-#   advisory -- this machine's values are right and the only follow-up is the command
-#               that the single ACTION row (section 3) names: info here; section 3 logs
-#               one warning with the ACTION
+#               write corrects or records it: info (D-TS12). An invalid config.json
+#               ("... -- resolving without it") is one of them: this write rebuilds the
+#               file, and the rebuild is the event's one warning (section 2)
+#   advisory -- the follow-up is `aitools user init`: info here; section 3 records the
+#               event once, as one warning that says what to do, with its ACTION
 #   real     -- something is off for this run (a clone, a duplicate alias, a hostname
-#               guess, an undetectable id): log_warn, counted; the config row becomes WARN
+#               guess, an undetectable id): one warning, recorded under aitools config
 #   caller   -- --no-machine only: advice whose follow-up is machine registration (it
 #               names aitools user init or aitools-profile migrate) belongs to the
 #               caller: detail only, not counted, no ACTION
@@ -221,7 +234,7 @@ NM_UNREG=false      # --no-machine: the resolver reported this machine as unregi
 NM_OTHER_ERR=false  # --no-machine: the resolver reported another error (still an ERROR)
 derive_warn() {
     case "$1" in
-        config.json\ *|*"not saved to config.json"*|"no dotprofile found"*|"githubUser unknown"*)
+        config.json\ *|*"not saved to config.json"*|"no dotprofile found"*|"githubUser unknown"*|*" -- resolving without it")
             log "config: $1 (handled by this write)" ;;
         *"run: aitools user init"*|*"run: aitools-profile migrate"*)
             if $NO_MACHINE; then
@@ -230,26 +243,35 @@ derive_warn() {
                 derive_warn_machine "$1"
             fi ;;
         *)
-            log_warn "config: $1" ;;
+            write_warn "aitools config" "$1" ;;
     esac
 }
+# derive_warn_machine TEXT -- advice whose follow-up is aitools user init: logged
+# here, recorded once in section 3 (one warning with its ACTION); the TEXT kept for
+# that record says what is wrong and what to run
 derive_warn_machine() {
+    log "config: $1 (see ACTION)"
     case "$1" in
         *"has no machine.id -- run: aitools user init"*)
-            log "config: $1 (see ACTION)"; NEED_INIT=true ;;
+            NEED_INIT=true
+            if [ -z "$NEED_INIT_TEXT" ]; then NEED_INIT_TEXT="${1%% -- *} (matched by $M_VIA) -- run: aitools user init"; fi ;;
         *"run: aitools-profile migrate"*)
-            log "config: $1 (see ACTION)"; NEED_MIGRATE=true ;;
+            NEED_MIGRATE=true
+            if [ -z "$NEED_MIGRATE_TEXT" ]; then NEED_MIGRATE_TEXT="${1%% -- *} -- run: aitools user init"; fi ;;
+        *"renamed (run: aitools user init"*)
+            NEED_UPDATE=true
+            if [ -z "$NEED_UPDATE_TEXT" ]; then NEED_UPDATE_TEXT="${1%% -- *} -- renamed or cloned -- run: aitools user init"; fi ;;
         *)
-            log_warn "config: $1"
-            case "$1" in
-                *"renamed (run: aitools user init"*) NEED_UPDATE=true ;;
-                *"run: aitools user init"*) NEED_INIT=true ;;
-            esac ;;
+            NEED_INIT=true
+            if [ -z "$NEED_INIT_TEXT" ]; then NEED_INIT_TEXT="machine ${1%% -- *} -- run: aitools user init"; fi ;;
     esac
 }
-# derive_error TEXT -- one resolver error. With --no-machine, "this machine is not
-# registered" (no profile matches it; profile.json has no machine profiles) is the
-# caller's to report: detail only. Every other error stays an error.
+# derive_error TEXT -- one resolver error, recorded once here with the resolver's line
+# as the reason (section 1's ACTION follows; no second record). With --no-machine,
+# "this machine is not registered" (no profile matches it; profile.json has no
+# machine profiles) is the caller's to report: detail only. Every other error stays
+# an error. The machine-profile WHAT is the library wrapper's (resolve_machine_profile:
+# "no machine match"), so the same failure seen by both is one panel line (x2).
 derive_error() {
     if $NO_MACHINE; then
         case "$1" in
@@ -260,9 +282,18 @@ derive_error() {
         esac
         NM_OTHER_ERR=true
     fi
-    log_error "config: $1"
-    # profile.json itself is unusable: invalid JSON, not version 2, or no profiles object
-    case "$1" in *"is invalid JSON"*|*"is not v2"*|*"has no profiles object"*) PROFILE_BAD=true ;; esac
+    D_ERRS=$((D_ERRS + 1))
+    case "$1" in
+        # profile.json itself is unusable: invalid JSON, not version 2, or no profiles object
+        *"is invalid JSON"*|*"is not v2"*|*"has no profiles object"*)
+            PROFILE_BAD=true
+            write_error "profile.json" "profile.json unusable" "$1" ;;
+        "AITOOLS_USER_REPO_PATH does not exist"*|"--user-repo-path does not exist"*)
+            write_error "dotprofile" "dotprofile not found" "$1" ;;
+        *)
+            MACHINE_ERR=true
+            write_error "machine profile" "no machine match" "$1" ;;
+    esac
 }
 while IFS=$'\t' read -r k v; do
     case "$k" in
@@ -281,28 +312,31 @@ while IFS=$'\t' read -r k v; do
     esac
 done <<< "$DERIVE_OUT"
 if ! $SEEN || [ "$DERIVE_RC" -gt 2 ]; then
-    log_error "Failed: profile derivation produced no result (exit $DERIVE_RC) -- see $(display_path "$LOG_FILE")"
-    write_summary ERROR "aitools config" "derivation failed"
+    # The resolver's early exits print one "aitools-profile: <reason>" line on stderr
+    # (logged at detail above with the rest of its stderr)
+    write_error "aitools config" "profile derivation produced no result (exit $DERIVE_RC)" "$(error_reason "$(<"$WORK_DIR/derive.err")" "$DERIVE_RC")"
     D_GH=""; D_URP=""; D_MID=""; D_ALIAS=""; DERIVE_RC=2
 else
     log "config: dotprofile=${D_URP:-none} via=$U_VIA machineId=${D_MID:-none} machineAlias=${D_ALIAS:-none} via=$M_VIA company=$D_COMPANY id=${D_ID:-unavailable} host=${D_HOST:-unavailable}"
     case "$DERIVE_RC" in
         0) : ;;
         1) log "config: no dotprofile yet -- writing bootstrap keys only (shared-only mode)" ;;
-        # Each ACTION has a log line that names its row and carries the instruction,
-        # at the row's level (error; audit A-10)
+        # Each resolver error was recorded once (derive_error); one ACTION names the fix.
+        # The advice line is logged at info: the error line above is the event (P1:
+        # one cause, one red line)
         *) if $PROFILE_BAD; then
                ADVICE="Fix profile.json in the dotprofile (details in deploy.log)"
-               log_error "config: profile.json invalid -- $ADVICE"
-               write_summary ERROR "profile.json" "invalid (see log)"
+               log "config: $ADVICE"
                write_summary ACTION "" "$ADVICE"
            elif $NO_MACHINE && $NM_UNREG && ! $NM_OTHER_ERR; then
                log_detail "config: no machine match not reported (--no-machine: the caller reports registration)"
-           else
+           elif $MACHINE_ERR; then
                ADVICE="Run: aitools user init (profiles: ${ALIASES:-none})"
-               log_error "config: machine profile: no machine match -- $ADVICE"
-               write_summary ERROR "machine profile" "no machine match"
+               log "config: $ADVICE"
                write_summary ACTION "" "$ADVICE"
+           elif [ "$D_ERRS" -eq 0 ]; then
+               # exit 2 with no error line: still one error, with the resolver's stderr as the reason
+               write_error "aitools config" "profile derivation failed (exit $DERIVE_RC)" "$(error_reason "$(<"$WORK_DIR/derive.err")" "$DERIVE_RC")"
            fi ;;
     esac
 fi
@@ -378,13 +412,17 @@ op_set string "$DERIVED_FROM" meta derivedFrom
 MERGE_RC=0
 MERGE_MSG=$(printf '%s' "$OPS" | pj edit "$IN" "$CONFIG_TMP" 2>&1) || MERGE_RC=$?
 if [ "$MERGE_RC" -ne 0 ]; then
-    log_detail "merge: $MERGE_MSG"
     # A key that differs only in case from a managed key (the JSON engines refuse to add
     # its twin, aitools-json.pl): name both keys, so the user knows what to fix (PR #108 n-2)
     MERGE_WHY=""
-    MERGE_WHY=$(printf '%s\n' "$MERGE_MSG" | perl -ne 'next if $done; if (/set: \x27(.*?)\x27 differs only in case from existing key \x27(.*)\x27/) { print " -- key \"$2\" differs only in case from the managed key \"$1\": rename or remove it"; $done = 1 }') || MERGE_WHY=""  # perl failed: the generic message below
-    log_error "Failed: $(display_path "$CONFIG_FILE"): config merge failed (exit $MERGE_RC)$MERGE_WHY -- existing file left untouched"
-    write_summary ERROR "aitools config" "merge failed"
+    MERGE_WHY=$(printf '%s\n' "$MERGE_MSG" | perl -ne 'next if $done; if (/set: \x27(.*?)\x27 differs only in case from existing key \x27(.*)\x27/) { print " -- key \"$2\" differs only in case from the managed key \"$1\": rename or remove it"; $done = 1 }') || MERGE_WHY=""  # perl failed: the generic reason below
+    if [ -n "$MERGE_WHY" ]; then
+        log_detail "merge: $MERGE_MSG"
+        write_error "aitools config" "config merge failed -- existing file left untouched" "${MERGE_WHY#" -- "}"
+    else
+        # error_reason logs the engine's output as detail lines
+        write_error "aitools config" "config merge failed -- existing file left untouched" "$(error_reason "$MERGE_MSG" "$MERGE_RC")"
+    fi
 else
     # Validation: valid object (checked by the engine on write) + bootstrap keys present
     MISSING=""
@@ -410,16 +448,14 @@ else
     # No "//" inside a path value (protocol prefixes excepted), as validate_json_config
     # (one perl, first match only: a two-stage pipe could die of SIGPIPE under pipefail)
     DOUBLE=""; DOUBLE_RC=0
-    DOUBLE=$(perl -ne 'if (/("[^"]*(?<!http:)(?<!https:)\/\/[^"]*")/) { print "$1"; exit }' "$CONFIG_TMP") || DOUBLE_RC=$?
+    # stdout is the match; perl's own message goes to a file (the reason on failure)
+    DOUBLE=$(perl -ne 'if (/("[^"]*(?<!http:)(?<!https:)\/\/[^"]*")/) { print "$1"; exit }' "$CONFIG_TMP" 2>"$WORK_DIR/double.err") || DOUBLE_RC=$?
     if [ "$DOUBLE_RC" -ne 0 ]; then
-        log_error "Failed: $(display_path "$CONFIG_FILE"): could not check the merged config (perl exit $DOUBLE_RC) -- existing file left untouched"
-        write_summary ERROR "aitools config" "validation failed"
+        write_error "aitools config" "could not check the merged config -- existing file left untouched" "$(error_reason "$(<"$WORK_DIR/double.err")" "$DOUBLE_RC")"
     elif [ -n "$DOUBLE" ]; then
-        log_error "Failed: $(display_path "$CONFIG_FILE"): double slash in a path value: $DOUBLE -- existing file left untouched"
-        write_summary ERROR "aitools config" "validation failed"
+        write_error "aitools config" "merged config rejected -- existing file left untouched" "double slash in a path value: $DOUBLE"
     elif [ -n "$MISSING" ]; then
-        log_error "Failed: $(display_path "$CONFIG_FILE"): missing bootstrap $MISSING (run aitools install) -- existing file left untouched"
-        write_summary ERROR "aitools config" "missing bootstrap values"
+        write_error "aitools config" "merged config rejected -- existing file left untouched" "missing bootstrap $MISSING (run aitools install)"
     elif $SAME; then
         log_ok "Verified: $(display_path "$CONFIG_FILE") (unchanged)"
         write_summary OK "aitools config" "verified"
@@ -431,14 +467,16 @@ else
         write_summary OK "aitools config" "dry-run: would update"
     else
         backup_file "$CONFIG_FILE"
-        if ! mv "$CONFIG_TMP" "$CONFIG_FILE"; then
-            log_error "Failed: $(display_path "$CONFIG_FILE"): could not replace the config file"
-            write_summary ERROR "aitools config" "write failed"
+        mv_rc=0
+        mv_out=$(mv "$CONFIG_TMP" "$CONFIG_FILE" 2>&1) || mv_rc=$?
+        if [ "$mv_rc" -ne 0 ]; then
+            write_error "aitools config" "could not replace $(display_path "$CONFIG_FILE")" "$(error_reason "$mv_out" "$mv_rc")"
         else
             case "$CONFIG_STATE" in
                 recovered)
-                    log_warn "$(display_path "$CONFIG_FILE") was not valid JSON ($CORRUPT_REASON) -- rebuilt; the invalid copy was backed up"
-                    write_summary WARN "aitools config" "rebuilt (was invalid)" ;;
+                    # The event's one warning (the resolver's "-- resolving without it" is
+                    # logged at info: this write corrects it)
+                    write_warn "aitools config" "$(display_path "$CONFIG_FILE") was not valid JSON ($CORRUPT_REASON) -- rebuilt; the invalid copy was backed up" ;;
                 created)
                     log_ok "Created: $(display_path "$CONFIG_FILE")"
                     write_summary OK "aitools config" "created" ;;
@@ -458,20 +496,26 @@ fi
 # The merge result is gone after a move; every other path removes it here (audit A-11)
 remove_config_tmp
 
-# --- 3. One ACTION for the advice. It must stay after the config row: write_summary
-# promotes an OK row to WARN once a warning is counted, and the log_warn paired with
-# the ACTION (script-standards-detail "Severity decision guide") is counted. The row
-# reports the write; the footer still counts this warning. ---
+# --- 3. The advice: each event the resolver reported (section 1) is one warning whose
+# text says what is wrong and what to run (reference/logging.md 7, 8.2). The event that
+# sets the ACTION (priority: register, then re-key, then update) is one write_action;
+# any other advice event of this run is one write_warn. The config status record above
+# stays as written (no record is recoloured, logging.md 8.3). ---
 # The re-key advice assumes user init calls aitools-profile migrate (re-key batch 5).
 # --no-machine: no NEED_* flag is set (the advice is the caller's), so no ACTION.
 if [ "$DERIVE_RC" -eq 0 ]; then
-    ADVICE=""
-    if $NEED_INIT; then ADVICE="Run: aitools user init (registers this machine)"
-    elif $NEED_MIGRATE; then ADVICE="Run: aitools user init (re-keys machine profiles by machine id)"
-    elif $NEED_UPDATE; then ADVICE="Run: aitools user init (updates this machine's profile)"; fi
-    if [ -n "$ADVICE" ]; then
-        log_warn "config: $ADVICE"
-        write_summary ACTION "" "$ADVICE"
+    ADVICE=""; ADVICE_KIND=""
+    if $NEED_INIT; then ADVICE="Run: aitools user init (registers this machine)"; ADVICE_KIND="init"
+    elif $NEED_MIGRATE; then ADVICE="Run: aitools user init (re-keys machine profiles by machine id)"; ADVICE_KIND="migrate"
+    elif $NEED_UPDATE; then ADVICE="Run: aitools user init (updates this machine's profile)"; ADVICE_KIND="update"; fi
+    if $NEED_INIT; then
+        if [ "$ADVICE_KIND" = "init" ]; then write_action "aitools config" "$NEED_INIT_TEXT" "$ADVICE"; else write_warn "aitools config" "$NEED_INIT_TEXT"; fi
+    fi
+    if $NEED_MIGRATE; then
+        if [ "$ADVICE_KIND" = "migrate" ]; then write_action "aitools config" "$NEED_MIGRATE_TEXT" "$ADVICE"; else write_warn "aitools config" "$NEED_MIGRATE_TEXT"; fi
+    fi
+    if $NEED_UPDATE; then
+        if [ "$ADVICE_KIND" = "update" ]; then write_action "aitools config" "$NEED_UPDATE_TEXT" "$ADVICE"; else write_warn "aitools config" "$NEED_UPDATE_TEXT"; fi
     fi
 fi
 

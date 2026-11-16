@@ -1,9 +1,10 @@
-# test-hookin.ps1 -- tests for the deploy-harness hook-ins on Windows: the
-# Windows branch of the deploy_configs loop of scripts/aitools (the bash entry
-# point, cross-platform), Deploy-Configs (scripts/aitools.ps1) and
-# Invoke-HarnessStep (scripts/aitools-install.ps1). The Windows harness of this
-# suite; tests/hookin/test-hookin.sh is the macOS/Linux harness (aitools-install.sh
-# Step 8b and the .sh list of deploy_configs).
+# test-hookin.ps1 -- tests for the deploy-harness hook-ins on Windows:
+# Deploy-Configs (scripts/aitools.ps1) and Invoke-HarnessStep
+# (scripts/aitools-install.ps1). The Windows harness of this suite;
+# tests/hookin/test-hookin.sh is the macOS/Linux harness (aitools-install.sh
+# Step 8b and the deploy_configs loop of scripts/aitools, whose one list is the
+# .sh list: on Windows scripts/aitools forwards to aitools.ps1 before its library
+# loads, so it has no Windows branch left to test here).
 #
 # Each case builds a fixture aitools repo (git) whose scripts/ holds copies of the
 # real aitools-install.sh, aitools, aitools-lib.sh/.ps1 and deploy-harness.sh/.ps1
@@ -14,26 +15,26 @@
 # touched.
 # Cases:
 #   static   -- installer has no ~/.aitools/bin step; Step 8b sits between Step 8
-#               (Node) and Step 9 on both platforms; the sync deploy lists start with
-#               deploy-harness and no longer list setup-user-config (file checks)
-#   loop     -- deploy_configs (extracted from scripts/aitools), its Windows branch
-#               (the .ps1 list with pwsh), run by Git Bash: writer runs once,
-#               deploy-harness first, the other 7 scripts run
-#   loop exit 1 / loop abort (pty) -- a duplicate hook: ERROR row; [x]abort
-#   ps loop / ps step -- the same for Deploy-Configs (aitools.ps1) and
-#               Invoke-HarnessStep (aitools-install.ps1) under native pwsh, through
-#               tests/hookin/hookin-driver.ps1
+#               (Node) and Step 9 on both platforms; the sync deploy lists (one in
+#               scripts/aitools, one in aitools.ps1) start with deploy-harness and no
+#               longer list setup-user-config (file checks)
+#   ps loop / ps step -- Deploy-Configs (aitools.ps1) and Invoke-HarnessStep
+#               (aitools-install.ps1) under native pwsh, through
+#               tests/hookin/hookin-driver.ps1: writer runs once, deploy-harness
+#               first, the other 7 scripts run; a duplicate hook is deploy-harness's
+#               own ERROR row and no second one from the relay; [x]abort (pty) is
+#               one WARN row and no ERROR row; a missing deploy-harness.ps1 is one
+#               WARN row
 #
 # Platform targeting (plans/ci-platform-targeting.md; commander 2026-11-14:
 # "sh scripts and tests should only run on linux/mac and ps1 on windows"):
-# this harness runs on Windows only. scripts/aitools is a bash entry point with
-# a Windows branch (cross-platform.md exemption table), so the loop cases run it
-# with Git Bash (Resolve-TestGitBash, never a bare bash: in native pwsh that can
-# be the WSL launcher; SKIP without Git Bash). aitools-install.sh refuses
-# Windows, so its install cases are in the .sh harness only. On Windows the bash
-# loop does not relay deploy-harness.ps1 to deploy.jsonl (by design,
-# scripts/aitools), so that check is not made for the loop. No sh-vs-ps1 parity
-# is asserted here, so there are no golden files.
+# this harness runs on Windows only. The loop cases that ran the Windows branch
+# of scripts/aitools' deploy_configs under Git Bash were removed (2026-11-16,
+# plan summary-warn-reporting I5): that branch is gone (A3-F2), and the extracted
+# bash loop now runs the .sh scripts, which refuse Windows; test-hookin.sh tests
+# that loop on macOS/Linux. aitools-install.sh refuses Windows, so its install
+# cases are in the .sh harness only. No sh-vs-ps1 parity is asserted here, so
+# there are no golden files.
 # Interactive cases use tests/managed-files/pty-run.py (python3 with pywinpty);
 # skipped without it. Exit 1 if any case fails.
 #
@@ -144,8 +145,8 @@ function Add-DuplicateRule {
 # Run-Env INPUT HOMEVALUE EXE ARGS: run EXE under the case HOME (stdin at EOF, or a
 # pty with INPUT). USERPROFILE (pwsh's home) and the log and summary paths are
 # native (forward slashes, as cygpath -m gave the Git Bash harness); HOMEVALUE is
-# the MSYS form for Git Bash and the native form for pwsh. CRs that pwsh writes
-# are removed from the files the checks read.
+# the native form for pwsh. CRs that pwsh writes are removed from the files the
+# checks read.
 function Run-Env([string]$InputText, [string]$HomeValue, [string]$Exe, [string[]]$ExeArgs) {
     WriteLf "$C/summary" ""
     WriteLf "$H/calls" ""
@@ -191,47 +192,12 @@ function IsEmpty([string]$Path) { -not (Test-Path -LiteralPath $Path -PathType L
 $loopStubs = "setup-user-claude setup-user-mcp setup-user-skills setup-cursor-ide-mcp setup-user-cursor setup-user-settings setup-user-hooks "
 
 try {
-    $gitBash = Resolve-TestGitBash
-    $havePty = [bool](Get-Command python3 -ErrorAction SilentlyContinue) -and (Test-Path -LiteralPath $PTY -PathType Leaf)
+    $havePty =[bool](Get-Command python3 -ErrorAction SilentlyContinue) -and (Test-Path -LiteralPath $PTY -PathType Leaf)
     # Get-Command exempt: command-existence check; $havePty is the fallback branch
     if ($havePty) {
         # Windows pty = pywinpty (ConPTY); a failing import means "not installed".
         & python3 -c "import winpty" 2>$null
         $havePty = ($LASTEXITCODE -eq 0)
-    }
-
-    # The loop functions: deploy_abort + deploy_configs extracted from scripts/aitools
-    # (top-level functions inside main()), as the .sh harness's perl range does:
-    # each from its "name() {" line to the next line that starts with "}".
-    $loopFuncs = Join-Path $tmpRoot "loop-funcs.sh"
-    $inAbort = $false; $inConfigs = $false
-    $sb = [Text.StringBuilder]::new()
-    foreach ($l in @(Lines (Join-Path $root "scripts/aitools"))) {
-        if (-not $inAbort -and $l -cmatch '^deploy_abort\(\) \{') { $inAbort = $true }
-        if ($inAbort) { [void]$sb.Append($l + "`n"); if ($l -cmatch '^\}') { $inAbort = $false } }
-        if (-not $inConfigs -and $l -cmatch '^deploy_configs\(\) \{') { $inConfigs = $true }
-        if ($inConfigs) { [void]$sb.Append($l + "`n"); if ($l -cmatch '^\}') { $inConfigs = $false } }
-    }
-    WriteLf $loopFuncs $sb.ToString()
-    $loopDriver = Join-Path $tmpRoot "loop-driver.sh"
-    WriteLf $loopDriver ((@(
-            '#!/usr/bin/env bash',
-            '# loop-driver.sh SCRIPTS_DIR FUNCS -- run deploy_configs SCRIPTS_DIR as scripts/aitools does',
-            'source "$1/aitools-lib.sh"',
-            'logging_init "aitools"',
-            'LOG_DISPLAY="$LOG_FILE"',
-            'dry_run=false',
-            'force=false',
-            'show_cloud_mcp() { :; }',
-            'source "$2"',
-            'deploy_configs "$1"',
-            'printf ''LOOP rc=%s aborted=%s\n'' "$?" "$deploy_aborted"'
-        ) -join "`n") + "`n")
-
-    # Run-Loop [INPUT]: the loop driver under Git Bash, MSYS paths (the bash code
-    # builds script paths from SCRIPTS_DIR and converts them with cygpath -w)
-    function Run-Loop([string]$InputText = "") {
-        Run-Env $InputText (ConvertTo-MsysPath $H) $gitBash @((ConvertTo-MsysPath $loopDriver), (ConvertTo-MsysPath "$R/scripts"), (ConvertTo-MsysPath $loopFuncs))
     }
 
     # ---------------------------------------------------------------------------
@@ -257,49 +223,14 @@ try {
         }
         Check "static: $f Step 8b between Step 8 (Node) and Step 9" ($a -and $b -and $c -and $a -lt $b -and $b -lt $c)
     }
+    # scripts/aitools has one deploy list, the .sh one: on Windows it forwards to
+    # aitools.ps1 before its library loads, so its Windows (.ps1) list is gone (A3-F2)
     $aitoolsBash = Join-Path $root "scripts/aitools"
-    Check "static: aitools deploy lists start with deploy-harness, no setup-user-config" `
-        ((CountMatch '^ +local deploy_scripts="deploy-harness\.(sh|ps1) ' $aitoolsBash) -eq 2 -and (CountMatch '^ +local deploy_scripts=.*setup-user-config' $aitoolsBash) -eq 0)
+    Check "static: aitools deploy list starts with deploy-harness, no setup-user-config" `
+        ((CountMatch '^ +local deploy_scripts=' $aitoolsBash) -eq 1 -and (CountMatch '^ +local deploy_scripts="deploy-harness\.sh ' $aitoolsBash) -eq 1 -and (CountMatch '^ +local deploy_scripts=.*setup-user-config' $aitoolsBash) -eq 0)
     $aitoolsPs1 = Join-Path $root "scripts/aitools.ps1"
     Check "static: aitools.ps1 deploy list starts with deploy-harness, no setup-user-config" `
         ((CountMatch '^ +\$deployScripts = @\("deploy-harness\.ps1", ' $aitoolsPs1) -ge 1 -and (CountMatch '^ +\$deployScripts = .*setup-user-config' $aitoolsPs1) -eq 0)
-    Check "static: loop functions extracted" `
-        ((CountMatch '^deploy_abort\(\) \{' $loopFuncs) -ge 1 -and (CountMatch '^deploy_configs\(\) \{' $loopFuncs) -ge 1)
-
-    # ---------------------------------------------------------------------------
-    # deploy_configs (scripts/aitools sync loop), its Windows branch: the .ps1 list
-    # with pwsh, under Git Bash
-    # ---------------------------------------------------------------------------
-    if (-not $gitBash) {
-        Skip "loop cases (Git Bash not found; scripts/aitools is bash)"
-    } else {
-        Setup-Case loop
-        Run-Loop
-        Check "loop ($langRun list): rc 0, not aborted" (OutHasLine 'LOOP rc=0 aborted=false')
-        Check "loop ($langRun list): writer runs once (inside deploy-harness)" `
-            ((CountLines "$H/writer-calls") -eq 1 -and (CountMatch '^called $' "$H/writer-calls") -eq 1)
-        Check "loop ($langRun list): deploy-harness first, then the 7 scripts" `
-            ((Calls) -ceq $loopStubs -and (Row 'OK|harness files|7 added'))
-        # deploy-harness.ps1 runs unrelayed on Windows (scripts/aitools, review prompt):
-        # no deploy.jsonl check for the loop
-
-        Setup-Case loop-err
-        Add-DuplicateRule
-        Run-Loop
-        Check "loop ($langRun list) exit 1: one error counted, ERROR row, the 7 scripts ran" `
-            ((OutHasLine 'LOOP rc=1 aborted=false') -and (Row 'ERROR|harness files|script failed (exit 1)') -and (Calls) -ceq $loopStubs)
-
-        if ($havePty) {
-            Setup-Case loop-abort
-            Run-Loop
-            LocalEdit "$H/.aitools/rules/p1.md"
-            Run-Loop 'x\n'
-            Check "loop ($langRun list) abort: aborted, no later script ran" `
-                ((OutMatch 'LOOP rc=0 aborted=true') -and (IsEmpty "$H/calls") -and (Row 'WARN|harness files|aborted by user'))
-        } else {
-            Skip "loop abort (no python3 / pty-run.py)"
-        }
-    }
 
     # ---------------------------------------------------------------------------
     # PowerShell: Deploy-Configs (aitools.ps1) and Invoke-HarnessStep
@@ -312,8 +243,8 @@ try {
         if ($Switch) { $argv += $Switch }
         Run-Env $InputText (Mixed $H) $pwshExe $argv
     }
-    $fixtureHarness = Join-Path $tmpRoot "loop/repo/scripts/deploy-harness.ps1"
-    if (-not (Test-Path -LiteralPath $fixtureHarness)) { Setup-Case loop }
+    Setup-Case fixture
+    $fixtureHarness = Join-Path $R "scripts/deploy-harness.ps1"
     Check "ps: fixture deploy-harness.ps1 is the real script (Windows guard intact)" `
         ([Linq.Enumerable]::SequenceEqual([IO.File]::ReadAllBytes((Join-Path $root "scripts/deploy-harness.ps1")), [IO.File]::ReadAllBytes($fixtureHarness)))
 
@@ -326,11 +257,14 @@ try {
         ((Calls) -ceq $loopStubs -and (Row 'OK|harness files|7 added'))
     Check "ps loop: deploy-harness lines relayed to deploy.jsonl" ((ReadText "$C/logs/deploy.jsonl").Contains('"script":"deploy-harness"'))
 
+    # The duplicate is deploy-harness's own error, recorded at the source; the relay
+    # counts the failed child (exit 1) but records no second ERROR (logging.md 8.3)
+    $dupRow = 'ERROR|harness files|duplicate hooks name dup.sh in .claude/hooks skipped|kept dup.sh from shared/hooks (first source wins)'
     Setup-Case ps-loop-err
     Add-DuplicateRule
     Run-Ps loop
-    Check "ps loop exit 1: one error counted, ERROR row, the 7 scripts ran" `
-        ((OutHasLine 'LOOP rc=1 aborted=False') -and (Row 'ERROR|harness files|script failed (exit 1)') -and (Calls) -ceq $loopStubs)
+    Check "ps loop exit 1: one error counted, one ERROR row (deploy-harness's own), the 7 scripts ran" `
+        ((OutHasLine 'LOOP rc=1 aborted=False') -and (Row $dupRow) -and (CountMatch '^ERROR\|harness files\|' "$C/summary") -eq 1 -and (Calls) -ceq $loopStubs)
 
     Setup-Case ps-step
     Run-Ps step
@@ -347,21 +281,22 @@ try {
     Setup-Case ps-step-err
     Add-DuplicateRule
     Run-Ps step
-    Check "ps step exit 1: returns 0 (install continues), ERROR row" `
-        ((OutHasLine 'STEP rc=0') -and (Row 'ERROR|harness files|script failed (exit 1)'))
+    Check "ps step exit 1: returns 0 (install continues), one ERROR row (deploy-harness's own)" `
+        ((OutHasLine 'STEP rc=0') -and (Row $dupRow) -and (CountMatch '^ERROR\|harness files\|' "$C/summary") -eq 1)
 
     Setup-Case ps-step-missing
     Remove-Item -LiteralPath "$R/scripts/deploy-harness.ps1" -Force
     Run-Ps step
-    Check "ps step missing script: WARN row" ((OutHasLine 'STEP rc=0') -and (Row 'WARN|harness files|deploy-harness.ps1 not found'))
+    Check "ps step missing script: WARN row" ((OutHasLine 'STEP rc=0') -and (Row 'WARN|harness files|deploy-harness.ps1 not found -- skipped (MDM deploy)'))
 
     if ($havePty) {
         Setup-Case ps-loop-abort
         Run-Ps loop
         LocalEdit "$H/.aitools/rules/p1.md"
         Run-Ps loop 'x\n'
-        Check "ps loop abort: aborted, no later script ran, WARN row" `
-            ((OutMatch 'LOOP rc=0 aborted=True') -and (IsEmpty "$H/calls") -and (Row 'WARN|harness files|aborted by user'))
+        # one WARN record, by the relay (-AbortAsWarning); no ERROR record (logging.md 8.3)
+        Check "ps loop abort: aborted, no later script ran, one WARN row, no ERROR row" `
+            ((OutMatch 'LOOP rc=0 aborted=True') -and (IsEmpty "$H/calls") -and (Row 'WARN|harness files|aborted by user') -and (CountMatch '^ERROR\|harness files\|' "$C/summary") -eq 0 -and (CountMatch '^WARN\|harness files\|aborted by user$' "$C/summary") -eq 1)
         Check "ps loop abort: abort line logged as [aitools]" `
             ((CountMatch '\[aitools\] \[info\] deploy-harness.ps1: aborted by user' $script:LOG) -ge 1)
 
@@ -369,8 +304,8 @@ try {
         Run-Ps step
         LocalEdit "$H/.aitools/rules/p1.md"
         Run-Ps step 'x\n'
-        Check "ps step abort: returns 2, WARN row, file unchanged" `
-            ((OutMatch 'STEP rc=2') -and (Row 'WARN|harness files|aborted by user') -and (@(Lines "$H/.aitools/rules/p1.md") -ccontains 'local edit'))
+        Check "ps step abort: returns 2, one WARN row, no ERROR row, file unchanged" `
+            ((OutMatch 'STEP rc=2') -and (Row 'WARN|harness files|aborted by user') -and (CountMatch '^ERROR\|harness files\|' "$C/summary") -eq 0 -and (CountMatch '^WARN\|harness files\|aborted by user$' "$C/summary") -eq 1 -and (@(Lines "$H/.aitools/rules/p1.md") -ccontains 'local edit'))
     } else {
         Skip "ps abort cases (no python3 / pty-run.py with pywinpty)"
     }

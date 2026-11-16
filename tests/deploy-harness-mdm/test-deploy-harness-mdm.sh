@@ -11,9 +11,10 @@
 # Cases: build output and parse, extraction by body markers (no marker line
 # copied, section 5b kept; a missing or duplicated marker fails the build and
 # leaves deploy/ as it was), the payload data file (deploy-harness.payload),
-# the size gate (a script over the Intune limit is a WARN with its fix hint,
-# listed again at the end, and the build passes; a forced case pads the
-# fixture dotprofile so a .sh goes over 1 MB), cursor header port and step 4
+# the size gate (each script over the Intune limit is one detail line with its
+# fix hint in the build's deploy.log, one WARN per exceeded limit, and the build
+# passes; a forced case pads the fixture dotprofile so a .sh goes over 1 MB),
+# cursor header port and step 4
 # (MDM), no adopt target in MDM, shared rules embedded and dotprofile rules and
 # skills not (not harness sources, commander 2026-11-06; skills manifest same
 # as dev), first run / rerun / edit / dry run equivalence
@@ -61,7 +62,7 @@ case "${BASH_VERSINFO[5]:-}" in
 esac
 
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
-    perl -ne 'print if $. >= 2 && $. <= 45' "$0"
+    perl -ne 'print if $. >= 2 && $. <= 46' "$0"
     exit 0
 fi
 if [ "${1:-}" = "--bash-only" ]; then shift; fi
@@ -131,9 +132,12 @@ write_config() {
 
 # run_build HOME_DIR DOTPROFILE BUILD_SCRIPT -- one build-deploy.sh run, output to
 # $OUT. The build resolves the dotprofile from the isolated config.json.
-# (DOTPROFILE is the dotprofile that config.json names.)
+# (DOTPROFILE is the dotprofile that config.json names.) Its deploy.log goes to
+# HOME_DIR/logs and its run summary records to HOME_DIR/build.summary, so the
+# checks can read both.
 run_build() {
-    env -u AITOOLS_USER_REPO_PATH HOME="$1" "$TB" "$3" > "$OUT" 2>&1
+    env -u AITOOLS_USER_REPO_PATH HOME="$1" AITOOLS_LOG_DIR="$1/logs" AITOOLS_SUMMARY_FILE="$1/build.summary" \
+        "$TB" "$3" > "$OUT" 2>&1
 }
 
 # build NAME -- build-deploy.sh into $DOT/deploy, then copy deploy/ to $TMP_ROOT/NAME
@@ -191,7 +195,12 @@ run() {
 
 rc_of() { cat "$TMP_ROOT/$1.rc"; }
 same_rc() { [ "$(rc_of "$1-dev")" = "$(rc_of "$1-mdm")" ]; }
-same_summary() { cmp -s "$TMP_ROOT/$1-dev.summary" "$TMP_ROOT/$1-mdm.summary"; }
+# home_rows SUMMARY -- the summary file's rows with the case's isolated HOME
+# (SUMMARY without .summary: $TMP_ROOT/NAME-SIDE) written as <HOME>: a warning
+# that names a deployed file (the non-interactive overwrite) holds its HOME,
+# which differs between the dev and MDM runs and between runs
+home_rows() { HOMEDIR="${1%.summary}" perl -pe 's/\r//g; s/\Q$ENV{HOMEDIR}\E/<HOME>/g' "$1"; }
+same_summary() { cmp -s <(home_rows "$TMP_ROOT/$1-dev.summary") <(home_rows "$TMP_ROOT/$1-mdm.summary"); }
 row() { grep -qxF "$2" "$TMP_ROOT/$1.summary"; }
 same_trees() {  # same_trees NAME -- six directories and exec bits identical
     local k a="$TMP_ROOT/$1-dev/.aitools" b="$TMP_ROOT/$1-mdm/.aitools"
@@ -207,8 +216,10 @@ only_review_diff_git() {
     [ ! -s "$TMP_ROOT/fakegit.calls" ] || ! perl -pe 's/\r//g' "$TMP_ROOT/fakegit.calls" | grep -v -e ' diff --no-index ' >/dev/null
 }
 # rows_golden FILE OUT -- summary rows for the cross-language golden: order-free,
-# every number replaced by N (file counts follow this repo's sources)
-rows_golden() { perl -pe 's/\r//g; s/\d+/N/g' "$1" | LC_ALL=C sort > "$2"; }
+# the case's HOME written as <HOME> (home_rows), the temp root as <TMP> (the
+# resolver's "profile.json not found in <dp>" names the fixture dotprofile),
+# then every number replaced by N (file counts follow this repo's sources)
+rows_golden() { home_rows "$1" | TMPR="$TMP_ROOT" perl -pe 's/\Q$ENV{TMPR}\E/<TMP>/g; s/\d+/N/g' | LC_ALL=C sort > "$2"; }
 # set_payload_sha DIR -- write the sha256 of DIR/deploy-harness.payload into the
 # generated deploy-harness.sh (after a payload edit)
 set_payload_sha() {
@@ -224,7 +235,7 @@ BUILD=b1
 build b1
 G="$TMP_ROOT/b1/deploy"
 # Exit 0 alone is not a build: a skipped build ("No dotprofile found") exits 0 too.
-check "build: exit 0, not skipped" "[ \"\$(rc_of build-b1)\" = 0 ] && ! grep -q 'skipping deploy build' '$TMP_ROOT/build-b1.out'"
+check "build: exit 0, not skipped" "[ \"\$(rc_of build-b1)\" = 0 ] && ! grep -q 'deploy build skipped' '$TMP_ROOT/build-b1.out'"
 check "build: deploy-harness.sh/.ps1 and the config writer bundle generated" \
     "[ -f '$G/deploy-harness.sh' ] && [ -f '$G/deploy-harness.ps1' ] && [ -f '$G/setup-user-config.sh' ] && [ -f '$G/setup-user-config.ps1' ] && [ -f '$G/aitools-profile.sh' ] && [ -f '$G/aitools-profile.ps1' ] && [ -f '$G/aitools-json.pl' ] && [ -f '$G/aitools-json.ps1' ]"
 check "build: the generated .sh scripts are executable" "[ -x '$G/deploy-harness.sh' ] && [ -x '$G/setup-user-config.sh' ]"
@@ -241,16 +252,20 @@ check "MDM: no dotprofile, .claude/rules or .claude/skills record in the payload
     "! grep -qE '^(dotprofile/|aitools/\\.claude/(rules|skills)/)' '$G/deploy-harness.payload'"
 check "payload: data file beside the scripts, none inline" \
     "[ -f '$G/deploy-harness.payload' ] && ! grep -q '^mdm_unpack ' '$G/deploy-harness.sh' && ! grep -q '^Expand-MdmPayload ' '$G/deploy-harness.ps1' && grep -q '^MDM_PAYLOAD_SHA256=[0-9a-f]\{64\}$' '$G/deploy-harness.sh'"
-# size_gate_warned DIR OUT -- every generated .ps1 (200000) / .sh (1000000) at or
-# over its Intune limit has its WARN in the build output, twice (inline and the
-# end-of-build list); one under it has none (FX-12: WARN, not a build FAIL)
-# Each over-limit WARN carries its fix hint (deploy-harness: the payload; the
-# others: FX-35). The end-of-build header counts them, and "ready for MDM
-# deployment" is printed only when none is over. SIZE_GATE_OVER is set to the
-# number of over-limit scripts found.
-SIZE_GATE_OVER=0
+# size_gate_warned DIR OUT LOG [SUMMARY] -- every generated .ps1 (200000) / .sh
+# (1000000) at or over its Intune limit has its line and fix hint once as a
+# detail line in the build's deploy.log (LOG), and none in the build output (OUT);
+# one under it has neither (FX-12: WARN, not a build FAIL). Each over-limit line
+# carries its fix hint (deploy-harness: the payload; the others: FX-35). The
+# build output has one warning per exceeded limit, with the count of scripts
+# over it, and none for a limit nothing exceeds; "ready for MDM deployment" is
+# printed only when none is over. SUMMARY (the build's run summary file): one
+# WARN record per exceeded limit and no per-script record. SIZE_GATE_OVER_PS1
+# and SIZE_GATE_OVER_SH are set to the number of over-limit scripts found.
+SIZE_GATE_OVER_PS1=0
+SIZE_GATE_OVER_SH=0
 size_gate_warned() {
-    local f n max sz line hint over=0
+    local f n max sz line hint over_ps1=0 over_sh=0 lim cnt
     for f in "$1"/*.ps1 "$1"/*.sh; do
         [ -f "$f" ] || continue
         n="${f##*/}"
@@ -264,25 +279,40 @@ size_gate_warned() {
         esac
         line="deploy/$n is $sz bytes, over the Intune script limit ($max) -- $hint"
         if [ "$sz" -ge "$max" ]; then
-            [ "$(grep -F -- '[warn]' "$2" | grep -cF -- "$line")" = 2 ] || return 1
-            over=$((over + 1))
+            [ "$(grep -F -- '[detail]' "$3" | grep -cF -- "$line")" = 1 ] || return 1
+            if grep -F -- '[warn]' "$2" | grep -F -- "$line" >/dev/null; then return 1; fi
+            case "$n" in *.ps1) over_ps1=$((over_ps1 + 1)) ;; *) over_sh=$((over_sh + 1)) ;; esac
         else
-            if grep -F -- "[warn] deploy/$n is " "$2" | grep -F "over the Intune script limit" >/dev/null; then
+            if grep -F -- "[detail] deploy/$n is " "$3" | grep -F "over the Intune script limit" >/dev/null; then
                 return 1
             fi
         fi
     done
-    SIZE_GATE_OVER=$over
-    if [ "$over" -gt 0 ]; then
-        grep -qF -- "[warn] $over generated script(s) over the Intune script limit (WARN only, the build does not fail):" "$2" || return 1
+    SIZE_GATE_OVER_PS1=$over_ps1
+    SIZE_GATE_OVER_SH=$over_sh
+    for lim in 200000 1000000; do
+        if [ "$lim" = 200000 ]; then cnt=$over_ps1; else cnt=$over_sh; fi
+        if [ "$cnt" -gt 0 ]; then
+            grep -qF -- "[warn] $cnt generated script(s) over the Intune script limit ($lim)" "$2" || return 1
+            if [ -n "${4:-}" ]; then
+                grep -qxF -- "WARN|build-deploy|$cnt generated script(s) over the Intune script limit ($lim)" "$4" || return 1
+            fi
+        else
+            ! grep -qF -- "generated script(s) over the Intune script limit ($lim)" "$2" || return 1
+        fi
+    done
+    if [ -n "${4:-}" ]; then
+        [ "$(grep -c 'over the Intune script limit' "$4")" = "$(( (over_ps1 > 0) + (over_sh > 0) ))" ] || return 1
+    fi
+    if [ $((over_ps1 + over_sh)) -gt 0 ]; then
         ! grep -qF 'ready for MDM deployment' "$2" || return 1
     else
         grep -qF 'Scripts are self-contained and ready for MDM deployment' "$2" || return 1
         ! grep -qF 'generated script(s) over the Intune script limit' "$2" || return 1
     fi
 }
-check "size gate: a generated script over its Intune limit is a WARN, not a build failure (FX-12)" \
-    "[ \"\$(rc_of build-b1)\" = 0 ] && size_gate_warned '$G' '$TMP_ROOT/build-b1.out'"
+check "size gate: a generated script over its Intune limit is a WARN (one record per limit), not a build failure (FX-12)" \
+    "[ \"\$(rc_of build-b1)\" = 0 ] && size_gate_warned '$G' '$TMP_ROOT/build-b1.out' '$TMP_ROOT/home-build-b1/logs/deploy.log' '$TMP_ROOT/home-build-b1/build.summary'"
 
 # Forced over-limit case, independent of the real script sizes: a copy of the
 # fixture dotprofile whose claude/CLAUDE.md template is padded by ~1.2 MB.
@@ -309,8 +339,8 @@ big_sh_over() {
     local sz
     sz=$(wc -c < "$DOT_BIG/deploy/setup-user-claude.sh") || return 1
     [ "$((sz + 0))" -ge 1000000 ] || return 1
-    size_gate_warned "$DOT_BIG/deploy" "$OUT" || return 1
-    [ "$SIZE_GATE_OVER" -ge 1 ]
+    size_gate_warned "$DOT_BIG/deploy" "$OUT" "$HB_BIG/logs/deploy.log" "$HB_BIG/build.summary" || return 1
+    [ "$SIZE_GATE_OVER_SH" -ge 1 ]
 }
 check "size gate (forced): a .sh padded over 1 MB is a WARN with the FX-35 hint, build exit 0" \
     "[ \"\$(rc_of build-big)\" = 0 ] && big_sh_over"
@@ -348,12 +378,13 @@ printf 'local edit\n' > "$TMP_ROOT/eq-dev/.aitools/rules/tool-ops.md"
 printf 'local edit\n' > "$TMP_ROOT/eq-mdm/.aitools/rules/tool-ops.md"
 run dev eq
 run mdm eq
-# WARN, not OK: the non-interactive overwrite logs a warning and the library
-# raises the row to WARN; the dev path does the same (next check).
-check "edit then rerun (non-interactive): source wins in MDM, 1 updated" \
-    "cmp -s '$P2' '$TMP_ROOT/eq-mdm/.aitools/rules/tool-ops.md' && grep -q '^WARN|harness files|1 updated' '$TMP_ROOT/eq-mdm.summary'"
-check "edit then rerun: same rows and files as dev" "same_summary eq && same_trees eq"
-if ! same_summary eq; then diff "$TMP_ROOT/eq-dev.summary" "$TMP_ROOT/eq-mdm.summary" | perl -pe 's/^/      | /'; fi
+# The status stays OK; the non-interactive overwrite of the local edit is its
+# own warning, recorded by the library (reference/logging.md 8.3: "local edits
+# overwritten in a non-interactive run"); the dev path does the same (next check).
+check "edit then rerun (non-interactive): source wins in MDM, 1 updated, overwrite warning" \
+    "cmp -s '$P2' '$TMP_ROOT/eq-mdm/.aitools/rules/tool-ops.md' && grep -q '^OK|harness files|1 updated' '$TMP_ROOT/eq-mdm.summary' && row eq-mdm 'WARN|harness files|local edits overwritten (non-interactive run, backup kept): $TMP_ROOT/eq-mdm/.aitools/rules/tool-ops.md'"
+check "edit then rerun: same rows (each side's HOME as <HOME>) and files as dev" "same_summary eq && same_trees eq"
+if ! same_summary eq; then diff <(home_rows "$TMP_ROOT/eq-dev.summary") <(home_rows "$TMP_ROOT/eq-mdm.summary") | perl -pe 's/^/      | /'; fi
 rows_golden "$TMP_ROOT/eq-mdm.summary" "$TMP_ROOT/eq-edit.rows"
 check "edit then rerun parity: MDM summary rows (numbers as N) match golden" "golden_match eq-edit.rows '$TMP_ROOT/eq-edit.rows'"
 
@@ -371,8 +402,10 @@ if $HAVE_PTY; then
     echo $? > "$TMP_ROOT/pty-mdm.rc"
     perl -pi -e 's/\r//g' "$TMP_ROOT/pty-mdm.summary"
     perl -pe 's/\e\[[0-9;?]*[A-Za-z]//g; s/\r//g' "$OUT" > "$OUT.plain"
+    # The skip is one warning, recorded by the library (logging.md 8.2), and
+    # counted in the OK status.
     check "terminal review (MDM): overwrite offered, adopt and merge not; skip keeps LOCAL" \
-        "[ \"\$(rc_of pty-mdm)\" = 0 ] && grep -q '\[o\]verwrite' '$OUT.plain' && ! grep -q '\[a\]ccept & adopt' '$OUT.plain' && ! grep -q '\[m\]erge & adopt' '$OUT.plain' && grep -qx 'local edit' '$TMP_ROOT/eq-mdm/.aitools/rules/scratch.md' && grep -q '^WARN|harness files|1 skipped' '$TMP_ROOT/pty-mdm.summary'"
+        "[ \"\$(rc_of pty-mdm)\" = 0 ] && grep -q '\[o\]verwrite' '$OUT.plain' && ! grep -q '\[a\]ccept & adopt' '$OUT.plain' && ! grep -q '\[m\]erge & adopt' '$OUT.plain' && grep -qx 'local edit' '$TMP_ROOT/eq-mdm/.aitools/rules/scratch.md' && row pty-mdm 'WARN|harness files|skipped at review, local differs from source: rules/scratch.md' && [ \"\$(grep -c '^WARN|harness files|skipped at review, ' '$TMP_ROOT/pty-mdm.summary')\" = 1 ] && grep -q '^OK|harness files|1 skipped, [0-9]* verified\$' '$TMP_ROOT/pty-mdm.summary'"
     check "terminal review (MDM) without git: diff unavailable, menu still shown" \
         "grep -q 'diff unavailable' '$OUT.plain' && grep -q '\[o\]verwrite' '$OUT.plain'"
 else
@@ -460,14 +493,19 @@ corrupt_record "$TMP_ROOT/bad/deploy/deploy-harness.payload"
 BUILD=bad
 run mdm corrupt
 check "damaged payload (checksum): exit 1, ERROR payload damaged, nothing deployed" \
-    "[ \"\$(rc_of corrupt-mdm)\" = 1 ] && row corrupt-mdm 'ERROR|harness files|payload damaged' && grep -q 'sha256 mismatch' '$TMP_ROOT/corrupt-mdm.out' && [ ! -e '$TMP_ROOT/corrupt-mdm/.aitools/rules' ]"
+    "[ \"\$(rc_of corrupt-mdm)\" = 1 ] && row corrupt-mdm 'ERROR|harness files|payload damaged|sha256 mismatch: damaged or from another build (nothing deployed)' && [ \"\$(grep -c '^ERROR|' '$TMP_ROOT/corrupt-mdm.summary')\" = 1 ] && grep -q 'sha256 mismatch' '$TMP_ROOT/corrupt-mdm.out' && [ ! -e '$TMP_ROOT/corrupt-mdm/.aitools/rules' ]"
 # The same damage with the script's sha256 updated: the record check catches it.
 # The stage directory goes under pstmp/ (TMPDIR).
 set_payload_sha "$TMP_ROOT/bad/deploy"
 mkdir -p "$TMP_ROOT/pstmp"
 PS_TMPDIR="$TMP_ROOT/pstmp/" run mdm record
-check "damaged record: exit 1, ERROR row, that file not deployed, the others are" \
-    "[ \"\$(rc_of record-mdm)\" = 1 ] && grep -q '^ERROR|harness files|1 embedded file(s) damaged' '$TMP_ROOT/record-mdm.summary' && grep -q 'shared/rules/scratch.md is damaged' '$TMP_ROOT/record-mdm.out' && [ ! -e '$TMP_ROOT/record-mdm/.aitools/rules/scratch.md' ] && [ -f '$TMP_ROOT/record-mdm/.aitools/rules/tool-ops.md' ]"
+# One ERROR record per damaged file; no aggregate record (the count line is info).
+check "damaged record: exit 1, one ERROR row for that file, that file not deployed, the others are" \
+    "[ \"\$(rc_of record-mdm)\" = 1 ] && grep -q '^ERROR|harness files|embedded aitools/shared/rules/scratch.md is damaged or cannot be written|.' '$TMP_ROOT/record-mdm.summary' && [ \"\$(grep -c '^ERROR|' '$TMP_ROOT/record-mdm.summary')\" = 1 ] && ! grep -q 'embedded file(s) damaged' '$TMP_ROOT/record-mdm.summary' && grep -q 'shared/rules/scratch.md is damaged' '$TMP_ROOT/record-mdm.out' && [ ! -e '$TMP_ROOT/record-mdm/.aitools/rules/scratch.md' ] && [ -f '$TMP_ROOT/record-mdm/.aitools/rules/tool-ops.md' ]"
+# Its missing file is the consequence of that error: logged at info, no WARN
+# record (one cause, one red line: logging.md 8.3; fix-forward 5899-6-L2-P1)
+check "damaged record: the missing file is logged at info, no 'tracked but missing' WARN record" \
+    "! grep -q '^WARN|harness files|' '$TMP_ROOT/record-mdm.summary' && grep -q '\[info\] shared/rules: scratch.md not deployed -- its embedded record is damaged (the error above)' '$TMP_ROOT/record-mdm.out' && ! grep -q 'tracked but missing' '$TMP_ROOT/record-mdm.out'"
 # (The .ps1 stage-directory case, removed in a finally block on exit 1, is in
 # the .ps1 harness.)
 # A CRLF copy of the payload (Windows checkout with autocrlf) still verifies
@@ -479,7 +517,7 @@ check "CRLF payload: verified and deployed (exit 0)" \
 rm -f "$TMP_ROOT/bad/deploy/deploy-harness.payload"
 run mdm nopayload
 check "missing payload: exit 1, ERROR payload missing, nothing deployed" \
-    "[ \"\$(rc_of nopayload-mdm)\" = 1 ] && row nopayload-mdm 'ERROR|harness files|payload missing' && [ ! -e '$TMP_ROOT/nopayload-mdm/.aitools/rules' ]"
+    "[ \"\$(rc_of nopayload-mdm)\" = 1 ] && grep -q '^ERROR|harness files|payload missing|.*deploy-harness.payload not found; it ships in deploy/ with this script (nothing deployed)\$' '$TMP_ROOT/nopayload-mdm.summary' && [ ! -e '$TMP_ROOT/nopayload-mdm/.aitools/rules' ]"
 restore_bad
 # Truncated copies (review B1): the guard is the first command, so every cut
 # after it -- inside the inlined library (a bash parse error otherwise, exit
@@ -494,13 +532,13 @@ trunc_case() {
 }
 trunc_case trunc40 'int($s * 0.40)'
 check "truncated script at 40% (inside the library): exit 1, ERROR row, nothing deployed" \
-    "[ \"\$(rc_of trunc40-mdm)\" = 1 ] && row trunc40-mdm 'ERROR|harness files|script truncated' && [ ! -e '$TMP_ROOT/trunc40-mdm/.aitools/rules' ]"
+    "[ \"\$(rc_of trunc40-mdm)\" = 1 ] && row trunc40-mdm 'ERROR|harness files|script truncated|end marker missing' && [ ! -e '$TMP_ROOT/trunc40-mdm/.aitools/rules' ]"
 trunc_case truncs1 'index($t, "\n# 1. config.json") + 1'
 check "truncated script at the section 1 heading: exit 1, ERROR row, nothing deployed" \
-    "[ \"\$(rc_of truncs1-mdm)\" = 1 ] && row truncs1-mdm 'ERROR|harness files|script truncated' && [ ! -e '$TMP_ROOT/truncs1-mdm/.aitools/rules' ]"
+    "[ \"\$(rc_of truncs1-mdm)\" = 1 ] && row truncs1-mdm 'ERROR|harness files|script truncated|end marker missing' && [ ! -e '$TMP_ROOT/truncs1-mdm/.aitools/rules' ]"
 trunc_case trunc95 'int($s * 0.95)'
 check "truncated script at 95% (sections 3-7): exit 1, ERROR row, nothing deployed" \
-    "[ \"\$(rc_of trunc95-mdm)\" = 1 ] && row trunc95-mdm 'ERROR|harness files|script truncated' && [ ! -e '$TMP_ROOT/trunc95-mdm/.aitools/rules' ]"
+    "[ \"\$(rc_of trunc95-mdm)\" = 1 ] && row trunc95-mdm 'ERROR|harness files|script truncated|end marker missing' && [ ! -e '$TMP_ROOT/trunc95-mdm/.aitools/rules' ]"
 restore_bad
 check "truncation guard: the first command of the generated .sh (before the library)" \
     "[ \"\$(perl -ne 'if (/^if command -v perl .*END OF GENERATED SCRIPT/) { print \$.; exit }' '$G/deploy-harness.sh')\" -lt \"\$(perl -ne 'if (/^logging_init\\b/ || /^set -euo pipefail\$/) { print \$.; exit }' '$G/deploy-harness.sh')\" ]"
@@ -509,7 +547,7 @@ perl -i -pe 's/^(aitools\/shared\/rules\/scratch\.md\t0\t)\d+/${1}x/' "$TMP_ROOT
 set_payload_sha "$TMP_ROOT/bad/deploy"
 run mdm malformed
 check "malformed record (size not a number): exit 1, ERROR payload damaged, nothing deployed" \
-    "[ \"\$(rc_of malformed-mdm)\" = 1 ] && row malformed-mdm 'ERROR|harness files|payload damaged' && grep -q 'malformed record' '$TMP_ROOT/malformed-mdm.out' && [ ! -e '$TMP_ROOT/malformed-mdm/.aitools/rules' ]"
+    "[ \"\$(rc_of malformed-mdm)\" = 1 ] && grep -q '^ERROR|harness files|payload damaged|malformed record line: aitools/shared/rules/scratch.md' '$TMP_ROOT/malformed-mdm.summary' && [ \"\$(grep -c '^ERROR|' '$TMP_ROOT/malformed-mdm.summary')\" = 1 ] && grep -q 'malformed record' '$TMP_ROOT/malformed-mdm.out' && [ ! -e '$TMP_ROOT/malformed-mdm/.aitools/rules' ]"
 BUILD=b1
 
 # ---------------------------------------------------------------------------

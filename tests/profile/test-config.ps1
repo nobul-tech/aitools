@@ -17,7 +17,9 @@
 # with the .sh writer is checked against the committed golden results, one per
 # case: exit code, summary rows and config.json (temp root as <TMP>, path
 # separators as /), tests/profile/golden/config-*.txt (Test-GoldenMatch in
-# tests/lib/platform-lib.ps1). No NAME.windows golden is needed.
+# tests/lib/platform-lib.ps1). No NAME.windows golden is needed: in the golden
+# rows a JSON parser's message is <PARSE-ERROR> and this writer's option names
+# take the .sh spelling (norm_rows); the cases assert this writer's exact text.
 #
 # Safe to re-run: every case runs in a child pwsh under a temp HOME (HOME and
 # USERPROFILE; removed on exit); the real HOME is never read or written. Exit 1
@@ -26,7 +28,7 @@
 # Usage: pwsh -NoProfile -File tests/profile/test-config.ps1 [-Help]
 
 param([switch]$Help)
-if ($Help) { Get-Content $PSCommandPath -TotalCount 26 | ForEach-Object { $_ -replace '^# ?', '' }; exit 0 }
+if ($Help) { Get-Content $PSCommandPath -TotalCount 28 | ForEach-Object { $_ -replace '^# ?', '' }; exit 0 }
 
 if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
     [Console]::Error.WriteLine("This script is for Windows. On macOS/Linux, run tests/profile/test-config.sh with bash.")
@@ -158,6 +160,28 @@ function norm_json([string]$Path) {
     return [regex]::Replace($t, [regex]::Escape($NWORK), '<TMP>', [Text.RegularExpressions.RegexOptions]::IgnoreCase)
 }
 
+# norm_rows TEXT -- the summary rows as compared with the golden file: a JSON
+# parser's message after "is invalid JSON: " (up to ") -- rebuilt" or the end of the
+# record) is <PARSE-ERROR> (the parsers differ by writer: .NET here, aitools-json.pl
+# in the .sh writer, which says "invalid JSON at byte N: ..."), and the writer's
+# option names in a bad-arguments reason take the .sh spelling (-MachineId ->
+# --machine-id, -MachineAlias -> --machine-alias, -NoMachine -> --no-machine,
+# "(see -Help)" -> "(see --help)"). The .sh harness's norm_rows makes the same
+# parser replacement; each harness asserts its own exact text (has_row / has_row_like).
+function norm_rows([string]$Text) {
+    $t = $Text -replace "`r", ""
+    $t = [regex]::Replace($t, '(?m) is invalid JSON: .*?(?=\) -- rebuilt|$)', ' is invalid JSON: <PARSE-ERROR>')
+    $t = [regex]::Replace($t, '(?m)^(ERROR\|aitools config\|bad arguments\|.*)$', {
+            param($m)
+            $r = $m.Groups[1].Value
+            $r = $r -creplace '(?<![\w-])-MachineId\b', '--machine-id'
+            $r = $r -creplace '(?<![\w-])-MachineAlias\b', '--machine-alias'
+            $r = $r -creplace '(?<![\w-])-NoMachine\b', '--no-machine'
+            $r.Replace('(see -Help)', '(see --help)')
+        })
+    return $t
+}
+
 # case_run NAME RC SETUP [ARGS...] -- SETUP (a function name) builds the fixture;
 # one writer run. RAWJ: config.json as written (empty file = none); OUTJ: normalized
 # (norm_json); SUMM: summary rows; OUT: console output (CR and colours removed). The
@@ -174,7 +198,7 @@ function case_run([string]$Name, [int]$Want, [string]$Setup, [string[]]$WArgs = 
     WriteText $script:OUT (Strip (ReadText "$WORK/out.txt"))
     if ($script:RC -eq $Want) { ok "${Name}: $L exit $($script:RC)" }
     else { bad "${Name}: $L exit $($script:RC), want $Want"; Show-Indented (ReadText $script:OUT) }
-    WriteText "$WORK/$Name.result" ("exit $($script:RC)`n-- summary rows`n" + (ReadText $script:SUMM) + "-- config.json`n" + (ReadText $script:OUTJ))
+    WriteText "$WORK/$Name.result" ("exit $($script:RC)`n-- summary rows`n" + (norm_rows (ReadText $script:SUMM)) + "-- config.json`n" + (ReadText $script:OUTJ))
     if (Test-GoldenMatch "config-$Name.txt" "$WORK/$Name.result") { ok "${Name}: exit, rows and config.json match golden (sh and ps1 share it)" }
     else { bad "${Name}: result differs from golden config-$Name.txt" }
 }
@@ -193,6 +217,11 @@ function has_row([string]$Row) {
 function no_row_like([string]$Re) {
     if (@(SummLines | Where-Object { $_ -cmatch $Re }).Count -gt 0) { bad "$($script:CASE): unexpected row /$Re/"; Show-Indented (ReadText $script:SUMM) }
     else { ok "$($script:CASE): no row /$Re/" }
+}
+# has_row_like REGEX -- a summary row matches (for a text with a path or a parser message)
+function has_row_like([string]$Re) {
+    if (@(SummLines | Where-Object { $_ -cmatch $Re }).Count -gt 0) { ok "$($script:CASE): row /$Re/" }
+    else { bad "$($script:CASE): no row /$Re/"; Show-Indented (ReadText $script:SUMM) }
 }
 # no_json REGEX -- the written config (normalized) does not match
 function no_json([string]$Re) {
@@ -265,13 +294,16 @@ try {
     has_json ('"machineAlias": "nobul-mac",\n  "githubUser": "nobul-jose",\n  "machineId": "' + $KEY_MAC + '",\n  "meta"')
     if (AitoolsDirHas 'config.json.bak') { ok "c3-upgrade: backup written" } else { bad "c3-upgrade: no backup" }
 
-    # C4 corrupt config: rebuilt with salvaged keys, WARN
+    # C4 corrupt config: rebuilt with salvaged keys, one WARN that names the file and
+    # the parser's reason (logging.md 8.3: the rebuild is the event's one warning)
     function fix_corrupt {
         reset_home; profile_with_id
         WriteText $CFG ('{ "reposPath": "' + "$H/repos" + '", "repoPath": "' + "$H/repos/aitools" + '", "machineAlias": "laptop", oops' + "`n")
     }
+    $RE_REBUILT = '^WARN\|aitools config\|.*[/\\]\.aitools[/\\]config\.json was not valid JSON \(.*[/\\]\.aitools[/\\]config\.json is invalid JSON: .+\) -- rebuilt; the invalid copy was backed up$'
     case_run c4-corrupt 0 fix_corrupt
-    has_row "WARN|aitools config|rebuilt (was invalid)"
+    has_row_like $RE_REBUILT
+    rows_n 1 "WARN"
     has_json '\A\{\n  "reposPath": "[^"]+",\n  "repoPath": "[^"]+",\n  "machineAlias": "nobul-mac",\n  "version": 3'
     has_json ('"machineId": "' + $KEY_MAC + '"')
 
@@ -284,7 +316,7 @@ try {
 
     # C6 missing bootstrap values: error, nothing written
     case_run c6-no-bootstrap 1 fix_nodp
-    has_row "ERROR|aitools config|missing bootstrap values"
+    has_row "ERROR|aitools config|merged config rejected -- existing file left untouched|missing bootstrap reposPath, repoPath (run aitools install)"
     if ((Get-Item -LiteralPath $RAWJ).Length -eq 0) { ok "c6-no-bootstrap: no config written" } else { bad "c6-no-bootstrap: config written" }
 
     # C7 no machine match: ERROR + ACTION, existing alias kept
@@ -293,8 +325,10 @@ try {
         fix_v2
         write_profile $KEY_OTHER '"alias": "nobul-mac",' $KEY_OTHER "elsewhere"
     }
+    # The reason is the resolver's error line (logging.md 8.3: every error has a reason)
+    $R_NOMATCH = "no profile matches this machine (machine.id $ID_MAC, hostname nobul-mac) -- run: aitools user init"
     case_run c7-no-match 1 fix_nomatch
-    has_row "ERROR|machine profile|no machine match"
+    has_row "ERROR|machine profile|no machine match|$R_NOMATCH"
     has_row "ACTION||Run: aitools user init (profiles: nobul-mac, laptop)"
     rows_n 1 "ACTION"
     has_json '"machineAlias": "new-mac"'
@@ -331,20 +365,22 @@ try {
     has_json '"machineAlias": "nobul-mac"'
     has_json ('"machineId": "' + $KEY_MAC + '"')
     # C10b the deprecated -MachineAlias is still accepted for one release (detail line);
-    # the chosen 2.1 profile has no machine.id: advisory, one ACTION, the row stays OK
+    # the chosen 2.1 profile has no machine.id: one warning with its ACTION
+    # (Write-AitAction: a WARN record and an ACTION record), the status row stays OK
     case_run c10b-deprecated-alias 0 fix_v2 @("-MachineAlias", "laptop")
     has_json '"machineAlias": "laptop"'
     no_json '"machineId"'
     has_row "OK|aitools config|updated"
+    has_row "WARN|aitools config|profile `"laptop`" has no machine.id (matched by override) -- run: aitools user init"
     has_row "ACTION||Run: aitools user init (registers this machine)"
     rows_n 1 "ACTION"
     log_has "[detail] deprecated flag:"
-    # C10c both flags: bad arguments
+    # C10c both flags: bad arguments, the reason says which
     case_run c10c-both-flags 1 fix_v2 @("-MachineId", $ID_MAC, "-MachineAlias", "nobul-mac")
-    has_row "ERROR|aitools config|bad arguments"
+    has_row "ERROR|aitools config|bad arguments|pass -MachineId or -MachineAlias, not both (see -Help)"
     # C10d an unknown -MachineId: no machine match, nothing derived is saved
     case_run c10d-unknown-id 1 fix_v2 @("-MachineId", $KEY_OTHER)
-    has_row "ERROR|machine profile|no machine match"
+    has_row "ERROR|machine profile|no machine match|override alias `"$KEY_OTHER`" not in profiles (nobul-mac, laptop)"
     has_json '"machineAlias": "new-mac"'
 
     # C11 AITOOLS_USER_REPO_PATH: used for the run, not saved
@@ -357,7 +393,7 @@ try {
     has_json '"machineAlias": "nobul-mac"'
 
     # C13 cached alias names a 2.1 profile without machine.id (not registered): written;
-    # the advice is one ACTION (with its counted warning), the config row stays OK
+    # the advice is one ACTION with its warning (a WARN record), the config row stays OK
     function fix_unreg {
         fix_v2
         write_profile "nobul-mac" "" "" "nobul-mac"
@@ -365,6 +401,8 @@ try {
     }
     case_run c13-unregistered 0 fix_unreg
     has_row "OK|aitools config|updated"
+    has_row "WARN|aitools config|profile `"nobul-mac`" has no machine.id (matched by alias) -- run: aitools user init"
+    rows_n 1 "WARN"
     has_row "ACTION||Run: aitools user init (registers this machine)"
     rows_n 1 "ACTION"
     no_json '"machineId"'
@@ -372,34 +410,42 @@ try {
 
     # C17 legacy 2.1 profile (alias-keyed, matched by machine.id): the resolver's
     # "run: aitools-profile migrate" advice is ONE ACTION naming the user-facing command
-    # (aitools user init re-keys), not a WARN row; no machineId (not an id-keyed profile)
+    # (aitools user init re-keys), with its one warning (Write-AitAction: one WARN record
+    # that names the same command); no machineId (not an id-keyed profile)
     function fix_legacy { reset_home; profile_legacy }
     case_run c17-legacy-migrate 0 fix_legacy $BOOT
     has_row "OK|aitools config|created"
     has_row "ACTION||Run: aitools user init (re-keys machine profiles by machine id)"
     rows_n 1 "ACTION"
-    rows_n 0 "WARN"
+    has_row "WARN|aitools config|profile `"nobul-mac`" is keyed by alias -- run: aitools user init"
+    rows_n 1 "WARN"
     has_json '"machineAlias": "nobul-mac"'
     no_json '"machineId"'
     log_has "run: aitools-profile migrate"
 
     # C18 a real problem (stored hostname differs: renamed, or a clone sharing the id):
-    # a counted warning, the row becomes WARN; plus the one ACTION
+    # one warning (its WARN record) with the one ACTION. The status row stays OK:
+    # Write-Summary never recolours a status (reference/logging.md 8.3; the OK -> WARN
+    # promotion is gone). The event counts once (it counted twice before I3 G3b)
     function fix_clone { reset_home; write_profile $KEY_MAC '"alias": "nobul-mac",' $KEY_MAC "other-host" }
     case_run c18-real-warning 0 fix_clone $BOOT
-    has_row "WARN|aitools config|created"
+    has_row "OK|aitools config|created"
+    has_row "WARN|aitools config|profile `"nobul-mac`" was registered with hostname `"other-host`", this machine is `"nobul-mac`" -- renamed or cloned -- run: aitools user init"
+    rows_n 1 "WARN"
     has_row "ACTION||Run: aitools user init (updates this machine's profile)"
     rows_n 1 "ACTION"
-    out_has "COMPLETED with 2 warning(s)"
+    out_has "COMPLETED with 1 warning(s)"
     has_json ('"machineId": "' + $KEY_MAC + '"')
 
     # C19 this machine's id cannot be detected: the cached machineId selects the profile
-    # (via=config) and is kept; the undetectable id is a real warning
+    # (via=config) and is kept; the undetectable id is a real warning, and the status
+    # row stays OK (no promotion: reference/logging.md 8.3)
     function fix_noid { fix_fresh; Copy-Item -LiteralPath "$WORK/c1-fresh.json" -Destination $CFG -Force }
     $script:CaseEnv = @{ AITOOLS_PROFILE_TEST_MACHINE_ID = "none" }
     case_run c19-id-unavailable 0 fix_noid
     $script:CaseEnv = @{}
-    has_row "WARN|aitools config|verified"
+    has_row "OK|aitools config|verified"
+    has_row "WARN|aitools config|machine id unavailable: no machine id (test value)"
     if (SameFile $RAWJ "$WORK/c1-fresh.json") { ok "c19-id-unavailable: machineId kept, file unchanged" } else { bad "c19-id-unavailable: file changed" }
     log_has "machineAlias=nobul-mac via=config"
 
@@ -412,6 +458,7 @@ try {
     case_run c20-stale-machine-id 0 fix_stale_mid
     has_row "OK|aitools config|updated"
     has_row "DETAIL|aitools config|machineId updated"
+    has_row "WARN|aitools config|profile `"nobul-mac`" is keyed by alias -- run: aitools user init"
     no_json '"machineId"'
     has_json '"machineAlias": "nobul-mac"'
     out_has "cached machineId `"$KEY_OTHER`" removed"
@@ -425,7 +472,7 @@ try {
     $script:CaseEnv = @{ AITOOLS_PROFILE_TEST_MACHINE_ID = "none" }
     case_run c21-salvage-machine-id 0 fix_corrupt_mid
     $script:CaseEnv = @{}
-    has_row "WARN|aitools config|rebuilt (was invalid)"
+    has_row_like $RE_REBUILT
     has_json ('"machineId": "' + $KEY_MAC + '"')
     out_has "Recovered machineId from the invalid config"
 
@@ -452,7 +499,7 @@ try {
     log_has ": left to the caller)"  # "(--no-machine: ..." (bash) / "(-NoMachine: ..." (PowerShell)
     # C22b the same fixture without the flag still reports it (C7 behaviour unchanged)
     case_run c22b-unmatched-without-flag 1 fix_nm_nomatch @("-GithubUser", "nobul-jose")
-    has_row "ERROR|machine profile|no machine match"
+    has_row "ERROR|machine profile|no machine match|$R_NOMATCH"
     rows_n 1 "ACTION"
     # C22c profile.json with no machine profiles: unregistered too, nothing reported
     function fix_nm_empty {
@@ -485,22 +532,26 @@ try {
     no_json '"machineId"'
     # C22g other derivation errors are still reported: an invalid profile.json
     function fix_nm_badprofile { fix_v2; WriteText "$DP/profile.json" '{ "version": 2, ' }
+    # The .NET parser's message (the .sh writer's aitools-json.pl says "invalid JSON
+    # at byte 16: expected a string key"): any text after "is invalid JSON: "
+    $RE_BADPROFILE = '^ERROR\|profile\.json\|profile\.json unusable\|.*[/\\]aitools-nobul-jose[/\\]profile\.json is invalid JSON: .+$'
     case_run c22g-no-machine-bad-profile 1 fix_nm_badprofile @("-NoMachine")
-    has_row "ERROR|profile.json|invalid (see log)"
+    has_row_like $RE_BADPROFILE
     # C22h -NoMachine with a machine choice: bad arguments, nothing written
+    $R_NM_ARGS = "-NoMachine leaves the machine to the caller: not with -MachineId or -MachineAlias (see -Help)"
     case_run c22h-no-machine-and-id 1 fix_v2 @("-NoMachine", "-MachineId", $ID_MAC)
-    has_row "ERROR|aitools config|bad arguments"
+    has_row "ERROR|aitools config|bad arguments|$R_NM_ARGS"
     rows_n 1 "ERROR"
     if ((ReadText $RAWJ).Contains('"version": 2')) { ok "c22h-no-machine-and-id: config untouched" } else { bad "c22h-no-machine-and-id: config changed" }
     case_run c22i-no-machine-and-alias 1 fix_v2 @("-MachineAlias", "laptop", "-NoMachine")
-    has_row "ERROR|aitools config|bad arguments"
+    has_row "ERROR|aitools config|bad arguments|$R_NM_ARGS"
     # C22k an ambiguous match (this machine.id on two profiles) is still an error
     function fix_nm_dupid {
         fix_v2
         WriteText "$DP/profile.json" ('{ "version": 2, "meta": { "schemaRevision": "2.2" }, "identity": { "github": "nobul-jose" }, "profiles": { "a": { "machine": { "id": "' + $ID_MAC + '", "hostname": "nobul-mac" } }, "b": { "machine": { "id": "' + $ID_MAC + '", "hostname": "nobul-mac" } } } }' + "`n")
     }
     case_run c22k-no-machine-ambiguous 1 fix_nm_dupid @("-NoMachine")
-    has_row "ERROR|machine profile|no machine match"
+    has_row "ERROR|machine profile|no machine match|machine.id $ID_MAC is registered on more than one profile: a, b"
     # C22l -NoMachine with -DryRun: nothing written, no machine rows
     case_run c22l-no-machine-dry-run 0 fix_nm_nomatch @("-NoMachine", "-DryRun")
     has_row "OK|aitools config|dry-run: would update"
@@ -518,54 +569,60 @@ try {
 
     # C14 relative bootstrap path: bad arguments, nothing written
     case_run c14-relative 1 fix_nodp @("-ReposPath", "repos", "-RepoPath", "$H/repos/aitools")
-    has_row "ERROR|aitools config|bad arguments"
+    has_row "ERROR|aitools config|bad arguments|paths must be absolute: repos (see -Help)"
     if ((Get-Item -LiteralPath $RAWJ).Length -eq 0) { ok "c14-relative: no config written" } else { bad "c14-relative: config written" }
 
     # C15 double slash in a path value: validation failed, existing file untouched
     case_run c15-double-slash 1 fix_v2 @("-ReposPath", "$H/repos//x")
-    has_row "ERROR|aitools config|validation failed"
+    has_row "ERROR|aitools config|merged config rejected -- existing file left untouched|double slash in a path value: `"$H/repos//x`""
     if ((ReadText $RAWJ).Contains('"version": 2')) { ok "c15-double-slash: config untouched" } else { bad "c15-double-slash: config changed" }
 
-    # C16 invalid profile.json: its own ERROR row, not "no machine match"
+    # C16 invalid profile.json: its own ERROR record (the resolver's line as the reason),
+    # not "no machine match"
     function fix_badprofile { fix_v2; WriteText "$DP/profile.json" '{ "version": 2, ' }
     case_run c16-bad-profile 1 fix_badprofile
-    has_row "ERROR|profile.json|invalid (see log)"
+    has_row_like $RE_BADPROFILE
     no_row_like "no machine match"
-    # Audit A-10: the ACTION's instruction is in a log line that names its row (error level)
-    out_has "config: profile.json invalid -- Fix profile.json in the dotprofile (details in deploy.log)"
-    log_has "[error] config: profile.json invalid -- Fix profile.json"
+    # Audit A-10: the error line names the record (WHAT: REASON), and the ACTION's
+    # instruction is logged right after it, at info (a consequence of the one error,
+    # not a second red line: I3 G3b, P1)
+    out_has "[error] profile.json unusable: "
+    out_has "profile.json is invalid JSON: "
+    log_has "[info] config: Fix profile.json in the dotprofile (details in deploy.log)"
 
     # C23 the resolver's two "unusable profile.json" states (PR #98 review m1): a v1 file
     # ("is not v2") and a v2 file without a profiles object each have their own message,
     # and both are an invalid profile.json, with or without -NoMachine
     function fix_v1profile { fix_v2; WriteText "$DP/profile.json" ('{ "name": "Jose", "machines": [] }' + "`n") }
     case_run c23-v1-profile 1 fix_v1profile
-    has_row "ERROR|profile.json|invalid (see log)"
+    has_row "ERROR|profile.json|profile.json unusable|profile.json is not v2"
     has_row "ACTION||Fix profile.json in the dotprofile (details in deploy.log)"
     rows_n 1 "ACTION"
     no_row_like "no machine match"
-    log_has "config: profile.json is not v2"
-    out_has "config: profile.json invalid -- Fix profile.json in the dotprofile (details in deploy.log)"
+    log_has "[error] profile.json unusable: profile.json is not v2"
+    out_has "[info] config: Fix profile.json in the dotprofile (details in deploy.log)"
     has_json '"machineAlias": "new-mac"'
     function fix_noprofiles {
         fix_v2
         WriteText "$DP/profile.json" ('{ "version": 2, "meta": { "schemaRevision": "2.2" }, "identity": { "github": "nobul-jose" } }' + "`n")
     }
     case_run c23b-no-profiles-object 1 fix_noprofiles
-    has_row "ERROR|profile.json|invalid (see log)"
+    has_row "ERROR|profile.json|profile.json unusable|profile.json has no profiles object"
     rows_n 1 "ACTION"
     no_row_like "no machine match"
-    log_has "config: profile.json has no profiles object"
+    log_has "[error] profile.json unusable: profile.json has no profiles object"
     case_run c23c-no-profiles-object-no-machine 1 fix_noprofiles @("-NoMachine")
-    has_row "ERROR|profile.json|invalid (see log)"
+    has_row "ERROR|profile.json|profile.json unusable|profile.json has no profiles object"
     rows_n 1 "ACTION"
     case_run c23d-v1-profile-no-machine 1 fix_v1profile @("-NoMachine")
-    has_row "ERROR|profile.json|invalid (see log)"
+    has_row "ERROR|profile.json|profile.json unusable|profile.json is not v2"
     rows_n 1 "ACTION"
-    # C23e audit A-10 for the other ACTION: no machine match (C7 fixture)
+    # C23e audit A-10 for the other ACTION: no machine match (C7 fixture): the error
+    # line, then the instruction at info
     case_run c23e-no-match-log-line 1 fix_nomatch
     has_row "ACTION||Run: aitools user init (profiles: nobul-mac, laptop)"
-    out_has "config: machine profile: no machine match -- Run: aitools user init (profiles: nobul-mac, laptop)"
+    out_has "[error] no machine match: $R_NOMATCH"
+    out_has "[info] config: Run: aitools user init (profiles: nobul-mac, laptop)"
 
     # C24 a config.json key that differs only in case from a managed key (PR #108 n-2):
     # the merge fails, and the message names both keys; the file is untouched, no temp left
@@ -574,7 +631,7 @@ try {
         WriteText $CFG ((ReadText $CFG).Replace('"machineAlias": "new-mac"', "`"machineAlias`": `"new-mac`",`n  `"MachineId`": `"hand-written`""))
     }
     case_run c24-case-twin 1 fix_case_twin
-    has_row "ERROR|aitools config|merge failed"
+    has_row "ERROR|aitools config|config merge failed -- existing file left untouched|key `"MachineId`" differs only in case from the managed key `"machineId`": rename or remove it"
     out_has 'key "MachineId" differs only in case from the managed key "machineId": rename or remove it'
     has_json '"MachineId": "hand-written"'
     if ((ReadText $RAWJ).Contains('"version": 2')) { ok "c24-case-twin: config untouched" } else { bad "c24-case-twin: config changed" }
@@ -586,7 +643,7 @@ try {
 
     # C12 bad arguments
     case_run c12-bad-arg 1 fix_nodp @("--bogus")
-    has_row "ERROR|aitools config|bad arguments"
+    has_row "ERROR|aitools config|bad arguments|Unknown option: --bogus (see -Help)"
 
     # --- Installer Step 3/5 helpers (aitools-install.ps1 "install log helpers" block) ---
     # The full installer cannot run here (incident #89); its helper block is extracted
@@ -707,17 +764,22 @@ Write-Output "COUNTS errors=$($script:errors) warnings=$($script:warnings)"
     $script:INST_CWD = ""
     $got = inst_got
     if (same_path $got $root_tmp) { ok "$L step3: relative from / -> $got" } else { bad "$L step3: relative from / -> '$got', want $root_tmp" }
-    # JSONL records stay valid with quotes, backslashes and control characters
+    # JSONL records stay valid with quotes, backslashes and control characters: the
+    # installers write their deploy.jsonl records through the library's
+    # Write-JsonlRecord. Exactly one record must be written: a missing or empty file
+    # fails (Read-JsonlFile), as in the .sh harness
     New-Item -ItemType Directory -Path "$H/.aitools/logs" -Force | Out-Null
     if (Test-Path -LiteralPath "$H/.aitools/logs/deploy.jsonl") { Remove-Item -LiteralPath "$H/.aitools/logs/deploy.jsonl" -Force }
     inst_run jsonl
     $jr = Read-JsonlFile "$H/.aitools/logs/deploy.jsonl"
-    if ($jr.Ok) { ok "$L jsonl: control characters give valid JSON" }
-    else { bad "$L jsonl: invalid record"; Show-Indented ((ReadText "$H/.aitools/logs/deploy.jsonl") + "`n" + $jr.Error) }
+    if ($jr.Ok -and $jr.Records.Count -eq 1) { ok "$L jsonl: control characters give one valid JSON record" }
+    else { bad "$L jsonl: no record, or an invalid one ($($jr.Records.Count) record(s))"; Show-Indented ((ReadText "$WORK/inst.out") + "`n" + (ReadText "$H/.aitools/logs/deploy.jsonl") + "`n" + $jr.Error) }
 
     # Step 5 relays the writer: its lines reach deploy.jsonl, its warnings are counted
-    # (C13 fixture: an unregistered profile warns), and the relative-path regression
-    # is gone (Step 3's absolute path is accepted and config.json is written)
+    # by the writer only (C13 fixture: an unregistered profile warns; reference/logging.md
+    # 8.3: a relayed child's warnings are not added to the parent's count), and the
+    # relative-path regression is gone (Step 3's absolute path is accepted and
+    # config.json is written)
     fix_unreg
     Remove-Item -LiteralPath $CFG -Force
     inst_run run $REL_GOT "$H/repos/aitools"   # REL_GOT: Step 3's answer for the relative 'repos'
@@ -726,10 +788,10 @@ Write-Output "COUNTS errors=$($script:errors) warnings=$($script:warnings)"
     else { bad "$L step5: rc=$($script:RC), config missing"; Show-Indented (ReadText "$WORK/inst.out") }
     jsonl_check
     if ($script:JlAll -gt 0) { ok "$L step5: writer lines in deploy.jsonl ($($script:JlAll))" } else { bad "$L step5: no writer lines in deploy.jsonl" }
-    # the installer's count = the writer's own N (its footer) = its warn lines minus the footer
-    $cw = if ($counts) { ($counts -split ' ')[1] } else { "" }
-    if ($cw -ceq [string]$script:JlFooter -and $script:JlWarn -eq $script:JlFooter -and $script:JlFooter -gt 0) { ok "$L step5: writer warnings counted ($cw)" }
-    else { bad "$L step5: counts '$counts', writer warn lines $($script:JlWarn), writer footer N $($script:JlFooter)"; Show-Indented (ReadText "$WORK/inst.out") }
+    # the writer's own N (its footer) = its warn lines minus the footer, N > 0; the
+    # installer counts none of them (errors 0, warnings 0)
+    if ($counts -ceq "0 0" -and $script:JlWarn -eq $script:JlFooter -and $script:JlFooter -gt 0) { ok "$L step5: writer warnings counted by the writer ($($script:JlFooter)), not the installer" }
+    else { bad "$L step5: counts '$counts' (want '0 0'), writer warn lines $($script:JlWarn), writer footer N $($script:JlFooter)"; Show-Indented (ReadText "$WORK/inst.out") }
     if ((ReadText "$WORK/inst.out") -cmatch '\[setup-user-config\] \[warn\]') { ok "$L step5: writer lines shown on the console" } else { bad "$L step5: writer lines not shown" }
 
     # A failing writer (relative path reaching it) is one installer error
@@ -738,7 +800,12 @@ Write-Output "COUNTS errors=$($script:errors) warnings=$($script:warnings)"
     $counts = inst_counts
     $ce = if ($counts) { ($counts -split ' ')[0] } else { "" }
     if ($ce -ceq "1") { ok "$L step5: failed writer = 1 error" } else { bad "$L step5: failed writer counts '$counts'"; Show-Indented (ReadText "$WORK/inst.out") }
-    if (@(((ReadText "$H/summary.txt") -replace "`r", "") -split "`n") -ccontains "ERROR|aitools config|bad arguments") { ok "$L step5: writer ERROR row kept" } else { bad "$L step5: no writer ERROR row" }
+    # The writer recorded its own error, so the installer's relay records none (8.3)
+    $sumLines = @(((ReadText "$H/summary.txt") -replace "`r", "") -split "`n")
+    if ($sumLines -ccontains "ERROR|aitools config|bad arguments|paths must be absolute: repos (see -Help)") { ok "$L step5: writer ERROR row kept" }
+    else { bad "$L step5: no writer ERROR row"; Show-Indented (ReadText "$H/summary.txt") }
+    $nErr = @($sumLines | Where-Object { $_ -cmatch '^ERROR\|' }).Count
+    if ($nErr -eq 1) { ok "$L step5: one ERROR row (the relay adds none)" } else { bad "$L step5: $nErr ERROR rows, want 1"; Show-Indented (ReadText "$H/summary.txt") }
 } finally {
     Remove-TestTempRoot $WORK
 }

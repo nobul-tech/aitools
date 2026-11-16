@@ -167,6 +167,7 @@ try {
     Check "corrupted: no more parse errors than before ($($c1.ParseErrors) <= $errsBefore)" ($c1.ParseErrors -le $errsBefore)
     Check "corrupted: user line kept, stray fragments left in place" ($c1.Text.StartsWith("Set-Alias ll Get-ChildItem`n") -and ($c1.Text -match '(?m)^_aitoolsLocalBin'))
     Check "corrupted: ACTION names the newest clean backup (2026-01-01; 02 has 2 blocks, 03 a stray line)" ($c1.Summary -match [regex]::Escape("ACTION||Restore $p from $p.bak.2026-01-01T000000Z"))
+    Check "corrupted: one warning, saying what to do (logging.md 8.2 Write-AitAction)" (($c1.Summary -match [regex]::Escape("WARN|shell|profile damage left in place -- restore $p from $p.bak.2026-01-01T000000Z")) -and ([regex]::Matches($c1.Summary, '(?m)^WARN\|').Count -eq 1))
     $c2 = Invoke-Setup "corrupt" $p
     Check "corrupted: re-run byte-identical, still WARN + ACTION" (($c2.Rc -eq 0) -and ($c2.Text -ceq $c1.Text) -and ($c2.Summary -match 'WARN\|shell\|profile damage left in place') -and ($c2.Summary -match 'ACTION\|\|Restore '))
 
@@ -199,6 +200,7 @@ try {
     [IO.File]::WriteAllText($p, $mdmBefore)
     $a1 = Invoke-Setup "mdm" $p $noAliases
     Check "MDM: exit 0, WARN aliases.ps1 not found, OK managed block added" (($a1.Rc -eq 0) -and ($a1.Summary -match 'WARN\|shell\|aliases.ps1 not found') -and ($a1.Summary -match '\|shell\|managed block added'))
+    Check "MDM: the warning names the missing path" ($a1.Summary -match [regex]::Escape("WARN|shell|aliases.ps1 not found ($noAliases) -- shell integration skipped (MDM deploy)"))
     Check "MDM: legacy integration left as is, no integration block written" (($a1.Legacy -eq 1) -and ($a1.Integ -eq 0) -and $a1.Text.StartsWith($mdmBefore))
     $p = New-ProfilePath "mdm2"
     [IO.File]::WriteAllText($p, $r1.Text)
@@ -216,6 +218,7 @@ try {
     $e1 = Invoke-Setup "latin1" $p
     $after = [IO.File]::ReadAllBytes($p)
     Check "non-UTF-8: exit 1, ERROR row, file unchanged" (($e1.Rc -eq 1) -and ($e1.Summary -match 'ERROR\|shell\|profile not readable as UTF-8') -and ($after.Length -eq 7))
+    Check "non-UTF-8: the error's reason is the decoder's message (logging.md 8.3)" ($e1.Summary -match '(?m)^ERROR\|shell\|profile not readable as UTF-8\|\S')
 
     # --- A splice that would break the profile is refused ---
     # The block is commented out with a <# #> that closes before the end
@@ -225,6 +228,7 @@ try {
     [IO.File]::WriteAllText($p, $before)
     $g = Invoke-Setup "guard" $p
     Check "breaking splice: exit 1, ERROR row" (($g.Rc -eq 1) -and ($g.Summary -match 'ERROR\|shell\|managed block splice failed parse check'))
+    Check "breaking splice: the error's reason is the parser's first error (logging.md 8.3)" ($g.Summary -match '(?m)^ERROR\|shell\|managed block splice failed parse check\|line \d+: \S')
     Check "breaking splice: profile left unchanged" ($g.Text -ceq $before)
 } finally {
     if (Test-Path $tmpRoot) { Remove-Item -Recurse -Force $tmpRoot }

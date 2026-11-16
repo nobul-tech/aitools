@@ -39,18 +39,9 @@ esac
 
 [ "$DRY_RUN" = "true" ] && log "[DRY RUN] Preview mode -- no files will be written"
 
-# Log captured command output to the log file as detail lines (blank lines skipped).
-write_output_detail() {  # label, output
-    local line
-    while IFS= read -r line; do
-        if [ -n "${line// /}" ]; then log_detail "$1: $line"; fi
-    done <<< "$2"
-}
-
 # --- Require node for JSON manipulation ---
 if ! command -v node &>/dev/null; then
-    log_error "node required for settings sync"
-    write_summary ERROR "claude settings" "node not found"
+    write_error "claude settings" "settings not synced" "node not found (run aitools install)"
     exit 1
 fi
 
@@ -62,7 +53,8 @@ DEPRECATED_RULES="MCP(vercel),MCP(webflow),Agent(claude-code-guide)"
 # --- Resolve profile.json (source of truth): the one dotprofile resolver ---
 # (reference/user-repo.md "Resolution"; SD-7). The rc is captured, not
 # suppressed: 0 found, 1 no dotprofile (shared-only mode, expected),
-# 3 resolver error (the lib already logged it: log_error + ERROR row "dotprofile").
+# 3 resolver error (the lib already logged, counted and recorded it once:
+# write_error "dotprofile").
 URP_RC=0
 resolve_user_repo_path || URP_RC=$?
 USER_REPO_PATH="$AITLIB_USER_REPO_PATH"
@@ -70,15 +62,15 @@ PROFILE_FILE=""
 [ -n "$USER_REPO_PATH" ] && PROFILE_FILE="$USER_REPO_PATH/profile.json"
 
 if [ "$URP_RC" -ne 0 ] && [ "$URP_RC" -ne 1 ]; then
-    # Counted (S3-M3Lead decision): this step fails too, not only the resolver.
-    log_error "Dotprofile unresolved (resolver error above) -- settings not synced"
-    write_summary ERROR "claude settings" "not synced: dotprofile error"
+    # A consequence of the resolver's error, which the lib already counted and
+    # recorded: logged at info, so one cause is one red line (reference/logging.md
+    # 8.3; supersedes the earlier S3-M3Lead choice to count it again). The exit
+    # status stays 1 through the resolver's counted error.
+    log "Dotprofile unresolved (resolver error above) -- settings not synced"
 elif [ -z "$USER_REPO_PATH" ] || [ ! -d "$USER_REPO_PATH" ]; then
-    log_warn "No dotprofile found (shared-only mode; run 'aitools user init'; details in deploy.log) -- skipping settings sync"
-    write_summary WARN "claude settings" "not synced: no dotprofile"
+    write_warn "claude settings" "not synced: no dotprofile (shared-only mode) -- run: aitools user init"
 elif [ ! -f "$PROFILE_FILE" ]; then
-    log_warn "profile.json not found at $(display_path "$PROFILE_FILE") -- skipping settings sync"
-    write_summary WARN "claude settings" "profile.json missing"
+    write_warn "claude settings" "not synced: profile.json not found at $(display_path "$PROFILE_FILE")"
 else
     # A missing settings.json is not skipped: sync_managed_json creates it from the
     # profile without prompting (#31, C-F5).
@@ -97,8 +89,10 @@ else
             LEGACY_RC=$?
         fi
         if [ "$LEGACY_RC" -ge 2 ]; then
-            write_output_detail "legacy-probe (exit $LEGACY_RC)" "$LEGACY_OUT"
-            log_warn "Could not read $(display_path "$PROFILE_FILE") for the legacy preference check -- skipped"
+            # Logged at info, not a warning: the sync below reads the same file and
+            # records the same failure as its error, and one cause is recorded once
+            # (reference/logging.md 8.3). error_reason logs the output as detail lines.
+            log "Legacy preference check skipped: $(display_path "$PROFILE_FILE") unreadable: $(error_reason "$LEGACY_OUT" "$LEGACY_RC") (the settings sync reports it)"
         fi
     fi
     if [ "$LEGACY_RC" -eq 0 ]; then
@@ -122,18 +116,19 @@ if (migrated.length) fs.writeFileSync(p, JSON.stringify(o, null, 2) + "\n");
 process.stdout.write(migrated.join(", "));
 ' "$PROFILE_FILE" 2>&1) || MIGRATE_RC=$?
         if [ "$MIGRATE_RC" -ne 0 ]; then
-            write_output_detail "legacy-migration (exit $MIGRATE_RC)" "$MIGRATED"
-            log_warn "Legacy preference migration failed (exit $MIGRATE_RC, non-fatal) -- see $(display_path "$LOG_FILE")"
+            # error_reason logs the migration's output as detail lines
+            write_warn "claude settings" "legacy preference migration failed (non-fatal): $(error_reason "$MIGRATED" "$MIGRATE_RC")"
         elif [ -n "$MIGRATED" ]; then
             log_ok "Migrated legacy prefs into claude.settings: $MIGRATED"
         fi
     fi
 
     # --- Sync settings.json <-> profile.json (granular per-leaf review) ---
-    # Called in an `if` so a failed sync (already logged by the lib) writes an ERROR
-    # row instead of aborting under set -e with no row (#26c).
-    if ! sync_managed_json "$SETTINGS_FILE" "$PROFILE_FILE" "claude.settings" "hooks" "$DEPRECATED_RULES"; then
-        write_summary ERROR "claude settings" "sync failed"
+    # Called in an `if` so a failed sync does not abort under set -e (#26c) and
+    # writes no OK record. The lib records the failure once, under the tool name
+    # passed as its 6th argument (reference/logging.md 8.3), so no record here.
+    if ! sync_managed_json "$SETTINGS_FILE" "$PROFILE_FILE" "claude.settings" "hooks" "$DEPRECATED_RULES" "claude settings"; then
+        log "Settings sync failed (recorded above) -- no status record"
     elif [ "$DRY_RUN" = "true" ]; then
         write_summary OK "claude settings" "dry-run"
     else

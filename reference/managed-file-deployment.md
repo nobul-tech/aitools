@@ -32,15 +32,15 @@ merge". This file is the implementation detail.
 | `Prompt-DiffReview` | `prompt_diff_review` | Text files: show the diff and the review menu, return the choice (and the merged content for merge) |
 | `Review-JsonFields` | `review_json_fields` | JSON files: review field by field; SOURCE owns every field; write adopted values into the adopt target |
 | `Initialize-DeployTracker` | `deploy_tracker_init` | Reset the outcome counters before a deploy loop |
-| `Record-DeployOutcome` | `deploy_tracker_record` | Count one outcome (including `failed`, and `removed` for a deployed copy a fan-out consumer backed up and deleted) and write its DETAIL row; an unknown outcome is logged with `log_error` and counted as `failed` (outcomes are matched case-sensitively) |
-| `Write-DeployTrackerSummary` | `deploy_tracker_summary` | Write the loop's summary row: ERROR `N failed` when any file failed, WARN `N skipped (user review)` when any was skipped, else OK with the non-zero counts `N added, N updated, N accepted, N removed, N verified, N failed` (no count at all: `n/a (nothing to deploy)`, PR #118 at f69e2db) |
+| `Record-DeployOutcome` | `deploy_tracker_record` | Count one outcome (including `failed`, and `removed` for a deployed copy a fan-out consumer backed up and deleted) and write its DETAIL record; an unknown outcome is logged with `log_error` and counted as `failed` (outcomes are matched case-sensitively). It writes no WARN or ERROR record for `skipped` or `failed`: the library recorded those when they happened (see "Return Values") |
+| `Write-DeployTrackerSummary` | `deploy_tracker_summary` | Write the loop's status: one OK record with the non-zero counts `N added, N updated, N accepted, N removed, N verified, N failed` (no count at all: `n/a (nothing to deploy)`, PR #118 at f69e2db). It writes no WARN or ERROR record; the tool's skipped and failed files are already recorded, so its panel line is yellow or red (`@reference/logging.md` 8.5) |
 | `Read-HarnessManifest` | `read_harness_manifest` | Read the rules or skills manifest (`-Kind` / KIND `rules` or `skills`): each name's source or `retired`, invalid lines reported, a bad header reported as `header-bad`; `Read-RulesManifest` / `read_rules_manifest` wrap it for rules |
 | `Get-RuleNameKind` | `rule_name_kind` | Classify a name in `~/.aitools/rules`, case-insensitively: `hidden`, `backup` (`*.bak.*`), `rule` (`*.md`), `other` |
 | `Get-SkillNameKind` | `skill_name_kind` | Classify a name in `~/.aitools/skills`, case-insensitively: `hidden`, `backup` (`*.bak.*`), `skill` |
 | `Test-FanoutTextEqual` | `fanout_text_equal` | 0 equal ignoring trailing CR/LF, 1 differ, 2 unreadable |
 | `Test-FanoutDirMatches` | `fanout_dir_matches` | 0 when every file of a deployed skill directory matches a harness copy (`*.bak.*` ignored, symlinks and special files rejected), 1 otherwise, 2 unreadable |
 | `Backup-Dir` | `backup_dir` | Copy a directory to `<dir>.bak.<UTC>` (`-<n>` on a name clash) and keep the newest 5 (old backups matched by literal name); reports `BACKUP_DIR_OK` / `$script:BackupDirOk`, the path and the reason (`no directory`, `no top-level *.md`, `cannot list`, `copy failed`). A half-made copy is removed, or renamed `<dir>.bak.incomplete.<UTC>` (never pruned) when that fails. Skips a directory with no top-level `*.md` (extension case-insensitive), so it never copies `~/.claude/skills`, `~/.cursor/skills` or `~/.cursor/rules` (PR #118 at ec6c4ac) |
-| `Invoke-HarnessSkillsFanout` | `fanout_harness_skills` | Fan `~/.aitools/skills` out to one tool's skills directory (`claude skills`, `cursor skills`): deploy every file of every non-retired skill, adopt target from the manifest, retired prune, summary row (`@reference/skills.md` section 6) |
+| `Invoke-HarnessSkillsFanout` | `fanout_harness_skills` | Fan `~/.aitools/skills` out to one tool's skills directory (`claude skills`, `cursor skills`): deploy every file of every non-retired skill, adopt target from the manifest, retired prune, status record (`@reference/skills.md` section 6) |
 | `Adopt-ManagedFile` | `adopt_managed_file` | Back up and write an adopt target. Used inside `deploy_managed_file` for review adopts; called directly only by reverse discovery of user-created hooks and skills (no SOURCE; see "Shell Script Deployment Detail") |
 | `Sync-ManagedJson` | `sync_managed_json` | Profile-mirror regime for `settings.json` (see "JSON Config Review Detail"); unchanged |
 | `Prompt-JsonFieldReview` | `prompt_json_field_review` | Per-leaf prompt used by `sync_managed_json` and `review_json_fields` |
@@ -105,9 +105,9 @@ Source content
               +-- [a]ccept & adopt  --> keep LOCAL + copy to repo now (backup) --> "accept & adopt"
               +-- [m]erge & adopt   --> AI merge (text only) --> write LOCAL
               |                         + copy to repo now (backups)          --> "accept & adopt"
-              +-- [s]kip            --> nothing written                       --> "skipped"
-              +-- [x]abort          --> log error, exit 2
-    Any write/merge/validation failure --> restore backups, log, ERROR row, continue
+              +-- [s]kip            --> nothing written, warning recorded     --> "skipped"
+              +-- [x]abort          --> log error (not recorded), exit 2
+    Any write/merge/validation failure --> restore backups, write_error with the reason, continue
 JSON files: the same choices per differing field (no [m]erge); SOURCE owns every field.
 ```
 
@@ -235,15 +235,17 @@ prompt does not: they loop the same way locally, without logging.
 
 ### [x]abort
 
-`[x]abort` logs an error and exits 2. A bare exit 2 is a user abort
-(D-TS13 as decided 2026-10-21). Abort ends this setup
+`[x]abort` logs an error and exits 2. The abort line is logged and counted
+in the script, not recorded in the run summary file: the runner records
+the abort (`@reference/logging.md` 8.3, "A user abort"). A bare exit 2 is a
+user abort (D-TS13 as decided 2026-10-21). Abort ends this setup
 script (exit 2). What happens next depends on which script exited 2 and
 which runner launched it (kept by the commander 2026-10-26):
 
 | Script that exits 2 | Installer (`aitools install`, or run directly) | `aitools` sync (no arguments, `gitpull`) |
 |---|---|---|
-| `deploy-harness` | Step 8b (`run_harness_step` in `@scripts/aitools-install.sh` / `Invoke-HarnessStep` in `@scripts/aitools-install.ps1`) writes WARN `harness files` `aborted by user`, renders the summary and exits 2: Steps 9-22 do not run. `aitools install` reads the exit 2, logs "Installer aborted by user", renders the summary and exits 2 | `deploy_configs` in `@scripts/aitools` / `Deploy-Configs` in `@scripts/aitools.ps1` call `deploy_abort` / `Invoke-DeployAbort` (WARN `harness files` `aborted by user`) and stop: no further deploy script, no relay mirror to `~/.cursor/AGENTS.md`, no version tag (`gitpull`). The entry point renders the summary and exits 2 |
-| Any other setup script (`setup-user-*`, `setup-cursor-ide-mcp`, tool setup scripts) | `validate_and_run` / `Invoke-ValidatedScript` treat it as a failure: `log_error "<script> failed (exit 2)"`, ERROR `script failed (exit 2)`; the install continues | `deploy_configs` / `Deploy-Configs` treat it as a failure: ERROR `script failed (exit 2)`, counted as an error; the remaining deploy scripts run |
+| `deploy-harness` | Step 8b (`run_harness_step` in `@scripts/aitools-install.sh` / `Invoke-HarnessStep` in `@scripts/aitools-install.ps1`) records one warning, `write_warn "harness files" "aborted by user"`, renders the summary and exits 2: Steps 9-22 do not run. `aitools install` reads the exit 2, logs "Installer aborted by user", renders the summary and exits 2 | `deploy_configs` in `@scripts/aitools` / `Deploy-Configs` in `@scripts/aitools.ps1` call `deploy_abort` / `Invoke-DeployAbort` (one warning, `write_warn "harness files" "aborted by user"`) and stop: no further deploy script, no relay mirror to `~/.cursor/AGENTS.md`, no version tag (`gitpull`). The entry point renders the summary and exits 2 |
+| Any other setup script (`setup-user-*`, `setup-cursor-ide-mcp`, tool setup scripts) | `validate_and_run` / `Invoke-ValidatedScript` treat it as a failure: the relay records one error, WHAT `<label> failed (exit 2)`, REASON `aborted by user`, counted in the installer's error count; the install continues | `deploy_configs` / `Deploy-Configs` treat it as a failure: the relay records one error, WHAT `<label> failed (exit 2)`, REASON `aborted by user`, counted as an error; the remaining deploy scripts run |
 
 `aitools user init` launches `setup-user-hooks` directly: exit 2 there logs
 "user init: aborted by user" and `user init` exits 2. `bootstrap.sh` does not
@@ -265,8 +267,12 @@ of these: it asks again (see "Menus").
 
 Then no menu is shown and `overwrite` is selected: SOURCE is written to LOCAL
 (backup kept) and the result is `updated`. No AI merge runs. The decision is
-logged to deploy.log. For JSON, each differing field takes the SOURCE value;
-a field only in LOCAL stays in LOCAL.
+logged to deploy.log: under `--force` at info, because the user asked for the
+overwrite in this run; with no terminal, as a warning recorded under the
+tool name, because local edits were overwritten without a review (EOF has
+its own warning, above)
+(`@reference/logging.md` 8.3, "What is a warning"). For JSON, each differing
+field takes the SOURCE value; a field only in LOCAL stays in LOCAL.
 
 **Read-only copies.** A caller marks LOCAL as a read-only copy (never edited
 there) with `MANAGED_NO_REVIEW=true` on the `deploy_managed_file` call /
@@ -316,9 +322,15 @@ For an adopt target in the dotprofile, `accept & adopt` also means the
 library tried to commit and push it (see Caller Responsibilities, N-Q2).
 
 On `failed` the library has already restored every file it backed up and
-written a `log_error` with the reason. The caller records the outcome
-(`deploy_tracker_record failed ...` / `Record-DeployOutcome failed ...`) and
-continues with the next file.
+recorded the error once, at the source (`@reference/logging.md` 8.3,
+"Recorded at the source"): `write_error` / `Write-AitError` under the tool
+name the caller passed, WHAT the step that failed (with the item), REASON
+the write, AI merge, adopt filter or validation error. On `skipped` it has recorded one warning under the tool
+name: the item was skipped at the review and still differs from SOURCE.
+The caller records the outcome (`deploy_tracker_record failed ...` /
+`Record-DeployOutcome failed ...`), writes no second WARN or ERROR record,
+and continues with the next file. Each helper's effect on deploy.log, the
+counts and the run summary file: `@reference/logging.md` 8.2.
 
 ## Caller Responsibilities
 
@@ -336,15 +348,17 @@ continues with the next file.
 | `updated` | Yes | Record |
 | `verified` | No | Record |
 | `accept & adopt` | Yes when LOCAL was written (merge) | Record |
-| `skipped` | No | Record (summary WARN) |
-| `failed` | No (library restored and logged) | Record (summary ERROR) |
+| `skipped` | No | Record (the library recorded the warning) |
+| `failed` | No (library restored and recorded the error with its reason) | Record (the library recorded the error) |
 
 `removed` is not a `deploy_managed_file` value: a fan-out consumer records it
 itself after it backed up its own copy of a retired rule or skill (the backup
 verified) and deleted it.
 
 - **Single-file callers** without a tracker loop (CLAUDE.md) write the
-  equivalent `write_summary` row themselves; `failed` is an ERROR row.
+  tool's OK record themselves (`write_summary OK`) for `created`,
+  `updated`, `verified` and `accept & adopt`. For `skipped` and `failed`
+  they write no record: the library has recorded the warning or the error.
 - **Dotprofile writes are committed and pushed** (N-Q2, approved
   2026-10-21). An adopt or merge whose adopt target is in the dotprofile
   repo is committed and pushed by the library, right after the adopt write
@@ -359,7 +373,7 @@ verified) and deleted it.
     the dotprofile's. The dotprofile is the caller's resolved path
     (`AITLIB_USER_REPO_PATH` / `$script:AitLibUserRepoPath`, set by
     `resolve_user_repo_path` / `Resolve-UserRepoPath`), or, when the caller
-    never resolved it, the resolver is asked quietly (no ERROR row).
+    never resolved it, the resolver is asked quietly (no record).
   - *Pathspec commit*: `git add -- FILE`, then `git commit -m MESSAGE --
     FILE`. Other staged or unstaged changes in the dotprofile are never
     included. Message from the adopt path: `Adopt <file name> from the
@@ -372,11 +386,11 @@ verified) and deleted it.
     |-------|---------|---------------|
     | `committed-pushed` | committed and pushed | `ok` line |
     | `unchanged` | file matches HEAD: nothing committed, no push | detail line only |
-    | `commit-failed` | commit failed (or the dotprofile is not a git repository) | WARN + ACTION `commit and push <file> in <dotprofile>` |
-    | `push-failed` | committed, not pushed | WARN + ACTION `git pull --rebase, then git push in <dotprofile>` (remote has newer commits) or `run git push in <dotprofile>` |
+    | `commit-failed` | commit failed (or the dotprofile is not a git repository) | one warning that says what to do, with ACTION `commit and push <file> in <dotprofile>` (`write_action`) |
+    | `push-failed` | committed, not pushed | one warning that says what to do, with ACTION `git pull --rebase, then git push in <dotprofile>` (remote has newer commits) or `run git push in <dotprofile>` (`write_action`) |
     | `not-dotprofile` | not in the dotprofile, or no dotprofile | detail line; the adopt path then logs "Uncommitted change in <repo>" as before |
 
-    ACTION rows are written once per run (`_aitlib_action_once` /
+    Each ACTION record is written once per run (`_aitlib_action_once` /
     `Write-AitLibActionOnce`). A failed commit or push never changes the
     deploy result: it stays `accept & adopt` and the run continues.
 - **Several LOCALs for one SOURCE** (a harness rule or skill file and its
@@ -390,8 +404,8 @@ verified) and deleted it.
   also goes through `deploy_managed_file`, but after an accept & adopt into
   one LOCAL, `setup-user-skills` backs up and copies that LOCAL to the other
   targets (`deploy_skill` / `Deploy-Skill`), so they match the adopted SOURCE
-  without a second review; a failed copy is an ERROR row
-  `sync failed: <skill>`.
+  without a second review; a failed copy is one error, `write_error` with
+  WHAT `sync failed: <skill>` and the copy error as REASON.
 - **CLAUDE.md** passes an adopt filter: see "Markdown files".
 - **Exit 2** is not trapped by the caller: it ends the script.
 
@@ -536,7 +550,7 @@ they go through `~/.aitools`, filled from aitools `shared/rules/` and
 | Claude settings | `<userRepoPath>/profile.json` `claude.settings` (every settings.json key except `hooks`) | none: without a dotprofile or profile.json the sync is skipped (WARN `not synced: no dotprofile` / `profile.json missing`) |
 | Cursor preferences | `<userRepoPath>/profile.json` `cursor.cli` section | defaults (vimMode: false, model: auto) |
 | Identity (git name/email) | `<userRepoPath>/profile.json` `identity` section | (required — no fallback) |
-| Machine profile | `<userRepoPath>/profile.json` `profiles[<machine id>]`, chosen by the one resolver (`aitools-profile.sh` / `.ps1`: override, environment, id, config `machineId`, 2.1 alias cache, hostname) | none: no match is an ERROR row `machine profile` `no machine match`; another machine's profile is never used (`@reference/user-repo.md` "Which machine profile") |
+| Machine profile | `<userRepoPath>/profile.json` `profiles[<machine id>]`, chosen by the one resolver (`aitools-profile.sh` / `.ps1`: override, environment, id, config `machineId`, 2.1 alias cache, hostname) | none: no match is one error under `machine profile`, WHAT `no machine match`, the resolver's error line as REASON; another machine's profile is never used (`@reference/user-repo.md` "Which machine profile") |
 | Hook scripts | `shared/hooks/*.sh` | (required — no fallback) |
 | Skills | `~/.aitools/skills/<name>/**` (deploy-harness fills it from `shared/skills/` only); `setup-user-claude` and `setup-user-cursor` take every non-retired skill | `setup-user-skills` when `~/.aitools/skills` is absent: `<userRepoPath>/claude/skills/*/SKILL.md` when present, else `shared/skills/*/SKILL.md` |
 | MCP server configs | hardcoded in setup scripts | (required — no fallback) |
@@ -550,7 +564,8 @@ The adopt target per content type is listed under each deployment type above.
 `deploy_managed_file` / `Deploy-ManagedFile` with the tool name
 `harness files`; the adopt target is the repo file it was read from. Only
 git-tracked files are deployed. On a name conflict the first source wins
-and each skipped duplicate is a `log_error` plus an ERROR row.
+and each skipped duplicate is one error under `harness files`
+(`write_error`, the reason naming the source that won).
 
 | Deployed to | Sources, in order |
 |-------------|-------------------|
@@ -707,7 +722,9 @@ For a JSON file deployed from a JSON SOURCE through `deploy_managed_file`.
 (`@.claude/rules/config-file-safety.md`) with no review menu and no adopt.
 Their values come from `profile.json` (cursor.cli) or are hardcoded. They
 refuse to write a corrupt file, or a merge that would lose fields, without
-`--force`.
+`--force`. Under `--force` they write it, and that write stays a warning,
+not info: data is lost, which `--force` alone does not ask for
+(`@reference/logging.md` 8.3, "What is a warning").
 
 | Config file | Regime | Managed field source | Adopt target |
 |-------------|--------|---------------------|--------------|
@@ -720,8 +737,9 @@ refuse to write a corrupt file, or a merge that would lose fields, without
 **Script-owned text: the rules manifest and the skills manifest.**
 deploy-harness writes `~/.aitools/rules/.aitools-rules-manifest` and
 `~/.aitools/skills/.aitools-skills-manifest` on every run without review
-(it is their sole owner; temp file then move; a failure is `log_error` + an
-ERROR row). They are not deployed through `deploy_managed_file`: they are
+(it is their sole owner; temp file then move; a failure is one error under
+`harness files`, `write_error` with the write error as its reason). They
+are not deployed through `deploy_managed_file`: they are
 generated, not copied from a source. Each lists a name's source or
 `retired`; retired rules and skill directories are backed up and removed by
 deploy-harness and by the fan-out consumers. Format and rules:
@@ -823,8 +841,9 @@ the adopt target. Merge is adopt.
    `deploy_managed_file` backs up LOCAL and the adopt target, writes the
    merge to both, validates, and returns `accept & adopt`
 6. The AI merge fails (no valid output after the retry): no file is
-   written; the outcome is `failed` (log_error with the reject reason,
-   ERROR row) and the run continues with the next file
+   written; the outcome is `failed` (one error, `write_error` with the
+   validation's reject reason as REASON) and the run continues with the
+   next file
 7. `[n]o`: no file is written and the review menu is shown again for the
    same file (Q4, approved 2026-10-21; implemented: `_invoke_ai_merge` /
    `Invoke-AiMerge` return `menu`)
@@ -860,8 +879,9 @@ or merge (JSON: LOCAL and `ADOPT_PATH`).
   `@.claude/rules/config-file-safety.md`)
 - **Restore on failure**: when a write, the AI merge or a validation fails,
   the library restores each file from the backup it just took (a file that
-  did not exist before is removed), logs the error with its reason, and
-  returns `failed`. A failure never leaves a half-written file.
+  did not exist before is removed), records the error with its reason
+  (`write_error`), and returns `failed`. A failure never leaves a
+  half-written file.
 
 See `/incident` skill (incident #5) for the backup proliferation issue
 with directory backups.
@@ -891,7 +911,13 @@ files. Auth configs are tool-owned and user-managed.
 
 Setup scripts only CHECK auth status and report:
 - Authenticated: silent (no output)
-- Not authenticated: `log_warn` + `write_summary WARN` + `write_summary ACTION`
+- Not authenticated: one `write_action` / `Write-AitAction` call, whose
+  warning says what to do and whose ACTION is the login command:
+  `write_action "<tool>" "not authenticated -- run: <cmd>" "<cmd> -- <what it does>"`
+  (for example `write_action "vercel cli" "not authenticated -- run: vercel login" "vercel login -- authenticate vercel CLI"`).
+  It logs the warning, counts it, and writes one WARN and one ACTION
+  record (`@reference/logging.md` 8.2); no separate `log_warn` or
+  `write_summary` call
 
 | Tool | Auth check | Method |
 |------|-----------|--------|

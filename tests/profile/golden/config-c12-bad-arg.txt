@@ -1,4 +1,4 @@
 exit 1
 -- summary rows
-ERROR|aitools config|bad arguments
+ERROR|aitools config|bad arguments|Unknown option: --bogus (see --help)
 -- config.json

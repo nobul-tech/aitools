@@ -97,26 +97,27 @@ if ($DryRun) {
         $status.ripgrep = "already installed ($rgVersion)"
     } else {
         Log "Installing ripgrep via winget..."
-        # Exit code decides (C-F2); the output goes to the log.
+        # Exit code decides (C-F2). On failure Get-AitErrorReason logs the
+        # output as detail (and takes the reason from it); otherwise it is
+        # logged here, at detail (parity with the .sh)
         $rgOutput = winget install BurntSushi.ripgrep.MSVC --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
         $rgRc = $LASTEXITCODE
-        Log-WingetOutput $rgOutput
         Refresh-Path
 
         # Get-Command exempt: command-existence check with if/else fallback
         $rgCmd = Get-Command rg -ErrorAction SilentlyContinue
         if ($rgRc -ne 0 -and $rgOutput -notmatch 'already installed') {
-            LogError "winget install ripgrep failed (exit $rgRc) -- see $logFile"
             $status.ripgrep = "FAILED (exit $rgRc)"
-            Write-Summary "ERROR" "cursor cli" "ripgrep install failed (exit $rgRc)"
+            Write-AitError "cursor cli" "ripgrep install failed" (Get-AitErrorReason -Output $rgOutput -ExitCode $rgRc)
         } elseif ($rgCmd) {
+            Write-OutputDetail "winget-install-ripgrep" $rgOutput
             $rgVersion = (rg --version | Select-Object -First 1)
             LogOk "Installed: $rgVersion"
             $status.ripgrep = "installed ($rgVersion)"
         } else {
-            LogWarn "winget install completed but 'rg' not found in PATH. Restart terminal to verify."
+            Write-OutputDetail "winget-install-ripgrep" $rgOutput
             $status.ripgrep = "installed (restart terminal to verify)"
-            Write-Summary "WARN" "cursor cli" "ripgrep not on PATH (restart terminal)"
+            Write-AitAction "cursor cli" "ripgrep installed but not on PATH -- restart the terminal" "Restart the terminal, then check: rg --version"
         }
     }
 }
@@ -150,9 +151,8 @@ if ($DryRun) {
             Write-OutputDetail "cursor-installer" $installerOutput
         } catch {
             $installerFailed = $true
-            LogError "Cursor CLI installer failed: $_"
             $status.cursorCli = "FAILED"
-            Write-Summary "ERROR" "cursor cli" "installer failed"
+            Write-AitError "cursor cli" "Cursor CLI installer failed" (Get-AitErrorReason -ErrorRecord $_)
         }
         Refresh-Path
 
@@ -164,9 +164,8 @@ if ($DryRun) {
                 LogOk "Installed: $agentVersion"
                 $status.cursorCli = "installed ($agentVersion)"
             } else {
-                LogWarn "Cursor CLI install completed but 'agent' not found in PATH. Restart terminal to verify."
                 $status.cursorCli = "installed (restart terminal to verify)"
-                Write-Summary "WARN" "cursor cli" "agent not on PATH (restart terminal)"
+                Write-AitAction "cursor cli" "Cursor CLI installed but 'agent' not on PATH -- restart the terminal" "Restart the terminal, then check: agent --version"
             }
         }
     }
@@ -177,8 +176,7 @@ if ($DryRun) {
 if (-not $DryRun) {
     $resolvedAgent = Get-Command agent -ErrorAction SilentlyContinue
     if ($resolvedAgent -and $resolvedAgent.Source -like "*\.grok\*") {
-        LogWarn "'agent' resolves to grok ($($resolvedAgent.Source)), not Cursor -- ensure the Cursor shim precedes grok on PATH"
-        Write-Summary "WARN" "cursor cli" "agent shadowed by grok"
+        Write-AitAction "cursor cli" "'agent' resolves to grok ($($resolvedAgent.Source)), not Cursor -- put the Cursor shim before grok on PATH" "Put the Cursor CLI shim before grok on PATH"
     }
 }
 
@@ -194,7 +192,7 @@ $prefsUnresolved = $false
 # dotprofile (the one resolver, reference/user-repo.md "Resolution"; SD-7)
 # -> profile.json -> cursor.cli prefs. The rc is captured, not suppressed:
 # 0 found, 1 no dotprofile (shared-only mode: default preferences), 3 resolver
-# error (the lib already logged it: LogError + ERROR row "dotprofile");
+# error (the library recorded it once: Write-AitError "dotprofile");
 # on 3 the merge is skipped rather than write defaults over the user's choices.
 $vimMode = $false
 $modelId = "auto"
@@ -215,7 +213,7 @@ if ($urpRc -eq 0 -and $userRepoPath) {
                 if ($cli.ContainsKey("model") -and $cli["model"] -is [string]) { $modelId = $cli["model"] }
             }
         } catch {
-            LogWarn "Could not read profile preferences from $profilePath`: $_ -- default preferences"
+            Write-AitWarn "cursor cli" "could not read profile preferences from ${profilePath}: $_ -- using the defaults"
         }
     } else {
         LogDetail "cli-config: no profile.json in $userRepoPath -- default preferences"
@@ -241,12 +239,16 @@ if (-not (Test-Path $cursorDir)) {
 # --- Read existing cli-config.json ---
 $config = @{}
 $corrupt = $false
+$parseError = ""
 if (Test-Path $cliConfig) {
     try {
         $config = ConvertPSObjectToHashtable (Get-Content $cliConfig -Raw | ConvertFrom-Json)
     } catch {
         $corrupt = $true
-        LogWarn "$cliConfig could not be parsed ($_)"
+        $parseError = "$_"
+        # Recorded once below: as the "config corrupt" reason, or as the
+        # -Force warning (logging.md 8.3: one event, one record)
+        Log "$cliConfig could not be parsed"
     }
 }
 $beforeKeys = @($config.Keys)
@@ -291,20 +293,21 @@ $lostKeys = @($beforeKeys | Where-Object { $_ -notin $config.Keys })
 $afterJson = Normalize-JsonForComparison $config -Depth 10
 
 if ($prefsUnresolved) {
-    # Counted (S3-M3Lead decision, as setup-user-settings and -skills): this
-    # step fails too, not only the resolver (the lib logged that one).
-    LogError "Dotprofile unresolved (resolver error above) -- $cliConfig not merged, so defaults cannot replace the profile preferences"
+    # A consequence of the resolver error, which the library recorded once
+    # (Write-AitError "dotprofile", counted here: the exit status is 1): logged
+    # at info, not recorded again (G3 policy P1, one cause one red line; it
+    # supersedes the S3-M3Lead decision that counted it). Parity: the .sh.
+    Log "Dotprofile unresolved (resolver error above) -- $cliConfig not merged, so defaults cannot replace the profile preferences"
     $status.cliConfig = "ERROR (dotprofile error)"
-    Write-Summary "ERROR" "cursor cli" "not merged: dotprofile error"
 } elseif ($DryRun) {
     # --- Dry-run output ---
     Log "[DRY RUN] $cliConfig`: merge"
     Log "  Managed fields: $($managedKeys -join ', ')"
     if ($lostKeys.Count -gt 0) {
-        LogWarn "[DRY RUN] CLOBBER: would lose non-managed fields: $($lostKeys -join ', ')"
+        Write-AitWarn "cursor cli" "dry run: merge would lose non-managed fields: $($lostKeys -join ', ')"
     }
     if ($corrupt) {
-        LogWarn "[DRY RUN] File is corrupt -- -Force required to overwrite"
+        Write-AitWarn "cursor cli" "dry run: cli-config.json is corrupt (--force required to overwrite)"
     }
     # Same rows as the .sh dry run: unchanged -> verified, else would update.
     if ($beforeJson -eq $afterJson -and -not $corrupt) {
@@ -319,23 +322,26 @@ if ($prefsUnresolved) {
 } else {
     # --- Normal mode ---
     if ($corrupt -and -not $Force) {
-        LogError "$cliConfig is corrupt. Use -Force to overwrite, or fix manually."
         $status.cliConfig = "ERROR (corrupt, needs -Force)"
-        Write-Summary "ERROR" "cursor cli" "config corrupt"
+        Write-AitError "cursor cli" "config corrupt" "$cliConfig is not valid JSON: $parseError"
+        Log "Use -Force to overwrite it, or fix it by hand"
     } elseif ($lostKeys.Count -gt 0 -and -not $Force) {
-        LogError "$cliConfig merge would lose fields: $($lostKeys -join ', '). Use -Force to proceed."
         $status.cliConfig = "ERROR (clobber, needs -Force)"
-        Write-Summary "ERROR" "cursor cli" "merge would lose fields"
+        Write-AitError "cursor cli" "merge would lose fields" "would drop $($lostKeys -join ', ')"
+        Log "Use -Force to proceed"
     } elseif ($beforeJson -eq $afterJson -and -not $corrupt) {
         LogOk "Already up to date: $cliConfig"
         $status.cliConfig = "already up to date"
         Write-Summary "OK" "cursor cli" "verified"
     } else {
-        if ($corrupt) { LogWarn "Proceeding with -Force on corrupt file" }
-        if ($lostKeys.Count -gt 0) { LogWarn "Proceeding with -Force, losing fields: $($lostKeys -join ', ')" }
+        # A --force write that loses data stays a warning (logging.md 8.3)
+        if ($corrupt) { Write-AitWarn "cursor cli" "cli-config.json was not valid JSON ($parseError): rewritten under --force" }
+        if ($lostKeys.Count -gt 0) { Write-AitWarn "cursor cli" "--force dropped fields of cli-config.json: $($lostKeys -join ', ')" }
 
         $json = $config | ConvertTo-Json -Depth 10
-        $errorsBeforeWrite = $errors
+        # The first failure (write, or post-write validation) is the reason of
+        # the one error below (parity with the .sh's "config merge failed")
+        $writeReason = ""
         try {
             [System.IO.File]::WriteAllText(
                 $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($cliConfig),
@@ -343,20 +349,22 @@ if ($prefsUnresolved) {
                 [System.Text.UTF8Encoding]::new($false)
             )
         } catch {
-            LogError "Could not write $cliConfig -- $_"
+            $writeReason = Get-AitErrorReason -ErrorRecord $_
         }
 
         # Post-write validation
-        try {
-            $vContent = [System.IO.File]::ReadAllText(
-                $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($cliConfig)
-            )
-            $vParsed = $vContent | ConvertFrom-Json
-            if (-not ($vParsed.PSObject.Properties.Name -contains "version")) {
-                LogError "Validation failed: $cliConfig missing required field 'version'"
+        if (-not $writeReason) {
+            try {
+                $vContent = [System.IO.File]::ReadAllText(
+                    $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($cliConfig)
+                )
+                $vParsed = $vContent | ConvertFrom-Json
+                if (-not ($vParsed.PSObject.Properties.Name -contains "version")) {
+                    $writeReason = "validation failed: missing required field 'version'"
+                }
+            } catch {
+                $writeReason = "validation failed: $(Get-AitErrorReason -ErrorRecord $_)"
             }
-        } catch {
-            LogError "Validation failed: $cliConfig is not valid JSON -- $_"
         }
 
         # Detect per-key changes and emit DETAIL lines
@@ -370,10 +378,10 @@ if ($prefsUnresolved) {
             }
         }
 
-        if ($errors -gt $errorsBeforeWrite) {
-            # Write or post-write validation failed: ERROR row, never OK after it
+        if ($writeReason) {
+            # Write or post-write validation failed: one error, never OK after it
             $status.cliConfig = "ERROR (write or validation failed)"
-            Write-Summary "ERROR" "cursor cli" "config write/validation failed"
+            Write-AitError "cursor cli" "config merge failed" $writeReason
         } elseif ($beforeKeys.Count -eq 0) {
             LogOk "Created: $cliConfig"
             $status.cliConfig = "created"
@@ -538,15 +546,14 @@ if (-not (Test-Path -LiteralPath $harnessRulesDir -PathType Container)) {
         [Array]::Sort($entries, [Comparison[object]]{ param($x, $y) [string]::CompareOrdinal($x.Name, $y.Name) })
         $rulesGo = $true
     } catch {
-        LogError "Cannot list $harnessRulesDir -- $_"
-        Write-Summary "ERROR" "cursor rules" "cannot read harness rules"
+        Write-AitError "cursor rules" "cannot read harness rules" (Get-AitErrorReason -ErrorRecord $_)
     }
 }
 
 # Rules manifest: the retired names (pruned) and the names Cursor expects.
 # Without one (deploy-harness before PR #100) every rule is fanned out and none
 # is removed, as setup-user-claude does (FAN-PLAN Q3).
-$manifestFailed = $false   # unreadable: counted as a failed item, so the final row is ERROR
+$manifestFailed = $false   # unreadable: one error, and a failed tracker item
 $listedNames = New-Object System.Collections.Generic.List[string]    # manifest names not retired
 $retiredNames = New-Object System.Collections.Generic.List[string]
 $retiredSet = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
@@ -565,17 +572,17 @@ if ($rulesGo) {
         try {
             $manifest = Read-RulesManifest $rulesManifest
         } catch {
-            LogError "Cannot read the rules manifest ${rulesManifest}: $_ -- every rule fanned out, none removed"
-            Write-Summary "ERROR" "cursor rules" "cannot read rules manifest"
+            Write-AitError "cursor rules" "cannot read rules manifest" (Get-AitErrorReason -ErrorRecord $_)
+            Log "every rule fanned out, none removed"
             $manifestFailed = $true
         }
         if ($manifest -and $manifest.Status -eq "header-bad") {
-            LogWarn "Rules manifest ${rulesManifest}: the first line is not `"$rulesManifestHeader`" -- every rule fanned out, none removed -- $rulesRebuildHint"
-            Write-Summary "ACTION" "" $rulesRebuildHint
+            LogDetail "rules manifest ${rulesManifest}: the first line is not `"$rulesManifestHeader`""
+            Write-AitAction "cursor rules" "bad rules manifest header -- run: aitools (every rule fanned out, none removed)" $rulesRebuildHint
         } elseif ($manifest) {
             foreach ($bad in $manifest.Invalid) {
                 $rulesNeedRebuild = $true
-                LogWarn "Rules manifest ${rulesManifest}: line ignored: $bad -- $rulesRebuildHint"
+                Write-AitWarn "cursor rules" "rules manifest line ignored: $bad -- run: aitools"
             }
             foreach ($r in $manifest.Rules) {
                 if ($r.Source -ceq "retired") {
@@ -628,22 +635,21 @@ if ($rulesGo) {
     foreach ($name in $listedNames) {
         if (-not $foundSet.Contains($name)) {
             $rulesNeedRebuild = $true
-            LogWarn "Not fanned out: $name is in the rules manifest but not in $harnessRulesDir -- $rulesRebuildHint"
+            Write-AitWarn "cursor rules" "not fanned out: $name is in the rules manifest but not in $harnessRulesDir -- run: aitools"
         }
     }
     if ($rulesNeedRebuild) { Write-Summary "ACTION" "" $rulesRebuildHint }
 
     if ($ruleSources.Count -eq 0 -and $ruleBroken.Count -eq 0 -and $retiredNames.Count -eq 0) {
         Log "No rules in $harnessRulesDir -- skipping"
-        # An unreadable manifest already wrote this tool's ERROR row
+        # An unreadable manifest already recorded this tool's error
         if (-not $manifestFailed) { Write-Summary "OK" "cursor rules" "n/a (no harness rules)" }
         $rulesGo = $false
     } elseif ($DryRun) {
         # The dry run previews the error the real run reports: something that
         # is not a directory where .cursor\rules goes
         if ((Test-Path -LiteralPath $cursorRulesDir) -and -not (Test-Path -LiteralPath $cursorRulesDir -PathType Container)) {
-            LogError "Cannot create ${cursorRulesDir}: not a directory (dry run)"
-            Write-Summary "ERROR" "cursor rules" "cannot create rules dir"
+            Write-AitError "cursor rules" "cannot create rules dir" "$cursorRulesDir is not a directory (dry run)"
             $rulesGo = $false
         }
     } else {
@@ -658,9 +664,8 @@ if ($rulesGo) {
             # New-Item -Force can return without an error when a file is in
             # the way: check the result (parity with mkdir -p in the .sh)
             if (-not (Test-Path -LiteralPath $cursorRulesDir -PathType Container)) {
-                if (-not $mkdirError) { $mkdirError = "not a directory" }
-                LogError "Cannot create ${cursorRulesDir}: $mkdirError"
-                Write-Summary "ERROR" "cursor rules" "cannot create rules dir"
+                if (-not $mkdirError) { $mkdirError = "$cursorRulesDir is not a directory" }
+                Write-AitError "cursor rules" "cannot create rules dir" $mkdirError
                 $rulesGo = $false
             }
         }
@@ -673,8 +678,11 @@ if ($rulesGo) {
     if ($manifestFailed) {
         Record-DeployOutcome -Outcome "failed" -ToolName "cursor rules" -ItemName ".aitools-rules-manifest"
     }
+    # Each failed item below is one error record (Write-AitError "cursor rules"
+    # "failed: <item>" <cause>) and one tracker DETAIL item; the tracker's OK
+    # status counts them, with no aggregate error record (logging.md 8.3)
     foreach ($brokenName in $ruleBroken) {
-        LogError "Failed: ${brokenName}: dangling symlink in $harnessRulesDir"
+        Write-AitError "cursor rules" "failed: $brokenName" "dangling symlink in $harnessRulesDir"
         Record-DeployOutcome -Outcome "failed" -ToolName "cursor rules" -ItemName $brokenName
     }
 
@@ -691,7 +699,7 @@ if ($rulesGo) {
         # Two sources mapping to one target (names that differ only in case,
         # possible on a case-sensitive file system): the first wins
         if ($ruleDestsLc.Contains($destName)) {
-            LogError "Skipped duplicate: $ruleBase -> $destName (already deployed from another harness rule)"
+            Write-AitError "cursor rules" "failed: $ruleBase" "$destName was already deployed from a harness rule whose name differs only in case"
             Record-DeployOutcome -Outcome "failed" -ToolName "cursor rules" -ItemName $ruleBase
             continue
         }
@@ -701,13 +709,13 @@ if ($rulesGo) {
         try {
             $raw = [System.IO.File]::ReadAllText($src.FullName, [System.Text.UTF8Encoding]::new($false))
         } catch {
-            LogError "Failed: ${ruleBase}: cannot read $($src.FullName) -- $_"
+            Write-AitError "cursor rules" "failed: $ruleBase" (Get-AitErrorReason -ErrorRecord $_)
             Record-DeployOutcome -Outcome "failed" -ToolName "cursor rules" -ItemName $destName
             continue
         }
         $ruleContent = ConvertTo-CursorRule $raw $ruleBase
         if (-not $ruleContent) {
-            LogError "Failed: ${ruleBase}: empty after conversion -- nothing written"
+            Write-AitError "cursor rules" "failed: $ruleBase" "empty after conversion (nothing written)"
             Record-DeployOutcome -Outcome "failed" -ToolName "cursor rules" -ItemName $destName
             continue
         }
@@ -716,15 +724,15 @@ if ($rulesGo) {
             -ToolName "cursor rules" -ItemName $destName -AdoptPath ""
         switch ($result) {
             { $_ -in @("created", "updated", "verified", "skipped", "failed") } {
-                # The library wrote (or left) LOCAL; the tracker records every
-                # outcome (failed -> ERROR row, skipped -> WARN row).
+                # The library wrote (or left) LOCAL and recorded a failed or
+                # skipped file once; the tracker counts every outcome.
             }
             "accept & adopt" {
                 # Not reachable: adopt is not offered without an adopt target
-                LogError "Unexpected accept & adopt for $destName (no adopt target)"
+                Write-AitError "cursor rules" "failed: $destName" "unexpected accept & adopt (no adopt target)"
             }
             default {
-                LogError "Unexpected deploy result for ${destName}: $result"
+                Write-AitError "cursor rules" "failed: $destName" "unexpected deploy result: $result"
                 $result = "failed"
             }
         }
@@ -762,7 +770,7 @@ if ($rulesGo) {
         try {
             $rmText = [System.IO.File]::ReadAllText($rmPath, [System.Text.UTF8Encoding]::new($false))
         } catch {
-            LogError "Cannot read $rmPath -- not removed: $_"
+            Write-AitError "cursor rules" "retired rule $rmDest not removed" (Get-AitErrorReason -ErrorRecord $_)
             Record-DeployOutcome -Outcome "failed" -ToolName "cursor rules" -ItemName $rmDest
             continue
         }
@@ -801,7 +809,7 @@ if ($rulesGo) {
         }
         if (-not $rmWhy) {
             # Kept (it may be the user's own file), but Cursor still loads it
-            LogWarn "Kept ${rmDest}: the rules manifest retires $rmName, but this file was not created by the fan-out (no aitools-fanout marker, no matching harness copy) -- Cursor still loads it; remove it if it is an old fan-out copy"
+            Write-AitWarn "cursor rules" "kept ${rmDest}: the rules manifest retires $rmName, but the fan-out did not create it -- delete it if it is an old fan-out copy"
             $rmKept.Add($rmDest)
             continue
         }
@@ -809,38 +817,35 @@ if ($rulesGo) {
             Log "[DRY RUN] Would back up and remove $rmDest (retired rule; $rmWhy)"
             continue
         }
-        # Backup-File uses -LiteralPath (aitools-lib): names with [ ] * ? are backed up too
-        Backup-File -FilePath $rmPath
-        # Belt and braces: remove only when a backup with the same text exists
-        # beside it (a backup step that reports success without a copy must not
-        # lose the file)
-        $rmBacked = $false
-        if ($script:BackupFileOk) {
-            try {
-                foreach ($b in @([System.IO.Directory]::GetFiles($cursorRulesDir) |
-                        Where-Object { [System.IO.Path]::GetFileName($_).StartsWith("$rmDest.bak.", [System.StringComparison]::Ordinal) })) {
-                    if ((Test-FanoutTextEqual $rmPath $b) -eq 0) { $rmBacked = $true; break }
-                }
-            } catch {
-                # Detail only (the .sh glob cannot fail this way): the LogError
-                # below reports the outcome
-                LogDetail "cursor rules: cannot list the backups of $rmDest in ${cursorRulesDir}: $_"
-            }
-        }
-        if (-not $rmBacked) {
-            LogError "Not removed: $rmDest (retired rule): backup failed"
+        # The file is removed only with a backup, so this script makes its own
+        # copy (not Backup-File, which warns and proceeds): one failure is one
+        # error (the G3 rule for retired-rule backups). -LiteralPath: names with
+        # [ ] * ? are backed up too. Belt and braces: the copy must exist and
+        # hold the same text (a copy that reports success without writing must
+        # not lose the file). Parity: setup-user-cursor.sh.
+        $rmBak = "$rmPath.bak.$((Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHHmmssZ'))"
+        try {
+            Copy-Item -LiteralPath $rmPath -Destination $rmBak -Force -ErrorAction Stop
+        } catch {
+            Write-AitError "cursor rules" "retired rule $rmDest not removed" "backup failed: $(Get-AitErrorReason -ErrorRecord $_)"
             Record-DeployOutcome -Outcome "failed" -ToolName "cursor rules" -ItemName $rmDest
             continue
         }
+        if (-not (Test-Path -LiteralPath $rmBak -PathType Leaf) -or (Test-FanoutTextEqual $rmPath $rmBak) -ne 0) {
+            Write-AitError "cursor rules" "retired rule $rmDest not removed" "backup failed: $rmBak missing or different after the copy"
+            Record-DeployOutcome -Outcome "failed" -ToolName "cursor rules" -ItemName $rmDest
+            continue
+        }
+        Log "Backed up $rmPath"
         try {
             Remove-Item -LiteralPath $rmPath -Force -ErrorAction Stop
         } catch {
-            LogError "Cannot remove $rmPath (retired rule): $_"
+            Write-AitError "cursor rules" "cannot remove retired rule $rmDest" (Get-AitErrorReason -ErrorRecord $_)
             Record-DeployOutcome -Outcome "failed" -ToolName "cursor rules" -ItemName $rmDest
             continue
         }
         if (Test-Path -LiteralPath $rmPath) {
-            LogError "Cannot remove $rmPath (retired rule): still present"
+            Write-AitError "cursor rules" "cannot remove retired rule $rmDest" "still present after Remove-Item"
             Record-DeployOutcome -Outcome "failed" -ToolName "cursor rules" -ItemName $rmDest
             continue
         }
@@ -852,14 +857,8 @@ if ($rulesGo) {
     }
 
     if ($DryRun) {
-        if ($script:dtFailed -gt 0) {
-            Write-Summary "ERROR" "cursor rules" "$($script:dtFailed) failed (dry run)"
-        } elseif ($errors -ne $errorsBeforeCursorRules) {
-            # An error not recorded as a failed item still makes the row ERROR
-            Write-Summary "ERROR" "cursor rules" "dry run failed"
-        } else {
-            Write-Summary "OK" "cursor rules" "dry run (no files written)"
-        }
+        # Each error of the fan-out already recorded its own error record
+        Write-Summary "OK" "cursor rules" "dry run (no files written)"
     } else {
         # Preserved: files in .cursor\rules not produced from .aitools\rules
         $destEntries = @()
@@ -895,39 +894,37 @@ if ($rulesGo) {
             if ($destType -ne "file") { continue }
             $item = Get-Item -LiteralPath $destPath
             if ($item.Length -eq 0) {
-                LogError "Validation failed: $destName is empty after deploy"
+                Write-AitError "cursor rules" "validation failed: $destName" "empty after deploy"
                 continue
             }
             try {
                 $deployed = [System.IO.File]::ReadAllText($destPath)
             } catch {
-                LogError "Validation failed: cannot read $destPath -- $_"
+                Write-AitError "cursor rules" "validation failed: $destName" (Get-AitErrorReason -ErrorRecord $_)
                 continue
             }
             if (-not $deployed.TrimStart([char]0xFEFF).StartsWith("---")) {
-                LogError "Validation failed: $destName has no frontmatter (Cursor skips it)"
+                Write-AitError "cursor rules" "validation failed: $destName" "no frontmatter (Cursor skips it)"
             } else {
                 # Check each deployed rule as Cursor parses it (warn: the
                 # rule is deployed but Cursor would misread its frontmatter)
                 $parseProblem = Test-CursorRuleParse $deployed
                 if ($parseProblem) {
-                    LogWarn "${destName}: $parseProblem -- fix the source rule in $harnessRulesDir"
+                    LogDetail "${destName}: $parseProblem"
+                    Write-AitAction "cursor rules" "${destName}: Cursor would misread its frontmatter -- fix the source rule" "Fix the frontmatter of $($destName -replace '\.mdc$', '.md') in its harness source (a --- inside a frontmatter value)"
                 }
             }
         }
 
-        if ($script:dtFailed -gt 0) {
-            # Write-DeployTrackerSummary writes the ERROR row ("N failed")
-            Write-DeployTrackerSummary -ToolName "cursor rules"
-            Log "Cursor rules: $($script:deployTrackerText), $($script:dtPreserved) preserved in $cursorRulesDir"
-        } elseif ($errors -eq $errorsBeforeCursorRules) {
-            # Only retired names, none of them here: the tracker's own text,
-            # "n/a (nothing to deploy)", the same row text the skills fan-out
-            # (step 5) writes in that case
-            Write-DeployTrackerSummary -ToolName "cursor rules"
+        # The tracker writes the OK status (its counts include "N failed";
+        # with only retired names, none of them here, its own text "n/a
+        # (nothing to deploy)", as the skills fan-out writes); every failure,
+        # validation included, is already its own error record
+        Write-DeployTrackerSummary -ToolName "cursor rules"
+        if ($script:dtFailed -eq 0 -and $errors -eq $errorsBeforeCursorRules) {
             LogOk "Cursor rules: $($script:deployTrackerText), $($script:dtPreserved) preserved in $cursorRulesDir"
         } else {
-            Write-Summary "ERROR" "cursor rules" "validation failed"
+            Log "Cursor rules: $($script:deployTrackerText), $($script:dtPreserved) preserved in $cursorRulesDir"
         }
     }
 }

@@ -7,4 +7,6 @@ mine/SKILL.md d92bf619dc8282f474be4bfbce48183f
 # summary rows (ACTION and skills, sorted)
 ACTION||Claude Code skills in ~/.claude/skills cannot be listed: retired skills not checked and other skills not counted -- check its permissions
 DETAIL|claude skills|added: a/SKILL.md
-WARN|claude skills|1 added
+OK|claude skills|1 added
+WARN|claude skills|Cannot list HOME/.claude/skills for the preserved report -- cannot list HOME/.claude/skills: Permission denied -- check its permissions
+WARN|claude skills|Cannot list HOME/.claude/skills for the retired skills -- cannot list HOME/.claude/skills: Permission denied -- check its permissions

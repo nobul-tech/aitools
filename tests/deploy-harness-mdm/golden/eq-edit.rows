@@ -1,2 +1,4 @@
-WARN|aitools config|verified
-WARN|harness files|N updated, N verified
+OK|aitools config|verified
+OK|harness files|N updated, N verified
+WARN|aitools config|profile.json not found in <TMP>/dot
+WARN|harness files|local edits overwritten (non-interactive run, backup kept): <HOME>/.aitools/rules/tool-ops.md

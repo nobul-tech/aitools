@@ -24,8 +24,12 @@ validate this (`check-post-push` step 29: Menu parity audit).
 Every return value from `Deploy-ManagedFile` / `deploy_managed_file` MUST be
 handled at **every call site**: `created`, `updated`, `verified`,
 `accept & adopt`, `skipped`, `failed`. On `failed` the library has restored
-its backups and logged the error; the caller records the outcome (ERROR row)
-and continues. Scripts with multiple call sites (e.g.,
+its backups and recorded the error once (`write_error` under the tool name
+the caller passed: WHAT the failed step, REASON the write, AI merge, adopt
+filter or validation error); on `skipped` it has recorded the
+warning once (`@reference/logging.md` section 8). The caller records the
+outcome with the deploy tracker, writes no second WARN or ERROR record, and
+continues. Scripts with multiple call sites (e.g.,
 setup-user-claude deploys both CLAUDE.md and rules) must handle all return
 values at each site independently.
 
@@ -104,14 +108,17 @@ on the script (commander, 2026-10-26: keep this behaviour):
 
 - **`deploy-harness`** (installer Step 8b; the first script of the `aitools`
   sync, `deploy_configs` / `Deploy-Configs`): the run stops. The runner
-  writes WARN `harness files` `aborted by user`, runs no further step,
-  renders the summary and exits 2.
+  records one warning, `write_warn "harness files" "aborted by user"`, runs
+  no further step, renders the summary and exits 2.
 - **Any other setup script** (the `setup-user-*` / `setup-cursor-*` deploy
   scripts, the tool setup scripts): exit 2 is handled like any failure.
-  The runner writes ERROR `script failed (exit 2)` and the run continues
-  with the next script.
+  The runner's relay records one error, WHAT `<label> failed (exit 2)`,
+  REASON `aborted by user`, counted in the runner's error count, and the
+  run continues with the next script.
 
-Detail: `@reference/managed-file-deployment.md` "[x]abort".
+The script's own abort line is logged and counted, not recorded. Detail:
+`@reference/logging.md` 8.3 ("A user abort") and
+`@reference/managed-file-deployment.md` "[x]abort".
 
 The installers apply the same rule to their own prompts (gh login, repos path):
 terminal and not forced = prompt; otherwise use the default.
@@ -177,8 +184,9 @@ into `profile.json` with no prompt. `overwrite`/`adopt`/`skip` are per-leaf; onl
 ```
 
 (`[x]abort` ends `setup-user-settings` with exit 2. Despite the menu text,
-the run does not stop: the runner writes ERROR `script failed (exit 2)` and
-continues with the next script; see "Abort" above.)
+the run does not stop: the runner records ERROR `<label> failed (exit 2)`
+with the reason `aborted by user` and continues with the next script; see
+"Abort" above.)
 
 - **Adopt** available for every managed leaf (the settings sync mirrors all
   of settings.json in `profile.json`, including permission rules)

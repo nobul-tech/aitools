@@ -1,6 +1,6 @@
 exit 1
 -- summary rows
-ERROR|aitools config|bad arguments
+ERROR|aitools config|bad arguments|pass --machine-id or --machine-alias, not both (see --help)
 -- config.json
 {
   "version": 2,

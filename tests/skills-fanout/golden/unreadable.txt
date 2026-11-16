@@ -2,4 +2,4 @@
 1
 # skills tree (path md5 [x]; symlinks not listed)
 # summary rows (ACTION and skills, sorted)
-ERROR|claude skills|cannot read harness skills
+ERROR|claude skills|cannot read harness skills|cannot list HOME/.aitools/skills: permission denied

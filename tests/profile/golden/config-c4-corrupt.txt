@@ -1,6 +1,6 @@
 exit 0
 -- summary rows
-WARN|aitools config|rebuilt (was invalid)
+WARN|aitools config|<TMP>/home/.aitools/config.json was not valid JSON (<TMP>/home/.aitools/config.json is invalid JSON: <PARSE-ERROR>) -- rebuilt; the invalid copy was backed up
 DETAIL|aitools config|version updated
 DETAIL|aitools config|reposPath updated
 DETAIL|aitools config|repoPath updated

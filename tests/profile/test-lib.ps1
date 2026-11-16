@@ -19,6 +19,20 @@
 # records) is checked against the committed golden file
 # tests/profile/golden/lib-relay-record.jsonl (Test-GoldenMatch in
 # tests/lib/platform-lib.ps1; host and os replaced by <HOST> and <OS>).
+# Summary-warn-reporting I1 (reference/logging.md section 8): every resolver
+# error is one ERROR record with a reason (ERROR|<name>|<what>|<reason>); the
+# machine-profile "unresolved" line is a detail line, not a second error; a tool
+# exception warning is a WARN record under the script's name before its ACTION;
+# the relay adds no child warning to the parent's count, records a failed child
+# as "<label> failed (exit N)" or "(exception)" with a reason, and names a child
+# relayed without a summary tool after its script.
+# Summary-warn-reporting I5: LogWarn and LogError always record (each child
+# warning is the child's own WARN record), Write-Summary takes no WARN or
+# ERROR, a warning line is never a failed child's reason (RFI 5899-31), and a
+# user abort is recorded once: by the child when it recorded it, else by the
+# relay.
+# Fix-forward 5899-6-L2-P1: only an abort record the child wrote counts as the
+# child recording it; its earlier warnings do not (case 9).
 #
 # Platform targeting (plans/ci-platform-targeting.md; commander 2026-11-14:
 # "sh scripts and tests should only run on linux/mac and ps1 on windows"):
@@ -34,7 +48,7 @@
 # Usage: pwsh -NoProfile -File tests/profile/test-lib.ps1 [-Help]
 
 param([switch]$Help)
-if ($Help) { Get-Content $PSCommandPath -TotalCount 34 | ForEach-Object { $_ -replace '^# ?', '' }; exit 0 }
+if ($Help) { Get-Content $PSCommandPath -TotalCount 46 | ForEach-Object { $_ -replace '^# ?', '' }; exit 0 }
 
 if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
     [Console]::Error.WriteLine("This script is for Windows. On macOS/Linux, run tests/profile/test-lib.sh with bash.")
@@ -76,6 +90,16 @@ $H = Join-Path $WORK "home"                       # native, for this harness's o
 $DPn = Join-Path $H "repos/aitools-nobul-jose"
 $DP = "$WM/home/repos/aitools-nobul-jose"         # the dotprofile as expectations spell it
 $A_DP = "ACTION||see deploy.log -- the dotprofile could not be resolved"
+# The reasons of the resolver ERROR records (reference/logging.md 8.3: every error
+# has a reason): the resolver's first error line, with its exit note. A missing
+# resolver's reason is the runner's error line, as in bash (test-lib.sh).
+$R_NOMATCH = "no profile matches this machine (machine.id $ID_MAC, hostname nobul-mac) -- run: aitools user init"
+$R_MISSING = "resolver none.ps1 not found ($WM)"
+$NOTE3 = "resolver exit 3: refused"
+$NOTE4 = "resolver exit 4: alias used by another profile -- not a result of this command"
+# A resolver or child that does not parse: PowerShell's parse error, one line
+# ("At <file>:<line> " precedes it; the file is mapped to $WM by ConvertFrom-NativeWork)
+$R_PARSE_POS = "char:5 + if ( +     ~ Missing condition in if statement after 'if ('."
 $E_ACUTE = [string][char]0xE9; $CHECK = [string][char]0x2713   # ASCII source: the non-ASCII test characters by code
 
 # WorkRegexes: every spelling of $WORK a child may print -- native C:\..., mixed
@@ -404,27 +428,41 @@ function Invoke-Case([string]$Name, [string]$Call, [string]$Want, [string]$WSum,
 }
 
 # Child scripts for the relay cases: log through the lib, info, a warning with a
-# quote, a backslash and a tab, a second warning, then by CHILD_FAIL:
+# quote, a backslash and a tab, a second warning (each warning is a WARN record
+# of the child: LogWarn records, logging.md 8.2), then by CHILD_FAIL:
 #   0  the standard exit footer, exit 0
-#   1  an error, its own ERROR row "child tool|child failed", footer, exit 1
-#   2  an error, no row, exit 0 anyway (a child bug)
+#   1  an error with its own record (Write-AitError "child tool" "child failed"
+#      "child error"), footer, exit 1
+#   2  an error line printed without the library (no record, as a writer outside
+#      the library prints it: logging.md 8.1), exit 0 anyway (a child bug)
 #   3  exit 1 before any row or footer
 #   4  exit 127
-#   5  a user abort: "Aborted by user", exit 2 (D-TS13)
+#   5  a user abort the child records itself, as a relay inside it would: one
+#      abort record (Write-AitError "child tool" "child step aborted" "aborted
+#      by user": an ERROR whose reason is "aborted by user", logging.md 8.3),
+#      exit 2 (D-TS13)
 #   6  throws
+#   8  a user abort through the library's abort path (Invoke-ManagedAbort:
+#      logged and counted, not recorded) right after "child info", before the
+#      warnings, so the child records nothing and the relay records the abort (8.3)
+#   9  its two warnings (recorded), then a user abort through the library's
+#      abort path: its warnings are not abort records, so the relay records
+#      the abort (8.3 "A user abort")
 Write-LfFile "$WORK/child.ps1" @'
 . (Join-Path $env:REPO "scripts/aitools-lib.ps1")
 Initialize-Logging "child-ps"
 Log "child info"
+if ($env:CHILD_FAIL -eq "8") { Invoke-ManagedAbort }
 LogWarn "quote `" back \ tab`tend"
 LogWarn "second warning"
 switch ($env:CHILD_FAIL) {
-    "1" { LogError "child error"; Write-Summary "ERROR" "child tool" "child failed" }
-    "2" { LogError "child error" }
+    "1" { Write-AitError "child tool" "child failed" "child error" }
+    "2" { Write-Host "[2026-01-01T00:00:00Z] [child-ps] [error] child error" }
     "3" { exit 1 }
     "4" { exit 127 }
-    "5" { LogError "Aborted by user"; exit 2 }
+    "5" { Write-AitError "child tool" "child step aborted" "aborted by user"; exit 2 }
     "6" { throw "child died" }
+    "9" { Invoke-ManagedAbort }
 }
 # Review m4: the relay's own parameters and locals must not leak into the child (dynamic scope)
 if ($Label -or $ChildScript -or $ChildArgs -or $SummaryTool -or $Detail -or $ErrRows) { LogError "parent's Invoke-ChildRelayed variables are visible" }
@@ -441,8 +479,10 @@ Write-LfFile "$WORK/child-parse.ps1" "Log `"never`"`nif (`n"
 $relayPs1 = @'
 . (Join-Path $env:REPO "scripts/aitools-lib.ps1")
 Initialize-Logging "test-relay"
-# PRE_ROW=1: an earlier step's ERROR row is in the summary before the child runs
-if ($env:PRE_ROW -eq "1") { Write-Summary "ERROR" "earlier step" "failed before" }
+# PRE_ROW=1: an earlier step's ERROR record is in the summary before the child
+# runs (written directly, as another script of the run would have recorded it;
+# Write-Summary takes no ERROR: logging.md 8.2)
+if ($env:PRE_ROW -eq "1") { [IO.File]::AppendAllText($env:AITOOLS_SUMMARY_FILE, "ERROR|earlier step|failed before|`n", [Text.UTF8Encoding]::new($false)) }
 $rc = 0
 $child = Join-Path $env:REPO_WORK "child.ps1"
 switch ($env:RMODE) {
@@ -568,7 +608,8 @@ function Invoke-RelayCase([string]$Name, [string]$Mode, [string]$Fail, [string]$
     }
     if ($WRec -eq "skip") { return }
     if ($Mode -ne "record") {
-        if ($out.Contains("second warning")) { Ok "$Name (ps): child lines on the console" }
+        # "child info": the one line every child prints (CHILD_FAIL 8 aborts before its warnings)
+        if ($out.Contains("child info")) { Ok "$Name (ps): child lines on the console" }
         else { Bad "$Name (ps): child lines not on the console" }
     }
     $gotRec = Get-JsonlCheck $jl @($WARN_MSG)
@@ -603,22 +644,26 @@ try {
 
     New-Fixture with-id
     Set-NoMatch
-    Invoke-Case rmp-nomatch rmp (J "rc=3" "alias= via=none company=nobul-tech name=Jose" "warnings=0 errors=2") `
-        (J "ERROR|machine profile|no machine match" "ACTION||Run: aitools user init (pick or register this machine's profile)")
+    # One error with its reason (the "unresolved" line is a detail line: logging.md 8.3)
+    Invoke-Case rmp-nomatch rmp (J "rc=3" "alias= via=none company=nobul-tech name=Jose" "warnings=0 errors=1") `
+        (J "ERROR|machine profile|no machine match|$R_NOMATCH" "ACTION||Run: aitools user init (pick or register this machine's profile)")
 
     # m3: the same failure twice in one run -> two ERROR rows, one ACTION
-    Invoke-Case rmp-nomatch-twice rmp2 (J "rc=3" "alias= via=none company=nobul-tech name=Jose" "warnings=0 errors=4") `
-        (J "ERROR|machine profile|no machine match" "ACTION||Run: aitools user init (pick or register this machine's profile)" "ERROR|machine profile|no machine match")
+    Invoke-Case rmp-nomatch-twice rmp2 (J "rc=3" "alias= via=none company=nobul-tech name=Jose" "warnings=0 errors=2") `
+        (J "ERROR|machine profile|no machine match|$R_NOMATCH" "ACTION||Run: aitools user init (pick or register this machine's profile)" "ERROR|machine profile|no machine match|$R_NOMATCH")
 
     New-Fixture with-id
     Invoke-Case eget-none eget (J "rc=0" "found=false method= path=" "warnings=0 errors=0") ""
 
+    # The warning is a WARN record under the script's name (LogWarn records:
+    # logging.md 8.2)
     New-Fixture none
-    Invoke-Case eget-unavailable eget (J "rc=1" "found=false method= path=" "warnings=1 errors=0") ""
+    Invoke-Case eget-unavailable eget (J "rc=1" "found=false method= path=" "warnings=1 errors=0") "WARN|test-lib|tool exceptions unavailable (no dotprofile)"
 
-    # No remote: the push fails -> warning + ACTION
+    # No remote: the push fails -> warning (a WARN record under the script's name) + ACTION
     New-Fixture with-id
-    Invoke-Case eset-written eset (J "rc=0" "result=created pushed=false" "warnings=1 errors=0") "ACTION||run git push in $DP"
+    Invoke-Case eset-written eset (J "rc=0" "result=created pushed=false" "warnings=1 errors=0") `
+        (J "WARN|test-lib|tool exception for go saved but not pushed (dotprofile push failed (exit 128) -- run git push in $DP)" "ACTION||run git push in $DP")
 
     # m1: an identical second record and a dry run write nothing: no warning, no ACTION
     New-Fixture with-id
@@ -628,7 +673,8 @@ try {
     Invoke-Case eset-dry-run eset (J "rc=0" "result=dry-run pushed=false" "warnings=0 errors=0") "" @("AITOOLS_DRY_RUN=1")
 
     New-Fixture hostname-only
-    Invoke-Case eset-refused eset (J "rc=3" "result=refused pushed=false" "warnings=1 errors=0") "ACTION||run aitools user init to remember tool choices"
+    Invoke-Case eset-refused eset (J "rc=3" "result=refused pushed=false" "warnings=1 errors=0") `
+        (J "WARN|test-lib|tool exception for go not saved (machine profile `"nobul-mac`" matched by hostname only -- run: aitools user init to remember tool choices) ($NOTE3)" "ACTION||run aitools user init to remember tool choices")
 
     # B1/M1: the caller's own parameters and variables survive dot-sourcing the lib
     # and calling the wrappers (-UserRepoPath, -MachineAlias, -ProfileFile, $profileName)
@@ -637,7 +683,7 @@ try {
 
     # AITOOLS_PROFILE_PS1 override: a missing resolver, then a stub
     New-Fixture with-id
-    Invoke-Case override-missing urp (J "rc=3" "path= via=none" "warnings=0 errors=1") (J "ERROR|dotprofile|resolver missing" $A_DP) @("AITOOLS_PROFILE_PS1=<W>/none.ps1")
+    Invoke-Case override-missing urp (J "rc=3" "path= via=none" "warnings=0 errors=1") (J "ERROR|dotprofile|resolver missing|$R_MISSING" $A_DP) @("AITOOLS_PROFILE_PS1=<W>/none.ps1")
 
     Invoke-Case override-stub urp (J "rc=0" "path=/stub/aitools-dp via=env" "warnings=0 errors=0") "" @("AITOOLS_PROFILE_PS1=<W>/stub.ps1")
 
@@ -647,20 +693,21 @@ try {
     # Review 2 M1: a resolver exit 0 or 1 without result lines is an error, not
     # "found" or "shared-only"; a throw or parse error is an error too
     New-Fixture with-id
-    Invoke-Case broken-silent0-urp urp (J "rc=3" "path= via=" "warnings=0 errors=1") (J "ERROR|dotprofile|resolver failed" $A_DP) @("AITOOLS_PROFILE_PS1=<W>/silent0.ps1")
+    Invoke-Case broken-silent0-urp urp (J "rc=3" "path= via=" "warnings=0 errors=1") (J "ERROR|dotprofile|resolver failed|resolver exited 0 without result lines (see deploy.log)" $A_DP) @("AITOOLS_PROFILE_PS1=<W>/silent0.ps1")
 
-    Invoke-Case broken-silent1-urp urp (J "rc=3" "path= via=" "warnings=0 errors=1") (J "ERROR|dotprofile|resolver failed" $A_DP) @("AITOOLS_PROFILE_PS1=<W>/silent1.ps1")
+    Invoke-Case broken-silent1-urp urp (J "rc=3" "path= via=" "warnings=0 errors=1") (J "ERROR|dotprofile|resolver failed|resolver exited 1 without result lines (see deploy.log)" $A_DP) @("AITOOLS_PROFILE_PS1=<W>/silent1.ps1")
 
-    Invoke-Case broken-silent1-rmp rmp (J "rc=3" "alias= via= company= name=" "warnings=0 errors=2") `
-        (J "ERROR|machine profile|no machine match" "ACTION||Run: aitools user init (pick or register this machine's profile)") @("AITOOLS_PROFILE_PS1=<W>/silent1.ps1")
+    Invoke-Case broken-silent1-rmp rmp (J "rc=3" "alias= via= company= name=" "warnings=0 errors=1") `
+        (J "ERROR|machine profile|no machine match|resolver exited 1 without result lines (see deploy.log)" "ACTION||Run: aitools user init (pick or register this machine's profile)") @("AITOOLS_PROFILE_PS1=<W>/silent1.ps1")
 
-    Invoke-Case broken-silent0-eget eget (J "rc=1" "found=false method= path=" "warnings=1 errors=0") "" @("AITOOLS_PROFILE_PS1=<W>/silent0.ps1")
+    Invoke-Case broken-silent0-eget eget (J "rc=1" "found=false method= path=" "warnings=1 errors=0") "WARN|test-lib|tool exceptions unavailable (resolver exited 0 without result lines (see deploy.log))" @("AITOOLS_PROFILE_PS1=<W>/silent0.ps1")
 
-    Invoke-Case broken-silent0-eset eset (J "rc=1" "result=failed pushed=false" "warnings=1 errors=0") "ACTION||see deploy.log -- a tool choice (tool exception) was not saved" @("AITOOLS_PROFILE_PS1=<W>/silent0.ps1")
+    Invoke-Case broken-silent0-eset eset (J "rc=1" "result=failed pushed=false" "warnings=1 errors=0") `
+        (J "WARN|test-lib|tool exception for go not saved (resolver exited 0 without result lines (see deploy.log))" "ACTION||see deploy.log -- a tool choice (tool exception) was not saved") @("AITOOLS_PROFILE_PS1=<W>/silent0.ps1")
 
-    Invoke-Case broken-throw-urp urp (J "rc=3" "path= via=" "warnings=0 errors=1") (J "ERROR|dotprofile|resolver failed" $A_DP) @("AITOOLS_PROFILE_PS1=<W>/throw.ps1")
+    Invoke-Case broken-throw-urp urp (J "rc=3" "path= via=" "warnings=0 errors=1") (J "ERROR|dotprofile|resolver failed|aitools-profile user-repo-path threw: boom" $A_DP) @("AITOOLS_PROFILE_PS1=<W>/throw.ps1")
 
-    Invoke-Case broken-parse-urp urp (J "rc=3" "path= via=" "warnings=0 errors=1") (J "ERROR|dotprofile|resolver failed" $A_DP) @("AITOOLS_PROFILE_PS1=<W>/parse.ps1")
+    Invoke-Case broken-parse-urp urp (J "rc=3" "path= via=" "warnings=0 errors=1") (J "ERROR|dotprofile|resolver failed|aitools-profile user-repo-path threw: At $WM/parse.ps1:1 $R_PARSE_POS" $A_DP) @("AITOOLS_PROFILE_PS1=<W>/parse.ps1")
 
     # Re-key batch 3, item 1: the id-key results
     New-Fixture id-key
@@ -681,35 +728,38 @@ try {
 
     New-Fixture with-id
     Set-NoMatch
-    Invoke-Case rmpk-nomatch rmpk (J "rc=3" "alias= via=none company=nobul-tech" "key= owner=absent legacy=false host=nobul-mac" "warnings=0 errors=2") `
-        (J "ERROR|machine profile|no machine match" "ACTION||Run: aitools user init (pick or register this machine's profile)")
+    Invoke-Case rmpk-nomatch rmpk (J "rc=3" "alias= via=none company=nobul-tech" "key= owner=absent legacy=false host=nobul-mac" "warnings=0 errors=1") `
+        (J "ERROR|machine profile|no machine match|$R_NOMATCH" "ACTION||Run: aitools user init (pick or register this machine's profile)")
 
     # A resolver that predates the id-key fields (an older embedded copy): defaults
     New-Fixture with-id
     Invoke-Case rmpk-old-resolver rmpk (J "rc=0" "alias=nobul-mac via=id company=nobul-tech" "key= owner=absent legacy=false host=nobul-mac" "warnings=0 errors=0") "" @("AITOOLS_PROFILE_PS1=<W>/oldres.ps1")
 
     # Item 3: a dotprofile resolver error twice in one run -> two ERROR rows, one ACTION
-    Invoke-Case urp-missing-twice urp2 (J "rc=3" "path= via=none" "warnings=0 errors=2") (J "ERROR|dotprofile|resolver missing" $A_DP "ERROR|dotprofile|resolver missing") @("AITOOLS_PROFILE_PS1=<W>/none.ps1")
+    Invoke-Case urp-missing-twice urp2 (J "rc=3" "path= via=none" "warnings=0 errors=2") (J "ERROR|dotprofile|resolver missing|$R_MISSING" $A_DP "ERROR|dotprofile|resolver missing|$R_MISSING") @("AITOOLS_PROFILE_PS1=<W>/none.ps1")
 
     # FIX-1, A-2: the machine-profile wrapper's "resolver missing" path writes the
     # ACTION too; with the dotprofile wrapper in the same run, one ACTION in total
-    Invoke-Case rmp-missing rmp (J "rc=3" "alias= via=none company= name=" "warnings=0 errors=1") (J "ERROR|machine profile|resolver missing" $A_DP) @("AITOOLS_PROFILE_PS1=<W>/none.ps1")
+    Invoke-Case rmp-missing rmp (J "rc=3" "alias= via=none company= name=" "warnings=0 errors=1") (J "ERROR|machine profile|resolver missing|$R_MISSING" $A_DP) @("AITOOLS_PROFILE_PS1=<W>/none.ps1")
     Invoke-Case urp-rmp-missing keep (J "rc=3" "kept=urp:/caller/urp pf:/caller/pf alias:caller name:caller-name" "alias= urp-via=none" "warnings=0 errors=2") `
-        (J "ERROR|dotprofile|resolver missing" $A_DP "ERROR|machine profile|resolver missing") @("AITOOLS_PROFILE_PS1=<W>/none.ps1")
+        (J "ERROR|dotprofile|resolver missing|$R_MISSING" $A_DP "ERROR|machine profile|resolver missing|$R_MISSING") @("AITOOLS_PROFILE_PS1=<W>/none.ps1")
 
     # Item 2: resolver exits 3 and 4 are mapped and logged with their meaning in
     # every wrapper; neither is read as "nothing found"
     foreach ($n in 3, 4) {
         $x = @("AITOOLS_PROFILE_PS1=<W>/exit$n.ps1", "SHOW_NOTES=1")
+        $note = if ($n -eq 3) { $NOTE3 } else { $NOTE4 }
         New-Fixture with-id
-        Invoke-Case "exit$n-urp" urp (J "rc=3" "path= via=none" "warnings=0 errors=1" "notes=1") (J "ERROR|dotprofile|resolver failed" $A_DP) $x
-        Invoke-Case "exit$n-rmp" rmp (J "rc=3" "alias= via=none company= name=" "warnings=0 errors=2" "notes=1") `
-            (J "ERROR|machine profile|no machine match" "ACTION||Run: aitools user init (pick or register this machine's profile)") $x
-        Invoke-Case "exit$n-eget" eget (J "rc=1" "found=false method= path=" "warnings=1 errors=0" "notes=1") "" $x
+        Invoke-Case "exit$n-urp" urp (J "rc=3" "path= via=none" "warnings=0 errors=1" "notes=1") (J "ERROR|dotprofile|resolver failed|stub says no ($note)" $A_DP) $x
+        Invoke-Case "exit$n-rmp" rmp (J "rc=3" "alias= via=none company= name=" "warnings=0 errors=1" "notes=1") `
+            (J "ERROR|machine profile|no machine match|stub says no ($note)" "ACTION||Run: aitools user init (pick or register this machine's profile)") $x
+        Invoke-Case "exit$n-eget" eget (J "rc=1" "found=false method= path=" "warnings=1 errors=0" "notes=1") "WARN|test-lib|tool exceptions unavailable (stub says no) ($note)" $x
     }
     New-Fixture with-id
-    Invoke-Case exit3-eset eset (J "rc=3" "result=refused pushed=false" "warnings=1 errors=0" "notes=1") "ACTION||run aitools user init to remember tool choices" @("AITOOLS_PROFILE_PS1=<W>/exit3.ps1", "SHOW_NOTES=1")
-    Invoke-Case exit4-eset eset (J "rc=1" "result=failed pushed=false" "warnings=1 errors=0" "notes=1") "ACTION||see deploy.log -- a tool choice (tool exception) was not saved" @("AITOOLS_PROFILE_PS1=<W>/exit4.ps1", "SHOW_NOTES=1")
+    Invoke-Case exit3-eset eset (J "rc=3" "result=refused pushed=false" "warnings=1 errors=0" "notes=1") `
+        (J "WARN|test-lib|tool exception for go not saved (stub says no) ($NOTE3)" "ACTION||run aitools user init to remember tool choices") @("AITOOLS_PROFILE_PS1=<W>/exit3.ps1", "SHOW_NOTES=1")
+    Invoke-Case exit4-eset eset (J "rc=1" "result=failed pushed=false" "warnings=1 errors=0" "notes=1") `
+        (J "WARN|test-lib|tool exception for go not saved (stub says no) ($NOTE4)" "ACTION||see deploy.log -- a tool choice (tool exception) was not saved") @("AITOOLS_PROFILE_PS1=<W>/exit4.ps1", "SHOW_NOTES=1")
 
     # M3-FINISH item 3: the runner itself (Invoke-AitLibProfile), as user init calls
     # it. register and migrate print a "result" line and no "via" line; hostname
@@ -756,16 +806,23 @@ try {
     Invoke-Case via-pwsh-rmpk-id-key rmpk (J "rc=0" "alias=nobul-mac via=id company=nobul-mac-co" "key=$ID_KEY owner=this legacy=false host=nobul-mac" "warnings=0 errors=0") "" @($pwshEnv) gitbash
 
     New-Fixture with-id
-    Invoke-Case via-pwsh-exit4-urp urp (J "rc=3" "path= via=none" "warnings=0 errors=1" "notes=1") (J "ERROR|dotprofile|resolver failed" $A_DP) @($pwshEnv, "AITOOLS_PROFILE_PS1=<W>/exit4.ps1", "SHOW_NOTES=1") gitbash
+    Invoke-Case via-pwsh-exit4-urp urp (J "rc=3" "path= via=none" "warnings=0 errors=1" "notes=1") (J "ERROR|dotprofile|resolver failed|stub says no ($NOTE4)" $A_DP) @($pwshEnv, "AITOOLS_PROFILE_PS1=<W>/exit4.ps1", "SHOW_NOTES=1") gitbash
 
     New-Fixture hostname-only
-    Invoke-Case via-pwsh-eset-refused eset (J "rc=3" "result=refused pushed=false" "warnings=1 errors=0") "ACTION||run aitools user init to remember tool choices" @($pwshEnv) gitbash
+    Invoke-Case via-pwsh-eset-refused eset (J "rc=3" "result=refused pushed=false" "warnings=1 errors=0") `
+        (J "WARN|test-lib|tool exception for go not saved (machine profile `"nobul-mac`" matched by hostname only -- run: aitools user init to remember tool choices) ($NOTE3)" "ACTION||run aitools user init to remember tool choices") @($pwshEnv) gitbash
 
     New-Fixture with-id
     Invoke-Case via-pwsh-stub urp (J "rc=0" "path=/stub/aitools-dp via=env" "warnings=0 errors=0") "" @($pwshEnv, "AITOOLS_PROFILE_PS1=<W>/stub.ps1") gitbash
 
+    $brokenReason = @{
+        silent0 = "resolver exited 0 without result lines (see deploy.log)"
+        silent1 = "resolver exited 1 without result lines (see deploy.log)"
+        throw   = "aitools-profile user-repo-path threw: boom"
+        parse   = "aitools-profile user-repo-path threw: At $WM/parse.ps1:1 $R_PARSE_POS"
+    }
     foreach ($broken in "silent0", "silent1", "throw", "parse") {
-        Invoke-Case "via-pwsh-broken-$broken" urp (J "rc=3" "path= via=" "warnings=0 errors=1") (J "ERROR|dotprofile|resolver failed" $A_DP) @($pwshEnv, "AITOOLS_PROFILE_PS1=<W>/$broken.ps1") gitbash
+        Invoke-Case "via-pwsh-broken-$broken" urp (J "rc=3" "path= via=" "warnings=0 errors=1") (J "ERROR|dotprofile|resolver failed|$($brokenReason[$broken])" $A_DP) @($pwshEnv, "AITOOLS_PROFILE_PS1=<W>/$broken.ps1") gitbash
     }
 
     # M3-FINISH item 3 through the pwsh branch: result lines, a bare hostname, a
@@ -803,31 +860,51 @@ try {
     } else {
         Bad "relay-record: no deploy.jsonl record to compare"
     }
-    Invoke-RelayCase relay-run-ok run 0 (J "rc=0 child_rc=0" "cw=2 ce=0 warnings=2 errors=0") (J "records=4 invalid=0" "msg-ok")
-    # A failed child that wrote its own ERROR row gets no second one (FIX-1, A-3)
-    Invoke-RelayCase relay-run-fail run 1 (J "rc=1 child_rc=1" "cw=2 ce=1 warnings=2 errors=1") (J "records=5 invalid=0" "msg-ok") "ERROR|child tool|child failed"
-    # A child that logged an error but exited 0 and wrote no row: one ERROR row
-    Invoke-RelayCase relay-run-error-exit0 run 2 (J "rc=1 child_rc=0" "cw=2 ce=1 warnings=2 errors=1") (J "records=5 invalid=0" "msg-ok") "ERROR|child tool|logged errors (exit 0)"
-    # A-3: a child that died before its own rows (exit 1, exit 127) is in the panel
-    # as ERROR; a user abort (exit 2) too
-    Invoke-RelayCase relay-run-crash run 3 (J "rc=1 child_rc=1" "cw=2 ce=0 warnings=2 errors=1") (J "records=3 invalid=0" "msg-ok") "ERROR|child tool|script failed (exit 1)"
-    Invoke-RelayCase relay-run-exit127 run 4 (J "rc=1 child_rc=127" "cw=2 ce=0 warnings=2 errors=1") (J "records=3 invalid=0" "msg-ok") "ERROR|child tool|script failed (exit 127)"
-    Invoke-RelayCase relay-run-abort run 5 (J "rc=1 child_rc=2" "cw=2 ce=1 warnings=2 errors=1") (J "records=4 invalid=0" "msg-ok") "ERROR|child tool|aborted (exit 2)"
-    # Review A m1: the dedupe compares with the rows before the child, not with zero:
-    # an earlier step's ERROR row does not hide the crashed child's row
-    Invoke-RelayCase relay-run-crash-prior-row run 3 (J "rc=1 child_rc=1" "cw=2 ce=0 warnings=2 errors=1") (J "records=3 invalid=0" "msg-ok") `
-        (J "ERROR|earlier step|failed before" "ERROR|child tool|script failed (exit 1)") @("PRE_ROW=1")
-    # Without a summary tool: no row (the caller writes its own)
-    Invoke-RelayCase relay-run-crash-notool run-notool 3 (J "rc=1 child_rc=1" "cw=2 ce=0 warnings=2 errors=1") (J "records=3 invalid=0" "msg-ok") ""
-    # A throw and a parse error (in-process) are one LogError and a row
-    Invoke-RelayCase relay-run-throw run 6 (J "rc=1 child_rc=1" "cw=2 ce=0 warnings=2 errors=1") (J "records=3 invalid=0" "msg-ok") "ERROR|child tool|script failed (exception)"
-    Invoke-RelayCase relay-run-parse parse 0 (J "rc=1 child_rc=1" "cw=0 ce=0 warnings=0 errors=1") "skip" "ERROR|child tool|script failed (exception)"
+    # The child's two warnings are counted in cw only, never in the parent's
+    # warnings (logging.md 8.3: each script counts its own warnings); they are the
+    # child's own WARN records (recorded at the source), in every run case below
+    $W_CHILD = J "WARN|child-ps|$WARN_MSG" "WARN|child-ps|second warning"
+    Invoke-RelayCase relay-run-ok run 0 (J "rc=0 child_rc=0" "cw=2 ce=0 warnings=0 errors=0") (J "records=4 invalid=0" "msg-ok") $W_CHILD
+    # A failed child that wrote its own ERROR record gets no second one (FIX-1, A-3)
+    Invoke-RelayCase relay-run-fail run 1 (J "rc=1 child_rc=1" "cw=2 ce=1 warnings=0 errors=1") (J "records=5 invalid=0" "msg-ok") (J $W_CHILD "ERROR|child tool|child failed|child error")
+    # A child that printed an error line but exited 0 and recorded no error: one
+    # ERROR record, WHAT "<label> failed (exit 0)", REASON from the child's last
+    # line that is not a warning line (8.3)
+    Invoke-RelayCase relay-run-error-exit0 run 2 (J "rc=1 child_rc=0" "cw=2 ce=1 warnings=0 errors=1") (J "records=5 invalid=0" "msg-ok") (J $W_CHILD "ERROR|child tool|child step failed (exit 0)|child error")
+    # A-3: a child that died before its own error record (exit 1, exit 127) is in
+    # the panel as ERROR. The in-process child wrote no error record, so the reason
+    # is its last relayed line that is not a warning line (8.3 rule 4: no error
+    # marker; a warning line is never the reason, RFI 5899-31)
+    Invoke-RelayCase relay-run-crash run 3 (J "rc=1 child_rc=1" "cw=2 ce=0 warnings=0 errors=1") (J "records=3 invalid=0" "msg-ok") (J $W_CHILD "ERROR|child tool|child step failed (exit 1)|child info")
+    Invoke-RelayCase relay-run-exit127 run 4 (J "rc=1 child_rc=127" "cw=2 ce=0 warnings=0 errors=1") (J "records=3 invalid=0" "msg-ok") (J $W_CHILD "ERROR|child tool|child step failed (exit 127)|child info")
+    # A user abort (exit 2) the child recorded itself (an abort record): the relay
+    # counts it and records nothing more (8.3 "A user abort": recorded once)
+    Invoke-RelayCase relay-run-abort run 5 (J "rc=1 child_rc=2" "cw=2 ce=1 warnings=0 errors=1") (J "records=4 invalid=0" "msg-ok") (J $W_CHILD "ERROR|child tool|child step aborted|aborted by user")
+    # Its warnings (recorded), then an abort through the library's abort path: the
+    # warnings are not abort records, so the relay records the abort once (8.3)
+    Invoke-RelayCase relay-run-abort-after-warn run 9 (J "rc=1 child_rc=2" "cw=2 ce=1 warnings=0 errors=1") (J "records=4 invalid=0" "msg-ok") (J $W_CHILD "ERROR|child tool|child step failed (exit 2)|aborted by user")
+    # A user abort through the library's abort path (logged, not recorded) by a
+    # child that recorded nothing: the relay records it once, ERROR "<label> failed
+    # (exit 2)" with the reason "aborted by user" (8.3). The child printed no warning line.
+    Invoke-RelayCase relay-run-abort-unrecorded run 8 (J "rc=1 child_rc=2" "cw=0 ce=1 warnings=0 errors=1") (J "records=2 invalid=0" "msg-missing: $WARN_MSG") "ERROR|child tool|child step failed (exit 2)|aborted by user"
+    # Review A m1: the dedupe compares with the records before the child, not with
+    # zero: an earlier step's ERROR record does not hide the crashed child's record
+    Invoke-RelayCase relay-run-crash-prior-row run 3 (J "rc=1 child_rc=1" "cw=2 ce=0 warnings=0 errors=1") (J "records=3 invalid=0" "msg-ok") `
+        (J "ERROR|earlier step|failed before|" $W_CHILD "ERROR|child tool|child step failed (exit 1)|child info") @("PRE_ROW=1")
+    # Without a summary tool: the record is named after the child's script (8.3 "Its
+    # name": the base name of the first argument ending in .ps1, child.ps1 -> child)
+    Invoke-RelayCase relay-run-crash-notool run-notool 3 (J "rc=1 child_rc=1" "cw=2 ce=0 warnings=0 errors=1") (J "records=3 invalid=0" "msg-ok") (J $W_CHILD "ERROR|child|child step failed (exit 1)|child info")
+    # A throw and a parse error (in-process) are one error and a row: WHAT
+    # "<label> failed (exception)", REASON the exception message
+    Invoke-RelayCase relay-run-throw run 6 (J "rc=1 child_rc=1" "cw=2 ce=0 warnings=0 errors=1") (J "records=3 invalid=0" "msg-ok") (J $W_CHILD "ERROR|child tool|child step failed (exception)|child died")
+    Invoke-RelayCase relay-run-parse parse 0 (J "rc=1 child_rc=1" "cw=0 ce=0 warnings=0 errors=1") "skip" "ERROR|child tool|child step failed (exception)|At $WM/child-parse.ps1:2 $R_PARSE_POS"
     # Review m3: no command is a failure, not a silent success; with a tool, a row
-    Invoke-RelayCase relay-run-no-command noargs 0 (J "rc=1 child_rc=1" "cw=0 ce=0 warnings=0 errors=1") "-" "ERROR|child tool|not run (no command)"
+    # (WHAT "<label> not run", the label being "no command" here)
+    Invoke-RelayCase relay-run-no-command noargs 0 (J "rc=1 child_rc=1" "cw=0 ce=0 warnings=0 errors=1") "-" "ERROR|child tool|no command not run|no command given"
     # The relay's own temp file is bash code (aitools-lib.sh); its cases
     # (relay-run-mktemp-fail, relay-run-rm-fail) run in test-lib.sh on macOS/Linux
     SkipLine "relay-run-rm-fail (bash relay temp file: macOS/Linux)"
-    Invoke-RelayCase relay-captured captured 0 (J "rc=0 child_rc=0" "cw=2 ce=0 warnings=2 errors=0") (J "records=4 invalid=0" "msg-ok")
+    Invoke-RelayCase relay-captured captured 0 (J "rc=0 child_rc=0" "cw=2 ce=0 warnings=0 errors=0") (J "records=4 invalid=0" "msg-ok") $W_CHILD
 } catch {
     Bad "harness error: $($_.Exception.Message) (line $($_.InvocationInfo.ScriptLineNumber))"
 } finally {

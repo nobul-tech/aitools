@@ -6,6 +6,7 @@ gone/sub/x.md f38d5e91722573bc0e84b95f2a9db5cd
 # summary rows (ACTION and skills, sorted)
 DETAIL|claude skills|added: a/SKILL.md
 DETAIL|claude skills|failed: gone
-ERROR|claude skills|1 failed
+ERROR|claude skills|Cannot remove HOME/.claude/skills/gone (retired skill; it may be partly removed; backup in HOME/.claude/skills.bak.<UTC>/gone)|<OS error>
+OK|claude skills|1 added, 1 failed
 # extra
 backup gone/sub mode 555

@@ -77,10 +77,17 @@ function Find-Python {
 # ---------------------------------------------------------------------------
 # Find the generator script
 # ---------------------------------------------------------------------------
-function Find-Generator {
+# Get-DashboardRepoPath -- the aitools clone the generator is looked up in
+# first: repoPath from ~/.aitools/config.json, else ~/repos/aitools
+function Get-DashboardRepoPath {
     $configFile = Join-Path $env:USERPROFILE ".aitools\config.json"
     $repoPath = ReadConfigKey -File $configFile -Key "repoPath"
     if (-not $repoPath) { $repoPath = Join-Path $env:USERPROFILE "repos\aitools" }
+    return $repoPath
+}
+
+function Find-Generator {
+    $repoPath = Get-DashboardRepoPath
 
     $genPath = Join-Path $repoPath "scripts\generate-dashboard.py"
     if (Test-Path $genPath) { return $genPath }
@@ -306,7 +313,7 @@ function Test-InstanceHealth {
     if ($healthy) {
         LogOk "Dashboard on port ${InstPort}: HEALTHY ($details)"
     } else {
-        LogWarn "Dashboard on port ${InstPort}: UNHEALTHY ($details)"
+        Write-AitWarn "dashboard" "port $InstPort unhealthy: $details"
     }
 
     return $healthy
@@ -325,7 +332,7 @@ if ($Status) {
     if ($instances.Count -eq 0) {
         Log "No dashboard instances running"
         if (Test-PortInUse -TestPort $Port) {
-            LogWarn "Port $Port is in use by another process (not a managed dashboard)"
+            Write-AitWarn "dashboard" "port $Port is in use by another process (not a managed dashboard)"
         }
     } else {
         foreach ($inst in $instances) {
@@ -343,7 +350,7 @@ if ($Status) {
 if ($HealthCheck) {
     $instances = Get-RunningInstances
     if ($instances.Count -eq 0) {
-        LogWarn "No dashboard instances running"
+        Write-AitWarn "dashboard" "no dashboard instances running"
         exit 1
     }
     $unhealthy = 0
@@ -397,23 +404,20 @@ if ($Stop) {
 if ($Snapshot) {
     $python = Find-Python
     if (-not $python) {
-        LogError "python not found -- install Python to use the dashboard"
-        Write-Summary "ERROR" "dashboard" "python not found"
+        Write-AitError "dashboard" "python not found" "no python3 or python on PATH -- install Python to use the dashboard"
         exit 1
     }
 
     $generator = Find-Generator
     if (-not $generator) {
-        LogError "generate-dashboard.py not found"
-        Write-Summary "ERROR" "dashboard" "generator not found"
+        Write-AitError "dashboard" "generator not found" "generate-dashboard.py is in neither $(Get-DashboardRepoPath)\scripts nor $ProjectRoot\scripts"
         exit 1
     }
 
     if (-not $Estimate) {
         $Estimate = Find-Estimate
         if (-not $Estimate) {
-            LogError "no running estimate found"
-            Write-Summary "WARN" "dashboard" "no estimate found"
+            Write-AitWarn "dashboard" "no running estimate found -- create .aitools/channel/running-estimate.json"
             exit 1
         }
     }
@@ -422,13 +426,16 @@ if ($Snapshot) {
     $genArgs = @("$generator", "--estimate", "$Estimate")
     if ($OpenBrowser) { $genArgs += "--open" }
 
+    # Captured (stdout and stderr), then logged on success or passed to
+    # Get-AitErrorReason, which logs it as detail, on failure (reference/logging.md 8.2)
     $result = & $python @genArgs 2>&1
-    if ($LASTEXITCODE -eq 0) {
+    $genRc = $LASTEXITCODE
+    if ($genRc -eq 0) {
+        $result | ForEach-Object { Log "$_" }
         LogOk "Dashboard snapshot generated"
         Write-Summary "OK" "dashboard" "snapshot generated"
     } else {
-        LogError "Dashboard generation failed"
-        Write-Summary "ERROR" "dashboard" "generation failed"
+        Write-AitError "dashboard" "generation failed" (Get-AitErrorReason -Output (@($result) -join "`n") -ExitCode $genRc)
         exit 1
     }
     exit 0
@@ -451,23 +458,20 @@ if ($existingPid) {
 
 # Check if port is in use by something else
 if (Test-PortInUse -TestPort $Port) {
-    LogWarn "Port $Port is already in use by another process"
-    Write-Summary "WARN" "dashboard" "port $Port in use"
+    Write-AitWarn "dashboard" "port $Port is already in use by another process"
     exit 1
 }
 
 # Find dependencies
 $python = Find-Python
 if (-not $python) {
-    LogError "python not found -- install Python to use the dashboard"
-    Write-Summary "ERROR" "dashboard" "python not found"
+    Write-AitError "dashboard" "python not found" "no python3 or python on PATH -- install Python to use the dashboard"
     exit 1
 }
 
 $generator = Find-Generator
 if (-not $generator) {
-    LogError "generate-dashboard.py not found"
-    Write-Summary "ERROR" "dashboard" "generator not found"
+    Write-AitError "dashboard" "generator not found" "generate-dashboard.py is in neither $(Get-DashboardRepoPath)\scripts nor $ProjectRoot\scripts"
     exit 1
 }
 
@@ -479,9 +483,8 @@ if (-not $Estimate) {
             # Background mode: no estimate is not an error, just skip
             exit 0
         }
-        LogError "no running estimate found"
+        Write-AitWarn "dashboard" "no running estimate found -- create .aitools/channel/running-estimate.json"
         Log "Create a running estimate in .aitools\channel\running-estimate.json or .scratch\session-*\running-estimate*.json"
-        Write-Summary "WARN" "dashboard" "no estimate found"
         exit 1
     }
 }
@@ -493,9 +496,11 @@ $portPidFile = Get-PidFileForPort -PortNum $Port
 
 if ($Background) {
     # Background mode: Start-Process for detached process
+    # -ErrorAction SilentlyContinue: the failure is checked through $proc below,
+    # and its error record (-ErrorVariable) is the reason
     $proc = Start-Process -FilePath $python -ArgumentList @(
         "$generator", "--estimate", "$Estimate", "--serve", "--port", "$Port"
-    ) -WindowStyle Hidden -PassThru -ErrorAction SilentlyContinue
+    ) -WindowStyle Hidden -PassThru -ErrorAction SilentlyContinue -ErrorVariable startErr
 
     if ($proc) {
         # Write PID to port-keyed registry
@@ -513,19 +518,25 @@ if ($Background) {
                 Write-Summary "OK" "dashboard" "http://localhost:$Port/"
             } else {
                 Remove-Item -Path $portPidFile -Force -ErrorAction SilentlyContinue
-                LogError "Dashboard server failed to start"
-                Write-Summary "ERROR" "dashboard" "failed to start"
+                # The server runs in a hidden window, so the reason is the
+                # observed state, not its output (a follow-up: write it to a log file)
+                Write-AitError "dashboard" "failed to start" "the server process exited within 0.3 s"
                 exit 1
             }
         } catch {
             Remove-Item -Path $portPidFile -Force -ErrorAction SilentlyContinue
-            LogError "Dashboard server failed to start"
-            Write-Summary "ERROR" "dashboard" "failed to start"
+            Write-AitError "dashboard" "failed to start" $_.Exception.Message
             exit 1
         }
     } else {
-        LogError "Failed to launch dashboard server process"
-        Write-Summary "ERROR" "dashboard" "launch failed"
+        # -ErrorVariable holds an ErrorRecord or, for a failed process start,
+        # the exception itself (observed under pwsh 7 on macOS): its message is the reason
+        $launchReason = "Start-Process returned no process"
+        if ($startErr -and $startErr.Count -gt 0) {
+            $startEx = if ($startErr[0] -is [System.Management.Automation.ErrorRecord]) { $startErr[0].Exception } else { $startErr[0] }
+            if ($startEx -and $startEx.Message) { $launchReason = ($startEx.Message -replace '\s*\r?\n\s*', ' ').Trim() }
+        }
+        Write-AitError "dashboard" "launch failed" $launchReason
         exit 1
     }
 } else {

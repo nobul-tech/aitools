@@ -61,26 +61,26 @@ while [[ $# -gt 0 ]]; do
         --port)
             shift
             if [[ $# -eq 0 ]]; then
-                log_error "--port requires a value"
+                write_error "dashboard" "invalid arguments" "--port requires a value"
                 exit 1
             fi
             PORT="$1"; shift ;;
         --estimate)
             shift
             if [[ $# -eq 0 ]]; then
-                log_error "--estimate requires a path"
+                write_error "dashboard" "invalid arguments" "--estimate requires a path"
                 exit 1
             fi
             ESTIMATE="$1"; shift ;;
         --project-root)
             shift
             if [[ $# -eq 0 ]]; then
-                log_error "--project-root requires a path"
+                write_error "dashboard" "invalid arguments" "--project-root requires a path"
                 exit 1
             fi
             PROJECT_ROOT="$1"; shift ;;
         *)
-            log_error "unknown option '$1'"
+            write_error "dashboard" "invalid arguments" "unknown option '$1'"
             exit 1 ;;
     esac
 done
@@ -119,10 +119,19 @@ find_python() {
 # ---------------------------------------------------------------------------
 # Find the generator script
 # ---------------------------------------------------------------------------
+# dashboard_repo_path -- the aitools clone the generator is looked up in first:
+# repoPath from ~/.aitools/config.json, else ~/repos/aitools
+dashboard_repo_path() {
+    local repo_path=""
+    # 2>/dev/null || true: a missing or unreadable config.json is the default
+    # below (the empty result is checked on the next line)
+    repo_path=$(read_config_key "$HOME/.aitools/config.json" "repoPath" 2>/dev/null || true)
+    printf '%s' "${repo_path:-$HOME/repos/aitools}"
+}
+
 find_generator() {
     local repo_path=""
-    repo_path=$(read_config_key "$HOME/.aitools/config.json" "repoPath" 2>/dev/null || true)
-    repo_path="${repo_path:-$HOME/repos/aitools}"
+    repo_path=$(dashboard_repo_path)
 
     if [ -f "$repo_path/scripts/generate-dashboard.py" ]; then
         printf '%s' "$repo_path/scripts/generate-dashboard.py"
@@ -388,7 +397,7 @@ else:
     if [ "$healthy" = true ]; then
         log_ok "Dashboard on port $port: HEALTHY ($details)"
     else
-        log_warn "Dashboard on port $port: UNHEALTHY ($details)"
+        write_warn "dashboard" "port $port unhealthy: $details"
     fi
 
     if [ "$healthy" = true ]; then
@@ -418,7 +427,7 @@ if [ "$ACTION" = "status" ]; then
     if [ "$local_found" = false ]; then
         log "No dashboard instances running"
         if is_port_in_use "$PORT"; then
-            log_warn "Port $PORT is in use by another process (not a managed dashboard)"
+            write_warn "dashboard" "port $PORT is in use by another process (not a managed dashboard)"
         fi
     fi
     exit 0
@@ -438,7 +447,7 @@ if [ "$ACTION" = "health-check" ]; then
     done < <(list_running_instances 2>/dev/null || true)
 
     if [ "$local_found" = false ]; then
-        log_warn "No dashboard instances running"
+        write_warn "dashboard" "no dashboard instances running"
         exit 1
     fi
 
@@ -483,21 +492,18 @@ fi
 # ---------------------------------------------------------------------------
 if [ "$ACTION" = "snapshot" ]; then
     PYTHON=$(find_python) || {
-        log_error "python3 not found -- install Python to use the dashboard"
-        write_summary ERROR "dashboard" "python3 not found"
+        write_error "dashboard" "python not found" "no python3 or python on PATH -- install Python to use the dashboard"
         exit 1
     }
 
     GENERATOR=$(find_generator) || {
-        log_error "generate-dashboard.py not found"
-        write_summary ERROR "dashboard" "generator not found"
+        write_error "dashboard" "generator not found" "generate-dashboard.py is in neither $(dashboard_repo_path)/scripts nor $PROJECT_ROOT/scripts"
         exit 1
     }
 
     if [ -z "$ESTIMATE" ]; then
         ESTIMATE=$(find_estimate) || {
-            log_error "no running estimate found"
-            write_summary WARN "dashboard" "no estimate found"
+            write_warn "dashboard" "no running estimate found -- create .aitools/channel/running-estimate.json"
             exit 1
         }
     fi
@@ -508,12 +514,29 @@ if [ "$ACTION" = "snapshot" ]; then
         local_args+=("--open")
     fi
 
-    if "$PYTHON" "$GENERATOR" "${local_args[@]}"; then
+    # The generator's output streams to the console and deploy.log as it
+    # arrives and is captured at the same time, for the reason of a failure
+    # (script-standards "External command error handling" 5; a failure's
+    # output is logged twice: reference/logging.md 8.2)
+    GEN_OUT=""
+    GEN_RC=0
+    # || GEN_FILE="": checked on the next line (no temp file: stream only)
+    GEN_FILE=$(mktemp "${TMPDIR:-/tmp}/aitools-dashboard.XXXXXX") || GEN_FILE=""
+    if [ -n "$GEN_FILE" ]; then
+        "$PYTHON" "$GENERATOR" "${local_args[@]}" 2>&1 | tee "$GEN_FILE" | while IFS= read -r line; do log "$line"; done || GEN_RC=$?
+        # || GEN_OUT="": an unreadable capture leaves the reason "no output (exit N)"
+        GEN_OUT=$(cat "$GEN_FILE") || GEN_OUT=""
+        rm -f "$GEN_FILE"
+    else
+        log_detail "mktemp failed -- the generator's output is not captured"
+        "$PYTHON" "$GENERATOR" "${local_args[@]}" 2>&1 | while IFS= read -r line; do log "$line"; done || GEN_RC=$?
+    fi
+
+    if [ "$GEN_RC" -eq 0 ]; then
         log_ok "Dashboard snapshot generated"
         write_summary OK "dashboard" "snapshot generated"
     else
-        log_error "Dashboard generation failed"
-        write_summary ERROR "dashboard" "generation failed"
+        write_error "dashboard" "generation failed" "$(error_reason "$GEN_OUT" "$GEN_RC")"
         exit 1
     fi
     exit 0
@@ -535,21 +558,18 @@ fi
 
 # Check if port is in use by something else
 if is_port_in_use "$PORT"; then
-    log_warn "Port $PORT is already in use by another process"
-    write_summary WARN "dashboard" "port $PORT in use"
+    write_warn "dashboard" "port $PORT is already in use by another process"
     exit 1
 fi
 
 # Find dependencies
 PYTHON=$(find_python) || {
-    log_error "python3 not found -- install Python to use the dashboard"
-    write_summary ERROR "dashboard" "python3 not found"
+    write_error "dashboard" "python not found" "no python3 or python on PATH -- install Python to use the dashboard"
     exit 1
 }
 
 GENERATOR=$(find_generator) || {
-    log_error "generate-dashboard.py not found"
-    write_summary ERROR "dashboard" "generator not found"
+    write_error "dashboard" "generator not found" "generate-dashboard.py is in neither $(dashboard_repo_path)/scripts nor $PROJECT_ROOT/scripts"
     exit 1
 }
 
@@ -560,9 +580,8 @@ if [ -z "$ESTIMATE" ]; then
             # Background mode: no estimate is not an error, just skip
             exit 0
         fi
-        log_error "no running estimate found"
+        write_warn "dashboard" "no running estimate found -- create .aitools/channel/running-estimate.json"
         log "Create a running estimate in .aitools/channel/running-estimate.json or .scratch/session-*/running-estimate*.json"
-        write_summary WARN "dashboard" "no estimate found"
         exit 1
     }
 fi
@@ -592,8 +611,9 @@ if $BACKGROUND; then
         write_summary OK "dashboard" "http://localhost:$PORT/"
     else
         rm -f "$PORT_PID_FILE"
-        log_error "Dashboard server failed to start"
-        write_summary ERROR "dashboard" "failed to start"
+        # The server's output goes to /dev/null (nohup), so the reason is the
+        # observed state, not its output (a follow-up: write it to a log file)
+        write_error "dashboard" "failed to start" "the server process exited within 0.3 s"
         exit 1
     fi
 else

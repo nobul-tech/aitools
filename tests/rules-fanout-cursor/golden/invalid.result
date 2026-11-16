@@ -2,6 +2,12 @@ exit code: 0
 # ~/.cursor/rules (path md5)
 lower.mdc a82c1d22c2fc9e00222322737ec9f909
 # summary rows
+WARN|cursor rules|rules manifest line ignored: LOWER.md<TAB>aitools -- run: aitools
+WARN|cursor rules|rules manifest line ignored: ../x.md<TAB>shared -- run: aitools
+WARN|cursor rules|rules manifest line ignored: y.txt<TAB>shared -- run: aitools
+WARN|cursor rules|rules manifest line ignored: z.md<TAB>bogus -- run: aitools
+WARN|cursor rules|rules manifest line ignored: w.bak.1.md<TAB>shared -- run: aitools
+WARN|cursor rules|rules manifest line ignored: nosource.md -- run: aitools
 ACTION||Run aitools to rebuild ~/.aitools/rules and its manifest
 DETAIL|cursor rules|added: lower.mdc
-WARN|cursor rules|1 added
+OK|cursor rules|1 added

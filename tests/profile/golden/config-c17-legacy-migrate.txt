@@ -8,6 +8,7 @@ DETAIL|aitools config|googleDrives updated
 DETAIL|aitools config|githubUser updated
 DETAIL|aitools config|userRepoPath updated
 DETAIL|aitools config|machineAlias updated
+WARN|aitools config|profile "nobul-mac" is keyed by alias -- run: aitools user init
 ACTION||Run: aitools user init (re-keys machine profiles by machine id)
 -- config.json
 {

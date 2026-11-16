@@ -26,13 +26,14 @@ remove_package() {  # label, command...
     local label="$1"; shift
     local out rc=0 line
     out=$("$@" 2>&1) || rc=$?
-    while IFS= read -r line; do
-        if [ -n "${line// /}" ]; then log_detail "$label: $line"; fi
-    done <<< "$out"
     if [ "$rc" -eq 0 ]; then
+        while IFS= read -r line; do
+            if [ -n "${line// /}" ]; then log_detail "$label: $line"; fi
+        done <<< "$out"
         log "Removed non-preferred install ($label)"
     else
-        log_warn "$label failed (exit $rc) -- see $(display_path "$LOG_FILE")"
+        # error_reason logs the output as detail lines (logging.md 8.2)
+        write_warn "typst" "$label failed: $(error_reason "$out" "$rc")"
     fi
 }
 # Cargo typst-cli conflicts with Homebrew typst (different binary paths)
@@ -40,8 +41,7 @@ if command -v cargo &>/dev/null; then
     cargo_list_rc=0
     cargo_list=$(cargo install --list 2>&1) || cargo_list_rc=$?
     if [ "$cargo_list_rc" -ne 0 ]; then
-        log_detail "cargo-install-list: $cargo_list"
-        log_warn "cargo install --list failed (exit $cargo_list_rc) -- skipping cargo typst-cli cleanup"
+        write_warn "typst" "cargo install --list failed, cargo typst-cli cleanup skipped: $(error_reason "$cargo_list" "$cargo_list_rc")"
     elif printf '%s\n' "$cargo_list" | grep '^typst-cli ' >/dev/null; then
         remove_package "cargo uninstall typst-cli" cargo uninstall typst-cli
     fi
@@ -63,43 +63,75 @@ if command -v typst &>/dev/null; then
             log_ok "Typst already up to date"
             write_summary OK "typst" "$(typst --version)"
         else
-            while IFS= read -r line; do log "$line"; done <<< "$UPGRADE_OUTPUT"
             # Exit code first (C-F2); the output grep stays for brew upgrade (Standard 3).
             if [ "$upgrade_rc" -ne 0 ] || printf '%s\n' "$UPGRADE_OUTPUT" | grep -i 'error\|fatal' >/dev/null; then
-                log_error "brew upgrade typst failed (exit $upgrade_rc) -- see $(display_path "$LOG_FILE")"
-                write_summary ERROR "typst" "brew upgrade failed (exit $upgrade_rc)"
+                # The installed typst still works: a warning, not an error (Standard 3).
+                # error_reason logs the output as detail lines.
+                write_warn "typst" "brew upgrade failed: $(error_reason "$UPGRADE_OUTPUT" "$upgrade_rc")"
+                write_summary OK "typst" "$(typst --version)"
             else
+                while IFS= read -r line; do log "$line"; done <<< "$UPGRADE_OUTPUT"
                 log_ok "$(typst --version)"
                 write_summary OK "typst" "$(typst --version)"
             fi
         fi
     else
-        log_warn "Typst installed via non-preferred method at $typst_path"
+        write_warn "typst" "installed via a non-preferred method at $typst_path -- migrating to Homebrew"
         log "Migrating to Homebrew..."
-        if ! brew install typst 2>&1 | while IFS= read -r line; do log "$line"; done; then
-            log_error "brew install typst failed"
-            write_summary ERROR "typst" "brew install failed"
+        # brew's output streams to the console and deploy.log as it arrives and is
+        # teed to a temporary file for the error reason (a failed install's output is
+        # then in deploy.log twice: logging.md 8.2).
+        INSTALL_OUTPUT=""
+        INSTALL_RC=0
+        # A failed mktemp is checked on the next line: the install then streams uncaptured
+        INSTALL_FILE=$(mktemp "${TMPDIR:-/tmp}/setup-typst.XXXXXX") || INSTALL_FILE=""
+        if [ -n "$INSTALL_FILE" ]; then
+            brew install typst 2>&1 | tee "$INSTALL_FILE" | while IFS= read -r line; do log "$line"; done || INSTALL_RC=$?
+            INSTALL_OUTPUT=$(cat "$INSTALL_FILE")
+            rm -f "$INSTALL_FILE"
+        else
+            log_detail "mktemp failed -- the brew install output is not captured; the error reason falls back to its exit code"
+            brew install typst 2>&1 | while IFS= read -r line; do log "$line"; done || INSTALL_RC=$?
+        fi
+        if [ "$INSTALL_RC" -ne 0 ]; then
+            write_error "typst" "brew install failed" "$(error_reason "$INSTALL_OUTPUT" "$INSTALL_RC")"
         fi
         if command -v typst &>/dev/null; then
             log_ok "Migrated to Homebrew: $(typst --version)"
             write_summary OK "typst" "$(typst --version)"
+        elif [ "$INSTALL_RC" -ne 0 ]; then
+            # One failure, one red line: the install error above is the cause
+            log "typst not on PATH after the failed brew install"
         else
-            log_error "brew install succeeded but 'typst' not found in PATH"
-            write_summary ERROR "typst" "installed but not on PATH"
+            write_error "typst" "installed but not on PATH" "command -v typst found nothing after brew install"
         fi
     fi
 else
     log "Installing Typst via Homebrew..."
-    if ! brew install typst 2>&1 | while IFS= read -r line; do log "$line"; done; then
-        log_error "brew install typst failed"
-        write_summary ERROR "typst" "brew install failed"
+    # Streamed and teed, as above
+    INSTALL_OUTPUT=""
+    INSTALL_RC=0
+    # A failed mktemp is checked on the next line: the install then streams uncaptured
+    INSTALL_FILE=$(mktemp "${TMPDIR:-/tmp}/setup-typst.XXXXXX") || INSTALL_FILE=""
+    if [ -n "$INSTALL_FILE" ]; then
+        brew install typst 2>&1 | tee "$INSTALL_FILE" | while IFS= read -r line; do log "$line"; done || INSTALL_RC=$?
+        INSTALL_OUTPUT=$(cat "$INSTALL_FILE")
+        rm -f "$INSTALL_FILE"
+    else
+        log_detail "mktemp failed -- the brew install output is not captured; the error reason falls back to its exit code"
+        brew install typst 2>&1 | while IFS= read -r line; do log "$line"; done || INSTALL_RC=$?
+    fi
+    if [ "$INSTALL_RC" -ne 0 ]; then
+        write_error "typst" "brew install failed" "$(error_reason "$INSTALL_OUTPUT" "$INSTALL_RC")"
     fi
     if command -v typst &>/dev/null; then
         log_ok "Typst installed ($(typst --version))"
         write_summary OK "typst" "$(typst --version)"
+    elif [ "$INSTALL_RC" -ne 0 ]; then
+        # One failure, one red line: the install error above is the cause
+        log "typst not on PATH after the failed brew install"
     else
-        log_error "brew install completed but 'typst' not found in PATH"
-        write_summary ERROR "typst" "installed but not on PATH"
+        write_error "typst" "installed but not on PATH" "command -v typst found nothing after brew install"
     fi
 fi
 

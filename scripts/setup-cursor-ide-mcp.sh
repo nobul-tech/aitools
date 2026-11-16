@@ -49,7 +49,7 @@ log "Setting up MCP servers for Cursor IDE (user scope)..."
 
 # Check that Node.js is available (required for Chrome DevTools MCP)
 if ! command -v node &> /dev/null; then
-    log_error "Node.js not found. Install via 'aitools install' or manually: https://nodejs.org"
+    write_error "cursor ide mcp" "Node.js not found" "node is not on PATH -- install it with aitools install or from https://nodejs.org"
     exit 1
 else
     log_ok "Node.js $(node --version) found"
@@ -78,8 +78,24 @@ else
     log "Creating $(display_path "$mcp_json")"
 fi
 
-# Merge managed servers — preserves user-added servers and other keys
-MERGE_RESULT=$(node -e "
+# Merge managed servers — preserves user-added servers and other keys.
+# node's stdout is the status (MERGE_RESULT); its stderr (warnings, dry-run
+# preview, error text) is captured in MERGE_ERR and routed through the library
+# below, so nothing reaches the console unlogged and a failure has a reason
+# (reference/logging.md 8.3). A non-zero node exit (a crash, or the post-write
+# validation) is one recorded error instead of a set -e abort.
+MERGE_RC=0
+MERGE_RESULT=""
+MERGE_ERR=""
+MKTEMP_RC=0
+# || records mktemp's exit status; checked below (its message is the reason)
+MERGE_ERR_FILE=$(mktemp 2>&1) || MKTEMP_RC=$?
+if [ "$MKTEMP_RC" -ne 0 ]; then
+    write_error "cursor ide mcp" "mcp.json merge not run" "mktemp failed: $MERGE_ERR_FILE"
+    MERGE_RC=-1
+else
+    # || records node's exit status; checked below
+    MERGE_RESULT=$(node -e "
 $SORT_KEYS_JS
 const fs = require('fs');
 const f = process.argv[1];
@@ -158,10 +174,47 @@ if (dryRun) {
         changed.forEach(c => console.log('CHANGED: ' + c));
     }
 }
-" "$mcp_json" "$DRY_RUN" "$FORCE" "$CHROME_MCP_ARGS_JSON")
+" "$mcp_json" "$DRY_RUN" "$FORCE" "$CHROME_MCP_ARGS_JSON" 2>"$MERGE_ERR_FILE") || MERGE_RC=$?
+    MERGE_ERR=$(cat "$MERGE_ERR_FILE")
+    rm -f "$MERGE_ERR_FILE"
+fi
 
 MCP_CHANGED=false
-MERGE_STATUS=$(echo "$MERGE_RESULT" | sed -n '1p')
+MERGE_ERR_LINES=""
+if [ "$MERGE_RC" -eq 0 ]; then
+    # Route node's stderr through the library. A --force write that loses data
+    # stays a warning (reference/logging.md 8.3 "What is a warning"); the dry-run
+    # preview of a real problem is a warning; the "is invalid JSON" note is detail
+    # (the corrupt-file error or the forced rewrite reports it); the "ERROR: ..."
+    # lines are the reason of the error recorded below.
+    while IFS= read -r line; do
+        case "$line" in
+            "") ;;
+            "  CLOBBER WARNING: would lose: "*)
+                write_warn "cursor ide mcp" "[DRY RUN] would lose non-managed fields: ${line#  CLOBBER WARNING: would lose: }" ;;
+            "  File is corrupt -- --force required")
+                write_warn "cursor ide mcp" "[DRY RUN] mcp.json is corrupt -- --force required to overwrite" ;;
+            "[DRY RUN] "*|"  Managed fields: "*)
+                log "$line" ;;
+            "Warning: proceeding with --force on corrupt file")
+                write_warn "cursor ide mcp" "overwrote corrupt $(display_path "$mcp_json") (--force)" ;;
+            "Warning: proceeding with --force, losing fields: "*)
+                write_warn "cursor ide mcp" "dropped fields under --force: ${line#Warning: proceeding with --force, losing fields: }" ;;
+            "ERROR: "*)
+                MERGE_ERR_LINES="${MERGE_ERR_LINES:+$MERGE_ERR_LINES
+}$line" ;;
+            *)
+                log_detail "node: $line" ;;
+        esac
+    done <<< "$MERGE_ERR"
+    MERGE_STATUS=$(printf '%s\n' "$MERGE_RESULT" | sed -n '1p')
+elif [ "$MERGE_RC" -gt 0 ]; then
+    # error_reason logs node's stderr as detail lines
+    write_error "cursor ide mcp" "mcp.json merge failed" "$(error_reason "$MERGE_ERR" "$MERGE_RC")"
+    MERGE_STATUS="failed"
+else
+    MERGE_STATUS="failed"
+fi
 case "$MERGE_STATUS" in
     ok)
         MCP_CHANGED=true
@@ -176,30 +229,33 @@ case "$MERGE_STATUS" in
         log "[DRY RUN] Would write Cursor MCP config"
         log "  Servers: chrome-devtools (stdio), vercel (http), webflow (http)" ;;
     error-corrupt)
-        log_error "$(display_path "$mcp_json") is corrupt. Use --force to overwrite."
-        write_summary ERROR "cursor ide mcp" "config corrupt" ;;
+        write_error "cursor ide mcp" "config corrupt" "$(error_reason "$MERGE_ERR_LINES" 1)" ;;
     error-clobber)
-        log_error "$(display_path "$mcp_json") merge would lose fields. Use --force to proceed."
-        write_summary ERROR "cursor ide mcp" "merge would lose fields" ;;
+        write_error "cursor ide mcp" "merge would lose fields" "$(error_reason "$MERGE_ERR_LINES" 1)" ;;
+    failed)
+        ;;  # already recorded above (node failed, or mktemp failed)
     *)
-        log_error "Unexpected merge result: $MERGE_STATUS"
-        write_summary ERROR "cursor ide mcp" "unexpected error" ;;
+        write_error "cursor ide mcp" "unexpected merge result" "node printed '${MERGE_STATUS:-nothing}'" ;;
 esac
 
 # --- Disable vercel/webflow via Cursor CLI if available ---
-# Cursor's `agent mcp` CLI dropped the `disable`/`enable` subcommands; the current
-# verbs are list/add/remove/doctor. We `remove` the two default-off servers (removed
-# == not active, matching the prior "disabled" intent). Treated as best-effort: a
-# failure here is non-fatal (the server simply stays present), so it never aborts install.
+# `agent mcp disable <name>`: Cursor docs https://cursor.com/docs/cli/mcp
+# ("Disabled servers won't load or prompt for approval"). The CLI has no
+# `remove` verb. The disable applies to the project (git root) of the current
+# directory, not to the user (user rule tool-lifecycle.md "MCP servers");
+# `aitools --addmcp` re-enables a server per project with `agent mcp enable`.
+# A failed disable is a warning with the CLI's output as its reason (issue #186).
 if [ "$DRY_RUN" = "true" ]; then
-    log "[DRY RUN] Would remove vercel/webflow from Cursor via Cursor CLI (if available)"
+    log "[DRY RUN] Would disable vercel/webflow via Cursor CLI (if available)"
 elif command -v agent &>/dev/null; then
     for server in vercel webflow; do
-        if remove_output=$(agent mcp remove "$server" 2>&1); then
-            log_ok "$server removed from Cursor (default-off)"
+        disable_rc=0
+        # || records the CLI's exit status; checked below
+        disable_output=$(agent mcp disable "$server" 2>&1) || disable_rc=$?
+        if [ "$disable_rc" -eq 0 ]; then
+            log_ok "$server disabled in Cursor"
         else
-            # Non-fatal: typically means the server wasn't present to begin with.
-            log_warn "Could not remove $server from Cursor (likely not configured): $remove_output"
+            write_warn "cursor ide mcp" "failed to disable $server: $(error_reason "$disable_output" "$disable_rc")"
         fi
     done
 else

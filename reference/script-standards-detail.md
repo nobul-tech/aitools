@@ -32,6 +32,11 @@ plain text to `$LOG_FILE` and colored text to the console separately.
 ## Exit footer
 
 Every reusable script ends with an exit footer that checks both error and warning counters.
+The counts are the script's own (`@reference/logging.md` 8.3, 8.6): `WARNINGS` /
+`$warnings` holds only the warnings the script logged itself (a relayed child's warnings
+stay the child's), and `ERRORS` / `$errors` holds its own errors plus one for every
+relayed child that failed. When a relay prints a child's footer line (`COMPLETED with
+...`, `FAILED with ...`), it does not count it.
 
 ### Bash
 
@@ -83,13 +88,15 @@ Check scripts source `check-lib.sh`/`.ps1` which in turn sources `aitools-lib.sh
 | Config reader | `read_config_key()` | `ReadConfigKey` | JSON key extraction (BOM-safe) |
 | Module-level counters | `ERRORS=0`, `WARNINGS=0` | n/a (set in `Initialize-Logging`) | Safe defaults for scripts that source without `logging_init` |
 | Logging init | `logging_init "name"` | `Initialize-Logging "name"` | Sets SCRIPT_NAME, LOG_DIR, LOG_FILE; resets ERRORS, WARNINGS |
-| Standard logging | `log`/`log_ok`/`log_error`/`log_warn` | `Log`/`LogOk`/`LogError`/`LogWarn` | `[ts] [script] [level] msg` with console colors |
+| Standard logging | `log`/`log_ok`/`log_error`/`log_warn` | `Log`/`LogOk`/`LogError`/`LogWarn` | `[ts] [script] [level] msg` with console colors; `log_warn` / `log_error` also count and record under the script name (`@reference/logging.md` 8.2) |
+| Warning and error helpers | `write_warn`, `write_action`, `write_error` | `Write-AitWarn`, `Write-AitAction`, `Write-AitError` | Log, count and record one warning (with an ACTION for `write_action`) or one error under a tool name (`@reference/logging.md` 8.2) |
+| Error reason | `error_reason` | `Get-AitErrorReason` | One reason line from a failed command's output; logs the output as detail lines (`@reference/logging.md` 8.3) |
 | Detail logging | `log_detail()` | `LogDetail` | File-only diagnostic logging (no console output) |
-| Summary writer | `write_summary` | `Write-Summary` | 3-arg append to summary file; an OK row becomes WARN once the script has counted a warning ("Function definition") |
+| Summary writer | `write_summary` | `Write-Summary` | 3-arg append of an OK, DETAIL or ACTION record, exactly as given ("Function definition") |
 | Dotprofile and machine profile | `resolve_user_repo_path`, `resolve_machine_profile` (results `AITLIB_*`) | `Resolve-UserRepoPath`, `Resolve-MachineProfile` (results `$script:AitLib*`) | Wrappers around the native resolver `aitools-profile.sh` / `.ps1` (`@reference/user-repo.md` "Resolution"); never return 2 |
 | Tool exceptions | `tool_exception_get`, `tool_exception_record` | `Get-ToolException`, `Set-ToolException` | Reader and writer of `toolExceptions` (`@reference/tool-support-decision-tree.md` section 8) |
-| JSONL record and child relay | `jsonl_record`, `relay_child_log`, `run_child_relayed` | `Write-JsonlRecord`, `Send-ChildLog`, `Invoke-ChildRelayed` | One escaped `deploy.jsonl` record; run a child setup script, show its lines, mirror them to `deploy.jsonl`, count its warnings and errors |
-| Summary renderer | `show_summary` | `Show-Summary` | Colored panel display |
+| JSONL record and child relay | `jsonl_record`, `relay_child_log`, `run_child_relayed` | `Write-JsonlRecord`, `Send-ChildLog`, `Invoke-ChildRelayed`, `Invoke-NativeRelayed` | One escaped `deploy.jsonl` record; run a child (a setup script, or a native command from PowerShell), show its lines, mirror them to `deploy.jsonl`, count its warn and error lines to decide whether it failed; a failed child is one error of the parent (`@reference/logging.md` 8.3) |
+| Summary renderer | `show_summary` | `Show-Summary` | The end-of-run panel (`@reference/logging.md` 8.5) |
 | File backup | `backup_file()` | `Backup-File` | Timestamped backup with pruning |
 | Dir backup | `backup_dir()` | `Backup-Dir` | Directory backup for managed files |
 | JSON hashtable | n/a | `ConvertPSObjectToHashtable` | PSCustomObject to Hashtable (recursive, array-aware) |
@@ -117,71 +124,42 @@ Initialize-Logging "setup-toolname"
 
 **Entry points** load the lib as early as they can. `scripts/aitools` / `aitools.ps1`
 source it once `repoPath` is known (only `--help`, `--version` and a missing-repo clone
-run before it) and use its logging unchanged; warnings found before it loads are queued
-and logged right after. `aitools-install` sources the lib first and overrides the log
-functions only to add a `deploy.jsonl` record per line, through the lib's
-`jsonl_record` / `Write-JsonlRecord` (escaped; one `AITOOLS_RUN_ID` for the installer
-and its relayed children; an unwritable file is one warning, audit A-16). The
-override writes its `deploy.log` line through the lib's fail-safe append,
-`_aitlib_log_append` / `Add-AitLibLogText` (`@reference/logging.md` section 5,
-incident #174), as the `aitools-profile` override below does:
+run before it) and use its logging unchanged; warnings found before it loads are logged
+right after (`@reference/logging.md` 8.1). `aitools-install` sources the lib first and
+sets its jsonl option, so every `log` / `Log` line also becomes a `deploy.jsonl` record
+through the lib's `jsonl_record` / `Write-JsonlRecord` (escaped; one `AITOOLS_RUN_ID` for
+the installer and its relayed children; an unwritable file is one warning, audit A-16;
+`@reference/logging.md` section 3). `build-deploy.sh` sources the lib and calls
+`logging_init "build-deploy"` like any setup script.
 
-Bash (`scripts/aitools-install.sh`):
-```bash
-source "$SCRIPT_DIR/aitools-lib.sh"
-logging_init "aitools-install"
-# Override: JSONL dual-format (human-readable + structured JSON)
-log() {
-    local level="${2:-info}"
-    local ts; ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-    local line="[$ts] [$SCRIPT_NAME] [$level] $1"
-    _aitlib_log_append "$line" "$LOG_FILE"
-    printf '%s\n' "$line"
-    jsonl_record "$ts" "$SCRIPT_NAME" "$level" "$1"
-}
-log_ok()    { log "$1" "ok"; }
-log_error() { log "$1" "error"; ERRORS=$((ERRORS + 1)); }
-log_warn()  { log "$1" "warn"; WARNINGS=$((WARNINGS + 1)); }
-```
+### Logging overrides (none: library options)
 
-PowerShell (`scripts/aitools-install.ps1`):
-```powershell
-# Override: JSONL dual-format (human-readable + structured JSON)
-function Log($msg, $level = "info") {
-    $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
-    $line = "[$ts] [$scriptName] [$level] $msg"
-    Write-Host $line
-    Add-AitLibLogText $line
-    Write-JsonlRecord $ts $scriptName $level $msg
-}
-function LogOk($msg)    { Log $msg "ok" }
-function LogError($msg) { Log $msg "error"; $script:errors++ }
-function LogWarn($msg)  { Log $msg "warn"; $script:warnings++ }
-```
+No script overrides the lib's logging functions, defines logging functions of its own,
+or appends to a log or run summary file directly (`@reference/logging.md` 8.1, which
+lists the writers that keep their own logging until the unified-logging roadmap item,
+GitHub issue #187, is implemented). A script that needs other logging behaviour sets a
+library option, documented with `logging_init` / `Initialize-Logging` in
+`scripts/aitools-lib.sh` / `.ps1`. `tests/logging/` checks that the entry points define
+no log functions.
 
-### Logging overrides
+| Script | Option | Effect | Reason |
+|--------|--------|--------|--------|
+| `scripts/aitools-install` | jsonl option | every `log` / `Log` line is also one `deploy.jsonl` record | JSONL dual-format (human-readable + structured JSON); `@reference/logging.md` section 3 |
+| `scripts/aitools-profile` | stderr console option | console lines go to stderr; the file line is unchanged | Library-style tool: stdout carries data only (see "Library-style tools"; `@reference/logging.md` section 7) |
 
-Only the scripts below override the lib's default logging functions (after sourcing).
-`scripts/aitools` / `aitools.ps1`, setup scripts and check scripts use the defaults --
-no overrides. `tests/logging/` checks that the entry points define no log functions.
-
-| Script | Bash overrides | PS1 overrides | Reason |
-|--------|---------------|---------------|--------|
-| `scripts/aitools-install` | `log`, `log_ok`, `log_error`, `log_warn` | `Log`, `LogOk`, `LogError`, `LogWarn` | JSONL dual-format (human-readable + structured JSON) |
-| `scripts/build-deploy.sh` | `blog`, `blog_ok`, `blog_warn`, `blog_error` (warn/error to stderr; colour only when stderr is a terminal) | n/a | Standalone build tool; does not source aitools-lib.sh (its dotprofile lookup runs the lib in a child bash); the entry points append its output to deploy.log |
-| `scripts/aitools-profile` | `log` (console line to stderr; file line unchanged) | `Log` (same) | Library-style tool: stdout carries data only (see "Library-style tools") |
+`build-deploy.sh` sets no option: it logs through the lib like a setup script, and the
+entry points run it through the relay (`run_child_relayed`, `Invoke-NativeRelayed`)
+instead of appending its output to deploy.log.
 
 **`log_detail` / `LogDetail`**: File-only logging for diagnostic content (rejected merge
-output, verbose debugging). Not included in override tables -- entry points that override
-`log`/`Log` do not need to override `log_detail`/`LogDetail` because it always writes
-directly to `$LOG_FILE`/`$logFile` regardless of console routing.
+output, verbose debugging, the output `error_reason` / `Get-AitErrorReason` reads). It
+always writes to `$LOG_FILE` / `$logFile`, whatever the console option.
 
 **`_ai_log` / `Write-AiLog`**: File-only telemetry for `invoke_ai` / `Invoke-AI`. Uses
 the same format as `log` / `Log` but writes only to `$LOG_FILE` / `$logFile` (no console)
 and counts no error or warning. In bash this prevents stdout pollution when `invoke_ai`
 output is captured via `$()`; in both it keeps telemetry out of the AI-merge spinner row.
-Entry point overrides of `log` do NOT affect them -- they always write directly to the
-log file.
+The console options do not affect them -- they always write directly to the log file.
 
 ### Library-style tools
 
@@ -198,11 +176,14 @@ A library-style tool:
 - MUST follow the block order (header, `set -euo pipefail`, source the lib +
   `logging_init`, OS guard) and the error-handling requirements like any
   reusable script.
-- MUST NOT write log lines, summary rows or ACTION items to stdout. Its `log` /
-  `Log` override sends console lines to stderr (row in "Logging overrides").
-- MUST NOT call `write_summary` / `Write-Summary` and has no exit footer: it
+- MUST NOT write log lines, summary records or ACTION items to stdout. It sets
+  the lib's stderr console option, so its console lines go to stderr (row in
+  "Logging overrides").
+- MUST NOT call `write_summary` / `Write-Summary`, `write_warn`, `write_action`
+  or `write_error` (or their PowerShell twins), and has no exit footer: it
   returns every warning and error to its caller as a `warn` / `error` protocol
-  line, and the caller logs each at its level and owns the summary rows and the
+  line, and the caller logs each at its level (`write_warn` / `log_warn`, or `write_error` with the returned line as
+  the reason; `@reference/logging.md` section 7) and owns the records and the
   ERRORS / WARNINGS counters.
 - MUST log every warning, error and exit code to deploy.log at `detail` level
   (`log_detail` / `LogDetail`), including paths that exit before the protocol
@@ -224,31 +205,37 @@ them at level".
 
 ### Function definition
 
-The canonical `write_summary` / `Write-Summary` definition lives in
-`scripts/aitools-lib.sh` / `.ps1`. All scripts source the lib -- no inline copies.
+The canonical definitions of `write_summary` / `Write-Summary` and of the warning and
+error helpers (`write_warn`, `write_action`, `write_error`, `error_reason` /
+`Write-AitWarn`, `Write-AitAction`, `Write-AitError`, `Get-AitErrorReason`) live in
+`scripts/aitools-lib.sh` / `.ps1`. All scripts source the lib -- no inline copies. What
+each helper writes to deploy.log, counts and records is specified in
+`@reference/logging.md` 8.2; this section says when to use which.
 
-`write_summary OK` writes `WARN` instead when the script has already counted a warning
-(`WARNINGS` > 0 / `$script:warnings` > 0): the row reports the script's state so far,
-not only its own step. Order rows so that this is true. A warning that concerns a step
-is logged before that step's row; an advisory ACTION that does not concern the step
-(and its paired `log_warn`) is written after the step's OK row. Example:
-`setup-user-config` writes its `aitools config` row first, then the one
-`Run: aitools user init (...)` ACTION with its `log_warn`.
+`write_summary` / `Write-Summary` write OK, DETAIL and ACTION records only, exactly as
+given: an OK record is never turned into a WARN, whatever the script has counted.
+`write_summary WARN` / `ERROR` are retired: a warning is written with `write_warn`,
+`write_action` or `log_warn`, an error with `write_error` or `log_error`, and each of
+these logs, counts and records it in one call. The order of a script's records changes
+no colour: a tool with a WARN or ERROR record under its name is shown in yellow or red,
+and not in green (`@reference/logging.md` 8.5).
 
 ### Summary file format
 
-Each line: `CATEGORY|tool_name|detail_text`
-
-- Field 1: `OK`, `WARN`, `ERROR`, or `ACTION`
-- Field 2: Tool name (lowercase, consistent -- see tool name table below)
-- Field 3: Detail text (version, status, error description, or action instruction)
-
-The renderer reads this file and displays columns: `[tag]  tool_name  detail_text`,
-left-aligned, grouped by severity (OK first, then WARN, ERROR, ACTION last).
+The run summary file, its record kinds (`OK`, `DETAIL`, `WARN`, `ERROR`, `ACTION`), their
+fields and the reader rules are specified in `@reference/logging.md` 8.4, and the panel
+drawn from it in 8.5. Scripts never write the file directly: the helpers do. Legacy
+3-field `ERROR|<name>|<text>` records are still read, with an empty reason (8.4 reader
+rules).
 
 ### Tool name table
 
-These are the canonical tool names for field 2. Always use these exact strings.
+These are the canonical names for the `<tool>` / `<name>` field of a record
+(`@reference/logging.md` 8.0, 8.4). Always use these exact strings. When no tool is
+known, the record's name is the logging script's script name, the name it passed to
+`logging_init` / `Initialize-Logging`: `log_warn` / `log_error` record under it, and a
+helper given an empty TOOL uses it. Tool names and script names share one namespace: a
+script whose name equals a tool name is that tool.
 
 | Tool name | Script(s) |
 |-----------|-----------|
@@ -294,51 +281,81 @@ These are the canonical tool names for field 2. Always use these exact strings.
 | `google chrome` | setup-google-chrome |
 | `nss tools` | setup-google-chrome |
 | `chrome proxy ca` | setup-google-chrome |
+| `build-deploy` | build-deploy.sh |
+| `build-package` | build-package.sh (every outcome, each package kind's included: `stage`, `pkg`, `intune`, `deb`, `dry-run`; the kind is named in the record's text) |
+| `source` | aitools (Step 1: the pull of the aitools checkout) |
+| `relay sync` | aitools, aitools-install (the relay -> Cursor `AGENTS.md` sync: `run_relay_sync` / `Invoke-RelaySync`) |
 
 ### Severity categories
 
-| Category | Tag | Color | Meaning | When to use |
-|----------|-----|-------|---------|-------------|
-| `OK` | `[ok]` | Green (`\033[32m`) | Tool installed and usable | Tool verified on PATH at expected version |
-| `WARN` | `[!]` | Yellow (`\033[33m`) | Advisory -- tool works but something is off | Upgrade check failed, optional dependency missing, restart suggested |
-| `ERROR` | `[ERR]` | Red (`\033[31m`) | Functional failure -- tool not usable | Install failed, not on PATH, dependency conflict, validation failed |
-| `ACTION` | `>>` | Bold magenta (`\033[1;35m`) | User must do something before tool is ready | Auth required, PATH needs manual fix, manual install needed |
+| Record | Meaning | When to use |
+|--------|---------|-------------|
+| `OK` | The tool's status: installed and usable | Tool verified on PATH at expected version; `verified`; `n/a (<reason>)` |
+| `DETAIL` | One item of the tool's outcome | `added: <item>`, a changed JSON key |
+| `WARN` | One warning: something is wrong, or still needs the user, while the tool works | Upgrade check failed, optional dependency missing, restart suggested, not authenticated, a managed file left differing after a skipped review |
+| `ERROR` | One error: what failed (WHAT) and why (REASON) -- the tool is not usable | Install failed, not on PATH, dependency conflict, validation failed |
+| `ACTION` | A command or step the user must take | Auth required, PATH needs manual fix, manual install needed |
 
-**Key distinction**: WARN means the tool itself works; ERROR means it doesn't.
-A tool that installed but isn't on persistent PATH is ERROR (Claude Code can't find it).
-A tool where `brew upgrade` returned unexpected output but the existing version works is WARN.
+The panel's tags, colours and line format: `@reference/logging.md` 8.5.
+
+**Key distinction**: a warning means the tool itself works; an error means it doesn't.
+A tool that installed but isn't on persistent PATH is an error (Claude Code can't find it).
+A tool where `brew upgrade` returned unexpected output but the existing version works is a
+warning. A step the user explicitly asked for in this run that completed as asked (an
+overwrite under `--force`) is neither: log it at info (`@reference/logging.md` 8.3 "What is
+a warning").
 
 ### Severity decision guide
 
 - `log_ok` + `write_summary OK` -- tool verified present and functional
-- `log_warn` + `write_summary WARN` -- tool works but with a caveat (disclose the caveat)
-- `log_error` + `write_summary ERROR` -- tool not functional (install failed, not on PATH, dependency broken)
-- `log_warn` + `write_summary ACTION` -- user action required; always pair ACTION with a log_warn carrying the same instruction
-- SHADOWED (a managed tool is installed, but the command resolves to another copy) is ERROR `shadowed (see log)` + ACTION, although a copy runs: supported means the command resolves to the managed copy (D-TS11, `@reference/tool-support-decision-tree.md`)
+- `write_warn TOOL TEXT` -- tool works but with a caveat; TEXT discloses the caveat
+- `write_action TOOL TEXT ACTION` -- user action required; TEXT says what needs to be done
+  (for a login: `not authenticated -- run: vercel login`), ACTION is the command or step.
+  The same advice in the yellow line and the ACTION line is expected
+- `write_error TOOL WHAT REASON` -- tool not functional (install failed, not on PATH,
+  dependency broken); WHAT is the step that failed, REASON why (for an external command,
+  `error_reason` over its captured output: "External command error handling")
+- `log_warn` / `log_error` -- only when no tool is known (recorded under the script name);
+  `log_error` only when its text already states the cause, since it records an empty reason
+- `log` -- a step the user explicitly asked for that completed as asked (not a warning)
+- SHADOWED (a managed tool is installed, but the command resolves to another copy) is an
+  error, `write_error TOOL "shadowed" REASON` with REASON naming the copy the command
+  resolves to, plus an ACTION, although a copy runs: supported means the command resolves
+  to the managed copy (D-TS11, `@reference/tool-support-decision-tree.md`)
+
+A working tool with a warning still writes its OK record; the panel then shows it in
+yellow only.
 
 ### Summary coverage rule
 
 Every code path through a setup script -- success, partial failure, and full failure --
-must produce at least one `write_summary` call. A tool that fails to install must appear
-in the end-of-run panel as ERROR or WARN, not be silently absent.
+must report its tool: an OK record when the tool works (with its warnings, if any), and an
+error through `write_error` when it fails. A tool that fails to install must appear in the
+end-of-run panel as an error, not be silently absent.
 
 Library-style tools (`scripts/aitools-profile.sh` / `.ps1`) are not setup scripts: they
-write no summary rows and no exit footer, and return their warnings and errors to the
-caller, which logs them at level and writes the rows (`@reference/logging.md`
-"Library-style tools").
+write no summary records and no exit footer, and return their warnings and errors to the
+caller, which logs and records them at level (`@reference/logging.md` "Library-style
+tools").
 
 ### ACTION items
 
-ACTION entries appear in a separate block at the bottom of the summary panel with the
+ACTION records appear in a separate block at the bottom of the summary panel with the
 header "ACTION REQUIRED -- run before tools are ready:". The tool field is empty for
-ACTION entries (field 2 = ""). Always pair with a `log_warn` carrying the same text.
+ACTION records. Write an ACTION that comes with a warning through `write_action` /
+`Write-AitAction` (one WARN record whose text says what needs to be done, and one ACTION
+record). Write `write_summary ACTION ""` alone only for an instruction with no warning of
+its own, for example the remedy after an error. Identical ACTION lines are shown once
+(`@reference/logging.md` 8.5).
 
 ```bash
-write_summary ACTION "" "modal setup -- authenticate modal (browser flow)"
+write_action "modal cli" "not authenticated -- run: modal setup (browser flow)" "modal setup -- authenticate modal (browser flow)"
+write_summary ACTION "" "Add $dir to PATH -- tool not accessible"
 ```
 
 ```powershell
-Write-Summary "ACTION" "" "modal setup -- authenticate modal (browser flow)"
+Write-AitAction "modal cli" "not authenticated -- run: modal setup (browser flow)" "modal setup -- authenticate modal (browser flow)"
+Write-Summary "ACTION" "" "Add $dir to PATH -- tool not accessible"
 ```
 
 ## Config and file update reporting
@@ -347,11 +364,11 @@ Write-Summary "ACTION" "" "modal setup -- authenticate modal (browser flow)"
 
 Every file write in a setup script must distinguish one of three outcomes:
 
-| Outcome | Log level | Log message | Summary detail (max 30 chars) |
-|---------|-----------|-------------|-------------------------------|
-| **Unchanged** | `log_ok` / `LogOk` | `"Unchanged: <filepath>"` | `"verified"` |
-| **Updated** | `log_ok` / `LogOk` | `"Updated: <filepath>"` + change detail | Concise description |
-| **Failed** | `log_error` / `LogError` | `"Failed: <filepath>: <reason>"` | `"<failure reason>"` |
+| Outcome | Helper | Log message | Record |
+|---------|--------|-------------|--------|
+| **Unchanged** | `log_ok` / `LogOk` | `"Unchanged: <filepath>"` | OK, `"verified"` (max 30 chars) |
+| **Updated** | `log_ok` / `LogOk` | `"Updated: <filepath>"` + change detail | OK, a concise description (max 30 chars) |
+| **Failed** | `write_error TOOL "Failed: <filepath>" "<reason>"` / `Write-AitError` | `"Failed: <filepath>: <reason>"` (WHAT: REASON) | ERROR, its reason the write error |
 
 ### Change detail by file type
 
@@ -363,7 +380,13 @@ Every file write in a setup script must distinguish one of three outcomes:
 
 ### Summary detail text rules
 
-- Max 30 characters (compliance-checked)
+These rules apply to the status text of OK records. DETAIL text (an item of the outcome,
+such as `key: old -> new`) is not held to the 30-character limit and is not cut
+(`@reference/logging.md` 8.5). Warning and error text is not held to them either: it says
+what is wrong, or what failed and why, and the panel cuts yellow and red lines at 70
+characters (`@reference/logging.md` 8.5).
+
+- Max 30 characters
 - No file paths (those go in log lines)
 - Present tense: "updated", "verified", "failed", "created"
 - Multi-item tools: counts (`"2 added, 1 updated"`)
@@ -397,7 +420,8 @@ are free-text and not subject to this table.
 ### DETAIL lines in summary panel
 
 When a config update changes keys, scripts write `DETAIL` entries after the main entry.
-These render left-aligned with the detail column (position 25).
+They render under their tool's line, indented by 26 spaces (`@reference/logging.md` 8.5
+`detail-line`).
 
 **Summary file format** -- new `DETAIL` category:
 
@@ -420,10 +444,11 @@ DETAIL|claude settings|autoMemoryEnabled: false -> true
 ```
 
 DETAIL lines:
-- Follow their parent entry (same tool name)
-- Left-aligned at position 25 (2 + tag(4) + 2 + tool(16) + 1)
-- Inherit parent's color
-- Never deduped, always shown
+- Follow their tool's first panel line (same tool name)
+- Indented by 26 spaces
+- Inherit that line's color
+- Never deduped; not shown when their tool's line is beyond the 20-line cap or does
+  not exist (`@reference/logging.md` 8.5)
 - Optional -- only emitted when there are specific changes to report
 
 **write_summary / Write-Summary** -- no API change. DETAIL is a new category value:
@@ -574,8 +599,11 @@ if ($srcContent -eq $dstContent) {
 
 ### Logging-summary pairing rule
 
-Every `log_error` / `LogError` for a file write failure MUST be paired with
-`write_summary ERROR` / `Write-Summary "ERROR"` in the same code block.
+A warning or an error is reported with one call, which logs, counts and records it
+(`@reference/logging.md` 8.2). Never log an event and then write a record for the same
+event: it would be counted or shown twice. A file write failure is
+`write_error TOOL "Failed: <filepath>" "<the write error>"` /
+`Write-AitError TOOL "Failed: <filepath>" "<the write error>"`.
 
 ## External command error handling
 
@@ -584,43 +612,55 @@ curl). These commands can fail silently if output and exit codes are not checked
 
 ### Standard 1: Capture output from install/upgrade commands
 
-Never fire-and-forget an install command. Capture output, log it, then check the result.
+Never fire-and-forget an install command. Capture output and the exit code, then check
+the result. The captured output is where the error's reason comes from (Standard 2).
 
 **Bash:**
 
 ```bash
-INSTALL_OUTPUT=$(brew install tool 2>&1) || true
-printf '%s\n' "$INSTALL_OUTPUT" | while IFS= read -r line; do log "$line"; done
+INSTALL_RC=0
+INSTALL_OUTPUT=$(brew install tool 2>&1) || INSTALL_RC=$?
 ```
 
 **PowerShell:**
 
 ```powershell
 $installOutput = winget install --id Some.Tool 2>&1 | Out-String
-$installOutput.Trim().Split("`n") | ForEach-Object { Log $_.TrimEnd() }
+$installRc = $LASTEXITCODE
 ```
+
+Log the output on success (`log` per line). On failure `error_reason` /
+`Get-AitErrorReason` logs the whole output as detail lines (`@reference/logging.md` 8.2),
+so it is not logged twice. Output streamed through `| while read` is not captured, and
+leaves nothing to take a reason from: capture it, or tee it to a temporary file and pass
+the file's content to `error_reason`.
 
 ### Standard 2: Check exit codes after external commands
 
-**Bash** -- `set -euo pipefail` kills the script on failure before `write_summary` runs.
-Wrap install commands to catch failure without hard-aborting:
+**Bash** -- `set -euo pipefail` kills the script on failure before any record is written.
+Capture the exit code (Standard 1) and report a failure with its reason:
 
 ```bash
-if ! brew install tool 2>&1 | while IFS= read -r line; do log "$line"; done; then
-    log_error "brew install tool failed"
-    write_summary ERROR "tool" "install failed"
+if [ "$INSTALL_RC" -ne 0 ]; then
+    write_error "tool" "brew install failed" "$(error_reason "$INSTALL_OUTPUT" "$INSTALL_RC")"
+else
+    printf '%s\n' "$INSTALL_OUTPUT" | while IFS= read -r line; do log "$line"; done
 fi
 ```
 
 **PowerShell** -- external command failures set `$LASTEXITCODE` but don't stop execution.
-Always check after piping through `Out-String` or `ForEach-Object`:
+Save it right after the command (Standard 1) and check it:
 
 ```powershell
-if ($LASTEXITCODE -ne 0) {
-    LogError "install failed (exit code $LASTEXITCODE)"
-    Write-Summary "ERROR" "tool" "install failed (exit $LASTEXITCODE)"
+if ($installRc -ne 0) {
+    Write-AitError "tool" "winget install failed" (Get-AitErrorReason -Output $installOutput -ExitCode $installRc)
+} else {
+    $installOutput.Trim().Split("`n") | ForEach-Object { Log $_.TrimEnd() }
 }
 ```
+
+How the reason is derived: `@reference/logging.md` 8.3 "Every error has a reason". The
+panel shows `<what>: <reason>`; deploy.log keeps the full output.
 
 ### Standard 3: Distinguish "already up to date" from real failures
 
@@ -628,28 +668,46 @@ if ($LASTEXITCODE -ne 0) {
 Capture output and check the message:
 
 ```bash
-UPGRADE_OUTPUT=$(brew upgrade tool 2>&1) || true
+UPGRADE_RC=0
+UPGRADE_OUTPUT=$(brew upgrade tool 2>&1) || UPGRADE_RC=$?
 if printf '%s\n' "$UPGRADE_OUTPUT" | grep -i 'already installed\|up.to.date' >/dev/null; then
     log_ok "tool already up to date"
-    write_summary OK "tool" "$version"
+elif printf '%s\n' "$UPGRADE_OUTPUT" | grep -i 'error\|fatal' >/dev/null; then
+    # The existing version still works: a warning, not an error
+    write_warn "tool" "upgrade check failed: $(error_reason "$UPGRADE_OUTPUT" "$UPGRADE_RC")"
 else
     printf '%s\n' "$UPGRADE_OUTPUT" | while IFS= read -r line; do log "$line"; done
-    if printf '%s\n' "$UPGRADE_OUTPUT" | grep -i 'error\|fatal' >/dev/null; then
-        log_warn "brew upgrade returned unexpected output"
-        write_summary WARN "tool" "$version (upgrade check failed)"
-    fi
 fi
+write_summary OK "tool" "$version"
+```
+
+```powershell
+$upgradeOutput = winget upgrade --id Some.Tool 2>&1 | Out-String
+$upgradeRc = $LASTEXITCODE
+if ($upgradeOutput -match 'No available upgrade|already installed') {
+    LogOk "tool already up to date"
+} elseif ($upgradeOutput -match 'error|fatal') {
+    # The existing version still works: a warning, not an error
+    Write-AitWarn "tool" "upgrade check failed: $(Get-AitErrorReason -Output $upgradeOutput -ExitCode $upgradeRc)"
+} else {
+    $upgradeOutput.Trim().Split("`n") | ForEach-Object { Log $_.TrimEnd() }
+}
+Write-Summary "OK" "tool" "$version"
 ```
 
 ### Standard 4: PATH verification is an error, not a warning
 
 If a tool installs but isn't in persistent PATH, Claude Code (which reads PATH from
-the registry/shell profile) will never find it. This is a functional failure.
+the registry/shell profile) will never find it. This is a functional failure: one error,
+plus the remedy as an ACTION.
+
+```bash
+write_error "tool" "installed but not on PATH" "$dir is not in the persistent PATH"
+write_summary ACTION "" "Add $dir to PATH -- tool not accessible"
+```
 
 ```powershell
-LogError "tool install dir not in persistent PATH: $dir"
-Write-Summary "ERROR" "tool" "installed but not on PATH"
-LogWarn "Add $dir to PATH -- tool not accessible to Claude Code"
+Write-AitError "tool" "installed but not on PATH" "$dir is not in the persistent PATH"
 Write-Summary "ACTION" "" "Add $dir to PATH -- tool not accessible"
 ```
 
@@ -730,9 +788,8 @@ if command -v toolname >/dev/null 2>&1 && [ "$ERRORS" -eq 0 ]; then
     AUTH_EC=0
     AUTH_OUTPUT=$(toolname auth status 2>&1) || AUTH_EC=$?
     if [ "$AUTH_EC" -ne 0 ]; then
-        log_warn "Not authenticated: run 'toolname auth login' (one-time OAuth)"
-        write_summary WARN "tool name" "not authenticated"
-        write_summary ACTION "" "toolname auth login -- authenticate tool"
+        write_action "tool name" "not authenticated -- run: toolname auth login (one-time OAuth)" \
+            "toolname auth login -- authenticate tool"
     fi
 fi
 ```
@@ -745,9 +802,8 @@ fi
 if ((Get-Command toolname -ErrorAction SilentlyContinue) -and $errors -eq 0) {
     $authOutput = toolname auth status 2>&1 | Out-String
     if ($LASTEXITCODE -ne 0) {
-        LogWarn "Not authenticated: run 'toolname auth login' (one-time OAuth)"
-        Write-Summary "WARN" "tool name" "not authenticated"
-        Write-Summary "ACTION" "" "toolname auth login -- authenticate tool"
+        Write-AitAction "tool name" "not authenticated -- run: toolname auth login (one-time OAuth)" `
+            "toolname auth login -- authenticate tool"
     }
 }
 ```
@@ -765,9 +821,8 @@ Use when the tool's status command always exits 0 and reports auth state in outp
 if command -v toolname >/dev/null 2>&1 && [ "$ERRORS" -eq 0 ]; then
     AUTH_OUTPUT=$(toolname auth status 2>&1) || true
     if printf '%s\n' "$AUTH_OUTPUT" | grep -i 'not authenticated' >/dev/null; then
-        log_warn "Not authenticated: run 'toolname auth login' (one-time OAuth)"
-        write_summary WARN "tool name" "not authenticated"
-        write_summary ACTION "" "toolname auth login -- authenticate tool"
+        write_action "tool name" "not authenticated -- run: toolname auth login (one-time OAuth)" \
+            "toolname auth login -- authenticate tool"
     fi
 fi
 ```
@@ -781,9 +836,8 @@ fi
 if ((Get-Command toolname -ErrorAction SilentlyContinue) -and $errors -eq 0) {
     $authOutput = toolname auth status 2>&1 | Out-String
     if ($authOutput -match 'Not authenticated|"authenticated":\s*false') {
-        LogWarn "Not authenticated: run 'toolname auth login' (one-time OAuth)"
-        Write-Summary "WARN" "tool name" "not authenticated"
-        Write-Summary "ACTION" "" "toolname auth login -- authenticate tool"
+        Write-AitAction "tool name" "not authenticated -- run: toolname auth login (one-time OAuth)" `
+            "toolname auth login -- authenticate tool"
     }
 }
 ```
@@ -798,9 +852,8 @@ Use when the tool stores auth in a known file (e.g., `~/.modal.toml`) and has no
 # --- Auth status check ---
 if command -v toolname >/dev/null 2>&1 && [ "$ERRORS" -eq 0 ]; then
     if [ ! -f "$HOME/.toolname.toml" ]; then
-        log_warn "Authentication required: run 'toolname setup' (browser flow)"
-        write_summary WARN "tool name" "not authenticated"
-        write_summary ACTION "" "toolname setup -- authenticate tool"
+        write_action "tool name" "not authenticated -- run: toolname setup (browser flow)" \
+            "toolname setup -- authenticate tool"
     fi
 fi
 ```
@@ -813,9 +866,8 @@ fi
 if ((Get-Command toolname -ErrorAction SilentlyContinue) -and $errors -eq 0) {
     $authFile = Join-Path $HOME ".toolname.toml"
     if (-not (Test-Path $authFile)) {
-        LogWarn "Authentication required: run 'toolname setup' (browser flow)"
-        Write-Summary "WARN" "tool name" "not authenticated"
-        Write-Summary "ACTION" "" "toolname setup -- authenticate tool"
+        Write-AitAction "tool name" "not authenticated -- run: toolname setup (browser flow)" `
+            "toolname setup -- authenticate tool"
     }
 }
 ```
@@ -824,7 +876,9 @@ if ((Get-Command toolname -ErrorAction SilentlyContinue) -and $errors -eq 0) {
 
 - Runs AFTER install/upgrade, BEFORE exit footer
 - Only runs when `$ERRORS -eq 0` / `$errors -eq 0` (skip if install itself failed)
-- Always pairs: `log_warn` + `write_summary WARN` + `write_summary ACTION`
+- One call: `write_action` / `Write-AitAction` -- one warning whose text says what needs
+  to be done (`not authenticated -- run: <command>`), and one ACTION with the command
+  (`@reference/logging.md` 8.2)
 - Prefer command exit code over file presence when the tool provides a status command
 - Auth check method documented per-tool in the tool registry (`/tool-registry` skill, `authentication` field)
 
@@ -870,21 +924,31 @@ UPGRADE_OUTPUT=$(brew upgrade tool 2>&1) || true
 
 ```powershell
 $output = & $pipCmd install modal 2>&1 | Out-String
-if ($LASTEXITCODE -ne 0) { LogError "pip install failed (exit $LASTEXITCODE)" }
+$rc = $LASTEXITCODE
+if ($rc -ne 0) { Write-AitError "modal cli" "pip install failed" (Get-AitErrorReason -Output $output -ExitCode $rc) }
 ```
 
-**Wrong** -- `set -e` hard-abort with no summary:
+**Wrong** -- `set -e` hard-abort with no record:
 
 ```bash
-brew install tool  # script dies here, no write_summary, tool vanishes from panel
+brew install tool  # script dies here, no record, tool vanishes from panel
 ```
 
-**Correct** -- wrapped to catch failure:
+**Wrong** -- output streamed, nothing left for the reason:
 
 ```bash
 if ! brew install tool 2>&1 | while IFS= read -r line; do log "$line"; done; then
-    log_error "brew install tool failed"
-    write_summary ERROR "tool" "install failed"
+    write_error "tool" "brew install failed" "no output (exit 1)"
+fi
+```
+
+**Correct** -- captured, the failure reported with its reason:
+
+```bash
+INSTALL_RC=0
+INSTALL_OUTPUT=$(brew install tool 2>&1) || INSTALL_RC=$?
+if [ "$INSTALL_RC" -ne 0 ]; then
+    write_error "tool" "brew install failed" "$(error_reason "$INSTALL_OUTPUT" "$INSTALL_RC")"
 fi
 ```
 
@@ -910,11 +974,11 @@ be unified -- each serves a distinct purpose with different semantics and audien
 ### Setup/deploy logging (aitools-lib)
 
 - **Init**: `logging_init "name"` / `Initialize-Logging "name"`
-- **Functions**: `log`/`log_ok`/`log_error`/`log_warn` (bash), `Log`/`LogOk`/`LogError`/`LogWarn` (PS1)
-- **Destination**: `deploy.log`
-- **Semantics**: Tool installation status (OK/WARN/ERROR)
+- **Functions**: `log`/`log_ok`/`log_error`/`log_warn`, `write_warn`/`write_action`/`write_error` (bash), `Log`/`LogOk`/`LogError`/`LogWarn`, `Write-AitWarn`/`Write-AitAction`/`Write-AitError` (PS1)
+- **Destination**: `deploy.log` (and `deploy.jsonl` with the jsonl option)
+- **Semantics**: Tool status (OK), one record per warning (WARN) and per error (ERROR)
 - **Counters**: `ERRORS`/`WARNINGS` (bash), `$script:errors`/`$script:warnings` (PS1)
-- **Summary**: `write_summary`/`Write-Summary` → end-of-run panel
+- **Summary**: the helpers and `write_summary`/`Write-Summary` → run summary file → end-of-run panel (`@reference/logging.md` 8)
 
 ### Check/audit logging (check-lib)
 
@@ -1140,11 +1204,11 @@ Setup scripts that compile from source must validate prerequisites before buildi
 # PowerShell
 $missingPrereqs = Check-BuildPrereqs "cargo"
 if ($missingPrereqs.Count -gt 0) {
+    $names = ($missingPrereqs | ForEach-Object { $_.Name }) -join ', '
+    Write-AitError "<tool>" "missing build prereqs" "$names not installed"
     foreach ($p in $missingPrereqs) {
-        LogError "$($p.Name) not installed -- required to build <tool> from source"
-        LogError "Fix: $($p.Install)"
+        Write-Summary "ACTION" "" "$($p.Install) -- then re-run aitools install"
     }
-    Write-Summary "ERROR" "<tool>" "missing build prereqs: $(($missingPrereqs | ForEach-Object { $_.Name }) -join ', ')"
     # Skip the build entirely
 }
 ```
@@ -1153,40 +1217,36 @@ if ($missingPrereqs.Count -gt 0) {
 # Bash
 PREREQ_MISSING=$(check_build_prereqs "cargo") || true
 if [ -n "$PREREQ_MISSING" ]; then
+    PREREQ_NAMES=""
     while IFS='|' read -r prereq_name prereq_install; do
-        log_warn "$prereq_name not found -- $prereq_install"
+        PREREQ_NAMES="${PREREQ_NAMES:+$PREREQ_NAMES, }$prereq_name"
+        write_summary ACTION "" "$prereq_install -- then re-run aitools install"
     done <<< "$PREREQ_MISSING"
+    write_error "<tool>" "missing build prereqs" "$PREREQ_NAMES not installed"
+    # Skip the build entirely
 fi
 ```
 
-**Layer 2 — diagnostic (after failure):**
+**Layer 2 — diagnostic (after failure):** the reason comes from `error_reason` /
+`Get-AitErrorReason`, which tries the known signatures first and returns
+`<NAME>: <REMEDY>` (`@reference/logging.md` 8.3). Call the diagnoser yourself only to
+write the remedy as an ACTION.
 ```powershell
 # PowerShell
+$cargoRc = $LASTEXITCODE
+Write-AitError "<tool>" "cargo install failed" (Get-AitErrorReason -Output $cargoOutput -ExitCode $cargoRc)
 $diagnosis = Diagnose-BuildFailure $cargoOutput
 if ($diagnosis) {
-    LogError "Build failed: $($diagnosis.Name) not available"
-    LogError "Fix: $($diagnosis.Remedy)"
-    Write-Summary "ERROR" "<tool>" "build failed: $($diagnosis.Name) missing"
     Write-Summary "ACTION" "" "$($diagnosis.Remedy) -- then re-run aitools install"
-} else {
-    LogError "cargo install <tool> failed (exit code $LASTEXITCODE)"
-    Write-Summary "ERROR" "<tool>" "cargo install failed"
 }
 ```
 
 ```bash
 # Bash
+write_error "<tool>" "cargo install failed" "$(error_reason "$CARGO_OUTPUT" "$CARGO_EC")"
 DIAGNOSIS=$(diagnose_build_failure "$CARGO_OUTPUT") || true
 if [ -n "$DIAGNOSIS" ]; then
-    DIAG_NAME="${DIAGNOSIS%%|*}"
-    DIAG_REMEDY="${DIAGNOSIS#*|}"
-    log_error "Build failed: $DIAG_NAME not available"
-    log_error "Fix: $DIAG_REMEDY"
-    write_summary ERROR "<tool>" "build failed: $DIAG_NAME missing"
-    write_summary ACTION "" "$DIAG_REMEDY -- then re-run"
-else
-    log_error "cargo install <tool> failed (exit code $CARGO_EC)"
-    write_summary ERROR "<tool>" "install failed"
+    write_summary ACTION "" "${DIAGNOSIS#*|} -- then re-run aitools install"
 fi
 ```
 

@@ -65,65 +65,73 @@ elif [ -n "$PYTHON_CMD" ]; then
     py_rc=0
     PY_VERSION=$("$PYTHON_CMD" -c "import sys; print(str(sys.version_info.major) + '.' + str(sys.version_info.minor))" 2>&1) || py_rc=$?
     if [ "$py_rc" -ne 0 ] || ! [[ "$PY_VERSION" =~ ^[0-9]+\.[0-9]+$ ]]; then
-        write_output_detail "python-version (exit $py_rc)" "$PY_VERSION"
-        log_error "Could not read the $PYTHON_CMD version (exit $py_rc) -- see $(display_path "$LOG_FILE")"
-        write_summary ERROR "modal cli" "Python version check failed"
+        # error_reason logs the output as detail lines
+        write_error "modal cli" "Python version check failed" "$(error_reason "$PY_VERSION" "$py_rc")"
         exit 1
     fi
     PY_MAJOR=$(printf '%s' "$PY_VERSION" | cut -d. -f1)
     PY_MINOR=$(printf '%s' "$PY_VERSION" | cut -d. -f2)
     if [ "$PY_MAJOR" -lt 3 ] || { [ "$PY_MAJOR" -eq 3 ] && [ "$PY_MINOR" -lt 10 ]; }; then
-        log_error "Python 3.10+ required (pip fallback path). Found Python $PY_VERSION"
-        write_summary ERROR "modal cli" "Python 3.10+ required (found $PY_VERSION)"
+        write_error "modal cli" "Python 3.10+ required" "found Python $PY_VERSION (pip fallback path)"
         exit 1
     fi
     log "Python $PY_VERSION found ($PYTHON_CMD)"
 fi
 
 # --- Install/update ---
-# Exit codes decide (C-F2); each command's full output goes to the log as detail.
+# Exit codes decide (C-F2). A command's output goes to the log as detail; a failed
+# command's output is passed to error_reason instead, which logs it (logging.md 8.2).
 if command -v uv >/dev/null 2>&1; then
     if command -v modal >/dev/null 2>&1; then
         read_modal_version
         log "Modal CLI already installed ($MODAL_VERSION) -- upgrading via uv..."
         tool_rc=0
         TOOL_OUTPUT=$(uv tool upgrade modal 2>&1) || tool_rc=$?
-        write_output_detail "uv-tool-upgrade" "$TOOL_OUTPUT"
-        if [ "$tool_rc" -ne 0 ] && grep -q 'is not installed' <<< "$TOOL_OUTPUT"; then
-            log_warn "Modal was not installed via uv -- migrating to uv tool..."
+        # repair_uv_tool_env: 0 repaired, 1 not applicable, 3 failed and already recorded
+        repair_rc=1
+        if [ "$tool_rc" -eq 0 ]; then
+            write_output_detail "uv-tool-upgrade" "$TOOL_OUTPUT"
+        elif grep -q 'is not installed' <<< "$TOOL_OUTPUT"; then
+            write_output_detail "uv-tool-upgrade (exit $tool_rc)" "$TOOL_OUTPUT"
+            write_warn "modal cli" "not installed with uv -- migrating to uv tool"
             tool_rc=0
             TOOL_OUTPUT=$(uv tool install modal 2>&1) || tool_rc=$?
-            write_output_detail "uv-tool-install" "$TOOL_OUTPUT"
-        elif [ "$tool_rc" -ne 0 ] && repair_uv_tool_env "modal" "$TOOL_OUTPUT"; then
-            tool_rc=0
+            if [ "$tool_rc" -eq 0 ]; then write_output_detail "uv-tool-install" "$TOOL_OUTPUT"; fi
+        else
+            repair_rc=0
+            repair_uv_tool_env "modal" "$TOOL_OUTPUT" "modal cli" || repair_rc=$?
+            if [ "$repair_rc" -ne 1 ]; then write_output_detail "uv-tool-upgrade (exit $tool_rc)" "$TOOL_OUTPUT"; fi
+            if [ "$repair_rc" -eq 0 ]; then tool_rc=0; fi
         fi
         if [ "$tool_rc" -ne 0 ]; then
-            log_error "uv tool install/upgrade modal failed (exit $tool_rc) -- see $(display_path "$LOG_FILE")"
-            write_summary ERROR "modal cli" "uv tool install/upgrade failed (exit $tool_rc)"
+            # A failed repair (3) is already recorded by the library: no second record
+            if [ "$repair_rc" -ne 3 ]; then
+                write_error "modal cli" "uv tool install/upgrade failed" "$(error_reason "$TOOL_OUTPUT" "$tool_rc")"
+            fi
         elif command -v modal >/dev/null 2>&1; then
             read_modal_version
             log_ok "Modal CLI upgraded ($MODAL_VERSION)"
             write_summary OK "modal cli" "$MODAL_VERSION"
         else
-            log_error "uv tool upgrade completed but 'modal' not found in PATH"
-            write_summary ERROR "modal cli" "not on PATH after upgrade"
+            write_error "modal cli" "not on PATH after upgrade" "modal not found on PATH after uv tool upgrade"
         fi
     else
         log "Installing Modal CLI via uv tool..."
         tool_rc=0
         TOOL_OUTPUT=$(uv tool install modal 2>&1) || tool_rc=$?
-        write_output_detail "uv-tool-install" "$TOOL_OUTPUT"
         if [ "$tool_rc" -ne 0 ]; then
-            log_error "uv tool install modal failed (exit $tool_rc) -- see $(display_path "$LOG_FILE")"
-            write_summary ERROR "modal cli" "uv tool install failed (exit $tool_rc)"
-        elif command -v modal >/dev/null 2>&1; then
-            read_modal_version
-            log_ok "Modal CLI installed ($MODAL_VERSION)"
-            write_summary OK "modal cli" "$MODAL_VERSION"
+            write_error "modal cli" "uv tool install failed" "$(error_reason "$TOOL_OUTPUT" "$tool_rc")"
         else
-            log_error "uv tool install completed but 'modal' not found in PATH"
-            log_warn "Ensure ~/.local/bin is in PATH"
-            write_summary ERROR "modal cli" "installed but not on PATH"
+            write_output_detail "uv-tool-install" "$TOOL_OUTPUT"
+            if command -v modal >/dev/null 2>&1; then
+                read_modal_version
+                log_ok "Modal CLI installed ($MODAL_VERSION)"
+                write_summary OK "modal cli" "$MODAL_VERSION"
+            else
+                # Not on PATH is an error, with the remedy as an ACTION (Standard 4)
+                write_error "modal cli" "installed but not on PATH" "modal not found after uv tool install"
+                write_summary ACTION "" "Add the directory 'uv tool dir --bin' prints to PATH -- modal not accessible"
+            fi
         fi
     fi
 elif command -v pip3 >/dev/null 2>&1 || command -v pip >/dev/null 2>&1; then
@@ -131,29 +139,27 @@ elif command -v pip3 >/dev/null 2>&1 || command -v pip >/dev/null 2>&1; then
     log "uv not found -- installing Modal CLI via pip (--user)..."
     pip_rc=0
     PIP_OUTPUT=$("$PIP_CMD" install --user modal 2>&1) || pip_rc=$?
-    write_output_detail "pip-install" "$PIP_OUTPUT"
     if [ "$pip_rc" -ne 0 ]; then
-        log_error "pip install --user modal failed (exit $pip_rc) -- see $(display_path "$LOG_FILE")"
-        write_summary ERROR "modal cli" "pip install failed (exit $pip_rc)"
-    elif command -v modal >/dev/null 2>&1; then
-        read_modal_version
-        log_ok "Modal CLI installed ($MODAL_VERSION)"
-        write_summary OK "modal cli" "$MODAL_VERSION"
+        write_error "modal cli" "pip install failed" "$(error_reason "$PIP_OUTPUT" "$pip_rc")"
     else
-        log_error "pip install completed but 'modal' not found in PATH"
-        write_summary ERROR "modal cli" "installed but not on PATH"
+        write_output_detail "pip-install" "$PIP_OUTPUT"
+        if command -v modal >/dev/null 2>&1; then
+            read_modal_version
+            log_ok "Modal CLI installed ($MODAL_VERSION)"
+            write_summary OK "modal cli" "$MODAL_VERSION"
+        else
+            write_error "modal cli" "installed but not on PATH" "modal not found after pip install --user"
+        fi
     fi
 else
-    log_error "No package installer found. Install uv or pip first."
-    write_summary ERROR "modal cli" "no package installer (uv/pip) found"
+    write_error "modal cli" "no package installer" "neither uv nor pip is on PATH"
 fi
 
-# Only suggest auth if modal is installed but not yet authenticated
-if command -v modal >/dev/null 2>&1; then
+# Only suggest auth if modal is installed, this run had no error, and modal is not yet
+# authenticated
+if command -v modal >/dev/null 2>&1 && [ "$ERRORS" -eq 0 ]; then
     if [ ! -f "$HOME/.modal.toml" ]; then
-        log_warn "Authentication required: run 'modal setup' to authenticate (browser flow)"
-        write_summary WARN "modal cli" "not authenticated"
-        write_summary ACTION "" "modal setup -- authenticate modal (browser flow)"
+        write_action "modal cli" "not authenticated -- run: modal setup (browser flow)" "modal setup -- authenticate modal (browser flow)"
     fi
 fi
 

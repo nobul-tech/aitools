@@ -12,8 +12,8 @@
 # isolated HOMEs and compares the results. Cases: build output and parse,
 # extraction by body markers (no marker line copied, section 5b kept; a missing
 # or duplicated marker fails the build and leaves deploy/ as it was), the
-# payload data file, the size gate (WARN with its fix hint, also forced with a
-# padded fixture dotprofile), cursor header port and step 4, no adopt target in
+# payload data file, the size gate (one WARN per limit, fix hints in the log;
+# also forced with a padded fixture dotprofile), cursor header port and step 4, no adopt target in
 # MDM, shared rules embedded and dotprofile rules and skills not, first run /
 # rerun / edit / dry run equivalence (trees, summary rows, exit codes), the
 # terminal review menu (pywinpty), no git needed at run time, -Help,
@@ -185,9 +185,14 @@ try {
     # are both the isolated HOME: the resolver build-deploy runs is pwsh, whose
     # $HOME follows USERPROFILE (CI run 41265193554: "No dotprofile found"). The
     # dotprofile is passed as AITOOLS_USER_REPO_PATH in C:/... form, the way
-    # scripts/aitools passes it.
+    # scripts/aitools passes it. Its deploy.log goes to HOME_DIR/logs and its run
+    # summary records to HOME_DIR/build.summary (MSYS form: bash writes them), so
+    # the checks can read both (as the .sh's run_build).
     function Run-Build([string]$HomeDir, [string]$Dot, [string]$BuildScript) {
-        $envs = @{ HOME = (Msys $HomeDir); USERPROFILE = (Mixed $HomeDir); AITOOLS_USER_REPO_PATH = (Mixed $Dot) }
+        $envs = @{
+            HOME = (Msys $HomeDir); USERPROFILE = (Mixed $HomeDir); AITOOLS_USER_REPO_PATH = (Mixed $Dot)
+            AITOOLS_LOG_DIR = (Msys (Join-Path $HomeDir "logs")); AITOOLS_SUMMARY_FILE = (Msys (Join-Path $HomeDir "build.summary"))
+        }
         return Invoke-TestScript -FilePath $gitBash -ArgumentList @((Msys $BuildScript)) -Environment $envs -OutFile $script:OUT
     }
 
@@ -278,7 +283,21 @@ try {
     }
 
     function SameRc([string]$Name) { $script:RC["$Name-dev"] -eq $script:RC["$Name-mdm"] }
-    function SameSummary([string]$Name) { SameBytes (Join-Path $tmpRoot "$Name-dev.summary") (Join-Path $tmpRoot "$Name-mdm.summary") }
+    # HomeRows SUMMARY -- the summary file's text (CRs removed) with the case's
+    # isolated HOME (SUMMARY without .summary, the C:/... form Run-Script passed)
+    # written as <HOME>, and the path separators of what follows as "/": a warning
+    # that names a deployed file (the non-interactive overwrite) holds its HOME,
+    # which differs between the dev and MDM runs and between runs (as home_rows)
+    function HomeRows([string]$Sum) {
+        if (-not (Test-Path -LiteralPath $Sum -PathType Leaf)) { return $null }
+        $hm = Mixed ($Sum -replace '\.summary$', '')
+        $t = ((ReadBytesText $Sum) -replace "`r", "").Replace('\', '/')
+        return [regex]::Replace($t, [regex]::Escape($hm), '<HOME>', [Text.RegularExpressions.RegexOptions]::IgnoreCase)
+    }
+    function SameSummary([string]$Name) {
+        $a = HomeRows (Join-Path $tmpRoot "$Name-dev.summary"); $b = HomeRows (Join-Path $tmpRoot "$Name-mdm.summary")
+        return ($null -ne $a -and $null -ne $b -and $a -ceq $b)
+    }
     function Row([string]$Name, [string]$Text) { GrepQ (Join-Path $tmpRoot "$Name.summary") $Text -Fixed -Whole }
     function SumMatch([string]$Name, [string]$Pattern) { GrepQ (Join-Path $tmpRoot "$Name.summary") $Pattern }
     # TreeMap DIR: relative path -> "dir" or the file's sha256, without any
@@ -316,9 +335,15 @@ try {
         return -not (@(FileLines $fakeCalls) | Where-Object { -not $_.Contains(' diff --no-index ') })
     }
     # Rows-Golden FILE OUT -- summary rows for the cross-language golden: order-free
-    # (ordinal, as LC_ALL=C sort), every number replaced by N
+    # (ordinal, as LC_ALL=C sort), the case's HOME written as <HOME> (HomeRows),
+    # the temp root (C:/... form, case-insensitive) as <TMP> (the resolver's
+    # "profile.json not found in <dp>" names the fixture dotprofile), then every
+    # number replaced by N (as the .sh's rows_golden)
     function Rows-Golden([string]$In, [string]$Out) {
-        $t = (ReadBytesText $In) -replace "`r", "" -replace '[0-9]+', 'N'
+        $hr = HomeRows $In
+        if ($null -eq $hr) { $hr = "" }
+        $t = [regex]::Replace($hr, [regex]::Escape((Mixed $tmpRoot).TrimEnd('/')), '<TMP>', [Text.RegularExpressions.RegexOptions]::IgnoreCase)
+        $t = $t -replace '[0-9]+', 'N'
         $text = ""
         if ($t.Length -gt 0) {
             if ($t.EndsWith("`n")) { $t = $t.Substring(0, $t.Length - 1) }
@@ -352,7 +377,7 @@ try {
     $GPs = Join-Path $G "deploy-harness.ps1"
     $GPayload = Join-Path $G "deploy-harness.payload"
     # Exit 0 alone is not a build: a skipped build ("No dotprofile found") exits 0 too.
-    Check "build: exit 0, not skipped" ($script:RC["build-b1"] -eq 0 -and -not (GrepQ (Join-Path $tmpRoot "build-b1.out") 'skipping deploy build'))
+    Check "build: exit 0, not skipped" ($script:RC["build-b1"] -eq 0 -and -not (GrepQ (Join-Path $tmpRoot "build-b1.out") 'deploy build skipped'))
     Check "build: deploy-harness.sh/.ps1 and the config writer bundle generated" ((@("deploy-harness.sh", "deploy-harness.ps1", "setup-user-config.sh", "setup-user-config.ps1", "aitools-profile.sh", "aitools-profile.ps1", "aitools-json.pl", "aitools-json.ps1") | ForEach-Object { Test-Path -LiteralPath (Join-Path $G $_) -PathType Leaf }) -notcontains $false)
     # (The .sh harness's "generated .sh scripts are executable" and "bash -n" checks
     # run on macOS/Linux only: Windows has no executable bit.)
@@ -367,18 +392,25 @@ try {
     Check "MDM: no dotprofile, .claude/rules or .claude/skills record in the payload" (-not (GrepQ $GPayload '^(dotprofile/|aitools/\.claude/(rules|skills)/)'))
     Check "payload: data file beside the scripts, none inline" ((Test-Path -LiteralPath $GPayload -PathType Leaf) -and -not (GrepQ $GSh '^mdm_unpack ') -and -not (GrepQ $GPs '^Expand-MdmPayload ') -and (GrepQ $GSh '^MDM_PAYLOAD_SHA256=[0-9a-f]{64}$'))
 
-    # SizeGateWarned DIR OUT -- every generated .ps1 (200000) / .sh (1000000) at or
-    # over its Intune limit has its WARN in the build output, twice (inline and the
-    # end-of-build list); one under it has none (FX-12: WARN, not a build FAIL).
-    # Each over-limit WARN carries its fix hint (deploy-harness: the payload; the
-    # others: FX-35). The end-of-build header counts them, and "ready for MDM
-    # deployment" is printed only when none is over. $SizeGateOver is set to the
-    # number of over-limit scripts found.
-    $script:SizeGateOver = 0
-    function SizeGateWarned([string]$Dir, [string]$Out) {
-        $over = 0
+    # SizeGateWarned DIR OUT LOG [SUMMARY] -- every generated .ps1 (200000) / .sh
+    # (1000000) at or over its Intune limit has its line and fix hint once as a
+    # detail line in the build's deploy.log (LOG), and none in the build output
+    # (OUT); one under it has neither (FX-12: WARN, not a build FAIL). Each
+    # over-limit line carries its fix hint (deploy-harness: the payload; the
+    # others: FX-35). The build output has one warning per exceeded limit, with
+    # the count of scripts over it, and none for a limit nothing exceeds; "ready
+    # for MDM deployment" is printed only when none is over. SUMMARY (the build's
+    # run summary file): one WARN record per exceeded limit and no per-script
+    # record. $SizeGateOverPs1 / $SizeGateOverSh are set to the number of
+    # over-limit scripts found (as the .sh's size_gate_warned).
+    $script:SizeGateOverPs1 = 0
+    $script:SizeGateOverSh = 0
+    function SizeGateWarned([string]$Dir, [string]$Out, [string]$Log, [string]$Sum = "") {
+        $overPs1 = 0; $overSh = 0
         $outLines = FileLines $Out
         if ($null -eq $outLines) { $outLines = [string[]]@() }
+        $logLines = FileLines $Log
+        if ($null -eq $logLines) { $logLines = [string[]]@() }
         $files = @(Get-ChildItem -LiteralPath $Dir -File -Force | Where-Object { $_.Name -clike '*.ps1' }) + @(Get-ChildItem -LiteralPath $Dir -File -Force | Where-Object { $_.Name -clike '*.sh' })
         foreach ($f in $files) {
             $n = $f.Name
@@ -387,15 +419,29 @@ try {
             $hint = if ($n -clike 'deploy-harness.*') { "move content to deploy-harness.payload" } else { "see FX-35 (inlined lib)" }
             $line = "deploy/$n is $sz bytes, over the Intune script limit ($max) -- $hint"
             if ($sz -ge $max) {
-                if (@($outLines | Where-Object { $_.Contains('[warn]') -and $_.Contains($line) }).Count -ne 2) { return $false }
-                $over++
-            } elseif (@($outLines | Where-Object { $_.Contains("[warn] deploy/$n is ") -and $_.Contains("over the Intune script limit") }).Count -gt 0) {
+                if (@($logLines | Where-Object { $_.Contains('[detail]') -and $_.Contains($line) }).Count -ne 1) { return $false }
+                if (@($outLines | Where-Object { $_.Contains('[warn]') -and $_.Contains($line) }).Count -gt 0) { return $false }
+                if ($n -clike '*.ps1') { $overPs1++ } else { $overSh++ }
+            } elseif (@($logLines | Where-Object { $_.Contains("[detail] deploy/$n is ") -and $_.Contains("over the Intune script limit") }).Count -gt 0) {
                 return $false
             }
         }
-        $script:SizeGateOver = $over
-        if ($over -gt 0) {
-            if (-not (GrepQ $Out "[warn] $over generated script(s) over the Intune script limit (WARN only, the build does not fail):" -Fixed)) { return $false }
+        $script:SizeGateOverPs1 = $overPs1
+        $script:SizeGateOverSh = $overSh
+        foreach ($lim in @(200000, 1000000)) {
+            $cnt = if ($lim -eq 200000) { $overPs1 } else { $overSh }
+            if ($cnt -gt 0) {
+                if (-not (GrepQ $Out "[warn] $cnt generated script(s) over the Intune script limit ($lim)" -Fixed)) { return $false }
+                if ($Sum -and -not (GrepQ $Sum "WARN|build-deploy|$cnt generated script(s) over the Intune script limit ($lim)" -Fixed -Whole)) { return $false }
+            } elseif (GrepQ $Out "generated script(s) over the Intune script limit ($lim)" -Fixed) {
+                return $false
+            }
+        }
+        if ($Sum) {
+            $want = [int]($overPs1 -gt 0) + [int]($overSh -gt 0)
+            if ((GrepCount $Sum 'over the Intune script limit') -ne $want) { return $false }
+        }
+        if ($overPs1 + $overSh -gt 0) {
             if (GrepQ $Out 'ready for MDM deployment' -Fixed) { return $false }
         } else {
             if (-not (GrepQ $Out 'Scripts are self-contained and ready for MDM deployment' -Fixed)) { return $false }
@@ -403,7 +449,8 @@ try {
         }
         return $true
     }
-    Check "size gate: a generated script over its Intune limit is a WARN, not a build failure (FX-12)" ($script:RC["build-b1"] -eq 0 -and (SizeGateWarned $G (Join-Path $tmpRoot "build-b1.out")))
+    $hb1 = Join-Path $tmpRoot "home-build-b1"
+    Check "size gate: a generated script over its Intune limit is a WARN (one record per limit), not a build failure (FX-12)" ($script:RC["build-b1"] -eq 0 -and (SizeGateWarned $G (Join-Path $tmpRoot "build-b1.out") (Join-Path $hb1 "logs/deploy.log") (Join-Path $hb1 "build.summary")))
 
     # Forced over-limit case, independent of the real script sizes: a copy of the
     # fixture dotprofile whose claude/CLAUDE.md template is padded by ~1.2 MB.
@@ -430,8 +477,8 @@ try {
         $f = Join-Path $DOT_BIG "deploy/setup-user-claude.sh"
         if (-not (Test-Path -LiteralPath $f -PathType Leaf)) { return $false }
         if ((Get-Item -LiteralPath $f).Length -lt 1000000) { return $false }
-        if (-not (SizeGateWarned (Join-Path $DOT_BIG "deploy") $script:OUT)) { return $false }
-        return ($script:SizeGateOver -ge 1)
+        if (-not (SizeGateWarned (Join-Path $DOT_BIG "deploy") $script:OUT (Join-Path $HB_BIG "logs/deploy.log") (Join-Path $HB_BIG "build.summary"))) { return $false }
+        return ($script:SizeGateOverSh -ge 1)
     }
     Check "size gate (forced): a .sh padded over 1 MB is a WARN with the FX-35 hint, build exit 0" ($script:RC["build-big"] -eq 0 -and (BigShOver))
     $script:OUT = ""
@@ -478,12 +525,13 @@ try {
     WriteLf (Join-Path $tmpRoot "eq-mdm/.aitools/rules/tool-ops.md") "local edit`n"
     Run-Case dev eq
     Run-Case mdm eq
-    # WARN, not OK: the non-interactive overwrite logs a warning and the library
-    # raises the row to WARN; the dev path does the same (next check).
-    Check "edit then rerun (non-interactive): source wins in MDM, 1 updated" ((SameBytes $P2 (Join-Path $tmpRoot "eq-mdm/.aitools/rules/tool-ops.md")) -and (SumMatch eq-mdm '^WARN\|harness files\|1 updated'))
-    Check "edit then rerun: same rows and files as dev" ((SameSummary eq) -and (SameTrees eq))
+    # The status stays OK; the non-interactive overwrite of the local edit is its
+    # own warning, recorded by the library (reference/logging.md 8.3: "local edits
+    # overwritten in a non-interactive run"); the dev path does the same (next check).
+    Check "edit then rerun (non-interactive): source wins in MDM, 1 updated, overwrite warning" ((SameBytes $P2 (Join-Path $tmpRoot "eq-mdm/.aitools/rules/tool-ops.md")) -and (SumMatch eq-mdm '^OK\|harness files\|1 updated') -and ((HomeRows (Join-Path $tmpRoot "eq-mdm.summary")) -split "`n" -ccontains 'WARN|harness files|local edits overwritten (non-interactive run, backup kept): <HOME>/.aitools/rules/tool-ops.md'))
+    Check "edit then rerun: same rows (each side's HOME as <HOME>) and files as dev" ((SameSummary eq) -and (SameTrees eq))
     if (-not (SameSummary eq)) {
-        Compare-Object @(FileLines (Join-Path $tmpRoot "eq-dev.summary")) @(FileLines (Join-Path $tmpRoot "eq-mdm.summary")) -CaseSensitive |
+        Compare-Object @((HomeRows (Join-Path $tmpRoot "eq-dev.summary")) -split "`n") @((HomeRows (Join-Path $tmpRoot "eq-mdm.summary")) -split "`n") -CaseSensitive |
             ForEach-Object { Write-Output ("      | " + $(if ($_.SideIndicator -eq '<=') { '< ' } else { '> ' }) + $_.InputObject) }
     }
     Rows-Golden (Join-Path $tmpRoot "eq-mdm.summary") (Join-Path $tmpRoot "eq-edit.rows")
@@ -515,7 +563,9 @@ try {
         Remove-CR $ptySum
         $plainFile = "$($script:OUT).plain"
         WriteLf $plainFile (Strip (ReadText $script:OUT))
-        Check "terminal review (MDM): overwrite offered, adopt and merge not; skip keeps LOCAL" ($script:RC["pty-mdm"] -eq 0 -and (GrepQ $plainFile '\[o\]verwrite') -and -not (GrepQ $plainFile '\[a\]ccept & adopt') -and -not (GrepQ $plainFile '\[m\]erge & adopt') -and (GrepQ (Join-Path $tmpRoot "eq-mdm/.aitools/rules/scratch.md") 'local edit' -Fixed -Whole) -and (SumMatch pty-mdm '^WARN\|harness files\|1 skipped'))
+        # The skip is one warning, recorded by the library (logging.md 8.2), and
+        # counted in the OK status.
+        Check "terminal review (MDM): overwrite offered, adopt and merge not; skip keeps LOCAL" ($script:RC["pty-mdm"] -eq 0 -and (GrepQ $plainFile '\[o\]verwrite') -and -not (GrepQ $plainFile '\[a\]ccept & adopt') -and -not (GrepQ $plainFile '\[m\]erge & adopt') -and (GrepQ (Join-Path $tmpRoot "eq-mdm/.aitools/rules/scratch.md") 'local edit' -Fixed -Whole) -and (Row pty-mdm 'WARN|harness files|skipped at review, local differs from source: rules/scratch.md') -and (GrepCount $ptySum 'WARN|harness files|skipped at review, ') -eq 1 -and (SumMatch pty-mdm '^OK\|harness files\|1 skipped, [0-9]* verified$'))
         if ($fakeGitExe) {
             Check "terminal review (MDM) without git: diff unavailable, menu still shown" ((GrepQ $plainFile 'diff unavailable') -and (GrepQ $plainFile '\[o\]verwrite'))
         } else {
@@ -612,7 +662,7 @@ try {
     Corrupt-Record $badPayload
     $script:BUILD = "bad"
     Run-Case mdm corrupt
-    Check "damaged payload (checksum): exit 1, ERROR payload damaged, nothing deployed" ($script:RC["corrupt-mdm"] -eq 1 -and (Row corrupt-mdm 'ERROR|harness files|payload damaged') -and (GrepQ (Join-Path $tmpRoot "corrupt-mdm.out") 'sha256 mismatch') -and -not (Test-Path -LiteralPath (Join-Path $tmpRoot "corrupt-mdm/.aitools/rules")))
+    Check "damaged payload (checksum): exit 1, ERROR payload damaged, nothing deployed" ($script:RC["corrupt-mdm"] -eq 1 -and (Row corrupt-mdm 'ERROR|harness files|payload damaged|sha256 mismatch: damaged or from another build (nothing deployed)') -and (GrepCount (Join-Path $tmpRoot "corrupt-mdm.summary") 'ERROR|') -eq 1 -and (GrepQ (Join-Path $tmpRoot "corrupt-mdm.out") 'sha256 mismatch') -and -not (Test-Path -LiteralPath (Join-Path $tmpRoot "corrupt-mdm/.aitools/rules")))
     # The same damage with the script's sha256 updated: the record check catches it.
     # The stage directory goes under pstmp/ (TMP and TEMP, C:/... form with a
     # trailing slash, as the .sh harness passed it).
@@ -620,7 +670,11 @@ try {
     $pstmp = Join-Path $tmpRoot "pstmp"
     MakeDir $pstmp
     Run-Case mdm record @() ((Mixed $pstmp) + "/")
-    Check "damaged record: exit 1, ERROR row, that file not deployed, the others are" ($script:RC["record-mdm"] -eq 1 -and (SumMatch record-mdm '^ERROR\|harness files\|1 embedded file\(s\) damaged') -and (GrepQ (Join-Path $tmpRoot "record-mdm.out") 'shared/rules/scratch.md is damaged') -and -not (Test-Path -LiteralPath (Join-Path $tmpRoot "record-mdm/.aitools/rules/scratch.md")) -and (Test-Path -LiteralPath (Join-Path $tmpRoot "record-mdm/.aitools/rules/tool-ops.md") -PathType Leaf))
+    # One ERROR record per damaged file; no aggregate record (the count line is info).
+    Check "damaged record: exit 1, one ERROR row for that file, that file not deployed, the others are" ($script:RC["record-mdm"] -eq 1 -and (SumMatch record-mdm '^ERROR\|harness files\|embedded aitools/shared/rules/scratch\.md is damaged or cannot be written\|.') -and (GrepCount (Join-Path $tmpRoot "record-mdm.summary") 'ERROR|') -eq 1 -and -not (SumMatch record-mdm 'embedded file\(s\) damaged') -and (GrepQ (Join-Path $tmpRoot "record-mdm.out") 'shared/rules/scratch.md is damaged') -and -not (Test-Path -LiteralPath (Join-Path $tmpRoot "record-mdm/.aitools/rules/scratch.md")) -and (Test-Path -LiteralPath (Join-Path $tmpRoot "record-mdm/.aitools/rules/tool-ops.md") -PathType Leaf))
+    # Its missing file is the consequence of that error: logged at info, no WARN
+    # record (one cause, one red line: logging.md 8.3; fix-forward 5899-6-L2-P1)
+    Check "damaged record: the missing file is logged at info, no 'tracked but missing' WARN record" (-not (SumMatch record-mdm '^WARN\|harness files\|') -and (GrepQ (Join-Path $tmpRoot "record-mdm.out") '\[info\] shared/rules: scratch\.md not deployed -- its embedded record is damaged \(the error above\)') -and -not (GrepQ (Join-Path $tmpRoot "record-mdm.out") 'tracked but missing'))
     # .ps1: the stage directory is removed in a finally block, also on exit 1.
     # Where it was made: the "unpacked in" path's parent is pstmp, compared as the
     # same directory (long path, case-insensitive), not by spelling: .NET may print
@@ -660,7 +714,7 @@ try {
     Check "CRLF payload: verified and deployed (exit 0)" ($script:RC["crlf-mdm"] -eq 0 -and (SameBytes $P1 (Join-Path $tmpRoot "crlf-mdm/.aitools/rules/scratch.md")))
     Remove-Item -LiteralPath $badPayload -Force
     Run-Case mdm nopayload
-    Check "missing payload: exit 1, ERROR payload missing, nothing deployed" ($script:RC["nopayload-mdm"] -eq 1 -and (Row nopayload-mdm 'ERROR|harness files|payload missing') -and -not (Test-Path -LiteralPath (Join-Path $tmpRoot "nopayload-mdm/.aitools/rules")))
+    Check "missing payload: exit 1, ERROR payload missing, nothing deployed" ($script:RC["nopayload-mdm"] -eq 1 -and (SumMatch nopayload-mdm '^ERROR\|harness files\|payload missing\|.*deploy-harness\.payload not found; it ships in deploy[\\/] with this script \(nothing deployed\)$') -and -not (Test-Path -LiteralPath (Join-Path $tmpRoot "nopayload-mdm/.aitools/rules")))
     Restore-Bad
     # The truncation guard is the first command of the generated .sh (static check)
     function LineNo([string]$Path, [string[]]$Patterns) {
@@ -678,7 +732,7 @@ try {
     WriteBytesText $badPayload ([regex]::Replace((ReadBytesText $badPayload), '(?m)^(aitools/shared/rules/scratch\.md\t0\t)[0-9]+', '${1}x'))
     Set-PayloadSha $badDeploy
     Run-Case mdm malformed
-    Check "malformed record (size not a number): exit 1, ERROR payload damaged, nothing deployed" ($script:RC["malformed-mdm"] -eq 1 -and (Row malformed-mdm 'ERROR|harness files|payload damaged') -and (GrepQ (Join-Path $tmpRoot "malformed-mdm.out") 'malformed record') -and -not (Test-Path -LiteralPath (Join-Path $tmpRoot "malformed-mdm/.aitools/rules")))
+    Check "malformed record (size not a number): exit 1, ERROR payload damaged, nothing deployed" ($script:RC["malformed-mdm"] -eq 1 -and (SumMatch malformed-mdm '^ERROR\|harness files\|payload damaged\|malformed record line: aitools/shared/rules/scratch\.md') -and (GrepCount (Join-Path $tmpRoot "malformed-mdm.summary") 'ERROR|') -eq 1 -and (GrepQ (Join-Path $tmpRoot "malformed-mdm.out") 'malformed record') -and -not (Test-Path -LiteralPath (Join-Path $tmpRoot "malformed-mdm/.aitools/rules")))
     $script:BUILD = "b1"
 
     # ---------------------------------------------------------------------------

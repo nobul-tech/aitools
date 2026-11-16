@@ -35,7 +35,7 @@ Log "Setting up MCP servers for Cursor IDE (user scope)..."
 
 # Check that Node.js is available (required for Chrome DevTools MCP)
 if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
-    LogError "Node.js not found. Install via 'aitools install' or manually: https://nodejs.org"
+    Write-AitError "cursor ide mcp" "Node.js not found" "node is not on PATH -- install it with aitools install or from https://nodejs.org"
     exit 1
 } else {
     $nodeVersion = (node --version)
@@ -57,6 +57,7 @@ if (-not $DryRun) {
 }
 $config = @{}
 $corrupt = $false
+$parseError = ""
 if (Test-Path $mcpJson) {
     Log "Merging managed servers into $mcpJson"
     try {
@@ -64,7 +65,9 @@ if (Test-Path $mcpJson) {
         $config = ConvertPSObjectToHashtable ($raw | ConvertFrom-Json)
     } catch {
         $corrupt = $true
-        LogWarn "$mcpJson could not be parsed ($_)"
+        # Detail only: the corrupt-file error or the forced rewrite below reports it
+        $parseError = $_.Exception.Message
+        LogDetail "$mcpJson could not be parsed: $parseError"
     }
 } else {
     Log "Creating $mcpJson"
@@ -106,20 +109,20 @@ if ($DryRun) {
     Log "[DRY RUN] $mcpJson`: merge MCP servers"
     Log "  Managed fields: mcpServers.chrome-devtools, mcpServers.vercel, mcpServers.webflow"
     if ($lostKeys.Count -gt 0) {
-        LogWarn "[DRY RUN] CLOBBER: would lose non-managed fields: $($lostKeys -join ', ')"
+        Write-AitWarn "cursor ide mcp" "[DRY RUN] would lose non-managed fields: $($lostKeys -join ', ')"
     }
     if ($corrupt) {
-        LogWarn "[DRY RUN] File is corrupt -- -Force required to overwrite"
+        Write-AitWarn "cursor ide mcp" "[DRY RUN] mcp.json is corrupt -- -Force required to overwrite"
     }
 } elseif ($corrupt -and -not $Force) {
-    LogError "$mcpJson is corrupt. Use -Force to overwrite, or fix manually."
-    Write-Summary "ERROR" "cursor ide mcp" "config corrupt"
+    Write-AitError "cursor ide mcp" "config corrupt" "$mcpJson is not valid JSON ($parseError) -- fix it or re-run with -Force"
 } elseif ($lostKeys.Count -gt 0 -and -not $Force) {
-    LogError "$mcpJson merge would lose fields: $($lostKeys -join ', '). Use -Force to proceed."
-    Write-Summary "ERROR" "cursor ide mcp" "merge would lose fields"
+    Write-AitError "cursor ide mcp" "merge would lose fields" "would drop: $($lostKeys -join ', ') -- re-run with -Force to proceed"
 } else {
-    if ($corrupt) { LogWarn "Proceeding with -Force on corrupt file" }
-    if ($lostKeys.Count -gt 0) { LogWarn "Proceeding with -Force, losing fields: $($lostKeys -join ', ')" }
+    # A -Force write that loses data stays a warning (reference/logging.md 8.3
+    # "What is a warning")
+    if ($corrupt) { Write-AitWarn "cursor ide mcp" "overwrote corrupt $mcpJson (-Force)" }
+    if ($lostKeys.Count -gt 0) { Write-AitWarn "cursor ide mcp" "dropped fields under -Force: $($lostKeys -join ', ')" }
 
     $afterJson = $config | ConvertTo-Json -Depth 10
     $afterNorm = Normalize-JsonForComparison $config -Depth 10
@@ -129,51 +132,63 @@ if ($DryRun) {
         LogOk "Cursor MCP config already up to date"
         Write-Summary "OK" "cursor ide mcp" "verified"
     } else {
-        $mcpChanged = $true
         $resolvedPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($mcpJson)
         [System.IO.File]::WriteAllText($resolvedPath, $afterJson, [System.Text.UTF8Encoding]::new($false))
 
-        # Post-write validation
+        # Post-write validation: a failure is one recorded error and no OK record
+        $validationFailed = $false
         try {
             $vContent = [System.IO.File]::ReadAllText($resolvedPath)
             $vParsed = $vContent | ConvertFrom-Json
             if (-not ($vParsed.PSObject.Properties.Name -contains "mcpServers")) {
-                LogError "Validation failed: $mcpJson missing required field 'mcpServers'"
+                $validationFailed = $true
+                Write-AitError "cursor ide mcp" "post-write validation failed" "$mcpJson has no 'mcpServers' field"
             }
         } catch {
-            LogError "Validation failed: $mcpJson is not valid JSON -- $_"
+            $validationFailed = $true
+            Write-AitError "cursor ide mcp" "post-write validation failed" "$mcpJson is not valid JSON after the write: $($_.Exception.Message)"
         }
 
-        # Detect per-server changes and emit DETAIL lines
-        $serverChanges = @()
-        foreach ($s in $managedServers) {
-            $newVal = Normalize-JsonForComparison $config["mcpServers"][$s] -Depth 5 -Compress
-            if ($beforeServers[$s] -ne $newVal) {
-                $oldDisplay = if ($beforeServers[$s]) { $beforeServers[$s] } else { "(unset)" }
-                $serverChanges += "${s}: $oldDisplay -> $newVal"
+        if (-not $validationFailed) {
+            $mcpChanged = $true
+
+            # Detect per-server changes and emit DETAIL lines
+            $serverChanges = @()
+            foreach ($s in $managedServers) {
+                $newVal = Normalize-JsonForComparison $config["mcpServers"][$s] -Depth 5 -Compress
+                if ($beforeServers[$s] -ne $newVal) {
+                    $oldDisplay = if ($beforeServers[$s]) { $beforeServers[$s] } else { "(unset)" }
+                    $serverChanges += "${s}: $oldDisplay -> $newVal"
+                }
             }
-        }
 
-        LogOk "Cursor MCP config written to $mcpJson"
-        Log "Servers configured: chrome-devtools (stdio), vercel (http), webflow (http)"
-        if ($serverChanges.Count -gt 0) {
-            Emit-MergeDetails -Changes $serverChanges -ToolName "cursor ide mcp"
+            LogOk "Cursor MCP config written to $mcpJson"
+            Log "Servers configured: chrome-devtools (stdio), vercel (http), webflow (http)"
+            if ($serverChanges.Count -gt 0) {
+                Emit-MergeDetails -Changes $serverChanges -ToolName "cursor ide mcp"
+            }
+            Write-Summary "OK" "cursor ide mcp" "updated"
         }
-        Write-Summary "OK" "cursor ide mcp" "updated"
     }
 }
 
 # --- Disable vercel/webflow via Cursor CLI if available ---
+# `agent mcp disable <name>`: Cursor docs https://cursor.com/docs/cli/mcp
+# ("Disabled servers won't load or prompt for approval"). The CLI has no
+# `remove` verb. The disable applies to the project (git root) of the current
+# directory, not to the user (user rule tool-lifecycle.md "MCP servers");
+# `aitools --addmcp` re-enables a server per project with `agent mcp enable`.
+# A failed disable is a warning with the CLI's output as its reason (issue #186).
 if ($DryRun) {
     Log "[DRY RUN] Would disable vercel/webflow via Cursor CLI (if available)"
 } elseif (Get-Command agent -ErrorAction SilentlyContinue) {
     foreach ($server in @("vercel", "webflow")) {
-        $result = agent mcp disable $server 2>&1
-        if ($LASTEXITCODE -eq 0) {
+        $result = agent mcp disable $server 2>&1 | Out-String
+        $disableRc = $LASTEXITCODE
+        if ($disableRc -eq 0) {
             LogOk "$server disabled in Cursor"
         } else {
-            LogError "Failed to disable $server in Cursor: $result"
-            Write-Summary "ERROR" "cursor ide mcp" "failed to disable $server"
+            Write-AitWarn "cursor ide mcp" "failed to disable ${server}: $(Get-AitErrorReason -Output $result -ExitCode $disableRc)"
         }
     }
 } else {
