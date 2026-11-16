@@ -21,8 +21,7 @@ if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
 # Get-Command exempt: command-existence check with explicit fallback
 $cargoCheck = Get-Command cargo -ErrorAction SilentlyContinue
 if (-not $cargoCheck) {
-    LogError "Rust (cargo) is not installed -- required for Datadog CLI on Windows. Run setup-rust.ps1 first."
-    Write-Summary "ERROR" "datadog cli" "Rust not installed (prerequisite)"
+    Write-AitError "datadog cli" "Rust not installed" "cargo is not on PATH -- run setup-rust.ps1 first"
 } else {
     # --- Check build prerequisites before expensive source build ---
     Refresh-Path  # Pick up tools installed earlier in the same aitools-install session
@@ -45,20 +44,24 @@ if (-not $cargoCheck) {
                         LogOk "CMake found after uv install (added to session PATH)"
                         $missingPrereqs = @($missingPrereqs | Where-Object { $_.Name -ne "CMake" })
                     } else {
-                        LogWarn "uv tool install cmake succeeded but cmake not on PATH"
+                        # One event, one red line: CMake stays missing, so the
+                        # missing-prerequisites error below names it
+                        Log "uv tool install cmake succeeded but cmake not on PATH"
                     }
                 }
             }
         }
     }
     if ($missingPrereqs.Count -gt 0) {
+        # Layer 1: one error naming every missing prerequisite, one ACTION each, no build
         foreach ($p in $missingPrereqs) {
-            LogError "$($p.Name) not installed -- required to build pup from source"
-            LogError "Fix: $($p.Install)"
+            Log "$($p.Name) not installed -- required to build pup from source"
+            Log "Fix: $($p.Install)"
         }
-        Write-Summary "ERROR" "datadog cli" "missing build prereqs: $(($missingPrereqs | ForEach-Object { $_.Name }) -join ', ')"
+        $names = ($missingPrereqs | ForEach-Object { $_.Name }) -join ', '
+        Write-AitError "datadog cli" "missing build prereqs" "$names not installed"
         foreach ($p in $missingPrereqs) {
-            Write-Summary "ACTION" "" "$($p.Install) -- build prerequisite for pup"
+            Write-Summary "ACTION" "" "$($p.Install) -- then re-run aitools install"
         }
     } else {
         # --- Detect existing install ---
@@ -73,20 +76,17 @@ if (-not $cargoCheck) {
                 Log "Pup found but version check failed -- reinstalling via cargo install..."
             }
             $cargoOutput = cargo install --git https://github.com/datadog-labs/pup 2>&1 | Out-String
-            if ($LASTEXITCODE -ne 0) {
-                $cargoOutput.Trim().Split("`n") | ForEach-Object { $l = $_.TrimEnd(); if ($l.Trim()) { Log $l } }
-                # Diagnose: scan output for known failure signatures
+            $cargoRc = $LASTEXITCODE
+            if ($cargoRc -ne 0) {
+                # Layer 2: Get-AitErrorReason tries the known build signatures first
+                # and logs the output as detail lines
+                Write-AitError "datadog cli" "cargo install failed" (Get-AitErrorReason -Output $cargoOutput -ExitCode $cargoRc)
                 $diagnosis = Diagnose-BuildFailure $cargoOutput
                 if ($diagnosis) {
-                    LogError "Build failed: $($diagnosis.Name) not available"
-                    LogError "Fix: $($diagnosis.Remedy)"
-                    Write-Summary "ERROR" "datadog cli" "build failed: $($diagnosis.Name) missing"
                     Write-Summary "ACTION" "" "$($diagnosis.Remedy) -- then re-run aitools install"
-                } else {
-                    LogError "cargo install pup failed (exit code $LASTEXITCODE)"
-                    Write-Summary "ERROR" "datadog cli" "cargo install failed"
                 }
             } else {
+                $cargoOutput.Trim().Split("`n") | ForEach-Object { $l = $_.TrimEnd(); if ($l.Trim()) { Log $l } }
                 Refresh-Path
                 $pupVersionAfter = pup version 2>$null
                 if ($pupVersionAfter) {
@@ -97,44 +97,41 @@ if (-not $cargoCheck) {
                     }
                     Write-Summary "OK" "datadog cli" "$pupVersionAfter"
                 } else {
-                    LogError "cargo install completed but 'pup version' failed"
-                    Write-Summary "ERROR" "datadog cli" "version check failed after upgrade"
+                    Write-AitError "datadog cli" "version check failed after upgrade" "'pup version' printed nothing"
                 }
             }
         } else {
             # Fresh install
             Log "Installing Pup via cargo install..."
             $cargoOutput = cargo install --git https://github.com/datadog-labs/pup 2>&1 | Out-String
-            if ($LASTEXITCODE -ne 0) {
-                $cargoOutput.Trim().Split("`n") | ForEach-Object { $l = $_.TrimEnd(); if ($l.Trim()) { Log $l } }
-                # Diagnose: scan output for known failure signatures
+            $cargoRc = $LASTEXITCODE
+            if ($cargoRc -ne 0) {
+                # Layer 2: Get-AitErrorReason tries the known build signatures first
+                # and logs the output as detail lines
+                Write-AitError "datadog cli" "cargo install failed" (Get-AitErrorReason -Output $cargoOutput -ExitCode $cargoRc)
                 $diagnosis = Diagnose-BuildFailure $cargoOutput
                 if ($diagnosis) {
-                    LogError "Build failed: $($diagnosis.Name) not available"
-                    LogError "Fix: $($diagnosis.Remedy)"
-                    Write-Summary "ERROR" "datadog cli" "build failed: $($diagnosis.Name) missing"
                     Write-Summary "ACTION" "" "$($diagnosis.Remedy) -- then re-run aitools install"
-                } else {
-                    LogError "cargo install pup failed (exit code $LASTEXITCODE)"
-                    Write-Summary "ERROR" "datadog cli" "cargo install failed"
                 }
-            }
-            Refresh-Path
+                # One failure, one red line: the build error above is it
+                Log "pup not checked: cargo install failed"
+            } else {
+                $cargoOutput.Trim().Split("`n") | ForEach-Object { $l = $_.TrimEnd(); if ($l.Trim()) { Log $l } }
+                Refresh-Path
 
-            # Get-Command exempt: command-existence check with explicit fallback
-            $pupCheck = Get-Command pup -ErrorAction SilentlyContinue
-            if ($pupCheck) {
-                $pupVersion = pup version 2>$null
-                if ($pupVersion) {
-                    LogOk "Pup installed ($pupVersion)"
-                    Write-Summary "OK" "datadog cli" "$pupVersion"
+                # Get-Command exempt: command-existence check with explicit fallback
+                $pupCheck = Get-Command pup -ErrorAction SilentlyContinue
+                if ($pupCheck) {
+                    $pupVersion = pup version 2>$null
+                    if ($pupVersion) {
+                        LogOk "Pup installed ($pupVersion)"
+                        Write-Summary "OK" "datadog cli" "$pupVersion"
+                    } else {
+                        Write-AitError "datadog cli" "version check failed" "'pup version' printed nothing"
+                    }
                 } else {
-                    LogError "pup found but version check failed"
-                    Write-Summary "ERROR" "datadog cli" "version check failed"
+                    Write-AitError "datadog cli" "installed but not on PATH" "pup not found after cargo install"
                 }
-            } elseif ($errors -eq 0) {
-                LogError "cargo install completed but 'pup' not found in PATH"
-                Write-Summary "ERROR" "datadog cli" "installed but not on PATH"
             }
         }
     }
@@ -151,9 +148,8 @@ if (-not $env:DD_SITE) {
 if ((Get-Command pup -ErrorAction SilentlyContinue) -and $errors -eq 0) {
     $authOutput = pup auth status 2>&1 | Out-String
     if ($authOutput -match 'Not authenticated|"authenticated":\s*false') {
-        LogWarn "Not authenticated: run 'pup auth login' (one-time OAuth)"
-        Write-Summary "WARN" "datadog cli" "not authenticated"
-        Write-Summary "ACTION" "" "pup auth login -- authenticate Datadog CLI"
+        Write-AitAction "datadog cli" "not authenticated -- run: pup auth login (one-time OAuth)" `
+            "pup auth login -- authenticate Datadog CLI"
     }
 }
 
