@@ -287,11 +287,18 @@ try {
     }
     function RowsText([string]$Case) { @(RowsOf $Case) -join "`n" }
     # Golden-Rows CASE: the skill rows of CASE ("<lang>-<name>") equal golden/<name>.rows,
-    # the same file for the .sh run (macOS/Linux) and the .ps1 run (Windows)
+    # the same file for the .sh run (macOS/Linux) and the .ps1 run (Windows). The
+    # same rules as golden_rows in test-skills-legacy.sh: the case's own dotprofile
+    # copy (dp-sh-<name>, dp-ps-<name>) as dp-<lang>-<name>; the reason of a failed
+    # adopt, an OS message (BSD and GNU mkdir, .NET word it differently; asserted
+    # per platform inline), as <OS error>
     function Golden-Rows([string]$Case) {
         $name = $Case.Substring($Case.IndexOf('-') + 1)
         $f = Join-Path $tmpRoot "$Case.rows"
-        $rows = @(RowsOf $Case)
+        $rows = @(RowsOf $Case | ForEach-Object {
+            $r = [regex]::Replace($_, '\bdp-(?:sh|ps)-', 'dp-<lang>-')
+            [regex]::Replace($r, '^(ERROR\|[^|]*\|adopt to [^|]* failed)\|.*$', '$1|<OS error>')
+        })
         WriteLf $f $(if ($rows.Count) { ($rows -join "`n") + "`n" } else { "" })
         Check "golden ${L}: ${name}: summary rows" (Test-GoldenMatch "$name.rows" $f)
     }
@@ -497,6 +504,13 @@ try {
                 try { Run-SkillsPty $c 'a\n' } finally { Undo-Deny $p }
                 Check "$lang pty adopt failure (fanned out): exit 1, ERROR skills 'adopt failed: mine', no claude skills row" `
                     ((RcOf $c) -eq 1 -and (Row $c 'ERROR|skills|adopt failed: mine') -and (NoRowsFor $c 'claude skills') -and -not (Exists (Join-Path $tmpRoot "dp-$c/claude/skills/mine")))
+                # The library records the failed write at the source (logging.md 8.3;
+                # Adopt-ManagedFile: WHAT the target, REASON the .NET message; the .sh
+                # asserts mkdir's text per platform). Its record name is not pinned
+                # here: setup-user-skills passes no -Tool yet (G3)
+                $afRe = '^ERROR\|[^|]+\|adopt to .*[\\/]dp-' + [regex]::Escape($c) + '[\\/]claude[\\/]skills[\\/]mine[\\/]SKILL\.md failed\|.+$'
+                Check "$lang pty adopt failure: the library's ERROR record for the write, with its reason" `
+                    (@(Get-Lines (SumOf $c) | Where-Object { $_ -cmatch $afRe }).Count -eq 1)
                 Golden-Rows $c
             } else {
                 Skip "$lang pty adopt failure (a deny ACE does not block writes here)"
