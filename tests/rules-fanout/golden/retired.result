@@ -9,4 +9,4 @@ ACTION||Claude Code still loads retired rules in ~/.claude/rules: mine2.md -- de
 DETAIL|claude rules|added: a.md
 DETAIL|claude rules|removed: gone.md
 DETAIL|claude rules|removed: old.md
-WARN|claude rules|1 added, 2 removed
+OK|claude rules|1 added, 2 removed
