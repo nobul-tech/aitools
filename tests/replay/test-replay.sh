@@ -374,7 +374,13 @@ if perl -ne 'BEGIN { $f = 0 } $f = 1 if /^\s*\[s\]kip\s+: nothing written; asked
 else
     bad "replay: no review menu in the output"; show "$WORK/replay.out"
 fi
-has_line "$WORK/replay.out" "  >> skipped: local file unchanged" "replay: the menu took the answer s (skipped)"
+# Checked on the menu as menu() extracts it, not on the raw lines: when the
+# answer was typed ahead of the prompt (the pty echoes it where it arrives, a
+# timing matter: seen on the macOS CI runner), the result line follows the
+# prompt on the same terminal line ("choice [o/a/m/s/x]:   >> skipped: ...");
+# menu() splits it off the prompt, so the check holds for either timing
+menu "$WORK/replay.out" "$WORK/replay.menu"
+has_line "$WORK/replay.menu" "  >> skipped: local file unchanged" "replay: the menu took the answer s (skipped)"
 if [ "$(perl -0777 -ne 'print' "$H1/.claude/CLAUDE.md")" = "$CLAUDE_LOCAL" ]; then ok "replay: ~/.claude/CLAUDE.md left as it was (skip)"
 else bad "replay: ~/.claude/CLAUDE.md changed"; show "$H1/.claude/CLAUDE.md"; fi
 if [ -f "$LOG1" ] && perl -ne 'BEGIN { $f = 0 } $f = 1 if /\[detail\] menu answer \(review CLAUDE\.md\): "s" -> s$/; END { exit($f ? 0 : 1) }' "$LOG1"; then
@@ -407,7 +413,6 @@ RCD=0
     "$PY" "$PTY" --timeout 90 --input 's\n' --log "$WORK/direct.raw" -- "$TB" "$A/scripts/setup-user-claude.sh" > "$WORK/direct.pty" 2>&1 || RCD=$?
 norm "$WORK/direct.raw" "$WORK/direct.out"
 menu "$WORK/direct.out" "$WORK/direct.menu"
-menu "$WORK/replay.out" "$WORK/replay.menu"
 if [ "$RCD" -eq 0 ]; then ok "direct: setup-user-claude exits 0"
 else bad "direct: setup-user-claude exits $RCD, want 0"; show "$WORK/direct.out"; fi
 if [ -s "$WORK/direct.menu" ] && [ -s "$WORK/replay.menu" ]; then

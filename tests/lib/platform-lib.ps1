@@ -156,7 +156,7 @@ function Invoke-TestScript {
     $saved = @{}
     foreach ($k in @($Environment.Keys)) {
         $saved[$k] = [Environment]::GetEnvironmentVariable($k)
-        [Environment]::SetEnvironmentVariable($k, $Environment[$k])
+        Set-TestEnvVar $k $Environment[$k]
     }
     if ($WorkingDirectory) { Push-Location -LiteralPath $WorkingDirectory }
     try {
@@ -164,9 +164,26 @@ function Invoke-TestScript {
         $rc = $LASTEXITCODE
     } finally {
         if ($WorkingDirectory) { Pop-Location }
-        foreach ($k in @($saved.Keys)) { [Environment]::SetEnvironmentVariable($k, $saved[$k]) }
+        foreach ($k in @($saved.Keys)) { Set-TestEnvVar $k $saved[$k] }
     }
     return $rc
+}
+
+# Set-TestEnvVar NAME VALUE: set a process environment variable; a $null VALUE
+# removes it. PowerShell turns a $null argument to a .NET string parameter into
+# "", and [Environment]::SetEnvironmentVariable(NAME, "") leaves NAME set to an
+# empty value (observed with pwsh 7 on macOS: the child's environment holds
+# "NAME="), so "remove" and the restore of a variable that was unset left an
+# empty variable behind. Under Git Bash an empty TMPDIR becomes "<cwd>/=" (the
+# MSYS runtime converts TMPDIR as a path), and build-deploy.sh's mktemp then
+# failed (CI run 43792694610, windows, tests/claude-mdm). [NullString]::Value
+# passes a real null, which removes the variable.
+function Set-TestEnvVar([string]$Name, $Value) {
+    if ($null -eq $Value) {
+        [Environment]::SetEnvironmentVariable($Name, [NullString]::Value)
+    } else {
+        [Environment]::SetEnvironmentVariable($Name, [string]$Value)
+    }
 }
 
 function ConvertTo-MsysPath {

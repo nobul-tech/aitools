@@ -104,11 +104,14 @@ function Invoke-Git {
 # Set-TestEnv HASHTABLE: set the variables ($null removes one); returns the old values
 function Set-TestEnv([hashtable]$Vars) {
     $old = @{}
-    foreach ($k in @($Vars.Keys)) { $old[$k] = [Environment]::GetEnvironmentVariable($k); [Environment]::SetEnvironmentVariable($k, $Vars[$k]) }
+    # Set-TestEnvVar (tests/lib/platform-lib.ps1): a $null value removes the
+    # variable instead of leaving it set to "" (an empty TMPDIR broke
+    # build-deploy.sh's mktemp under Git Bash)
+    foreach ($k in @($Vars.Keys)) { $old[$k] = [Environment]::GetEnvironmentVariable($k); Set-TestEnvVar $k $Vars[$k] }
     return $old
 }
 function Restore-TestEnv([hashtable]$Old) {
-    foreach ($k in @($Old.Keys)) { [Environment]::SetEnvironmentVariable($k, $Old[$k]) }
+    foreach ($k in @($Old.Keys)) { Set-TestEnvVar $k $Old[$k] }
 }
 
 try {
