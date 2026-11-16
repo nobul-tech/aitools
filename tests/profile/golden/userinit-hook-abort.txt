@@ -9,7 +9,7 @@ DETAIL|aitools config|userRepoPath updated
 DETAIL|aitools config|machineId updated
 DETAIL|aitools config|machineAlias updated
 OK|claude hooks|stub
-ERROR|claude hooks|user init: setup-user-hooks.<EXT> failed (exit 2)|aborted by user
+ERROR|claude hooks|user init: setup-user-hooks failed (exit 2)|aborted by user
 -- profile.json
 {
   "version": 2,

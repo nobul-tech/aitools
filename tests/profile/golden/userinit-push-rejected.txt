@@ -1,6 +1,7 @@
 exit 0
 -- summary rows
 OK|dotprofile|verified
+WARN|dotprofile|dotprofile push rejected (exit 1): the remote has newer commits -- run git pull --rebase, then git push in <D>/home/repos/aitools-nobul-jose
 ACTION||git pull --rebase, then git push in <D>/home/repos/aitools-nobul-jose
 OK|machine profile|created (spare)
 OK|aitools config|updated

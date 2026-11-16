@@ -1,7 +1,9 @@
 exit 0
 -- summary rows
 OK|dotprofile|verified
+WARN|machine profile|alias "laptop" is used by 2 machines (bbbbbbbb-1111-2222-3333-444444444444, aaaaaaaa-1111-2222-3333-444444444444)
 OK|machine profile|created (laptop)
+WARN|aitools config|alias "laptop" is used by 2 machines (bbbbbbbb-1111-2222-3333-444444444444, aaaaaaaa-1111-2222-3333-444444444444)
 OK|aitools config|updated
 DETAIL|aitools config|googleDrives updated
 DETAIL|aitools config|githubUser updated
