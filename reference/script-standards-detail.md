@@ -283,6 +283,8 @@ script whose name equals a tool name is that tool.
 | `chrome proxy ca` | setup-google-chrome |
 | `build-deploy` | build-deploy.sh |
 | `build-package` | build-package.sh (every outcome, each package kind's included: `stage`, `pkg`, `intune`, `deb`, `dry-run`; the kind is named in the record's text) |
+| `source` | aitools (Step 1: the pull of the aitools checkout) |
+| `relay sync` | aitools, aitools-install (the relay -> Cursor `AGENTS.md` sync: `run_relay_sync` / `Invoke-RelaySync`) |
 
 ### Severity categories
 

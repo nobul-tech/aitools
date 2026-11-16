@@ -57,16 +57,19 @@ if ($env:AITOOLS_DRY_RUN -eq "1") { $DryRun = [switch]::Present }
 if ($DryRun) { $env:AITOOLS_DRY_RUN = "1" }
 
 # --- BEGIN install log helpers (tests/profile/test-config.sh extracts this block) ---
-# deploy.jsonl records (Write-JsonlRecord) and the child relay (Invoke-ChildRelayed)
-# come from aitools-lib: one copy for the installers, user init and deploy-harness
-# (audit A-1). A record that cannot be written is one warning and the run goes on
-# (A-16). This block keeps only the installer's own Step 3 / Step 5 helpers.
+# deploy.jsonl records (Write-JsonlRecord), the child relay (Invoke-ChildRelayed)
+# and the relay sync (Invoke-RelaySync) come from aitools-lib: one copy for the
+# installers, user init and deploy-harness (audit A-1). A record that cannot be
+# written is one warning and the run goes on (A-16). This block keeps only the
+# installer's own Step 3 / Step 5 helpers.
 
 # Invoke-ConfigWriter WRITER ARGS -- Step 5: run setup-user-config.ps1 in-process
-# through the lib relay. The writer logs and writes its own summary rows; the relay
-# shows and mirrors its lines to deploy.jsonl, counts its warnings, logs one error
-# for a failed writer (exit code or throw) and writes "ERROR|aitools config|..."
-# when the writer died before a row of its own (A-1, A-18). Returns nothing.
+# through the lib relay. The writer logs and records its own warnings and errors;
+# the relay shows and mirrors its lines to deploy.jsonl, counts a failed writer
+# (exit code or throw) as one error of the installer and records "ERROR|aitools
+# config|Step 5: setup-user-config.ps1 failed (...)|<reason>" when the writer
+# recorded no error of its own (reference/logging.md 8.3; A-1, A-18). Returns
+# nothing.
 function Invoke-ConfigWriter([string]$Writer, [hashtable]$WriterArgs) {
     $writerRc = Invoke-ChildRelayed "Step 5: setup-user-config.ps1" $Writer $WriterArgs "aitools config"
     if ($writerRc -ne 0) {
@@ -77,28 +80,30 @@ function Invoke-ConfigWriter([string]$Writer, [hashtable]$WriterArgs) {
 # Get-AbsoluteReposPath PATH -- PATH as an absolute path. A relative answer is taken
 # relative to the current location, where Step 3 creates it (the pre-#79 installer
 # kept it relative; the config writer accepts absolute paths only). "" when it
-# cannot be resolved (the reason is a detail line).
+# cannot be resolved; the exception message is then in $script:ReposPathError.
 function Get-AbsoluteReposPath([string]$Path) {
+    $script:ReposPathError = ""
     if ([IO.Path]::IsPathRooted($Path)) { return $Path }
     try {
         return [IO.Path]::GetFullPath($Path, (Get-Location).Path)
     } catch {
-        LogDetail "Repos path '$Path': $($_.Exception.Message)"
+        $script:ReposPathError = $_.Exception.Message -replace '\s*\r?\n\s*', ' '
         return ""
     }
 }
 
 # Resolve-ReposDir PATH -- Step 3: make PATH absolute (relative to the current
-# location) and create it. Returns the absolute path, or "" after LogError and one
-# ERROR row "aitools config" when it cannot be resolved or created; the caller then
-# skips Step 5, whose writer accepts absolute paths only (audit A-17).
+# location) and create it. Returns the absolute path, or "" after one error
+# (Write-AitError "aitools config", the reason the exception message) when it
+# cannot be resolved or created; the caller then skips Step 5, whose writer accepts
+# absolute paths only (audit A-17).
 function Resolve-ReposDir([string]$Path) {
     $abs = $Path
     if (-not [IO.Path]::IsPathRooted($Path)) {
         $abs = Get-AbsoluteReposPath $Path
         if (-not $abs) {
-            LogError "Repos path '$Path' is relative and could not be resolved -- config.json will not be written"
-            Write-Summary "ERROR" "aitools config" "repos path not absolute"
+            $why = if ($script:ReposPathError) { $script:ReposPathError } else { "the path could not be resolved" }
+            Write-AitError "aitools config" "repos path '$Path' not resolved -- config.json will not be written" $why
             return ""
         }
         Log "Repos path '$Path' is relative -- using $abs (relative to the current directory)"
@@ -114,33 +119,15 @@ function Resolve-ReposDir([string]$Path) {
             $why = $_.Exception.Message -replace '\s*\r?\n\s*', ' '
         }
         if (-not (Test-Path -LiteralPath $abs -PathType Container)) {
-            LogDetail "Repos directory '$abs': $why"
-            LogError "Repos directory '$abs' could not be created -- config.json will not be written"
-            Write-Summary "ERROR" "aitools config" "repos dir not created"
+            Write-AitError "aitools config" "repos directory '$abs' not created -- config.json will not be written" $why
             return ""
         }
     }
     return $abs
 }
-
-# Invoke-RelaySync EXE ARGS -- Step 22: run the relay -> Cursor AGENTS.md sync (EXE
-# ARGS = the python command, the sync script and its options) and put its output in
-# deploy.log through the lib's Add-AitLibLogText, so a deploy.log that cannot be
-# written is swallowed (reference/logging.md section 5; incident #174). The old
-# `$out | Add-Content` printed an error record and the run went on: the installer
-# sets no $ErrorActionPreference, and neither do its callers (aitools.ps1 runs it
-# in-process; bootstrap.ps1 sets "Stop" but starts it in a new process). Returns the
-# sync's exit code. Parity: run_relay_sync in aitools-install.sh.
-function Invoke-RelaySync([string]$Exe, [string[]]$SyncArgs) {
-    $out = & $Exe @SyncArgs 2>&1
-    $rc = $LASTEXITCODE
-    $text = (@($out) | ForEach-Object { "$_" }) -join "`n"
-    if ($text) { Add-AitLibLogText $text }
-    return $rc
-}
 # --- END install log helpers ---
 
-# --- BEGIN install log override (tests/profile/test-install.sh extracts this block) ---
+# --- BEGIN install log options (tests/profile/test-install.sh extracts this block) ---
 # One run id for this installer's deploy.jsonl records and every relayed child's
 # (the lib's Write-JsonlRecord reads AITOOLS_RUN_ID; a child that relays its own
 # children passes it on). 6 random bytes as hex, the lib's form. Set only when the
@@ -151,46 +138,71 @@ if (-not $env:AITOOLS_RUN_ID) {
     $env:AITOOLS_RUN_ID = -join ((1..6) | ForEach-Object { '{0:x2}' -f (Get-Random -Maximum 256) })
     $script:InstallSetRunId = $true
 }
+# The library's jsonl option (reference/logging.md sections 3 and 8.2): every log
+# line of the installer is also one deploy.jsonl record (Write-JsonlRecord: escaped,
+# the run id above; an unwritable deploy.jsonl is one warning, A-16). Inside a relay
+# (aitools.ps1 runs this installer relayed) it writes nothing: the outer relay
+# mirrors the line (8.3).
+$script:AitLibOptJsonl = $true
+# --- END install log options ---
 
-# Override: JSONL dual-format (human-readable + structured JSON). The record goes
-# through the lib's Write-JsonlRecord: escaped, one run_id for the installer's own
-# lines and its relayed children's, and an unwritable deploy.jsonl is one warning (A-16).
-# The deploy.log line goes through the lib's Add-AitLibLogText: a failed write is
-# swallowed (reference/logging.md section 5; incident #174), also under
-# $ErrorActionPreference = "Stop" and inside a caller's try; the console line still
-# prints and LogError / LogWarn still count.
-function Log($msg, $level = "info") {
-    $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
-    $line = "[$ts] [$scriptName] [$level] $msg"
-    Write-Host $line
-    Add-AitLibLogText $line
-    Write-JsonlRecord $ts $scriptName $level $msg
-}
-function LogOk($msg)    { Log $msg "ok" }
-function LogError($msg) { Log $msg "error"; $script:errors++ }
-function LogWarn($msg)  { Log $msg "warn"; $script:warnings++ }
-# --- END install log override ---
-
-# --- Summary file init (if not already set by parent aitools invocation) ---
-if (-not $env:AITOOLS_SUMMARY_FILE) {
-    $env:AITOOLS_SUMMARY_FILE = Join-Path $env:USERPROFILE ".aitools\run-summary.txt"
-    # Remove stale summary file before creating fresh one; may not exist (expected)
-    if (Test-Path $env:AITOOLS_SUMMARY_FILE) {
-        Remove-Item $env:AITOOLS_SUMMARY_FILE -Force
-    }
-    New-Item -ItemType File -Path $env:AITOOLS_SUMMARY_FILE -Force | Out-Null
-}
+# --- Run summary file (reference/logging.md 8.4, 8.5): created here only when no
+# caller set one (aitools.ps1 runs this installer with its own); drawn at the end
+# only when this installer created it (Complete-AitSummary) ---
+Start-AitSummary
 
 # Interactive mode (same rule as the lib's review prompts): a console on stdin and
 # no -Force / AITOOLS_FORCE. Otherwise every prompt takes its default.
 $installInteractive = ($env:AITOOLS_FORCE -ne "1") -and (Test-InteractiveConsole)
 
+# Get-InstallTool SCRIPT -- the tool name a setup script records under (the tool
+# name table, reference/script-standards-detail.md), passed to the relay as its
+# summary tool so a failed child is recorded under that name. A script that
+# records under several tools gets the first (A6 Q7). Parity: install_tool in
+# aitools-install.sh.
+function Get-InstallTool([string]$Script) {
+    switch ($Script -replace '\.ps1$', '') {
+        "setup-gh-cli"         { return "gh cli" }
+        "setup-user-shell"     { return "shell" }
+        "setup-vercelcli"      { return "vercel cli" }
+        "setup-pandoc"         { return "pandoc" }
+        "setup-rust"           { return "rust/cargo" }
+        "setup-typst"          { return "typst" }
+        "setup-uv"             { return "uv" }
+        "setup-python"         { return "python" }
+        "setup-pywinpty"       { return "pywinpty" }
+        "setup-modal"          { return "modal cli" }
+        "setup-go"             { return "go" }
+        "setup-datadog"        { return "datadog cli" }
+        "setup-perl"           { return "perl" }
+        "setup-bash"           { return "bash" }
+        "setup-google-chrome"  { return "google chrome" }
+        "setup-user-claude"    { return "claude.md" }
+        "setup-user-cursor"    { return "cursor cli" }
+        "setup-user-mcp"       { return "claude mcp" }
+        "setup-user-skills"    { return "skills" }
+        "setup-cursor-ide-mcp" { return "cursor ide mcp" }
+        "setup-user-settings"  { return "claude settings" }
+        "setup-user-hooks"     { return "claude hooks" }
+        "deploy-harness"       { return "harness files" }
+    }
+    return ($Script -replace '\.ps1$', '')
+}
+
 # --- Script validation helper ---
-# Validates PS1 syntax with ParseFile before executing. A parse error or a failed
-# script logs an error and writes an ERROR summary row; the install continues.
+# Invoke-ValidatedScript STEP SCRIPT -- run setup SCRIPT as installer step STEP
+# ("Step 11"). ParseFile first: a parse error is one error under the script's tool
+# (the reason its first parse error, every one a detail line) and the script is
+# skipped. Then the script runs in-process and relayed (Invoke-ChildRelayed, label
+# "<STEP>: <script>", the script's tool): its lines reach the console and
+# deploy.jsonl, and a failed child (exit code or throw) is one error of the
+# installer, recorded by the relay only when the child recorded none
+# (reference/logging.md 8.3). The install continues either way. Parity:
+# validate_and_run in aitools-install.sh.
 function Invoke-ValidatedScript {
-    param([string]$ScriptPath)
+    param([string]$Step, [string]$ScriptPath)
     $name = Split-Path $ScriptPath -Leaf
+    $tool = Get-InstallTool $name
     $parseErrors = $null
     $null = [System.Management.Automation.Language.Parser]::ParseFile(
         $ScriptPath, [ref]$null, [ref]$parseErrors)
@@ -198,51 +210,35 @@ function Invoke-ValidatedScript {
         foreach ($err in $parseErrors) {
             LogDetail "$name parse: line $($err.Extent.StartLineNumber): $($err.Message)"
         }
-        LogError "$name has parse errors on this PowerShell version -- skipped"
-        Write-Summary "ERROR" ($name -replace '\.ps1$', '') "parse errors -- skipped"
+        $first = $parseErrors[0]
+        Write-AitError $tool "$name parse check failed -- skipped" "line $($first.Extent.StartLineNumber): $($first.Message)"
         return
     }
-    $global:LASTEXITCODE = 0
-    try {
-        & $ScriptPath
-    } catch {
-        LogError "$name failed: $_"
-        Write-Summary "ERROR" ($name -replace '\.ps1$', '') "script failed (exception)"
-        return
-    }
-    $scriptRc = $LASTEXITCODE
-    if ($scriptRc -and $scriptRc -ne 0) {
-        LogError "$name failed (exit $scriptRc)"
-        Write-Summary "ERROR" ($name -replace '\.ps1$', '') "script failed (exit $scriptRc)"
+    if ((Invoke-ChildRelayed "${Step}: $name" $ScriptPath @{} $tool) -ne 0) {
+        LogDetail "${Step}: $name failed (exit $($script:AitLibChildRc); logged and counted by the relay)"
     }
 }
 
 # Invoke-HarnessStep SCRIPT [ARGS] -- Step 8b: run deploy-harness.ps1 (SCRIPT) with the
 # ARGS hashtable (the caller passes @{ SkipConfig = $true } when Step 5 ran the config
-# writer) in-process and relayed (aitools-lib Invoke-ChildRelayed: its Write-Host lines go to the console and
-# deploy.jsonl; the review menu reads and writes the console directly). A parse error
-# throws, which the lib reports as a failure (exit 1), never as an abort. Returns 2
-# when deploy-harness exited 2 (the user chose [x]abort, D-TS13; the caller stops the
-# install), else 0. Exit 1 (errors): the lib logged the error; this adds the ERROR
-# row and the install continues. Parity: run_harness_step in aitools-install.sh.
+# writer) in-process and relayed (aitools-lib Invoke-ChildRelayed "harness files"
+# -AbortAsWarning: its Write-Host lines go to the console and deploy.jsonl; the
+# review menu reads and writes the console directly). A parse error throws, which
+# the lib reports as a failure, never as an abort. Returns 2 when deploy-harness
+# exited 2 (the user chose [x]abort, D-TS13: the relay recorded one warning,
+# "harness files" "aborted by user"; the caller stops the install), else 0. A
+# failure is counted and, when deploy-harness recorded none, recorded by the
+# relay; the install continues. Parity: run_harness_step in aitools-install.sh.
 function Invoke-HarnessStep([string]$Harness, [hashtable]$HarnessArgs = @{}) {
     if (-not (Test-Path -LiteralPath $Harness)) {
-        LogWarn "deploy-harness.ps1 not found -- skipping (MDM deploy)"
-        Write-Summary "WARN" "harness files" "deploy-harness.ps1 not found"
+        Write-AitWarn "harness files" "deploy-harness.ps1 not found -- skipped (MDM deploy)"
         return 0
     }
-    $harnessRc = Invoke-ChildRelayed "Step 8b: deploy-harness.ps1" $Harness $HarnessArgs "harness files"
+    $harnessRc = Invoke-ChildRelayed "Step 8b: deploy-harness.ps1" $Harness $HarnessArgs "harness files" -AbortAsWarning
     if ($harnessRc -eq 0) { return 0 }
     if ($script:AitLibChildRc -eq 2) {
         Log "Step 8b: aborted by user at a review menu -- install stopped (exit 2)"
-        Write-Summary "WARN" "harness files" "aborted by user"
         return 2
-    }
-    # Exit 0 with error lines: the lib logged them and returned 1
-    if ($script:AitLibChildRc -eq 0) {
-        Write-Summary "ERROR" "harness files" "errors logged (exit 0)"
-    } else {
-        Write-Summary "ERROR" "harness files" "script failed (exit $($script:AitLibChildRc))"
     }
     return 0
 }
@@ -252,28 +248,31 @@ function Invoke-HarnessStep([string]$Harness, [hashtable]$HarnessArgs = @{}) {
 # required keys present, and no double-slash paths (excluding protocol prefixes).
 # No caller here since config.json moved to setup-user-config.ps1 (M3 B3b). It stays
 # in this installer (M3 B2 kept it out of aitools-lib) because config-file-safety.md
-# cites it as the reference example for ValidateJsonConfig.
+# cites it as the reference example for ValidateJsonConfig. Each failure is one
+# error (Write-AitError, empty TOOL = this script's name: WHAT "<file> validation
+# failed", REASON what is wrong, with the parser's message; reference/logging.md
+# 8.2, 8.3). Parity: validate_json_config in aitools-install.sh.
 function ValidateJsonConfig {
     param([string]$File, [string[]]$RequiredKeys)
     if (-not (Test-Path $File) -or (Get-Item $File).Length -eq 0) {
-        LogError "Validation failed: $File is empty or missing"
+        Write-AitError "" "$File validation failed" "the file is empty or missing"
         return
     }
     try {
         $content = [System.IO.File]::ReadAllText($File)
         $parsed = $content | ConvertFrom-Json
     } catch {
-        LogError "Validation failed: $File is not valid JSON -- $_"
+        Write-AitError "" "$File validation failed" ("not valid JSON: " + ($_.Exception.Message -replace '\s*\r?\n\s*', ' '))
         return
     }
     foreach ($key in $RequiredKeys) {
         if (-not ($parsed.PSObject.Properties.Name -contains $key)) {
-            LogError "Validation failed: $File missing required field '$key'"
+            Write-AitError "" "$File validation failed" "missing required field '$key'"
         }
     }
     # Double-slash path check (skip protocol prefixes)
     if ($content -match '"[^"]*(?<!https?:)//[^"]*"') {
-        LogError "Validation failed: $File contains double-slash in path value"
+        Write-AitError "" "$File validation failed" "a path value has a double slash: $($Matches[0])"
     }
 }
 
@@ -304,9 +303,8 @@ try {
 if ($longPathsEnabled) {
     LogOk "Windows long paths enabled"
 } else {
-    LogWarn "Windows long paths disabled (LongPathsEnabled=0) -- cargo/git may fail on deep paths"
-    LogWarn "Fix (run as admin): Set-ItemProperty '$longPathsKey' -Name LongPathsEnabled -Value 1"
-    Write-Summary "ACTION" "" "Enable long paths (admin): Set-ItemProperty '$longPathsKey' -Name LongPathsEnabled -Value 1"
+    # One warning (no tool: recorded under this script's name) and one ACTION
+    Write-AitAction "" "Windows long paths disabled (LongPathsEnabled=0) -- cargo/git may fail on deep paths; enable them as admin" "Enable long paths (admin): Set-ItemProperty '$longPathsKey' -Name LongPathsEnabled -Value 1"
 }
 
 # git core.longpaths -- can set without elevation
@@ -315,13 +313,11 @@ if ($gitLongPaths -ne "true") {
     Log "Setting git config --global core.longpaths true..."
     $longPathsOut = git config --global core.longpaths true 2>&1 | Out-String
     $longPathsRc = $LASTEXITCODE
-    foreach ($lpLine in $longPathsOut.Split("`n")) {
-        if ($lpLine.Trim()) { LogDetail "git-longpaths: $($lpLine.TrimEnd())" }
-    }
     if ($longPathsRc -eq 0) {
         LogOk "git core.longpaths enabled"
     } else {
-        LogWarn "git config --global core.longpaths true failed (exit $longPathsRc) -- deep paths may fail"
+        # Get-AitErrorReason logs git's output as detail lines
+        LogWarn ("git config --global core.longpaths true failed (exit $longPathsRc) -- deep paths may fail: " + (Get-AitErrorReason -Output $longPathsOut -ExitCode $longPathsRc))
     }
 } else {
     LogOk "git core.longpaths already enabled"
@@ -334,9 +330,9 @@ Log "Step 1: gh CLI"
 
 $ghScript = Join-Path $PSScriptRoot "setup-gh-cli.ps1"
 if (Test-Path $ghScript) {
-    Invoke-ValidatedScript $ghScript
+    Invoke-ValidatedScript "Step 1" $ghScript
 } else {
-    LogWarn "setup-gh-cli.ps1 not found -- skipping (MDM deploy)"
+    Write-AitWarn "gh cli" "setup-gh-cli.ps1 not found -- skipped (MDM deploy)"
 }
 
 # ============================================================
@@ -347,25 +343,35 @@ Log "Step 2: gh authentication"
 if ($SkipGhAuth) {
     Log "Skipping gh auth (-SkipGhAuth)"
 } elseif (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
-    LogWarn "gh not installed, skipping auth"
+    Write-AitWarn "gh auth" "gh not installed -- authentication skipped"
 } else {
     $authStatus = gh auth status 2>&1
     if ($LASTEXITCODE -eq 0) {
         LogOk "gh already authenticated"
     } elseif ($installInteractive) {
         Log "Not authenticated. Starting gh auth login..."
-        # Interactive: gh talks to the console directly, so only the exit code is captured.
-        gh auth login
-        $ghAuthRc = $LASTEXITCODE
+        # Interactive: gh talks to the console directly, so only the exit code is
+        # captured. Start-Process -NoNewWindow -Wait gives it this console (stdin,
+        # stdout and stderr): run as a native command inside a relay (aitools.ps1
+        # runs this installer relayed), its output would go to the relay's pipeline
+        # and gh would not prompt.
+        $ghAuthRc = 0
+        try {
+            $ghAuthProc = Start-Process -FilePath "gh" -ArgumentList @("auth", "login") -NoNewWindow -Wait -PassThru -ErrorAction Stop
+            $ghAuthRc = $ghAuthProc.ExitCode
+            $ghAuthWhy = Get-AitErrorReason -Output "" -ExitCode $ghAuthRc
+        } catch {
+            $ghAuthRc = 1
+            $ghAuthWhy = Get-AitErrorReason -Output "" -ExitCode 1 -ErrorRecord $_
+        }
         if ($ghAuthRc -ne 0) {
-            LogError "gh auth login failed (exit $ghAuthRc)"
-            Write-Summary "ERROR" "gh auth" "login failed (exit $ghAuthRc)"
+            # The output went to the console: the reason is the exit code (or the
+            # exception when gh could not be started)
+            Write-AitError "gh auth" "gh auth login failed (exit $ghAuthRc)" $ghAuthWhy
             Write-Summary "ACTION" "" "Run: gh auth login"
         }
     } else {
-        LogWarn "Not authenticated and not interactive -- skipping gh auth (use -SkipGhAuth to suppress)"
-        Write-Summary "WARN" "gh auth" "not authenticated"
-        Write-Summary "ACTION" "" "Run: gh auth login"
+        Write-AitAction "gh auth" "not authenticated (non-interactive run) -- run: gh auth login" "Run: gh auth login"
     }
 }
 
@@ -387,7 +393,7 @@ if ($ReposPath) {
             Log "Using repos path from config: $resolvedReposPath"
         }
     } catch {
-        LogWarn "Could not read repos path from config"
+        Write-AitWarn "aitools config" "could not read reposPath from config.json ($($_.Exception.Message -replace '\s*\r?\n\s*', ' ')) -- using the default"
     }
 }
 if (-not $resolvedReposPath) {
@@ -442,7 +448,9 @@ if ($SkipDriveDetection) {
     }
 
     if ($drives.Count -eq 0) {
-        LogWarn "No Google Drive mounts detected"
+        # Not a warning: a machine without Google Drive is a supported state (the
+        # bash twin logs nothing, or info, for it)
+        Log "No Google Drive mounts detected"
     }
 }
 
@@ -458,8 +466,7 @@ $configWriterRan = $false   # true: Step 8b passes -SkipConfig (the writer runs 
 if (-not $reposOk) {
     Log "Step 5: skipped -- the repos path is unusable (see the error above); config.json not written"
 } elseif (-not (Test-Path $configWriter)) {
-    LogError "Failed: setup-user-config.ps1 not found next to the installer -- config.json not written"
-    Write-Summary "ERROR" "aitools config" "writer missing"
+    Write-AitError "aitools config" "config.json not written" "setup-user-config.ps1 not found next to the installer"
 } else {
     $drivesJson = ConvertTo-Json -InputObject @($drives | ForEach-Object { [ordered]@{ path = $_.path; account = $_.account; label = $_.label } }) -Depth 5 -Compress
     if (-not $drivesJson) { $drivesJson = "[]" }
@@ -485,7 +492,7 @@ if (Test-Path $aitoolsSrc) {
     Copy-Item $aitoolsSrc $aitoolsDst -Force
     LogOk "Installed aitools (bash) to $aitoolsDst"
 } else {
-    LogWarn "aitools bash source not found (MDM deploy -- skipping)"
+    Write-AitWarn "aitools install" "aitools bash source not found at $aitoolsSrc -- skipped (MDM deploy)"
 }
 
 # Install PowerShell aitools.ps1 (native Windows CLI)
@@ -495,7 +502,7 @@ if (Test-Path $aitoolsPs1Src) {
     Copy-Item $aitoolsPs1Src $aitoolsPs1Dst -Force
     LogOk "Installed aitools.ps1 to $aitoolsPs1Dst"
 } else {
-    LogWarn "aitools.ps1 source not found (MDM deploy -- skipping)"
+    Write-AitWarn "aitools install" "aitools.ps1 source not found at $aitoolsPs1Src -- skipped (MDM deploy)"
 }
 
 $hhPs1Src = Join-Path $PSScriptRoot "hh.ps1"
@@ -504,7 +511,7 @@ if (Test-Path $hhPs1Src) {
     Copy-Item $hhPs1Src $hhPs1Dst -Force
     LogOk "Installed hh.ps1 to $hhPs1Dst"
 } else {
-    LogWarn "hh.ps1 not found -- skipping"
+    Write-AitWarn "aitools install" "hh.ps1 not found -- skipped (MDM deploy)"
 }
 
 # The harness Python CLIs (.aitools\bin) are deployed by deploy-harness (Step 8b).
@@ -519,9 +526,9 @@ Log "Step 7: Shell integration"
 # migration of the legacy "# aitools shell integration" lines.
 $shellScript = Join-Path $PSScriptRoot "setup-user-shell.ps1"
 if (Test-Path $shellScript) {
-    Invoke-ValidatedScript $shellScript
+    Invoke-ValidatedScript "Step 7" $shellScript
 } else {
-    LogWarn "setup-user-shell.ps1 not found -- skipping the PowerShell profile blocks (MDM deploy)"
+    Write-AitWarn "shell" "setup-user-shell.ps1 not found -- the PowerShell profile blocks skipped (MDM deploy)"
 }
 
 # ============================================================
@@ -536,18 +543,22 @@ if (Get-Command node -ErrorAction SilentlyContinue) {
 } else {
     Log "Installing Node.js via winget..."
     $wingetOutput = winget install OpenJS.NodeJS.LTS --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
-    $wingetOutput.Trim().Split("`n") | ForEach-Object { Log $_.TrimEnd() }
-    if ($LASTEXITCODE -ne 0) {
-        LogError "winget install node failed (exit code $LASTEXITCODE)"
-        Write-Summary "ERROR" "node.js" "winget install failed (exit $LASTEXITCODE)"
+    $nodeRc = $LASTEXITCODE
+    if ($nodeRc -ne 0) {
+        # Get-AitErrorReason logs winget's output as detail lines
+        Write-AitError "node.js" "winget install of Node.js failed (exit $nodeRc)" (Get-AitErrorReason -Output $wingetOutput -ExitCode $nodeRc)
+    } else {
+        $wingetOutput.Trim().Split("`n") | ForEach-Object { Log $_.TrimEnd() }
     }
     Refresh-Path
     if (Get-Command node -ErrorAction SilentlyContinue) {
         LogOk "Node.js installed ($(node --version))"
         Write-Summary "OK" "node.js" "$(node --version)"
+    } elseif ($nodeRc -ne 0) {
+        # The failed install is the error (one cause, one red line)
+        Log "Step 8: 'node' not found in PATH after the failed winget install"
     } else {
-        LogError "Node.js install failed (restart terminal and re-run)"
-        Write-Summary "ERROR" "node.js" "install failed (restart terminal)"
+        Write-AitError "node.js" "installed but not on PATH" "restart the terminal and re-run"
     }
 }
 
@@ -564,7 +575,7 @@ Log "Step 8b: Deployed harness"
 $harnessStepArgs = if ($configWriterRan) { @{ SkipConfig = $true } } else { @{} }
 $harnessStepRc = Invoke-HarnessStep (Join-Path $PSScriptRoot "deploy-harness.ps1") $harnessStepArgs
 if ($harnessStepRc -eq 2) {
-    if (-not $env:AITOOLS_SUPPRESS_SUMMARY_DISPLAY) { Show-Summary }
+    Complete-AitSummary
     exit 2
 }
 
@@ -580,18 +591,23 @@ if (Get-Command claude -ErrorAction SilentlyContinue) {
     Log "Running claude update..."
     $claudeOutput = claude update 2>&1 | Out-String
     $updateRc = $LASTEXITCODE
-    foreach ($updateLine in $claudeOutput.Split("`n")) {
-        if ($updateLine.Trim()) { Log $updateLine.TrimEnd() }
-    }
     if ($updateRc -ne 0) {
-        LogWarn "claude update failed (exit $updateRc) -- see $logFile"
-    } elseif ($claudeOutput -match '(?i)already.*up.to.date|no update') {
-        LogOk "Already up to date"
+        # One warning (the tool still works); Get-AitErrorReason logs the output as
+        # detail lines
+        Write-AitWarn "claude code" ("claude update failed (exit $updateRc): " + (Get-AitErrorReason -Output $claudeOutput -ExitCode $updateRc))
     } else {
-        LogOk "claude update finished"
+        foreach ($updateLine in $claudeOutput.Split("`n")) {
+            if ($updateLine.Trim()) { Log $updateLine.TrimEnd() }
+        }
+        if ($claudeOutput -match '(?i)already.*up.to.date|no update') {
+            LogOk "Already up to date"
+        } else {
+            LogOk "claude update finished"
+        }
     }
 } else {
     Log "Installing Claude Code CLI..."
+    $installOut = ""
     try {
         # Capture every stream of the official installer so its output reaches the log.
         $installOut = Invoke-Expression (Invoke-RestMethod 'https://claude.ai/install.ps1') *>&1 | Out-String
@@ -603,12 +619,12 @@ if (Get-Command claude -ErrorAction SilentlyContinue) {
             LogOk "Claude Code installed ($(claude --version 2>$null | Select-Object -First 1))"
             Write-Summary "OK" "claude code" "$(claude --version 2>$null | Select-Object -First 1)"
         } else {
-            LogWarn "Claude Code installed -- restart terminal to use"
-            Write-Summary "WARN" "claude code" "installed -- restart terminal to use"
+            # Installed but not on PATH is a functional failure (script standards
+            # "External command error handling" 4): an error, as in the bash twin
+            Write-AitError "claude code" "installed but not on PATH" "restart the terminal and re-run"
         }
     } catch {
-        LogError "Claude Code install failed: $_"
-        Write-Summary "ERROR" "claude code" "install failed"
+        Write-AitError "claude code" "Claude Code install failed" (Get-AitErrorReason -Output $installOut -ExitCode 1 -ErrorRecord $_)
     }
 }
 
@@ -619,9 +635,9 @@ Log "Step 10: Vercel CLI"
 
 $vercelScript = Join-Path $PSScriptRoot "setup-vercelcli.ps1"
 if (Test-Path $vercelScript) {
-    Invoke-ValidatedScript $vercelScript
+    Invoke-ValidatedScript "Step 10" $vercelScript
 } else {
-    LogWarn "setup-vercelcli.ps1 not found -- skipping (MDM deploy)"
+    Write-AitWarn "vercel cli" "setup-vercelcli.ps1 not found -- skipped (MDM deploy)"
 }
 
 # ============================================================
@@ -631,9 +647,9 @@ Log "Step 11: Pandoc"
 
 $pandocScript = Join-Path $PSScriptRoot "setup-pandoc.ps1"
 if (Test-Path $pandocScript) {
-    Invoke-ValidatedScript $pandocScript
+    Invoke-ValidatedScript "Step 11" $pandocScript
 } else {
-    LogWarn "setup-pandoc.ps1 not found -- skipping (MDM deploy)"
+    Write-AitWarn "pandoc" "setup-pandoc.ps1 not found -- skipped (MDM deploy)"
 }
 
 # ============================================================
@@ -643,9 +659,9 @@ Log "Step 12: Rust (cargo)"
 
 $rustScript = Join-Path $PSScriptRoot "setup-rust.ps1"
 if (Test-Path $rustScript) {
-    Invoke-ValidatedScript $rustScript
+    Invoke-ValidatedScript "Step 12" $rustScript
 } else {
-    LogWarn "setup-rust.ps1 not found -- skipping (MDM deploy)"
+    Write-AitWarn "rust/cargo" "setup-rust.ps1 not found -- skipped (MDM deploy)"
 }
 
 # ============================================================
@@ -655,9 +671,9 @@ Log "Step 13: Typst"
 
 $typstScript = Join-Path $PSScriptRoot "setup-typst.ps1"
 if (Test-Path $typstScript) {
-    Invoke-ValidatedScript $typstScript
+    Invoke-ValidatedScript "Step 13" $typstScript
 } else {
-    LogWarn "setup-typst.ps1 not found -- skipping (MDM deploy)"
+    Write-AitWarn "typst" "setup-typst.ps1 not found -- skipped (MDM deploy)"
 }
 
 # ============================================================
@@ -667,9 +683,9 @@ Log "Step 14: uv"
 
 $uvScript = Join-Path $PSScriptRoot "setup-uv.ps1"
 if (Test-Path $uvScript) {
-    Invoke-ValidatedScript $uvScript
+    Invoke-ValidatedScript "Step 14" $uvScript
 } else {
-    LogWarn "setup-uv.ps1 not found -- skipping (MDM deploy)"
+    Write-AitWarn "uv" "setup-uv.ps1 not found -- skipped (MDM deploy)"
 }
 
 # ============================================================
@@ -679,9 +695,9 @@ Log "Step 15: Python"
 
 $pythonScript = Join-Path $PSScriptRoot "setup-python.ps1"
 if (Test-Path $pythonScript) {
-    Invoke-ValidatedScript $pythonScript
+    Invoke-ValidatedScript "Step 15" $pythonScript
 } else {
-    LogWarn "setup-python.ps1 not found -- skipping (MDM deploy)"
+    Write-AitWarn "python" "setup-python.ps1 not found -- skipped (MDM deploy)"
 }
 
 # ============================================================
@@ -693,9 +709,9 @@ Log "Step 15b: pywinpty"
 
 $pywinptyScript = Join-Path $PSScriptRoot "setup-pywinpty.ps1"
 if (Test-Path $pywinptyScript) {
-    Invoke-ValidatedScript $pywinptyScript
+    Invoke-ValidatedScript "Step 15b" $pywinptyScript
 } else {
-    LogWarn "setup-pywinpty.ps1 not found -- skipping (MDM deploy)"
+    Write-AitWarn "pywinpty" "setup-pywinpty.ps1 not found -- skipped (MDM deploy)"
 }
 
 # ============================================================
@@ -705,9 +721,9 @@ Log "Step 16: Modal CLI"
 
 $modalScript = Join-Path $PSScriptRoot "setup-modal.ps1"
 if (Test-Path $modalScript) {
-    Invoke-ValidatedScript $modalScript
+    Invoke-ValidatedScript "Step 16" $modalScript
 } else {
-    LogWarn "setup-modal.ps1 not found -- skipping (MDM deploy)"
+    Write-AitWarn "modal cli" "setup-modal.ps1 not found -- skipped (MDM deploy)"
 }
 
 # ============================================================
@@ -717,9 +733,9 @@ Log "Step 17: Go"
 
 $goScript = Join-Path $PSScriptRoot "setup-go.ps1"
 if (Test-Path $goScript) {
-    Invoke-ValidatedScript $goScript
+    Invoke-ValidatedScript "Step 17" $goScript
 } else {
-    LogWarn "setup-go.ps1 not found -- skipping (MDM deploy)"
+    Write-AitWarn "go" "setup-go.ps1 not found -- skipped (MDM deploy)"
 }
 
 # ============================================================
@@ -729,9 +745,9 @@ Log "Step 18: Datadog CLI"
 
 $datadogScript = Join-Path $PSScriptRoot "setup-datadog.ps1"
 if (Test-Path $datadogScript) {
-    Invoke-ValidatedScript $datadogScript
+    Invoke-ValidatedScript "Step 18" $datadogScript
 } else {
-    LogWarn "setup-datadog.ps1 not found -- skipping (MDM deploy)"
+    Write-AitWarn "datadog cli" "setup-datadog.ps1 not found -- skipped (MDM deploy)"
 }
 
 # ============================================================
@@ -741,9 +757,9 @@ Log "Step 19: Perl"
 
 $perlScript = Join-Path $PSScriptRoot "setup-perl.ps1"
 if (Test-Path $perlScript) {
-    Invoke-ValidatedScript $perlScript
+    Invoke-ValidatedScript "Step 19" $perlScript
 } else {
-    LogWarn "setup-perl.ps1 not found -- skipping (MDM deploy)"
+    Write-AitWarn "perl" "setup-perl.ps1 not found -- skipped (MDM deploy)"
 }
 
 # ============================================================
@@ -753,9 +769,9 @@ Log "Step 20: Bash"
 
 $bashScript = Join-Path $PSScriptRoot "setup-bash.ps1"
 if (Test-Path $bashScript) {
-    Invoke-ValidatedScript $bashScript
+    Invoke-ValidatedScript "Step 20" $bashScript
 } else {
-    LogWarn "setup-bash.ps1 not found -- skipping (MDM deploy)"
+    Write-AitWarn "bash" "setup-bash.ps1 not found -- skipped (MDM deploy)"
 }
 
 # ============================================================
@@ -766,9 +782,9 @@ Log "Step 20b: Google Chrome"
 
 $chromeScript = Join-Path $PSScriptRoot "setup-google-chrome.ps1"
 if (Test-Path $chromeScript) {
-    Invoke-ValidatedScript $chromeScript
+    Invoke-ValidatedScript "Step 20b" $chromeScript
 } else {
-    LogWarn "setup-google-chrome.ps1 not found -- skipping (MDM deploy)"
+    Write-AitWarn "google chrome" "setup-google-chrome.ps1 not found -- skipped (MDM deploy)"
 }
 
 # ============================================================
@@ -789,9 +805,9 @@ $deployScripts = @(
 foreach ($script in $deployScripts) {
     $scriptPath = Join-Path $PSScriptRoot $script
     if (Test-Path $scriptPath) {
-        Invoke-ValidatedScript $scriptPath
+        Invoke-ValidatedScript "Step 21" $scriptPath
     } else {
-        LogWarn "$script not found -- skipping"
+        Write-AitWarn (Get-InstallTool $script) "$script not found -- skipped (MDM deploy)"
     }
 }
 
@@ -800,6 +816,8 @@ foreach ($script in $deployScripts) {
 # ============================================================
 Log "Step 22: Relay → Cursor AGENTS.md mirror"
 
+# Invoke-RelaySync (aitools-lib) logs the sync's output as detail lines and records
+# a failure as one warning, "relay sync" (with its reason); nothing more here
 $syncPy = Join-Path $PSScriptRoot "sync-relay-to-cursor-agents.py"
 if (Test-Path $syncPy) {
     if (-not $DryRun) { $env:AITOOLS_SYNC_DEPLOY_LOG = "1" }
@@ -813,16 +831,9 @@ if (Test-Path $syncPy) {
         $pyArgs = @("-3") + $syncArgs
         $exitCode = Invoke-RelaySync "py" $pyArgs
     } else {
-        LogWarn "Python not found -- skipping relay→AGENTS sync"
-        $exitCode = -2
+        Write-AitWarn "relay sync" "Python not found -- relay -> AGENTS.md sync skipped"
     }
-    if ($exitCode -ge 0) {
-        if ($exitCode -eq 0) {
-            if ($DryRun) { LogOk "relay→AGENTS sync (dry-run)" }
-        } else {
-            LogWarn "sync-relay-to-cursor-agents.py failed (non-fatal)"
-        }
-    }
+    if ($exitCode -eq 0 -and $DryRun) { LogOk "relay -> AGENTS.md sync (dry-run)" }
     if (Test-Path Env:\AITOOLS_SYNC_DEPLOY_LOG) { Remove-Item Env:\AITOOLS_SYNC_DEPLOY_LOG }
 }
 
@@ -835,7 +846,8 @@ if ($script:InstallSetRunId) {
     if (Test-Path Env:\AITOOLS_RUN_ID) { LogDetail "AITOOLS_RUN_ID could not be cleared" }
 }
 
-if (-not $env:AITOOLS_SUPPRESS_SUMMARY_DISPLAY) { Show-Summary }
+# The panel, only when this installer created the run summary file (Start-AitSummary)
+Complete-AitSummary
 
 # --- Exit ---
 if ($errors -gt 0) {
