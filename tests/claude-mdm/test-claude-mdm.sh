@@ -203,13 +203,14 @@ claude_rows "$lang-dry" > "$TMP_ROOT/dry-3.rows"
 check "parity A-26 (edited CLAUDE.md): claude.md rows match golden" \
     "golden_match dry-3.rows '$TMP_ROOT/dry-3.rows'"
 # Unreadable CLAUDE.md (review B-1): a counted warning, a row, exit 0 -- not a
-# set -e abort. chmod does not block reads for root.
+# set -e abort. chmod does not block reads for root. The warning does not
+# recolour the claude.md status: it stays OK (reference/logging.md 8.3).
 if $CAN_CHMOD_READ; then
     chmod 000 "$(md_of "$lang-dry")"
     run_claude "$lang-dry" stub-host "$DRY"
     chmod 644 "$(md_of "$lang-dry")"
     check "$lang A-26: dry run on an unreadable CLAUDE.md -> warning, 'dry-run: would update' row, exit 0" \
-        "[ \"\$(rc_of $lang-dry)\" = 0 ] && [ \"\$(claude_rows $lang-dry)\" = 'WARN|claude.md|dry-run: would update' ] && grep -q 'for the dry-run comparison' '$TMP_ROOT/$lang-dry/logs/deploy.log'"
+        "[ \"\$(rc_of $lang-dry)\" = 0 ] && [ \"\$(claude_rows $lang-dry)\" = 'OK|claude.md|dry-run: would update' ] && grep -q '\[warn\] Cannot read .* for the dry-run comparison' '$TMP_ROOT/$lang-dry/logs/deploy.log'"
     claude_rows "$lang-dry" > "$TMP_ROOT/dry-4.rows"
     check "parity A-26 (unreadable CLAUDE.md): claude.md rows match golden" \
         "golden_match dry-4.rows '$TMP_ROOT/dry-4.rows'"
@@ -359,8 +360,11 @@ env -u AITOOLS_USER_REPO_PATH -u AITOOLS_SUMMARY_FILE \
 echo $? > "$TMP_ROOT/build-fail.rc"
 check "A-20 resolver error: build skips (exit 0) with a plain-text warning" \
     "[ \"\$(rc_of build-fail)\" = 0 ] && grep -q '\[build-deploy\] \[warn\] Dotprofile resolver failed' '$OUT' && ! grep -qF \"\$ESC\" '$OUT'"
+# The resolver failure is one error (reference/logging.md 8.2, write_error):
+# deploy.log has "[error] <WHAT>: <REASON>", WHAT "resolver failed", REASON the
+# child's first error line.
 check "A-20 resolver error: the child's error line is in deploy.log once, not in the build output" \
-    "! grep -q 'stub resolver failure' '$OUT' && [ \"\$(grep -c '\[error\] dotprofile: stub resolver failure' '$HF/logs/deploy.log')\" = 1 ]"
+    "! grep -q 'stub resolver failure' '$OUT' && [ \"\$(grep -c '\[error\] resolver failed: stub resolver failure' '$HF/logs/deploy.log')\" = 1 ]"
 if $HAVE_PTY; then
     OUT="$TMP_ROOT/build-fail-tty.out"
     env -u AITOOLS_USER_REPO_PATH -u AITOOLS_SUMMARY_FILE \

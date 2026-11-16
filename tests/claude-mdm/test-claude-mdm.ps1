@@ -415,8 +415,11 @@ try {
         $bfText = ReadText $script:OUT
         Check "A-20 resolver error: build skips (exit 0) with a plain-text warning" `
             ((RcOf "build-fail") -eq 0 -and (CountMatch $script:OUT '\[build-deploy\] \[warn\] Dotprofile resolver failed') -ge 1 -and -not $bfText.Contains($ESC))
+        # The resolver failure is one error (reference/logging.md 8.2, write_error):
+        # deploy.log has "[error] <WHAT>: <REASON>", WHAT "resolver failed", REASON the
+        # child's first error line.
         Check "A-20 resolver error: the child's error line is in deploy.log once, not in the build output" `
-            ((CountMatch $script:OUT 'stub resolver failure') -eq 0 -and (CountMatch (Join-Path $HF "logs/deploy.log") '\[error\] dotprofile: stub resolver failure') -eq 1)
+            ((CountMatch $script:OUT 'stub resolver failure') -eq 0 -and (CountMatch (Join-Path $HF "logs/deploy.log") '\[error\] resolver failed: stub resolver failure') -eq 1)
         if ($havePty) {
             $script:OUT = Join-Path $tmpRoot "build-fail-tty.out"
             $old = Set-TestEnv $failEnv

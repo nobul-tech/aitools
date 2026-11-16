@@ -278,7 +278,21 @@ try {
     }
 
     function SameRc([string]$Name) { $script:RC["$Name-dev"] -eq $script:RC["$Name-mdm"] }
-    function SameSummary([string]$Name) { SameBytes (Join-Path $tmpRoot "$Name-dev.summary") (Join-Path $tmpRoot "$Name-mdm.summary") }
+    # HomeRows SUMMARY -- the summary file's text (CRs removed) with the case's
+    # isolated HOME (SUMMARY without .summary, the C:/... form Run-Script passed)
+    # written as <HOME>, and the path separators of what follows as "/": a warning
+    # that names a deployed file (the non-interactive overwrite) holds its HOME,
+    # which differs between the dev and MDM runs and between runs (as home_rows)
+    function HomeRows([string]$Sum) {
+        if (-not (Test-Path -LiteralPath $Sum -PathType Leaf)) { return $null }
+        $hm = Mixed ($Sum -replace '\.summary$', '')
+        $t = ((ReadBytesText $Sum) -replace "`r", "").Replace('\', '/')
+        return [regex]::Replace($t, [regex]::Escape($hm), '<HOME>', [Text.RegularExpressions.RegexOptions]::IgnoreCase)
+    }
+    function SameSummary([string]$Name) {
+        $a = HomeRows (Join-Path $tmpRoot "$Name-dev.summary"); $b = HomeRows (Join-Path $tmpRoot "$Name-mdm.summary")
+        return ($null -ne $a -and $null -ne $b -and $a -ceq $b)
+    }
     function Row([string]$Name, [string]$Text) { GrepQ (Join-Path $tmpRoot "$Name.summary") $Text -Fixed -Whole }
     function SumMatch([string]$Name, [string]$Pattern) { GrepQ (Join-Path $tmpRoot "$Name.summary") $Pattern }
     # TreeMap DIR: relative path -> "dir" or the file's sha256, without any
@@ -316,9 +330,10 @@ try {
         return -not (@(FileLines $fakeCalls) | Where-Object { -not $_.Contains(' diff --no-index ') })
     }
     # Rows-Golden FILE OUT -- summary rows for the cross-language golden: order-free
-    # (ordinal, as LC_ALL=C sort), every number replaced by N
+    # (ordinal, as LC_ALL=C sort), the case's HOME written as <HOME> (HomeRows),
+    # then every number replaced by N
     function Rows-Golden([string]$In, [string]$Out) {
-        $t = (ReadBytesText $In) -replace "`r", "" -replace '[0-9]+', 'N'
+        $t = (HomeRows $In) -replace '[0-9]+', 'N'
         $text = ""
         if ($t.Length -gt 0) {
             if ($t.EndsWith("`n")) { $t = $t.Substring(0, $t.Length - 1) }
@@ -478,12 +493,13 @@ try {
     WriteLf (Join-Path $tmpRoot "eq-mdm/.aitools/rules/tool-ops.md") "local edit`n"
     Run-Case dev eq
     Run-Case mdm eq
-    # WARN, not OK: the non-interactive overwrite logs a warning and the library
-    # raises the row to WARN; the dev path does the same (next check).
-    Check "edit then rerun (non-interactive): source wins in MDM, 1 updated" ((SameBytes $P2 (Join-Path $tmpRoot "eq-mdm/.aitools/rules/tool-ops.md")) -and (SumMatch eq-mdm '^WARN\|harness files\|1 updated'))
-    Check "edit then rerun: same rows and files as dev" ((SameSummary eq) -and (SameTrees eq))
+    # The status stays OK; the non-interactive overwrite of the local edit is its
+    # own warning, recorded by the library (reference/logging.md 8.3: "local edits
+    # overwritten in a non-interactive run"); the dev path does the same (next check).
+    Check "edit then rerun (non-interactive): source wins in MDM, 1 updated, overwrite warning" ((SameBytes $P2 (Join-Path $tmpRoot "eq-mdm/.aitools/rules/tool-ops.md")) -and (SumMatch eq-mdm '^OK\|harness files\|1 updated') -and ((HomeRows (Join-Path $tmpRoot "eq-mdm.summary")) -split "`n" -ccontains 'WARN|harness files|Diff in <HOME>/.aitools/rules/tool-ops.md -- overwriting (non-interactive)'))
+    Check "edit then rerun: same rows (each side's HOME as <HOME>) and files as dev" ((SameSummary eq) -and (SameTrees eq))
     if (-not (SameSummary eq)) {
-        Compare-Object @(FileLines (Join-Path $tmpRoot "eq-dev.summary")) @(FileLines (Join-Path $tmpRoot "eq-mdm.summary")) -CaseSensitive |
+        Compare-Object @((HomeRows (Join-Path $tmpRoot "eq-dev.summary")) -split "`n") @((HomeRows (Join-Path $tmpRoot "eq-mdm.summary")) -split "`n") -CaseSensitive |
             ForEach-Object { Write-Output ("      | " + $(if ($_.SideIndicator -eq '<=') { '< ' } else { '> ' }) + $_.InputObject) }
     }
     Rows-Golden (Join-Path $tmpRoot "eq-mdm.summary") (Join-Path $tmpRoot "eq-edit.rows")

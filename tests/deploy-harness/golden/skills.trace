@@ -215,7 +215,7 @@ s3	shared
 ./s3/SKILL.md
 == invalid rc=0
 WARN|harness files|not a dir: zz
-WARN|harness files|15 verified
+OK|harness files|15 verified
 -- manifest
 # aitools skills manifest v1
 s1	shared
@@ -255,7 +255,7 @@ zz	retired
 ./s3/SKILL.md
 ./zz
 == header rc=0
-WARN|harness files|15 verified
+OK|harness files|15 verified
 -- manifest
 # aitools skills manifest v1
 s1	shared
