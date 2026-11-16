@@ -24,14 +24,17 @@ if (Test-Path $cargoPath) {
     $rustupExe = Join-Path $env:USERPROFILE ".cargo\bin\rustup.exe"
     $rustupOutput = & $rustupExe update 2>&1 | Out-String
     $updateRc = $LASTEXITCODE
-    # Full output to the log as detail (C-F2); the exit code decides.
-    foreach ($l in $rustupOutput.Split("`n")) {
-        if ($l.Trim()) { LogDetail "rustup-update: $($l.TrimEnd())" }
-    }
+    # The exit code decides (C-F2); the full output goes to the log as detail.
     if ($updateRc -ne 0) {
-        LogError "rustup update failed (exit $updateRc) -- see $logFile"
-        Write-Summary "ERROR" "rust/cargo" "rustup update failed (exit $updateRc)"
+        # The installed toolchain still works: a warning, not an error (script-standards
+        # Standard 3). Get-AitErrorReason logs the output as detail lines.
+        Write-AitWarn "rust/cargo" "rustup update failed: $(Get-AitErrorReason -Output $rustupOutput -ExitCode $updateRc)"
+        $cargoVersion = (& $cargoPath --version 2>&1)
+        Write-Summary "OK" "rust/cargo" "$cargoVersion"
     } else {
+        foreach ($l in $rustupOutput.Split("`n")) {
+            if ($l.Trim()) { LogDetail "rustup-update: $($l.TrimEnd())" }
+        }
         $cargoVersion = (& $cargoPath --version 2>&1)
         $rustcPath = Join-Path $env:USERPROFILE ".cargo\bin\rustc.exe"
         $rustcVersion = (& $rustcPath --version 2>&1)
@@ -42,10 +45,12 @@ if (Test-Path $cargoPath) {
 } else {
     Log "Installing Rust toolchain via winget..."
     $wingetOutput = winget install -e --id Rustlang.Rustup --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
-    Log-WingetOutput $wingetOutput
-    if ($LASTEXITCODE -ne 0) {
-        LogError "winget install rustup failed (exit code $LASTEXITCODE)"
-        Write-Summary "ERROR" "rust/cargo" "winget install failed (exit $LASTEXITCODE)"
+    $installRc = $LASTEXITCODE
+    if ($installRc -ne 0) {
+        # Get-AitErrorReason logs the output as detail lines
+        Write-AitError "rust/cargo" "winget install failed" (Get-AitErrorReason -Output $wingetOutput -ExitCode $installRc)
+    } else {
+        Log-WingetOutput $wingetOutput
     }
     Refresh-Path
 
@@ -57,9 +62,11 @@ if (Test-Path $cargoPath) {
         LogOk "cargo $cargoVersion"
         LogOk "rustc $rustcVersion"
         Write-Summary "OK" "rust/cargo" "$cargoVersion"
+    } elseif ($installRc -ne 0) {
+        # One failure, one red line: the install error above is the cause
+        Log "cargo not found after the failed winget install"
     } else {
-        LogError "winget install completed but cargo not found at $cargoPath"
-        Write-Summary "ERROR" "rust/cargo" "install failed (cargo not found)"
+        Write-AitError "rust/cargo" "cargo not found after install" "winget exited 0 but $cargoPath does not exist"
     }
 }
 
@@ -78,10 +85,9 @@ if (Test-Path $vsWhere) {
 if ($hasMSVC) {
     LogOk "MSVC Build Tools found"
 } else {
-    LogWarn "MSVC Build Tools not detected -- cargo build will fail without a C linker"
-    LogWarn "Install: winget install Microsoft.VisualStudio.2022.BuildTools"
-    LogWarn "  Then add workload: Desktop Development with C++"
-    Write-Summary "WARN" "rust/cargo" "MSVC Build Tools not detected -- cargo build will fail without a C linker"
+    Write-AitAction "rust/cargo" "MSVC Build Tools not detected -- cargo build will fail without a C linker; install them" "winget install Microsoft.VisualStudio.2022.BuildTools, then add the workload Desktop Development with C++"
+    Log "Install: winget install Microsoft.VisualStudio.2022.BuildTools"
+    Log "  Then add workload: Desktop Development with C++"
 }
 
 # --- Build tool prerequisites (NASM, CMake, etc.) ---
@@ -114,19 +120,17 @@ if ($nasmCheck) {
 } else {
     Log "NASM not found -- installing via winget (needed by crypto crates like aws-lc-sys)..."
     $wingetOutput = winget install -e --id NASM.NASM --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
-    Log-WingetOutput $wingetOutput
-    if ($LASTEXITCODE -ne 0) {
-        LogWarn "winget install NASM failed (exit $LASTEXITCODE)"
-        Write-Summary "WARN" "rust/cargo" "NASM not installed -- some cargo builds will fail"
-        Write-Summary "ACTION" "" "winget install NASM.NASM -- needed for aws-lc-sys crypto crates"
+    $nasmRc = $LASTEXITCODE
+    if ($nasmRc -ne 0) {
+        # Get-AitErrorReason logs the output as detail lines
+        Write-AitAction "rust/cargo" "NASM not installed ($(Get-AitErrorReason -Output $wingetOutput -ExitCode $nasmRc)) -- some cargo builds will fail" "winget install NASM.NASM -- needed for aws-lc-sys crypto crates"
     } else {
+        Log-WingetOutput $wingetOutput
         $nasmKnownPaths = @("$env:LOCALAPPDATA\bin\NASM\nasm.exe", "$env:ProgramFiles\NASM\nasm.exe", "${env:ProgramFiles(x86)}\NASM\nasm.exe")
         if (Ensure-ToolOnPath -ToolName "nasm" -KnownPaths $nasmKnownPaths) {
             LogOk "NASM installed and on PATH"
         } else {
-            LogWarn "NASM installed but not found at known locations or PATH"
-            Write-Summary "WARN" "rust/cargo" "NASM installed but not on PATH"
-            Write-Summary "ACTION" "" "Restart terminal or check NASM install location"
+            Write-AitAction "rust/cargo" "NASM installed but not on PATH -- restart the terminal" "Restart terminal or check NASM install location"
         }
     }
 }
@@ -134,10 +138,11 @@ if ($nasmCheck) {
 # --- Verify PATH persistence ---
 $cargoBinDir = Join-Path $env:USERPROFILE ".cargo\bin"
 $persistentPath = [Environment]::GetEnvironmentVariable("Path", "User") + ";" + [Environment]::GetEnvironmentVariable("Path", "Machine")
-if ($persistentPath -notlike "*$cargoBinDir*") {
-    LogError "~/.cargo/bin not in persistent PATH: $cargoBinDir"
-    Write-Summary "ERROR" "rust/cargo" "installed but not on PATH"
-    LogWarn "Add $cargoBinDir to PATH -- tool not accessible to Claude Code"
+if (-not (Test-Path $cargoPath)) {
+    # The failed install above is the one error (one failure, one red line)
+    Log "~/.cargo/bin not checked: cargo was not installed"
+} elseif ($persistentPath -notlike "*$cargoBinDir*") {
+    Write-AitError "rust/cargo" "installed but not on PATH" "$cargoBinDir is not in the persistent PATH"
     Write-Summary "ACTION" "" "Add $cargoBinDir to PATH -- cargo not accessible"
 }
 
