@@ -222,6 +222,12 @@ Write-Output "END errors=$($script:errors) warnings=$($script:warnings)"
         if ($script:SUM -ceq $Want) { ok "${Name}: summary rows" }
         else { bad "${Name}: summary '$($script:SUM)', want '$Want'" }
     }
+    # want_sum_match NAME REGEX -- the whole summary matches REGEX (case-sensitive, as
+    # perl; \A ... \z), for a record whose text holds a path
+    function want_sum_match([string]$Name, [string]$Re) {
+        if ($script:SUM -cmatch $Re) { ok "${Name}: summary rows" }
+        else { bad "${Name}: summary '$($script:SUM)', want /$Re/" }
+    }
     # want_sum_prefix NAME PREFIX -- one record, starting with PREFIX (its reason is the
     # OS's or the exception's own message)
     function want_sum_prefix([string]$Name, [string]$Prefix) {
@@ -360,10 +366,11 @@ Write-Output "END errors=$($script:errors) warnings=$($script:warnings)"
 
     # A-18 / A-3: a writer that dies without a row gets the relay's ERROR row: WHAT
     # "<label> failed (exit 1)", REASON from its output (no error record: its last
-    # relayed line, 8.3)
+    # relayed line that is not a warning line, 8.3; RFI 5899-31: a warning line is
+    # never the reason)
     fresh; run_h step5 -Vars @{ WRITER_MODE = "crash" }
     want_end "step5-crash ($impl)" "errors=1 warnings=0"
-    want_sum "step5-crash ($impl)" "ERROR|aitools config|Step 5: setup-user-config.ps1 failed (exit 1)|stub warning"
+    want_sum "step5-crash ($impl)" "ERROR|aitools config|Step 5: setup-user-config.ps1 failed (exit 1)|stub writer"
     want_out "step5-crash ($impl)" "Step 5: setup-user-config"
 
     # ... and a writer that wrote its own ERROR row gets no second one
@@ -372,14 +379,16 @@ Write-Output "END errors=$($script:errors) warnings=$($script:warnings)"
     want_sum "step5-ownrow ($impl)" "ERROR|aitools config|stub failed"
 
     # A-16: deploy.jsonl cannot be written (a directory in its place): one warning
-    # of the installer (the writer's is not added), the installer goes on, the
-    # writer still runs
+    # of the installer (the writer's is not added), recorded once under the
+    # installer's name (LogWarn, logging.md 8.2) before the writer's OK record; the
+    # installer goes on, the writer still runs. The path in the warning is the OS's
+    # spelling of the log directory, so it is not compared
     fresh; New-Item -ItemType Directory -Path "$H/.aitools/logs/deploy.jsonl" -Force | Out-Null
     run_h step5 -Vars @{ WRITER_MODE = "warn" }
     want_end "jsonl-blocked ($impl)" "errors=0 warnings=1"
     count_out "jsonl-blocked ($impl)" "deploy.jsonl: cannot write" 1
     want_out "jsonl-blocked ($impl)" "[aitools-install] [info] harness end"
-    want_sum "jsonl-blocked ($impl)" "OK|aitools config|stub"
+    want_sum_match "jsonl-blocked ($impl)" '\AWARN\|aitools-install\|deploy\.jsonl: cannot write \S.* -- structured log records are skipped for the rest of this run\nOK\|aitools config\|stub\z'
 
     # A-17: Step 3. A relative path is made absolute (relative to the current
     # directory, $H) and created. pwsh prints a Windows path (C:\...\home\repos);
