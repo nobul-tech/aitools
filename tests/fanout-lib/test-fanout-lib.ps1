@@ -174,9 +174,9 @@ try {
     # DETAIL records only; each item's warning or error is recorded where it
     # happened (reference/logging.md 8.3 "Managed files")
     Case 't-removed' 'DETAIL|t|removed: a.md ;; OK|t|1 removed ;; text=1 removed ;; errors=0' 'tracker' 'removed:a.md'
-    Case 't-unknown' 'DETAIL|t|failed: b.md ;; OK|t|1 failed ;; text=1 failed ;; errors=1' 'tracker' 'bogus:b.md'
-    Case 't-blank' 'DETAIL|t|failed: x.md ;; OK|t|1 failed ;; text=1 failed ;; errors=1' 'tracker' ':x.md'
-    Case 't-mix' 'DETAIL|t|added: a.md ;; DETAIL|t|removed: b.md ;; DETAIL|t|failed: d.md ;; OK|t|1 added, 1 removed, 1 verified, 1 failed ;; text=1 added, 1 removed, 1 verified, 1 failed ;; errors=1' 'tracker' 'added:a.md,removed:b.md,verified:c.md,bogus:d.md,preserved:e.md'
+    Case 't-unknown' 'ERROR|test-fanout-lib|deploy tracker: unknown outcome "bogus" for b.md (t) -- counted as failed| ;; DETAIL|t|failed: b.md ;; OK|t|1 failed ;; text=1 failed ;; errors=1' 'tracker' 'bogus:b.md'
+    Case 't-blank' 'ERROR|test-fanout-lib|deploy tracker: unknown outcome "" for x.md (t) -- counted as failed| ;; DETAIL|t|failed: x.md ;; OK|t|1 failed ;; text=1 failed ;; errors=1' 'tracker' ':x.md'
+    Case 't-mix' 'DETAIL|t|added: a.md ;; DETAIL|t|removed: b.md ;; ERROR|test-fanout-lib|deploy tracker: unknown outcome "bogus" for d.md (t) -- counted as failed| ;; DETAIL|t|failed: d.md ;; OK|t|1 added, 1 removed, 1 verified, 1 failed ;; text=1 added, 1 removed, 1 verified, 1 failed ;; errors=1' 'tracker' 'added:a.md,removed:b.md,verified:c.md,bogus:d.md,preserved:e.md'
     Case 't-order' 'DETAIL|t|accept & adopt: a.md ;; DETAIL|t|removed: b.md ;; DETAIL|t|updated: d.md ;; DETAIL|t|added: e.md ;; OK|t|1 added, 1 updated, 1 accepted, 1 removed, 1 verified ;; text=1 added, 1 updated, 1 accepted, 1 removed, 1 verified ;; errors=0' 'tracker' 'accept & adopt:a.md,removed:b.md,verified:c.md,updated:d.md,created:e.md'
     Case 't-skip' 'DETAIL|t|removed: a.md ;; DETAIL|t|skipped: b.md ;; OK|t|1 removed, 1 skipped ;; text=1 removed, 1 skipped ;; errors=0' 'tracker' 'removed:a.md,skipped:b.md'
     # every count 0 (only preserved items): the text is "n/a (nothing to deploy)", never "verified"
@@ -184,7 +184,7 @@ try {
     # only skipped items: "1 skipped" is a count of the status, not a warning record
     Case 't-skiponly' 'DETAIL|t|skipped: a.md ;; OK|t|1 skipped ;; text=1 skipped ;; errors=0' 'tracker' 'skipped:a.md'
     # outcomes are matched case-sensitively in both shells
-    Case 't-case' 'DETAIL|t|failed: x.md ;; DETAIL|t|failed: y.md ;; DETAIL|t|failed: z.md ;; OK|t|3 failed ;; text=3 failed ;; errors=3' 'tracker' 'Removed:x.md,Added:y.md,CREATED:z.md'
+    Case 't-case' 'ERROR|test-fanout-lib|deploy tracker: unknown outcome "Removed" for x.md (t) -- counted as failed| ;; DETAIL|t|failed: x.md ;; ERROR|test-fanout-lib|deploy tracker: unknown outcome "Added" for y.md (t) -- counted as failed| ;; DETAIL|t|failed: y.md ;; ERROR|test-fanout-lib|deploy tracker: unknown outcome "CREATED" for z.md (t) -- counted as failed| ;; DETAIL|t|failed: z.md ;; OK|t|3 failed ;; text=3 failed ;; errors=3' 'tracker' 'Removed:x.md,Added:y.md,CREATED:z.md'
     # name kinds: NAME RULE-KIND SKILL-KIND
     foreach ($spec in @("a.md rule skill", "A.MD rule skill", ".hidden.md hidden hidden", ".aitools-skills-manifest hidden hidden",
                         "x.md.bak.2026-10-22T010203Z backup backup", "X.MD.BAK.1 backup backup", "odd.bak.2026.md backup backup",

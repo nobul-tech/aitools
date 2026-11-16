@@ -3541,7 +3541,8 @@ function Record-DeployOutcome {
         "verified"  { $script:dtVerified++ }
         "preserved" { $script:dtPreserved++ }
         default {
-            LogError "Record-DeployOutcome: unknown outcome `"$Outcome`" for $ItemName ($ToolName) -- counted as failed"
+            # The same text in deploy_tracker_record: its record is in the shared golden files
+            LogError "deploy tracker: unknown outcome `"$Outcome`" for $ItemName ($ToolName) -- counted as failed"
             $script:dtFailed++
             Write-Summary "DETAIL" $ToolName "failed: $ItemName"
         }

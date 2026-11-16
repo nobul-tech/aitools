@@ -3461,7 +3461,8 @@ deploy_tracker_record() {
                    write_summary DETAIL "$tool_name" "removed: $item_name" ;;
         verified)  _DT_VERIFIED=$((_DT_VERIFIED + 1)) ;;
         preserved) _DT_PRESERVED=$((_DT_PRESERVED + 1)) ;;
-        *)         log_error "deploy_tracker_record: unknown outcome \"$outcome\" for $item_name ($tool_name) -- counted as failed"
+        # The same text in Record-DeployOutcome: its record is in the shared golden files
+        *)         log_error "deploy tracker: unknown outcome \"$outcome\" for $item_name ($tool_name) -- counted as failed"
                    _DT_FAILED=$((_DT_FAILED + 1))
                    write_summary DETAIL "$tool_name" "failed: $item_name" ;;
     esac
