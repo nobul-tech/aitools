@@ -26,6 +26,11 @@
 # the relay adds no child warning to the parent's count, records a failed child
 # as "<label> failed (exit N)" or "(exception)" with a reason, and names a child
 # relayed without a summary tool after its script.
+# Summary-warn-reporting I5: LogWarn and LogError always record (each child
+# warning is the child's own WARN record), Write-Summary takes no WARN or
+# ERROR, a warning line is never a failed child's reason (RFI 5899-31), and a
+# user abort is recorded once: by the child when it recorded it, else by the
+# relay.
 #
 # Platform targeting (plans/ci-platform-targeting.md; commander 2026-11-14:
 # "sh scripts and tests should only run on linux/mac and ps1 on windows"):
@@ -41,7 +46,7 @@
 # Usage: pwsh -NoProfile -File tests/profile/test-lib.ps1 [-Help]
 
 param([switch]$Help)
-if ($Help) { Get-Content $PSCommandPath -TotalCount 41 | ForEach-Object { $_ -replace '^# ?', '' }; exit 0 }
+if ($Help) { Get-Content $PSCommandPath -TotalCount 46 | ForEach-Object { $_ -replace '^# ?', '' }; exit 0 }
 
 if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
     [Console]::Error.WriteLine("This script is for Windows. On macOS/Linux, run tests/profile/test-lib.sh with bash.")
@@ -421,23 +426,31 @@ function Invoke-Case([string]$Name, [string]$Call, [string]$Want, [string]$WSum,
 }
 
 # Child scripts for the relay cases: log through the lib, info, a warning with a
-# quote, a backslash and a tab, a second warning, then by CHILD_FAIL:
+# quote, a backslash and a tab, a second warning (each warning is a WARN record
+# of the child: LogWarn records, logging.md 8.2), then by CHILD_FAIL:
 #   0  the standard exit footer, exit 0
-#   1  an error, its own ERROR row "child tool|child failed", footer, exit 1
-#   2  an error, no row, exit 0 anyway (a child bug)
+#   1  an error with its own record (Write-AitError "child tool" "child failed"
+#      "child error"), footer, exit 1
+#   2  an error line printed without the library (no record, as a writer outside
+#      the library prints it: logging.md 8.1), exit 0 anyway (a child bug)
 #   3  exit 1 before any row or footer
 #   4  exit 127
-#   5  a user abort: "Aborted by user", exit 2 (D-TS13)
+#   5  a user abort the child records itself (LogError "Aborted by user"
+#      records), exit 2 (D-TS13)
 #   6  throws
+#   8  a user abort through the library's abort path (Invoke-ManagedAbort:
+#      logged and counted, not recorded) right after "child info", before the
+#      warnings, so the child records nothing and the relay records the abort (8.3)
 Write-LfFile "$WORK/child.ps1" @'
 . (Join-Path $env:REPO "scripts/aitools-lib.ps1")
 Initialize-Logging "child-ps"
 Log "child info"
+if ($env:CHILD_FAIL -eq "8") { Invoke-ManagedAbort }
 LogWarn "quote `" back \ tab`tend"
 LogWarn "second warning"
 switch ($env:CHILD_FAIL) {
-    "1" { LogError "child error"; Write-Summary "ERROR" "child tool" "child failed" }
-    "2" { LogError "child error" }
+    "1" { Write-AitError "child tool" "child failed" "child error" }
+    "2" { Write-Host "[2026-01-01T00:00:00Z] [child-ps] [error] child error" }
     "3" { exit 1 }
     "4" { exit 127 }
     "5" { LogError "Aborted by user"; exit 2 }
@@ -458,8 +471,10 @@ Write-LfFile "$WORK/child-parse.ps1" "Log `"never`"`nif (`n"
 $relayPs1 = @'
 . (Join-Path $env:REPO "scripts/aitools-lib.ps1")
 Initialize-Logging "test-relay"
-# PRE_ROW=1: an earlier step's ERROR row is in the summary before the child runs
-if ($env:PRE_ROW -eq "1") { Write-Summary "ERROR" "earlier step" "failed before" }
+# PRE_ROW=1: an earlier step's ERROR record is in the summary before the child
+# runs (written directly, as another script of the run would have recorded it;
+# Write-Summary takes no ERROR: logging.md 8.2)
+if ($env:PRE_ROW -eq "1") { [IO.File]::AppendAllText($env:AITOOLS_SUMMARY_FILE, "ERROR|earlier step|failed before|`n", [Text.UTF8Encoding]::new($false)) }
 $rc = 0
 $child = Join-Path $env:REPO_WORK "child.ps1"
 switch ($env:RMODE) {
@@ -585,7 +600,8 @@ function Invoke-RelayCase([string]$Name, [string]$Mode, [string]$Fail, [string]$
     }
     if ($WRec -eq "skip") { return }
     if ($Mode -ne "record") {
-        if ($out.Contains("second warning")) { Ok "$Name (ps): child lines on the console" }
+        # "child info": the one line every child prints (CHILD_FAIL 8 aborts before its warnings)
+        if ($out.Contains("child info")) { Ok "$Name (ps): child lines on the console" }
         else { Bad "$Name (ps): child lines not on the console" }
     }
     $gotRec = Get-JsonlCheck $jl @($WARN_MSG)
@@ -631,8 +647,10 @@ try {
     New-Fixture with-id
     Invoke-Case eget-none eget (J "rc=0" "found=false method= path=" "warnings=0 errors=0") ""
 
+    # The warning is a WARN record under the script's name (LogWarn records:
+    # logging.md 8.2)
     New-Fixture none
-    Invoke-Case eget-unavailable eget (J "rc=1" "found=false method= path=" "warnings=1 errors=0") ""
+    Invoke-Case eget-unavailable eget (J "rc=1" "found=false method= path=" "warnings=1 errors=0") "WARN|test-lib|tool exceptions unavailable (no dotprofile)"
 
     # No remote: the push fails -> warning (a WARN record under the script's name) + ACTION
     New-Fixture with-id
@@ -674,7 +692,7 @@ try {
     Invoke-Case broken-silent1-rmp rmp (J "rc=3" "alias= via= company= name=" "warnings=0 errors=1") `
         (J "ERROR|machine profile|no machine match|resolver exited 1 without result lines (see deploy.log)" "ACTION||Run: aitools user init (pick or register this machine's profile)") @("AITOOLS_PROFILE_PS1=<W>/silent1.ps1")
 
-    Invoke-Case broken-silent0-eget eget (J "rc=1" "found=false method= path=" "warnings=1 errors=0") "" @("AITOOLS_PROFILE_PS1=<W>/silent0.ps1")
+    Invoke-Case broken-silent0-eget eget (J "rc=1" "found=false method= path=" "warnings=1 errors=0") "WARN|test-lib|tool exceptions unavailable (resolver exited 0 without result lines (see deploy.log))" @("AITOOLS_PROFILE_PS1=<W>/silent0.ps1")
 
     Invoke-Case broken-silent0-eset eset (J "rc=1" "result=failed pushed=false" "warnings=1 errors=0") `
         (J "WARN|test-lib|tool exception for go not saved (resolver exited 0 without result lines (see deploy.log))" "ACTION||see deploy.log -- a tool choice (tool exception) was not saved") @("AITOOLS_PROFILE_PS1=<W>/silent0.ps1")
@@ -727,7 +745,7 @@ try {
         Invoke-Case "exit$n-urp" urp (J "rc=3" "path= via=none" "warnings=0 errors=1" "notes=1") (J "ERROR|dotprofile|resolver failed|stub says no ($note)" $A_DP) $x
         Invoke-Case "exit$n-rmp" rmp (J "rc=3" "alias= via=none company= name=" "warnings=0 errors=1" "notes=1") `
             (J "ERROR|machine profile|no machine match|stub says no ($note)" "ACTION||Run: aitools user init (pick or register this machine's profile)") $x
-        Invoke-Case "exit$n-eget" eget (J "rc=1" "found=false method= path=" "warnings=1 errors=0" "notes=1") "" $x
+        Invoke-Case "exit$n-eget" eget (J "rc=1" "found=false method= path=" "warnings=1 errors=0" "notes=1") "WARN|test-lib|tool exceptions unavailable (stub says no) ($note)" $x
     }
     New-Fixture with-id
     Invoke-Case exit3-eset eset (J "rc=3" "result=refused pushed=false" "warnings=1 errors=0" "notes=1") `
@@ -835,29 +853,39 @@ try {
         Bad "relay-record: no deploy.jsonl record to compare"
     }
     # The child's two warnings are counted in cw only, never in the parent's
-    # warnings (logging.md 8.3: each script counts its own warnings)
-    Invoke-RelayCase relay-run-ok run 0 (J "rc=0 child_rc=0" "cw=2 ce=0 warnings=0 errors=0") (J "records=4 invalid=0" "msg-ok")
-    # A failed child that wrote its own ERROR row gets no second one (FIX-1, A-3)
-    Invoke-RelayCase relay-run-fail run 1 (J "rc=1 child_rc=1" "cw=2 ce=1 warnings=0 errors=1") (J "records=5 invalid=0" "msg-ok") "ERROR|child tool|child failed"
-    # A child that logged an error but exited 0 and wrote no row: one ERROR row,
-    # WHAT "<label> failed (exit 0)", REASON from the child's output (8.3)
-    Invoke-RelayCase relay-run-error-exit0 run 2 (J "rc=1 child_rc=0" "cw=2 ce=1 warnings=0 errors=1") (J "records=5 invalid=0" "msg-ok") "ERROR|child tool|child step failed (exit 0)|child error"
-    # A-3: a child that died before its own rows (exit 1, exit 127) is in the panel
-    # as ERROR; a user abort (exit 2) too. The in-process child wrote no error
-    # record, so the reason is its last relayed line (8.3 rule 4: no error marker)
-    Invoke-RelayCase relay-run-crash run 3 (J "rc=1 child_rc=1" "cw=2 ce=0 warnings=0 errors=1") (J "records=3 invalid=0" "msg-ok") "ERROR|child tool|child step failed (exit 1)|second warning"
-    Invoke-RelayCase relay-run-exit127 run 4 (J "rc=1 child_rc=127" "cw=2 ce=0 warnings=0 errors=1") (J "records=3 invalid=0" "msg-ok") "ERROR|child tool|child step failed (exit 127)|second warning"
-    Invoke-RelayCase relay-run-abort run 5 (J "rc=1 child_rc=2" "cw=2 ce=1 warnings=0 errors=1") (J "records=4 invalid=0" "msg-ok") "ERROR|child tool|child step failed (exit 2)|aborted by user"
-    # Review A m1: the dedupe compares with the rows before the child, not with zero:
-    # an earlier step's ERROR row does not hide the crashed child's row
+    # warnings (logging.md 8.3: each script counts its own warnings); they are the
+    # child's own WARN records (recorded at the source), in every run case below
+    $W_CHILD = J "WARN|child-ps|$WARN_MSG" "WARN|child-ps|second warning"
+    Invoke-RelayCase relay-run-ok run 0 (J "rc=0 child_rc=0" "cw=2 ce=0 warnings=0 errors=0") (J "records=4 invalid=0" "msg-ok") $W_CHILD
+    # A failed child that wrote its own ERROR record gets no second one (FIX-1, A-3)
+    Invoke-RelayCase relay-run-fail run 1 (J "rc=1 child_rc=1" "cw=2 ce=1 warnings=0 errors=1") (J "records=5 invalid=0" "msg-ok") (J $W_CHILD "ERROR|child tool|child failed|child error")
+    # A child that printed an error line but exited 0 and recorded no error: one
+    # ERROR record, WHAT "<label> failed (exit 0)", REASON from the child's last
+    # line that is not a warning line (8.3)
+    Invoke-RelayCase relay-run-error-exit0 run 2 (J "rc=1 child_rc=0" "cw=2 ce=1 warnings=0 errors=1") (J "records=5 invalid=0" "msg-ok") (J $W_CHILD "ERROR|child tool|child step failed (exit 0)|child error")
+    # A-3: a child that died before its own error record (exit 1, exit 127) is in
+    # the panel as ERROR. The in-process child wrote no error record, so the reason
+    # is its last relayed line that is not a warning line (8.3 rule 4: no error
+    # marker; a warning line is never the reason, RFI 5899-31)
+    Invoke-RelayCase relay-run-crash run 3 (J "rc=1 child_rc=1" "cw=2 ce=0 warnings=0 errors=1") (J "records=3 invalid=0" "msg-ok") (J $W_CHILD "ERROR|child tool|child step failed (exit 1)|child info")
+    Invoke-RelayCase relay-run-exit127 run 4 (J "rc=1 child_rc=127" "cw=2 ce=0 warnings=0 errors=1") (J "records=3 invalid=0" "msg-ok") (J $W_CHILD "ERROR|child tool|child step failed (exit 127)|child info")
+    # A user abort (exit 2) the child recorded itself: the relay counts it and
+    # records nothing more (8.3 "A user abort": recorded once)
+    Invoke-RelayCase relay-run-abort run 5 (J "rc=1 child_rc=2" "cw=2 ce=1 warnings=0 errors=1") (J "records=4 invalid=0" "msg-ok") (J $W_CHILD "ERROR|child-ps|Aborted by user|")
+    # A user abort through the library's abort path (logged, not recorded) by a
+    # child that recorded nothing: the relay records it once, ERROR "<label> failed
+    # (exit 2)" with the reason "aborted by user" (8.3). The child printed no warning line.
+    Invoke-RelayCase relay-run-abort-unrecorded run 8 (J "rc=1 child_rc=2" "cw=0 ce=1 warnings=0 errors=1") (J "records=2 invalid=0" "msg-missing: $WARN_MSG") "ERROR|child tool|child step failed (exit 2)|aborted by user"
+    # Review A m1: the dedupe compares with the records before the child, not with
+    # zero: an earlier step's ERROR record does not hide the crashed child's record
     Invoke-RelayCase relay-run-crash-prior-row run 3 (J "rc=1 child_rc=1" "cw=2 ce=0 warnings=0 errors=1") (J "records=3 invalid=0" "msg-ok") `
-        (J "ERROR|earlier step|failed before" "ERROR|child tool|child step failed (exit 1)|second warning") @("PRE_ROW=1")
-    # Without a summary tool: the row is named after the child's script (8.3 "Its
+        (J "ERROR|earlier step|failed before|" $W_CHILD "ERROR|child tool|child step failed (exit 1)|child info") @("PRE_ROW=1")
+    # Without a summary tool: the record is named after the child's script (8.3 "Its
     # name": the base name of the first argument ending in .ps1, child.ps1 -> child)
-    Invoke-RelayCase relay-run-crash-notool run-notool 3 (J "rc=1 child_rc=1" "cw=2 ce=0 warnings=0 errors=1") (J "records=3 invalid=0" "msg-ok") "ERROR|child|child step failed (exit 1)|second warning"
+    Invoke-RelayCase relay-run-crash-notool run-notool 3 (J "rc=1 child_rc=1" "cw=2 ce=0 warnings=0 errors=1") (J "records=3 invalid=0" "msg-ok") (J $W_CHILD "ERROR|child|child step failed (exit 1)|child info")
     # A throw and a parse error (in-process) are one error and a row: WHAT
     # "<label> failed (exception)", REASON the exception message
-    Invoke-RelayCase relay-run-throw run 6 (J "rc=1 child_rc=1" "cw=2 ce=0 warnings=0 errors=1") (J "records=3 invalid=0" "msg-ok") "ERROR|child tool|child step failed (exception)|child died"
+    Invoke-RelayCase relay-run-throw run 6 (J "rc=1 child_rc=1" "cw=2 ce=0 warnings=0 errors=1") (J "records=3 invalid=0" "msg-ok") (J $W_CHILD "ERROR|child tool|child step failed (exception)|child died")
     Invoke-RelayCase relay-run-parse parse 0 (J "rc=1 child_rc=1" "cw=0 ce=0 warnings=0 errors=1") "skip" "ERROR|child tool|child step failed (exception)|At $WM/child-parse.ps1:2 $R_PARSE_POS"
     # Review m3: no command is a failure, not a silent success; with a tool, a row
     # (WHAT "<label> not run", the label being "no command" here)
@@ -865,7 +893,7 @@ try {
     # The relay's own temp file is bash code (aitools-lib.sh); its cases
     # (relay-run-mktemp-fail, relay-run-rm-fail) run in test-lib.sh on macOS/Linux
     SkipLine "relay-run-rm-fail (bash relay temp file: macOS/Linux)"
-    Invoke-RelayCase relay-captured captured 0 (J "rc=0 child_rc=0" "cw=2 ce=0 warnings=0 errors=0") (J "records=4 invalid=0" "msg-ok")
+    Invoke-RelayCase relay-captured captured 0 (J "rc=0 child_rc=0" "cw=2 ce=0 warnings=0 errors=0") (J "records=4 invalid=0" "msg-ok") $W_CHILD
 } catch {
     Bad "harness error: $($_.Exception.Message) (line $($_.InvocationInfo.ScriptLineNumber))"
 } finally {
