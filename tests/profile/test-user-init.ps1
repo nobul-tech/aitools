@@ -322,16 +322,16 @@ try {
     }
     # Result-Golden [NAME] -- this case's result (exit code, summary rows, profile.json,
     # remote commits) must equal the golden file userinit-NAME.txt (sh and ps1 share
-    # it; NAME defaults to this case's name). In the summary rows a relay label's
-    # script extension is <EXT>: aitools.ps1 labels a child "user init:
-    # setup-user-hooks.ps1", the bash entry point "user init: setup-user-hooks.sh"
-    # (the WHAT of a failed child's ERROR record, reference/logging.md 8.3); the
-    # inline Has-Row checks keep the real name.
+    # it; NAME defaults to this case's name). The summary rows are compared as
+    # written: both entry points label a relayed child without its script extension
+    # ("user init: setup-user-hooks", the WHAT of a failed child's ERROR record,
+    # reference/logging.md 8.3), so no <EXT> placeholder is needed (2026-11-16, plan
+    # summary-warn-reporting I3 G1).
     function Result-Golden([string]$Name = "") {
         $g = if ($Name) { $Name } else { $script:CASE }
         $f = Join-Path $script:D "result.txt"
         $pjf = Join-Path $script:DP "profile.json"
-        $rows = (ReadText $script:SUM) -creplace '(user init: [\w.-]+?)\.(?:sh|ps1)\b', '$1.<EXT>'
+        $rows = ReadText $script:SUM
         $text = "exit $($script:RC)`n-- summary rows`n" + $rows + "-- profile.json`n"
         $text += if (Test-Path -LiteralPath $pjf -PathType Leaf) { Norm-Pj $pjf } else { "(none)`n" }
         $text += "-- remote.git commits`n" + (Log-Subjects (Join-Path $script:D "remote.git"))
@@ -514,7 +514,7 @@ try {
 
     say "== decision 1: --alias of another machine's profile, no terminal -> refused (exit 1)"
     Case-Run "alias-other" 1 $fx_two @("--alias", "laptop")
-    Has-Row "ERROR|machine profile|alias used by another machine"
+    Has-Row "ERROR|machine profile|not registered|alias `"laptop`" is used by another machine's profile ($OTHER_ID) and there is no terminal to confirm"
     Unregistered-Once
     Pj-Lacks "`"$THIS_KEY`""
     Pj-OtherIntact
@@ -522,7 +522,7 @@ try {
 
     say "== an unregistered machine without --alias and without a terminal -> ERROR, exit 1"
     Case-Run "unregistered-notty" 1 $fx_two
-    Has-Row "ERROR|machine profile|not registered (no terminal)"
+    Has-Row "ERROR|machine profile|not registered|this machine has no profile and there is no terminal to ask"
     Has-Row "ACTION||Run: aitools user init --alias <name> (or on a terminal)"
     Unregistered-Once
 
@@ -561,7 +561,7 @@ try {
     say "== decision 2 switch = 0 (default): cached machineAlias, no terminal -> ERROR, exit 1 (same as unregistered)"
     $fx_cached = { Fixture $script:CASE $PJ_TWO ",`n  `"machineAlias`": `"nobul-mac`"" }
     Case-Run "cached-alias-0" 1 $fx_cached
-    Has-Row "ERROR|machine profile|not registered (no terminal)"
+    Has-Row "ERROR|machine profile|not registered|this machine has no profile and there is no terminal to ask"
     Unregistered-Once
     Pj-Lacks "`"$THIS_KEY`""
 
@@ -585,7 +585,7 @@ try {
     say "== Review3 #82 minor 5: uncommitted edits to profile.json are never committed"
     $fx_dirty = { & $fx_two; Edit-Bytes (Join-Path $DP "profile.json") '"old-host"' { param($m) '"edited-host"' } }
     Case-Run "dirty" 1 $fx_dirty @("--alias", "spare")
-    Has-Row "ERROR|machine profile|not registered (local edits)"
+    Has-Row "ERROR|machine profile|not registered|profile.json in <D>/home/repos/aitools-$GH_USER has uncommitted changes (they would be committed with it)"
     Unregistered-Once
     Pj-Has '"edited-host"'
     Pj-Lacks "`"$THIS_KEY`""
@@ -596,7 +596,7 @@ try {
         Edit-Bytes (Join-Path $DP "profile.json") '"old-host"' { param($m) '"edited-host"' }
     }
     Case-Run "dirty-registered" 0 $fx_dirty_reg
-    Has-Row "WARN|machine profile|not refreshed (local edits)"
+    Has-Row "WARN|machine profile|profile.json in <D>/home/repos/aitools-$GH_USER has uncommitted changes -- this machine's profile was not refreshed; commit or discard them, then run: aitools user init"
     No-MachineFlag "no"
     Remote-Count $BARE 2
 
@@ -615,6 +615,8 @@ try {
     # This asserted the old promotion (OK -> WARN after any warning) before I1.
     Has-Row "OK|machine profile|created (spare)"
     No-RowLike "WARN|machine profile|created"
+    # E4: the rejected push is one warning of its own, with the ACTION above
+    Has-Row "WARN|dotprofile|dotprofile push rejected (exit 1): the remote has newer commits -- run git pull --rebase, then git push in <D>/home/repos/aitools-$GH_USER"
 
     say "== D-TS13: the hooks review aborted (exit 2) -> user init exits 2"
     $script:CaseEnv = @{ HOOK_RC = "2" }
@@ -622,7 +624,7 @@ try {
     # FIX-2 (A-13): the relay records the abort (the stub wrote no ERROR row), as
     # reference/logging.md 8.3 "A user abort": WHAT "<label> failed (exit 2)",
     # REASON "aborted by user"
-    Has-Row "ERROR|claude hooks|user init: setup-user-hooks.ps1 failed (exit 2)|aborted by user"
+    Has-Row "ERROR|claude hooks|user init: setup-user-hooks failed (exit 2)|aborted by user"
     $script:CaseEnv = @{}
 
     # Jsonl-Count CASE SCRIPT [LEVEL MSG] -- valid records of SCRIPT (with LEVEL and
@@ -651,7 +653,7 @@ try {
     # The stub prints nothing, so the reason is "no output (exit 3)" (reference/logging.md 8.3)
     $script:CaseEnv = @{ HOOK_RC = "3" }
     Case-Run "hook-crash" 1 $fx_two @("--alias", "spare")
-    Has-Row "ERROR|claude hooks|user init: setup-user-hooks.ps1 failed (exit 3)|no output (exit 3)"
+    Has-Row "ERROR|claude hooks|user init: setup-user-hooks failed (exit 3)|no output (exit 3)"
     Row-Count "ERROR|claude hooks|" 1
     $script:CaseEnv = @{}
     # The children's lines reach deploy.jsonl and the console; a hooks warning is relayed
@@ -674,14 +676,16 @@ try {
     say "== review M1: a relative reposPath is refused (nothing created under the current directory)"
     $fx_relative = { Fixture $script:CASE $PJ_TWO; Edit-Bytes (Join-Path $H ".aitools/config.json") '"reposPath": "[^"]*"' { param($m) '"reposPath": "repos"' } }
     Case-Run "relative-repos" 1 $fx_relative @("--alias", "spare")
-    Has-Row "ERROR|dotprofile|reposPath not absolute"
+    Has-Row "ERROR|dotprofile|reposPath not absolute|'repos' in <D>/home/.aitools/config.json"
     if (Test-Path -LiteralPath (Join-Path $D "repos")) { bad "$($script:CASE): a repos/ directory was created under the cwd" } else { ok "$($script:CASE): nothing created under the cwd" }
 
     say "== review M2: id undetectable (via=config) -> WARN, the cached machineId survives two runs"
     $fx_viaconfig = { Fixture $script:CASE $PJ_TWO ",`n  `"machineId`": `"$THIS_KEY`""; Register-This }
     $script:CaseEnv = @{ AITOOLS_PROFILE_TEST_MACHINE_ID = "none" }
     Case-Run "via-config" 0 $fx_viaconfig
-    Has-Row "WARN|machine profile|not refreshed (no machine id)"
+    Has-Row "WARN|machine profile|profile 'mine' not refreshed: this machine's id cannot be detected (key from config.json machineId)"
+    # E2: the resolver's warning is a record of its own
+    Has-Row "WARN|machine profile|machine id unavailable: no machine id (test value)"
     Cfg-Id $THIS_KEY
     # Registered, id undetectable: machine_key is emptied for the writer, but no flag
     No-MachineFlag "no"
@@ -773,7 +777,7 @@ try {
         Case-Run "pty-hostname-other" 1 $fx_two
         Out-Has "[-] laptop (suggested, registered to another machine)"
         Out-Has "is registered to another machine"
-        Has-Row "WARN|machine profile|skipped"
+        Has-Row "WARN|machine profile|registration skipped -- deploys will report no machine match"
         Pj-Lacks "`"$THIS_KEY`""
         $script:CaseEnv = @{}
 
@@ -787,7 +791,7 @@ try {
         say "== interactive (pty): ... declined -> skipped (WARN row; not registered = exit 1)"
         $script:PtyInput = '\n\nn\n'
         Case-Run "pty-dup-decline" 1 $fx_two @("--alias", "laptop")
-        Has-Row "WARN|machine profile|skipped"
+        Has-Row "WARN|machine profile|registration skipped: alias `"laptop`" is used by another machine's profile ($OTHER_ID)"
         No-MachineFlag "yes"
         No-RowLike "no machine match"
         Pj-Lacks "`"$THIS_KEY`""
@@ -824,7 +828,7 @@ try {
         say "== interactive (pty) with --force: no prompt; an unregistered machine is refused like no terminal"
         $script:PtyInput = '1\n'
         Case-Run "pty-force" 1 $fx_two @("--force")
-        Has-Row "ERROR|machine profile|not registered (no terminal)"
+        Has-Row "ERROR|machine profile|not registered|this machine has no profile and there is no terminal to ask"
         if ((ReadText $OUT).Contains("Which profile is this machine")) { bad "$($script:CASE): --force prompted" } else { ok "$($script:CASE): --force did not prompt" }
         $script:PtyInput = ""
     } else {

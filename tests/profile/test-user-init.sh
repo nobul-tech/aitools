@@ -226,15 +226,15 @@ log_subjects() {
 # remote commits) must equal the golden file userinit-NAME.txt (sh and ps1 share it;
 # NAME defaults to this case's name). A case that only compares with another
 # case's golden (NAME given) never writes it under AITOOLS_TEST_UPDATE_GOLDEN=1.
-# In the summary rows a relay label's script extension is <EXT>: the bash entry
-# point labels a child "user init: setup-user-hooks.sh", aitools.ps1
-# "user init: setup-user-hooks.ps1" (the WHAT of a failed child's ERROR record,
-# reference/logging.md 8.3); the inline has_row checks keep the real name.
+# The summary rows are compared as written: both entry points label a relayed
+# child without its script extension ("user init: setup-user-hooks", the WHAT of
+# a failed child's ERROR record, reference/logging.md 8.3), so no <EXT>
+# placeholder is needed (2026-11-16, plan summary-warn-reporting I3 G1).
 result_golden() {
     local g="${1:-$CASE}" f="$D/result.txt"
     {
         printf 'exit %s\n-- summary rows\n' "$RC"
-        perl -pe 's/(user init: [\w.-]+?)\.(?:sh|ps1)\b/$1.<EXT>/g' "$SUM"
+        cat "$SUM"
         printf -- '-- profile.json\n'
         if [ -f "$DP/profile.json" ]; then norm_pj "$DP/profile.json"; else printf '(none)\n'; fi
         printf -- '-- remote.git commits\n'; log_subjects "$D/remote.git"
@@ -373,7 +373,7 @@ remote_count "$BARE" 2
 
 echo "== decision 1: --alias of another machine's profile, no terminal -> refused (exit 1)"
 case_run alias-other 1 fx_two --alias laptop
-has_row "ERROR|machine profile|alias used by another machine"
+has_row "ERROR|machine profile|not registered|alias \"laptop\" is used by another machine's profile ($OTHER_ID) and there is no terminal to confirm"
 unregistered_once
 pj_lacks "\"$THIS_KEY\""
 pj_other_intact
@@ -381,7 +381,7 @@ remote_count "$BARE" 1
 
 echo "== an unregistered machine without --alias and without a terminal -> ERROR, exit 1"
 case_run unregistered-notty 1 fx_two
-has_row "ERROR|machine profile|not registered (no terminal)"
+has_row "ERROR|machine profile|not registered|this machine has no profile and there is no terminal to ask"
 has_row "ACTION||Run: aitools user init --alias <name> (or on a terminal)"
 unregistered_once
 
@@ -422,7 +422,7 @@ echo "== decision 2 switch = 0 (default): cached machineAlias, no terminal -> ER
 fx_cached() { fixture "$CASE" "$PJ_TWO" ',
   "machineAlias": "nobul-mac"'; }
 case_run cached-alias-0 1 fx_cached
-has_row "ERROR|machine profile|not registered (no terminal)"
+has_row "ERROR|machine profile|not registered|this machine has no profile and there is no terminal to ask"
 unregistered_once
 pj_lacks "\"$THIS_KEY\""
 
@@ -444,7 +444,7 @@ else bad "decision 2 switch line not found (or not at its default) in scripts/ai
 echo "== Review3 #82 minor 5: uncommitted edits to profile.json are never committed"
 fx_dirty() { fx_two; perl -pi -e 's/"old-host"/"edited-host"/' "$DP/profile.json"; }
 case_run dirty 1 fx_dirty --alias spare
-has_row "ERROR|machine profile|not registered (local edits)"
+has_row "ERROR|machine profile|not registered|profile.json in <D>/home/repos/aitools-$GH_USER has uncommitted changes (they would be committed with it)"
 unregistered_once
 pj_has '"edited-host"'
 pj_lacks "\"$THIS_KEY\""
@@ -456,7 +456,7 @@ fx_dirty_reg() {
     perl -pi -e 's/"old-host"/"edited-host"/' "$DP/profile.json"
 }
 case_run dirty-registered 0 fx_dirty_reg
-has_row "WARN|machine profile|not refreshed (local edits)"
+has_row "WARN|machine profile|profile.json in <D>/home/repos/aitools-$GH_USER has uncommitted changes -- this machine's profile was not refreshed; commit or discard them, then run: aitools user init"
 no_machine_flag no
 remote_count "$BARE" 2
 
@@ -475,6 +475,8 @@ has_row "ACTION||git pull --rebase, then git push in <D>/home/repos/aitools-$GH_
 # This asserted the old promotion (OK -> WARN after any warning) before I1.
 has_row "OK|machine profile|created (spare)"
 no_row_like "WARN|machine profile|created"
+# E4: the rejected push is one warning of its own, with the ACTION above
+has_row "WARN|dotprofile|dotprofile push rejected (exit 1): the remote has newer commits -- run git pull --rebase, then git push in <D>/home/repos/aitools-$GH_USER"
 
 echo "== D-TS13: the hooks review aborted (exit 2) -> user init exits 2"
 CASE_ENV=(HOOK_RC=2)
@@ -482,7 +484,7 @@ case_run hook-abort 2 fx_two --alias spare
 # FIX-2 (A-13): the relay records the abort (the stub wrote no ERROR row), as
 # reference/logging.md 8.3 "A user abort": WHAT "<label> failed (exit 2)",
 # REASON "aborted by user"
-has_row "ERROR|claude hooks|user init: setup-user-hooks.sh failed (exit 2)|aborted by user"
+has_row "ERROR|claude hooks|user init: setup-user-hooks failed (exit 2)|aborted by user"
 CASE_ENV=()
 
 # jsonl_count CASE SCRIPT [LEVEL MSG] -- valid records of SCRIPT (with LEVEL and
@@ -505,7 +507,7 @@ echo "== FIX-2 (A-12, A-13): user init runs setup-user-config and setup-user-hoo
 # The stub prints nothing, so the reason is "no output (exit 3)" (reference/logging.md 8.3)
 CASE_ENV=(HOOK_RC=3)
 case_run hook-crash 1 fx_two --alias spare
-has_row "ERROR|claude hooks|user init: setup-user-hooks.sh failed (exit 3)|no output (exit 3)"
+has_row "ERROR|claude hooks|user init: setup-user-hooks failed (exit 3)|no output (exit 3)"
 row_count "ERROR|claude hooks|" 1
 CASE_ENV=()
 # The children's lines reach deploy.jsonl and the console; a hooks warning is relayed
@@ -534,7 +536,7 @@ out_has "--alias needs a value"
 echo "== review M1: a relative reposPath is refused (nothing created under the current directory)"
 fx_relative() { fixture "$CASE" "$PJ_TWO"; perl -pi -e 's/"reposPath": "[^"]*"/"reposPath": "repos"/' "$H/.aitools/config.json"; }
 case_run relative-repos 1 fx_relative --alias spare
-has_row "ERROR|dotprofile|reposPath not absolute"
+has_row "ERROR|dotprofile|reposPath not absolute|'repos' in <D>/home/.aitools/config.json"
 if [ -e "$D/repos" ]; then bad "$CASE: a repos/ directory was created under the cwd"; else ok "$CASE: nothing created under the cwd"; fi
 
 echo "== review M2: id undetectable (via=config) -> WARN, the cached machineId survives two runs"
@@ -546,7 +548,9 @@ fx_viaconfig() {
 }
 CASE_ENV=(AITOOLS_PROFILE_TEST_MACHINE_ID=none)
 case_run via-config 0 fx_viaconfig
-has_row "WARN|machine profile|not refreshed (no machine id)"
+has_row "WARN|machine profile|profile 'mine' not refreshed: this machine's id cannot be detected (key from config.json machineId)"
+# E2: the resolver's warning is a record of its own
+has_row "WARN|machine profile|machine id unavailable: no machine id (test value)"
 cfg_id "$THIS_KEY"
 # Registered, id undetectable: machine_key is emptied for the writer, but no flag
 no_machine_flag no
@@ -627,7 +631,7 @@ if $USE_PTY; then
     case_run pty-hostname-other 1 fx_two
     out_has "[-] laptop (suggested, registered to another machine)"
     out_has "is registered to another machine"
-    has_row "WARN|machine profile|skipped"
+    has_row "WARN|machine profile|registration skipped -- deploys will report no machine match"
     pj_lacks "\"$THIS_KEY\""
     CASE_ENV=()
 
@@ -641,7 +645,7 @@ if $USE_PTY; then
     echo "== interactive (pty): ... declined -> skipped (WARN row; not registered = exit 1)"
     PTY_INPUT=$'\n\nn\n'
     case_run pty-dup-decline 1 fx_two --alias laptop
-    has_row "WARN|machine profile|skipped"
+    has_row "WARN|machine profile|registration skipped: alias \"laptop\" is used by another machine's profile ($OTHER_ID)"
     no_machine_flag yes
     no_row_like "no machine match"
     pj_lacks "\"$THIS_KEY\""
@@ -678,7 +682,7 @@ if $USE_PTY; then
     echo "== interactive (pty) with --force: no prompt; an unregistered machine is refused like no terminal"
     PTY_INPUT=$'1\n'
     case_run pty-force 1 fx_two --force
-    has_row "ERROR|machine profile|not registered (no terminal)"
+    has_row "ERROR|machine profile|not registered|this machine has no profile and there is no terminal to ask"
     if grep -q "Which profile is this machine" "$OUT"; then bad "$CASE: --force prompted"; else ok "$CASE: --force did not prompt"; fi
     PTY_INPUT=""
 else

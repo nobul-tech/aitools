@@ -1,7 +1,9 @@
 exit 1
 -- summary rows
 OK|dotprofile|verified
-WARN|machine profile|skipped
+WARN|machine profile|profile "laptop" is registered to another machine (machine.id bbbbbbbb-1111-2222-3333-444444444444, this machine AAAAAAAA-1111-2222-3333-444444444444)
+WARN|machine profile|registration skipped -- deploys will report no machine match
+WARN|aitools config|profile "laptop" is registered to another machine (machine.id bbbbbbbb-1111-2222-3333-444444444444, this machine AAAAAAAA-1111-2222-3333-444444444444)
 OK|aitools config|updated
 DETAIL|aitools config|googleDrives updated
 DETAIL|aitools config|githubUser updated
