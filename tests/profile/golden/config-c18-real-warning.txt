@@ -1,6 +1,6 @@
 exit 0
 -- summary rows
-WARN|aitools config|created
+OK|aitools config|created
 DETAIL|aitools config|version updated
 DETAIL|aitools config|reposPath updated
 DETAIL|aitools config|repoPath updated

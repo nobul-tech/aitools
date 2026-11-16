@@ -384,22 +384,25 @@ try {
     log_has "run: aitools-profile migrate"
 
     # C18 a real problem (stored hostname differs: renamed, or a clone sharing the id):
-    # a counted warning, the row becomes WARN; plus the one ACTION
+    # counted warnings, plus the one ACTION. The status row stays OK: Write-Summary
+    # never recolours a status (reference/logging.md 8.3; the OK -> WARN promotion
+    # is gone), so each warning is its own WARN record once LogWarn records
     function fix_clone { reset_home; write_profile $KEY_MAC '"alias": "nobul-mac",' $KEY_MAC "other-host" }
     case_run c18-real-warning 0 fix_clone $BOOT
-    has_row "WARN|aitools config|created"
+    has_row "OK|aitools config|created"
     has_row "ACTION||Run: aitools user init (updates this machine's profile)"
     rows_n 1 "ACTION"
     out_has "COMPLETED with 2 warning(s)"
     has_json ('"machineId": "' + $KEY_MAC + '"')
 
     # C19 this machine's id cannot be detected: the cached machineId selects the profile
-    # (via=config) and is kept; the undetectable id is a real warning
+    # (via=config) and is kept; the undetectable id is a real warning, and the status
+    # row stays OK (no promotion: reference/logging.md 8.3)
     function fix_noid { fix_fresh; Copy-Item -LiteralPath "$WORK/c1-fresh.json" -Destination $CFG -Force }
     $script:CaseEnv = @{ AITOOLS_PROFILE_TEST_MACHINE_ID = "none" }
     case_run c19-id-unavailable 0 fix_noid
     $script:CaseEnv = @{}
-    has_row "WARN|aitools config|verified"
+    has_row "OK|aitools config|verified"
     if (SameFile $RAWJ "$WORK/c1-fresh.json") { ok "c19-id-unavailable: machineId kept, file unchanged" } else { bad "c19-id-unavailable: file changed" }
     log_has "machineAlias=nobul-mac via=config"
 
@@ -716,8 +719,10 @@ Write-Output "COUNTS errors=$($script:errors) warnings=$($script:warnings)"
     else { bad "$L jsonl: invalid record"; Show-Indented ((ReadText "$H/.aitools/logs/deploy.jsonl") + "`n" + $jr.Error) }
 
     # Step 5 relays the writer: its lines reach deploy.jsonl, its warnings are counted
-    # (C13 fixture: an unregistered profile warns), and the relative-path regression
-    # is gone (Step 3's absolute path is accepted and config.json is written)
+    # by the writer only (C13 fixture: an unregistered profile warns; reference/logging.md
+    # 8.3: a relayed child's warnings are not added to the parent's count), and the
+    # relative-path regression is gone (Step 3's absolute path is accepted and
+    # config.json is written)
     fix_unreg
     Remove-Item -LiteralPath $CFG -Force
     inst_run run $REL_GOT "$H/repos/aitools"   # REL_GOT: Step 3's answer for the relative 'repos'
@@ -726,10 +731,10 @@ Write-Output "COUNTS errors=$($script:errors) warnings=$($script:warnings)"
     else { bad "$L step5: rc=$($script:RC), config missing"; Show-Indented (ReadText "$WORK/inst.out") }
     jsonl_check
     if ($script:JlAll -gt 0) { ok "$L step5: writer lines in deploy.jsonl ($($script:JlAll))" } else { bad "$L step5: no writer lines in deploy.jsonl" }
-    # the installer's count = the writer's own N (its footer) = its warn lines minus the footer
-    $cw = if ($counts) { ($counts -split ' ')[1] } else { "" }
-    if ($cw -ceq [string]$script:JlFooter -and $script:JlWarn -eq $script:JlFooter -and $script:JlFooter -gt 0) { ok "$L step5: writer warnings counted ($cw)" }
-    else { bad "$L step5: counts '$counts', writer warn lines $($script:JlWarn), writer footer N $($script:JlFooter)"; Show-Indented (ReadText "$WORK/inst.out") }
+    # the writer's own N (its footer) = its warn lines minus the footer, N > 0; the
+    # installer counts none of them (errors 0, warnings 0)
+    if ($counts -ceq "0 0" -and $script:JlWarn -eq $script:JlFooter -and $script:JlFooter -gt 0) { ok "$L step5: writer warnings counted by the writer ($($script:JlFooter)), not the installer" }
+    else { bad "$L step5: counts '$counts' (want '0 0'), writer warn lines $($script:JlWarn), writer footer N $($script:JlFooter)"; Show-Indented (ReadText "$WORK/inst.out") }
     if ((ReadText "$WORK/inst.out") -cmatch '\[setup-user-config\] \[warn\]') { ok "$L step5: writer lines shown on the console" } else { bad "$L step5: writer lines not shown" }
 
     # A failing writer (relative path reaching it) is one installer error

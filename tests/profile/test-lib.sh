@@ -28,9 +28,16 @@
 # M3-FINISH item 7 (FIX-1): the machine-profile "resolver missing" ACTION (A-2,
 # one per run with the dotprofile wrapper's); the relay's ERROR row for a failed
 # child that wrote none -- crash, exit 127, abort, error lines with exit 0, PS
-# throw and parse error, no command -- and none for a child that wrote its own or
-# without a summary tool (A-3); the relay's temp file: mktemp failure and a
-# failed removal (A-4, stubs on PATH).
+# throw and parse error, no command -- and none for a child that wrote its own
+# (A-3); the relay's temp file: mktemp failure and a failed removal (A-4, stubs
+# on PATH).
+# Summary-warn-reporting I1 (reference/logging.md section 8): every resolver
+# error is one ERROR record with a reason (ERROR|<name>|<what>|<reason>); the
+# machine-profile "unresolved" line is info, not a second error; a tool
+# exception warning is a WARN record under the script's name before its ACTION;
+# the relay adds no child warning to the parent's count, records a failed
+# child as "<label> failed (exit N)" with a reason, and names a child relayed
+# without a summary tool after its script.
 #
 # Platform targeting (plans/ci-platform-targeting.md; commander 2026-11-14:
 # "sh scripts and tests should only run on linux/mac and ps1 on windows"):
@@ -66,7 +73,7 @@ case "${BASH_VERSINFO[5]:-}" in
 esac
 
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
-    perl -ne 'print if $. >= 2 && $. <= 50' "$0"
+    perl -ne 'print if $. >= 2 && $. <= 57' "$0"
     exit 0
 fi
 
@@ -91,6 +98,12 @@ ID_KEY="3d4df2a5-7d91-5af9-9944-4feebaae3cf5"   # ID_MAC lower-cased: the profil
 H="$WORK/home"
 DP="$H/repos/aitools-nobul-jose"
 A_DP="ACTION||see deploy.log -- the dotprofile could not be resolved"
+# The reasons of the resolver ERROR records (reference/logging.md 8.3: every error
+# has a reason): the resolver's first error line, with its exit note
+R_NOMATCH="no profile matches this machine (machine.id $ID_MAC, hostname nobul-mac) -- run: aitools user init"
+R_MISSING="resolver none.sh not found ($WORK)"
+NOTE3="resolver exit 3: refused"
+NOTE4="resolver exit 4: alias used by another profile -- not a result of this command"
 
 FIX_KIND=""
 FIX_NAME="Jose"
@@ -257,17 +270,18 @@ warnings=0 errors=0" ""
 
 fixture with-id
 perl -pi -e "s/$ID_MAC/OTHER-ID/; s/\"hostname\": \"nobul-mac\"/\"hostname\": \"elsewhere\"/" "$DP/profile.json"
+# One error with its reason (the "unresolved" line is info: logging.md 8.3)
 run_case rmp-nomatch rmp "rc=3
 alias= via=none company=nobul-tech name=Jose
-warnings=0 errors=2" "ERROR|machine profile|no machine match
+warnings=0 errors=1" "ERROR|machine profile|no machine match|$R_NOMATCH
 ACTION||Run: aitools user init (pick or register this machine's profile)"
 
 # m3: the same failure twice in one run -> two ERROR rows, one ACTION
 run_case rmp-nomatch-twice rmp2 "rc=3
 alias= via=none company=nobul-tech name=Jose
-warnings=0 errors=4" "ERROR|machine profile|no machine match
+warnings=0 errors=2" "ERROR|machine profile|no machine match|$R_NOMATCH
 ACTION||Run: aitools user init (pick or register this machine's profile)
-ERROR|machine profile|no machine match"
+ERROR|machine profile|no machine match|$R_NOMATCH"
 
 fixture with-id
 run_case eget-none eget "rc=0
@@ -279,11 +293,12 @@ run_case eget-unavailable eget "rc=1
 found=false method= path=
 warnings=1 errors=0" ""
 
-# No remote: the push fails -> warning + ACTION
+# No remote: the push fails -> warning (a WARN record under the script's name) + ACTION
 fixture with-id
 run_case eset-written eset "rc=0
 result=created pushed=false
-warnings=1 errors=0" "ACTION||run git push in $DP"
+warnings=1 errors=0" "WARN|test-lib|tool exception for go saved but not pushed (dotprofile push failed (exit 128) -- run git push in $DP)
+ACTION||run git push in $DP"
 
 # m1: an identical second record and a dry run write nothing: no warning, no ACTION
 fixture with-id
@@ -299,7 +314,8 @@ warnings=0 errors=0" "" "AITOOLS_DRY_RUN=1"
 fixture hostname-only
 run_case eset-refused eset "rc=3
 result=refused pushed=false
-warnings=1 errors=0" "ACTION||run aitools user init to remember tool choices"
+warnings=1 errors=0" "WARN|test-lib|tool exception for go not saved (machine profile \"nobul-mac\" matched by hostname only -- run: aitools user init to remember tool choices) ($NOTE3)
+ACTION||run aitools user init to remember tool choices"
 
 # B1/M1: the caller's own variables and parameters survive sourcing the lib and
 # calling the wrappers (bash: USER_REPO_PATH, PROFILE_FILE, MACHINE_ALIAS,
@@ -314,7 +330,7 @@ warnings=0 errors=0" ""
 fixture with-id
 run_case override-missing urp "rc=3
 path= via=none
-warnings=0 errors=1" "ERROR|dotprofile|resolver missing
+warnings=0 errors=1" "ERROR|dotprofile|resolver missing|$R_MISSING
 $A_DP" "AITOOLS_PROFILE_SH=$WORK/none.sh"
 
 run_case override-stub urp "rc=0
@@ -332,17 +348,17 @@ warnings=0 errors=0" ""
 fixture with-id
 run_case broken-silent0-urp urp "rc=3
 path= via=
-warnings=0 errors=1" "ERROR|dotprofile|resolver failed
+warnings=0 errors=1" "ERROR|dotprofile|resolver failed|resolver exited 0 without result lines (see deploy.log)
 $A_DP" "AITOOLS_PROFILE_SH=$WORK/silent0.sh"
 
 run_case broken-silent1-urp urp "rc=3
 path= via=
-warnings=0 errors=1" "ERROR|dotprofile|resolver failed
+warnings=0 errors=1" "ERROR|dotprofile|resolver failed|resolver exited 1 without result lines (see deploy.log)
 $A_DP" "AITOOLS_PROFILE_SH=$WORK/silent1.sh"
 
 run_case broken-silent1-rmp rmp "rc=3
 alias= via= company= name=
-warnings=0 errors=2" "ERROR|machine profile|no machine match
+warnings=0 errors=1" "ERROR|machine profile|no machine match|resolver exited 1 without result lines (see deploy.log)
 ACTION||Run: aitools user init (pick or register this machine's profile)" "AITOOLS_PROFILE_SH=$WORK/silent1.sh"
 
 run_case broken-silent0-eget eget "rc=1
@@ -351,7 +367,8 @@ warnings=1 errors=0" "" "AITOOLS_PROFILE_SH=$WORK/silent0.sh"
 
 run_case broken-silent0-eset eset "rc=1
 result=failed pushed=false
-warnings=1 errors=0" "ACTION||see deploy.log -- a tool choice (tool exception) was not saved" "AITOOLS_PROFILE_SH=$WORK/silent0.sh"
+warnings=1 errors=0" "WARN|test-lib|tool exception for go not saved (resolver exited 0 without result lines (see deploy.log))
+ACTION||see deploy.log -- a tool choice (tool exception) was not saved" "AITOOLS_PROFILE_SH=$WORK/silent0.sh"
 
 # Re-key batch 3, item 1: the id-key results
 fixture id-key
@@ -390,7 +407,7 @@ perl -pi -e "s/$ID_MAC/OTHER-ID/; s/\"hostname\": \"nobul-mac\"/\"hostname\": \"
 run_case rmpk-nomatch rmpk "rc=3
 alias= via=none company=nobul-tech
 key= owner=absent legacy=false host=nobul-mac
-warnings=0 errors=2" "ERROR|machine profile|no machine match
+warnings=0 errors=1" "ERROR|machine profile|no machine match|$R_NOMATCH
 ACTION||Run: aitools user init (pick or register this machine's profile)"
 
 # A resolver that predates the id-key fields (an older embedded copy): defaults
@@ -403,37 +420,38 @@ warnings=0 errors=0" "" "AITOOLS_PROFILE_SH=$WORK/oldres.sh"
 # Item 3: a dotprofile resolver error twice in one run -> two ERROR rows, one ACTION
 run_case urp-missing-twice urp2 "rc=3
 path= via=none
-warnings=0 errors=2" "ERROR|dotprofile|resolver missing
+warnings=0 errors=2" "ERROR|dotprofile|resolver missing|$R_MISSING
 $A_DP
-ERROR|dotprofile|resolver missing" "AITOOLS_PROFILE_SH=$WORK/none.sh"
+ERROR|dotprofile|resolver missing|$R_MISSING" "AITOOLS_PROFILE_SH=$WORK/none.sh"
 
 # FIX-1, A-2: the machine-profile wrapper's "resolver missing" path writes the
 # ACTION too; with the dotprofile wrapper in the same run, one ACTION in total
 run_case rmp-missing rmp "rc=3
 alias= via=none company= name=
-warnings=0 errors=1" "ERROR|machine profile|resolver missing
+warnings=0 errors=1" "ERROR|machine profile|resolver missing|$R_MISSING
 $A_DP" "AITOOLS_PROFILE_SH=$WORK/none.sh"
 run_case urp-rmp-missing keep "rc=3
 kept=urp:/caller/urp pf:/caller/pf alias:caller name:caller-name
 alias= urp-via=none
-warnings=0 errors=2" "ERROR|dotprofile|resolver missing
+warnings=0 errors=2" "ERROR|dotprofile|resolver missing|$R_MISSING
 $A_DP
-ERROR|machine profile|resolver missing" "AITOOLS_PROFILE_SH=$WORK/none.sh"
+ERROR|machine profile|resolver missing|$R_MISSING" "AITOOLS_PROFILE_SH=$WORK/none.sh"
 
 # Item 2: resolver exits 3 and 4 are mapped and logged with their meaning in
 # every wrapper; neither is read as "nothing found"
 for n in 3 4; do
     X="AITOOLS_PROFILE_SH=$WORK/exit$n.sh SHOW_NOTES=1"
+    if [ "$n" = "3" ]; then note="$NOTE3"; else note="$NOTE4"; fi
     fixture with-id
     run_case "exit$n-urp" urp "rc=3
 path= via=none
 warnings=0 errors=1
-notes=1" "ERROR|dotprofile|resolver failed
+notes=1" "ERROR|dotprofile|resolver failed|stub says no ($note)
 $A_DP" "$X"
     run_case "exit$n-rmp" rmp "rc=3
 alias= via=none company= name=
-warnings=0 errors=2
-notes=1" "ERROR|machine profile|no machine match
+warnings=0 errors=1
+notes=1" "ERROR|machine profile|no machine match|stub says no ($note)
 ACTION||Run: aitools user init (pick or register this machine's profile)" "$X"
     run_case "exit$n-eget" eget "rc=1
 found=false method= path=
@@ -444,11 +462,13 @@ fixture with-id
 run_case exit3-eset eset "rc=3
 result=refused pushed=false
 warnings=1 errors=0
-notes=1" "ACTION||run aitools user init to remember tool choices" "AITOOLS_PROFILE_SH=$WORK/exit3.sh SHOW_NOTES=1"
+notes=1" "WARN|test-lib|tool exception for go not saved (stub says no) ($NOTE3)
+ACTION||run aitools user init to remember tool choices" "AITOOLS_PROFILE_SH=$WORK/exit3.sh SHOW_NOTES=1"
 run_case exit4-eset eset "rc=1
 result=failed pushed=false
 warnings=1 errors=0
-notes=1" "ACTION||see deploy.log -- a tool choice (tool exception) was not saved" "AITOOLS_PROFILE_SH=$WORK/exit4.sh SHOW_NOTES=1"
+notes=1" "WARN|test-lib|tool exception for go not saved (stub says no) ($NOTE4)
+ACTION||see deploy.log -- a tool choice (tool exception) was not saved" "AITOOLS_PROFILE_SH=$WORK/exit4.sh SHOW_NOTES=1"
 
 # M3-FINISH item 3: the runner itself (_aitlib_profile_run / Invoke-AitLibProfile),
 # as user init calls it. register and migrate print a "result" line and no "via"
@@ -655,43 +675,49 @@ if [ -f "$WORK/record.jsonl" ]; then
 else
     bad "relay-record: no deploy.jsonl record to compare"
 fi
+# The child's two warnings are counted in cw only, never in the parent's
+# warnings (logging.md 8.3: each script counts its own warnings)
 relay_case relay-run-ok run 0 "rc=0 child_rc=0
-cw=2 ce=0 warnings=2 errors=0" "records=4 invalid=0
+cw=2 ce=0 warnings=0 errors=0" "records=4 invalid=0
 msg-ok"
 # A failed child that wrote its own ERROR row gets no second one (FIX-1, A-3)
 relay_case relay-run-fail run 1 "rc=1 child_rc=1
-cw=2 ce=1 warnings=2 errors=1" "records=5 invalid=0
+cw=2 ce=1 warnings=0 errors=1" "records=5 invalid=0
 msg-ok" "ERROR|child tool|child failed"
-# A child that logged an error but exited 0 and wrote no row: one ERROR row
+# A child that logged an error but exited 0 and wrote no row: one ERROR row,
+# WHAT "<label> failed (exit 0)", REASON from the child's stderr (8.3)
 relay_case relay-run-error-exit0 run 2 "rc=1 child_rc=0
-cw=2 ce=1 warnings=2 errors=1" "records=5 invalid=0
-msg-ok" "ERROR|child tool|logged errors (exit 0)"
+cw=2 ce=1 warnings=0 errors=1" "records=5 invalid=0
+msg-ok" "ERROR|child tool|child step failed (exit 0)|child error"
 # A-3: a child that died before its own rows (set -e abort / exit 1, exit 127)
-# is in the panel as ERROR; a user abort (exit 2) too
+# is in the panel as ERROR; a user abort (exit 2) too. The crash's reason is the
+# last non-empty line of the child's stderr (8.3 rule 4: no error marker in it)
 relay_case relay-run-crash run 3 "rc=1 child_rc=1
-cw=2 ce=0 warnings=2 errors=1" "records=3 invalid=0
-msg-ok" "ERROR|child tool|script failed (exit 1)"
+cw=2 ce=0 warnings=0 errors=1" "records=3 invalid=0
+msg-ok" "ERROR|child tool|child step failed (exit 1)|second warning"
 relay_case relay-run-exit127 run 4 "rc=1 child_rc=127
-cw=2 ce=0 warnings=2 errors=1" "records=3 invalid=0
-msg-ok" "ERROR|child tool|script failed (exit 127)"
+cw=2 ce=0 warnings=0 errors=1" "records=3 invalid=0
+msg-ok" "ERROR|child tool|child step failed (exit 127)|$WORK/child.sh: line 11: aitools-test-no-such-command: command not found"
 relay_case relay-run-abort run 5 "rc=1 child_rc=2
-cw=2 ce=1 warnings=2 errors=1" "records=4 invalid=0
-msg-ok" "ERROR|child tool|aborted (exit 2)"
+cw=2 ce=1 warnings=0 errors=1" "records=4 invalid=0
+msg-ok" "ERROR|child tool|child step failed (exit 2)|aborted by user"
 # Review A m1: the dedupe compares with the rows before the child, not with zero:
 # an earlier step's ERROR row does not hide the crashed child's row
 relay_case relay-run-crash-prior-row run 3 "rc=1 child_rc=1
-cw=2 ce=0 warnings=2 errors=1" "records=3 invalid=0
+cw=2 ce=0 warnings=0 errors=1" "records=3 invalid=0
 msg-ok" "ERROR|earlier step|failed before
-ERROR|child tool|script failed (exit 1)" "PRE_ROW=1"
-# Without a summary tool: no row (the caller writes its own)
+ERROR|child tool|child step failed (exit 1)|second warning" "PRE_ROW=1"
+# Without a summary tool: the row is named after the child's script (8.3 "Its
+# name": the base name of the first argument ending in .sh, child.sh -> child)
 relay_case relay-run-crash-notool run-notool 3 "rc=1 child_rc=1
-cw=2 ce=0 warnings=2 errors=1" "records=3 invalid=0
-msg-ok" ""
+cw=2 ce=0 warnings=0 errors=1" "records=3 invalid=0
+msg-ok" "ERROR|child|child step failed (exit 1)|second warning"
 # (PowerShell: a throw and a parse error, in-process, are one LogError and a row:
 # relay-run-throw and relay-run-parse in test-lib.ps1)
 # Review m3: no command is a failure, not a silent success; with a tool, a row
+# (WHAT "<label> not run", the label being "no command" here)
 relay_case relay-run-no-command noargs 0 "rc=1 child_rc=1
-cw=0 ce=0 warnings=0 errors=1" "-" "ERROR|child tool|not run (no command)"
+cw=0 ce=0 warnings=0 errors=1" "-" "ERROR|child tool|no command not run|no command given"
 # A-4 (bash only: the relay's exit-code temp file). mktemp fails: not run, a row;
 # the file cannot be removed: a detail line, nothing else changes. mktemp stubs:
 # $WORK/mkfail fails, $WORK/mkro creates the file in $WORK/tmpro
@@ -700,20 +726,20 @@ printf '#!/usr/bin/env bash\nexit 1\n' > "$WORK/mkfail/mktemp"
 printf '#!/usr/bin/env bash\n: > "%s/tmpro/rc.tmp"\nprintf "%%s\\n" "%s/tmpro/rc.tmp"\n' "$WORK" "$WORK" > "$WORK/mkro/mktemp"
 chmod +x "$WORK/mkfail/mktemp" "$WORK/mkro/mktemp"
 relay_case relay-run-mktemp-fail run 0 "rc=1 child_rc=1
-cw=0 ce=0 warnings=0 errors=1" "-" "ERROR|child tool|not run (mktemp failed)" "FAKEBIN=$WORK/mkfail"
+cw=0 ce=0 warnings=0 errors=1" "-" "ERROR|child tool|child step not run|mktemp failed" "FAKEBIN=$WORK/mkfail"
 # Review A n3: root ignores the read-only directory (Claude Code web runs as root).
 if [ "$(id -u)" -eq 0 ]; then
     printf '  skip relay-run-rm-fail (running as root: a read-only directory does not stop rm)\n'
 else
     relay_case relay-run-rm-fail run 7 "rc=0 child_rc=0
-cw=2 ce=0 warnings=2 errors=0" "records=4 invalid=0
+cw=2 ce=0 warnings=0 errors=0" "records=4 invalid=0
 msg-ok" "" "FAKEBIN=$WORK/mkro RO_DIR=$WORK/tmpro"
     chmod 755 "$WORK/tmpro"
     if grep -qF "[detail] child step: could not remove temp file $WORK/tmpro/rc.tmp" "$H/.aitools/logs/deploy.log"; then ok "relay-run-rm-fail (bash): detail line in deploy.log"
     else bad "relay-run-rm-fail (bash): no 'could not remove temp file' detail line"; fi
 fi
 relay_case relay-captured captured 0 "rc=0 child_rc=0
-cw=2 ce=0 warnings=2 errors=0" "records=4 invalid=0
+cw=2 ce=0 warnings=0 errors=0" "records=4 invalid=0
 msg-ok"
 
 printf '\n%s passed, %s failed\n' "$PASS" "$FAIL"

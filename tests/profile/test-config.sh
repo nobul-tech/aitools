@@ -349,22 +349,25 @@ no_json '"machineId"'
 log_has "run: aitools-profile migrate"
 
 # C18 a real problem (stored hostname differs: renamed, or a clone sharing the id):
-# a counted warning, the row becomes WARN; plus the one ACTION
+# counted warnings, plus the one ACTION. The status row stays OK: write_summary
+# never recolours a status (reference/logging.md 8.3; the OK -> WARN promotion
+# is gone), so each warning is its own WARN record once log_warn records
 fix_clone() { reset_home; write_profile "$KEY_MAC" '"alias": "nobul-mac",' "$KEY_MAC" other-host; }
 case_run c18-real-warning 0 fix_clone "${BOOT[@]}"
-has_row "WARN|aitools config|created"
+has_row "OK|aitools config|created"
 has_row "ACTION||Run: aitools user init (updates this machine's profile)"
 rows_n 1 "ACTION"
 out_has "COMPLETED with 2 warning(s)"
 has_json '"machineId": "'"$KEY_MAC"'"'
 
 # C19 this machine's id cannot be detected: the cached machineId selects the profile
-# (via=config) and is kept; the undetectable id is a real warning
+# (via=config) and is kept; the undetectable id is a real warning, and the status
+# row stays OK (no promotion: reference/logging.md 8.3)
 fix_noid() { fix_fresh; cp "$WORK/c1-fresh.json" "$CFG"; }
 CASE_ENV="AITOOLS_PROFILE_TEST_MACHINE_ID=none"
 case_run c19-id-unavailable 0 fix_noid
 CASE_ENV=""
-has_row "WARN|aitools config|verified"
+has_row "OK|aitools config|verified"
 if cmp -s "$RAWJ" "$WORK/c1-fresh.json"; then ok "c19-id-unavailable: machineId kept, file unchanged"; else bad "c19-id-unavailable: file changed"; fi
 log_has "machineAlias=nobul-mac via=config"
 
@@ -654,8 +657,10 @@ if perl -MJSON::PP -ne 'decode_json($_)' "$H/.aitools/logs/deploy.jsonl" 2> "$WO
 else bad "$L jsonl: invalid record"; perl -pe 's/^/       /' "$H/.aitools/logs/deploy.jsonl" "$WORK/jsonl.err"; fi
 
 # Step 5 relays the writer: its lines reach deploy.jsonl, its warnings are counted
-# (C13 fixture: an unregistered profile warns), and the relative-path regression
-# is gone (Step 3's absolute path is accepted and config.json is written)
+# by the writer only (C13 fixture: an unregistered profile warns; reference/logging.md
+# 8.3: a relayed child's warnings are not added to the parent's count), and the
+# relative-path regression is gone (Step 3's absolute path is accepted and
+# config.json is written)
 fix_unreg
 rm -f "$CFG"
 inst_run run "$REL_GOT" "$H/repos/aitools"   # REL_GOT: Step 3's answer for the relative 'repos'
@@ -664,9 +669,10 @@ if [ "$RC" -eq 0 ] && [ -s "$CFG" ]; then ok "$L step5: config.json written"; el
 jsonl_check
 read -r jl_all jl_warn jl_footer < "$WORK/jsonl.res" || true  # empty result = unset, reported below
 if [ "${jl_all:-0}" -gt 0 ]; then ok "$L step5: writer lines in deploy.jsonl ($jl_all)"; else bad "$L step5: no writer lines in deploy.jsonl"; fi
-# the installer's count = the writer's own N (its footer) = its warn lines minus the footer
-if [ "${counts#* }" = "${jl_footer:-x}" ] && [ "${jl_warn:-x}" = "${jl_footer:-y}" ] && [ "${jl_footer:-0}" -gt 0 ]; then ok "$L step5: writer warnings counted (${counts#* })"
-else bad "$L step5: counts '$counts', writer warn lines ${jl_warn:-none}, writer footer N ${jl_footer:-none}"; perl -pe 's/^/       /' "$WORK/inst.out"; fi
+# the writer's own N (its footer) = its warn lines minus the footer, N > 0; the
+# installer counts none of them (errors 0, warnings 0)
+if [ "$counts" = "0 0" ] && [ "${jl_warn:-x}" = "${jl_footer:-y}" ] && [ "${jl_footer:-0}" -gt 0 ]; then ok "$L step5: writer warnings counted by the writer (${jl_footer}), not the installer"
+else bad "$L step5: counts '$counts' (want '0 0'), writer warn lines ${jl_warn:-none}, writer footer N ${jl_footer:-none}"; perl -pe 's/^/       /' "$WORK/inst.out"; fi
 if grep -q '\[setup-user-config\] \[warn\]' "$WORK/inst.out"; then ok "$L step5: writer lines shown on the console"; else bad "$L step5: writer lines not shown"; fi
 
 # A failing writer (relative path reaching it) is one installer error

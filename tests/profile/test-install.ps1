@@ -9,15 +9,17 @@
 # from the installer, dot-sources aitools-lib.ps1 with Initialize-Logging
 # "aitools-install" in a child pwsh under an isolated HOME, and runs one step
 # against a stub:
-#   step5-warn     a writer warning is counted in the installer's warnings, its
-#                  lines reach deploy.jsonl (one run_id with the installer's own)
-#                  and the console; its own OK row is kept
+#   step5-warn     a writer warning is the writer's own, not counted in the
+#                  installer's warnings (reference/logging.md 8.3); its lines
+#                  reach deploy.jsonl (one run_id with the installer's own) and
+#                  the console; its own OK row is kept
 #   step5-runid    the child sees the installer's AITOOLS_RUN_ID, every record has it
 #   step5-crash    a writer that dies without a row: one error and the relay's
-#                  "ERROR|aitools config|script failed (exit 1)"
+#                  "ERROR|aitools config|<label> failed (exit 1)|<reason>"
 #   step5-ownrow   a writer that wrote its own ERROR row and exits 1: one error,
 #                  no second row
-#   jsonl-blocked  deploy.jsonl cannot be written: one warning, the run goes on
+#   jsonl-blocked  deploy.jsonl cannot be written: one warning of the installer
+#                  (the writer's warning stays the writer's), the run goes on
 #   step3-*        Step 3 (Resolve-ReposDir): a relative path made absolute and
 #                  created; a path that cannot be created is one error and one
 #                  ERROR row "aitools config"
@@ -330,9 +332,10 @@ Write-Output "END errors=$($script:errors) warnings=$($script:warnings)"
     $impl = "ps"
     Write-Output "installer Step 3 / Step 5 on the lib relay (windows: $impl)"
 
-    # A-1: a writer warning is counted, its lines reach deploy.jsonl and the console
+    # A-1: a writer warning is the writer's (8.3: not added to the installer's
+    # count); its lines reach deploy.jsonl and the console
     fresh; run_h step5 -Vars @{ WRITER_MODE = "warn" }
-    want_end "step5-warn ($impl)" "errors=0 warnings=1"
+    want_end "step5-warn ($impl)" "errors=0 warnings=0"
     want_sum "step5-warn ($impl)" "OK|aitools config|stub"
     want_out "step5-warn ($impl)" "[setup-user-config] [warn] stub warning"
     $got = jsonl_check "$H/.aitools/logs/deploy.jsonl"
@@ -347,10 +350,12 @@ Write-Output "END errors=$($script:errors) warnings=$($script:warnings)"
     if ($got -ceq "same") { ok "step5-runid ($impl): the child's AITOOLS_RUN_ID is every record's run_id" }
     else { bad "step5-runid ($impl): $got" }
 
-    # A-18 / A-3: a writer that dies without a row gets the relay's ERROR row
+    # A-18 / A-3: a writer that dies without a row gets the relay's ERROR row: WHAT
+    # "<label> failed (exit 1)", REASON from its output (no error record: its last
+    # relayed line, 8.3)
     fresh; run_h step5 -Vars @{ WRITER_MODE = "crash" }
-    want_end "step5-crash ($impl)" "errors=1 warnings=1"
-    want_sum "step5-crash ($impl)" "ERROR|aitools config|script failed (exit 1)"
+    want_end "step5-crash ($impl)" "errors=1 warnings=0"
+    want_sum "step5-crash ($impl)" "ERROR|aitools config|Step 5: setup-user-config.ps1 failed (exit 1)|stub warning"
     want_out "step5-crash ($impl)" "Step 5: setup-user-config"
 
     # ... and a writer that wrote its own ERROR row gets no second one
@@ -358,11 +363,12 @@ Write-Output "END errors=$($script:errors) warnings=$($script:warnings)"
     want_end "step5-ownrow ($impl)" "errors=1 warnings=0"
     want_sum "step5-ownrow ($impl)" "ERROR|aitools config|stub failed"
 
-    # A-16: deploy.jsonl cannot be written (a directory in its place): one warning,
-    # the installer goes on, the writer still runs
+    # A-16: deploy.jsonl cannot be written (a directory in its place): one warning
+    # of the installer (the writer's is not added), the installer goes on, the
+    # writer still runs
     fresh; New-Item -ItemType Directory -Path "$H/.aitools/logs/deploy.jsonl" -Force | Out-Null
     run_h step5 -Vars @{ WRITER_MODE = "warn" }
-    want_end "jsonl-blocked ($impl)" "errors=0 warnings=2"
+    want_end "jsonl-blocked ($impl)" "errors=0 warnings=1"
     count_out "jsonl-blocked ($impl)" "deploy.jsonl: cannot write" 1
     want_out "jsonl-blocked ($impl)" "[aitools-install] [info] harness end"
     want_sum "jsonl-blocked ($impl)" "OK|aitools config|stub"
