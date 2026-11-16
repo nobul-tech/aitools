@@ -1,0 +1,317 @@
+{
+  "provenance": {
+    "document": "mission-brief",
+    "schema_version": 1,
+    "version": "v1.0",
+    "mission": "874d-10-consistency-forensics",
+    "session_id": "dbd05b0c-2365-4159-9976-bc64a2af874d",
+    "session_db": "",
+    "session_scratch": "/Users/new-jose/repos/aitools/.scratch/session-dbd05b0c-2365-4159-9976-bc64a2af874d",
+    "written_by": {
+      "agent_id": "dbd05b0c-2365-4159-9976-bc64a2af874d",
+      "agent_type": "session",
+      "mission": null
+    },
+    "chain_of_command": [
+      "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl"
+    ],
+    "created_at": "2026-11-16T02:00:25Z"
+  },
+  "identity": {
+    "name": "874d-10-consistency-forensics",
+    "level": 1,
+    "delegated_by": "session agent dbd05b0c-2365-4159-9976-bc64a2af874d",
+    "parallel_missions": [
+      {
+        "mission": "874d-7-normative-language",
+        "scope": "review of RFC 0011 v1.3 (running; do not touch)"
+      },
+      {
+        "mission": "874d-9-implementer-read",
+        "scope": "review of RFC 0011 v1.3 (running; do not touch)"
+      }
+    ]
+  },
+  "intent": {
+    "purpose": "Establish what happened to mission 874d-8-consistency, which an API safeguard stopped, and list any work product it left that the session agent can use, so the commander can decide whether to relaunch it",
+    "scope": "the failed delegate's transcript (/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d/subagents/agent-af0c5e479d52a9629.jsonl), its meta.json, its scratch directory (/Users/new-jose/repos/aitools/.scratch/session-874d-8-cns/), and its expected AAR path",
+    "out_of_scope": [
+      "reviewing RFC 0011",
+      "the thinking blocks of the failed transcript",
+      "the two running reviewers 874d-7 and 874d-9"
+    ],
+    "audience": "the session agent dbd05b0c and the commander"
+  },
+  "objectives": [
+    {
+      "id": "OBJ-1",
+      "type": "objective",
+      "text": "can you launch a mission to look at the transcript of 874d-8-consistency and figure out what happened and if it produced any work product we can use?",
+      "source": {
+        "kind": "commander",
+        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl L4290"
+      },
+      "quote": "can you launch a mission to look at the transcript of 874d-8-consistency and figure out what happened and if it produced any work product we can use?"
+    },
+    {
+      "id": "OBJ-2",
+      "type": "objective",
+      "text": "Report: (1) the failed delegate's timeline: what it read, ran and wrote, in order, with transcript line numbers and timestamps, up to the last record; (2) what it was doing when it stopped (the last tool call and visible text before the failure), without the thinking blocks; (3) every work product it left: files in its scratch, an AAR file if any, findings in its visible text or tool results, and for each whether it is complete, partial or unusable, and why; (4) what the failure notice and the record metadata establish about the cause, separated from what is unknown; (5) whether a relaunch can start from its work product, and what the relaunch brief should change",
+      "source": {
+        "kind": "agent",
+        "location": "session agent dbd05b0c-2365-4159-9976-bc64a2af874d, this brief"
+      }
+    }
+  ],
+  "constraints": [
+    {
+      "text": "Read-only everywhere except your scratch directory and your AAR file: change no repository file, no other mission's scratch, and no transcript.",
+      "source": {
+        "kind": "agent",
+        "location": "session agent dbd05b0c"
+      }
+    },
+    {
+      "text": "Do not do 874d-8-consistency's work: do not review RFC 0011 yourself and do not continue its review. Report what it did and what it left.",
+      "source": {
+        "kind": "agent",
+        "location": "session agent dbd05b0c; the harness note on the failed delegate"
+      }
+    },
+    {
+      "text": "Do not read, print or quote the thinking blocks of the failed transcript, and do not try to reproduce or reconstruct the request the safeguard flagged (its detail was [reasoning_extraction]). Work only from its tool calls, tool results, visible text, the files it wrote and the record metadata (types, timestamps, sizes). Write a script that skips records or content parts of type thinking.",
+      "source": {
+        "kind": "agent",
+        "location": "the failure notice of 874d-8 (request req_011Ch5mefJ6kSLRCLQhLBckr)"
+      }
+    },
+    {
+      "text": "Never load a transcript whole: read it with a short script in your scratch directory, or with the harness readers using --no-thinking.",
+      "source": {
+        "kind": "agent",
+        "location": "/Users/new-jose/.claude/skills/delegate/SKILL.md 'Reading the commander's sessions'"
+      }
+    },
+    {
+      "text": "Every claim cites its source: a transcript line number, a file path and line, or a command and its output. Say unknown rather than guess.",
+      "source": {
+        "kind": "agent",
+        "location": "/Users/new-jose/.claude/CLAUDE.md"
+      }
+    },
+    {
+      "text": "Stop every background shell and monitor you start before you hand back.",
+      "source": {
+        "kind": "agent",
+        "location": "/Users/new-jose/.claude/skills/delegate/SKILL.md"
+      }
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "ASM-1",
+      "type": "assumption",
+      "text": "The failed delegate's transcript and scratch files are complete and no longer written to",
+      "status": "unverified",
+      "confidence": "high",
+      "evidence": "the failure notice reports the agent terminated; the transcript's mtime is 17:54 local",
+      "impact_if_false": "a later record changes the timeline; report the file sizes and times you read",
+      "source": {
+        "kind": "agent",
+        "location": "session agent dbd05b0c-2365-4159-9976-bc64a2af874d"
+      }
+    }
+  ],
+  "decisions": [],
+  "operational_learning": [
+    {
+      "id": "OL-1",
+      "type": "operational_learning",
+      "text": "A session JSONL record has a type (user, assistant, queue-operation, system, ...); an assistant record's message.content is a list of parts of type text, thinking or tool_use; a user record's content holds tool_result parts. Skip parts of type thinking",
+      "source": {
+        "kind": "artifact",
+        "location": "/Users/new-jose/repos/aitools/.scratch/session-dbd05b0c-2365-4159-9976-bc64a2af874d/turns.py"
+      }
+    },
+    {
+      "id": "OL-2",
+      "type": "operational_learning",
+      "text": "The 874d-8 delegate was sent a correction by SendMessage after launch (read 10 more project rules); it arrives in its transcript as a user record at its next tool round",
+      "source": {
+        "kind": "agent",
+        "location": "session agent dbd05b0c"
+      }
+    },
+    {
+      "id": "OL-3",
+      "type": "operational_learning",
+      "text": "Save copies of transcript content under a .tmp name in your scratch: the harvester copies other top-level scratch files into the tracked harvesting/ of a public repo",
+      "source": {
+        "kind": "artifact",
+        "location": "/Users/new-jose/repos/aitools/rfcs/RFC-0011-structured-reports.md section 7"
+      }
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "/Users/new-jose/.claude/CLAUDE.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/.claude/rules/delegation.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/.claude/rules/prompt-turn.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/.claude/rules/scratch.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/.claude/rules/tool-evaluation.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/.claude/rules/tool-lifecycle.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/.claude/rules/tool-ops.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/.claude/rules/web-sources.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/CLAUDE.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/.aitools/channel/CLAUDE.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/.claude/rules/agentic-standards.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/.claude/rules/aitools-workspace.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/.claude/rules/config-file-safety.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/.claude/rules/cross-platform.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/.claude/rules/deploy-paths.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/.claude/rules/documentation-standards.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/.claude/rules/frameworks.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/.claude/rules/git-safety.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/.claude/rules/glossary.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/.claude/rules/governed-data-access.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/.claude/rules/hook-lifecycle.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/.claude/rules/hook-rollout.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/.claude/rules/incident-governance.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/.claude/rules/interactive-menus.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/.claude/rules/managed-file-deployment.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/.claude/rules/script-standards.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/.claude/rules/smoke-test-pattern.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/.claude/skills/delegate/SKILL.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/shared/skills/scratch/SKILL.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/.scratch/session-dbd05b0c-2365-4159-9976-bc64a2af874d/874d-8-consistency-brief.json",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d/subagents/agent-af0c5e479d52a9629.meta.json",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d/subagents/agent-af0c5e479d52a9629.jsonl",
+      "instruction": "use as reference for answers"
+    },
+    {
+      "path": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl",
+      "instruction": "use as reference for answers"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/rfcs/RFC-0011-structured-reports.md",
+      "instruction": "use as reference for answers"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/.scratch/session-874d-8-cns/scan.pl",
+      "instruction": "use as reference for answers"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/.scratch/session-874d-8-cns/scan.log",
+      "instruction": "use as reference for answers"
+    },
+    {
+      "path": "/Users/new-jose/.aitools/bin/read-session.py",
+      "instruction": "use as reference for answers"
+    },
+    {
+      "path": "/Users/new-jose/.aitools/bin/read-session-full.py",
+      "instruction": "use as reference for answers"
+    }
+  ],
+  "deliverables": [
+    {
+      "kind": "aar",
+      "ref": "/Users/new-jose/repos/aitools/.scratch/session-dbd05b0c-2365-4159-9976-bc64a2af874d/874d-10-consistency-forensics-aar.json",
+      "objective": "OBJ-2",
+      "text": "your AAR: JSON in the AAR schema of RFC 0011 3.4, the last fenced json block of your final message, and the same JSON in this file (requested)"
+    }
+  ]
+}

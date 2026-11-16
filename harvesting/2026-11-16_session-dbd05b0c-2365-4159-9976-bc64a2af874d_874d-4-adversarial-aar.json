@@ -1,0 +1,641 @@
+{
+  "provenance": {
+    "document": "aar",
+    "schema_version": 1,
+    "version": "v1.0",
+    "mission": "874d-4-adversarial",
+    "agent_id": "a7a116cbb073032af",
+    "session_id": "dbd05b0c-2365-4159-9976-bc64a2af874d",
+    "brief": "/Users/new-jose/repos/aitools/.scratch/session-dbd05b0c-2365-4159-9976-bc64a2af874d/874d-4-adversarial-brief.json",
+    "created_at": "2026-11-16T00:29:17Z"
+  },
+  "objectives": [
+    {
+      "id": "OBJ-1",
+      "type": "objective",
+      "text": "launch delegates to run different types of verfiers including adverserial",
+      "source": {"kind": "commander", "location": "session dbd05b0c, transcript L2553 (/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl)"},
+      "quote": "launch delegates to run different types of verfiers including adverserial",
+      "status": "accomplished",
+      "how": "This mission is the adversarial verifier the order names. It ran without delegates of its own and hands back this AAR (also written to the requested AAR file).",
+      "deviation_refs": [],
+      "observation_refs": [],
+      "deliverables": ["/Users/new-jose/repos/aitools/.scratch/session-dbd05b0c-2365-4159-9976-bc64a2af874d/874d-4-adversarial-aar.json"]
+    },
+    {
+      "id": "OBJ-2",
+      "type": "objective",
+      "text": "Attack RFC 0011, the plan and the implementing brief as an opponent would: run a pre-mortem (assume the implementation failed in use and list why), argue the strongest case for the rejected option of every point the RFC settles itself (section 4), and find what is wrong, missing, ambiguous or unsafe: concurrency and locking, worktree isolation, SessionEnd timing, cross-platform, security and privacy (the aitools repo is open-source), migration and data loss, and every sentence an implementer could read two ways.",
+      "source": {"kind": "agent", "location": "session agent dbd05b0c-2365-4159-9976-bc64a2af874d, 874d-4-adversarial-brief.json OBJ-2"},
+      "status": "accomplished",
+      "how": "Read the three targets, the code they rest on (harness-db.py, ait-harvest.py, the SessionStart/SessionEnd hooks, intelligence-stop.py, deploy-harness.sh), the harvest log, git history and repo visibility; ran one throwaway SQLite probe in my scratch. PRE-MORTEM (the implementation shipped and failed; top ten, most likely first): (1) a v5 helper run from a worktree or the batch-3.5 probe migrates a live session DB, and the deployed v4 helper the hooks prefer then crashes on it (OBS-1); (2) the dotprofile copy runs before or without the export: two different SessionEnd hooks, a 1.5 s shared budget, export last after a network call (OBS-3); (3) dotprofile index.lock contention leaves copies uncommitted, and catch-up only recommits sessions/ (OBS-4); (4) session content keeps reaching the public repo through the tracked running-estimate.json and harvesting/ (OBS-5, OBS-6, OBS-7); (5) the per-turn estimate update has no table and no checklist line, so intent and assessment are never written (OBS-10); (6) one [s]kip in a deploy review menu splits hooks and bin across --session/--db (OBS-2); (7) the v4-to-v5 migration fails or drops data: NULL attributed_to, unmapped decisions, messages and finding columns (OBS-8), and intelligence-stop.py goes silently blind (OBS-9); (8) the AAR check never sees a background delegate's hand-back (OBS-14); (9) AAR item ids and refs break when the session agent records an AAR, and appended versions show up as duplicates (OBS-11, OBS-12); (10) the single implementing delegate runs out of context across ~20 batches, or waits forever on gate G1 (OBS-21). SECTION 4, strongest case for each rejected option: S-1 embedding the schemas in harness-db.py (as 3.6.8 does for the SQL) keeps one source; RFC choice still wins if the lookup path is specified. S-2 a Stop hook cannot write an assessment, but can detect a stale one; RFC choice wins only with that detection plus a store (OBS-10). S-3 one brief per workflow fan-out is heavy, but objectives differ per agent(); RFC wins. S-4 update-in-place plus a history table keeps provenance without forcing every reader to pick the latest version; the rejected option is at least as strong (OBS-12, PRO-12). S-5 columns per field make deviations by cause or objectives by status queryable; RFC 0010 section 11 does not mention JSON functions and json_extract works here; RFC choice acceptable, rationale weak (OBS-30). S-6 the rejected third-party validator is barred by RFC 0010; RFC wins, but the subset cannot enforce the spec's MUSTs (OBS-15). S-7 wins before schema 5; the remap after it is missing (OBS-11). S-8 a separate references or read_in_full node keeps binding rules apart from material under review; the rejected option wins (OBS-23). S-9 launching DB-writing delegates without isolation removes most of the fallback's holes; the rejected option should be the default (OBS-13). S-10 a spool file never loses a write, which exit 1 does unless the caller acts; RFC acceptable if it says what the caller does (OBS-20). S-11 the full id in the DB name is barred by D874d-48; RFC wins, the refusal needs a fallback (OBS-26). S-12 keeping the v4 tables untouched beside items avoids the view's write failure; RFC can win with a view contract and a version guard (OBS-1, OBS-9). S-13 keeping the old export during transition keeps the dashboard working, but it publishes session content; retire it earlier, not later (OBS-5, OBS-24). S-14 excluding every .json and prompt dump is broader and matches what is already published; the rejected option wins (OBS-6). S-15 a deprecated, ignored --session alias for one release survives deploy skew; the rejected option wins (OBS-2, R874d-a4-1). S-16 RFC wins. S-17 the mapping is incomplete; no rejected option, but the claim 'No v4 data is lost' fails (OBS-8). S-18 RFC wins; folded-in level-2 items need their own writer fields (OBS-13).",
+      "deviation_refs": ["DEV-1"],
+      "observation_refs": ["OBS-1", "OBS-2", "OBS-3", "OBS-4", "OBS-5", "OBS-6", "OBS-7", "OBS-8", "OBS-9", "OBS-10", "OBS-11", "OBS-12", "OBS-13", "OBS-14", "OBS-15", "OBS-16", "OBS-17", "OBS-18", "OBS-19", "OBS-20", "OBS-21", "OBS-22", "OBS-23", "OBS-24", "OBS-25", "OBS-26", "OBS-27", "OBS-28", "OBS-29", "OBS-30", "OBS-31", "OBS-32"],
+      "deliverables": ["/Users/new-jose/repos/aitools/.scratch/session-dbd05b0c-2365-4159-9976-bc64a2af874d/874d-4-adversarial-aar.json", "/Users/new-jose/repos/aitools/.scratch/session-874d-4-adv/view_probe.py"]
+    }
+  ],
+  "ambiguities": [
+    {
+      "id": "AMB-1",
+      "type": "ambiguity",
+      "text": "rules[] lists /Users/new-jose/repos/aitools/rfcs/RFC-0011-structured-reports.md, the plan and 874d-2-structured-reports-brief.json",
+      "source": {"kind": "agent", "location": "874d-4-adversarial-brief.json L325-327"},
+      "readings": ["the files are rules binding on me (D-DEL6 tier 4)", "the files are material under verification"],
+      "resolution": "Material under verification. RFC 0011 is normative for the implementation, not for its verifiers; I followed my brief and prompt (tier 2) where they differ, e.g. the AAR file is written because duties L365 requests it.",
+      "resolved_by": "reason",
+      "evidence": "RFC 0011 L48: 'This RFC is normative for the implementation of issue #180'",
+      "status": "resolved"
+    },
+    {
+      "id": "AMB-2",
+      "type": "ambiguity",
+      "text": "RFI ids are R<sid4>-<n>; the session agent's counter is at R874d-28 or later",
+      "source": {"kind": "agent", "location": "RFC 0011 L220; prompt-turn checklist 5.1 'n rises through the session, never reused'"},
+      "readings": ["take the next session numbers (R874d-29 ...) and risk colliding with the session agent and three parallel verifiers", "use provisional ids the session agent renumbers"],
+      "resolution": "Provisional ids R874d-a4-1 to R874d-a4-5; the session agent renumbers them when it records them. This is itself a defect (OBS-11).",
+      "resolved_by": "assumption",
+      "evidence": "three parallel verifiers hand back RFIs at the same time (brief identity.parallel_missions)",
+      "status": "resolved"
+    },
+    {
+      "id": "AMB-3",
+      "type": "ambiguity",
+      "text": "CONFLICT: prompt-turn checklist 12.6 (answer, then '--- Turn record ---', OL and Open RFIs lines) vs my prompt's deliverable (at most five lines, then one fenced JSON block); and .aitools/channel/CLAUDE.md L127-128 'append an entry to the relay' vs my access (write only my scratch and the AAR file)",
+      "source": {"kind": "agent", "location": "~/.claude/rules/prompt-turn.md item 12.6; /Users/new-jose/repos/aitools/.aitools/channel/CLAUDE.md L125-131; my prompt 'Deliverable' and 'Access'"},
+      "readings": ["follow the rule and the channel CLAUDE.md", "follow the prompt"],
+      "resolution": "resolved by D-DEL6 tier 2 (my prompt and brief) over tier 4 (rules, harness files): no turn record and no relay entry; the RFIs and OL are AAR nodes.",
+      "resolved_by": "reason",
+      "evidence": "my prompt 'Conflicts (D-DEL6)'; prompt-turn 12.7 (a direct order on the form supersedes the reply shape)",
+      "status": "resolved"
+    },
+    {
+      "id": "AMB-4",
+      "type": "ambiguity",
+      "text": "Do not run harness-db.py, any hook, or aitools against the real HOME or the real session DBs",
+      "source": {"kind": "agent", "location": "my prompt, Access"},
+      "readings": ["no SQLite at all", "no run against real DBs; a throwaway DB in my scratch is allowed"],
+      "resolution": "One probe (view_probe.py) on a throwaway DB in /Users/new-jose/repos/aitools/.scratch/session-874d-4-adv/, deleted by the probe; no harness-db.py run, no hook run, no real DB opened.",
+      "resolved_by": "reason",
+      "evidence": "/Users/new-jose/repos/aitools/.scratch/session-874d-4-adv/view_probe.py",
+      "status": "resolved"
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "ASM-1",
+      "type": "assumption",
+      "text": "The target files are the version written by session dbd05b0c at 2026-11-16 and are not changed while you verify",
+      "status": "verified",
+      "confidence": "high",
+      "evidence": "mtimes: RFC and brief 2026-11-15 16:14:29 local, plan 16:10:48 local, all before my launch (16:16 local, 00:16:58Z); checked again at 00:29Z",
+      "impact_if_false": "re-read a file whose content no longer matches a line you cite"
+    },
+    {
+      "id": "ASM-2",
+      "type": "assumption",
+      "text": "Claude Code runs the SessionEnd hooks of one event in parallel (else in settings order, session-archive.sh before harness-db-sessionend.sh)",
+      "status": "unverified",
+      "confidence": "moderate",
+      "evidence": "From memory of the Claude Code hooks docs ('matching hooks run in parallel'); not re-read in the browser in this mission. OBS-3 holds under either order: the manifest lists session-archive.sh (L9) before harness-db-sessionend.sh (L12)",
+      "impact_if_false": "none for OBS-3's conclusion; only the mechanism (race vs fixed order) changes"
+    },
+    {
+      "id": "ASM-3",
+      "type": "assumption",
+      "text": "A Windows machine may have the WindowsApps python3 alias on PATH, which Git Bash's command -v finds",
+      "status": "unverified",
+      "confidence": "low",
+      "evidence": "no aitools file documents it (grep of reference/cross-platform-detail.md for python3: none); not probed on Windows",
+      "impact_if_false": "OBS-25's python3 half is moot; the detach half stands"
+    }
+  ],
+  "deviations": [
+    {
+      "id": "DEV-1",
+      "type": "deviation",
+      "from": {"kind": "brief", "ref": "874d-4-adversarial-brief.json rules[] and my prompt Work step 1", "text": "Then read in full, line by line, every file in its `rules` list"},
+      "text": "Read in full every rules[] file except two: /Users/new-jose/repos/aitools/shared/skills/delegate/SKILL.md (785 lines, v2.6 working copy; searched, not read whole) and /Users/new-jose/repos/aitools/reference/framework-intelligence-types.md (488 lines; not opened; its glossary entries read instead). shared/rules/delegation.md read from L28 to L113 plus its decisions grep.",
+      "cause": "initiative",
+      "why": "Their conformance is the scope of 874d-5-brief-verify and 874d-6-standards-verify; the parts my attack needed (D-DEL8 to D-DEL13, finding replacedBy deviation) were read verbatim.",
+      "effect": "OBJ-2: a defect in /delegate v2.6 text outside the parts I read is not covered here.",
+      "objective_refs": ["OBJ-2"],
+      "observation_refs": []
+    }
+  ],
+  "observations": [
+    {
+      "id": "OBS-1", "type": "observation", "severity": "critical", "incident": false,
+      "text": "A schema-4 harness-db.py crashes on any schema-5 session DB, and the hooks prefer the deployed (older) copy. ensure_schema runs migrate_v4 before the version check, so the 'newer than this helper' guard never runs. The plan's batch 3.5 probe and any delegate that runs the repo or worktree copy migrate the live session DB to v5 while the deployed hooks are still v4.",
+      "evidence": "harness-db.py L855 (migrate_v4) runs before L859 (record_schema_version; the newer-version warning L825-830); L727-729 _observations_need_v4 = table_info has columns and no legacy_category; L707 DROP TABLE. Probe on a throwaway DB (sqlite 3.53.1): table_info(view) returns columns, so need_v4 = True; 'DROP TABLE on the view: ERROR use DROP VIEW to delete view observations'; 'CREATE INDEX IF NOT EXISTS on the view: ERROR views may not be indexed' (SESSION_SCHEMA L202); 'INSERT into the view: ERROR cannot modify observations because it is a view'. harness-db-sessionstart.sh L71 and harness-db-sessionend.sh L69 try ~/.aitools/bin/harness-db.py first. Plan L87: batch 3.5 'a delegate in an isolated worktree writes the session DB'. RFC L391: 'A view named observations over items MUST stay'. Brief 874d-2 L994 gives the main checkout read-only, yet the probe writes the live DB in it.",
+      "source": {"kind": "artifact", "location": "scripts/harness-db.py L702-860; /Users/new-jose/repos/aitools/.scratch/session-874d-4-adv/view_probe.py output"}
+    },
+    {
+      "id": "OBS-2", "type": "observation", "severity": "high", "incident": false,
+      "text": "S-15 protects the source tree, not the deployed pair. deploy-harness reviews ~/.aitools/bin/harness-db.py and the hooks through the interactive menu, so one [s]kip leaves a hook calling --session against a v5 helper, or --db against a v4 helper. Hooks exit 0, so the failure is silent.",
+      "evidence": "RFC L395: '--session MUST be removed in the same change that switches the hooks ... so no hook calls a removed argument'. deploy-harness.sh L306-309 (bin from scripts/), L350-354: only reference/* and registries/* get MANAGED_NO_REVIEW; bin and hooks go through deploy_managed_file with [s]kip. Hooks also deploy to ~/.claude/hooks through setup-user-hooks with its own review (hook-lifecycle rule, 'Deployment'). harness-db-sessionend.sh L83-102 failures only print and log.",
+      "source": {"kind": "artifact", "location": "scripts/deploy-harness.sh L306-354; rfcs/RFC-0011-structured-reports.md L395"}
+    },
+    {
+      "id": "OBS-3", "type": "observation", "severity": "high", "incident": false,
+      "text": "The SessionEnd export and the dotprofile copy live in two different hooks with no ordering. The copy (planned in ait-harvest.py, run by session-archive.sh) can run before the export (harness-db-sessionend.sh), or without it: the export is the last of four synchronous Python calls, after a network call to Datadog, inside a 1.5 s shared budget. Catch-up cannot recover a missing export: the plan only has it 'recover a missed copy'.",
+      "evidence": "hooks-manifest.json L9 session-archive.sh and L12 harness-db-sessionend.sh, both SessionEnd. harness-db-sessionend.sh L83 session end, L89 process-events, L94 ship (Datadog), L100 export. reference/tool-ops-claude-code.md L85 (#35): 'SessionEnd hooks have a default timeout of 1.5 seconds. It applies when you exit, run /clear, or switch sessions'; overrun = 'Hook cancelled'. Plan L95 batch 4.3 files: ait-harvest.py and session-catchup.sh only; it does not name who triggers the copy. RFC L346: catch-up 'MUST recover an export or a copy'. Issue #180 AMB-3 suggestion: 'the session-end export stays in harness-db-sessionend.sh'.",
+      "source": {"kind": "artifact", "location": "shared/hooks/hooks-manifest.json L9-12; shared/hooks/harness-db-sessionend.sh L83-102; plans/structured-reports/implementation-plan.md L95"}
+    },
+    {
+      "id": "OBS-4", "type": "observation", "severity": "high", "incident": false,
+      "text": "The archive mechanism the RFC reuses already fails often under contention and recovers only sessions/. The archive path takes no single-flight lock; catch-up recommits only the sessions directory; a dirty dotprofile skips pull --rebase, so a non-fast-forward push fails and catch-up's push-if-ahead retries without pulling. Nothing checks that the checked-out branch is main.",
+      "evidence": "~/.aitools/logs/ait-harvest.log: 60 git failure lines, of which the latest are 'git add failed ... Unable to create .../aitools-nobul-jose/.git/index.lock: File exists' (2026-11-15T18:01:08Z, 18:51:08Z, 18:52:06Z) and 'git push failed (offline or remote ahead)' (2026-10-16, 2026-10-21). ait-harvest.py L1475-1484 cmd_archive has no HarvestLock (only catchup takes one, L1243); L649 and L659 commit_pending_archives: status and commit of 'sessions' only; L623-624 'dotprofile worktree dirty; skipping pull --rebase'; L1277-1278 catch-up pushes without pulling; L533-562 push-blocked reasons cover rebase, origin, upstream, detached HEAD, not the branch name. RFC L344: 'commit and push the dotprofile's main (D874d-51)'.",
+      "source": {"kind": "telemetry", "location": "/Users/new-jose/.aitools/logs/ait-harvest.log; scripts/ait-harvest.py L533-663, L1243, L1475-1484"}
+    },
+    {
+      "id": "OBS-5", "type": "observation", "severity": "high", "incident": false,
+      "text": "Session content already reaches the public repo through the tracked single export, and the plan keeps it until WP-5. nobul-tech/aitools is PUBLIC; .aitools/channel/running-estimate.json is tracked and was last committed on 2026-11-15 with a session observation's text. RFC 3.5.6 retires it but the plan does it in batch 5.2, after WP-3 has made the exported items richer (quotes of the commander).",
+      "evidence": "gh repo view nobul-tech/aitools: visibility PUBLIC. git ls-files: .aitools/channel/running-estimate.json and .aitools/templates/mission-running-estimate.json tracked. git show 5d8fa521 (2026-11-15): adds an observation 'intelligence-stop.py has no entry for claude-fable-5-2 ...' and 'agentIdentity': 'Session Commander 7ad4f838-d'. harness-db.py L614-616 writes that path; harness-db-sessionend.sh L8 '(tracked)'. RFC L348 (S-13) and L507 'MUST NOT be committed to a project repo'; plan L103 batch 5.2.",
+      "source": {"kind": "artifact", "location": "git show 5d8fa521 -- .aitools/channel/running-estimate.json; plans/structured-reports/implementation-plan.md L103"}
+    },
+    {
+      "id": "OBS-6", "type": "observation", "severity": "high", "incident": false,
+      "text": "S-14's filter is narrower than what the harvester already published, and the interim guard depends on a human. Tracked harvesting/ in the public repo already holds AARs, briefs and dumps of the commander's prompts under names the planned filter does not match; more are pending in git status. My own requested AAR file sits in the session scratch dir and will be harvested before batch 4.4 ships.",
+      "evidence": "git ls-files harvesting: 2026-03-22_6_m1-running-estimate-lifecycle-aar.json and ten more *-aar.json, 2026-03-22_6_s2b-filing-briefs.json, 2026-03-22_6_handoff-briefing.json, 2026-11-14_session-M2-Reask_M2-Reask-common-brief.md, 2026-10-29_session-fricprs_prompts.txt, 2026-10-29_session-fricsess_cur-prompts.txt, 2026-10-29_session-rcledg_prompts.txt, 2026-10-29_session-mabrief_user-prompts.py. git status (session start): ?? harvesting/2026-11-15_session-5899-1_user-prompts.txt, ?? harvesting/2026-11-15_session-5899-4_prompts.txt. Commit 8a5e8698 'Harvest 49 session artifacts' (bulk commit). ait-harvest.py L837-860: .txt and .py are harvested (ARTIFACT_EXTS L830, CODE_EXTS). RFC L471, L508: 'Until it does, a harvested brief MUST NOT be committed'.",
+      "source": {"kind": "artifact", "location": "git ls-files harvesting; scripts/ait-harvest.py L830-860; rfcs/RFC-0011-structured-reports.md L508"}
+    },
+    {
+      "id": "OBS-7", "type": "observation", "severity": "high", "incident": false,
+      "text": "Outside the aitools repo nothing ignores .aitools/ or .scratch/. The SessionStart hook creates .aitools/sessions and .aitools/channel in whatever repo the session runs in, so the new per-session export (and every brief in .scratch/) is untracked but not ignored there, one 'git add -A' from a commit. The RFC adds .gitignore only to aitools.",
+      "evidence": "harness-db.py L960-969 cmd_init mkdir .aitools/sessions and .aitools/channel in find_project_root(); grep for 'gitignore' and 'info/exclude' in harness-db.py, harness-db-sessionstart.sh and scratch-init.sh: only comments (harness-db.py L11, L487). /scratch skill '.gitignore': 'For other projects, add: .scratch/' (manual). RFC L342: '.aitools/channel/estimates/ is added to .gitignore' (aitools only); RFC L507 'MUST NOT be committed to a project repo'.",
+      "source": {"kind": "artifact", "location": "scripts/harness-db.py L960-969; rfcs/RFC-0011-structured-reports.md L342, L507"}
+    },
+    {
+      "id": "OBS-8", "type": "observation", "severity": "high", "incident": false,
+      "text": "The v4-to-v5 mapping (S-17) does not support 'No v4 data is lost'. The v4 decisions and messages tables are not mapped although decisions are items and the log verb must write items; SITREP/SPOTREP is not an item type. The v4 observation columns evidence, confidence, criteria, cause, effect, suggestion, refs and legacy_category have no target. Every row that came from v3 has NULL attributed_to, while every DB row MUST carry agent_id. And v4 'finding' maps to observation although D874d-28 and the glossary say replacedBy: deviation.",
+      "evidence": "RFC L384-389 (mapping: observations, attributed_to, finding, deviations only); L356 'All items go in one items table'; L403 'observation add, ol add, decision add, log, knowledge add MUST keep working and write items rows'; L118 type enum has no sitrep/spotrep; L134 'In the session DB, every row MUST carry them'; L474 S-17 'No v4 data is lost'. harness-db.py L163-172 decisions, L178-201 observation columns, L206-217 messages; L748-761 the v3-to-v4 copy does not copy attributed_to. Glossary 'finding': 'deprecated: true, replacedBy: deviation'; brief 874d-2 L485 D874d-28.",
+      "source": {"kind": "artifact", "location": "rfcs/RFC-0011-structured-reports.md L382-391; scripts/harness-db.py L163-217, L748-761"}
+    },
+    {
+      "id": "OBS-9", "type": "observation", "severity": "high", "incident": false,
+      "text": "intelligence-stop.py reads three v4 tables with exact column names inside try/except-pass. The RFC keeps an observations view but does not fix its columns, and new deviations and decisions written to items never reach the deviations and decisions tables the hook reads. The hook goes blind without an error. No plan batch touches intelligence-stop.py.",
+      "evidence": "intelligence-stop.py L186-190 'SELECT observation_id, category, text FROM observations WHERE created_at > ?', L194 id f'obs-{observation_id}', L203-205 'SELECT decision_id, title FROM decisions WHERE decided_at > ?', L220-222 'SELECT deviation_id, description FROM deviations WHERE created_at > ?', L198-199 'except Exception: pass'. RFC L391 names intelligence-stop.py as the view's reader. Plan L52-109: no batch lists shared/hooks/intelligence-stop.py.",
+      "source": {"kind": "artifact", "location": "shared/hooks/intelligence-stop.py L168-230"}
+    },
+    {
+      "id": "OBS-10", "type": "observation", "severity": "high", "incident": false,
+      "text": "S-2 has no store and no carrier. The session agent MUST update intent, assessment and objectives each turn, but intent, assessment and main_effort are not item types and the schema has only items and refs. The plan never adds the duty to the prompt-turn checklist: batch 2.3 changes only the RFI and decision id format.",
+      "evidence": "RFC L337 (3.5.3) 'MUST update intent, assessment and the session's objectives at each prompt turn (prompt-turn checklist item 12)'; L118-119 type enum; L358-362 tables items and refs only; L327-329 intent and assessment nodes. Plan L72 batch 2.3: 'R<sid4>-<n> for session RFIs, D<sid4>-<n> for decisions ... in both files'. ~/.claude/rules/prompt-turn.md item 12 has no estimate step.",
+      "source": {"kind": "artifact", "location": "rfcs/RFC-0011-structured-reports.md L327-362; plans/structured-reports/implementation-plan.md L72"}
+    },
+    {
+      "id": "OBS-11", "type": "observation", "severity": "medium", "incident": false,
+      "text": "Ids and refs break between documents and the DB. Before schema 5 a document numbers its items from 1 (OBS-1); after it the DB assigns them. When the session agent records an AAR's items (S-9), the AAR's ids collide with DB ids and its refs (deviation_refs, observation_refs, objective refs) point at the wrong rows. The link from a brief's ASM-1 to the AAR's verified ASM-1 is lost, and parallel delegates' RFIs collide on R<sid4>-<n> with the session agent's counter.",
+      "evidence": "RFC L221-222 (3.2.4); L312 '(the session agent then writes its items'; L316; prompt-turn 5.1 '<n> rises through the session, never reused'. This AAR uses provisional R874d-a4-<n> (AMB-2).",
+      "source": {"kind": "artifact", "location": "rfcs/RFC-0011-structured-reports.md L220-222, L312, L316"}
+    },
+    {
+      "id": "OBS-12", "type": "observation", "severity": "medium", "incident": false,
+      "text": "S-4 (append a version, never change in place) has no key and no read rule, and the schema contradicts it. items has updated_at and the CLI has 'item update'; the primary key is not stated (id alone cannot hold two versions); refs point to an id without a version; version is not among the common item fields; every reader (export, aar, the observations view, intelligence-stop) must select the latest version or shows duplicates. Combined with S-2 (three updates per turn), a long session appends hundreds of versions.",
+      "evidence": "RFC L224 (3.2.5); L359-360 'id, type, ... created_at, updated_at, version'; L398 'item add | update | list'; L114-130 common fields without version; L361-362 refs from_id, to_id.",
+      "source": {"kind": "artifact", "location": "rfcs/RFC-0011-structured-reports.md L114-130, L224, L356-365, L398"}
+    },
+    {
+      "id": "OBS-13", "type": "observation", "severity": "medium", "incident": false,
+      "text": "The S-9 fallback has holes. A brief written to a delegate's own scratch is invisible to missions[], which scans only the session scratch dir. A level-2 delegate's AAR goes to its level-1 delegate, never to the session agent that 3.4.8 says records it. A delegate that wrote some rows before failing gets them written twice. Items folded in from a level-2 AAR inherit the wrong writer under S-18. The implementing brief makes every brief of 874d-2 a fallback case: its writable access excludes the session scratch dir.",
+      "evidence": "RFC L278 (3.3.8) 'MUST write the brief into its own scratch directory'; L339 (3.5.4) 'one entry per <mission name>-brief.json in the session scratch directory'; L312 'the session agent then writes its items'; L134 (S-18). Brief 874d-2 L999-1003: writable = its worktree and branches; scratch = <worktree>/.scratch/session-874d-2-str.",
+      "source": {"kind": "artifact", "location": "rfcs/RFC-0011-structured-reports.md L134, L278, L312, L339; 874d-2-structured-reports-brief.json L992-1004"}
+    },
+    {
+      "id": "OBS-14", "type": "observation", "severity": "medium", "incident": false,
+      "text": "The planned AAR check cannot see most hand-backs, and its parse is undefined. PostToolUse on Agent sees only the launch result of a background delegate, not its AAR. The plan leaves the event open. Extracting 'the fenced JSON' breaks when a quoted string contains three backticks, and prose may precede the block.",
+      "evidence": "Parent transcript, my own launch at 2026-11-16T00:16:58.542Z: toolUseResult {'isAsync':true,'status':'async_launched','agentId':'a7a116cbb073032af', ...}. Plan L94 batch 4.2: 'PostToolUse on Agent, or SubagentStop'. My prompt allows 'at most five lines' before the block. RFC L282 'in one fenced block'.",
+      "source": {"kind": "telemetry", "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl (toolUseResult of agentId a7a116cbb073032af)"}
+    },
+    {
+      "id": "OBS-15", "type": "observation", "severity": "medium", "incident": false,
+      "text": "The stdlib validator subset (S-6) cannot check the spec's own MUSTs and leaves null typing unspecified, so 'validate' passes documents the RFC forbids. It cannot express: quote REQUIRED when source.kind is commander; a not-accomplished objective MUST cite a deviation; an id pattern (R<sid4>-<n>, OBJ-n) or a UTC Z timestamp. return.file and written_by.mission are null in real briefs; version (3.2.5) is not a common field, so additionalProperties:false rejects it or nothing requires it. Plan 1.4's negative cases cover none of these.",
+      "evidence": "RFC L419 subset 'type, required, properties, items, enum, additionalProperties: false'; L127 'quote ... REQUIRED when the source is the commander's words'; L290 'MUST cite the deviation'; L264 'file is null'; brief 874d-2 L13 'mission': null, L1016 'file': null. Plan L61.",
+      "source": {"kind": "artifact", "location": "rfcs/RFC-0011-structured-reports.md L127, L264, L290, L419; plans/structured-reports/implementation-plan.md L61"}
+    },
+    {
+      "id": "OBS-16", "type": "observation", "severity": "high", "incident": false,
+      "text": "Plan batch 4.3's test pushes to the commander's real dotprofile. 'A copy of the dotprofile' keeps its origin, so 'committed and pushed' sends test commits to the real main. The brief says the dotprofile is 'never written'.",
+      "evidence": "Plan L95: 'Under an isolated HOME with a copy of the dotprofile: the copy lands at the right path and is committed and pushed'. git -C /Users/new-jose/repos/aitools-nobul-jose remote get-url origin = https://github.com/nobul-jose/aitools-nobul-jose.git (PRIVATE, default branch main). Brief 874d-2 L995: 'the dotprofile: never written; tests use a copy'. ait-harvest.py L627, L632 pull --rebase and push to the configured upstream.",
+      "source": {"kind": "artifact", "location": "plans/structured-reports/implementation-plan.md L95"}
+    },
+    {
+      "id": "OBS-17", "type": "observation", "severity": "medium", "incident": false,
+      "text": "'<repo>' is resolved from the current working directory, not from where the session started. The session agent's cd persists, so at SessionEnd the cwd can be a worktree or another repo. 'session end' and 'export' then look for <that root>/.aitools/sessions/<prefix>.db, find nothing, and exit 1: no export, no record. Hooks that write rows with --db face the same choice. The RFC never defines <repo>.",
+      "evidence": "harness-db-sessionend.sh L47-52 (PROJECT_ROOT from the input cwd); harness-db.py L559-566 find_project_root walks up from Path.cwd(); L1077-1083 cmd_session_end returns 1 when the DB is not found; L1510-1513 export the same. RFC L342 and L352 '<repo>/.aitools/...'. Bash tool contract in this harness: cd carries to the next call in the main session. Whether Claude Code's hook input cwd follows that cd: unverified.",
+      "source": {"kind": "artifact", "location": "shared/hooks/harness-db-sessionend.sh L46-52; scripts/harness-db.py L559-566, L1075-1083"}
+    },
+    {
+      "id": "OBS-18", "type": "observation", "severity": "medium", "incident": false,
+      "text": "The record path's <project> and <YYYY-MM-DD> have no definition, and 'laid out like the session archives' conflicts with D874d-53's example. Archives take the date from the transcript's mtime (the last write, i.e. the end date) and the project from the git-root basename, with fallbacks that have produced odd directories. This session started 2026-11-15 and is now in 2026-11-16, so the mtime rule names its record 2026-11-16_..., not the example's 2026-11-15_dbd05b0c-2.json. A session resumed on a later day gets a second record file.",
+      "evidence": "ait-harvest.py L342-351 transcript_date 'file mtime (UTC)'; L325-339 derive_project (git root basename; worktree root inside a worktree); log lines 'sessions/0b5cf7bf-a4e0-420e-bd67-aa44f86b523e/2026-11-13_0b5cf7bf.jsonl' and 'sessions/aitools-nobul-jose/...'. RFC L343, L429; transcript L2439 (R874d-28 suggestion) and L2442 'love it agreed'.",
+      "source": {"kind": "artifact", "location": "scripts/ait-harvest.py L325-351; rfcs/RFC-0011-structured-reports.md L343, L429"}
+    },
+    {
+      "id": "OBS-19", "type": "observation", "severity": "medium", "incident": false,
+      "text": "'--session MUST be removed' reads two ways, and both break something. The harness-tier verbs store --session in the cross-session harness DB. process-events needs the full id to find .scratch/session-<full id>/events.jsonl, and the DB file name holds only 10 characters. The mission verbs require --session. 3.6.10 also says knowledge add 'writes items rows', but it writes the harness DB, not the session DB.",
+      "evidence": "harness-db.py L3367 knowledge add '--session', help 'Producing session ID'; L3413 edge add; L3427 nogood add; L3299 and L3306 mission start/end '--session', required=True; L906-917 find_session_scratch_dir (full id, 10-char legacy fallback); L2092-2095 cmd_knowledge_add opens get_harness_db_path. RFC L395, L403.",
+      "source": {"kind": "artifact", "location": "scripts/harness-db.py L906-917, L2092-2095, L3299-3427; rfcs/RFC-0011-structured-reports.md L395-403"}
+    },
+    {
+      "id": "OBS-20", "type": "observation", "severity": "medium", "incident": false,
+      "text": "S-10's retry is unsafe for hooks and does not cover the real contention point. A hook that writes a row (agent_type hook) could block up to 5 s plus three backoffs on the hot path. And every write command first runs ensure_schema, whose executescript of ~20 DDL statements takes the write lock, so parallel writers contend on DDL before any INSERT. The RFC does not say what the caller does after exit 1.",
+      "evidence": "RFC L380 (3.6.6). RFC 0010 section 9: 'Hot path (hooks): <50ms total'; section 8: hooks 'ALWAYS exit 0'. harness-db.py L953-954 resolve_session_db(for_write) -> prepare_db L869-877 -> ensure_schema L856 executescript(SESSION_SCHEMA).",
+      "source": {"kind": "artifact", "location": "rfcs/0010-python-sqlite-engineering.md sections 8-9; scripts/harness-db.py L841-877, L933-955"}
+    },
+    {
+      "id": "OBS-21", "type": "observation", "severity": "medium", "incident": false,
+      "text": "The implementing brief gives one level-1 delegate about 20 batches, 6 PRs, three-OS CI and per-PR reviewers, with no instruction to orchestrate. Gate G1 blocks WP-1 although WP-1 touches none of the six files. G1 rests on one reading of the commander's 'dont worry about it'. If G1 never closes, WP-2 edits the origin/main versions while the main checkout holds different uncommitted ones.",
+      "evidence": "/delegate (deployed) 'Orchestrate, don't execute ... Commanders that did the work themselves ran out of context'. Brief 874d-2 L37-101 (OBJ-2 to OBJ-7), L1006-1013 duties; no orchestration duty. Plan L36 G1, L39 'WP-1 starts when G0, G1 and G2 are met', L58-62 WP-1 files. Transcript L2157 R874d-27 ('Suggest: on your go-ahead, I commit exactly these six files ...') and L2160 '27) dont worry about it'.",
+      "source": {"kind": "artifact", "location": "plans/structured-reports/implementation-plan.md L31-39; 874d-2-structured-reports-brief.json L1006-1013"}
+    },
+    {
+      "id": "OBS-22", "type": "observation", "severity": "medium", "incident": false,
+      "text": "D-DEL13 is the session agent's own review-after decision, but the RFC uses it as a fixed decision. On its strength the RFC drops conflict_priority and permissions from the brief and calls the blocker duty 'standing'. The deployed /delegate this mission loaded (v2.4) carries none of D-DEL9 to D-DEL13, so those duties do not reach a delegate until deploy.",
+      "evidence": "shared/rules/delegation.md L33: D-DEL13 '... | 2026-11-15 | session agent dbd05b0c, review after (D-DEL5)'. RFC L106 '(D-DEL13)'; L437-446 table lists D-DEL13 among the recorded decisions; section 4 has no S-point for it. Deployed ~/.claude/skills/delegate/SKILL.md: version line 'v2.4 (2026-11-14 ...)', no 'brief' or 'AAR' section.",
+      "source": {"kind": "artifact", "location": "shared/rules/delegation.md L33; rfcs/RFC-0011-structured-reports.md L106, L437-446"}
+    },
+    {
+      "id": "OBS-23", "type": "observation", "severity": "medium", "incident": false,
+      "text": "S-8 puts the mission's references in rules[], so one list holds binding rules (tier 4 of D-DEL6) and material that is not binding, and a delegate cannot tell which is which. My own brief lists the documents I attack in rules[] (AMB-1).",
+      "evidence": "RFC L255-256 'rules[] every file to read in full ...: every CLAUDE.md file, every rule, and the mission's references (S-8)'; L465. 874d-4-adversarial-brief.json L325-327.",
+      "source": {"kind": "artifact", "location": "rfcs/RFC-0011-structured-reports.md L255-256, L465"}
+    },
+    {
+      "id": "OBS-24", "type": "observation", "severity": "medium", "incident": false,
+      "text": "Readers of the retired running-estimate.json are not in the plan, so batch 5.2's 'grep finds no reference' fails with no batch to fix it, and the dashboard breaks when the file stops being written. The aitools-workspace rule still says the file is tracked carry-forward state.",
+      "evidence": "Search for 'running-estimate.json' outside worktrees: shared/hooks/dashboard-serve.sh, scripts/generate-dashboard.py, scripts/aitools-dashboard.sh, scripts/aitools-dashboard.ps1, .claude/rules/aitools-workspace.md (table row 'channel/running-estimate.json | tracked | Carry-forward state'), reference/artifact-harvesting.md, shared/skills/aitool-continue/SKILL.md, shared/skills/mission-control/SKILL.md. harness-db.py L1298 comment: 'the running-estimate key the dashboard'. Plan L102-103 lists only the three skills and the two retired files.",
+      "source": {"kind": "artifact", "location": "plans/structured-reports/implementation-plan.md L98-103"}
+    },
+    {
+      "id": "OBS-25", "type": "observation", "severity": "medium", "incident": false,
+      "text": "Windows is claimed, not verified, for the detached copy. That the nohup/disown child outlives Claude Code on Windows is described only in POSIX terms. The hooks pick python3 before python, while RFC section 6 says Windows uses python.",
+      "evidence": "session-archive.sh L19 '(reparented to init/launchd)', L83-96; reference/artifact-harvesting.md L157, L417 (no Windows note); tests/harvest runs unit tests, not detachment. session-archive.sh L49-53 and session-catchup.sh L31-36: python3 first. RFC L497 'as python on Windows', L500 'already archives transcripts on macOS, Linux and Windows'. ASM-3.",
+      "source": {"kind": "artifact", "location": "shared/hooks/session-archive.sh L15-23, L47-53; rfcs/RFC-0011-structured-reports.md L497-500"}
+    },
+    {
+      "id": "OBS-26", "type": "observation", "severity": "low", "incident": false,
+      "text": "S-11 refuses to write another session's DB but gives the colliding session no fallback, so that session silently has no DB and no estimate.",
+      "evidence": "RFC L354 'it MUST log an error and refuse to write into the other session's DB'; harness-db-sessionstart.sh L94-98 reports 'NOT registered' only.",
+      "source": {"kind": "artifact", "location": "rfcs/RFC-0011-structured-reports.md L354"}
+    },
+    {
+      "id": "OBS-27", "type": "observation", "severity": "low", "incident": false,
+      "text": "The no-credentials rule and the verbatim-quote rule conflict, and neither the RFC nor the plan specifies redaction or a check.",
+      "evidence": "RFC L127 'quote ... REQUIRED when the source is the commander's words' vs L509 'MUST NOT copy credentials or tokens into any item, quotes included'.",
+      "source": {"kind": "artifact", "location": "rfcs/RFC-0011-structured-reports.md L127, L509"}
+    },
+    {
+      "id": "OBS-28", "type": "observation", "severity": "low", "incident": false,
+      "text": "'Session' is undefined across /clear and an interactive /resume. Both fire SessionEnd (export, copy, commit, push), and /clear starts a new session id, so a new DB and estimate begin while the briefs stay in the old scratch dir.",
+      "evidence": "tool-ops-claude-code.md L85 (#35) 'It applies when you exit, run /clear, or switch sessions with interactive /resume'. RFC L320 'one running estimate per session (D874d-8)'.",
+      "source": {"kind": "artifact", "location": "reference/tool-ops-claude-code.md L85; rfcs/RFC-0011-structured-reports.md L320"}
+    },
+    {
+      "id": "OBS-29", "type": "observation", "severity": "low", "incident": false,
+      "text": "The implementing brief gives two assumptions a status their evidence does not support. ASM-6 is 'verified' on the strength of '36 bits', a probability, not a recorded fact. OL-2 (meta.json is created only when the delegate finishes) is falsified by this launch: my meta.json existed while I was running.",
+      "evidence": "Brief 874d-2 L220-232 (ASM-6 status 'verified', evidence '36 bits'); glossary 'assumption': 'verified (confirmed against evidence: a fact is recorded ...)'. ls subagents/: agent-a7a116cbb073032af.meta.json, 288 bytes, Nov 15 16:16 local (= launch, 00:16Z), while agent-a7a116cbb073032af.jsonl was still growing (16:26). Brief OL-2 L877-883.",
+      "source": {"kind": "telemetry", "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d/subagents/"}
+    },
+    {
+      "id": "OBS-30", "type": "observation", "severity": "low", "incident": false,
+      "text": "S-5's citation does not hold. RFC 0010 section 11 does not mention SQLite's JSON functions, and json_extract worked in the probe (SQLite 3.53.1). The harness-db.py header also says 'Python 3.10+' against the 3.8 floor the RFC cites (874d-6's scope; noted in one line).",
+      "evidence": "rfcs/0010-python-sqlite-engineering.md L121-125 (section 11: f-strings, walrus, FTS5 only); view_probe.py output 'json_extract available'; harness-db.py L60 'Python 3.10+'; RFC L367.",
+      "source": {"kind": "artifact", "location": "rfcs/0010-python-sqlite-engineering.md L121-125; scripts/harness-db.py L60"}
+    },
+    {
+      "id": "OBS-31", "type": "observation", "severity": "low", "incident": false,
+      "text": "'Update the status table after every batch' does not say where. The plan lives under plans/ (direct to main under the Channel exception), but the mission works on feature branches, and the session agent may also edit the plan on main.",
+      "evidence": "Plan L50 'After each batch, update the status table'; brief 874d-2 L1011; CLAUDE.md 'Channel exception (direct to main)': plans (plans/*); brief L998-1003 writable excludes the main checkout.",
+      "source": {"kind": "artifact", "location": "plans/structured-reports/implementation-plan.md L50"}
+    },
+    {
+      "id": "OBS-32", "type": "observation", "severity": "low", "incident": false,
+      "text": "'There is no session-id column' can be read as removing session.session_id, which 3.6.2's collision check needs.",
+      "evidence": "RFC L365 'There is no session-id column (D874d-31)'; L354 'compare the full session id stored in an existing DB'; harness-db.py L1011-1014 session.session_id.",
+      "source": {"kind": "artifact", "location": "rfcs/RFC-0011-structured-reports.md L354, L365"}
+    }
+  ],
+  "operational_learning": [
+    {
+      "id": "OL-1", "type": "operational_learning",
+      "text": "To find your own agentId as a background delegate, grep the parent transcript for '\"agentId\":\"<id>\",\"description\":\"<mission name>' (one grep -o call). It worked at once for this mission; the toolUseResult is written at launch ('status':'async_launched').",
+      "deviation_refs": [], "observation_refs": ["OBS-14", "OBS-29"]
+    },
+    {
+      "id": "OL-2", "type": "operational_learning",
+      "text": "A recursive grep from the aitools repo root ('.') walks .claude/worktrees/* and their .scratch HOME copies and does not finish in 120 s. Search named top-level dirs (shared, .claude/rules, scripts, reference) only, and stop a background task you no longer need with TaskStop.",
+      "deviation_refs": [], "observation_refs": []
+    },
+    {
+      "id": "OL-3", "type": "operational_learning",
+      "text": "Before trusting a 'reuse the existing mechanism' design, read that mechanism's log: ait-harvest.log showed 60 git failures, most of them index.lock contention, which the code review alone would not have shown.",
+      "deviation_refs": [], "observation_refs": ["OBS-4"]
+    },
+    {
+      "id": "OL-4", "type": "operational_learning",
+      "text": "A throwaway SQLite DB in the delegate's scratch is enough to prove schema-compatibility failures (view vs table DDL) without touching a live session DB.",
+      "deviation_refs": [], "observation_refs": ["OBS-1"]
+    },
+    {
+      "id": "OL-5", "type": "operational_learning",
+      "text": "My read of the design, honestly: the document model (one schema, items, provenance, AAR as hand-back) is sound and I found little to attack there. The risk sits in the plumbing it reuses (SessionEnd timing, the dotprofile git path, deploy skew, the harvester), which has failed before and is where the plan is thinnest.",
+      "deviation_refs": [], "observation_refs": ["OBS-1", "OBS-3", "OBS-4", "OBS-6"]
+    }
+  ],
+  "proposals": [
+    {
+      "id": "PRO-1", "type": "proposal", "text": "Make v4 and v5 helpers safe on each other's DBs, and keep the live DB on the deployed schema until deploy",
+      "what": "RFC 3.6.7: add 'ensure_schema MUST check schema_version before any migration step and, on a DB newer than the helper, change nothing and exit 1 with a clear error on write verbs; every v4-shape check MUST test sqlite_master type = table, not table_info. SESSION_SCHEMA MUST drop the observations index once observations is a view.' Plan 3.1: add a test 'a v4 helper (git show origin/main:scripts/harness-db.py) opened on a v5 DB fails cleanly, never DROPs'. Plan 3.5: old 'a delegate in an isolated worktree writes the session DB' -> new 'a delegate in an isolated worktree writes a throwaway copy of a session DB (sqlite3 backup API); never the live DB'. Brief 874d-2 constraints: add 'Never run a branch's harness-db.py against a live session DB or harness DB in the main checkout; the deployed ~/.aitools/bin copy is the only one that touches them until the commander deploys'. Also ship a v4 point release first (WP-3 batch 3.0) that moves the newer-version check before migrate_v4, so every machine's deployed v4 helper refuses a v5 DB.",
+      "why": "Probe: a v4 helper DROPs/INDEXes a view and raises; hooks prefer the deployed helper (OBS-1).",
+      "barrier_analysis": "Prevention (spec + test) stops the v4 crash; the brief constraint removes the only planned path that migrates a live DB early.",
+      "affected": ["rfcs/RFC-0011-structured-reports.md 3.6.7", "plans/structured-reports/implementation-plan.md batches 3.1, 3.5", "874d-2-structured-reports-brief.json constraints", "scripts/harness-db.py ensure_schema, record_schema_version"],
+      "observation_refs": ["OBS-1"], "deviation_refs": [], "disposition": "proposed"
+    },
+    {
+      "id": "PRO-2", "type": "proposal", "text": "Survive deploy skew of hooks and bin",
+      "what": "RFC 3.6.9 (S-15): append 'For one release after schema 5 ships, harness-db.py MUST accept --session as a deprecated, ignored argument on every verb that had it, logging a warning, so a deployed hook of either version works with a deployed helper of either version. The hooks MUST pass --db only when the helper's --help lists it.' Open R874d-a4-1 before writing it (D874d-31 says drop it 'all together').",
+      "why": "deploy-harness reviews bin and hooks separately; one [s]kip splits them (OBS-2).",
+      "barrier_analysis": "Removes the failure for the skew window; detection (the warning) shows when it is safe to drop the alias.",
+      "affected": ["rfcs/RFC-0011-structured-reports.md 3.6.9, S-15", "scripts/harness-db.py", "shared/hooks/harness-db-sessionstart.sh", "shared/hooks/harness-db-sessionend.sh"],
+      "observation_refs": ["OBS-2"], "deviation_refs": [], "disposition": "proposed"
+    },
+    {
+      "id": "PRO-3", "type": "proposal", "text": "One SessionEnd pipeline: export, then copy, then commit, all detached; catch-up re-exports",
+      "what": "RFC 3.5.5: old 'The copy and the push MUST run detached' -> new 'The export, the copy and the push MUST run as one detached sequence started by harness-db-sessionend.sh, in that order (export first; the copy reads the export just written). ship and process-events MUST NOT run before the export in the synchronous part. The next session's catch-up (session-catchup.sh) MUST re-export, from the session DB, any session whose DB is newer than its export, and copy any export newer than its record.' Plan 4.3 files: add shared/hooks/harness-db-sessionend.sh; Verify: add 'with CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS unset, the hook returns in well under 1.5 s; a cancelled hook leaves a state the next catch-up completes'.",
+      "why": "Two hooks with no ordering and a 1.5 s budget, with the export last (OBS-3).",
+      "barrier_analysis": "Ordering inside one process removes the race; catch-up from the DB (the durable store) removes the dependence on SessionEnd finishing.",
+      "affected": ["rfcs/RFC-0011-structured-reports.md 3.5.5", "plans/structured-reports/implementation-plan.md batch 4.3", "shared/hooks/harness-db-sessionend.sh", "shared/hooks/session-catchup.sh", "scripts/ait-harvest.py"],
+      "observation_refs": ["OBS-3"], "deviation_refs": [], "disposition": "proposed"
+    },
+    {
+      "id": "PRO-4", "type": "proposal", "text": "Fix the dotprofile git path before adding a second writer to it",
+      "what": "Plan 4.3: add to Files 'scripts/ait-harvest.py: archive and the estimate copy take HarvestLock, waiting up to their deadline instead of skipping; commit_pending_archives commits sessions/ and running-estimates/; commit_and_push refuses (logs, keeps the commit) when the branch is not main; when the worktree is dirty, fetch and rebase only the commit just made (or push to a retry next start), never leave a commit unpushed without a warning in the next SessionStart output'. Verify: 'two archive processes and one estimate copy started together all commit; a remote one commit ahead is pulled and the push succeeds'. RFC 3.5.5: add 'A copy or push that fails MUST be reported in the next SessionStart output, not only in ait-harvest.log'.",
+      "why": "60 logged git failures, mostly index.lock contention; no recovery for running-estimates/ (OBS-4).",
+      "barrier_analysis": "The lock prevents same-machine contention; the extended recovery and the SessionStart report detect what still fails.",
+      "affected": ["scripts/ait-harvest.py commit_and_push, commit_pending_archives, cmd_archive", "plans/structured-reports/implementation-plan.md batch 4.3", "rfcs/RFC-0011-structured-reports.md 3.5.5"],
+      "observation_refs": ["OBS-4"], "deviation_refs": [], "disposition": "proposed"
+    },
+    {
+      "id": "PRO-5", "type": "proposal", "text": "Stop publishing the single export now, not in WP-5",
+      "what": "Plan: move from batch 5.2 to a new batch 3.4 item: 'harness-db-sessionend.sh stops writing .aitools/channel/running-estimate.json; git rm --cached .aitools/channel/running-estimate.json; .gitignore gains .aitools/channel/running-estimate.json'. Keep the template retirement in 5.2. RFC 3.5.6: add 'This retirement ships with schema 5 (WP-3), before any richer item reaches the export.' If the commander agrees, do it even sooner as its own one-line PR (R874d-a4-4).",
+      "why": "The file is tracked in a PUBLIC repo and was committed with session content on 2026-11-15 (OBS-5).",
+      "barrier_analysis": "Prevention: an ignored file cannot be swept into a commit.",
+      "affected": ["plans/structured-reports/implementation-plan.md batches 3.4, 5.2", "rfcs/RFC-0011-structured-reports.md 3.5.6", ".gitignore", "shared/hooks/harness-db-sessionend.sh"],
+      "observation_refs": ["OBS-5"], "deviation_refs": [], "disposition": "proposed"
+    },
+    {
+      "id": "PRO-6", "type": "proposal", "text": "Widen S-14 and make the interim guard mechanical",
+      "what": "RFC section 7: old 'It MUST treat *-brief.json and *-aar.json as ephemeral. Until it does, a harvested brief MUST NOT be committed.' -> new 'It MUST treat as ephemeral *-brief.json, *-aar.json, *brief*.md, *briefing*.json and any file whose name contains prompt or rfi. Until it does, .gitignore MUST list harvesting/*-brief.json, harvesting/*-aar.json, harvesting/*brief*, harvesting/*prompt*, harvesting/*rfi*.' Plan: move batch 4.4's .gitignore half into WP-1 as batch 1.0. Surface the already-published files to the commander (R874d-a4-4); rewriting public history is his call.",
+      "why": "Published AARs, briefs and prompt dumps already sit in tracked harvesting/ under names the S-14 filter misses (OBS-6).",
+      "barrier_analysis": "Prevention at two layers: the harvester skips them; git ignores what slips through.",
+      "affected": ["rfcs/RFC-0011-structured-reports.md section 7, S-14", "plans/structured-reports/implementation-plan.md batches 1.0 (new), 4.4", ".gitignore", "scripts/ait-harvest.py _is_ephemeral"],
+      "observation_refs": ["OBS-6"], "deviation_refs": [], "disposition": "proposed"
+    },
+    {
+      "id": "PRO-7", "type": "proposal", "text": "Protect every repo, not only aitools",
+      "what": "RFC 3.5.5 / section 7: add 'At session start, in any git repo, the harness MUST add .aitools/ and .scratch/ to <git dir>/info/exclude (local, never committed) when no ignore rule covers them, and report it once.' Plan 3.4: add harness-db-sessionstart.sh (or scratch-init.sh) to Files, with a test in a temp repo.",
+      "why": "In other repos the export and the briefs are untracked but not ignored (OBS-7).",
+      "barrier_analysis": "Prevention without touching the other repo's tracked files.",
+      "affected": ["rfcs/RFC-0011-structured-reports.md 3.5.5, section 7", "shared/hooks/harness-db-sessionstart.sh or shared/hooks/scratch-init.sh", "plans/structured-reports/implementation-plan.md batch 3.4"],
+      "observation_refs": ["OBS-7"], "deviation_refs": [], "disposition": "proposed"
+    },
+    {
+      "id": "PRO-8", "type": "proposal", "text": "Complete the v4-to-v5 mapping",
+      "what": "RFC 3.6.7 table: add rows 'decisions rows -> items of type decision (decision_id kept as id, title -> text, description, implementation_evidence, decided_at, implemented_at -> fields)'; 'observations columns evidence, confidence, criteria, cause, effect, suggestion, refs, legacy_category -> fields (refs also -> refs rows)'; 'attributed_to NULL -> agent_id \"unknown\", agent_type session'; 'messages rows stay in messages; log keeps writing messages (SITREP/SPOTREP are not items)'. Old 'type finding | observation (D874d-28)' -> new 'type finding | observation, with fields.legacy_type finding (a stored v4 finding records what was seen and analysed, not something done; D874d-28 retires the type, replacedBy: deviation, for new items)'. Old S-17 'No v4 data is lost' -> keep, now true. 3.6.10: drop 'log' and 'knowledge add' from the list that writes items rows.",
+      "why": "Unmapped tables and columns, NULL writers and a semantic mismatch (OBS-8).",
+      "barrier_analysis": "Prevention: the row-count check of _rebuild_table plus a column-coverage test catch a dropped column.",
+      "affected": ["rfcs/RFC-0011-structured-reports.md 3.6.7, 3.6.10, S-17", "plans/structured-reports/implementation-plan.md batch 3.3 (test: every v4 column has a v5 home)"],
+      "observation_refs": ["OBS-8", "OBS-19"], "deviation_refs": [], "disposition": "proposed"
+    },
+    {
+      "id": "PRO-9", "type": "proposal", "text": "Give the observations view a column contract and move intelligence-stop.py to items",
+      "what": "RFC 3.6.7: add 'The observations view MUST expose observation_id (INTEGER), category, text, status, severity, created_at, the v4 column names, over the latest version of each item.' Plan: add batch 3.4b 'shared/hooks/intelligence-stop.py reads items (decisions and deviations included); its try/except blocks log to ~/.aitools/logs/intelligence-stop.log instead of pass' with a test that a v5 decision and deviation appear in its output.",
+      "why": "The hook reads v4 tables with exact names and swallows errors (OBS-9).",
+      "barrier_analysis": "Prevention (contract + test) and detection (logged errors).",
+      "affected": ["rfcs/RFC-0011-structured-reports.md 3.6.7", "plans/structured-reports/implementation-plan.md WP-3", "shared/hooks/intelligence-stop.py"],
+      "observation_refs": ["OBS-9"], "deviation_refs": [], "disposition": "proposed"
+    },
+    {
+      "id": "PRO-10", "type": "proposal", "text": "Give S-2 a store and a carrier",
+      "what": "RFC 3.6.3: add a table 'session_estimate  version, intent, main_effort, assessment, agent_id, created_at' (append-only, the latest row is current) and in 3.2.1 say intent and assessment are not items. Plan 2.3: add 'shared/rules/prompt-turn.md item 12 and reference/prompt-turn-checklist.md: 12.x ESTIMATE: once schema 5 ships, write intent, assessment and the session objectives' status to the session DB (harness-db.py estimate set)'. Add the verb 'estimate set' to 3.6.10.",
+      "why": "No place to write the per-turn update and no instruction that makes agents do it (OBS-10).",
+      "barrier_analysis": "Prevention: the checklist runs every turn; detection: the export can flag an assessment older than the last hand-back.",
+      "affected": ["rfcs/RFC-0011-structured-reports.md 3.2.1, 3.5.3, 3.6.3, 3.6.10", "plans/structured-reports/implementation-plan.md batch 2.3", "shared/rules/prompt-turn.md", "reference/prompt-turn-checklist.md"],
+      "observation_refs": ["OBS-10"], "deviation_refs": [], "disposition": "proposed"
+    },
+    {
+      "id": "PRO-11", "type": "proposal", "text": "Specify id remapping",
+      "what": "RFC 3.2.4: add 'An item's document id (OBS-1) is kept as fields.doc_id. When an AAR's items are written to the DB, harness-db.py MUST map each document id to the DB id it assigns and rewrite every ref in the same AAR. An AAR assumption that verifies a brief assumption carries fields.brief_ref (\"ASM-1\" of <brief path>). Delegates number RFIs R<sid4>-<mission name>-<n> until the session agent records them as R<sid4>-<n>.' Add 'item import --aar <file>' to 3.6.10 to do the mapping.",
+      "why": "Collisions and broken refs on the S-9 path (OBS-11).",
+      "barrier_analysis": "Prevention: one import verb owns the mapping instead of each agent improvising it.",
+      "affected": ["rfcs/RFC-0011-structured-reports.md 3.2.4, 3.4.8, 3.6.10"],
+      "observation_refs": ["OBS-11"], "deviation_refs": [], "disposition": "proposed"
+    },
+    {
+      "id": "PRO-12", "type": "proposal", "text": "Make S-4 implementable",
+      "what": "RFC 3.6.3: old 'items id, type, ... created_at, updated_at, version' -> new 'items id, version, type, ... created_at (PRIMARY KEY (id, version); no updated_at)', and add 'Readers (export, aar, the observations view, list) MUST use the latest version of each id. refs point to an id, meaning its latest version. item update appends a version.' Add version to the common fields of 3.2.1 as OPTIONAL in documents (default 1). Alternative (the rejected option, at least as strong): update in place with an append-only item_history table written by a trigger.",
+      "why": "No key, a contradicting column, and no read rule (OBS-12).",
+      "barrier_analysis": "Prevention: a schema constraint makes a duplicate (id, version) impossible; a test checks readers return one row per id.",
+      "affected": ["rfcs/RFC-0011-structured-reports.md 3.2.1, 3.2.5, 3.6.3, 3.6.10"],
+      "observation_refs": ["OBS-12"], "deviation_refs": [], "disposition": "proposed"
+    },
+    {
+      "id": "PRO-13", "type": "proposal", "text": "Default to non-isolated delegates and close the fallback's holes",
+      "what": "RFC 3.3.8 (S-9): add first 'A delegating agent MUST NOT launch a delegate that writes briefs or DB rows with Agent isolation \"worktree\"; it uses git worktree add, which does not confine writes.' Then: '3.5.4 also reads a briefs table in the session DB, where every delegating agent records the absolute path of each brief it writes (fallback briefs included)'; '3.4.8: each delegating agent, at any level, records the items of the AARs it receives that were not written as rows; an AAR states provenance.rows_written true|false|partial'; 'S-18: items folded in from another AAR keep their own agent_id, agent_type, mission'. Brief 874d-2 access.writable: add the session scratch dir /Users/new-jose/repos/aitools/.scratch/session-dbd05b0c-2365-4159-9976-bc64a2af874d/ for its delegates' briefs.",
+      "why": "Missions vanish from missions[], level-2 AARs are orphaned, rows duplicate (OBS-13).",
+      "barrier_analysis": "Removes the common case that triggers the fallback; makes the rare case complete.",
+      "affected": ["rfcs/RFC-0011-structured-reports.md 3.2.1 (S-18), 3.3.8, 3.4.8, 3.5.4", "874d-2-structured-reports-brief.json access"],
+      "observation_refs": ["OBS-13"], "deviation_refs": [], "disposition": "proposed"
+    },
+    {
+      "id": "PRO-14", "type": "proposal", "text": "Put the AAR check where hand-backs are, and define the parse",
+      "what": "Plan 4.2: old 'PostToolUse on Agent, or SubagentStop' -> new 'SubagentStop (reads the delegate's final hand-back from its transcript) or PreToolUse on SubagentHandback; probe both first and record which sees a background delegate's AAR; PostToolUse on Agent sees only async_launched'. RFC 3.4.1: add 'The AAR is the last fenced block whose opening line is exactly three backticks followed by json; text before it is ignored; inside JSON strings a run of three backticks MUST be written with the JSON escape for the backtick character (u0060).'",
+      "why": "Background launches return before the AAR exists; fence parsing is undefined (OBS-14).",
+      "barrier_analysis": "Detection that actually sees the artifact it checks.",
+      "affected": ["plans/structured-reports/implementation-plan.md batch 4.2", "rfcs/RFC-0011-structured-reports.md 3.4.1"],
+      "observation_refs": ["OBS-14"], "deviation_refs": [], "disposition": "proposed"
+    },
+    {
+      "id": "PRO-15", "type": "proposal", "text": "Add semantic checks beside the schema subset",
+      "what": "RFC 3.7.2: append 'type MAY be an array (e.g. [\"string\", \"null\"]); the subset adds pattern and const. validate MUST also run these Python checks the schema cannot express: quote present when source.kind is commander; an objective not accomplished cites a deviation; ids match their pattern; timestamps end in Z.' Plan 1.4: add a negative case for each.",
+      "why": "The subset passes documents the spec forbids (OBS-15).",
+      "barrier_analysis": "Detection of the spec's MUSTs at validation time.",
+      "affected": ["rfcs/RFC-0011-structured-reports.md 3.7.2", "plans/structured-reports/implementation-plan.md batch 1.4"],
+      "observation_refs": ["OBS-15"], "deviation_refs": [], "disposition": "proposed"
+    },
+    {
+      "id": "PRO-16", "type": "proposal", "text": "Test the dotprofile push against a local bare remote",
+      "what": "Plan 4.3 Verify: old 'Under an isolated HOME with a copy of the dotprofile: the copy lands at the right path and is committed and pushed' -> new 'Under an isolated HOME, with a clone of the dotprofile whose origin is set to a local bare repo in the scratch dir (git remote set-url origin <scratch>/remote.git) and checked before any push (git remote get-url origin must not contain github.com): the copy lands at the right path, is committed and is pushed to the bare repo'. Brief 874d-2 constraints: add the same sentence.",
+      "why": "A copy keeps origin = the real dotprofile (OBS-16).",
+      "barrier_analysis": "Prevention: the test cannot reach GitHub.",
+      "affected": ["plans/structured-reports/implementation-plan.md batch 4.3", "874d-2-structured-reports-brief.json constraints"],
+      "observation_refs": ["OBS-16"], "deviation_refs": [], "disposition": "proposed"
+    },
+    {
+      "id": "PRO-17", "type": "proposal", "text": "Resolve the session DB by session id, not by cwd",
+      "what": "RFC 2 Terminology: add '<repo>: the git toplevel of the directory the top-level session started in, as the SessionStart hook resolved it'. RFC 3.6.1: add 'The SessionStart hook MUST record the DB's absolute path in the session scratch dir (.session-db) and in ~/.aitools/sessions-index (session id -> DB path); every later hook and the SessionEnd export resolve the DB from it, never from the current cwd.'",
+      "why": "A cd into a worktree or another repo loses the export (OBS-17).",
+      "barrier_analysis": "Prevention: one resolution recorded at start.",
+      "affected": ["rfcs/RFC-0011-structured-reports.md section 2, 3.5.5, 3.6.1", "shared/hooks/harness-db-sessionstart.sh", "shared/hooks/harness-db-sessionend.sh"],
+      "observation_refs": ["OBS-17"], "deviation_refs": [], "disposition": "proposed"
+    },
+    {
+      "id": "PRO-18", "type": "proposal", "text": "Define <project> and the date of the record",
+      "what": "RFC 3.8 Record row: add '<project>: the basename of the main worktree of <repo> (git rev-parse --path-format=absolute --git-common-dir, parent dir name), so a worktree session files under its project; <YYYY-MM-DD>: the UTC date of session.started_at (stable across resume and midnight; the example 2026-11-15_dbd05b0c-2.json)'. Confirm with R874d-a4-2.",
+      "why": "Archive rules give a different date and odd project names (OBS-18).",
+      "barrier_analysis": "Prevention: one deterministic name per session.",
+      "affected": ["rfcs/RFC-0011-structured-reports.md 3.5.5, 3.8", "scripts/ait-harvest.py (new copy function)"],
+      "observation_refs": ["OBS-18"], "deviation_refs": [], "disposition": "proposed"
+    },
+    {
+      "id": "PRO-19", "type": "proposal", "text": "Scope the --session removal",
+      "what": "RFC 3.6.9: old '--session MUST be removed' -> new '--session MUST be removed from every verb that writes or reads the session DB (they take --db). The harness-DB verbs (knowledge add, knowledge invalidate, edge add, nogood add) keep --session, which records the producing session in the harness DB. process-events reads the full session id from the DB's session table. The mission verbs keep working with --db.'",
+      "why": "Two readings, both break something (OBS-19).",
+      "barrier_analysis": "Prevention: one reading.",
+      "affected": ["rfcs/RFC-0011-structured-reports.md 3.6.5, 3.6.9, 3.6.10"],
+      "observation_refs": ["OBS-19"], "deviation_refs": [], "disposition": "proposed"
+    },
+    {
+      "id": "PRO-20", "type": "proposal", "text": "Bound the retry for hooks and move schema work out of the write path",
+      "what": "RFC 3.6.6: append 'Hooks pass --no-retry with busy_timeout 200 and on failure append the item to <session scratch>/pending-items.jsonl, which the next successful write (or SessionEnd export) drains. ensure_schema runs only when schema_version is below the helper's, not on every write. After exit 1, an agent records the item in its AAR and says it was not written.'",
+      "why": "Hot-path budget and DDL contention (OBS-20).",
+      "barrier_analysis": "Prevention of hook stalls; no lost write.",
+      "affected": ["rfcs/RFC-0011-structured-reports.md 3.6.6", "scripts/harness-db.py"],
+      "observation_refs": ["OBS-20"], "deviation_refs": [], "disposition": "proposed"
+    },
+    {
+      "id": "PRO-21", "type": "proposal", "text": "Make the implementing mission an orchestrator and fix the gates",
+      "what": "Brief 874d-2 duties: add 'You are an orchestrator: one fresh delegate per batch (two or three files), each with its own brief; you verify between batches and own the PRs.' Plan Gates: old 'WP-1 starts when G0, G1 and G2 are met.' -> new 'WP-1 starts when G0 and G2 are met; WP-2 starts when G1 is met.' Add 'If G1 is still open when WP-2 starts, raise an RFI; do not edit origin/main versions of the six files.' Confirm the reading of '27) dont worry about it' (R874d-a4-3).",
+      "why": "Context exhaustion and an unnecessary block (OBS-21).",
+      "barrier_analysis": "Prevention per /delegate 'Orchestrate, don't execute'.",
+      "affected": ["874d-2-structured-reports-brief.json duties", "plans/structured-reports/implementation-plan.md Gates, WP-2"],
+      "observation_refs": ["OBS-21"], "deviation_refs": [], "disposition": "proposed"
+    },
+    {
+      "id": "PRO-22", "type": "proposal", "text": "List D-DEL13 as a point the RFC settles, and keep the standing duties in the prompt until deploy",
+      "what": "RFC section 4: add 'S-19 | Standing duties out of the brief | D-DEL13 (session agent, review after): conflict priority, WRITE_BLOCKED and reporting blockers at once live in /delegate and the rule, not in the brief | ...'. RFC 3.3.5: add 'Until the deployed /delegate carries D-DEL9 to D-DEL13, the prompt body MUST restate conflict priority, WRITE_BLOCKED and the duty to report a blocker at once.'",
+      "why": "An agent decision is presented as the commander's; the deployed skill lacks the duties (OBS-22).",
+      "barrier_analysis": "Keeps the duties reaching delegates during the deploy gap; keeps the review-after status visible.",
+      "affected": ["rfcs/RFC-0011-structured-reports.md 3.1.3, 3.3.5, 3.9.1, section 4"],
+      "observation_refs": ["OBS-22"], "deviation_refs": [], "disposition": "proposed"
+    },
+    {
+      "id": "PRO-23", "type": "proposal", "text": "Split rules[] from references",
+      "what": "RFC 3.3.3: old 'rules[] every file to read in full, line by line, by absolute path: every CLAUDE.md file, every rule, and the mission's references (S-8)' -> new 'rules[] every CLAUDE.md file and every rule, read in full (binding, D-DEL6 tier 4); references[] the mission's references, read in full (material, not binding)'. Update 3.3.2's key list and S-8.",
+      "why": "One list mixes binding and non-binding files (OBS-23).",
+      "barrier_analysis": "Prevention of misplaced authority.",
+      "affected": ["rfcs/RFC-0011-structured-reports.md 3.3.2, 3.3.3, S-8", "reference/schemas/mission-brief.schema.json (WP-1)"],
+      "observation_refs": ["OBS-23"], "deviation_refs": [], "disposition": "proposed"
+    },
+    {
+      "id": "PRO-24", "type": "proposal", "text": "Add the export's other readers to the plan",
+      "what": "Plan 5.2 Files: add shared/hooks/dashboard-serve.sh, scripts/generate-dashboard.py, scripts/aitools-dashboard.sh, scripts/aitools-dashboard.ps1 (read the per-session export), .claude/rules/aitools-workspace.md and its .cursor/rules twin (running-estimate row: untracked per-session export, record in the dotprofile), reference/artifact-harvesting.md. Split into 5.2 and 5.3 to keep two or three files per batch.",
+      "why": "Unowned readers break or fail the batch's grep (OBS-24).",
+      "barrier_analysis": "Prevention of a broken dashboard and a stale rule.",
+      "affected": ["plans/structured-reports/implementation-plan.md WP-5"],
+      "observation_refs": ["OBS-24"], "deviation_refs": [], "disposition": "proposed"
+    },
+    {
+      "id": "PRO-25", "type": "proposal", "text": "Probe Windows before relying on it",
+      "what": "Plan 4.3 Verify: add 'On Windows 11 (Git Bash): end a Claude Code session and confirm the detached copy finished (ait-harvest.log) after the Claude Code process exited; confirm which python the hook picked'. RFC section 6: old 'It is invoked as python3 on macOS and Linux and as python on Windows' -> new '... the hooks try python3, then python; on Windows a python3 that fails python3 -c \"import sqlite3\" is skipped'.",
+      "why": "Detachment and the interpreter choice are unverified on Windows (OBS-25).",
+      "barrier_analysis": "Detection before rollout.",
+      "affected": ["plans/structured-reports/implementation-plan.md batch 4.3", "rfcs/RFC-0011-structured-reports.md section 6", "shared/hooks/session-archive.sh"],
+      "observation_refs": ["OBS-25"], "deviation_refs": [], "disposition": "proposed"
+    },
+    {
+      "id": "PRO-26", "type": "proposal", "text": "Give S-11 a fallback",
+      "what": "RFC 3.6.2: append 'The session then uses <session id prefix>-<next 4 characters>.db and says so in the SessionStart output.'",
+      "why": "A collision now leaves the session without a DB (OBS-26).",
+      "barrier_analysis": "Removes the silent loss.",
+      "affected": ["rfcs/RFC-0011-structured-reports.md 3.6.2"],
+      "observation_refs": ["OBS-26"], "deviation_refs": [], "disposition": "proposed"
+    },
+    {
+      "id": "PRO-27", "type": "proposal", "text": "Redaction rule",
+      "what": "RFC section 7: append 'A secret in the commander's words is replaced by [REDACTED: <kind>] in quote; the item says so in text. validate warns on strings that match common token shapes (ghp_, sk-, xox, AKIA, -----BEGIN).'",
+      "why": "Two MUSTs conflict (OBS-27).",
+      "barrier_analysis": "Prevention plus detection.",
+      "affected": ["rfcs/RFC-0011-structured-reports.md section 7, 3.7.2"],
+      "observation_refs": ["OBS-27"], "deviation_refs": [], "disposition": "proposed"
+    },
+    {
+      "id": "PRO-28", "type": "proposal", "text": "Define session across /clear and /resume",
+      "what": "RFC section 2: add 'Session: one Claude Code session id. /clear starts a new session and a new running estimate; the new session's SessionStart output names the previous session's DB so the session agent can carry its open items forward.'",
+      "why": "Ambiguous unit of the estimate (OBS-28).",
+      "barrier_analysis": "Prevention of silent splits.",
+      "affected": ["rfcs/RFC-0011-structured-reports.md section 2, 3.5.1"],
+      "observation_refs": ["OBS-28"], "deviation_refs": [], "disposition": "proposed"
+    },
+    {
+      "id": "PRO-29", "type": "proposal", "text": "Correct two brief items",
+      "what": "Brief 874d-2 ASM-6: status 'verified' -> 'unverified', evidence '36 bits' -> '36 bits makes a collision unlikely; checked at session start (RFC 0011 3.6.2)'. OL-2: old '... was created when the delegate finished (20:55:18Z), not at launch; do not rely on it while a delegate runs' -> new 'was created at launch for 874d-4-adversarial (2026-11-16) but at finish for 874d-1-aar-doctrine; do not rely on it while a delegate runs; the parent transcript's toolUseResult (agentId, description) is written at launch'.",
+      "why": "OBS-29.",
+      "barrier_analysis": "Keeps the brief's intelligence honest.",
+      "affected": ["874d-2-structured-reports-brief.json ASM-6, OL-2"],
+      "observation_refs": ["OBS-29"], "deviation_refs": [], "disposition": "proposed"
+    },
+    {
+      "id": "PRO-30", "type": "proposal", "text": "Fix S-5's rationale",
+      "what": "RFC 3.6.4 / S-5 Why: old 'Python 3.8 does not guarantee SQLite's JSON functions (RFC 0010 section 11)' -> new 'The JSON1 functions are built into SQLite only from 3.38.0; the SQLite version bundled with a Python 3.8 build is not fixed, so the harness does not rely on them (RFC 0010 section 2, stdlib portability)'. Whether 3.38.0 is the right number: verify on sqlite.org with the browser before writing it.",
+      "why": "The cited section does not say it (OBS-30).",
+      "barrier_analysis": "Accurate provenance.",
+      "affected": ["rfcs/RFC-0011-structured-reports.md 3.6.4, S-5"],
+      "observation_refs": ["OBS-30"], "deviation_refs": [], "disposition": "proposed"
+    },
+    {
+      "id": "PRO-31", "type": "proposal", "text": "Say where the status table is updated",
+      "what": "Plan 'How every batch is shipped': old 'After each batch, update the status table at the end of this plan.' -> new 'After each batch, update the status table on main under the Channel exception (git pull --ff-only, commit only plans/structured-reports/implementation-plan.md, push), never on a feature branch.' Brief 874d-2 access.writable: add that file for direct-to-main commits.",
+      "why": "OBS-31.",
+      "barrier_analysis": "Prevents merge conflicts on the plan.",
+      "affected": ["plans/structured-reports/implementation-plan.md", "874d-2-structured-reports-brief.json access"],
+      "observation_refs": ["OBS-31"], "deviation_refs": [], "disposition": "proposed"
+    },
+    {
+      "id": "PRO-32", "type": "proposal", "text": "Clarify 'no session-id column'",
+      "what": "RFC 3.6.3: old 'There is no session-id column (D874d-31): the file is the session, and the export adds the id.' -> new 'items and refs have no session-id column (D874d-31): the file is the session. The session table keeps the full session id (one row), which the export and 3.6.2 read.'",
+      "why": "OBS-32.",
+      "barrier_analysis": "Prevention of a destructive misreading.",
+      "affected": ["rfcs/RFC-0011-structured-reports.md 3.6.3"],
+      "observation_refs": ["OBS-32"], "deviation_refs": [], "disposition": "proposed"
+    }
+  ],
+  "rfis": [
+    {
+      "id": "R874d-a4-1", "type": "rfi",
+      "title": "May harness-db.py keep --session as a deprecated, ignored alias for one release?",
+      "question": "D874d-31: 'we can drop that column and argument all together'. deploy-harness reviews ~/.aitools/bin/harness-db.py and the hooks separately, so one [s]kip pairs a new hook with an old helper or the reverse, and the hooks fail silently (OBS-2). A one-release alias that is accepted and ignored, with a warning, covers that window. Is that within your decision, or do you want --session gone in the same release?",
+      "suggestion": "Allow the alias for one release, removed in the release after WP-6 (PRO-2), because it is the only barrier against skew that does not depend on how you answer a deploy menu.",
+      "status": "open"
+    },
+    {
+      "id": "R874d-a4-2", "type": "rfi",
+      "title": "Which date and project name does the dotprofile record use?",
+      "question": "You agreed to running-estimates/<project>/<YYYY-MM-DD>_<session id prefix>.json, 'laid out like the session archives', with the example 2026-11-15_dbd05b0c-2.json (L2439, L2442). The archives use the transcript's last-modified date and the git-root name, which would name this session's record 2026-11-16_... and a worktree session under the worktree's name (OBS-18).",
+      "suggestion": "The session's start date (UTC) and the main repo's name, as in your example (PRO-18), so a resumed session overwrites one file instead of creating a second.",
+      "status": "open"
+    },
+    {
+      "id": "R874d-a4-3", "type": "rfi",
+      "title": "What did '27) dont worry about it' mean for the six uncommitted files?",
+      "question": "R874d-27 suggested the session agent commit the six working-copy files on a branch with a PR. The plan reads your answer as 'the commander takes care of this' and blocks WP-1 and WP-2 on it (gate G1). WP-1 does not touch those files (OBS-21).",
+      "suggestion": "WP-1 starts without G1; WP-2 waits for G1 and raises an RFI if it is still open then (PRO-21).",
+      "status": "open"
+    },
+    {
+      "id": "R874d-a4-4", "type": "rfi",
+      "title": "Untrack the single running-estimate export and block harvested briefs, AARs and prompt dumps now?",
+      "question": "nobul-tech/aitools is public. .aitools/channel/running-estimate.json is tracked and was committed on 2026-11-15 with session content; tracked harvesting/ already holds AARs, briefs and dumps of your prompts (OBS-5, OBS-6). The plan retires the export only in WP-5.",
+      "suggestion": "One small PR now: git rm --cached the export, add it and the harvesting patterns of PRO-6 to .gitignore. Leave the already-published files and history as they are unless you order a history rewrite, which is destructive and yours to decide.",
+      "status": "open"
+    },
+    {
+      "id": "R874d-a4-5", "type": "rfi",
+      "title": "May the harness add .aitools/ and .scratch/ to .git/info/exclude in every repo it runs in?",
+      "question": "In repos other than aitools nothing ignores them, so the per-session export and every brief are one 'git add -A' away from a commit (OBS-7). info/exclude is local to the clone and never committed.",
+      "suggestion": "Yes, at SessionStart, reported once per repo (PRO-7).",
+      "status": "open"
+    }
+  ]
+}

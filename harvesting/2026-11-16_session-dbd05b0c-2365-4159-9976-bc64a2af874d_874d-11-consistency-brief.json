@@ -1,0 +1,355 @@
+{
+  "provenance": {
+    "document": "mission-brief",
+    "schema_version": 1,
+    "version": "v1.0",
+    "mission": "874d-11-consistency",
+    "session_id": "dbd05b0c-2365-4159-9976-bc64a2af874d",
+    "session_db": "",
+    "session_scratch": "/Users/new-jose/repos/aitools/.scratch/session-dbd05b0c-2365-4159-9976-bc64a2af874d",
+    "written_by": {
+      "agent_id": "dbd05b0c-2365-4159-9976-bc64a2af874d",
+      "agent_type": "session",
+      "mission": null
+    },
+    "chain_of_command": [
+      "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl"
+    ],
+    "created_at": "2026-11-16T02:15:55Z"
+  },
+  "identity": {
+    "name": "874d-11-consistency",
+    "level": 1,
+    "delegated_by": "session agent dbd05b0c-2365-4159-9976-bc64a2af874d",
+    "parallel_missions": []
+  },
+  "intent": {
+    "purpose": "Consistency and formal register: report every defect of RFC 0011 v1.4 in this lens, with its line and exact replacement text, so the session agent can bring the RFC to formal software-engineering specification quality; the relaunch of mission 874d-8, which an API safeguard stopped",
+    "scope": "/Users/new-jose/repos/aitools/rfcs/RFC-0011-structured-reports.md, every line, in this lens only",
+    "out_of_scope": [
+      "editing any repository file",
+      "the defects missions 874d-7 and 874d-9 reported, which v1.4 applies",
+      "the commander's decisions and quotations",
+      "the plan and the brief"
+    ],
+    "audience": "the session agent dbd05b0c, which applies the fixes, and the commander"
+  },
+  "objectives": [
+    {
+      "id": "OBJ-1",
+      "type": "objective",
+      "text": "veerify the language you use and each line in the rfc line by line verbatim against formal best-practices for SWE.",
+      "source": {
+        "kind": "commander",
+        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl L4045"
+      },
+      "quote": "veerify the language you use and each line in the rfc line by line verbatim against formal best-practices for SWE."
+    },
+    {
+      "id": "OBJ-2",
+      "type": "objective",
+      "text": "Review RFC 0011 v1.4 line by line for consistency and formal register: every defined term used with one meaning and every term used defined; one name per concept (no synonyms); every section, clause, table, decision id (D874d-<n>, D-DEL<n>) and settled-point id (S-<n>) reference resolves and supports what the sentence says; tables and prose agree; clause numbering is continuous; identifiers are in code format; abbreviations are expanded on first use; and the register is formal technical English (no colloquialisms, contractions, rhetorical phrasing, first person or informal intensifiers). Work in five batches, in this order: sections 1 and 2; 3.1 and 3.2; 3.3 to 3.5; 3.6 to 3.9; sections 4 to 10 and appendix A. After each batch, write your AAR file as a new version holding every finding so far. Report each defect with the RFC line and the exact replacement text.",
+      "source": {
+        "kind": "agent",
+        "location": "session agent dbd05b0c-2365-4159-9976-bc64a2af874d, this brief; the relaunch the commander ordered: /Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl L4523"
+      }
+    }
+  ],
+  "constraints": [
+    {
+      "text": "Read-only: do not edit, commit or push any repository file, and do not comment on or edit any issue or PR. Write only in your scratch directory and your AAR file.",
+      "source": {
+        "kind": "agent",
+        "location": "session agent dbd05b0c"
+      }
+    },
+    {
+      "text": "Review in the five batches of OBJ-2, in order. After each batch, write your AAR file as a new version (provenance.version v1.0, v1.1, ...) holding every finding so far, before you start the next batch.",
+      "source": {
+        "kind": "agent",
+        "location": "mission 874d-10-consistency-forensics PRO-2 (/Users/new-jose/repos/aitools/.scratch/session-dbd05b0c-2365-4159-9976-bc64a2af874d/874d-10-consistency-forensics-aar.json)"
+      }
+    },
+    {
+      "text": "Do not alter a quotation of the commander: quoted text keeps its spelling, spacing and punctuation. Propose changes to the RFC's own prose only.",
+      "source": {
+        "kind": "agent",
+        "location": "/Users/new-jose/repos/aitools/rfcs/RFC-0011-structured-reports.md section 2; D-DEL6"
+      }
+    },
+    {
+      "text": "Do not reopen the commander's decisions (D874d-<n>); a decision you judge unsound is a proposal, not a defect.",
+      "source": {
+        "kind": "agent",
+        "location": "/Users/new-jose/repos/aitools/rfcs/RFC-0011-structured-reports.md, Status of this memo"
+      }
+    },
+    {
+      "text": "Do not repeat a defect that RFC 0011 v1.4 already fixes: v1.4 applied the proposals of missions 874d-7 and 874d-9 (their AAR files are reference artifacts). Report only what v1.4 still has.",
+      "source": {
+        "kind": "agent",
+        "location": "session agent dbd05b0c"
+      }
+    },
+    {
+      "text": "Cite every defect by its RFC line number, as read from disk when you start, and quote the text; every proposal gives the exact old text and new text, the old text occurring exactly once in the RFC.",
+      "source": {
+        "kind": "agent",
+        "location": "session agent dbd05b0c"
+      }
+    },
+    {
+      "text": "Fetch issue nobul-tech/aitools#180 yourself (gh issue view 180 --repo nobul-tech/aitools, with and without --comments; body v5.5 or later); do not use the copies in the 874d-8 scratch directory, which are stale.",
+      "source": {
+        "kind": "agent",
+        "location": "mission 874d-10-consistency-forensics OBS-6 and PRO-4"
+      }
+    },
+    {
+      "text": "Stop every background shell and monitor you start before you hand back.",
+      "source": {
+        "kind": "agent",
+        "location": "/Users/new-jose/.claude/skills/delegate/SKILL.md"
+      }
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "ASM-1",
+      "type": "assumption",
+      "text": "RFC 0011 does not change on disk while you review it: the session agent waits for you",
+      "status": "unverified",
+      "confidence": "high",
+      "evidence": "the session agent's plan for this turn",
+      "impact_if_false": "a line number you cite no longer matches; re-read the file and cite again",
+      "source": {
+        "kind": "agent",
+        "location": "session agent dbd05b0c-2365-4159-9976-bc64a2af874d"
+      }
+    }
+  ],
+  "decisions": [
+    {
+      "id": "D874d-75",
+      "type": "decision",
+      "text": "The consistency review is relaunched fresh, on Sonnet with high effort",
+      "decided_by": "commander",
+      "date": "2026-11-16",
+      "source": {
+        "kind": "commander",
+        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl L4523"
+      },
+      "quote": "46) yes, relaunch fresh, yes try sonnet 5.5 1M context with high effot",
+      "status": "decided"
+    }
+  ],
+  "operational_learning": [
+    {
+      "id": "OL-1",
+      "type": "operational_learning",
+      "text": "Mission 874d-8, given this lens on RFC 0011 v1.3, was stopped by an API safety classifier (category reasoning_extraction) during two long turns that held only reasoning, and left no findings: write findings to your AAR file after each batch, so a stop loses at most one batch",
+      "source": {
+        "kind": "telemetry",
+        "location": "/Users/new-jose/repos/aitools/.scratch/session-dbd05b0c-2365-4159-9976-bc64a2af874d/874d-10-consistency-forensics-aar.json OBS-9"
+      }
+    },
+    {
+      "id": "OL-2",
+      "type": "operational_learning",
+      "text": "874d-8's scan.pl flags candidate register defects per RFC line (contraction, first-person, informal, lowercase RFC 2119 keyword, abbreviation, placeholder, synonym) after dropping double-quoted text. Re-run it on v1.4: its old scan.log no longer matches the line numbers. Its contraction hits are possessives, not contractions",
+      "source": {
+        "kind": "artifact",
+        "location": "/Users/new-jose/repos/aitools/.scratch/session-dbd05b0c-2365-4159-9976-bc64a2af874d/874d-10-consistency-forensics-aar.json OBS-4, OBS-5"
+      }
+    },
+    {
+      "id": "OL-3",
+      "type": "operational_learning",
+      "text": "RFC 8174 section 2, read in the browser on 2026-11-16: key words have their RFC 2119 meaning \"when, and only when, they appear in all capitals, as shown here\"; RFC 0011 v1.4 adopts that phrase in section 2",
+      "source": {
+        "kind": "telemetry",
+        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d/subagents/agent-af0c5e479d52a9629.jsonl L135"
+      }
+    },
+    {
+      "id": "OL-4",
+      "type": "operational_learning",
+      "text": "In zsh an unquoted glob such as grep --include=*.meta.json fails with 'no matches found'. Your own agentId: grep -rl \"874d-11-consistency:\" in the parent session's subagents directory",
+      "source": {
+        "kind": "telemetry",
+        "location": "/Users/new-jose/repos/aitools/.scratch/session-dbd05b0c-2365-4159-9976-bc64a2af874d/874d-10-consistency-forensics-aar.json OL-1"
+      }
+    },
+    {
+      "id": "OL-5",
+      "type": "operational_learning",
+      "text": "The harvester copies top-level scratch files into the tracked harvesting/ of a public repo: save copies of the issue or the transcript under a .tmp name",
+      "source": {
+        "kind": "artifact",
+        "location": "/Users/new-jose/repos/aitools/rfcs/RFC-0011-structured-reports.md section 7"
+      }
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "/Users/new-jose/.claude/CLAUDE.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/.claude/rules/delegation.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/.claude/rules/prompt-turn.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/.claude/rules/scratch.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/.claude/rules/tool-evaluation.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/.claude/rules/tool-lifecycle.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/.claude/rules/tool-ops.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/.claude/rules/web-sources.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/CLAUDE.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/.aitools/channel/CLAUDE.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/.claude/rules/agentic-standards.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/.claude/rules/aitools-workspace.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/.claude/rules/config-file-safety.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/.claude/rules/cross-platform.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/.claude/rules/deploy-paths.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/.claude/rules/documentation-standards.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/.claude/rules/frameworks.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/.claude/rules/git-safety.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/.claude/rules/glossary.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/.claude/rules/governed-data-access.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/.claude/rules/hook-lifecycle.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/.claude/rules/hook-rollout.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/.claude/rules/incident-governance.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/.claude/rules/interactive-menus.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/.claude/rules/managed-file-deployment.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/.claude/rules/script-standards.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/.claude/rules/smoke-test-pattern.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/.claude/skills/delegate/SKILL.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/shared/skills/scratch/SKILL.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/.claude/skills/glossary/SKILL.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/rfcs/RFC-0011-structured-reports.md",
+      "instruction": "read in full"
+    },
+    {
+      "path": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl",
+      "instruction": "use as reference for answers"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/plans/structured-reports/implementation-plan.md",
+      "instruction": "use as reference for answers"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/rfcs/README.md",
+      "instruction": "use as reference for answers"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/rfcs/RFC-0001-workspace-tool-requests.md",
+      "instruction": "use as reference for answers"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/.scratch/session-874d-8-cns/scan.pl",
+      "instruction": "use as reference for answers"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/.scratch/session-dbd05b0c-2365-4159-9976-bc64a2af874d/874d-7-normative-language-aar.json",
+      "instruction": "use as reference for answers"
+    },
+    {
+      "path": "/Users/new-jose/repos/aitools/.scratch/session-dbd05b0c-2365-4159-9976-bc64a2af874d/874d-9-implementer-read-aar.json",
+      "instruction": "use as reference for answers"
+    }
+  ],
+  "deliverables": [
+    {
+      "kind": "aar",
+      "ref": "/Users/new-jose/repos/aitools/.scratch/session-dbd05b0c-2365-4159-9976-bc64a2af874d/874d-11-consistency-aar.json",
+      "objective": "",
+      "text": "your AAR: JSON in the AAR schema of RFC 0011 3.4, the last fenced json block of your final message, and the same JSON in this file, written as a new version after each batch"
+    }
+  ]
+}

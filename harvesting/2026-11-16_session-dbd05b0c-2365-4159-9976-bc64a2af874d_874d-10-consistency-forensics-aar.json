@@ -1,0 +1,309 @@
+{
+  "provenance": {
+    "document": "aar",
+    "schema_version": 1,
+    "version": "v1.0",
+    "mission": "874d-10-consistency-forensics",
+    "agent_id": "a510237036541bfea",
+    "session_id": "dbd05b0c-2365-4159-9976-bc64a2af874d",
+    "brief": "/Users/new-jose/repos/aitools/.scratch/session-dbd05b0c-2365-4159-9976-bc64a2af874d/874d-10-consistency-forensics-brief.json",
+    "created_at": "2026-11-16T02:02:58Z"
+  },
+  "objectives": [
+    {
+      "id": "OBJ-1",
+      "type": "objective",
+      "text": "can you launch a mission to look at the transcript of 874d-8-consistency and figure out what happened and if it produced any work product we can use?",
+      "source": {
+        "kind": "commander",
+        "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl L4290"
+      },
+      "quote": "can you launch a mission to look at the transcript of 874d-8-consistency and figure out what happened and if it produced any work product we can use?",
+      "status": "accomplished",
+      "how": "Walked the failed transcript (156 records) with a script that skips every thinking part, read its meta.json, its scratch files and the record metadata of the refused turns, and checked each work product against the current RFC, the current issue 180 and the session scratch. What happened: an API safety classifier stopped two consecutive model turns (category reasoning_extraction), each of which held only thinking, and Claude Code then ended the delegate. Usable: scan.pl, scan.log (as a candidate list) and the RFC 8174 text it read in the browser; not usable: the two issue 180 copies (stale); missing: any finding and any AAR.",
+      "observation_refs": ["OBS-1", "OBS-2", "OBS-3", "OBS-4", "OBS-5", "OBS-6", "OBS-7", "OBS-9"],
+      "deliverables": [
+        {
+          "kind": "aar",
+          "ref": "/Users/new-jose/repos/aitools/.scratch/session-dbd05b0c-2365-4159-9976-bc64a2af874d/874d-10-consistency-forensics-aar.json",
+          "text": "This AAR, also the last json block of the hand-back"
+        }
+      ]
+    },
+    {
+      "id": "OBJ-2",
+      "type": "objective",
+      "text": "Report: (1) the failed delegate's timeline: what it read, ran and wrote, in order, with transcript line numbers and timestamps, up to the last record; (2) what it was doing when it stopped (the last tool call and visible text before the failure), without the thinking blocks; (3) every work product it left: files in its scratch, an AAR file if any, findings in its visible text or tool results, and for each whether it is complete, partial or unusable, and why; (4) what the failure notice and the record metadata establish about the cause, separated from what is unknown; (5) whether a relaunch can start from its work product, and what the relaunch brief should change",
+      "source": {
+        "kind": "agent",
+        "location": "session agent dbd05b0c-2365-4159-9976-bc64a2af874d, this brief"
+      },
+      "status": "accomplished",
+      "how": "(1) timeline: OBS-1; (2) the stop: OBS-2; (3) work products: OBS-3 to OBS-7; (4) cause, established and unknown: OBS-9 and OBS-10; (5) relaunch: PRO-1 to PRO-5 and RFI R874d-10-consistency-forensics-1. Tools: /Users/new-jose/repos/aitools/.scratch/session-874d-10-cf/timeline.py and detail.py (both skip thinking parts, including those replayed inside api-request-blob records), checks.sh.",
+      "deviation_refs": ["DEV-1"],
+      "observation_refs": ["OBS-1", "OBS-2", "OBS-3", "OBS-4", "OBS-5", "OBS-6", "OBS-7", "OBS-8", "OBS-9", "OBS-10"],
+      "deliverables": [
+        {
+          "kind": "file",
+          "ref": "/Users/new-jose/repos/aitools/.scratch/session-874d-10-cf/timeline-400.tmp",
+          "text": "The full thinking-free timeline of agent-af0c5e479d52a9629.jsonl, one entry per record, text truncated at 400 characters"
+        },
+        {
+          "kind": "file",
+          "ref": "/Users/new-jose/repos/aitools/.scratch/session-874d-10-cf/timeline.py",
+          "text": "Timeline reader that skips thinking and redacted_thinking parts"
+        },
+        {
+          "kind": "file",
+          "ref": "/Users/new-jose/repos/aitools/.scratch/session-874d-10-cf/detail.py",
+          "text": "Record-metadata reader for chosen lines; prints part types and non-thinking content only"
+        }
+      ]
+    }
+  ],
+  "ambiguities": [
+    {
+      "id": "AMB-1",
+      "type": "ambiguity",
+      "text": "if it produced any work product we can use",
+      "source": "OBJ-1, the commander, parent transcript L4290",
+      "readings": [
+        "work product that can be applied to RFC 0011 as it stands (finished findings with replacement text)",
+        "work product a relaunch of the consistency review can start from"
+      ],
+      "resolution": "Both readings answered: nothing for the first (no finding was ever written down, OBS-3), three items for the second (OBS-4, OBS-5, OBS-7)",
+      "resolved_by": "reason",
+      "evidence": "OBJ-2 parts (3) and (5) ask for both",
+      "status": "resolved"
+    },
+    {
+      "id": "AMB-2",
+      "type": "ambiguity",
+      "text": "Do not read, print or quote the thinking blocks of the failed transcript",
+      "source": "brief constraint 3 and the delegation prompt, 'Critical constraints'",
+      "readings": [
+        "reporting any property of a thinking part (its count, token count, duration) is reading it",
+        "the content is out of bounds; record metadata about it (types, timestamps, sizes) is allowed"
+      ],
+      "resolution": "Second reading: this AAR reports part types, thinking_tokens, thinkingDurationMs and stop_details, never content. The brief allows 'the record metadata (types, timestamps, sizes)'",
+      "resolved_by": "read",
+      "evidence": "brief constraint 3: 'Work only from its tool calls, tool results, visible text, the files it wrote and the record metadata (types, timestamps, sizes)'",
+      "status": "resolved"
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "ASM-1",
+      "type": "assumption",
+      "text": "The failed delegate's transcript and scratch files are complete and no longer written to",
+      "status": "verified",
+      "confidence": "high",
+      "evidence": "meta.json has \"finished\":true (not present when 874d-8 read it at its L82); the transcript has 156 records, 2021082 bytes, mtime 17:54 local (01:54Z), the time of its last record L156 (2026-11-16T01:54:33.078Z); the scratch files' mtimes (17:48-17:49 local) match the tool calls that wrote them (L87, L98, L142, L145)",
+      "impact_if_false": "a later record changes the timeline",
+      "source": {
+        "kind": "agent",
+        "location": "session agent dbd05b0c-2365-4159-9976-bc64a2af874d"
+      }
+    },
+    {
+      "id": "ASM-2",
+      "type": "assumption",
+      "text": "RFC 0011 has not changed since 874d-8 scanned it, so the line numbers in scan.log still match the file",
+      "status": "verified",
+      "confidence": "high",
+      "evidence": "RFC mtime 2026-11-15 17:46:19 local (01:46:19Z); scan.log written 17:49:47 local, the time of L145 (01:49:47Z); checked at 2026-11-16T02:02Z",
+      "impact_if_false": "scan.log line numbers drift; re-run scan.pl",
+      "source": {
+        "kind": "agent",
+        "location": "874d-10-consistency-forensics"
+      }
+    }
+  ],
+  "deviations": [
+    {
+      "id": "DEV-1",
+      "type": "deviation",
+      "from": {
+        "kind": "brief",
+        "ref": "intent.scope",
+        "text": "the failed delegate's transcript (/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d/subagents/agent-af0c5e479d52a9629.jsonl), its meta.json, its scratch directory (/Users/new-jose/repos/aitools/.scratch/session-874d-8-cns/), and its expected AAR path"
+      },
+      "text": "Also read, read-only: the current issue 180 (gh issue view 180, updatedAt and body), the session scratch's issue 180 body versions (cmp and diff only), the parent session transcript at the lines that mention af0c5e479d52a9629 (grep, timestamps only), RFC 0011 section 3.4 for the AAR schema, and the file listing of the session scratch",
+      "cause": "initiative",
+      "why": "To judge whether the issue 180 copies are usable (OBJ-2 part 3) they had to be compared with the current issue; the parent lines date the launch, the correction and the notice. No file outside my scratch and my AAR was written",
+      "effect": "OBJ-2 part 3 has a verified staleness verdict (OBS-6); no effect on other missions",
+      "objective_refs": ["OBJ-2"],
+      "observation_refs": ["OBS-6"]
+    }
+  ],
+  "observations": [
+    {
+      "id": "OBS-1",
+      "type": "observation",
+      "text": "Timeline of agent af0c5e479d52a9629 (874d-8-consistency), transcript line: UTC time: action. Parent L4146 01:48:22.527Z: launch (background, general-purpose, spawnDepth 1). L1 01:48:22.518Z: prompt received. L18 01:48:25.094Z: Skill delegate. L25 01:48:25.724Z: Read its brief. L33-L46 01:48:29.561Z-01:48:32.268Z: Read RFC 0011 (truncated at lines 1-653 by the 25000-token cap, L54), documentation-standards.md, tool-evaluation.md, tool-lifecycle.md, hook-rollout.md, shared/skills/scratch/SKILL.md, shared/skills/intent-writing/SKILL.md; L53: deploy-paths.md, config-file-safety.md, hook-lifecycle.md, managed-file-deployment.md injected as path-scoped system reminders. L56 01:48:34.544Z: Read RFC lines 654-794 (RFC now read in full). L58: Skill scratch. L66 01:48:38.035Z: mkdir .scratch/session-874d-8-cns. L67: grep --include=*.meta.json, failed with '(eval):1: no matches found: --include=*.meta.json' (L71). L68: Read .claude/skills/glossary/SKILL.md. L73 01:48:40.894Z: grep -rl found its own meta.json. L76: the session agent's correction delivered (sent at parent L4175, 01:48:37.463Z). L79 01:48:43.109Z: Read .aitools/channel/CLAUDE.md. L81: Read its meta.json. L87 01:48:49.327Z: gh issue view 180 --comments > issue-180.tmp. L90: grep D874d- in it. L94: Read issue-180.tmp (limit 400). L98 01:48:57.967Z: gh issue view 180 body > issue-180-body.tmp. L101: grep headings and decision rows. L105 01:49:03.371Z: grep D-DEL rows in shared/rules/delegation.md. L109: ls .scratch/. L113: ToolSearch chrome-devtools tools. L120: Skill chrome-devtools. L125 01:49:16.877Z: new_page https://www.rfc-editor.org/rfc/rfc8174.txt (page 4). L128, L131, L134: evaluate_script reads of RFC 8174 section 2. L138 01:49:29.993Z: close_page 4. L142 01:49:45.102Z: Write scan.pl. L145 01:49:47.410Z: perl scan.pl RFC > scan.log. L148 01:49:49.409Z: grep -v placeholder|abbrev|synonym scan.log. L149 01:49:49.492Z: its result (4020 characters). L150 01:49:49.538Z: next model request. L151 01:52:14.214Z: refusal. L152: Claude Code meta message. L154 01:52:14.250Z: retry request. L155 01:54:33.077Z: refusal. L156 01:54:33.078Z: synthetic API error; agent ends. Parent L4281/L4283 01:54:33.082Z/01:54:33.095Z: task notification. Parent L4290 01:59:09.264Z: the commander's question. Total run 6 min 11 s: tool work about 1 min 27 s, then 4 min 44 s in the two refused turns",
+      "evidence": "/Users/new-jose/repos/aitools/.scratch/session-874d-10-cf/timeline-400.tmp (python3 timeline.py <transcript> 400); parent timestamps from perl over the parent transcript lines 4146, 4175, 4178, 4283, 4290",
+      "incident": false
+    },
+    {
+      "id": "OBS-2",
+      "type": "observation",
+      "text": "What it was doing when it stopped: its last tool call was L148, grep -v \"placeholder\\|abbrev\\|synonym\" on scan.log, filtering its heuristic scan of the RFC down to the contraction, informal and lower-2119 categories; L149 returned that list. The next turn (L151) and its retry (L155) each contain one content part, of type thinking, and nothing else: no visible text, no tool_use. The whole transcript contains no visible assistant text at all: every assistant record holds only thinking or tool_use parts. So it stopped after collecting candidate lines and before it had written any finding anywhere",
+      "evidence": "timeline-400.tmp L148-L156; detail.py L151 'part types: [thinking]', L155 'part types: [thinking]'",
+      "incident": false
+    },
+    {
+      "id": "OBS-3",
+      "type": "observation",
+      "text": "No AAR file exists and no finding was recorded: the expected file /Users/new-jose/repos/aitools/.scratch/session-dbd05b0c-2365-4159-9976-bc64a2af874d/874d-8-consistency-aar.json is absent, it never called SubagentHandback, and its only Write was scan.pl. The content of the two refused turns was withheld by the API (L152: 'The rest of it was withheld, and tool calls in it that had not finished did not run') and is not recoverable from the record",
+      "evidence": "checks.sh: 'ls: .../874d-8-consistency-aar.json: No such file or directory'; tool_use list in timeline-400.tmp (Write only at L142); L152 text",
+      "incident": false
+    },
+    {
+      "id": "OBS-4",
+      "type": "observation",
+      "text": "scan.pl (/Users/new-jose/repos/aitools/.scratch/session-874d-8-cns/scan.pl, 1416 bytes, 32 lines): complete and runnable; usable as a lead generator, not as a verdict. It flags seven categories per RFC line after dropping double-quoted text on that line: contraction, first-person, informal, lower-2119, abbrev, placeholder, synonym. Limits: its contraction pattern includes 's, so every 'contraction' hit in scan.log is a possessive (commander's, session's, DB's ...), not a contraction; quote stripping works within one line only; it checks no cross-reference, table-prose agreement, clause numbering or term definition. Its first-person check reported no hit, which agrees with grep -nwE 'we|our|us|I|my|me' on the RFC (no match)",
+      "evidence": "scan.pl lines 9-15 and 21; scan.log; checks.sh first-person grep output '(none)'",
+      "incident": false
+    },
+    {
+      "id": "OBS-5",
+      "type": "observation",
+      "text": "scan.log (/Users/new-jose/repos/aitools/.scratch/session-874d-8-cns/scan.log, 10723 bytes, 365 lines): partial. It is the raw candidate list of scan.pl over RFC 0011 as it is on disk now (ASM-2): line number, category, matched words. It holds no triage, no replacement text and no reference checks, so it covers only the register part of the 874d-8 lens, and only as candidates (for example 'lower-2119' hits such as L71 'must' and L145 'may, must' still need a reviewer's judgement of whether the lowercase word is meant normatively)",
+      "evidence": "scan.log lines 1-365; L145 of the failed transcript wrote it at 01:49:47Z",
+      "incident": false
+    },
+    {
+      "id": "OBS-6",
+      "type": "observation",
+      "text": "issue-180.tmp (40571 bytes; gh issue view 180 --comments at L87, 01:48:49Z) and issue-180-body.tmp (63593 bytes; the body at L98, 01:48:57Z): unusable as sources now. Issue 180 was updated at 2026-11-16T01:49:41Z, after both fetches, and its current body states 'Body version. v5.5 (2026-11-16, session dbd05b0c)'. issue-180-body.tmp differs from the session's issue-180-body-v5.4-final.md.tmp by 2 diff lines and from issue-180-body-v5.5.md.tmp by 37, so it is the v5.4 body. Whether the comments copy is also stale was not checked (the session scratch has issue-180-comment-history.md.tmp at 17:49 local). Both copies carry the commander's words and are correctly named .tmp (not harvested)",
+      "evidence": "gh issue view 180 --json updatedAt: 2026-11-16T01:49:41Z; gh issue view 180 body preview; checks.sh cmp/diff output",
+      "incident": false
+    },
+    {
+      "id": "OBS-7",
+      "type": "observation",
+      "text": "Its browser read of RFC 8174 is a usable verified citation, held in tool results L129, L132 and L135 (read through chrome-devtools on https://www.rfc-editor.org/rfc/rfc8174.txt, 2026-11-16T01:49:20Z-01:49:25Z). L135 returned verbatim: 'described in BCP 14 [RFC2119] [RFC8174] when, and only when, they\\n      appear in all capitals, as shown here.' L132 holds the start of the section 2 '=== NEW ===' text. No other standard (RFC 2119, RFC 7322, ISO/IEC/IEEE 29148) was read; an ISO OBP page (page 3) was already open in the shared browser and was not touched by 874d-8",
+      "evidence": "timeline-400.tmp L125-L139",
+      "incident": false
+    },
+    {
+      "id": "OBS-8",
+      "type": "observation",
+      "text": "The session agent's correction (L76: read 11 more files and record the omission as a brief deviation) was already satisfied before the stop: 6 of the files were in its initial context (L14 'Contents of' list: agentic-standards, git-safety, incident-governance, interactive-menus, script-standards, smoke-test-pattern), 4 were injected at L53 as path-scoped reminders (config-file-safety, deploy-paths, hook-lifecycle, managed-file-deployment), and it read .aitools/channel/CLAUDE.md at L79. The deviation it was told to record was never written (no AAR)",
+      "evidence": "checks.sh 'Contents of' list from L14; timeline-400.tmp L53, L76, L79",
+      "incident": false
+    },
+    {
+      "id": "OBS-9",
+      "type": "observation",
+      "text": "Cause, as far as the record establishes it. ESTABLISHED: (a) two consecutive model responses were stopped with stop_reason 'refusal' and stop_details {type 'refusal', category 'reasoning_extraction', explanation 'This request was blocked as it seems to violate Anthropic's Terms of Service restrictions on reverse engineering or duplicating model outputs. To learn more, visit https://www.anthropic.com/legal/commercial-terms.'}: L151 (requestId req_011Ch5mTzbtgHegMaUqpy8Xh, message msg_011Ch5mTzjLL4Ry53j5FaGsk, serverClassifierRequest 32a5980a-e21e-4813-bdab-82ee05557cea) and L155 (requestId req_011Ch5mefJ6kSLRCLQhLBckr, message msg_011Ch5meffAjCZZz6hixYeL5, serverClassifierRequest 07e8f504-dcf3-4d6b-b0b8-d297585ffbe0); (b) the stops came during generation, not on the request: L151 had generated 15733 output tokens, all thinking_tokens, over thinkingDurationMs 143538; L155 14738, all thinking, over 137913 ms; both requests were accepted with about 232k input tokens (cache_read 230911 and 232566); (c) after the first refusal Claude Code added the meta message L152 ('Do not produce that content again, even reworded') and the loop called the model again; after the second, Claude Code wrote the synthetic error L156 (isApiErrorMessage true, error 'invalid_request', model '<synthetic>', refusedMessageId msg_011Ch5meffAjCZZz6hixYeL5) and ended the agent; (d) request settings were model claude-opus-5-5, effort high, thinking adaptive with display 'updates', max_tokens 128000, Claude Code 2.1.325 (L150, L154). UNKNOWN: what in the generated content the classifier matched (that would need the thinking, which is out of bounds); whether it was a false positive (the error text itself says 'This sometimes happens with safe, normal conversations'); whether a relaunch on the same inputs will be flagged again",
+      "evidence": "detail.py output for L150, L151, L152, L154, L155, L156",
+      "incident": false
+    },
+    {
+      "id": "OBS-10",
+      "type": "observation",
+      "text": "The failure notice the session agent received quotes only the second request id (req_011Ch5mefJ6kSLRCLQhLBckr). The first refusal (req_011Ch5mTzbtgHegMaUqpy8Xh, L151) appears only in the transcript. Context, not cause: the parallel reviewer 874d-7-normative-language, launched from the same session with an equivalent brief and the same rules, has an AAR file (874d-7-normative-language-aar.json, 161114 bytes, 18:00 local) in the session scratch listing; its content was not opened",
+      "evidence": "the delegation prompt's failure quote; detail.py L151; ls -la of the session scratch",
+      "incident": false
+    },
+    {
+      "id": "OBS-11",
+      "type": "observation",
+      "text": "The deployed /Users/new-jose/.claude/skills/scratch/SKILL.md differs from the repo's shared/skills/scratch/SKILL.md at line 185 (the repo copy adds the /handoff note to 'Never put carry-forward artifacts in scratch'); the deployed copy lags the repo",
+      "evidence": "diff of the two files: '185,186c185,188'",
+      "severity": "low",
+      "incident": false
+    }
+  ],
+  "operational_learning": [
+    {
+      "id": "OL-1",
+      "type": "operational_learning",
+      "text": "In this zsh, an unquoted glob in grep --include=*.meta.json is expanded by the shell and fails with 'no matches found'. Use grep -rl \"<mission name>:\" <subagents dir>/ (the description is followed by a colon) without --include. Both 874d-8 (its L67, L71) and this mission hit it",
+      "observation_refs": ["OBS-1"]
+    },
+    {
+      "id": "OL-2",
+      "type": "operational_learning",
+      "text": "A safety-classifier refusal in a delegate gives it exactly two attempts: Claude Code injects a meta message and the model is called again; a second refusal ends the delegate with a synthetic API error. Anything the delegate held only in its context is lost; only files it wrote survive. Delegates on long analytic missions should write their work product to disk in batches",
+      "observation_refs": ["OBS-2", "OBS-3", "OBS-9"]
+    },
+    {
+      "id": "OL-3",
+      "type": "operational_learning",
+      "text": "Refusal forensics need no thinking content: the refused assistant record carries message.stop_reason, message.stop_details (type, category, explanation), message.usage.output_tokens_details.thinking_tokens, top-level thinkingDurationMs, requestId and serverClassifierRequest; the synthetic error record carries isApiErrorMessage, error and refusedMessageId; the meta user record carries refusedMessageId. api-request-blob records replay earlier turns, thinking parts included, so a thinking-free reader must skip thinking parts in those records too",
+      "observation_refs": ["OBS-9"]
+    }
+  ],
+  "proposals": [
+    {
+      "id": "PRO-1",
+      "type": "proposal",
+      "what": "Relaunch 874d-8's lens as a fresh delegate (a new mission name), not by resuming af0c5e479d52a9629 with SendMessage",
+      "why": "A resume continues the same conversation, which already holds two refused turns; the retry on that context (L154) was refused again (L155). A fresh delegate starts without them. Its work product is small enough that nothing is lost by starting over (OBS-3 to OBS-7)",
+      "barrier_analysis": "Would not have prevented the first refusal; avoids repeating the context that was refused twice",
+      "affected": ["the relaunch brief and prompt"],
+      "observation_refs": ["OBS-2", "OBS-9"],
+      "disposition": "proposed"
+    },
+    {
+      "id": "PRO-2",
+      "type": "proposal",
+      "what": "Add to the relaunch brief a constraint to review RFC 0011 in batches of one or two sections (for example: sections 1-2; 3.1-3.2; 3.3-3.5; 3.6-3.9; 4-10 and Appendix A) and to write the AAR file after each batch as a new version (v1.0, v1.1, ...), with that batch's findings, before starting the next",
+      "why": "874d-8 spent its whole remaining run (4 min 44 s, about 30k thinking tokens in two turns) in a single step that was to produce the whole review, and lost all of it. /delegate already asks for commits after every batch because usage limits stop missions mid-work; the same holds for this kind of stop",
+      "barrier_analysis": "Would have preserved every completed batch. Whether smaller turns lower the chance of a classifier flag is unknown (OBS-9)",
+      "affected": ["the relaunch brief (constraints, deliverables)"],
+      "observation_refs": ["OBS-2", "OBS-3", "OBS-9"],
+      "disposition": "proposed"
+    },
+    {
+      "id": "PRO-3",
+      "type": "proposal",
+      "what": "Seed the relaunch with 874d-8's usable products: list /Users/new-jose/repos/aitools/.scratch/session-874d-8-cns/scan.pl and scan.log as 'use as reference for answers' artifacts, with the caveats of OBS-4 and OBS-5 in operational_learning (contraction hits are possessives; re-run scan.pl if the RFC mtime is later than 2026-11-15 17:46:19 local), and carry the RFC 8174 text of OBS-7 as operational learning with its source (transcript af0c5e479d52a9629 L135)",
+      "why": "Saves the relaunch about 1.5 minutes of setup and one browser read; the scan is a fair first pass for the register half of the lens",
+      "barrier_analysis": "n/a (efficiency, not prevention)",
+      "affected": ["the relaunch brief (artifacts, operational_learning)"],
+      "observation_refs": ["OBS-4", "OBS-5", "OBS-7"],
+      "disposition": "proposed"
+    },
+    {
+      "id": "PRO-4",
+      "type": "proposal",
+      "what": "Tell the relaunch to fetch issue 180 itself (current body v5.5) and not to use issue-180.tmp or issue-180-body.tmp; and give it the brief artifact list of 874d-10 (which already includes the 10 project rules and .aitools/channel/CLAUDE.md that 874d-8's brief omitted), so no correction message is needed",
+      "why": "The copies are stale (OBS-6); the correction at L76 arrived mid-run (OBS-8)",
+      "barrier_analysis": "Prevents work from a stale specification and the brief deviation 874d-8 was told to record",
+      "affected": ["the relaunch brief (artifacts, prompt body)"],
+      "observation_refs": ["OBS-6", "OBS-8"],
+      "disposition": "proposed"
+    },
+    {
+      "id": "PRO-5",
+      "type": "proposal",
+      "what": "Add to the /delegate skill ('Duties to brief into the delegate' or 'Environment limits'): an analytic delegate writes its AAR file incrementally, one version per batch, because a classifier refusal ends a delegate after two attempts and discards what was only in context (OL-2)",
+      "why": "Generalizes PRO-2 so every review mission keeps its partial results",
+      "barrier_analysis": "Would have left 874d-8's completed batches on disk",
+      "affected": ["shared/skills/delegate/SKILL.md"],
+      "observation_refs": ["OBS-3", "OBS-9"],
+      "disposition": "proposed"
+    }
+  ],
+  "rfis": [
+    {
+      "id": "R874d-10-consistency-forensics-1",
+      "type": "rfi",
+      "title": "Relaunch the consistency and register review of RFC 0011, and on which model",
+      "question": "874d-8-consistency left no findings (OBS-3); its lens (consistency and formal register) is not covered by 874d-7 or 874d-9 by scope. The cause of the stop is an API classifier refusal of category reasoning_extraction whose trigger is unknown (OBS-9). Should the session agent relaunch the lens now as a fresh delegate, on the same model, with the batched brief of PRO-1 to PRO-4?",
+      "suggestion": "Yes: relaunch fresh on claude-opus-5-5 with PRO-1 to PRO-4 applied. If it is refused again, stop it and bring the model choice back to you rather than retry a third time (the error text offers a different model with /model).",
+      "status": "open"
+    },
+    {
+      "id": "R874d-10-consistency-forensics-2",
+      "type": "rfi",
+      "title": "Report the two refusals to Anthropic as a possible false positive",
+      "question": "The error text says 'This sometimes happens with safe, normal conversations' and points to /feedback. Do you want feedback sent with both request ids (req_011Ch5mTzbtgHegMaUqpy8Xh and req_011Ch5mefJ6kSLRCLQhLBckr), given that the mission was a read-only review of the repo's own RFC?",
+      "suggestion": "Yes, by you through /feedback in this session (an outward-facing action, so not done by an agent); include both request ids and the mission's purpose, nothing from the thinking.",
+      "status": "open"
+    }
+  ]
+}

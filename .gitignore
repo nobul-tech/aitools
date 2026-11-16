@@ -53,8 +53,7 @@ desktop.ini
 
 # Runtime session data (selective — tracked paths unblocked per D-GITIGNORE-FIX)
 .aitools/scratch/
-.aitools/channel/session-*/
-.aitools/channel/.current-session
+.aitools/channel/
 .aitools/.current-session
 .aitools/.dashboard-pid
 

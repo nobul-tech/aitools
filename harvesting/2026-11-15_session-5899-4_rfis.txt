@@ -1,0 +1,445 @@
+=== A1 ts=2026-11-15T19:22:06.110Z len=5771
+I didn't change any code. It's two library behaviours working together: the yellow on those five rows isn't a fault in node.js, Claude Code or the claude rules and skills. Each row is a green OK that the library turned yellow because some other step had logged a warning earlier in the same script, and the text was never changed to say why.
+
+### RCA: summary rows turn yellow with no reason
+
+**Immediate cause:** `write_summary` in `scripts/aitools-lib.sh` (and `Write-Summary` in `aitools-lib.ps1`, the Windows twin) changes any OK row to WARN when the calling script's warning count is above zero:
+
+```bash
+# Auto-promote OK to WARN when warnings have been logged
+if [ "$cat" = "OK" ] && [ "${WARNINGS:-0}" -gt 0 ]; then
+    cat="WARN"
+fi
+```
+
+It changes only the colour. The text stays as the caller wrote it, so you see `[!] node.js v26.3.1`.
+
+**Where the warning came from in your run** (from `~/.aitools/logs/deploy.log`, 19:16 to 19:19Z):
+
+| Rows turned yellow | Script | Warning that set the count | Already shown as |
+|---|---|---|---|
+| node.js, claude code | `aitools-install.sh` (writes both rows itself, steps 8 and 9) | Step 5: `[setup-user-config] [warn] config: Run: aitools user init (registers this machine)` | the ACTION line "Run: aitools user init" |
+| claude rules, claude skills | `setup-user-claude.sh` | `[warn] Skipped: CLAUDE.md (local differs from source; reviewed again next run)` | its own `claude.md skipped (user review)` row |
+
+Why node.js and claude code went yellow: the installer runs `setup-user-config` as a child script through `run_child_relayed`. Since commit `693a7e7d` (2026-10-22, the child-log relay), each `[warn]` line the child prints also adds 1 to the **parent's** count (`_aitlib_relay_line`: `WARNINGS=$((WARNINGS + 1))`; the Windows twin does the same with `$script:warnings++`). The installer's count went to 1 at step 5. Every OK row it wrote after that turned yellow. The log confirms it: `[aitools-install] [warn] COMPLETED with 1 warning(s)`, although the installer logged no warning of its own.
+
+**Contributing factors:**
+1. **The promotion has no context** (prevention). Commit `a88e2e4f` (v0.45.2, 2026-03-06) added it as a library-wide fix so that "OK" could not hide warnings. It looks only at the script's running total, not at which step warned, and it never rewrites the text.
+2. **The relay counts the child's warnings twice** (detection). The child script already reports its own warnings in its own rows and ACTION lines. The relay adds them to the parent's count as well, so the same warning shows up again on unrelated parent rows.
+3. **Row order decides the colour.** A row written before the warning stays green, and one written after turns yellow. For example `go` is green although `setup-go` logged 2 warnings, and `aitools config` is green although the "aitools user init" warning came from that same step.
+4. **Nothing checks it** (audit). No check requires a WARN row's text to give its reason.
+
+**Root cause:** WARN is meant to be a statement about one row, with its reason. The code computes it from a count shared by the whole script and leaves the original text in place. The relay then widens that count to cover child scripts.
+
+**Recommended corrective action** (structural, not done yet):
+- Promote a row only if a warning was logged since the previous `write_summary` call, and append the reason to the text, e.g. `v26.3.1 (warn: <last warning>)`.
+- Stop the relay adding child warnings to the parent's count. Keep `AITLIB_CHILD_WARNINGS` for the parent to read.
+- Make the bash and Windows twins match, and add a test that replays this run's order of steps. That should give node.js, claude code, claude rules and claude skills green, with claude.md and the ACTION lines unchanged.
+- **Verification:** with the "aitools user init" warning and the CLAUDE.md skip still present, run `aitools` again and confirm only the rows with their own reason are yellow.
+
+**Recurrence risk:** high. Any warning in any step colours every later row in that script.
+
+**Severity:** High on the incident scale ("silent wrong behavior"). Nothing broke, but the summary tells you something is wrong where nothing is, and gives no reason.
+
+---
+
+--- Turn record ---
+1 Re-read: turns 1-2, both sides | compacted: none
+2 Parse: "find the rca", "/investigate", "dont change any code yet", "summary should state what went wrong"; nothing unresolved
+3 Sources: `aitools-lib.sh`/`.ps1` (`write_summary`, `run_child_relayed`, `_aitlib_relay_line`), `aitools-install.sh`, `setup-user-claude.sh`, deploy.log for this run, git history (`a88e2e4f`, `693a7e7d`)
+4 Resolve: verified both sources of the count from the log and the code; Windows twin same behaviour (code read, not run)
+5 Surface: RFI 5899-1 raised
+6 Process: confirmed from the log lines instead of reasoning from the code alone
+7 Draft: n/a (no files)
+8 Review: one pass; dropped a guessed claim about a compliance step that grep did not find
+9 Files: n/a
+10 Whole: fits the "no code changes" order
+11 Verify: no files written; quotes match the log and the code
+12 Deliver: RCA delivered; next step: file the incident, then fix on a `fix/` branch
+OL: In scripts that run child scripts through the relay, the parent's `WARNINGS` includes the children's warnings, so a parent-written OK row after any child warning turns yellow.
+
+Open RFIs:
+RFI 5899-1: File this RCA as an incident and start the fix?
+The RCA above is only in this conversation; nothing is recorded in the harness yet. Filing it means writing a new entry to the incidents registry with this RCA.
+Suggest: file it via `/incident` (High, spec deviation), then implement the corrective action above on `fix/summary-warn-promotion` with a test. Recording it keeps the RCA and the fix linked.
+=== END
+=== A2 ts=2026-11-15T19:29:32.692Z len=3766
+Both files are now loaded in full:
+
+- `scripts/aitools-lib.sh`: all 4,515 lines
+- `scripts/aitools-lib.ps1`: all 4,786 lines
+
+No other file matches `scripts/aitools-lib*`.
+
+Reading the whole library changes one point in my RCA:
+
+1. **The relay passing child warnings up to the parent is intended, not an accident.** The comment on the child-log relay (`aitools-lib.sh` near line 517, the same text in the `.ps1`) says: *"Every counted warning also increments WARNINGS (it promotes the parent's OK rows, as the child's own rows are)."* So I was wrong to call contributing factor 2 an accidental double count. It is a design decision, and that design is what turned node.js and claude code yellow. Changing it changes documented behaviour, so it is your call, not a bug fix.
+2. **Other code relies on the same blanket rule.** `tool_exception_get` says a failed lookup gets no row of its own because "the warning promotes the caller's OK row to WARN". `_aitlib_rm_tmp` logs a detail line rather than a warning so it won't promote rows. A fix that drops the blanket rule has to give these callers their own WARN row with a reason.
+3. **More places trigger it.** `prompt_diff_review` / `Prompt-DiffReview` log a warning on every forced or non-interactive overwrite (`Diff in ... -- overwriting`), which turns every later OK row in that script yellow.
+4. **A fix must not break menu reads.** `read_menu_choice` / `Read-MenuChoice` treat an empty answer as end of input when the warning count rises during the read. That only looks at whether the count went up, so it survives a per-row change, but a new test should cover it.
+
+The rest of the RCA stands: `write_summary` / `Write-Summary` only change the colour, never the text, so a promoted row shows its old OK text.
+
+---
+
+--- Turn record ---
+1 Re-read: turns 1-3, both sides | compacted: none
+2 Parse: "put all of scripts/aitools-lib* into context": load every match, in full; nothing unresolved
+3 Sources: listed `scripts/` (2 matches); read both files end to end in pages
+4 Resolve: verified both files read with no gaps; found one RCA point that was wrong (factor 2 is intended)
+5 Surface: RFI 5899-1 still open; RFI 5899-2 raised
+6 Process: used the full read to check my earlier RCA instead of only confirming the load
+7 Draft: n/a
+8 Review: one pass; checked each claim against the line it cites
+9 Files: n/a (nothing written)
+10 Whole: reply limited to the load and what it changes
+11 Verify: the quote matches the library comment word for word
+12 Deliver: files loaded; RCA corrected; next step depends on RFI 5899-2
+OL: Read the whole of a shared library before calling a behaviour accidental; its section comments can show the behaviour is intended.
+
+Open RFIs:
+RFI 5899-1: File this RCA as an incident and start the fix?
+The RCA is only in this conversation; nothing is recorded in the harness yet. Filing it means a new entry in the incidents registry.
+Suggest: file it via `/incident` (High), then fix on `fix/summary-warn-promotion` with a test. Recording it keeps the RCA and the fix linked.
+
+RFI 5899-2: Should a warning in a child script still turn the parent's later rows yellow?
+The library's relay comment says it does on purpose ("it promotes the parent's OK rows, as the child's own rows are"). That is why node.js and claude code went yellow because of the `aitools user init` warning, which already shows as an ACTION line.
+Suggest: no. Each warning should colour only the row it belongs to and give its reason in that row's text, and each child script reports its own warnings. Callers that relied on the promotion (`tool_exception_get`, the forced-overwrite warning) would write their own WARN row with a reason. That way a yellow row always says what went wrong, which is what you asked for.
+=== END
+=== A3 ts=2026-11-15T19:35:12.259Z len=5431
+I've written the plan to `plans/summary-warn-reporting.md` (v1.0). It isn't committed, and no code has changed.
+
+**The key finding behind it:** the code does exactly what the spec says. `reference/script-standards-detail.md` says an OK row "reports the script's state so far, not only its own step". The child-log relay passes a child script's warnings up to the parent on purpose. A check (compliance step 13) and about 40 test file lines enforce this. So fixing it means changing the spec, the check, the tests and the code together.
+
+**What the plan changes (needs your approval as D-1):**
+- **A warning only colours the next row.** A row turns yellow only if a warning was logged after the previous row. Any OK, WARN, ERROR or ACTION row clears waiting warnings; DETAIL lines don't.
+- **A yellow row says why.** It becomes `<old text> -- <warning>`, with the warning cut to 70 characters plus `(+N more)`. The full text stays in deploy.log.
+- **A child script's warnings stay with the child.** They still count in the parent's "COMPLETED with N warning(s)" line, but never colour the parent's rows.
+- **No warning is lost.** A warning that no row clears gets its own yellow row at the end of the script.
+
+**How the work is split:** nine steps, each touching about 2–3 code files and running its tests before the next. In order:
+1. Your decisions, and filing an incident.
+2. The bash library.
+3. The PowerShell library.
+4. The installers' own warning functions and compliance step 13.
+5. The end-of-script summaries.
+6. An audit of every row that says WARN directly (about 110). A first pass found all of them already give a reason.
+7. The test files, plus a new test that replays your run. Each changed expected row is listed old → new.
+8. Specs, rules and comments.
+9. The deploy rebuild, CI on macOS, Linux and Windows, then a run of `aitools` on your Mac and Windows machines.
+
+**Expected panel for your run afterwards:**
+- Green: node.js, claude code, claude rules, claude skills.
+- Yellow, each with its reason: claude.md "skipped (user review)", and vercel cli, modal cli and datadog cli "not authenticated".
+- The ACTION list stays the same.
+
+**Out of scope, and real:** the "Run: aitools user init" warning is genuine (`profile "nobul-mac" has no machine.id`), so run `aitools user init`.
+
+---
+
+--- Turn record ---
+1 Re-read: turns 1-4, both sides | compacted: none
+2 Parse: "new thorough proposed plan of action", "remediate the issues i raised at the start": the issues are the false yellow (I1) and the missing reason (I2); a plan, not code; nothing unresolved
+3 Sources: both aitools-lib files (in context), script-standards-detail, tool-support-decision-tree, cross-platform-detail, setup-user-config, check-script-compliance step 13, the test suites, the explicit WARN call sites, the warning-count increments, the format of an existing plan
+4 Resolve: verified the current behaviour is the documented spec, only three warning-count increments per language, explicit WARN rows already give reasons, `tests/menus` exists
+5 Surface: RFI 5899-2 withdrawn (folded into 5899-3); 5899-3 to 5899-7 raised
+6 Process: searched for the specs and tests a fix must change before designing it, instead of designing from the library alone
+7 Draft: plan drafted in full before writing
+8 Review: two passes; added the DETAIL exception, the `|` escape and case L9
+9 Files: read the plan back from disk as the implementing agent; fixed one wrong case citation and the L1-L8 range
+10 Whole: covers I1 and I2 only; out-of-scope warnings listed
+11 Verify: your quoted words match turn 1; no code changed (your earlier order)
+12 Deliver: plan at `plans/summary-warn-reporting.md`; next step: your decisions D-1 to D-4
+OL: In aitools, check the reference specs before calling summary behaviour a bug: `script-standards-detail.md` defines row semantics, and a fix that contradicts it is a spec change.
+
+Open RFIs:
+RFI 5899-1: File this RCA as an incident?
+The RCA and plan aren't recorded in the incident registry yet.
+Suggest: file it via `/incident` (operational, High, linked to `plans/summary-warn-reporting.md`), so the fix has a tracked record.
+
+RFI 5899-2: withdrawn. Whether child warnings should colour the parent's rows is now part of D-1 in RFI 5899-3.
+
+RFI 5899-3 (D-1): Adopt the new rule that a warning only colours the next row?
+This reverses the documented rule that a row "reports the script's state so far", and stops child warnings colouring the parent's rows.
+Suggest: yes. It's what makes node.js, claude code, claude rules and claude skills go green when nothing is wrong with them.
+
+RFI 5899-4 (D-2): Use the reason format `<old text> -- <first warning>`, warning cut to 70 characters, `(+N more)`?
+Suggest: yes. It keeps the version and adds the cause on one panel line.
+
+RFI 5899-5 (D-3): Give a warning that no row clears its own yellow row, named after the script, at the end of that script?
+Suggest: yes. Otherwise a warning logged after the last row shows up only in the log.
+
+RFI 5899-6 (D-4): Ship it as one PR on `fix/summary-warn-reporting`, step by step, with you reviewing after?
+Suggest: yes. It's one behaviour change, so one review.
+
+RFI 5899-7: Commit the plan to main?
+Plans can go straight to main under the channel exception; it's written but not committed.
+Suggest: yes, commit `plans/summary-warn-reporting.md` alone after `git pull --ff-only`, so the plan is available on your other machines.
+=== END
+=== A4 ts=2026-11-15T19:54:43.060Z len=9834
+I've written plan v2.1 to `plans/summary-warn-reporting.md`, then checked it line by line against the whole session. Nothing is implemented and nothing is committed.
+
+## Plan v2.1
+
+### Your model, and can we implement it: yes
+Every warning is recorded once, by the script that logs it, at the moment it's logged. `log_warn` adds a `WARNMSG|<script>|<text>` line to the run's summary file (`~/.aitools/run-summary.txt`). Parent and child scripts already write to that same file, so there's no child/parent distinction at all.
+
+The panel would then read:
+1. green OK rows
+2. yellow WARN rows
+3. a **Warnings block** listing every warning
+4. red ERROR rows
+5. purple ACTION block
+
+Rows are never recoloured. The relay stops adding a child's warnings to its parent's count, and each script's footer counts only its own warnings. This is simpler than my v1.0 and removes every rule about the order rows are written in.
+
+### What you're missing
+Nothing fundamental, but six things need settling, and one is a side benefit:
+1. **ACTION advice would show twice.** The current rule pairs every ACTION with a warning carrying the same advice (vercel shows both "Authentication required: run 'vercel login'…" and the "vercel login" ACTION). There are about 90 ACTION call sites. Fix: a new `write_action` helper logs the warning but shows the advice only once, as the ACTION (**D-A**).
+2. **A warning knows its script, not its tool.** One script can write several rows (`setup-user-claude` writes claude.md, claude rules and claude skills), so warnings are labelled by script name.
+3. **Volume.** Non-interactive and `--force` runs log one "Diff in … overwriting" warning per changed managed file, so the block needs a cap. I also propose auditing warnings that report expected behaviour; any change of level goes to you first.
+4. **Warnings from outside the library.** In your run `build-deploy.sh` logged 23 Intune-size warnings that never reach the panel today. **D-C** makes them one collapsed line.
+5. **Errors have the same problem.** "script failed (exit 1)" doesn't say what failed. **D-B** gives errors the same block.
+6. **Footers change.** The installer's footer would have said "COMPLETED successfully" for your run; the run's total moves to the block header.
+7. **Side benefit: it shows warnings the panel hides today.** Your panel showed `cursor ide mcp verified` while that script logged two warnings: `agent mcp remove` fails with "too many arguments for 'mcp'". Separately, `setup-go` prints the variable name `$GOPATH_BIN` instead of its value. Both are real bugs.
+
+### State changes and the `reference/logging.md` proposal (your point 5)
+- Section 6 of the plan has before-and-after tables:
+  - the state: warning and error counts, the relay's counts, summary rows, the new records, logs, footers, the panel;
+  - the 10 events that change it.
+- The "warning no row consumes" question from v1.0 goes away: every warning is recorded once at the source.
+- Appendix A holds the exact proposed `reference/logging.md` text:
+  - a new section 8, "Warnings and errors across scripts", with a state table;
+  - one sentence changed in section 7;
+  - the intent scope and cross-references.
+
+  It is applied only after you approve it, as the first batch.
+
+### Documentation that changes
+- `reference/logging.md`.
+- `reference/script-standards-detail.md`: the summary function, file format, panel, severity guide, ACTION items, footer and library tables.
+- `.claude/rules/script-standards.md` and its Cursor twin.
+- `reference/managed-file-deployment.md`: the auth pattern.
+- `reference/tool-support-decision-tree.md`: the notes and five table rows.
+- `reference/cross-platform-detail.md`.
+- `reference/smoke-test-pattern-detail.md`.
+- Code comments in the library, `setup-user-config` and `setup-user-shell`.
+- `RELEASE_NOTES.md`.
+- `interactive-menus.md` doesn't change.
+
+### Steps (one PR, 2–3 files per step, tests between)
+| Step | What |
+|---|---|
+| B0 | Your approvals; file the incident |
+| B1 | `logging.md` |
+| B2 | Script standards and rule |
+| B3 | bash library |
+| B4 | PowerShell library |
+| B5 | Installer overrides and compliance step 13 |
+| B6 | `write_action` migration |
+| B7 | build-deploy |
+| B8 | Warning-level audit (to you) |
+| B9 | The 15 test suites that check summary contents, plus a test that replays your run |
+| B10 | Remaining docs |
+| B11 | Deploy rebuild, CI on 3 OSes, your `aitools` run on Mac and Windows |
+
+### Expected panel for your run
+- **Green:** node.js, claude code, claude rules and claude skills, with their current text.
+- **Yellow rows:** vercel, modal and datadog "not authenticated", and claude.md "skipped (user review)".
+- **Warnings block, 5 lines:**
+  - build-deploy (collapsed);
+  - setup-go (one of its two warnings);
+  - the CLAUDE.md skip;
+  - the two cursor MCP lines.
+- **ACTION block:** the same 5 lines as now.
+
+## Line-by-line check (your point 7)
+I read every line from disk against all four of your prompts word for word, the logs and code read this session, and three new checks:
+- the summary file variable is exported to child scripts;
+- the installer's success footer text;
+- the command behind the cursor MCP warning.
+
+It found 10 errors, now fixed:
+- **Wrong prompt numbers:** "Turn 4/5" should have been prompts 3 and 4.
+- **Misattributed quote:** the relay quote came from the `.sh`; the `.ps1` wording differs.
+- **Overstated test count:** "about 45 promoted rows" was too strong, since some are explicit WARN rows.
+- **Answer 3 recorded as a statement:** your child/parent point was a question.
+- **Fail-safe not marked as an extension:** writing summary records fail-safe extends the logging.md rule; it is now stated as one.
+- **Overwrite warning scope:** it applies only to managed text files.
+- **Child counter role:** the child warning count doesn't affect whether a child counts as failed.
+- **Decision-tree rows named from memory:** now counted.
+- **Test suites:** 15 check summary contents, not 8.
+- **setup-go:** the plan had picked which of its warnings stays; B6 decides that.
+
+Appendix B records all of this, which made the file v2.1.
+
+---
+
+--- Turn record ---
+1 Re-read: prompts 1-4 and all replies | compacted: none
+2 Parse: 3) the batched model and the questions "what am i missing", "can we implement this", "what in our documentation needs to change"; 4) yes; 5) think more, state changes, logging.md proposal before implementing; 6) yes, no action yet, revise and present the plan first; 7) new version, verify line by line, revise; nothing unresolved
+3 Sources: `reference/logging.md` in full; the docs that mention the summary; the ACTION and WARN call sites; the summary file readers; deploy.log of the run; the exports and footer text
+4 Resolve: the model can be implemented (records at the source in the shared exported file); 3 facts confirmed; the D-2 format carried over to block lines (to confirm)
+5 Surface: closed 5899-3, -4, -5, -6 (answered); open 5899-1, -7; raised 5899-8 to -13
+6 Process: answered "what am i missing" with evidence from your own run
+7 Draft: v2.0 drafted in full before writing
+8 Review: line-by-line check against the session; 10 revisions, giving v2.1
+9 Files: plan read back from disk for you and for an implementing agent
+10 Whole: covers every point of prompt 4; no implementation
+11 Verify: section 1 quotes match your prompts word for word; no code or docs other than the plan touched
+12 Deliver: plan v2.1 presented; next step: your decisions
+OL: A warning model in aitools must state who records the warning (the script that logs it) and that it is written to the shared run summary file; once that is settled, the child/parent question goes away.
+
+Open RFIs:
+RFI 5899-1: File the incident now?
+Nothing about this defect is recorded in the incident registry yet.
+Suggest: file it via `/incident` (operational, High, linked to `plans/summary-warn-reporting.md`) as part of B0.
+
+RFI 5899-7: Commit plan v2.1 to main?
+You said "wait" until the new version was produced and checked. It now is.
+Suggest: commit `plans/summary-warn-reporting.md` alone after `git pull --ff-only`, so it's available on your other machines.
+
+RFI 5899-8: Is this the right way to apply your "4) yes" to the Warnings block?
+With no promoted rows, the approved 70-character cut now applies to each warning line. Each line is the script name plus text cut to 70, repeats collapse to `(xN)`, and the block shows at most 20 lines, then `+N more in deploy.log`.
+Suggest: yes. It keeps each line on one row of the panel, and the full text stays in deploy.log.
+
+RFI 5899-9: Approve the `reference/logging.md` text in Appendix A of the plan?
+You asked for the proposal before implementing. It adds section 8 and changes one sentence in section 7, plus the intent scope and cross-references.
+Suggest: approve, or mark changes. It's applied first (B1), before any code.
+
+RFI 5899-10: File GitHub issues for the two bugs the batched model exposes?
+The two bugs:
+- `setup-cursor-ide-mcp`: `agent mcp remove` fails ("too many arguments for 'mcp'"), so vercel and webflow aren't removed from Cursor.
+- `setup-go` prints `export PATH="$GOPATH_BIN:$PATH"` literally.
+
+Suggest: yes, two issues via `gh issue create` on the aitools repo, outside this PR.
+
+RFI 5899-11 (D-A): Replace the "log_warn + ACTION" pair with a `write_action` helper so advice appears only once, as the ACTION?
+Suggest: yes. Without it, about 90 pieces of advice would each show twice.
+
+RFI 5899-12 (D-B): Give errors the same treatment (each error listed in a red Errors block)?
+Suggest: yes. An ERROR row like "script failed (exit 1)" has the same no-reason problem you raised for warnings.
+
+RFI 5899-13 (D-C): Show build-deploy's warnings as one collapsed line per kind?
+Suggest: yes. They are part of the run, and the 23 Intune-size lines would otherwise fill the block.
+=== END
+=== A5 ts=2026-11-15T20:37:01.541Z len=8388
+Plan v3.2 is in `plans/summary-warn-reporting.md`. It is uncommitted, nothing is implemented, and no issues are filed yet.
+
+- **Your ask:** `.claude/rules/script-standards.md` is now read in full.
+- **Already in context:** `reference/aitools.md` was loaded in full at session start through `CLAUDE.md`, so I didn't re-read it.
+
+## The format you want
+There is one yellow section; the separate Warnings block is gone. The panel has four parts:
+
+1. **Green:** one line per tool that is OK and has no warning or error.
+2. **Yellow:** every warning in the run, listed once, in the order it happened. Each line is `[!]  <tool, or script if no tool>  <what's wrong / what to do>`.
+   - A tool with a warning appears only here, not in green.
+   - A login warning says to log in.
+3. **Red:** every error, listed the same way.
+4. **Purple ACTION block:** as today. The same advice can also appear in a yellow line, which you said is fine.
+
+Line rules (your 8):
+- text cut to 70 characters, with the full text in deploy.log;
+- identical lines collapse into one, followed by `(xN)`;
+- at most 20 lines per colour, then `+N more in deploy.log`.
+
+For your run that gives:
+```
+  [ok]  ... (all green rows, now including node.js, claude code, claude rules, claude skills)
+  [!]   build-deploy     23 deploy/*.ps1 over the Intune script limit (200000) -- FX-35
+  [!]   aitools config   this machine is not registered -- run: aitools user init
+  [!]   vercel cli       not authenticated -- run: vercel login
+  [!]   modal cli        not authenticated -- run: modal setup (browser flow)
+  [!]   go               on PATH for this session only -- add ~/go/bin to your shell profile
+  [!]   datadog cli      not authenticated -- run: pup auth login
+  [!]   claude.md        skipped (user review): local differs from source
+  ACTION REQUIRED ... (the same 5 lines)
+```
+
+## What "no-reason problem" means for errors (your 12)
+Warnings had the problem you raised: a yellow row didn't say what went wrong. Errors have the same gap.
+- When a child script fails, the panel says `aitools config  script failed (exit 1)`, or a fan-out says `3 failed`.
+- That tells you which script failed, not why. The cause, for example `Failed: x.md: write failed …: Permission denied`, is only in deploy.log.
+- With every error recorded where it is logged, that cause becomes the red line.
+
+## What changed in the plan
+- **Helpers:** each warning or error is logged once and shown once.
+  - `write_warn TOOL TEXT`, `write_action TOOL TEXT ACTION` (your 11) and `write_error TOOL TEXT`.
+  - `log_warn` and `log_error` record under the script name.
+  - `write_summary WARN` / `ERROR` are retired.
+- **Every script through the library:** audit and fix everything that writes logs directly:
+  - `build-deploy.sh`'s `blog*` functions;
+  - the entry points' direct appends to deploy.log;
+  - the installers' and the profile resolver's log overrides (folded into library options);
+  - the relay-sync Python script writing deploy.log;
+  - the two hooks.
+
+  OS guards and environment conditionals are audited the same way, and a new compliance check enforces both.
+- **Spec:** `reference/logging.md` section 8 holds the rules, helpers, state and state machine (Appendix A). Your approval in answer 9 covered the v2.1 text; it is revised for this prompt.
+- **No approval gates:** each open question has a default, and the plan runs with the defaults.
+- **Five phases:**
+  1. Orient: targeted reads, including `aitools.md`.
+  2. Understand: inventories, the Cursor CLI docs, filing the two GitHub issues (your 10), and a hook timing test.
+  3. Spec and documentation.
+  4. Implement: the core library, then the call-site migration in five parallel groups.
+  5. Ship: one PR that includes the plan (your 7: no direct commit to main).
+- **Scale:** 111 WARN rows, 478 ERROR rows, about 90 ACTION rows and about 550 `log_warn` lines.
+
+## Second check, against all five prompts
+It found and fixed 12 issues (Appendix B.2), including:
+- `logging.md` section 3 also needed changes;
+- the new compliance check would have failed in the middle of the migration it guards;
+- two parallel groups would both rewrite the `profile` test golden files;
+- delegates' worktrees must branch explicitly from the feature branch;
+- `aitools.md` was added to the orientation reads.
+
+## Third check: order and parallelism
+Ten findings (Appendix C). The main ones:
+- **Overlap:** the library work, the checks and the two bug fixes start as soon as the `logging.md` spec is committed, while the documentation delegates finish. This is the one place phases overlap; it shortens the critical path.
+- **Early decisions:** the hook timing test moves to the understand phase, so the spec records the final decision.
+- **Early Windows CI:** a draft PR is opened early so Windows CI runs the `.ps1` suites on every later change. This Mac can't run them.
+- **End-only steps:** shared golden files, full suites, the deploy rebuild and the end-to-end panel check stay at the end.
+
+---
+
+--- Turn record ---
+1 Re-read: prompts 1-5 and all replies | compacted: none
+2 Parse: the yellow WARN rows are the Warnings block (merge); every script logs through the library; audit OS guards and conditionals; read script-standards.md (and aitools.md if not already loaded); document the spec; no approval gates; restate the format; RFI answers 1, 7, 8-13; a blank "3)"; new version, then the verify procedure, then the order check; five phases; ask questions
+3 Sources: script-standards.md in full; logging.md; the inventories of log writers, call sites, CLAUDE_CODE_REMOTE reads and tracked hook files; build-deploy.sh header; the cursor MCP command; the summary file export; the footer text
+4 Resolve: verified the direct log writers, the call-site counts, that only the library reads CLAUDE_CODE_REMOTE, and the stale tracked backups; the format restated and to confirm (RFI 5899-19)
+5 Surface: closed 5899-1, -7 to -13; raised 5899-14 to -20
+6 Process: the order check moved decisions and fixes to the start and Windows CI earlier
+7 Draft: v3.0 drafted in full
+8 Review: line-by-line check (12 revisions) and the order check (10 findings), giving v3.2
+9 Files: plan read back from disk for you and for the executing agent
+10 Whole: plan structure matches your five phases; one overlap, explained in Appendix C
+11 Verify: section 1 quotes match the prompts word for word; no code, issues or commits made
+12 Deliver: plan v3.2 presented; next step: your answers to the RFIs, or "execute"
+OL: When the commander says a section "IS" another, merge them; don't add a link between them.
+
+Open RFIs:
+RFI 5899-14 (Q-1): Should hooks use the library too?
+Hooks can't load it today (`cross-platform.md`: "Hooks cannot source aitools-lib.sh"), and two hooks write their own logs.
+Suggest: let the timing test decide. Under 50 ms per call, deploy the library to `~/.aitools/lib/` and use it in the hooks; otherwise keep them standalone, recorded as an exception with the measurement.
+
+RFI 5899-15 (Q-2): Python tools can't call the bash or PowerShell helpers. Is this the right rule for them?
+Suggest: they keep their own component logs (`ait-harvest.log`, `harness-db.log`) but never write deploy.log; the calling script logs their output through the library.
+
+RFI 5899-16 (Q-3): Your RFI answers include "3)" with nothing after it, and there was no open RFI 3. What did you mean?
+Suggest: treat it as a typo; nothing to do.
+
+RFI 5899-17 (Q-4): Two stale backups are tracked in git, in `shared/hooks/` (`harness-db-sessionstart.sh.bak.2026-06-21T203304Z`, `standing-order-guard.sh.bak.2026-06-21T203334Z`). Remove them in this PR?
+Suggest: yes, `git rm` both, listed in the PR body.
+
+RFI 5899-18 (Q-5): Open incident #178 tracks the entry points' direct deploy.log writes, which this PR removes. Update the incident registry?
+You said no to filing a new incident.
+Suggest: leave the registry alone and name #178 in the PR body.
+
+RFI 5899-19: Is the format restated above what you want?
+Suggest: yes as written, and confirm one detail: a tool with a warning drops its green line, so `go` loses its version text in the panel.
+
+RFI 5899-20: Add `write_warn` and `write_error` alongside the `write_action` you approved, and retire `write_summary WARN` / `ERROR`?
+That is what makes each warning or error appear exactly once. It touches about 590 call sites, migrated in parallel groups.
+Suggest: yes.
+=== END

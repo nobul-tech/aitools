@@ -1,0 +1,470 @@
+{
+  "provenance": {
+    "document": "aar",
+    "schema_version": 1,
+    "version": "v1.0",
+    "mission": "874d-5-brief-verify",
+    "agent_id": "a2f5dd4305cffdf2a",
+    "session_id": "dbd05b0c-2365-4159-9976-bc64a2af874d",
+    "brief": "/Users/new-jose/repos/aitools/.scratch/session-dbd05b0c-2365-4159-9976-bc64a2af874d/874d-5-brief-verify-brief.json",
+    "created_at": "2026-11-16T00:21:36Z"
+  },
+  "objectives": [
+    {
+      "id": "OBJ-1",
+      "type": "objective",
+      "text": "launch delegates to run different types of verfiers including adverserial",
+      "source": {"kind": "commander", "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d.jsonl L2553"},
+      "quote": "launch delegates to run different types of verfiers including adverserial",
+      "status": "accomplished",
+      "how": "This mission is the brief-and-schema verifier, one of the four verifier types the session agent launched; this AAR is its result. The launching itself is the session agent's.",
+      "deviation_refs": [],
+      "observation_refs": [],
+      "deliverables": ["/Users/new-jose/repos/aitools/.scratch/session-dbd05b0c-2365-4159-9976-bc64a2af874d/874d-5-brief-verify-aar.json"]
+    },
+    {
+      "id": "OBJ-2",
+      "type": "objective",
+      "text": "Verify the implementing brief 874d-2-structured-reports-brief.json against the brief schema of RFC 0011 section 3.3 and issue #180 section 3: valid JSON; top-level keys and their order; required fields and enum values of every item; no forbidden node; objectives verbatim with sources; every quote verbatim against the session transcript or the issue; every path in rules[] and access exists; name and location follow D874d-42; and whether a delegate with no other context could start WP-1 from it.",
+      "source": {"kind": "agent", "location": "/Users/new-jose/repos/aitools/.scratch/session-dbd05b0c-2365-4159-9976-bc64a2af874d/874d-5-brief-verify-brief.json objectives[1]"},
+      "status": "accomplished",
+      "how": "Own scripts in /Users/new-jose/repos/aitools/.scratch/session-874d-5-brf/ (check-briefs.py, extract-prompts.py, grep-issue.py, verifier-diff.py; the session agent's check-brief-quotes.py was not used). Mechanical results for 874d-2: valid JSON; the 15 keys in RFC 0011 3.3.2 order; no forbidden node anywhere (recursive key walk); every item has its required fields with valid enums and source.kind; OBJ-2..OBJ-7 equal the plan's six '## WP-n' headings exactly; all 39 quotes (OBJ-1 and 38 decisions) are found verbatim in the issue body/comments or the dbd05b0c transcript (D874d-1 also in the dotprofile archive 2026-03-16_79b05dd0.jsonl L419); every rules[] path exists; the brief sits at <session scratch dir>/<mission>-brief.json (D874d-42) with name_prefix and identity.name matching. The only missing access paths are the worktree, its scratch and the verifier AAR files, which are created later (expected). The four verifier briefs pass the same structural checks. Sufficiency and content defects: OBS-1 to OBS-16.",
+      "deviation_refs": ["DEV-1"],
+      "observation_refs": ["OBS-1", "OBS-2", "OBS-3", "OBS-4", "OBS-5", "OBS-6", "OBS-7", "OBS-8", "OBS-9", "OBS-10", "OBS-11", "OBS-12", "OBS-13", "OBS-14", "OBS-15", "OBS-16"],
+      "deliverables": ["/Users/new-jose/repos/aitools/.scratch/session-dbd05b0c-2365-4159-9976-bc64a2af874d/874d-5-brief-verify-aar.json"]
+    }
+  ],
+  "ambiguities": [
+    {
+      "id": "AMB-1",
+      "type": "ambiguity",
+      "text": "Brief and schema verifier: Brief conformance and sufficiency of RFC 0011, its implementation plan and the implementing mission's brief",
+      "source": {"kind": "agent", "location": "874d-5-brief-verify-brief.json intent.purpose (L40) and intent.scope (L41) 'the three target files'"},
+      "readings": ["verify all three files (RFC, plan, brief) for conformance and sufficiency", "verify only the implementing brief (and the verifier briefs for structure), as OBJ-2 and the prompt's Work section say"],
+      "resolution": "Only the implementing brief, plus the four verifier briefs for structure; RFC and plan read as the spec the brief is judged against",
+      "resolved_by": "reason",
+      "evidence": "OBJ-2 (brief L63) and the prompt's Work step 2 name only the brief; the RFC and plan are covered by 874d-3, 874d-4 and 874d-6. The intent text is a template shared by all four verifier briefs (see OBS-14)",
+      "status": "resolved"
+    },
+    {
+      "id": "AMB-2",
+      "type": "ambiguity",
+      "text": "Before your session ends, append an entry to the relay: `.aitools/channel/relay.md`",
+      "source": {"kind": "artifact", "location": "/Users/new-jose/repos/aitools/.aitools/channel/CLAUDE.md:127-128 (in my rules[])"},
+      "readings": ["append a relay entry (harness artifact, D-DEL6 tier 4)", "write nothing outside scratch and the AAR file (brief constraint L72, tier 2)"],
+      "resolution": "No relay entry written. CONFLICT: .aitools/channel/CLAUDE.md vs brief constraint 1 -- resolved by tier 2 (prompt and brief): read-only",
+      "resolved_by": "reason",
+      "evidence": "D-DEL6 order given in the prompt's Conflicts section",
+      "status": "resolved"
+    },
+    {
+      "id": "AMB-3",
+      "type": "ambiguity",
+      "text": "every quote verbatim against the session transcript or the issue",
+      "source": {"kind": "agent", "location": "874d-5-brief-verify-brief.json objectives[1] (L63)"},
+      "readings": ["only the dbd05b0c transcript and issue #180", "also the older sessions the quotes cite (87795dc3, 79b05dd0)"],
+      "resolution": "Checked against the issue body and comments and the dbd05b0c transcript; also the dotprofile archive of 79b05dd0 L419. Session 87795dc3 has no transcript on this machine (searched ~/.claude/projects and the dotprofile sessions/), so its quotes are checked against the issue only",
+      "resolved_by": "read",
+      "evidence": "find over /Users/new-jose/.claude/projects and /Users/new-jose/repos/aitools-nobul-jose returned no *87795dc3* file",
+      "status": "resolved"
+    },
+    {
+      "id": "AMB-4",
+      "type": "ambiguity",
+      "text": "For each, add a proposal with the exact fix, why, barrier_analysis and affected.",
+      "source": {"kind": "agent", "location": "delegation prompt, Work step 3"},
+      "readings": ["a field named 'fix'", "RFC 0011 3.2.2 proposal fields (what, why, barrier_analysis, affected)"],
+      "resolution": "The exact fix goes in the RFC field `what`; `text` repeats it in one line",
+      "resolved_by": "read",
+      "evidence": "RFC-0011-structured-reports.md:191-196",
+      "status": "resolved"
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "ASM-1",
+      "type": "assumption",
+      "text": "The target files are the version written by session dbd05b0c at 2026-11-16 and are not changed while you verify",
+      "status": "verified",
+      "confidence": "high",
+      "evidence": "ls -l at the end: 874d-2 brief 50184 bytes 16:14 local, RFC 38514 bytes 16:14, plan 11993 bytes 16:10, the same as at the start",
+      "impact_if_false": "re-read a file whose content no longer matches a line you cite",
+      "source": {"kind": "agent", "location": "874d-5-brief-verify-brief.json assumptions[0]"}
+    },
+    {
+      "id": "ASM-2",
+      "type": "assumption",
+      "text": "The transcript line numbers in the prompt (79, 289, ..., 2553) are physical 1-based lines of the JSONL",
+      "status": "verified",
+      "confidence": "high",
+      "evidence": "extract-prompts.py found user text records on exactly those lines (plus 10, 90, 334, 442, 443, 2569, which are not the commander's prompts)",
+      "impact_if_false": "quote line checks would point at the wrong records",
+      "source": {"kind": "agent", "location": "this mission"}
+    }
+  ],
+  "deviations": [
+    {
+      "id": "DEV-1",
+      "type": "deviation",
+      "from": {"kind": "brief", "ref": "874d-5-brief-verify-brief.json rules[] (L297-333) and the prompt's Work step 1", "text": "Read your brief, then every file in its rules list, in full."},
+      "text": "Read in full: the user CLAUDE.md and every user rule, aitools CLAUDE.md and every .claude/rules file (all in context), .aitools/channel/CLAUDE.md, RFC 0011, the plan, both briefs, shared/rules/delegation.md, rfcs/README.md. Read in part: shared/skills/delegate/SKILL.md v2.6 (headings, L120-229), rfcs/0010 (headings, sections 2 and 11). Not read: .claude/rules/hook-lifecycle.md, reference/framework-intelligence-types.md",
+      "cause": "initiative",
+      "why": "The unread or partly read files govern hook lifecycle and intelligence-type prose, outside this schema-and-sufficiency scope; the standards verifier (874d-6) covers them",
+      "effect": "None found on OBJ-2; a defect in the brief that only those files would reveal could be missed",
+      "objective_refs": ["OBJ-2"],
+      "observation_refs": []
+    }
+  ],
+  "observations": [
+    {
+      "id": "OBS-1",
+      "type": "observation",
+      "severity": "high",
+      "text": "A constraint forbids committing 'the commander's words' to a project repo, which is wider than its cited source and contradicts the work the brief orders",
+      "evidence": "874d-2 brief constraints[5] (L140): \"Never commit a brief, an AAR, a running-estimate export or the commander's words to a project repo; the record goes to the dotprofile only\", source \"RFC 0011 section 7; D874d-52\". RFC-0011:507 restricts only documents: \"Briefs, AARs and running estimates carry the commander's words verbatim ... They MUST NOT be committed to a project repo\". D874d-52 concerns only the stored running estimate. The repo commits the commander's words routinely (.claude/rules/cross-platform.md exemptions table: \"The commander, verbatim: \\\"unless a script is explicitly marked ...\\\"\"), RFC 0011 itself (to be committed under gate G1) quotes him at L62, and WP-1/WP-2 deliverables (reference/structured-reports.md, delegation.md decisions, glossary) cite his decisions. Read literally, the constraint blocks WP-1 batch 1.5 and WP-2",
+      "incident": false,
+      "source": {"kind": "artifact", "location": "/Users/new-jose/repos/aitools/.scratch/session-dbd05b0c-2365-4159-9976-bc64a2af874d/874d-2-structured-reports-brief.json:140"}
+    },
+    {
+      "id": "OBS-2",
+      "type": "observation",
+      "severity": "high",
+      "text": "The duty to update the plan's status table after every batch cannot be carried out under the brief's access and constraints, and the brief does not say how",
+      "evidence": "874d-2 brief duties[4] (L1011) \"update the plan's status table after every batch\"; plan:50 \"After each batch, update the status table at the end of this plan\". aitools CLAUDE.md \"Channel exception\": \"These paths are committed directly to main from the main checkout, with no worktree and no PR: ... plans (`plans/*`)\". But the brief's access (L994) gives the main checkout read-only, constraints[0] (L105) and plan:48 say \"never push to main\", and the plan file is still untracked on main (git status: '?? plans/structured-reports/'; gate G1). The delegate must pick one of three conflicting paths (direct to main, in the WP branch, not at all) with no guidance. The same applies to .aitools/channel/CLAUDE.md:127 (append to relay.md), which is in the brief's rules[] (L932)",
+      "incident": false,
+      "source": {"kind": "artifact", "location": "/Users/new-jose/repos/aitools/.scratch/session-dbd05b0c-2365-4159-9976-bc64a2af874d/874d-2-structured-reports-brief.json:1011"}
+    },
+    {
+      "id": "OBS-3",
+      "type": "observation",
+      "severity": "medium",
+      "text": "access.writable omits the session scratch directory, where the delegate must write the briefs of its own delegates (the independent reviewer of every PR is a duty)",
+      "evidence": "874d-2 brief access.writable (L999-1002) lists only the worktree and branches/PRs. RFC-0011:228 (3.3.1): \"The brief MUST be written to `<session scratch dir>/<mission name>-brief.json`\"; the fallback of 3.3.8 (L278) applies only to an agent that cannot write there \"because worktree isolation confines its writes\", which is not this delegate's case. duties[1] (L1008) requires a reviewer per PR, so at least six briefs; provenance.session_scratch (L9) names the directory but access does not grant it",
+      "incident": false,
+      "source": {"kind": "artifact", "location": "/Users/new-jose/repos/aitools/.scratch/session-dbd05b0c-2365-4159-9976-bc64a2af874d/874d-2-structured-reports-brief.json:999"}
+    },
+    {
+      "id": "OBS-4",
+      "type": "observation",
+      "severity": "medium",
+      "text": "decisions[] omits commander decisions the brief itself relies on or the work packages implement: D874d-10, D874d-11, D874d-12, D874d-16, D874d-18, D874d-36",
+      "evidence": "RFC-0011:252 (3.3.3): \"decisions[] decision items: the decisions the delegate must honour, quoted\". constraints[6] (L147-150) cites \"D874d-11, D874d-9, D874d-10\" but only D874d-9 is in decisions[] (L300). WP-2 implements D-DEL9 (D874d-16, issue L55) and the glossary synonyms of D874d-18 (issue L57: \"'Brief', 'mission brief' and 'delegate briefing' are one thing\"); D874d-42's text (L615) says it 'supersedes the name and format of D874d-36' while D874d-36's surviving part ('the location in `.scratch` stands', issue L75) is not given; D874d-12 (issue L51) governs where objectives come from",
+      "incident": false,
+      "source": {"kind": "artifact", "location": "/Users/new-jose/repos/aitools/.scratch/session-dbd05b0c-2365-4159-9976-bc64a2af874d/874d-2-structured-reports-brief.json:247-742"}
+    },
+    {
+      "id": "OBS-5",
+      "type": "observation",
+      "severity": "medium",
+      "text": "Ambiguity items whose passage is the commander's words carry source.kind 'agent' and no quote; three ambiguity texts are not verbatim passages",
+      "evidence": "RFC-0011:125-127 (3.2.1): quote \"REQUIRED when the source is the commander's words\"; RFC-0011:165 (3.2.2): ambiguity text is \"the passage, verbatim\". AMB-1 text \"keep the AAR as a handback\" (L747) is the commander's (transcript L1921), AMB-2 (L764) is his (issue L494, D874d-7), AMB-10 \"a directory called \\\"running estimates\\\"\" (L851) is his (L2160); each has source.kind \"agent\" (L749, L766, L853) and no quote. AMB-3 text \"assessment ... updated every turn\" (L781) uses an ellipsis; issue L495 reads \"The running estimate's `assessment` is \\\"updated every turn\\\"\". AMB-5 \"workflow agent() delegates\" (L800) and AMB-7 \"provenance is eternal, against changing an item's status\" (L817) are paraphrases of issue L497 and L499",
+      "incident": false,
+      "source": {"kind": "artifact", "location": "/Users/new-jose/repos/aitools/.scratch/session-dbd05b0c-2365-4159-9976-bc64a2af874d/874d-2-structured-reports-brief.json:743-865"}
+    },
+    {
+      "id": "OBS-6",
+      "type": "observation",
+      "severity": "medium",
+      "text": "Sufficiency: the brief does not state the gates' state at launch, the merge model between work packages, or when to hand back, and it leaves the /delegate 'self-merge' duty in conflict with its constraint",
+      "evidence": "plan:39 \"WP-1 starts when G0, G1 and G2 are met\"; G2 (plan:37) \"RFC 0011 has an independent reviewer's verdict\" appears nowhere in the brief; only G1 is an assumption (ASM-8, L234). constraints[0] (L105) forbids merging own PRs, while plan:43 chains WP branches with --no-ff merges and shared/skills/delegate/SKILL.md:195-196 (v2.6, duty 2) says \"The delegate launches its own independent reviewer before it self-merges\" and :193 \"does not return until all errors are resolved\". /delegate 'Writing the prompt' step 6 requires skill conflicts to be pre-resolved. A delegate starting WP-1 cannot tell whether G2 is met, whether to start WP-2 while the WP-1 PR awaits the commander's merge, or whether to hand back after WP-1 or after WP-6",
+      "incident": false,
+      "source": {"kind": "artifact", "location": "/Users/new-jose/repos/aitools/.scratch/session-dbd05b0c-2365-4159-9976-bc64a2af874d/874d-2-structured-reports-brief.json:103-152"}
+    },
+    {
+      "id": "OBS-7",
+      "type": "observation",
+      "severity": "medium",
+      "text": "rules[] omits references that /delegate requires for every aitools delegate and files the work packages change or depend on; skills[] omits /tool-ops for the hook-event work",
+      "evidence": "/Users/new-jose/.claude/skills/delegate/SKILL.md 'In the aitools repo': \"for delegates the subset the task needs, always including `reference/script-standards-detail.md`, `cross-platform-detail.md`, `logging.md`, `managed-file-deployment.md`, `plan-execution-detail.md`, `rules.md`, `skills.md`\"; none is in rules[] (L922-959). Also absent: reference/prompt-turn-checklist.md (plan:72, WP-2.3), scripts/harness-db.py and reference/harness-db-schema.sql (WP-1.4, WP-3), reference/README.md (WP-1.5), .github/workflows/check.yml (WP-1.4). All exist (ls). WP-4.2 chooses between PostToolUse on Agent and SubagentStop; ~/.claude/rules/tool-ops.md requires /tool-ops \"before assuming how a managed tool behaves\", and skills[] (L960-990) lacks it",
+      "incident": false,
+      "source": {"kind": "artifact", "location": "/Users/new-jose/repos/aitools/.scratch/session-dbd05b0c-2365-4159-9976-bc64a2af874d/874d-2-structured-reports-brief.json:922-990"}
+    },
+    {
+      "id": "OBS-8",
+      "type": "observation",
+      "severity": "low",
+      "text": "D874d-8's quote is the commander's later question, not the words of the decision",
+      "evidence": "L297 quote: \"each delegate will be writing to the running estimate.  can we safely do that with json or do we need to stick with sqlite3?\" (found at transcript L289). The decision text (L290) \"One running estimate per session; the session agent and every delegate write to it directly\" rests on the 87795dc3 answer quoted only in source.location (L295): \"one per session, as json, all delegates edit directly, ...\"",
+      "incident": false,
+      "source": {"kind": "artifact", "location": "/Users/new-jose/repos/aitools/.scratch/session-dbd05b0c-2365-4159-9976-bc64a2af874d/874d-2-structured-reports-brief.json:297"}
+    },
+    {
+      "id": "OBS-9",
+      "type": "observation",
+      "severity": "low",
+      "text": "D874d-51's quote joins two passages with an ellipsis, so it is not one verbatim source text",
+      "evidence": "L713: \"26) the sessionend hook should commit and push to main. … the session end hook should commit/push the user dotprofile repo.\" Each piece is verbatim in transcript L2160 and in the issue body, but the joined string is not; RFC-0011:127 asks for \"the source text verbatim\"",
+      "incident": false,
+      "source": {"kind": "artifact", "location": "/Users/new-jose/repos/aitools/.scratch/session-dbd05b0c-2365-4159-9976-bc64a2af874d/874d-2-structured-reports-brief.json:713"}
+    },
+    {
+      "id": "OBS-10",
+      "type": "observation",
+      "severity": "low",
+      "text": "Some sources cannot be resolved by a delegate with no other context",
+      "evidence": "D874d-1 location (L256) \"`<dp>/sessions/aitools/2026-03-16_79b05dd0.jsonl` L419\": `<dp>` is a placeholder; the file is /Users/new-jose/repos/aitools-nobul-jose/sessions/aitools/2026-03-16_79b05dd0.jsonl (quote verified there). OBJ-1 (L44), D874d-5 (L269), D874d-7 (L282) and D874d-8 (L295) cite session 87795dc3, whose transcript is on neither ~/.claude/projects nor the dotprofile sessions/ of this machine; chain_of_command (L15-17) lists only dbd05b0c. Those quotes are verifiable only through issue #180",
+      "incident": false,
+      "source": {"kind": "artifact", "location": "/Users/new-jose/repos/aitools/.scratch/session-dbd05b0c-2365-4159-9976-bc64a2af874d/874d-2-structured-reports-brief.json:256"}
+    },
+    {
+      "id": "OBS-11",
+      "type": "observation",
+      "severity": "low",
+      "text": "Verified assumptions lack the `ref` RFC 0011 asks for, and ASM-5 has an empty impact_if_false",
+      "evidence": "RFC-0011:179-181: \"ref (once verified or falsified) what settled it: a verified assumption points to a fact\". ASM-5 (L208-218) and ASM-6 (L221-232) have status \"verified\" and no ref; ASM-5 impact_if_false is \"\" (L214). ASM-5's evidence is correct (scripts/harness-db.py:1028 prints \"Session started:\", :1071 \"Session DB:\"), but it attributes the print to the hook; ASM-6 is 'verified' by arithmetic only (\"36 bits\"), while RFC S-11 still guards against the collision",
+      "incident": false,
+      "source": {"kind": "artifact", "location": "/Users/new-jose/repos/aitools/.scratch/session-dbd05b0c-2365-4159-9976-bc64a2af874d/874d-2-structured-reports-brief.json:207-232"}
+    },
+    {
+      "id": "OBS-12",
+      "type": "observation",
+      "severity": "low",
+      "text": "access.read_only gives the issue without its comments and the whole transcripts directory without the reference-only instruction",
+      "evidence": "L997: \"issue nobul-tech/aitools#180 (gh issue view 180 --repo nobul-tech/aitools)\" with no --comments; the decision record includes five comments (RFC-0011:539 lists them; D874d-7, D874d-8 sources cite 'its later answers (comments on this issue)', issue L544). L996 grants \"/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/ (transcripts)\" without \"search it; never load it whole\" (compare 874d-5 brief L354); RFC-0011:272 (3.3.5) requires the prompt to say which material is reference-only",
+      "incident": false,
+      "source": {"kind": "artifact", "location": "/Users/new-jose/repos/aitools/.scratch/session-dbd05b0c-2365-4159-9976-bc64a2af874d/874d-2-structured-reports-brief.json:996-997"}
+    },
+    {
+      "id": "OBS-13",
+      "type": "observation",
+      "severity": "low",
+      "text": "OL-2, carried in all five briefs, is contradicted by this mission: the meta.json existed while the delegate ran",
+      "evidence": "OL-2 (874d-2 brief L879): \"subagents/agent-<agentId>.meta.json ... was created when the delegate finished (20:55:18Z), not at launch; do not rely on it while a delegate runs\". During this mission /Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d/subagents/agent-a2f5dd4305cffdf2a.meta.json already held {\"description\":\"874d-5-brief-verify: brief and schema verifier\",\"spawnDepth\":1,\"requestShape\":\"background\"}; I found my agentId from it",
+      "incident": false,
+      "source": {"kind": "telemetry", "location": "/Users/new-jose/.claude/projects/-Users-new-jose-repos-aitools/dbd05b0c-2365-4159-9976-bc64a2af874d/subagents/agent-a2f5dd4305cffdf2a.meta.json"}
+    },
+    {
+      "id": "OBS-14",
+      "type": "observation",
+      "severity": "low",
+      "text": "The four verifier briefs conform structurally; their intent is a shared template whose scope does not match each OBJ-2",
+      "evidence": "verifier-diff.py: constraints, assumptions, decisions, ambiguities, operational_learning, rules, skills and duties are identical across 874d-3..6; each passes the key-order, forbidden-node, item-field, enum, quote and D874d-42 checks. All four have intent.scope \"the three target files, read against issue #180 v5.2 and the aitools repo\" and a purpose naming RFC, plan and brief, while 874d-5's OBJ-2 (L63) covers only the brief (my AMB-1). Their writable AAR paths do not exist yet (expected)",
+      "incident": false,
+      "source": {"kind": "artifact", "location": "/Users/new-jose/repos/aitools/.scratch/session-dbd05b0c-2365-4159-9976-bc64a2af874d/874d-5-brief-verify-brief.json:40-41"}
+    },
+    {
+      "id": "OBS-15",
+      "type": "observation",
+      "severity": "low",
+      "text": "Many source.location values are not in the forms RFC 0011 3.2.1 lists",
+      "evidence": "RFC-0011:126: \"source.location  path:line | commit SHA | URL | transcript path + line\". 874d-2 brief examples: L108 \"shared/rules/delegation.md D-DEL4; the plan\", L136 \"/delegate 'In the aitools repo'\", L750 \"D874d-47\", L873 \"session dbd05b0c, 2026-11-15/16\", and every decision's \"Session dbd05b0c L1275: ...\" (a session label, not a transcript path)",
+      "incident": false,
+      "source": {"kind": "artifact", "location": "/Users/new-jose/repos/aitools/.scratch/session-dbd05b0c-2365-4159-9976-bc64a2af874d/874d-2-structured-reports-brief.json"}
+    },
+    {
+      "id": "OBS-16",
+      "type": "observation",
+      "severity": "low",
+      "text": "Item ids reuse the issue's numbering with gaps, so ids the RFC cites are missing from the brief",
+      "evidence": "assumptions ids skip ASM-7 (L154-245) and ambiguities skip AMB-4, AMB-6, AMB-9 (L743-865). RFC-0011:405 (3.6.11) cites \"AMB-6\" and :463 (S-6) cites \"ASM-7\"; RFC-0011:222 (S-7) says \"the writer of a brief or AAR numbers its items from 1 within that document\". AMB-6 (issue L498, nothing written to the DB before schema 5) and AMB-9 (issue L501, D<sid4>-<n> vs D-DEL<n>) bear on WP-1 and WP-2",
+      "incident": false,
+      "source": {"kind": "artifact", "location": "/Users/new-jose/repos/aitools/.scratch/session-dbd05b0c-2365-4159-9976-bc64a2af874d/874d-2-structured-reports-brief.json:154-865"}
+    }
+  ],
+  "operational_learning": [
+    {
+      "id": "OL-1",
+      "type": "operational_learning",
+      "text": "A delegate in the main checkout's .scratch is harvested into tracked harvesting/ at the next SessionStart catch-up. A verifier that saves the issue or the commander's extracted prompts as .json there leaks them toward a tracked path; save such copies with a .tmp suffix (done here: prompts.json.tmp, issue180.json.tmp). The AAR files at <session scratch dir>/*-aar.json are harvested too until S-14 ships",
+      "deviation_refs": [],
+      "observation_refs": ["OBS-1"],
+      "source": {"kind": "artifact", "location": "/Users/new-jose/.claude/skills/scratch/SKILL.md 'Naming conventions'; RFC-0011:508"}
+    },
+    {
+      "id": "OL-2",
+      "type": "operational_learning",
+      "text": "A background level-1 delegate can find its own agentId while running from <parent session dir>/subagents/*.meta.json by matching its description (here agent-a2f5dd4305cffdf2a); the parent transcript also contains several agentIds near the mission name, so the meta.json match is the unambiguous one",
+      "deviation_refs": [],
+      "observation_refs": ["OBS-13"],
+      "source": {"kind": "telemetry", "location": "/Users/new-jose/repos/aitools/.scratch/session-874d-5-brf/find-agent-id.py output"}
+    },
+    {
+      "id": "OL-3",
+      "type": "operational_learning",
+      "text": "A mechanical schema check (keys, enums, quotes found) passes this brief completely; every substantive defect came from reading the constraints, duties and access against the repo's other rules (Channel exception, RFC 0011 3.3.1, /delegate 'In the aitools repo'). A future validate step should be paired with a sufficiency read",
+      "deviation_refs": [],
+      "observation_refs": ["OBS-1", "OBS-2", "OBS-3", "OBS-6"],
+      "source": {"kind": "agent", "location": "this mission"}
+    }
+  ],
+  "proposals": [
+    {
+      "id": "PRO-1",
+      "type": "proposal",
+      "text": "Narrow constraints[5] to the documents RFC 0011 section 7 names",
+      "what": "Replace the text at 874d-2 brief L140 with: \"Never commit a mission brief, an AAR, a running-estimate export or a harvested copy of one (harvesting/*-brief.json, harvesting/*-aar.json) to a project repo; the running-estimate record goes to the dotprofile only (RFC 0011 section 7). Citing the commander's decisions in rules, references and the glossary is allowed, as the repo already does\"",
+      "why": "RFC-0011:507 restricts the three documents, not every quotation; the widened text blocks WP-1 batch 1.5 and WP-2. plan:119 already names the harvesting risk",
+      "barrier_analysis": "Would prevent OBS-1: a delegate reading the constraint literally would otherwise stop at WP-2 or strip the decision citations the RFC requires",
+      "affected": ["874d-2-structured-reports-brief.json constraints[5]"],
+      "deviation_refs": [],
+      "observation_refs": ["OBS-1"],
+      "disposition": "proposed"
+    },
+    {
+      "id": "PRO-2",
+      "type": "proposal",
+      "text": "Say how the plan's status table is updated",
+      "what": "Replace duties[4] (L1011) with: \"update the plan's status table after every batch in your work-package branch (plans/structured-reports/implementation-plan.md), so it ships in that PR; do not push to main and do not append to .aitools/channel/relay.md\", and add to plan:50 the same words. Alternative if the commander wants the Channel exception used: grant write to the main checkout's plans/structured-reports/implementation-plan.md and quote his order to push it to main (R874d-<n> below)",
+      "why": "The Channel exception (aitools CLAUDE.md) and \"never push to main\" (L105, plan:48) cannot both hold for the delegate; the main checkout is read-only in its access",
+      "barrier_analysis": "Would prevent OBS-2: the delegate would otherwise either break a constraint or skip a duty silently",
+      "affected": ["874d-2-structured-reports-brief.json duties[4]", "plans/structured-reports/implementation-plan.md:50"],
+      "deviation_refs": [],
+      "observation_refs": ["OBS-2"],
+      "disposition": "proposed"
+    },
+    {
+      "id": "PRO-3",
+      "type": "proposal",
+      "text": "Grant the session scratch directory for the delegate's own briefs",
+      "what": "Add to access.writable (L999-1002): \"/Users/new-jose/repos/aitools/.scratch/session-dbd05b0c-2365-4159-9976-bc64a2af874d/ (only new files named <mission name>-brief.json, and <mission name>-aar.json when you request one, for your own delegates; RFC 0011 3.3.1)\"",
+      "why": "RFC-0011:228 puts every brief there; the delegate must launch one reviewer per PR",
+      "barrier_analysis": "Would prevent OBS-3: without it the delegate either writes outside its access or misapplies the isolation fallback of 3.3.8, scattering the session's briefs and breaking missions[] derivation (RFC-0011:339)",
+      "affected": ["874d-2-structured-reports-brief.json access.writable"],
+      "deviation_refs": [],
+      "observation_refs": ["OBS-3"],
+      "disposition": "proposed"
+    },
+    {
+      "id": "PRO-4",
+      "type": "proposal",
+      "text": "Add the missing decisions to decisions[]",
+      "what": "Add decision items for D874d-10, D874d-11, D874d-12, D874d-16, D874d-18 and D874d-36, each with text, decided_by, date, quote and source.location taken verbatim from issue #180 section 1 (body L49, L50, L51, L55, L57, L75), status \"decided\" (D874d-36 with its superseded part marked as in the issue)",
+      "why": "RFC-0011:252: the brief quotes the decisions the delegate must honour; constraints[6] already depends on D874d-10 and -11, and WP-2 implements -16 and -18",
+      "barrier_analysis": "Would prevent OBS-4: the delegate would honour decisions it can read in the brief instead of reconstructing them from the issue",
+      "affected": ["874d-2-structured-reports-brief.json decisions[]"],
+      "deviation_refs": [],
+      "observation_refs": ["OBS-4"],
+      "disposition": "proposed"
+    },
+    {
+      "id": "PRO-5",
+      "type": "proposal",
+      "text": "Make ambiguity items quote their source",
+      "what": "AMB-1: source {kind commander, location transcript L1921}, quote \"22) your right lets keep the AAR as a handback for now.  if a file is requested, it should follow the naming convention specific\". AMB-2: source {kind commander, location issue #180 body L494 (D874d-7)}, quote \"json or markdown not sure, for either we need schema and template/defined structure\". AMB-10: source {kind commander, location transcript L2160}, quote the D874d-52 quote. AMB-3 text: \"The running estimate's `assessment` is \\\"updated every turn\\\" (section 3)\"; AMB-5 text: \"Workflow `agent()` delegates (the delegation rule covers workflows)\"; AMB-7 text: \"\\\"provenance is eternal\\\" (the commander, 2026-03-30) against updating an item's status\" (issue L495, L497, L499 verbatim). Fix make-briefs.py so it emits these from the issue table",
+      "why": "RFC-0011:125-127 and :165",
+      "barrier_analysis": "Would prevent OBS-5 and let a quote checker cover ambiguities as it covers decisions",
+      "affected": ["874d-2-structured-reports-brief.json ambiguities[]", "/Users/new-jose/repos/aitools/.scratch/session-dbd05b0c-2365-4159-9976-bc64a2af874d/make-briefs.py"],
+      "deviation_refs": [],
+      "observation_refs": ["OBS-5"],
+      "disposition": "proposed"
+    },
+    {
+      "id": "PRO-6",
+      "type": "proposal",
+      "text": "State gates, merge model and hand-back point; pre-resolve the self-merge conflict",
+      "what": "Add constraints: (a) \"Gates at launch: G0 met by the launch order; G1 <state>; G2 <state>. If G1 or G2 is open, stop before WP-1 and report it as a blocker (D-DEL9)\" (plan:33-39); (b) \"You do not merge. Open each work package's PR and keep it green; start the next package on a branch that merges the previous one in with --no-ff (plan:43); the commander merges in order. This overrides /delegate duty 2 'before it self-merges' (D-DEL6 tier 2)\"; (c) in return.hand_back: \"hand back your AAR once every work package's PR is open with CI green, or earlier at a blocker\"",
+      "why": "plan:39 makes G2 a precondition the brief never mentions; /delegate step 6 requires skill conflicts to be pre-resolved",
+      "barrier_analysis": "Would prevent OBS-6: the delegate would neither stall on an unknown gate nor wait indefinitely for merges it may not do",
+      "affected": ["874d-2-structured-reports-brief.json constraints[]", "874d-2-structured-reports-brief.json return.hand_back"],
+      "deviation_refs": [],
+      "observation_refs": ["OBS-6"],
+      "disposition": "proposed"
+    },
+    {
+      "id": "PRO-7",
+      "type": "proposal",
+      "text": "Complete rules[] and skills[]",
+      "what": "Append to rules[]: /Users/new-jose/repos/aitools/reference/script-standards-detail.md, cross-platform-detail.md, logging.md, managed-file-deployment.md, plan-execution-detail.md, rules.md, skills.md, prompt-turn-checklist.md, harness-db-schema.sql, README.md (all under /Users/new-jose/repos/aitools/reference/), /Users/new-jose/repos/aitools/scripts/harness-db.py, /Users/new-jose/repos/aitools/.github/workflows/check.yml. Add to skills[]: {\"name\": \"/tool-ops\", \"use\": \"Claude Code hook events and sub-agent limits before WP-4.2 and the WP-3.5 probes\", \"override\": \"\"}",
+      "why": "/delegate 'In the aitools repo' lists the reference set for every delegate; the work packages change or depend on the other files; user rule tool-ops.md",
+      "barrier_analysis": "Would prevent OBS-7: a delegate reading only rules[] in full would start WP-1.4 without the script and logging standards it must meet",
+      "affected": ["874d-2-structured-reports-brief.json rules[]", "874d-2-structured-reports-brief.json skills[]"],
+      "deviation_refs": [],
+      "observation_refs": ["OBS-7"],
+      "disposition": "proposed"
+    },
+    {
+      "id": "PRO-8",
+      "type": "proposal",
+      "text": "Fix the D874d-8 and D874d-51 quotes",
+      "what": "D874d-8 quote: \"one per session, as json, all delegates edit directly, json allows for this right? the multi-writer, without issue? its the main reason to do json\" (issue body, source 87795dc3 L8030 answer 3), keeping L289 in source.location. D874d-51: quote \"26) the sessionend hook should commit and push to main.\" only, and move the second passage to source.location",
+      "why": "RFC-0011:127: the quote is the source text verbatim, the words the decision rests on",
+      "barrier_analysis": "Would prevent OBS-8 and OBS-9",
+      "affected": ["874d-2-structured-reports-brief.json decisions[3]", "874d-2-structured-reports-brief.json decisions[35]"],
+      "deviation_refs": [],
+      "observation_refs": ["OBS-8", "OBS-9"],
+      "disposition": "proposed"
+    },
+    {
+      "id": "PRO-9",
+      "type": "proposal",
+      "text": "Resolve source paths and say where 87795dc3 can be checked",
+      "what": "D874d-1 location: \"/Users/new-jose/repos/aitools-nobul-jose/sessions/aitools/2026-03-16_79b05dd0.jsonl L419\". For OBJ-1, D874d-5, -7, -8: append \"(transcript not on this machine; verified through issue #180 section 1)\". Write every source.location in a 3.2.1 form (path:line, SHA, URL, transcript path + line); for decisions, the transcript path plus line instead of \"Session dbd05b0c L<n>\"",
+      "why": "RFC-0011:126; a delegate cannot resolve `<dp>` or a session label",
+      "barrier_analysis": "Would prevent OBS-10 and OBS-15",
+      "affected": ["874d-2-structured-reports-brief.json (source.location values)", "make-briefs.py"],
+      "deviation_refs": [],
+      "observation_refs": ["OBS-10", "OBS-15"],
+      "disposition": "proposed"
+    },
+    {
+      "id": "PRO-10",
+      "type": "proposal",
+      "text": "Complete the verified assumptions",
+      "what": "ASM-5: evidence \"scripts/harness-db.py:1028 and :1071, run by the SessionStart hook\", ref \"scripts/harness-db.py:1028\", impact_if_false \"the session agent cannot pass --db or --agent-id\". ASM-6: status \"unverified\" with evidence \"36 bits; not tested\" (or keep verified and add ref to RFC 0011 S-11)",
+      "why": "RFC-0011:179-181",
+      "barrier_analysis": "Would prevent OBS-11",
+      "affected": ["874d-2-structured-reports-brief.json assumptions[4]", "874d-2-structured-reports-brief.json assumptions[5]"],
+      "deviation_refs": [],
+      "observation_refs": ["OBS-11"],
+      "disposition": "proposed"
+    },
+    {
+      "id": "PRO-11",
+      "type": "proposal",
+      "text": "Point to the issue comments and mark the transcripts reference-only",
+      "what": "L997: \"issue nobul-tech/aitools#180 (gh issue view 180 --repo nobul-tech/aitools, and with --comments; the body v5.2 and five comments are the decision record)\". L996: append \"(reference material: search with read-session.py; never load a transcript whole)\"",
+      "why": "RFC-0011:272 and :539",
+      "barrier_analysis": "Would prevent OBS-12",
+      "affected": ["874d-2-structured-reports-brief.json access.read_only"],
+      "deviation_refs": [],
+      "observation_refs": ["OBS-12"],
+      "disposition": "proposed"
+    },
+    {
+      "id": "PRO-12",
+      "type": "proposal",
+      "text": "Correct OL-2 in every brief",
+      "what": "Replace OL-2's text with: \"A delegate's subagents/agent-<agentId>.meta.json (description = mission name) existed while background delegate 874d-5-brief-verify ran (2026-11-16), but in mission 874d-1-aar-doctrine it appeared only at finish (20:55:18Z); check for it, and fall back to the parent transcript or a TaskStop error\"",
+      "why": "Observed contradiction (OBS-13); the old text tells delegates not to use a source that worked",
+      "barrier_analysis": "Would prevent OBS-13 from steering delegates away from the simplest agentId lookup (ASM-1 of the implementing brief)",
+      "affected": ["874d-2..874d-6 briefs operational_learning OL-2", "make-briefs.py"],
+      "deviation_refs": [],
+      "observation_refs": ["OBS-13"],
+      "disposition": "proposed"
+    },
+    {
+      "id": "PRO-13",
+      "type": "proposal",
+      "text": "Give each verifier brief its own intent scope",
+      "what": "874d-5: intent.scope \"the implementing brief 874d-2-structured-reports-brief.json, and the four verifier briefs for structure, read against RFC 0011 3.1-3.3 and issue #180 section 3\"; derive each verifier's purpose and scope from its OBJ-2 in make-briefs.py",
+      "why": "Intent and objectives disagreed (my AMB-1)",
+      "barrier_analysis": "Would prevent OBS-14",
+      "affected": ["874d-3..874d-6 briefs intent", "make-briefs.py"],
+      "deviation_refs": [],
+      "observation_refs": ["OBS-14"],
+      "disposition": "proposed"
+    },
+    {
+      "id": "PRO-14",
+      "type": "proposal",
+      "text": "Carry the ids the RFC cites",
+      "what": "Add ASM-7 (status falsified/settled, ref RFC 0011 S-6), AMB-4, AMB-6 and AMB-9 from issue L486, L496, L498, L501, keeping the issue's ids for traceability, and add to RFC 3.2.4 (S-7) that a brief MAY keep the ids of the record it copies items from",
+      "why": "RFC 3.6.11 and S-6 cite AMB-6 and ASM-7; S-7 as written conflicts with keeping issue ids",
+      "barrier_analysis": "Would prevent OBS-16",
+      "affected": ["874d-2-structured-reports-brief.json assumptions[], ambiguities[]", "rfcs/RFC-0011-structured-reports.md 3.2.4"],
+      "deviation_refs": [],
+      "observation_refs": ["OBS-16"],
+      "disposition": "proposed"
+    }
+  ],
+  "rfis": [
+    {
+      "id": "R874d-5-1",
+      "type": "rfi",
+      "title": "How the implementing mission updates the plan's status table",
+      "question": "The brief orders the delegate to update plans/structured-reports/implementation-plan.md after every batch, while forbidding pushes to main and giving the main checkout read-only. Your CLAUDE.md Channel exception says plans are committed directly to main from the main checkout. Should the delegate update the plan inside each work package's PR, or push it directly to main under the Channel exception?",
+      "suggestion": "Inside each work package's PR (PRO-2): no delegate pushes to main, and the plan's status lands with the work it describes",
+      "status": "open"
+    }
+  ]
+}

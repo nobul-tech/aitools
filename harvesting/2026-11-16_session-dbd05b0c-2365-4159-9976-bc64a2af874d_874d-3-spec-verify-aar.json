@@ -1,0 +1,669 @@
+{
+  "provenance": {
+    "document": "aar",
+    "schema_version": 1,
+    "version": "v1.0",
+    "mission": "874d-3-spec-verify",
+    "agent_id": "a311f00d1e3e84666",
+    "session_id": "dbd05b0c-2365-4159-9976-bc64a2af874d",
+    "brief": "/Users/new-jose/repos/aitools/.scratch/session-dbd05b0c-2365-4159-9976-bc64a2af874d/874d-3-spec-verify-brief.json",
+    "created_at": "2026-11-16T00:40:00Z"
+  },
+  "objectives": [
+    {
+      "id": "OBJ-1",
+      "type": "objective",
+      "text": "launch delegates to run different types of verfiers including adverserial",
+      "source": {"kind": "commander", "location": "session dbd05b0c, transcript L2553"},
+      "quote": "launch delegates to run different types of verfiers including adverserial",
+      "status": "accomplished",
+      "how": "This mission is the traceability verifier among the four the session agent launched (874d-3 to 874d-6). It ran its own type of verification only and launched no delegate of its own.",
+      "deviation_refs": [],
+      "observation_refs": [],
+      "deliverables": [
+        "/Users/new-jose/repos/aitools/.scratch/session-dbd05b0c-2365-4159-9976-bc64a2af874d/874d-3-spec-verify-aar.json"
+      ]
+    },
+    {
+      "id": "OBJ-2",
+      "type": "objective",
+      "text": "Trace every decision of issue #180 (body v5.2, D874d-1 to D874d-53) and every point the issue left to the RFC into RFC 0011, the plan and the implementing brief: for each, say where it is carried and whether faithfully, newest decision winning; list every contradiction, omission and misstatement; check that every quote in the brief is verbatim against the session transcript or the issue.",
+      "source": {"kind": "agent", "location": "session agent dbd05b0c-2365-4159-9976-bc64a2af874d, brief OBJ-2"},
+      "status": "accomplished",
+      "how": "Fetched issue #180 (body v5.2, 5 comments). Extracted the commander's 10 prompts from the transcript (L79-L2553) with a script. Scripted a citation scan of D874d-1..53 over the three files (cites.py) and a verbatim quote check of the 874d-2 brief (check_quotes.py: every quote and quoted source span is verbatim). Built the table for all 53 decisions, ASM-1..8, AMB-1..10 and WP-0..6 in 874d-3-spec-verify-traceability.md, and checked the code and harness files the RFC and plan depend on (harness-db.py, hooks, ROADMAP, glossary, RFC 0010). 28 defects recorded as observations, each with a proposal.",
+      "deviation_refs": ["DEV-1"],
+      "observation_refs": ["OBS-1", "OBS-2", "OBS-3", "OBS-4", "OBS-5", "OBS-6", "OBS-7", "OBS-8", "OBS-9", "OBS-10", "OBS-11", "OBS-12", "OBS-13", "OBS-14", "OBS-15", "OBS-16", "OBS-17", "OBS-18", "OBS-19", "OBS-20", "OBS-21", "OBS-22", "OBS-23", "OBS-24", "OBS-25", "OBS-26", "OBS-27", "OBS-28"],
+      "deliverables": [
+        "/Users/new-jose/repos/aitools/.scratch/session-874d-3-spc/874d-3-spec-verify-traceability.md",
+        "/Users/new-jose/repos/aitools/.scratch/session-874d-3-spc/cites.py",
+        "/Users/new-jose/repos/aitools/.scratch/session-874d-3-spc/check_quotes.py",
+        "/Users/new-jose/repos/aitools/.scratch/session-874d-3-spc/prompts.py",
+        "/Users/new-jose/repos/aitools/.scratch/session-874d-3-spc/data/ (issue body, comments, commander prompts, cites.txt)"
+      ]
+    }
+  ],
+  "ambiguities": [
+    {
+      "id": "AMB-1",
+      "type": "ambiguity",
+      "text": "Final response shape: \"5-line summary; PR URL(s) or commit SHAs; branch; files changed; ...\"",
+      "source": {"kind": "artifact", "location": "deployed ~/.claude/skills/delegate/SKILL.md \"Final response shape\" (older than working copy v2.6) vs this prompt \"Deliverable\" and brief return.hand_back"},
+      "readings": ["free-text final response per the deployed /delegate", "AAR JSON in one fenced block, at most five lines before it (prompt, brief, D874d-50)"],
+      "resolution": "AAR JSON in one fenced block, preceded by at most five lines",
+      "resolved_by": "read",
+      "evidence": "D-DEL6 tier 1: D874d-50 (\"25) json\", L2160); tier 2: the prompt and brief. The deployed skill is tier 4.",
+      "status": "resolved"
+    },
+    {
+      "id": "AMB-2",
+      "type": "ambiguity",
+      "text": "Trace every decision ... into RFC 0011, the plan and the implementing brief",
+      "source": {"kind": "agent", "location": "brief OBJ-2"},
+      "readings": ["every decision must appear in all three files", "the RFC must cite every decision; the plan and the brief carry what the implementation needs"],
+      "resolution": "The second reading. A decision missing from the RFC is a defect (issue WP-0 Done when: \"Every decision of section 1 is cited\", body L510); one missing from the plan or brief is a defect only when the implementer needs it.",
+      "resolved_by": "read",
+      "evidence": "issue #180 body L510; brief intent.scope",
+      "status": "resolved"
+    },
+    {
+      "id": "AMB-3",
+      "type": "ambiguity",
+      "text": "Do not reopen the commander's decisions (issue #180 section 1); a decision you think is wrong is a proposal, not a defect",
+      "source": {"kind": "agent", "location": "brief constraints[1]"},
+      "readings": ["a gap between a decision's agent-written row text and the commander's quoted words is a defect", "it is a question for the commander"],
+      "resolution": "Where the issue's row text generalizes the commander's words (D874d-30) or the schema of section 3 lacks a value the decisions rely on (superseded), raised as an RFI with a suggested answer, not as a defect of the RFC.",
+      "resolved_by": "reason",
+      "evidence": "issue #180 body L13: \"A point the RFC finds unclear goes to the commander as an RFI with a suggested answer.\"",
+      "status": "resolved"
+    },
+    {
+      "id": "AMB-4",
+      "type": "ambiguity",
+      "text": "auto mode: \"You can do much of your work through the Bash tool ... read files with cat, head, or sed -n\"",
+      "source": {"kind": "artifact", "location": "harness system instructions (auto mode) vs USO \"Dedicated tools for file ops\" in ~/.claude/CLAUDE.md"},
+      "readings": ["read files with Bash", "read files with Read"],
+      "resolution": "Read, Write and Edit for files; Bash only for gh, git, ls, mkdir, mv, date and scratch scripts",
+      "resolved_by": "read",
+      "evidence": "D-DEL6 tier 1: the commander's standing order (USO) in ~/.claude/CLAUDE.md; restated in this prompt's Access section",
+      "status": "resolved"
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "ASM-1",
+      "type": "assumption",
+      "text": "The target files are the version written by session dbd05b0c at 2026-11-16 and are not changed while you verify",
+      "status": "verified",
+      "confidence": "high",
+      "evidence": "mtimes: plan 00:10:48Z, RFC and 874d-2 brief 00:14:29Z, all before this delegate's meta.json (00:16:58Z); not re-modified when checked at 00:25:33Z",
+      "impact_if_false": "re-read a file whose content no longer matches a line you cite"
+    },
+    {
+      "id": "ASM-2",
+      "type": "assumption",
+      "text": "The issue body fetched (updatedAt 2026-11-16T00:02:21Z) is v5.2",
+      "status": "verified",
+      "confidence": "high",
+      "evidence": "body L15: \"**Body version.** v5.2 (2026-11-16, session dbd05b0c)\"",
+      "impact_if_false": "defects cited against the wrong version"
+    },
+    {
+      "id": "ASM-3",
+      "type": "assumption",
+      "text": "The stale ids D-SR<n> in the working copy map one to one to D874d-<n>",
+      "status": "verified",
+      "confidence": "moderate",
+      "evidence": "Matched by content: D-SR22 (deviations replace findings) = D874d-22; D-SR10 (roadmap) = D874d-10; D-SR9 = D874d-9; D-SR11 (/debrief not now) = D874d-11; issue comment 3 L5 uses D-SR2 and D-SR22 for D874d-2 and D874d-22. D-SR24 in glossary.json L224 not checked by content",
+      "impact_if_false": "the replacement ids proposed in PRO-11 would point to the wrong decisions"
+    }
+  ],
+  "deviations": [
+    {
+      "id": "DEV-1",
+      "type": "deviation",
+      "from": {
+        "kind": "brief",
+        "ref": "prompt section Skills",
+        "text": "Load /delegate now, before any other work, and give any delegate you launch this same instruction (you should not need one). Then /scratch, and /glossary (read only)."
+      },
+      "text": "Loaded /delegate first; created the scratch directory and read the files before loading /scratch and /glossary, which were loaded about two-thirds through the work",
+      "cause": "error",
+      "why": "Went straight to the reading after /delegate",
+      "effect": "None found on the objectives: the scratch path came from the prompt, and /scratch then showed that copies of the issue and the commander's prompts at the top level would be harvested into tracked harvesting/, so they were moved to data/ (OL-2) before the session ends",
+      "objective_refs": ["OBJ-2"],
+      "observation_refs": []
+    }
+  ],
+  "observations": [
+    {
+      "id": "OBS-1",
+      "type": "observation",
+      "text": "RFC 0011 cites 36 of the 53 decisions. Uncited: D874d-2, -3, -4, -5, -6, -7, -10, -11, -12, -16, -18, -30, -37, -38, -39, -40, -46. The superseded ones (-2, -3, -4, -39; the node set of -1) are not carried as superseded anywhere in the RFC.",
+      "evidence": "cites.py over rfcs/RFC-0011-structured-reports.md (data/cites.txt). Issue #180 body L510, WP-0 Done when: \"Every decision of section 1 is cited.\" Brief objective text: \"A superseded decision must be carried as superseded.\"",
+      "severity": "high"
+    },
+    {
+      "id": "OBS-2",
+      "type": "observation",
+      "text": "D874d-30 (\"A schema field is adopted only as a governed term\") is not carried by the RFC or the plan. The RFC defines nodes and fields that are not governed terms, including the node and item type `objective` (no glossary entry), and fields such as `how`, `readings`, `resolved_by`, `effect`, `assessment`, `main_effort`, `maintainer`, `chain_of_command`. The plan's WP-6 also drops the issue's \"the glossary check\" (see OBS-25).",
+      "evidence": "issue body L69 (D874d-30); commander L907: \"artifact_refs needs to be a governed term if we are going to adopt it\". grep of registries/glossary.json: entries for deliverable (L132), mission brief (L426), after action review (L47); no \"objective\". RFC 3.2.2 L139-201.",
+      "severity": "medium"
+    },
+    {
+      "id": "OBS-3",
+      "type": "observation",
+      "text": "RFC 3.2.1's item type enum omits `fact`, and the v4-to-v5 mapping of 3.6.7 says nothing about v4 `fact` rows, although D874d-43 keeps `fact` as a harness-DB type and the issue's schema 5 says \"fact stays (D874d-43)\". RFC 3.2.2 even points a verified assumption's `ref` to \"a fact\", a type the enum cannot hold. Implemented literally, the schema-5 CHECK constraint would reject or drop the v4 `fact` rows.",
+      "evidence": "RFC L118-119 (type enum), L181, L384-389 (mapping table). Issue body L82 (D874d-43: \"`fact` stays as it is: a governed term and a harness-DB type\"), L447 (\"`fact` stays (D874d-43)\"). scripts/harness-db.py L93-101: INTELLIGENCE_TYPES includes \"fact\".",
+      "severity": "high"
+    },
+    {
+      "id": "OBS-4",
+      "type": "observation",
+      "text": "RFC S-17 says \"No v4 data is lost\", and 3.6.3 puts every item type, `decision` included, in `items`, and 3.6.10 makes `decision add` write `items` rows. But the 3.6.7 mapping has no row for the v4 session `decisions` table, and 3.6.7 keeps only `missions` and `delegation_log` unchanged. Existing decision rows are neither migrated nor kept by the text.",
+      "evidence": "RFC L356, L384-391, L403, L474. scripts/harness-db.py L162-168 (CREATE TABLE decisions, status CHECK). Overlaps 874d-4 (adversarial).",
+      "severity": "medium"
+    },
+    {
+      "id": "OBS-5",
+      "type": "observation",
+      "text": "RFC S-18 lets an item in a brief or an AAR omit agent_id, agent_type, mission and created_at. This changes the issue's section 3 schema (\"Fields every item carries\"), which WP-0 says the RFC makes normative. The issue says points the RFC finds unclear go to the commander as an RFI; S-18 was settled by the agent instead.",
+      "evidence": "RFC L134 and L475. Issue body L178-196 (\"### Fields every item carries\": id, type, text, agent_id, agent_type, mission, ... created_at), L510 (\"makes sections 1 to 5 normative\"), L13.",
+      "severity": "medium"
+    },
+    {
+      "id": "OBS-6",
+      "type": "observation",
+      "text": "The plan's \"Sources of truth\" ranks RFC 0011 (2) and the plan (3) above the mission brief, and cites D-DEL6 for \"the higher one wins\". D-DEL6 puts the delegation prompt and briefing at tier 2, above skills and other harness artifacts. The brief is the briefing, so under D-DEL6 it outranks the RFC and the plan.",
+      "evidence": "plan L20-27. shared/rules/delegation.md L26 (D-DEL6: \"1) the commander's own words ...; 2) the delegation prompt; 3) skills\"); shared/skills/delegate/SKILL.md L325-329 (\"2. The delegation prompt and briefing.\" ... \"Harness artifacts\" last); this mission's prompt, Conflicts.",
+      "severity": "medium"
+    },
+    {
+      "id": "OBS-7",
+      "type": "observation",
+      "text": "Plan gate G1 says the commander takes care of moving the six working-copy files to main (R874d-27), then adds \"The same holds for this plan, RFC 0011 and the `rfcs/README.md` row\". R874d-27 and its answer covered the six files only; the extension is not the commander's word.",
+      "evidence": "plan L36. Commander L2160: \"27) dont worry about it\". Issue comment 5 L31: \"The commander takes care of the six working-copy files; WP-2 first checks `origin/main` for them (ASM-8)\". Issue body L468.",
+      "severity": "medium"
+    },
+    {
+      "id": "OBS-8",
+      "type": "observation",
+      "text": "The ROADMAP row: issue WP-0 lists \"the `ROADMAP.md` row moves to In Progress\" as WP-0 work; the plan moves \"the issue #180 row\" in batch 2.4. No row for implementing issue #180 exists: the only ROADMAP row naming #180 is \"Distributed sessions coordinated through running estimates\" (Future), which is out of scope (D874d-10). That row also still cites D-SR10 and D-SR9.",
+      "evidence": "issue body L510; plan L73; ROADMAP.md L41 (grep for 180|structured). documentation-standards.md: \"In Progress items must link to `plans/*.md`\".",
+      "severity": "medium"
+    },
+    {
+      "id": "OBS-9",
+      "type": "observation",
+      "text": "The plan has no probe for ASM-4, which the issue says is verified by a WP-2 probe. Batch 3.5 probes ASM-1 and ASM-3 only, and the brief's duty records only those two. RFC S-9's fallback for deeper delegating agents depends on ASM-4.",
+      "evidence": "issue body L483 (ASM-4 \"Verified in: WP-2 probe\"); plan L87; 874d-2 brief L1010 (\"record the probes of batch 3.5 (ASM-1, ASM-3) in the PR body\"); RFC L278, L466.",
+      "severity": "medium"
+    },
+    {
+      "id": "OBS-10",
+      "type": "observation",
+      "text": "Retiring `.aitools/channel/running-estimate.json` (RFC S-13, plan 5.2) leaves tracked files that refer to it outside every batch: .claude/rules/aitools-workspace.md (its table: \"channel/running-estimate.json | tracked | Carry-forward state\"), reference/artifact-harvesting.md, scripts/aitools-dashboard.sh, scripts/aitools-dashboard.ps1, scripts/generate-dashboard.py, shared/hooks/dashboard-serve.sh. Plan 5.2's own check (\"grep -rn finds no reference to the retired files\") and the issue's WP-5 Done when would fail. RFC 0010 section 7 still calls the export git-tracked; RFC 0011 3.6.8 supersedes only RFC 0010 section 5. D874d-52 makes the export untracked, so both texts now contradict a decision. The dashboards stop finding an estimate from WP-3 (the hook stops writing the file) until a later fix.",
+      "evidence": "git grep -l running-estimate.json (tracked files). plan L103; issue body L515; RFC L348, L393; rfcs/0010-python-sqlite-engineering.md L92-93 (\"Archive (git-tracked): .aitools/channel/running-estimate.json\"); .claude/rules/aitools-workspace.md table row channel/running-estimate.json; shared/hooks/dashboard-serve.sh L67-68.",
+      "severity": "medium"
+    },
+    {
+      "id": "OBS-11",
+      "type": "observation",
+      "text": "WP-2's Done-when grep misses stale ids that D874d-41 supersedes and the second permission signal: `D-SR<n>` (ROADMAP.md L41; registries/glossary.json L210, L224; reference/framework-intelligence-types.md L17), `RFI 874d-13` (glossary.json L210), the rfi id `<sid4>-<n>` (framework-intelligence-types.md L284), and `PERMISSION_DENIED` (shared/skills/delegate/SKILL.md L410, while v2.6 says \"the permission signal is `WRITE_BLOCKED` everywhere\" and the issue section 5 says \"One permission signal, `WRITE_BLOCKED`\"). ROADMAP.md is outside the grep's directories.",
+      "evidence": "plan L75; grep -rn D-SR[0-9] over shared .claude reference registries ROADMAP.md; delegate SKILL.md L58-59 and L410; issue body L458.",
+      "severity": "medium"
+    },
+    {
+      "id": "OBS-12",
+      "type": "observation",
+      "text": "Schema 5 changes the intelligence types (adds objective, deviation, ambiguity; drops finding). framework-intelligence-types.md requires that a type change update that file's tables and the glossary together, but no WP-3 batch lists the file or the glossary; plan 2.4 only adds a pointer (v1.3).",
+      "evidence": "reference/framework-intelligence-types.md L455-463 (\"Change a type there, bump SCHEMA_VERSION, ... update this file and the glossary together. A new or renamed type needs a glossary entry and a word-list line ... and a row in the two tables above.\"), L301-309 (types table with finding, no deviation/ambiguity/objective). plan L73, L81-87. Issue body L447.",
+      "severity": "medium"
+    },
+    {
+      "id": "OBS-13",
+      "type": "observation",
+      "text": "The 874d-2 brief's constraint widens RFC section 7: \"Never commit a brief, an AAR, a running-estimate export or the commander's words to a project repo\". RFC section 7 restricts briefs, AARs and running estimates only. The repo records the commander's words in rules, decision tables and release notes (D-DEL6 names \"the rules, standing orders and decision records that record his words\"), and the implementer's own WP-2 and WP-6 changes quote him. Read literally, the constraint blocks them.",
+      "evidence": "874d-2 brief L140; RFC L507; shared/rules/delegation.md L26 and D-DEL8..12 rows; documentation pattern \"(commander, 2026-11-13: ...)\" in .claude/rules/interactive-menus.md.",
+      "severity": "medium"
+    },
+    {
+      "id": "OBS-14",
+      "type": "observation",
+      "text": "The decision item's status values (decided | implemented | verified | deferred | reversed) have no `superseded`, and no field names the superseding decision, although the issue's record depends on supersession (\"A *superseded* decision is kept as the record\") and D-DEL6 makes the newest win. The 874d-2 brief carries the partly superseded D874d-1, -7, -8, -42 and -44 as status \"decided\"; only their free text says otherwise.",
+      "evidence": "RFC L183-185; issue body L36, L249-251; 874d-2 brief L259, L285, L298, L624, L649; scripts/harness-db.py L168 (same CHECK set).",
+      "severity": "medium"
+    },
+    {
+      "id": "OBS-15",
+      "type": "observation",
+      "text": "The brief's D874d-8 `quote` is verbatim but is the commander's question, not his decision: \"each delegate will be writing to the running estimate.  can we safely do that with json or do we need to stick with sqlite3?\". The words of the decision are his answer 3 in session 87795dc3.",
+      "evidence": "874d-2 brief L297; issue body L47; issue comment 1 L38: \"one per session, as json, all delegates edit directly, json allows for this right? the multi-writer, without issue? its the main reason to do json\".",
+      "severity": "low"
+    },
+    {
+      "id": "OBS-16",
+      "type": "observation",
+      "text": "The brief's D874d-51 `quote` joins two fragments of L2160 with \"…\" and drops the sentences between them; RFC 3.2.1 defines `quote` as \"the source text verbatim\". Each fragment is verbatim.",
+      "evidence": "874d-2 brief L713; transcript L2160 (data/prompts.txt L23); RFC L127.",
+      "severity": "low"
+    },
+    {
+      "id": "OBS-17",
+      "type": "observation",
+      "text": "The brief's ambiguities AMB-1, AMB-2 and AMB-10 quote the commander's words as their `text` but have source.kind \"agent\" and no `quote`; RFC 3.2.1 requires a quote when the source is the commander's words. Overlaps 874d-5 (brief conformance).",
+      "evidence": "874d-2 brief L747-751, L764-768, L851-855; RFC L127; texts found verbatim at L1921, issue comment 1 L19, L2160.",
+      "severity": "low"
+    },
+    {
+      "id": "OBS-18",
+      "type": "observation",
+      "text": "The brief's ASM-2 says status \"unverified\" with evidence \"no load test\"; the issue says ASM-2 is \"Partly verified: the settings are in `scripts/harness-db.py`\".",
+      "evidence": "874d-2 brief L169-180; issue body L481.",
+      "severity": "low"
+    },
+    {
+      "id": "OBS-19",
+      "type": "observation",
+      "text": "The brief omits issue AMB-4, AMB-6, AMB-9 and ASM-7. AMB-6 (\"Until schema 5, `provenance.session_db` is empty and nothing is written to the DB\") governs the implementer's sequence; ASM-7 is settled by S-6 and the brief does not say so.",
+      "evidence": "874d-2 brief L154-245 (ASM-1..6, 8), L743-865 (AMB-1, 2, 3, 5, 7, 8, 10); issue body L486, L496, L498, L501; RFC L405.",
+      "severity": "low"
+    },
+    {
+      "id": "OBS-20",
+      "type": "observation",
+      "text": "The issue's out-of-scope list is not carried whole. The brief omits \"harnesses other than Claude Code, beyond recording what is found when they are examined (D874d-33)\". RFC 0011 and the plan have no out-of-scope statement for D874d-9, -10 and -11.",
+      "evidence": "issue body L518-521; 874d-2 brief L30-34, L147; RFC intent L16-29.",
+      "severity": "low"
+    },
+    {
+      "id": "OBS-21",
+      "type": "observation",
+      "text": "RFC 3.8 and section 6 state \"Paths MUST NOT contain spaces (D874d-53)\". D874d-53 names one directory (AMB-10). Applied to every path, the rule covers `<repo>` and the dotprofile path, which the harness does not control (a Windows profile directory can contain a space).",
+      "evidence": "RFC L433, L499; issue body L92, L502.",
+      "severity": "low"
+    },
+    {
+      "id": "OBS-22",
+      "type": "observation",
+      "text": "The fallback for a delegate that cannot find its agentId is circular: the session agent fills the id \"from the AAR's `provenance.agent_id`\", but that delegate's AAR has no id either. The fallback is carried faithfully from the issue's ASM-1. /delegate tells the delegating agent to record the agentId the launch returns. Overlaps 874d-4.",
+      "evidence": "RFC L312, L316; issue body L480; shared/skills/delegate/SKILL.md L654-657 (\"Record the agentId the launch returns.\").",
+      "severity": "low"
+    },
+    {
+      "id": "OBS-23",
+      "type": "observation",
+      "text": "RFC 3.6.4 and S-5 cite RFC 0010 section 11 for \"SQLite's JSON functions, which the Python 3.8 floor does not guarantee\". RFC 0010 section 11 mentions FTS5 and language features only, nothing on JSON functions. The claim itself is unverified here. In 874d-6's scope (fact check).",
+      "evidence": "RFC L367, L462; rfcs/0010-python-sqlite-engineering.md L121-125.",
+      "severity": "low"
+    },
+    {
+      "id": "OBS-24",
+      "type": "observation",
+      "text": "RFC 3.9.1 lists D-DEL13 with the commander's delegation decisions without saying that the session agent wrote it, review-after. RFC 3.1.3 relies on it to leave conflict_priority and permissions out of the brief. D-DEL6: \"Text written by an agent is never the commander's words\".",
+      "evidence": "RFC L106, L437-446; shared/rules/delegation.md L33 (\"session agent dbd05b0c, review after (D-DEL5)\"); issue body L94; delegate SKILL.md L322-323.",
+      "severity": "low"
+    },
+    {
+      "id": "OBS-25",
+      "type": "observation",
+      "text": "Plan WP-6 (batch 6.1) drops \"the glossary check\" that the issue lists for WP-6.",
+      "evidence": "issue body L516; plan L109.",
+      "severity": "low"
+    },
+    {
+      "id": "OBS-26",
+      "type": "observation",
+      "text": "Issue WP-0 Done when: \"An independent reviewer's verdict is posted on the PR\". The RFC and plan were written in the working copy with no PR (the commander, L2553: \"implment the RFC directly\"). Plan G2 has no defined place to record the verdict.",
+      "evidence": "issue body L510; plan L37, L126; transcript L2553.",
+      "severity": "low"
+    },
+    {
+      "id": "OBS-27",
+      "type": "observation",
+      "text": "This delegate's subagents/agent-a311f00d1e3e84666.meta.json (description \"874d-3-spec-verify: traceability verifier\") existed at 00:16:58Z, about when it launched, while it was running. This contradicts the brief's OL-2 and the issue's section 4 note that the .meta.json appears only when a delegate finishes.",
+      "evidence": "ls -l -T of the meta.json (16:16:58 local, UTC-8 = 00:16:58Z); find_agentid.py output; 874d-2 brief L879; issue body L437; RFC carries no such note.",
+      "severity": "low"
+    },
+    {
+      "id": "OBS-28",
+      "type": "observation",
+      "text": "No rule says how a delegate numbers RFIs in its AAR before schema 5. S-7 numbers `<TYPE>-<n>` within the document, but RFIs keep `R<sid4>-<n>`, a session-wide counter a delegate cannot see. This AAR uses provisional ids.",
+      "evidence": "RFC L220-222, L474 (S-7); issue body L112.",
+      "severity": "low"
+    }
+  ],
+  "operational_learning": [
+    {
+      "id": "OL-1",
+      "type": "operational_learning",
+      "text": "On Claude Code 2026-11 (this session), a level-1 Agent delegate's .meta.json existed at launch, so a running delegate can find its own agentId by scanning subagents/*.meta.json for its mission name in `description`. This contradicts the earlier observation (OL-2 of the briefs) that it appears at the end; the difference may be launch mode (background vs foreground) or version. Probe both in WP-3 batch 3.5.",
+      "deviation_refs": [],
+      "observation_refs": ["OBS-27"]
+    },
+    {
+      "id": "OL-2",
+      "type": "operational_learning",
+      "text": "Copies of issue bodies, comments or commander prompts written at the top level of a session scratch directory are harvested into the tracked harvesting/ (any .md, .txt or .json not matching an ephemeral pattern). Put source copies in a subdirectory of the scratch directory, which is never harvested.",
+      "deviation_refs": ["DEV-1"],
+      "observation_refs": []
+    },
+    {
+      "id": "OL-3",
+      "type": "operational_learning",
+      "text": "A citation scan of D<sid4>-<n> ids must expand the short forms (\"D874d-22, -28\", \"D874d-51 and -52\", \"D874d-16 to -20\"), and must not count an abstract range (\"D874d-1 to D874d-53\") as citing each decision. cites.py does both and can be reused for WP-0's \"every decision is cited\" check.",
+      "deviation_refs": [],
+      "observation_refs": ["OBS-1"]
+    }
+  ],
+  "proposals": [
+    {
+      "id": "PRO-1",
+      "type": "proposal",
+      "what": "RFC 0011: add section 11 \"Decision traceability\", a table with one row per decision D874d-1 to D874d-53: | Decision | Carried in | Note |. Each row gives an RFC section, \"superseded by D874d-<n>\" (-2, -3, -4, -39; the node set of -1; the format of -7 and -36; the AAR part of -42; \"as json\" of -8), or \"process decision of session dbd05b0c, not normative here\" (-38, -40, -45, -46). Also cite D874d-7 in 3.7.1, -5 in 3.4.2 (what a delegate learns after its merge is an observation or operational learning), -6 in 3.6.10 (`log --type spotrep`), -12 in 3.3.3 objectives[], -16 with D-DEL9 in 3.2.3, -18 and -37 in section 2, -10 and -11 in the intent's scope (PRO-20), and -30 per PRO-2. Add a normative 3.9.3: \"The delegation guards MUST check that a prompt gives a brief path and the instruction to read it in full (D874d-27).\"",
+      "why": "Issue WP-0 Done when requires every decision to be cited, and the brief requires superseded decisions to be carried as superseded",
+      "barrier_analysis": "A traceability table, re-checked with cites.py, makes an uncited decision visible at review. It would have prevented OBS-1",
+      "affected": ["rfcs/RFC-0011-structured-reports.md"],
+      "deviation_refs": [],
+      "observation_refs": ["OBS-1"],
+      "disposition": "proposed"
+    },
+    {
+      "id": "PRO-2",
+      "type": "proposal",
+      "what": "RFC 0011 3.1: add \"3.1.6. Every node and every item type MUST be a governed term (D874d-30). A field not governed is defined in this section only; `artifact_refs` is not a field (D874d-30, D874d-34).\" Plan batch 2.2: add the glossary term `objective` (and any other node or type not yet governed). Plan 6.1: restore \"the glossary check\". Scope to be confirmed by R874d-NEW-1.",
+      "why": "D874d-30 is a commander decision that the RFC and plan do not carry. `objective` is a node and an item type with no glossary entry",
+      "barrier_analysis": "Would stop an ungoverned schema word from shipping, as artifact_refs nearly did",
+      "affected": ["rfcs/RFC-0011-structured-reports.md", "plans/structured-reports/implementation-plan.md", "registries/glossary.json", ".claude/rules/glossary.md"],
+      "deviation_refs": [],
+      "observation_refs": ["OBS-2", "OBS-25"],
+      "disposition": "proposed"
+    },
+    {
+      "id": "PRO-3",
+      "type": "proposal",
+      "what": "RFC 3.2.1 type line: old \"objective | deviation | observation | ambiguity | assumption | decision | operational_learning | proposal | rfi\" -> new \"objective | deviation | observation | ambiguity | assumption | decision | operational_learning | proposal | rfi; and, in the session DB only, fact (D874d-43: no brief, AAR or estimate node holds facts, D874d-32)\". RFC 3.6.7 mapping: add the row \"| type `fact` | `fact`, unchanged (D874d-43) |\".",
+      "why": "D874d-43 and the issue's schema 5 keep `fact` as a DB type; the RFC enum would reject v4 fact rows",
+      "barrier_analysis": "Prevents a CHECK constraint that rejects or drops existing data at migration",
+      "affected": ["rfcs/RFC-0011-structured-reports.md"],
+      "deviation_refs": [],
+      "observation_refs": ["OBS-3"],
+      "disposition": "proposed"
+    },
+    {
+      "id": "PRO-4",
+      "type": "proposal",
+      "what": "RFC 3.6.7 mapping: add \"| rows of the v4 `decisions` table | items of type `decision`: `decision_id` -> `id`, `title`/description -> `text`, `status` kept, the other columns in `fields` |\", or else add `decisions` to the tables that \"stay unchanged\" and make `decision add` write both. Recheck S-17's claim against every v4 session table (`session`, `missions`, `decisions`, `observations`, `deviations`, `messages`, `delegation_log`, `directives`, ...).",
+      "why": "S-17 claims no v4 data is lost, but the decisions table has no mapping",
+      "barrier_analysis": "A table-by-table mapping, tested on copies of the live DBs (3.6.7), would catch it",
+      "affected": ["rfcs/RFC-0011-structured-reports.md", "plans/structured-reports/implementation-plan.md (batch 3.3 test)"],
+      "deviation_refs": [],
+      "observation_refs": ["OBS-4"],
+      "disposition": "proposed"
+    },
+    {
+      "id": "PRO-5",
+      "type": "proposal",
+      "what": "Move S-18 from \"Settled by this RFC\" to section 9 \"Open questions\" as R874d-NEW-2, and until it is answered keep the issue's text in 3.2.1: every item carries agent_id, agent_type, mission and created_at. Do the same review for S-8 (it adds references to `rules[]`, a node the issue defined as CLAUDE.md files and rules).",
+      "why": "Issue L13 and L510: the RFC makes section 3 normative, and unclear points go to the commander as RFIs",
+      "barrier_analysis": "Keeps the RFC from quietly changing a specified schema",
+      "affected": ["rfcs/RFC-0011-structured-reports.md"],
+      "deviation_refs": [],
+      "observation_refs": ["OBS-5"],
+      "disposition": "proposed"
+    },
+    {
+      "id": "PRO-6",
+      "type": "proposal",
+      "what": "Plan \"Sources of truth\": old \"When two disagree, the higher one wins (D-DEL6).\" -> new \"When two disagree, D-DEL6 decides: the commander's decisions first; then the mission brief and the delegation prompt; then RFC 0011, then this plan (harness artifacts). A disagreement between the brief and RFC 0011 is a defect in one of them: report it in the AAR as an ambiguity and raise an RFI.\" Renumber the precedence column to match: decisions 1, brief 2, RFC 3, plan 4.",
+      "why": "D-DEL6 puts the briefing above harness artifacts",
+      "barrier_analysis": "Removes two contradicting precedence rules the implementer would have to choose between",
+      "affected": ["plans/structured-reports/implementation-plan.md"],
+      "deviation_refs": [],
+      "observation_refs": ["OBS-6"],
+      "disposition": "proposed"
+    },
+    {
+      "id": "PRO-7",
+      "type": "proposal",
+      "what": "Plan G1: old \"The commander takes care of this (R874d-27). The same holds for this plan, RFC 0011 and the `rfcs/README.md` row\" -> new \"The commander takes care of these six (R874d-27). This plan, RFC 0011 and the `rfcs/README.md` row must also reach main; how is R874d-NEW-4.\" Plan G2: name where the verdict is recorded (per R874d-NEW-4).",
+      "why": "R874d-27 covered the six files only; WP-0's verdict needs a place",
+      "barrier_analysis": "Stops attributing to the commander an undertaking he did not give",
+      "affected": ["plans/structured-reports/implementation-plan.md"],
+      "deviation_refs": [],
+      "observation_refs": ["OBS-7", "OBS-26"],
+      "disposition": "proposed"
+    },
+    {
+      "id": "PRO-8",
+      "type": "proposal",
+      "what": "Now, as WP-0: add an In Progress row to ROADMAP.md: \"| Structured running estimates, mission briefs and AARs | plans/structured-reports/implementation-plan.md | High | RFC 0011, issue #180 |\". Plan 2.4: old \"`ROADMAP.md` (the issue #180 row to In Progress, linked to this plan)\" -> new \"`ROADMAP.md` (the 'Structured running estimates, mission briefs and AARs' row stays In Progress; the 'Distributed sessions' row's D-SR10 and D-SR9 become D874d-10 and D874d-9)\".",
+      "why": "Issue WP-0 lists the row move as WP-0 work; no such row exists; documentation-standards requires In Progress rows to link a plan",
+      "barrier_analysis": "Would have kept the plan from pointing at a non-existent or out-of-scope row",
+      "affected": ["ROADMAP.md", "plans/structured-reports/implementation-plan.md"],
+      "deviation_refs": [],
+      "observation_refs": ["OBS-8"],
+      "disposition": "proposed"
+    },
+    {
+      "id": "PRO-9",
+      "type": "proposal",
+      "what": "Plan 3.5: old \"ASM-1 (...) and ASM-3 (a delegate in an isolated worktree writes the session DB)\" -> new \"ASM-1 (...), ASM-3 (a delegate in an isolated worktree writes the session DB) and ASM-4 (a level-2 delegating agent in an isolated worktree writes its delegate's brief into the top-level session's scratch directory)\". Brief duty: old \"(ASM-1, ASM-3)\" -> new \"(ASM-1, ASM-3, ASM-4)\".",
+      "why": "Issue ASM-4 is verified by a probe; RFC S-9 rests on it",
+      "barrier_analysis": "Each assumption the RFC's fallbacks rest on gets a probe",
+      "affected": ["plans/structured-reports/implementation-plan.md", ".scratch/session-dbd05b0c-.../874d-2-structured-reports-brief.json"],
+      "deviation_refs": [],
+      "observation_refs": ["OBS-9"],
+      "disposition": "proposed"
+    },
+    {
+      "id": "PRO-10",
+      "type": "proposal",
+      "what": "RFC 3.5.6: append \"This supersedes RFC 0010 section 7 (the tracked export) and the tracked `channel/running-estimate.json` row of `.claude/rules/aitools-workspace.md` (D874d-52).\" Plan: add batch 5.3 with `.claude/rules/aitools-workspace.md` (the row becomes `channel/estimates/` untracked, plus the dotprofile record), `reference/artifact-harvesting.md`, `scripts/aitools-dashboard.sh`, `scripts/aitools-dashboard.ps1`, `scripts/generate-dashboard.py`, `shared/hooks/dashboard-serve.sh` (read `.aitools/channel/estimates/<prefix>.json`); or move the dashboard readers into WP-3 so they never point at a file the hook has stopped writing. Verify: `git grep -l running-estimate.json` returns nothing outside history files.",
+      "why": "The issue's WP-5 Done when, the plan's own 5.2 check, and D874d-52 all require it",
+      "barrier_analysis": "Running the retirement grep at planning time lists every referrer; it would have found these six",
+      "affected": ["rfcs/RFC-0011-structured-reports.md", "plans/structured-reports/implementation-plan.md"],
+      "deviation_refs": [],
+      "observation_refs": ["OBS-10"],
+      "disposition": "proposed"
+    },
+    {
+      "id": "PRO-11",
+      "type": "proposal",
+      "what": "Plan, WP-2 Done when: old \"no harness file names `<sid4>_<mission name>-brief.md`, a Markdown brief, a default AAR file, `RFI <sid4>-<n>` or `D-<sid4>-<n>`. Check with `grep -rn` over `shared/`, `.claude/`, `reference/` and `registries/`.\" -> new \"no harness file names `<sid4>_<mission name>-brief.md`, a Markdown brief, a default AAR file, `RFI <sid4>-<n>`, `D-<sid4>-<n>`, a `D-SR<n>` id, an `RFI <4 hex>-<n>` id or `PERMISSION_DENIED`. Check with `grep -rnE 'D-SR[0-9]|RFI [0-9a-f]{4}-|PERMISSION_DENIED|_[0-9a-f]{4}_|brief\\.md'` over `shared/`, `.claude/`, `reference/`, `registries/` and `ROADMAP.md`; replace D-SR<n> with D874d-<n>.\" Batch 2.1 adds the `PERMISSION_DENIED` -> `WRITE_BLOCKED` fix in `shared/skills/delegate/SKILL.md` (L410).",
+      "why": "D874d-41 and the issue's \"one permission signal\" are not enforced by the current check",
+      "barrier_analysis": "A grep that covers every id format in use catches the stale ones",
+      "affected": ["plans/structured-reports/implementation-plan.md"],
+      "deviation_refs": [],
+      "observation_refs": ["OBS-11"],
+      "disposition": "proposed"
+    },
+    {
+      "id": "PRO-12",
+      "type": "proposal",
+      "what": "Plan batch 3.1 (or a new 3.6): add `reference/framework-intelligence-types.md` (decided-types table: rows for objective, deviation, ambiguity; finding marked retired with its v4->v5 mapping; \"How the types sit in an AAR\" replaced by a pointer to `reference/structured-reports.md`) and the glossary (word list and JSON for every new type), as that file's \"How It's Maintained\" requires for a type change.",
+      "why": "The harness's own maintenance rule for a type change",
+      "barrier_analysis": "Ties the schema change to its documentation in the same PR",
+      "affected": ["plans/structured-reports/implementation-plan.md"],
+      "deviation_refs": [],
+      "observation_refs": ["OBS-12"],
+      "disposition": "proposed"
+    },
+    {
+      "id": "PRO-13",
+      "type": "proposal",
+      "what": "874d-2 brief constraint: old \"Never commit a brief, an AAR, a running-estimate export or the commander's words to a project repo; the record goes to the dotprofile only\" -> new \"Never commit a brief, an AAR or a running-estimate export to a project repo; the record goes to the dotprofile only\".",
+      "why": "RFC section 7 restricts those three documents only; quoting the commander in rules and decision rows is the repo's practice",
+      "barrier_analysis": "A constraint wider than its source can block legitimate work",
+      "affected": [".scratch/session-dbd05b0c-.../874d-2-structured-reports-brief.json"],
+      "deviation_refs": [],
+      "observation_refs": ["OBS-13"],
+      "disposition": "proposed"
+    },
+    {
+      "id": "PRO-14",
+      "type": "proposal",
+      "what": "Per R874d-NEW-3: RFC 3.2.2 decision: old \"status decided | implemented | verified | deferred | reversed\" -> new \"status decided | implemented | verified | deferred | reversed | superseded; superseded_by[] the decisions that supersede it, in whole or in part (with `part`)\". Schema 5's CHECK gains `superseded`. In the 874d-2 brief, D874d-1, -7, -8, -42 and -44 get `superseded_by`.",
+      "why": "Supersession drives the decision record and D-DEL6; it should be structured",
+      "barrier_analysis": "Makes the governing decision queryable rather than buried in prose",
+      "affected": ["rfcs/RFC-0011-structured-reports.md", ".scratch/session-dbd05b0c-.../874d-2-structured-reports-brief.json"],
+      "deviation_refs": [],
+      "observation_refs": ["OBS-14"],
+      "disposition": "proposed"
+    },
+    {
+      "id": "PRO-15",
+      "type": "proposal",
+      "what": "874d-2 brief D874d-8 quote: old \"each delegate will be writing to the running estimate.  can we safely do that with json or do we need to stick with sqlite3?\" -> new \"one per session, as json, all delegates edit directly, json allows for this right? the multi-writer, without issue? its the main reason to do json\" (source location unchanged).",
+      "why": "The quote should be the words that decided",
+      "barrier_analysis": "n/a (quote choice)",
+      "affected": [".scratch/session-dbd05b0c-.../874d-2-structured-reports-brief.json"],
+      "deviation_refs": [],
+      "observation_refs": ["OBS-15"],
+      "disposition": "proposed"
+    },
+    {
+      "id": "PRO-16",
+      "type": "proposal",
+      "what": "874d-2 brief D874d-51 quote: old \"26) the sessionend hook should commit and push to main. … the session end hook should commit/push the user dotprofile repo.\" -> new the whole span from L2160, verbatim: \"26) the sessionend hook should commit and push to main.  the stored json estimate should actually live in my dotprofile repo actually, thats a decision.  there should be a directory called \\\"running estimates\\\" and thats where they should live.  the session end hook should commit/push the user dotprofile repo.\"",
+      "why": "RFC 3.2.1: the quote is the source text verbatim",
+      "barrier_analysis": "check_quotes.py with no ellipsis split would flag it",
+      "affected": [".scratch/session-dbd05b0c-.../874d-2-structured-reports-brief.json"],
+      "deviation_refs": [],
+      "observation_refs": ["OBS-16"],
+      "disposition": "proposed"
+    },
+    {
+      "id": "PRO-17",
+      "type": "proposal",
+      "what": "874d-2 brief ambiguities: AMB-1 source -> {kind: commander, location: \"Session dbd05b0c L1921 (D874d-47)\"}, quote \"keep the AAR as a handback\"; AMB-2 -> {kind: commander, location: \"Session 87795dc3 L8030, answer 1 (D874d-7)\"}, quote \"for either we need schema and template/defined structure\"; AMB-10 -> {kind: commander, location: \"Session dbd05b0c L2160 (D874d-52)\"}, quote \"there should be a directory called \\\"running estimates\\\"\". ASM-2 evidence -> \"partly verified: WAL, busy_timeout=5000 and BEGIN IMMEDIATE are in scripts/harness-db.py; no load test (issue #180 ASM-2)\".",
+      "why": "RFC 3.2.1 quote rule; the issue's ASM-2 status",
+      "barrier_analysis": "A validate check that requires `quote` when source.kind is commander (WP-1 1.4) would catch it; it cannot catch a wrong kind",
+      "affected": [".scratch/session-dbd05b0c-.../874d-2-structured-reports-brief.json"],
+      "deviation_refs": [],
+      "observation_refs": ["OBS-17", "OBS-18"],
+      "disposition": "proposed"
+    },
+    {
+      "id": "PRO-18",
+      "type": "proposal",
+      "what": "874d-2 brief: add ambiguities AMB-4 (resolved, D874d-51/-52), AMB-6 (resolved: until schema 5 nothing is written to the DB; RFC 3.6.11) and AMB-9 (resolved: session decisions D<sid4>-<n>; a rule's own table keeps its ids); add assumption ASM-7 with status \"falsified\" (the stdlib has no JSON Schema validator) and ref \"RFC 0011 S-6: stdlib subset validator\".",
+      "why": "The brief should carry every point of the issue's section 6 that bears on the implementation",
+      "barrier_analysis": "Generating the brief from section 6 as a whole, not a subset, would have included them",
+      "affected": [".scratch/session-dbd05b0c-.../874d-2-structured-reports-brief.json", "make-briefs.py (same directory)"],
+      "deviation_refs": [],
+      "observation_refs": ["OBS-19"],
+      "disposition": "proposed"
+    },
+    {
+      "id": "PRO-19",
+      "type": "proposal",
+      "what": "RFC 3.8: old \"Paths MUST NOT contain spaces (D874d-53).\" -> new \"The directory and file names this RFC defines MUST NOT contain spaces (AMB-10, D874d-53).\" Section 6: old \"**Paths:** no spaces (D874d-53), forward slashes.\" -> new \"**Paths:** the names this RFC defines contain no spaces (D874d-53); paths are written with forward slashes, and code quotes every path, which may contain spaces above `<repo>` or `<dotprofile>`.\"",
+      "why": "D874d-53 names one directory; the harness does not control the user's home path",
+      "barrier_analysis": "Prevents an unmeetable MUST",
+      "affected": ["rfcs/RFC-0011-structured-reports.md"],
+      "deviation_refs": [],
+      "observation_refs": ["OBS-21"],
+      "disposition": "proposed"
+    },
+    {
+      "id": "PRO-20",
+      "type": "proposal",
+      "what": "RFC intent Scope: append \"NOT the `/debrief`, `/brief` and `/channel` skills (D874d-11). NOT sharing estimates across sessions or distributed sessions (D874d-9, D874d-10). NOT harnesses other than Claude Code, beyond recording what is found when they are examined (D874d-33).\" 874d-2 brief out_of_scope: add \"harnesses other than Claude Code, beyond recording what is found when they are examined (D874d-33)\".",
+      "why": "Issue section 7 \"Out of scope\"",
+      "barrier_analysis": "Stops scope drift into the deferred items",
+      "affected": ["rfcs/RFC-0011-structured-reports.md", ".scratch/session-dbd05b0c-.../874d-2-structured-reports-brief.json"],
+      "deviation_refs": [],
+      "observation_refs": ["OBS-20"],
+      "disposition": "proposed"
+    },
+    {
+      "id": "PRO-21",
+      "type": "proposal",
+      "what": "RFC 3.4.9 last bullet: old \"The session agent fills the id from the AAR's `provenance.agent_id` on hand-back (ASM-1).\" -> new \"The session agent fills the id from the agentId its launch call returned (/delegate \\\"Identity and control\\\"), matched by mission name (ASM-1).\" Same change in 3.4.8 (\"with `agent_id` taken from ...\").",
+      "why": "A delegate that cannot find its id cannot put it in its AAR either",
+      "barrier_analysis": "Removes a circular fallback",
+      "affected": ["rfcs/RFC-0011-structured-reports.md", "plans/structured-reports/implementation-plan.md (Risks row 1)"],
+      "deviation_refs": [],
+      "observation_refs": ["OBS-22"],
+      "disposition": "proposed"
+    },
+    {
+      "id": "PRO-22",
+      "type": "proposal",
+      "what": "RFC 3.6.4 and S-5: replace \"(RFC 0010 section 11)\" with the actual source for the JSON-function claim, verified by 874d-6 or by a test on the Python 3.8 floor, or drop the claim and keep the reason \"one schema-free column keeps the type fields in one place\".",
+      "why": "The cited section does not support the claim",
+      "barrier_analysis": "n/a (citation)",
+      "affected": ["rfcs/RFC-0011-structured-reports.md"],
+      "deviation_refs": [],
+      "observation_refs": ["OBS-23"],
+      "disposition": "proposed"
+    },
+    {
+      "id": "PRO-23",
+      "type": "proposal",
+      "what": "RFC 3.9.1 row D-DEL13: old \"Every delegate loads `/delegate` at start\" -> new \"Every delegate loads `/delegate` at start (written by session agent dbd05b0c in answer to the commander's question on L1275; review after, D-DEL5)\".",
+      "why": "D-DEL6: an agent's text is not the commander's words; the RFC rests 3.1.3 on it",
+      "barrier_analysis": "Keeps provenance honest in normative text",
+      "affected": ["rfcs/RFC-0011-structured-reports.md"],
+      "deviation_refs": [],
+      "observation_refs": ["OBS-24"],
+      "disposition": "proposed"
+    },
+    {
+      "id": "PRO-24",
+      "type": "proposal",
+      "what": "874d-2 brief OL-2 and issue section 4 note: old \"was created when the delegate finished (20:55:18Z), not at launch; do not rely on it while a delegate runs\" -> new \"was created when 874d-1 finished (20:55:18Z), but 874d-3's was there at launch (00:16:58Z): unreliable while a delegate runs until WP-3 batch 3.5 probes both launch modes\". Plan 3.5: add the meta.json timing to the ASM-1 probe.",
+      "why": "This mission observed the opposite",
+      "barrier_analysis": "Probing both cases settles which way to find one's agentId",
+      "affected": [".scratch/session-dbd05b0c-.../874d-2-structured-reports-brief.json", "plans/structured-reports/implementation-plan.md"],
+      "deviation_refs": [],
+      "observation_refs": ["OBS-27"],
+      "disposition": "proposed"
+    },
+    {
+      "id": "PRO-25",
+      "type": "proposal",
+      "what": "RFC 3.2.4: add \"Until schema 5 ships, a delegate numbers the RFIs of its AAR `R<sid4>-<mission name>-<n>`; the session agent renumbers them `R<sid4>-<n>` when it raises them to the commander.\"",
+      "why": "A delegate cannot see the session's RFI counter",
+      "barrier_analysis": "Removes a guess every delegate would make differently",
+      "affected": ["rfcs/RFC-0011-structured-reports.md"],
+      "deviation_refs": [],
+      "observation_refs": ["OBS-28"],
+      "disposition": "proposed"
+    }
+  ],
+  "rfis": [
+    {
+      "id": "R874d-NEW-1",
+      "type": "rfi",
+      "title": "D874d-30: must every schema node and field be a governed term?",
+      "question": "Your words on L907 were \"artifact_refs needs to be a governed term if we are going to adopt it\". Issue #180 records them as the general rule \"A schema field is adopted only as a governed term\" (D874d-30). Taken literally, every field of RFC 0011 section 3 (how, readings, resolved_by, effect, assessment, main_effort, maintainer, chain_of_command, ...) needs a glossary entry. The node and item type `objective` has none today.",
+      "suggestion": "Node names and item types MUST be governed terms (add `objective` in WP-2); plain fields are defined once, in RFC 0011 section 3, and need no glossary entry unless they name a new concept, as artifact_refs did (PRO-2)",
+      "status": "open"
+    },
+    {
+      "id": "R874d-NEW-2",
+      "type": "rfi",
+      "title": "RFC S-18: may items in a brief or an AAR inherit the writer fields from provenance?",
+      "question": "Issue #180 section 3 says every item carries agent_id, agent_type, mission and created_at. RFC 0011 S-18 (settled by the session agent) lets items in a brief or an AAR omit them and inherit them from `provenance`, while every DB row still carries them. The issue says changes like this go to you as an RFI.",
+      "suggestion": "Accept S-18 and record it as a decision: a document has one writer and one time, and the DB rows still carry the fields (D874d-25 holds)",
+      "status": "open"
+    },
+    {
+      "id": "R874d-NEW-3",
+      "type": "rfi",
+      "title": "Add `superseded` to a decision's status, with `superseded_by`?",
+      "question": "The decision item's status values (decided, implemented, verified, deferred, reversed; the same CHECK in harness-db.py) have no `superseded`, yet issue #180 keeps superseded decisions as the record and D-DEL6 makes the newest win. Today a brief marks a partly superseded decision \"decided\", and only its prose says otherwise.",
+      "suggestion": "Yes: add status `superseded` and a `superseded_by[]` field (decision ids, with the part superseded) to RFC 0011 3.2.2 and schema 5 (PRO-14)",
+      "status": "open"
+    },
+    {
+      "id": "R874d-NEW-4",
+      "type": "rfi",
+      "title": "How do RFC 0011, its plan and the rfcs/README.md row reach main, and where is the WP-0 verdict recorded?",
+      "question": "Your \"27) dont worry about it\" covered the six working-copy files. The plan extends it to RFC 0011, the plan and the rfcs/README.md row. Issue WP-0 also wants an independent reviewer's verdict posted on a PR, and there is no PR because the RFC was written directly in the working copy (L2553).",
+      "suggestion": "The session agent commits plans/structured-reports/ directly to main (Channel exception) and opens a docs/ PR for rfcs/RFC-0011-structured-reports.md and its README row. The consolidated verdict of verifiers 874d-3 to 874d-6 is posted as a PR comment, which closes gate G2",
+      "status": "open"
+    }
+  ]
+}
