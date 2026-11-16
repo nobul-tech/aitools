@@ -6,7 +6,8 @@
 #   A-25  the CLAUDE.md footer hostname is the resolver's (lib result
 #         AITLIB_MACHINE_HOSTNAME), "unknown" when empty; dev and MDM
 #   A-26  --dry-run writes one claude.md row: "dry-run: would create",
-#         "verified", "dry-run: would update" (same rows in .sh and .ps1: golden)
+#         "verified", "dry-run: would update" (same rows in .sh and .ps1: golden);
+#         an unreadable CLAUDE.md adds one WARN claude.md record (logging.md 8.2)
 #   A-19  every generated .ps1 that embeds the profile resolver removes its temp
 #         dir and restores AITOOLS_PROFILE_PS1 on every exit (try/finally), also
 #         in-process (& script): here through the generated OS guard's early
@@ -56,7 +57,7 @@ case "${BASH_VERSINFO[5]:-}" in
 esac
 
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
-    perl -ne 'print if $. >= 2 && $. <= 40' "$0"
+    perl -ne 'print if $. >= 2 && $. <= 41' "$0"
     exit 0
 fi
 
@@ -202,15 +203,17 @@ check "$lang A-26: dry run on an edited CLAUDE.md -> 'dry-run: would update', fi
 claude_rows "$lang-dry" > "$TMP_ROOT/dry-3.rows"
 check "parity A-26 (edited CLAUDE.md): claude.md rows match golden" \
     "golden_match dry-3.rows '$TMP_ROOT/dry-3.rows'"
-# Unreadable CLAUDE.md (review B-1): a counted warning, a row, exit 0 -- not a
-# set -e abort. chmod does not block reads for root. The warning does not
-# recolour the claude.md status: it stays OK (reference/logging.md 8.3).
+# Unreadable CLAUDE.md (review B-1): one counted and recorded warning (write_warn
+# claude.md, its reason the read error), the OK row, exit 0 -- not a set -e
+# abort. chmod does not block reads for root. The warning does not recolour the
+# claude.md status: it stays OK (reference/logging.md 8.3).
 if $CAN_CHMOD_READ; then
     chmod 000 "$(md_of "$lang-dry")"
     run_claude "$lang-dry" stub-host "$DRY"
     chmod 644 "$(md_of "$lang-dry")"
-    check "$lang A-26: dry run on an unreadable CLAUDE.md -> warning, 'dry-run: would update' row, exit 0" \
-        "[ \"\$(rc_of $lang-dry)\" = 0 ] && [ \"\$(claude_rows $lang-dry)\" = 'OK|claude.md|dry-run: would update' ] && grep -q '\[warn\] Cannot read .* for the dry-run comparison' '$TMP_ROOT/$lang-dry/logs/deploy.log'"
+    DRY_WARN="dry run: cannot read $(md_of "$lang-dry") for the comparison: Permission denied"
+    check "$lang A-26: dry run on an unreadable CLAUDE.md -> one WARN record, 'dry-run: would update' row, exit 0" \
+        "[ \"\$(rc_of $lang-dry)\" = 0 ] && row $lang-dry 'OK|claude.md|dry-run: would update' && [ \"\$(claude_rows $lang-dry | grep -c '^WARN|')\" = 1 ] && row $lang-dry 'WARN|claude.md|$DRY_WARN' && grep -qF '[warn] $DRY_WARN' '$TMP_ROOT/$lang-dry/logs/deploy.log'"
     claude_rows "$lang-dry" > "$TMP_ROOT/dry-4.rows"
     check "parity A-26 (unreadable CLAUDE.md): claude.md rows match golden" \
         "golden_match dry-4.rows '$TMP_ROOT/dry-4.rows'"

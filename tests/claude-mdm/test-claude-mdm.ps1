@@ -240,9 +240,11 @@ try {
     WriteRows "$lang-dry" (Join-Path $tmpRoot "dry-3.rows")
     Check "parity A-26 (edited CLAUDE.md): claude.md rows match golden" `
         (Test-GoldenMatch "dry-3.rows" (Join-Path $tmpRoot "dry-3.rows"))
-    # Unreadable CLAUDE.md (review B-1, golden dry-4.rows): the .sh harness makes the
-    # file unreadable with chmod 000, which NTFS does not honour; the Git Bash harness
-    # skipped it on Windows, and so does this one (same SKIP line).
+    # Unreadable CLAUDE.md (review B-1, golden dry-4.rows: the OK row plus one WARN
+    # claude.md record whose text holds the .sh case path and the read error, so it
+    # is a .sh-only golden): the .sh harness makes the file unreadable with chmod
+    # 000, which NTFS does not honour; the Git Bash harness skipped it on Windows,
+    # and so does this one (same SKIP line).
     Skip "$lang unreadable CLAUDE.md case (chmod does not block reads here)"
 
     # ---------------------------------------------------------------------------
