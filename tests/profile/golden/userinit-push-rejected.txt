@@ -2,7 +2,7 @@ exit 0
 -- summary rows
 OK|dotprofile|verified
 ACTION||git pull --rebase, then git push in <D>/home/repos/aitools-nobul-jose
-WARN|machine profile|created (spare)
+OK|machine profile|created (spare)
 OK|aitools config|updated
 DETAIL|aitools config|googleDrives updated
 DETAIL|aitools config|githubUser updated

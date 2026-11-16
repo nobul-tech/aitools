@@ -2,7 +2,7 @@ exit 1
 -- summary rows
 OK|dotprofile|verified
 WARN|machine profile|skipped
-WARN|aitools config|updated
+OK|aitools config|updated
 DETAIL|aitools config|googleDrives updated
 DETAIL|aitools config|githubUser updated
 DETAIL|aitools config|userRepoPath updated
