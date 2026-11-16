@@ -27,8 +27,11 @@ case "$(uname -s)" in
         exit 1 ;;
 esac
 
+# The errors below have no tool (none in the tool name table) and state their
+# own cause, so they are log_error under the script name (reference/logging.md
+# 8.2). The report itself (node, below) is data on stdout, not log entries.
 if [ $# -lt 1 ]; then
-    echo "Usage: $0 <transcript.jsonl> [--verbose]"
+    log_error "usage: analyze-session.sh <transcript.jsonl> [--verbose]"
     exit 1
 fi
 
@@ -37,12 +40,12 @@ VERBOSE=false
 [ "${2:-}" = "--verbose" ] && VERBOSE=true
 
 if [ ! -f "$TRANSCRIPT" ]; then
-    echo "Error: file not found: $TRANSCRIPT"
+    log_error "file not found: $TRANSCRIPT"
     exit 1
 fi
 
 if ! command -v node &>/dev/null; then
-    echo "Error: node required for JSONL parsing"
+    log_error "node not on PATH -- required for JSONL parsing"
     exit 1
 fi
 
