@@ -28,15 +28,17 @@ export PATH="$HOME/.cargo/bin:$PATH"
 # Homebrew "rust" formula is a brew-managed toolchain that conflicts with rustup.
 # `brew list --versions rust` exits non-zero when the formula is not installed.
 if command -v brew &>/dev/null && brew_rust=$(brew list --versions rust 2>&1); then
-    log_warn "Found Homebrew-managed rust ($brew_rust; conflicts with rustup). Removing..."
+    write_warn "rust/cargo" "Homebrew rust found ($brew_rust; conflicts with rustup) -- removing it"
     uninstall_rc=0
     uninstall_out=$(brew uninstall rust 2>&1) || uninstall_rc=$?
-    while IFS= read -r line; do
-        if [ -n "${line// /}" ]; then log_detail "brew-uninstall-rust: $line"; fi
-    done <<< "$uninstall_out"
     if [ "$uninstall_rc" -ne 0 ]; then
         # Non-blocking: rustup installs alongside; the brew copy may shadow it on PATH.
-        log_warn "brew uninstall rust failed (exit $uninstall_rc) -- see $(display_path "$LOG_FILE")"
+        # error_reason logs the output as detail lines (logging.md 8.2).
+        write_warn "rust/cargo" "brew uninstall rust failed: $(error_reason "$uninstall_out" "$uninstall_rc")"
+    else
+        while IFS= read -r line; do
+            if [ -n "${line// /}" ]; then log_detail "brew-uninstall-rust: $line"; fi
+        done <<< "$uninstall_out"
     fi
 fi
 
@@ -46,22 +48,39 @@ if command -v rustup &>/dev/null; then
     # Exit code decides (C-F2); the full output goes to the log as detail.
     update_rc=0
     RUSTUP_OUTPUT=$(rustup update 2>&1) || update_rc=$?
-    while IFS= read -r line; do
-        if [ -n "${line// /}" ]; then log_detail "rustup-update: $line"; fi
-    done <<< "$RUSTUP_OUTPUT"
     if [ "$update_rc" -ne 0 ]; then
-        log_error "rustup update failed (exit $update_rc) -- see $(display_path "$LOG_FILE")"
-        write_summary ERROR "rust/cargo" "rustup update failed (exit $update_rc)"
+        # The installed toolchain still works: a warning, not an error (script-standards
+        # Standard 3). error_reason logs the output as detail lines.
+        write_warn "rust/cargo" "rustup update failed: $(error_reason "$RUSTUP_OUTPUT" "$update_rc")"
+        write_summary OK "rust/cargo" "$(cargo --version 2>&1)"
     else
+        while IFS= read -r line; do
+            if [ -n "${line// /}" ]; then log_detail "rustup-update: $line"; fi
+        done <<< "$RUSTUP_OUTPUT"
         log_ok "cargo $(cargo --version 2>&1)"
         log_ok "rustc $(rustc --version 2>&1)"
         write_summary OK "rust/cargo" "$(cargo --version 2>&1)"
     fi
 else
     log "Installing Rust toolchain via rustup..."
-    if ! curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y 2>&1 | while IFS= read -r line; do log "$line"; done; then
-        log_error "rustup installer failed"
-        write_summary ERROR "rust/cargo" "rustup install failed"
+    # The installer's output streams to the console and deploy.log as it arrives and
+    # is teed to a temporary file for the error reason (a failed install's output is
+    # then in deploy.log twice: logging.md 8.2). The brace group's 2>&1 takes curl's
+    # own stderr into the stream; pipefail gives curl's exit code when the download fails.
+    INSTALL_OUTPUT=""
+    INSTALL_RC=0
+    # A failed mktemp is checked on the next line: the install then streams uncaptured
+    INSTALL_FILE=$(mktemp "${TMPDIR:-/tmp}/setup-rust.XXXXXX") || INSTALL_FILE=""
+    if [ -n "$INSTALL_FILE" ]; then
+        { curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y; } 2>&1 | tee "$INSTALL_FILE" | while IFS= read -r line; do log "$line"; done || INSTALL_RC=$?
+        INSTALL_OUTPUT=$(cat "$INSTALL_FILE")
+        rm -f "$INSTALL_FILE"
+    else
+        log_detail "mktemp failed -- the rustup installer output is not captured; the error reason falls back to its exit code"
+        { curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y; } 2>&1 | while IFS= read -r line; do log "$line"; done || INSTALL_RC=$?
+    fi
+    if [ "$INSTALL_RC" -ne 0 ]; then
+        write_error "rust/cargo" "rustup install failed" "$(error_reason "$INSTALL_OUTPUT" "$INSTALL_RC")"
     fi
 
     # Re-source env in case PATH was just configured
@@ -74,10 +93,11 @@ else
         # rustup --version prints an "info:" line on stderr; keep only the version line.
         log_ok "$(grep -m1 '^rustup ' <<< "$(rustup --version 2>&1)")"
         write_summary OK "rust/cargo" "$(cargo --version 2>&1)"
+    elif [ "$INSTALL_RC" -ne 0 ]; then
+        # One failure, one red line: the install error above is the cause
+        log "cargo not on PATH after the failed rustup install"
     else
-        log_error "rustup install completed but 'cargo' not found in PATH"
-        log_error "Expected location: ~/.cargo/bin"
-        write_summary ERROR "rust/cargo" "installed but cargo not on PATH"
+        write_error "rust/cargo" "installed but cargo not on PATH" "cargo is not in ~/.cargo/bin"
     fi
 fi
 

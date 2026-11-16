@@ -37,8 +37,7 @@ function Get-VercelVersion {
 # --- Check npm ---
 # Get-Command exempt: command-existence check with if/else fallback
 if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
-    LogError "npm not found -- install Node.js first (aitools install handles this)"
-    Write-Summary "ERROR" "vercel cli" "npm not found (install Node.js)"
+    Write-AitError "vercel cli" "npm not found" "npm is not on PATH -- install Node.js first (aitools install does)"
     exit 1
 }
 
@@ -53,13 +52,13 @@ if (Get-Command vercel -ErrorAction SilentlyContinue) {
     # Exit code decides (C-F2); the full output goes to the log as detail.
     $npmOutput = npm install -g vercel 2>&1 | Out-String
     $npmRc = $LASTEXITCODE
-    Write-OutputDetail "npm-install-vercel" $npmOutput
+    if ($npmRc -eq 0) { Write-OutputDetail "npm-install-vercel" $npmOutput }
     Refresh-Path
 
     # Get-Command exempt: command-existence check with if/else fallback
     if ($npmRc -ne 0) {
-        LogError "npm install -g vercel failed (exit $npmRc) -- see $logFile"
-        Write-Summary "ERROR" "vercel cli" "npm install failed (exit $npmRc)"
+        # Get-AitErrorReason logs the output as detail lines (logging.md 8.2)
+        Write-AitError "vercel cli" "npm install failed" (Get-AitErrorReason -Output $npmOutput -ExitCode $npmRc)
     } elseif (Get-Command vercel -ErrorAction SilentlyContinue) {
         $vercelVersion = Get-VercelVersion
         $vercelPath = (Get-Command vercel).Source
@@ -70,16 +69,13 @@ if (Get-Command vercel -ErrorAction SilentlyContinue) {
         $vercelDir = Split-Path $vercelPath -Parent
         $persistentPath = [Environment]::GetEnvironmentVariable("Path", "User") + ";" + [Environment]::GetEnvironmentVariable("Path", "Machine")
         if ($persistentPath -notlike "*$vercelDir*") {
-            LogError "Vercel install dir not in persistent PATH: $vercelDir"
-            Write-Summary "ERROR" "vercel cli" "installed but not on PATH"
-            LogWarn "Add $vercelDir to PATH -- tool not accessible to Claude Code"
+            Write-AitError "vercel cli" "installed but not on PATH" "$vercelDir is not in the persistent PATH"
             Write-Summary "ACTION" "" "Add $vercelDir to PATH -- vercel not accessible"
         } else {
             Write-Summary "OK" "vercel cli" "$vercelVersion"
         }
     } else {
-        LogError "npm install completed but 'vercel' not found in PATH"
-        Write-Summary "ERROR" "vercel cli" "installed but not on PATH"
+        Write-AitError "vercel cli" "installed but not on PATH" "Get-Command vercel found nothing after npm install -g"
         $npmPrefix = npm config get prefix 2>&1 | Out-String
         $prefixRc = $LASTEXITCODE
         if ($prefixRc -eq 0) {
@@ -91,15 +87,14 @@ if (Get-Command vercel -ErrorAction SilentlyContinue) {
 }
 
 # --- Auth status check (script-standards-detail.md: command exit code pattern) ---
+# Gated on the script's own error count (the helpers still raise it).
 # Get-Command exempt: command-existence check with explicit fallback
 if ((Get-Command vercel -ErrorAction SilentlyContinue) -and $errors -eq 0) {
     $whoamiOutput = & vercel whoami 2>&1 | Out-String
     $whoamiRc = $LASTEXITCODE
     if ($whoamiRc -ne 0) {
         Write-OutputDetail "vercel-whoami (exit $whoamiRc)" $whoamiOutput
-        LogWarn "Authentication required: run 'vercel login' to authenticate"
-        Write-Summary "WARN" "vercel cli" "not authenticated"
-        Write-Summary "ACTION" "" "vercel login -- authenticate vercel CLI"
+        Write-AitAction "vercel cli" "not authenticated -- run: vercel login" "vercel login -- authenticate vercel CLI"
     }
 }
 

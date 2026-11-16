@@ -21,11 +21,12 @@ if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
 function Remove-NonPreferred([string]$Label, [scriptblock]$Command) {
     $out = & $Command 2>&1 | Out-String
     $rc = $LASTEXITCODE
-    foreach ($l in $out.Split("`n")) { if ($l.Trim()) { LogDetail "${Label}: $($l.TrimEnd())" } }
     if ($rc -eq 0) {
+        foreach ($l in $out.Split("`n")) { if ($l.Trim()) { LogDetail "${Label}: $($l.TrimEnd())" } }
         Log "Removed non-preferred install ($Label)"
     } else {
-        LogWarn "$Label failed (exit $rc) -- see $logFile"
+        # Get-AitErrorReason logs the output as detail lines (logging.md 8.2)
+        Write-AitWarn "typst" "${Label} failed: $(Get-AitErrorReason -Output $out -ExitCode $rc)"
     }
 }
 # Cargo typst-cli: different binary path, may shadow winget install
@@ -35,8 +36,7 @@ if ($cargoCmd) {
     $cargoList = & cargo install --list 2>&1 | Out-String
     $cargoListRc = $LASTEXITCODE
     if ($cargoListRc -ne 0) {
-        LogDetail "cargo-install-list: $($cargoList.Trim())"
-        LogWarn "cargo install --list failed (exit $cargoListRc) -- skipping cargo typst-cli cleanup"
+        Write-AitWarn "typst" "cargo install --list failed, cargo typst-cli cleanup skipped: $(Get-AitErrorReason -Output $cargoList -ExitCode $cargoListRc)"
     } elseif ($cargoList -match '(?m)^typst-cli ') {
         Remove-NonPreferred "cargo uninstall typst-cli" { cargo uninstall typst-cli }
     }
@@ -59,50 +59,60 @@ if ($typstCmd) {
     Log "Typst found -- upgrading via winget..."
     $wingetOutput = winget upgrade --id Typst.Typst --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
     $upgradeRc = $LASTEXITCODE
-    Log-WingetOutput $wingetOutput
     if ($wingetOutput -match 'No available upgrade|No newer package versions') {
+        Log-WingetOutput $wingetOutput
         LogOk "Typst already up to date"
     } elseif ($upgradeRc -ne 0) {
-        LogError "winget upgrade typst failed (exit $upgradeRc) -- see $logFile"
-        Write-Summary "ERROR" "typst" "winget upgrade failed (exit $upgradeRc)"
+        # The installed typst still works: a warning, not an error (Standard 3); the
+        # $errors gate below still writes the OK record. Get-AitErrorReason logs the
+        # output as detail lines.
+        Write-AitWarn "typst" "winget upgrade failed: $(Get-AitErrorReason -Output $wingetOutput -ExitCode $upgradeRc)"
+    } else {
+        Log-WingetOutput $wingetOutput
     }
     Refresh-Path
     if ($errors -eq 0) {
-        # Suppress stderr: typst may emit warnings on some configs; result checked immediately
-        $version = (typst --version 2>$null)
-        if ($version) {
+        # stderr is captured with stdout for the error reason; the version is the
+        # line that starts with "typst " (a warning typst prints is not taken for it)
+        $verOut = typst --version 2>&1 | Out-String
+        $verRc = $LASTEXITCODE
+        $version = ($verOut -split "`r?`n" | Where-Object { $_ -match '^typst ' } | Select-Object -First 1)
+        if ($verRc -eq 0 -and $version) {
             LogOk $version
             Write-Summary "OK" "typst" "$version"
         } else {
-            LogError "typst --version failed after upgrade"
-            Write-Summary "ERROR" "typst" "version check failed after upgrade"
+            Write-AitError "typst" "version check failed after upgrade" (Get-AitErrorReason -Output $verOut -ExitCode $verRc)
         }
     }
 } else {
     Log "Installing Typst via winget..."
     $wingetOutput = winget install --id Typst.Typst --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
     $installRc = $LASTEXITCODE
-    Log-WingetOutput $wingetOutput
     if ($installRc -ne 0) {
-        LogError "winget install typst failed (exit $installRc) -- see $logFile"
-        Write-Summary "ERROR" "typst" "winget install failed (exit $installRc)"
+        # Get-AitErrorReason logs the output as detail lines
+        Write-AitError "typst" "winget install failed" (Get-AitErrorReason -Output $wingetOutput -ExitCode $installRc)
+    } else {
+        Log-WingetOutput $wingetOutput
     }
     Refresh-Path
     $typstCmd = Get-Command typst -ErrorAction SilentlyContinue
     # Get-Command exempt: command-existence check with if/else fallback
     if ($typstCmd) {
-        # Suppress stderr: typst may emit warnings on some configs; result checked immediately
-        $version = (typst --version 2>$null)
-        if ($version) {
+        # As after the upgrade: stderr captured for the reason, the version line taken
+        $verOut = typst --version 2>&1 | Out-String
+        $verRc = $LASTEXITCODE
+        $version = ($verOut -split "`r?`n" | Where-Object { $_ -match '^typst ' } | Select-Object -First 1)
+        if ($verRc -eq 0 -and $version) {
             LogOk "Typst installed ($version)"
             Write-Summary "OK" "typst" "$version"
         } else {
-            LogError "typst --version failed after install"
-            Write-Summary "ERROR" "typst" "version check failed after install"
+            Write-AitError "typst" "version check failed after install" (Get-AitErrorReason -Output $verOut -ExitCode $verRc)
         }
+    } elseif ($installRc -ne 0) {
+        # One failure, one red line: the install error above is the cause
+        Log "typst not found after the failed winget install"
     } else {
-        LogError "winget install completed but 'typst' not found in PATH"
-        Write-Summary "ERROR" "typst" "install failed (not on PATH)"
+        Write-AitError "typst" "installed but not on PATH" "winget exited 0 but Get-Command typst found nothing"
     }
 }
 
