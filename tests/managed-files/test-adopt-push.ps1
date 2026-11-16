@@ -152,6 +152,9 @@ try {
     Check "push failure: push-failed, committed locally" ((PushState) -eq "push-failed" -and (Commits) -eq "2")
     Check "push failure: WARN logged, ACTION 'run git push in <dotprofile>'" ((Log) -match "\[warn\] dotprofile push failed" -and ((Summary) -ccontains "ACTION||run git push in $DP"))
     Check "push failure: exit 0" ((Rc) -eq "0")
+    # The warning carries git's error line as its reason (reference/logging.md
+    # 8.3; the same record in test-adopt-push.sh)
+    Check "push failure: the WARN record carries '(exit N: <git's error line>)'" ((Summary) -ccontains "WARN|dotprofile|dotprofile push failed (exit 128: fatal: No configured push destination.) -- run git push in $DP")
 
     Setup-Case "direct-push-rejected"
     G $C clone -q -b main $REMOTE (Join-Path $C "elsewhere")
@@ -160,6 +163,8 @@ try {
     W "dotprofile/claude/rules/r.md" "edited rule"
     Run-Lib (Dcp "$DP/claude/rules/r.md" "Adopt r.md")
     Check "push rejected: push-failed, ACTION pull --rebase" ((PushState) -eq "push-failed" -and (Log) -match "\[warn\] dotprofile push rejected" -and ((Summary) -ccontains "ACTION||git pull --rebase, then git push in $DP"))
+    $rejRe = '^WARN\|dotprofile\|dotprofile push rejected \(exit 1: error: failed to push some refs to .*\): the remote has newer commits -- run git pull --rebase, then git push in ' + [regex]::Escape($DP) + '$'
+    Check "push rejected: the WARN record carries '(exit N: <git's error line>)'" (@((Summary) | Where-Object { $_ -cmatch $rejRe }).Count -eq 1)
 
     # --- Through Deploy-ManagedFile (interactive adopt) ---
     if ($havePty) {

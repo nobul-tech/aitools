@@ -151,7 +151,10 @@ chmod 755 "$C/dest/ro"
 
 setup_case tracker
 run_lib "deploy_tracker_init; deploy_tracker_record failed tool x.md; deploy_tracker_record updated tool y.md; deploy_tracker_summary tool"
-check "tracker: failed -> DETAIL + ERROR row" "grep -qx 'DETAIL|tool|failed: x.md' '$C/summary' && grep -qx 'ERROR|tool|1 failed' '$C/summary'"
+# The tracker writes the OK status (its counts) and DETAIL records only; the
+# failure itself is recorded where it happened (reference/logging.md 8.3
+# "Managed files")
+check "tracker: failed -> DETAIL row, counted in the OK status, no ERROR row" "grep -qx 'DETAIL|tool|failed: x.md' '$C/summary' && grep -qx 'OK|tool|1 updated, 1 failed' '$C/summary' && ! grep -q '^ERROR|' '$C/summary'"
 
 # ---------------------------------------------------------------------------
 # Text files, interactive (pty)
@@ -297,8 +300,13 @@ run_lib "C='$C' SRCF='$C/repo/c.json' DEST='$C/dest/c.json' ADOPT='$C/repo/c.jso
 check "json non-interactive: SOURCE field written, LOCAL-only kept, key order kept" \
     "[ \"\$(result)\" = updated ] && [ \"\$(node -e 'console.log(JSON.stringify(JSON.parse(require(\"fs\").readFileSync(process.argv[1]))))' '$C/dest/c.json')\" = '{\"z\":0,\"b\":2,\"a\":1}' ]"
 check "json non-interactive: repo untouched" "grep -qx '{\"a\":1,\"b\":2}' '$C/repo/c.json'"
+# A field overwritten without the user's choice is one warning under the tool;
+# the LOCAL-only field kept is none (reference/logging.md 8.3 "What is a warning")
+check "json non-interactive: one WARN record for the overwritten field, none for the kept one" \
+    "[ \"\$(cat '$C/summary')\" = 'WARN|tool|Divergence in item: b -- overwriting from source (non-interactive)' ] && grep -q '\[warn\] Divergence in item: b' '$LOG'"
+: > "$C/summary"
 run_lib "C='$C' SRCF='$C/repo/c.json' DEST='$C/dest/c.json' ADOPT='$C/repo/c.json'; $DMF"
-check "json: LOCAL-only field alone -> verified (kept, no prompt)" "[ \"\$(result)\" = verified ]"
+check "json: LOCAL-only field alone -> verified (kept, no prompt, no warning)" "[ \"\$(result)\" = verified ] && [ ! -s '$C/summary' ]"
 
 setup_case json-invalid
 printf '{"a":1}\n' > "$C/src.json"; printf 'not json\n' > "$C/dest/c.json"
@@ -313,8 +321,9 @@ run_lib "C='$C' SRCF='$C/repo/c.json' DEST='$C/dest/c.json' ADOPT='$C/repo/c.jso
 check "json label: Created names the item" "[ \"\$(result)\" = created ] && grep -qF 'Created: registries/c.json -> ' '$LOG'"
 printf '{"a":2,"b":[2]}\n' > "$C/dest/c.json"
 run_lib "C='$C' SRCF='$C/repo/c.json' DEST='$C/dest/c.json' ADOPT='$C/repo/c.json'; $DMF_LABEL"
-check "json label: Divergence and Updated name the item" \
-    "[ \"\$(result)\" = updated ] && grep -qF 'Divergence in registries/c.json: a -- overwriting from source (non-interactive)' '$LOG' && grep -qF 'Updated: registries/c.json -> ' '$LOG'"
+check "json label: Divergence (a warning, one record per field) and Updated name the item" \
+    "[ \"\$(result)\" = updated ] && grep -qF '[warn] Divergence in registries/c.json: a -- overwriting from source (non-interactive)' '$LOG' && grep -qF 'Updated: registries/c.json -> ' '$LOG' && [ \"\$(cat '$C/summary')\" = 'WARN|tool|Divergence in registries/c.json: a -- overwriting from source (non-interactive)
+WARN|tool|Divergence in registries/c.json: b -- overwriting from source (non-interactive)' ]"
 
 # ---------------------------------------------------------------------------
 # The JSON review's node script (plan mode): the twins embed the same text, and

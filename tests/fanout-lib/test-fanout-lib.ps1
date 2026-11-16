@@ -169,18 +169,22 @@ try {
     function Case([string]$Id, [string]$Want, [string]$Call, [string]$A1, [string]$A2 = "") {
         $caseList.Add([pscustomobject]@{ Id = $Id; Want = $Want; Call = $Call; A1 = $A1; A2 = $A2; Group = "base" })
     }
-    # deploy tracker ("pairs" outcome:item, comma separated)
+    # deploy tracker ("pairs" outcome:item, comma separated). The tracker writes
+    # the tool's OK status (its counts, "N skipped" and "N failed" included) and
+    # DETAIL records only; each item's warning or error is recorded where it
+    # happened (reference/logging.md 8.3 "Managed files")
     Case 't-removed' 'DETAIL|t|removed: a.md ;; OK|t|1 removed ;; text=1 removed ;; errors=0' 'tracker' 'removed:a.md'
-    Case 't-unknown' 'DETAIL|t|failed: b.md ;; ERROR|t|1 failed ;; text=1 failed ;; errors=1' 'tracker' 'bogus:b.md'
-    Case 't-blank' 'DETAIL|t|failed: x.md ;; ERROR|t|1 failed ;; text=1 failed ;; errors=1' 'tracker' ':x.md'
-    Case 't-mix' 'DETAIL|t|added: a.md ;; DETAIL|t|removed: b.md ;; DETAIL|t|failed: d.md ;; ERROR|t|1 failed ;; text=1 added, 1 removed, 1 verified, 1 failed ;; errors=1' 'tracker' 'added:a.md,removed:b.md,verified:c.md,bogus:d.md,preserved:e.md'
+    Case 't-unknown' 'DETAIL|t|failed: b.md ;; OK|t|1 failed ;; text=1 failed ;; errors=1' 'tracker' 'bogus:b.md'
+    Case 't-blank' 'DETAIL|t|failed: x.md ;; OK|t|1 failed ;; text=1 failed ;; errors=1' 'tracker' ':x.md'
+    Case 't-mix' 'DETAIL|t|added: a.md ;; DETAIL|t|removed: b.md ;; DETAIL|t|failed: d.md ;; OK|t|1 added, 1 removed, 1 verified, 1 failed ;; text=1 added, 1 removed, 1 verified, 1 failed ;; errors=1' 'tracker' 'added:a.md,removed:b.md,verified:c.md,bogus:d.md,preserved:e.md'
     Case 't-order' 'DETAIL|t|accept & adopt: a.md ;; DETAIL|t|removed: b.md ;; DETAIL|t|updated: d.md ;; DETAIL|t|added: e.md ;; OK|t|1 added, 1 updated, 1 accepted, 1 removed, 1 verified ;; text=1 added, 1 updated, 1 accepted, 1 removed, 1 verified ;; errors=0' 'tracker' 'accept & adopt:a.md,removed:b.md,verified:c.md,updated:d.md,created:e.md'
-    Case 't-skip' 'DETAIL|t|removed: a.md ;; DETAIL|t|skipped: b.md ;; WARN|t|1 skipped (user review) ;; text=1 removed ;; errors=0' 'tracker' 'removed:a.md,skipped:b.md'
-    # every count 0 (only preserved / skipped items): the text is "n/a (nothing to deploy)", never "verified"
+    Case 't-skip' 'DETAIL|t|removed: a.md ;; DETAIL|t|skipped: b.md ;; OK|t|1 removed, 1 skipped ;; text=1 removed, 1 skipped ;; errors=0' 'tracker' 'removed:a.md,skipped:b.md'
+    # every count 0 (only preserved items): the text is "n/a (nothing to deploy)", never "verified"
     Case 't-preserved' 'OK|t|n/a (nothing to deploy) ;; text=n/a (nothing to deploy) ;; errors=0' 'tracker' 'preserved:a.md'
-    Case 't-skiponly' 'DETAIL|t|skipped: a.md ;; WARN|t|1 skipped (user review) ;; text=n/a (nothing to deploy) ;; errors=0' 'tracker' 'skipped:a.md'
+    # only skipped items: "1 skipped" is a count of the status, not a warning record
+    Case 't-skiponly' 'DETAIL|t|skipped: a.md ;; OK|t|1 skipped ;; text=1 skipped ;; errors=0' 'tracker' 'skipped:a.md'
     # outcomes are matched case-sensitively in both shells
-    Case 't-case' 'DETAIL|t|failed: x.md ;; DETAIL|t|failed: y.md ;; DETAIL|t|failed: z.md ;; ERROR|t|3 failed ;; text=3 failed ;; errors=3' 'tracker' 'Removed:x.md,Added:y.md,CREATED:z.md'
+    Case 't-case' 'DETAIL|t|failed: x.md ;; DETAIL|t|failed: y.md ;; DETAIL|t|failed: z.md ;; OK|t|3 failed ;; text=3 failed ;; errors=3' 'tracker' 'Removed:x.md,Added:y.md,CREATED:z.md'
     # name kinds: NAME RULE-KIND SKILL-KIND
     foreach ($spec in @("a.md rule skill", "A.MD rule skill", ".hidden.md hidden hidden", ".aitools-skills-manifest hidden hidden",
                         "x.md.bak.2026-10-22T010203Z backup backup", "X.MD.BAK.1 backup backup", "odd.bak.2026.md backup backup",
