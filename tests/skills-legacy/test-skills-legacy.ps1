@@ -291,13 +291,16 @@ try {
     # same rules as golden_rows in test-skills-legacy.sh: the case's own dotprofile
     # copy (dp-sh-<name>, dp-ps-<name>) as dp-<lang>-<name>; the reason of a failed
     # adopt, an OS message (BSD and GNU mkdir, .NET word it differently; asserted
-    # per platform inline), as <OS error>
+    # per platform inline), as <OS error>; the non-empty reason of a "no adopt:"
+    # error (the .sh and .ps1 word it differently, the .ps1 with the .NET message;
+    # asserted per twin inline), as <reason>
     function Golden-Rows([string]$Case) {
         $name = $Case.Substring($Case.IndexOf('-') + 1)
         $f = Join-Path $tmpRoot "$Case.rows"
         $rows = @(RowsOf $Case | ForEach-Object {
             $r = [regex]::Replace($_, '\bdp-(?:sh|ps)-', 'dp-<lang>-')
-            [regex]::Replace($r, '^(ERROR\|[^|]*\|adopt to [^|]* failed)\|.*$', '$1|<OS error>')
+            $r = [regex]::Replace($r, '^(ERROR\|[^|]*\|adopt to [^|]* failed)\|.*$', '$1|<OS error>')
+            [regex]::Replace($r, '^(ERROR\|[^|]*\|no adopt: [^|]*)\|.+$', '$1|<reason>')
         })
         WriteLf $f $(if ($rows.Count) { ($rows -join "`n") + "`n" } else { "" })
         Check "golden ${L}: ${name}: summary rows" (Test-GoldenMatch "$name.rows" $f)
@@ -311,6 +314,13 @@ try {
     }
     # FoundLog CASE TEXT: deploy.log of CASE holds TEXT (a fixed string)
     function FoundLog([string]$Case, [string]$Text) { (ReadText (Join-Path $tmpRoot "$Case/logs/deploy.log")).Contains($Text) }
+    # ErrorCount CASE: the number of ERROR records of CASE
+    function ErrorCount([string]$Case) { @(Get-Lines (SumOf $Case) | Where-Object { $_.StartsWith("ERROR|", [StringComparison]::Ordinal) }).Count }
+    # OnlyResolverError CASE: exactly one ERROR record, the resolver's
+    # (ERROR|dotprofile|resolver failed|<stub's error text>)
+    function OnlyResolverError([string]$Case) { (ErrorCount $Case) -eq 1 -and (Row $Case 'ERROR|dotprofile|resolver failed|stub resolver failure') }
+    # RowMatch CASE PATTERN: some summary line of CASE matches PATTERN (case-sensitive)
+    function RowMatch([string]$Case, [string]$Pattern) { [bool](@(Get-Lines (SumOf $Case)) | Where-Object { $_ -cmatch $Pattern }) }
     # RetiredNotOffered CASE: neither copy offered, the log says why (same text in .sh and .ps1)
     function RetiredNotOffered([string]$Case) {
         (-not (FoundAnyOf $Case @("aitool-ops", "Aitool-Eval"))) -and
@@ -425,17 +435,19 @@ try {
             ((RcOf $c) -eq 0 -and (RowsText $c) -ceq $FANOUT_ROW -and -not (Found $c mine))
         Golden-Rows $c
 
-        # resolver error
+        # resolver error: the resolver's ERROR "dotprofile" record is the only one;
+        # the consumer's consequence is logged at info (logging.md 8.3, one cause,
+        # one red line)
         $c = "$lang-rerr"
         Seed-Harness (Join-Path $tmpRoot $c)
         Run-Skills $c fail
-        Check "$lang fanned out, resolver error: exit 1, n/a + ERROR skills rows, no fan-out rows, nothing offered" `
-            ((RcOf $c) -eq 1 -and (Row $c $FANOUT_ROW) -and (Row $c 'ERROR|skills|no adopt: dotprofile error') -and (NoRowsFor $c 'claude skills') -and (NoRowsFor $c 'cursor skills') -and -not (Found $c mine) -and (FoundLog $c 'Dotprofile unresolved (resolver error above) -- reverse discovery not run, so no skill can be adopted to the dotprofile'))
+        Check "$lang fanned out, resolver error: exit 1, n/a row + the resolver's ERROR only, no fan-out rows, nothing offered" `
+            ((RcOf $c) -eq 1 -and (Row $c $FANOUT_ROW) -and (OnlyResolverError $c) -and (NoRowsFor $c 'claude skills') -and (NoRowsFor $c 'cursor skills') -and -not (Found $c mine) -and (FoundLog $c '[info] Dotprofile unresolved (resolver error above) -- reverse discovery not run, so no skill can be adopted to the dotprofile'))
         Golden-Rows $c
         $c = "$lang-rerrfb"
         Run-Skills $c fail
-        Check "$lang fallback, resolver error: today's ERROR claude skills / cursor skills rows, nothing deployed" `
-            ((RcOf $c) -eq 1 -and (Row $c 'ERROR|claude skills|not deployed: dotprofile error') -and (Row $c 'ERROR|cursor skills|not deployed: dotprofile error') -and (NoRowsFor $c skills) -and -not (Exists (Join-Path $tmpRoot "$c/.claude/skills")))
+        Check "$lang fallback, resolver error: exit 1, the resolver's ERROR only, nothing deployed" `
+            ((RcOf $c) -eq 1 -and (OnlyResolverError $c) -and (NoRowsFor $c 'claude skills') -and (NoRowsFor $c 'cursor skills') -and (NoRowsFor $c skills) -and -not (Exists (Join-Path $tmpRoot "$c/.claude/skills")) -and (FoundLog $c '[info] Dotprofile unresolved (resolver error above) -- skills not deployed, so shared copies cannot replace dotprofile versions'))
         Golden-Rows $c
 
         # unreadable manifest / harness directory (the .sh: chmod 000; here a
@@ -447,8 +459,11 @@ try {
             $p = Join-Path $H ".aitools/skills/.aitools-skills-manifest"
             Deny-Access $p ([Security.AccessControl.FileSystemRights]::ReadData)
             try { Run-Skills $c live } finally { Undo-Deny $p }
-            Check "$lang unreadable manifest: exit 1, ERROR skills row, reverse discovery not run" `
-                ((RcOf $c) -eq 1 -and (Row $c $FANOUT_ROW) -and (Row $c 'ERROR|skills|no adopt: manifest unreadable') -and -not (Found $c mine) -and (FoundLog $c 'Cannot read the skills manifest ~/.aitools/skills/.aitools-skills-manifest -- reverse discovery not run, so no harness skill is offered for adoption: '))
+            Check "$lang unreadable manifest: exit 1, one ERROR skills record, reverse discovery not run" `
+                ((RcOf $c) -eq 1 -and (Row $c $FANOUT_ROW) -and (ErrorCount $c) -eq 1 -and (RowMatch $c '^ERROR\|skills\|no adopt: manifest unreadable\|.') -and -not (Found $c mine) -and (FoundLog $c '[error] no adopt: manifest unreadable: '))
+            # The .ps1 reason: the manifest (~ form) and the .NET message
+            Check "$lang unreadable manifest: reason names the manifest and the OS error" `
+                (RowMatch $c '^ERROR\|skills\|no adopt: manifest unreadable\|cannot read ~/\.aitools/skills/\.aitools-skills-manifest: .+$')
             Golden-Rows $c
             $c = "$lang-hdu"
             $H = Join-Path $tmpRoot $c
@@ -456,8 +471,11 @@ try {
             $p = Join-Path $H ".aitools/skills"
             Deny-Access $p ([Security.AccessControl.FileSystemRights]::ListDirectory)
             try { Run-Skills $c live } finally { Undo-Deny $p }
-            Check "$lang unreadable ~/.aitools/skills: exit 1, ERROR skills row, reverse discovery not run" `
-                ((RcOf $c) -eq 1 -and (Row $c $FANOUT_ROW) -and (Row $c 'ERROR|skills|no adopt: harness unreadable') -and -not (Found $c mine) -and (FoundLog $c 'Cannot read ~/.aitools/skills -- reverse discovery not run, so no harness skill is offered for adoption: '))
+            Check "$lang unreadable ~/.aitools/skills: exit 1, one ERROR skills record, reverse discovery not run" `
+                ((RcOf $c) -eq 1 -and (Row $c $FANOUT_ROW) -and (ErrorCount $c) -eq 1 -and (RowMatch $c '^ERROR\|skills\|no adopt: harness unreadable\|.') -and -not (Found $c mine) -and (FoundLog $c '[error] no adopt: harness unreadable: '))
+            # The .ps1 reason: the .NET message of the failed listing (Get-AitErrorReason -ErrorRecord)
+            Check "$lang unreadable ~/.aitools/skills: the .ps1 reason (the .NET message)" `
+                (RowMatch $c '^ERROR\|skills\|no adopt: harness unreadable\|\S.*$')
             Golden-Rows $c
             # Audit B N1: an unreadable ~/.claude/skills is an error, not an empty scan
             $c = "$lang-dstu"
@@ -466,8 +484,10 @@ try {
             $p = Join-Path $H ".claude/skills"
             Deny-Access $p ([Security.AccessControl.FileSystemRights]::ListDirectory)
             try { Run-Skills $c live } finally { Undo-Deny $p }
-            Check "$lang unreadable ~/.claude/skills: exit 1, ERROR skills 'no adopt: target unreadable', logged" `
-                ((RcOf $c) -eq 1 -and (Row $c $FANOUT_ROW) -and (Row $c 'ERROR|skills|no adopt: target unreadable') -and (NoRowsFor $c 'claude skills') -and -not (Found $c mine) -and (FoundLog $c 'Cannot read ~/.claude/skills -- reverse discovery not run, so no user-created skill is offered for adoption: '))
+            Check "$lang unreadable ~/.claude/skills: exit 1, one ERROR skills 'no adopt: target unreadable', logged" `
+                ((RcOf $c) -eq 1 -and (Row $c $FANOUT_ROW) -and (ErrorCount $c) -eq 1 -and (RowMatch $c '^ERROR\|skills\|no adopt: target unreadable\|.') -and (NoRowsFor $c 'claude skills') -and -not (Found $c mine) -and (FoundLog $c '[error] no adopt: target unreadable: '))
+            Check "$lang unreadable ~/.claude/skills: the .ps1 reason (the .NET message)" `
+                (RowMatch $c '^ERROR\|skills\|no adopt: target unreadable\|\S.*$')
             Golden-Rows $c
         } else {
             Skip "$lang unreadable cases (a deny ACE does not block reads or listing here)"
@@ -483,8 +503,8 @@ try {
             ((RcOf $c) -eq 0 -and (RowsText $c) -ceq $FANOUT_ROW -and -not (Exists (Join-Path $H ".cursor/skills")) -and -not (Exists (Join-Path $H ".claude/skills/alpha")) -and (Found $c mine))
         Golden-Rows $c
 
-        # pty: adopt in fan-out mode writes the dotprofile; a failed adopt is a
-        # "skills" row (review N1), never "claude skills"
+        # pty: adopt in fan-out mode writes the dotprofile; a failed adopt is one
+        # "skills" record (review N1), never "claude skills"
         if ($havePty) {
             $c = "$lang-adopt"
             Own-Dotprofile $c
@@ -502,14 +522,15 @@ try {
                 $p = Join-Path $tmpRoot "dp-$c/claude/skills"
                 Deny-Access $p ([Security.AccessControl.FileSystemRights]'CreateFiles, CreateDirectories, DeleteSubdirectoriesAndFiles')
                 try { Run-SkillsPty $c 'a\n' } finally { Undo-Deny $p }
-                Check "$lang pty adopt failure (fanned out): exit 1, ERROR skills 'adopt failed: mine', no claude skills row" `
-                    ((RcOf $c) -eq 1 -and (Row $c 'ERROR|skills|adopt failed: mine') -and (NoRowsFor $c 'claude skills') -and -not (Exists (Join-Path $tmpRoot "dp-$c/claude/skills/mine")))
-                # The library records the failed write at the source (logging.md 8.3;
-                # Adopt-ManagedFile: WHAT the target, REASON the .NET message; the .sh
-                # asserts mkdir's text per platform). Its record name is not pinned
-                # here: setup-user-skills passes no -Tool yet (G3)
-                $afRe = '^ERROR\|[^|]+\|adopt to .*[\\/]dp-' + [regex]::Escape($c) + '[\\/]claude[\\/]skills[\\/]mine[\\/]SKILL\.md failed\|.+$'
-                Check "$lang pty adopt failure: the library's ERROR record for the write, with its reason" `
+                # The library records the failed write at the source, once, under the
+                # tool setup-user-skills passes (logging.md 8.3; Adopt-ManagedFile
+                # -Tool skills: WHAT the target, REASON the .NET message; the .sh
+                # asserts mkdir's text per platform); the script adds no "adopt
+                # failed" record of its own
+                Check "$lang pty adopt failure (fanned out): exit 1, one ERROR record (skills), no claude skills row" `
+                    ((RcOf $c) -eq 1 -and (ErrorCount $c) -eq 1 -and -not (RowMatch $c '\|adopt failed: mine') -and (NoRowsFor $c 'claude skills') -and -not (Exists (Join-Path $tmpRoot "dp-$c/claude/skills/mine")))
+                $afRe = '^ERROR\|skills\|adopt to .*[\\/]dp-' + [regex]::Escape($c) + '[\\/]claude[\\/]skills[\\/]mine[\\/]SKILL\.md failed\|.+$'
+                Check "$lang pty adopt failure: the library's ERROR skills record for the write, with its reason" `
                     (@(Get-Lines (SumOf $c) | Where-Object { $_ -cmatch $afRe }).Count -eq 1)
                 Golden-Rows $c
             } else {

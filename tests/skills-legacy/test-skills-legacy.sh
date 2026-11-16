@@ -19,14 +19,18 @@
 #   header-bad   a manifest with a bad header: directory names still ignored,
 #                a manifest-only name is offered again
 #   no dotprofile  fanned out, resolver finds none: no adoption offered, exit 0
-#   resolver error fanned out: ERROR "skills" "no adopt: dotprofile error", no
-#                fan-out rows, exit 1; fallback keeps today's ERROR
-#                "claude skills" / "cursor skills" rows
+#   resolver error fanned out and fallback: the resolver's ERROR "dotprofile"
+#                record is the only ERROR (logging.md 8.3, one cause, one red
+#                line: the consumer lines are logged at info), no fan-out rows,
+#                nothing deployed or offered, exit 1
 #   unreadable   fanned out, manifest, ~/.aitools/skills or ~/.claude/skills
-#                unreadable (chmod 000): ERROR "skills" "no adopt: ..." row,
-#                the same log text in .sh and .ps1, exit 1
+#                unreadable (chmod 000): ERROR "skills" "no adopt: ..." record
+#                with a reason (its text differs per twin: asserted inline, the
+#                golden holds <reason>), the same log prefix in .sh and .ps1,
+#                exit 1
 #   pty adopt    fanned out, [a]dopt on a pty writes the dotprofile; a failed
-#                adopt is ERROR "skills" "adopt failed: <name>"
+#                adopt is one ERROR "skills" "adopt to <target> failed" record,
+#                written by the library (adopt_managed_file --tool skills)
 #   one writer   setup-user-claude, setup-user-skills, setup-user-cursor in dev
 #                order into one summary: each skills tool row exactly once, in
 #                both modes (stub rg / agent on PATH: no installer runs)
@@ -272,12 +276,15 @@ rows_of() { grep -v -e '^ACTION|' -e '|dotprofile|' "$TMP_ROOT/$1.summary" | LC_
 # same rules as Golden-Rows in test-skills-legacy.ps1: the case's own dotprofile
 # copy (dp-sh-<name>, dp-ps-<name>) as dp-<lang>-<name>; the reason of a failed
 # adopt, an OS message (BSD and GNU mkdir, .NET word it differently; asserted
-# per platform inline), as <OS error>
+# per platform inline), as <OS error>; the non-empty reason of a "no adopt:"
+# error (the .sh and .ps1 word it differently, the .ps1 with the .NET message;
+# asserted per twin inline), as <reason>
 golden_rows() {
     local name="${1#*-}"
     rows_of "$1" | perl -pe '
         s/\bdp-(?:sh|ps)-/dp-<lang>-/g;
         s{^(ERROR\|[^|]*\|adopt to [^|]* failed)\|.*$}{$1|<OS error>};
+        s{^(ERROR\|[^|]*\|no adopt: [^|]*)\|.+$}{$1|<reason>};
     ' > "$TMP_ROOT/$1.rows"
     check "golden $L: $name: summary rows" "golden_match '$name.rows' '$TMP_ROOT/$1.rows'"
 }
@@ -291,6 +298,14 @@ same_text() { [ -f "$1" ] && [ "$(cat "$1")" = "$2" ]; }
 FANOUT_ROW='OK|skills|n/a (fanned out)'
 # found_log CASE TEXT: deploy.log of CASE holds TEXT (a fixed string)
 found_log() { grep -qF -- "$2" "$TMP_ROOT/$1/logs/deploy.log"; }
+# only_resolver_error CASE: the summary of CASE has exactly one ERROR record, the
+# resolver's (ERROR|dotprofile|resolver failed|<stub's error text>)
+only_resolver_error() {
+    [ "$(grep -c '^ERROR|' "$TMP_ROOT/$1.summary")" = 1 ] \
+        && grep -qxF 'ERROR|dotprofile|resolver failed|stub resolver failure' "$TMP_ROOT/$1.summary"
+}
+# error_count CASE: the number of ERROR records of CASE
+error_count() { grep -c '^ERROR|' "$TMP_ROOT/$1.summary"; }
 
 # ---------------------------------------------------------------------------
 # Dev path
@@ -353,17 +368,19 @@ for lang in $L; do
         "[ \"\$(rc_of $c)\" = 0 ] && [ \"\$(rows_of $c)\" = '$FANOUT_ROW' ] && ! found $c mine"
     golden_rows "$c"
 
-    # resolver error
+    # resolver error: the resolver's ERROR "dotprofile" record is the only one;
+    # the consumer's consequence is logged at info (logging.md 8.3, one cause,
+    # one red line)
     c="$lang-rerr"
     seed_harness "$TMP_ROOT/$c"
     run_skills "$lang" "$c" fail
-    check "$lang fanned out, resolver error: exit 1, n/a + ERROR skills rows, no fan-out rows, nothing offered" \
-        "[ \"\$(rc_of $c)\" = 1 ] && row $c '$FANOUT_ROW' && row $c 'ERROR|skills|no adopt: dotprofile error' && no_rows_for $c 'claude skills' && no_rows_for $c 'cursor skills' && ! found $c mine && found_log $c 'Dotprofile unresolved (resolver error above) -- reverse discovery not run, so no skill can be adopted to the dotprofile'"
+    check "$lang fanned out, resolver error: exit 1, n/a row + the resolver's ERROR only, no fan-out rows, nothing offered" \
+        "[ \"\$(rc_of $c)\" = 1 ] && row $c '$FANOUT_ROW' && only_resolver_error $c && no_rows_for $c 'claude skills' && no_rows_for $c 'cursor skills' && ! found $c mine && found_log $c '[info] Dotprofile unresolved (resolver error above) -- reverse discovery not run, so no skill can be adopted to the dotprofile'"
     golden_rows "$c"
     c="$lang-rerrfb"
     run_skills "$lang" "$c" fail
-    check "$lang fallback, resolver error: today's ERROR claude skills / cursor skills rows, nothing deployed" \
-        "[ \"\$(rc_of $c)\" = 1 ] && row $c 'ERROR|claude skills|not deployed: dotprofile error' && row $c 'ERROR|cursor skills|not deployed: dotprofile error' && no_rows_for $c skills && [ ! -e '$TMP_ROOT/$c/.claude/skills' ]"
+    check "$lang fallback, resolver error: exit 1, the resolver's ERROR only, nothing deployed" \
+        "[ \"\$(rc_of $c)\" = 1 ] && only_resolver_error $c && no_rows_for $c 'claude skills' && no_rows_for $c 'cursor skills' && no_rows_for $c skills && [ ! -e '$TMP_ROOT/$c/.claude/skills' ] && found_log $c '[info] Dotprofile unresolved (resolver error above) -- skills not deployed, so shared copies cannot replace dotprofile versions'"
     golden_rows "$c"
 
     # unreadable manifest / harness directory
@@ -373,16 +390,21 @@ for lang in $L; do
         chmod 000 "$TMP_ROOT/$c/.aitools/skills/.aitools-skills-manifest"
         run_skills "$lang" "$c" live
         chmod 644 "$TMP_ROOT/$c/.aitools/skills/.aitools-skills-manifest"
-        check "$lang unreadable manifest: exit 1, ERROR skills row, reverse discovery not run" \
-            "[ \"\$(rc_of $c)\" = 1 ] && row $c '$FANOUT_ROW' && row $c 'ERROR|skills|no adopt: manifest unreadable' && ! found $c mine && found_log $c 'Cannot read the skills manifest ~/.aitools/skills/.aitools-skills-manifest -- reverse discovery not run, so no harness skill is offered for adoption: '"
+        check "$lang unreadable manifest: exit 1, one ERROR skills record, reverse discovery not run" \
+            "[ \"\$(rc_of $c)\" = 1 ] && row $c '$FANOUT_ROW' && [ \"\$(error_count $c)\" = 1 ] && grep -q '^ERROR|skills|no adopt: manifest unreadable|.' '$TMP_ROOT/$c.summary' && ! found $c mine && found_log $c '[error] no adopt: manifest unreadable: '"
+        # The .sh reason: read_harness_manifest's own line (perl's \$! for EACCES)
+        check "$lang unreadable manifest: reason names the manifest and the OS error" \
+            "row $c 'ERROR|skills|no adopt: manifest unreadable|cannot read $TMP_ROOT/$c/.aitools/skills/.aitools-skills-manifest: Permission denied'"
         golden_rows "$c"
         c="$lang-hdu"
         seed_harness "$TMP_ROOT/$c"
         chmod 000 "$TMP_ROOT/$c/.aitools/skills"
         run_skills "$lang" "$c" live
         chmod 755 "$TMP_ROOT/$c/.aitools/skills"
-        check "$lang unreadable ~/.aitools/skills: exit 1, ERROR skills row, reverse discovery not run" \
-            "[ \"\$(rc_of $c)\" = 1 ] && row $c '$FANOUT_ROW' && row $c 'ERROR|skills|no adopt: harness unreadable' && ! found $c mine && found_log $c 'Cannot read ~/.aitools/skills -- reverse discovery not run, so no harness skill is offered for adoption: '"
+        check "$lang unreadable ~/.aitools/skills: exit 1, one ERROR skills record, reverse discovery not run" \
+            "[ \"\$(rc_of $c)\" = 1 ] && row $c '$FANOUT_ROW' && [ \"\$(error_count $c)\" = 1 ] && grep -q '^ERROR|skills|no adopt: harness unreadable|.' '$TMP_ROOT/$c.summary' && ! found $c mine && found_log $c '[error] no adopt: harness unreadable: '"
+        check "$lang unreadable ~/.aitools/skills: the .sh reason" \
+            "row $c 'ERROR|skills|no adopt: harness unreadable|~/.aitools/skills is not readable -- reverse discovery not run'"
         golden_rows "$c"
         # Audit B N1: an unreadable ~/.claude/skills is an error, not an empty scan
         c="$lang-dstu"
@@ -390,8 +412,10 @@ for lang in $L; do
         chmod 000 "$TMP_ROOT/$c/.claude/skills"
         run_skills "$lang" "$c" live
         chmod 755 "$TMP_ROOT/$c/.claude/skills"
-        check "$lang unreadable ~/.claude/skills: exit 1, ERROR skills 'no adopt: target unreadable', logged" \
-            "[ \"\$(rc_of $c)\" = 1 ] && row $c '$FANOUT_ROW' && row $c 'ERROR|skills|no adopt: target unreadable' && no_rows_for $c 'claude skills' && ! found $c mine && found_log $c 'Cannot read ~/.claude/skills -- reverse discovery not run, so no user-created skill is offered for adoption: '"
+        check "$lang unreadable ~/.claude/skills: exit 1, one ERROR skills 'no adopt: target unreadable', logged" \
+            "[ \"\$(rc_of $c)\" = 1 ] && row $c '$FANOUT_ROW' && [ \"\$(error_count $c)\" = 1 ] && grep -q '^ERROR|skills|no adopt: target unreadable|.' '$TMP_ROOT/$c.summary' && no_rows_for $c 'claude skills' && ! found $c mine && found_log $c '[error] no adopt: target unreadable: '"
+        check "$lang unreadable ~/.claude/skills: the .sh reason" \
+            "row $c 'ERROR|skills|no adopt: target unreadable|~/.claude/skills is not readable -- reverse discovery not run'"
         golden_rows "$c"
     else
         skip "$lang unreadable cases (chmod does not block reads here)"
@@ -406,8 +430,8 @@ for lang in $L; do
         "[ \"\$(rc_of $c)\" = 0 ] && [ \"\$(rows_of $c)\" = '$FANOUT_ROW' ] && [ ! -e '$TMP_ROOT/$c/.cursor/skills' ] && [ ! -e '$TMP_ROOT/$c/.claude/skills/alpha' ] && found $c mine"
     golden_rows "$c"
 
-    # pty: adopt in fan-out mode writes the dotprofile; a failed adopt is a
-    # "skills" row (review N1), never "claude skills"
+    # pty: adopt in fan-out mode writes the dotprofile; a failed adopt is one
+    # "skills" record (review N1), never "claude skills"
     if $HAVE_PTY; then
         c="$lang-adopt"
         own_dotprofile "$c"
@@ -423,20 +447,21 @@ for lang in $L; do
             chmod 555 "$TMP_ROOT/dp-$c/claude/skills"
             run_skills_pty "$lang" "$c" 'a\n'
             chmod 755 "$TMP_ROOT/dp-$c/claude/skills"
-            check "$lang pty adopt failure (fanned out): exit 1, ERROR skills 'adopt failed: mine', no claude skills row" \
-                "[ \"\$(rc_of $c)\" = 1 ] && row $c 'ERROR|skills|adopt failed: mine' && no_rows_for $c 'claude skills' && [ ! -e '$TMP_ROOT/dp-$c/claude/skills/mine' ]"
-            # The library records the failed write at the source (logging.md 8.3;
-            # adopt_managed_file: WHAT the target, REASON mkdir's output). Its record
-            # name is not pinned here: setup-user-skills passes no --tool yet (G3)
+            # The library records the failed write at the source, once, under the
+            # tool setup-user-skills passes (logging.md 8.3; adopt_managed_file
+            # --tool skills: WHAT the target, REASON mkdir's output); the script
+            # adds no "adopt failed" record of its own
             AF_WHAT="adopt to $TMP_ROOT/dp-$c/claude/skills/mine/SKILL.md failed"
-            check "$lang pty adopt failure: the library's ERROR record for the write, with its reason" \
-                "[ \"\$(grep -cF '|$AF_WHAT|' '$TMP_ROOT/$c.summary')\" = 1 ]"
+            check "$lang pty adopt failure (fanned out): exit 1, one ERROR record (skills), no claude skills row" \
+                "[ \"\$(rc_of $c)\" = 1 ] && [ \"\$(error_count $c)\" = 1 ] && ! grep -q '|adopt failed: mine' '$TMP_ROOT/$c.summary' && no_rows_for $c 'claude skills' && [ ! -e '$TMP_ROOT/dp-$c/claude/skills/mine' ]"
+            check "$lang pty adopt failure: the library's ERROR skills record for the write, with its reason" \
+                "[ \"\$(grep -cF 'ERROR|skills|$AF_WHAT|' '$TMP_ROOT/$c.summary')\" = 1 ]"
             if [ "$TEST_PLATFORM" = macos ]; then
                 check "$lang pty adopt failure: reason is BSD mkdir's message" \
-                    "perl -ne 'BEGIN { \$s = shift } chomp; \$n++ if /^ERROR\|[^|]+\|\Q\$s\E\z/; END { exit(\$n == 1 ? 0 : 1) }' '$AF_WHAT|cannot create its directory: mkdir: $TMP_ROOT/dp-$c/claude/skills/mine: Permission denied' '$TMP_ROOT/$c.summary'"
+                    "row $c 'ERROR|skills|$AF_WHAT|cannot create its directory: mkdir: $TMP_ROOT/dp-$c/claude/skills/mine: Permission denied'"
             else
                 check "$lang pty adopt failure: reason is mkdir's message (Permission denied)" \
-                    "grep -F '|$AF_WHAT|cannot create its directory: mkdir: ' '$TMP_ROOT/$c.summary' | grep -E 'Permission denied\$' >/dev/null"
+                    "grep -F 'ERROR|skills|$AF_WHAT|cannot create its directory: mkdir: ' '$TMP_ROOT/$c.summary' | grep -E 'Permission denied\$' >/dev/null"
             fi
             golden_rows "$c"
         else

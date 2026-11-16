@@ -1,1 +1,2 @@
+WARN|claude.md|dry run: cannot read <TMP>/sh-dry/.claude/CLAUDE.md for the comparison: Permission denied
 OK|claude.md|dry-run: would update
