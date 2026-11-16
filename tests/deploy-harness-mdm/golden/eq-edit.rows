@@ -1,2 +1,3 @@
-WARN|aitools config|verified
-WARN|harness files|N updated, N verified
+OK|aitools config|verified
+OK|harness files|N updated, N verified
+WARN|harness files|Diff in <HOME>/.aitools/rules/tool-ops.md -- overwriting (non-interactive)

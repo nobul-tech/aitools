@@ -191,7 +191,12 @@ run() {
 
 rc_of() { cat "$TMP_ROOT/$1.rc"; }
 same_rc() { [ "$(rc_of "$1-dev")" = "$(rc_of "$1-mdm")" ]; }
-same_summary() { cmp -s "$TMP_ROOT/$1-dev.summary" "$TMP_ROOT/$1-mdm.summary"; }
+# home_rows SUMMARY -- the summary file's rows with the case's isolated HOME
+# (SUMMARY without .summary: $TMP_ROOT/NAME-SIDE) written as <HOME>: a warning
+# that names a deployed file (the non-interactive overwrite) holds its HOME,
+# which differs between the dev and MDM runs and between runs
+home_rows() { HOMEDIR="${1%.summary}" perl -pe 's/\r//g; s/\Q$ENV{HOMEDIR}\E/<HOME>/g' "$1"; }
+same_summary() { cmp -s <(home_rows "$TMP_ROOT/$1-dev.summary") <(home_rows "$TMP_ROOT/$1-mdm.summary"); }
 row() { grep -qxF "$2" "$TMP_ROOT/$1.summary"; }
 same_trees() {  # same_trees NAME -- six directories and exec bits identical
     local k a="$TMP_ROOT/$1-dev/.aitools" b="$TMP_ROOT/$1-mdm/.aitools"
@@ -207,8 +212,9 @@ only_review_diff_git() {
     [ ! -s "$TMP_ROOT/fakegit.calls" ] || ! perl -pe 's/\r//g' "$TMP_ROOT/fakegit.calls" | grep -v -e ' diff --no-index ' >/dev/null
 }
 # rows_golden FILE OUT -- summary rows for the cross-language golden: order-free,
-# every number replaced by N (file counts follow this repo's sources)
-rows_golden() { perl -pe 's/\r//g; s/\d+/N/g' "$1" | LC_ALL=C sort > "$2"; }
+# the case's HOME written as <HOME> (home_rows), then every number replaced by N
+# (file counts follow this repo's sources)
+rows_golden() { home_rows "$1" | perl -pe 's/\d+/N/g' | LC_ALL=C sort > "$2"; }
 # set_payload_sha DIR -- write the sha256 of DIR/deploy-harness.payload into the
 # generated deploy-harness.sh (after a payload edit)
 set_payload_sha() {
@@ -348,12 +354,13 @@ printf 'local edit\n' > "$TMP_ROOT/eq-dev/.aitools/rules/tool-ops.md"
 printf 'local edit\n' > "$TMP_ROOT/eq-mdm/.aitools/rules/tool-ops.md"
 run dev eq
 run mdm eq
-# WARN, not OK: the non-interactive overwrite logs a warning and the library
-# raises the row to WARN; the dev path does the same (next check).
-check "edit then rerun (non-interactive): source wins in MDM, 1 updated" \
-    "cmp -s '$P2' '$TMP_ROOT/eq-mdm/.aitools/rules/tool-ops.md' && grep -q '^WARN|harness files|1 updated' '$TMP_ROOT/eq-mdm.summary'"
-check "edit then rerun: same rows and files as dev" "same_summary eq && same_trees eq"
-if ! same_summary eq; then diff "$TMP_ROOT/eq-dev.summary" "$TMP_ROOT/eq-mdm.summary" | perl -pe 's/^/      | /'; fi
+# The status stays OK; the non-interactive overwrite of the local edit is its
+# own warning, recorded by the library (reference/logging.md 8.3: "local edits
+# overwritten in a non-interactive run"); the dev path does the same (next check).
+check "edit then rerun (non-interactive): source wins in MDM, 1 updated, overwrite warning" \
+    "cmp -s '$P2' '$TMP_ROOT/eq-mdm/.aitools/rules/tool-ops.md' && grep -q '^OK|harness files|1 updated' '$TMP_ROOT/eq-mdm.summary' && row eq-mdm 'WARN|harness files|Diff in $TMP_ROOT/eq-mdm/.aitools/rules/tool-ops.md -- overwriting (non-interactive)'"
+check "edit then rerun: same rows (each side's HOME as <HOME>) and files as dev" "same_summary eq && same_trees eq"
+if ! same_summary eq; then diff <(home_rows "$TMP_ROOT/eq-dev.summary") <(home_rows "$TMP_ROOT/eq-mdm.summary") | perl -pe 's/^/      | /'; fi
 rows_golden "$TMP_ROOT/eq-mdm.summary" "$TMP_ROOT/eq-edit.rows"
 check "edit then rerun parity: MDM summary rows (numbers as N) match golden" "golden_match eq-edit.rows '$TMP_ROOT/eq-edit.rows'"
 
