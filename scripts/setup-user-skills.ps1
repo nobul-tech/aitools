@@ -18,8 +18,10 @@
 # hidden name as not user-created. Reverse discovery's own rows (a failed
 # adopt, an unreadable directory) then use the tool "skills" too. A resolver
 # error, or an unreadable .aitools\skills, manifest or .claude\skills, means
-# reverse discovery does not run (its adopt target is the dotprofile): ERROR
-# "skills" "no adopt: <reason>". Without .aitools\skills it deploys as before (an MDM endpoint run
+# reverse discovery does not run (its adopt target is the dotprofile): a
+# resolver error is recorded once by the library (under "dotprofile") and only
+# logged here; an unreadable directory or manifest is ERROR "skills" "no adopt:
+# <what>" with its reason. Without .aitools\skills it deploys as before (an MDM endpoint run
 # before deploy-harness, or a machine where deploy-harness failed). The check
 # sits in the extracted body, so the generated MDM script (build-deploy)
 # carries it. Same rows as setup-user-skills.sh (parity).
@@ -73,10 +75,13 @@ $skillsSrc = Join-Path (Join-Path $repoDir "shared") "skills"
 # User repo for dotprofile overrides and adopt target: the one dotprofile
 # resolver (reference/user-repo.md "Resolution"; SD-7). The rc is captured, not
 # suppressed: 0 found, 1 no dotprofile (shared-only mode, expected), 3 resolver
-# error (the lib already logged it: LogError + ERROR row "dotprofile").
+# error (the library recorded it once: Write-AitError "dotprofile", counted in
+# this script's errors, so the exit status is 1).
 # On 1 $userRepoPath is empty: shared skills only, no adopt offer. On 3 the
 # deploy is not run (S3-M3Lead decision): shared copies must never overwrite
-# deployed dotprofile versions while the dotprofile cannot be read. Same rows
+# deployed dotprofile versions while the dotprofile cannot be read. What is
+# not run because of it is logged at info, not recorded again (one cause, one
+# red line: reference/logging.md 8.3 "Recorded at the source"). Same records
 # and message as setup-user-skills.sh (parity).
 $urpRc = Resolve-UserRepoPath
 $userRepoPath = $script:AitLibUserRepoPath
@@ -85,13 +90,10 @@ if ($urpRc -ne 0 -and $urpRc -ne 1) {
     $skillsBlocked = $true
     if ($skillsFannedOut) {
         # The fan-out deploys; reverse discovery adopts into the dotprofile, so
-        # it cannot run. Reported under "skills": the two fan-out rows are not ours.
-        LogError "Dotprofile unresolved (resolver error above) -- reverse discovery not run, so no skill can be adopted to the dotprofile"
-        Write-Summary "ERROR" "skills" "no adopt: dotprofile error"
+        # it cannot run.
+        Log "Dotprofile unresolved (resolver error above) -- reverse discovery not run, so no skill can be adopted to the dotprofile"
     } else {
-        LogError "Dotprofile unresolved (resolver error above) -- skills not deployed, so shared copies cannot replace dotprofile versions"
-        Write-Summary "ERROR" "claude skills" "not deployed: dotprofile error"
-        Write-Summary "ERROR" "cursor skills" "not deployed: dotprofile error"
+        Log "Dotprofile unresolved (resolver error above) -- skills not deployed, so shared copies cannot replace dotprofile versions"
     }
 }
 $dotprofileSkills = $null
@@ -129,8 +131,7 @@ if ($dotprofileSkills -and -not $skillsFannedOut) {
 }
 
 if ($skillNames.Count -eq 0 -and -not $skillsBlocked -and -not $skillsFannedOut) {
-    LogWarn "No skills found in shared\skills\ or dotprofile"
-    Write-Summary "WARN" "claude skills" "no skills found"
+    Write-AitWarn "claude skills" "no skills found in shared\skills\ or the dotprofile -- nothing deployed"
 }
 
 # --- Deploy function ---
@@ -144,7 +145,8 @@ function Deploy-Skill {
     } elseif (Test-Path (Join-Path (Join-Path $skillsSrc $SkillName) "SKILL.md")) {
         $src = Join-Path (Join-Path $skillsSrc $SkillName) "SKILL.md"
     } else {
-        LogError "Skill source not found: $SkillName"
+        Write-AitError $ToolName "cannot deploy $SkillName" "SKILL.md not found in the dotprofile or shared\skills"
+        Record-DeployOutcome -Outcome "failed" -ToolName $ToolName -ItemName $SkillName
         return
     }
 
@@ -154,7 +156,8 @@ function Deploy-Skill {
     try {
         $srcContent = Get-Content $src -Raw -ErrorAction Stop
     } catch {
-        LogError "Cannot read skill source $SkillName`: $_"
+        Write-AitError $ToolName "cannot read the source of $SkillName" (Get-AitErrorReason -ErrorRecord $_)
+        Record-DeployOutcome -Outcome "failed" -ToolName $ToolName -ItemName $SkillName
         return
     }
 
@@ -178,13 +181,13 @@ function Deploy-Skill {
                     Copy-Item -Path $dest -Destination $other -Force -ErrorAction Stop
                     Log "Synced adopted skill to $other"
                 } catch {
-                    LogError "Failed: ${SkillName}: could not copy the adopted skill to ${other}: $_"
-                    Write-Summary "ERROR" $ToolName "sync failed: $SkillName"
+                    Write-AitError $ToolName "sync failed: $SkillName" (Get-AitErrorReason -ErrorRecord $_)
                 }
             }
         }
         { $_ -in @("created", "updated", "skipped", "verified", "failed") } {
-            # The tracker records the outcome (failed -> ERROR row).
+            # The library recorded a failed or skipped file itself; the
+            # tracker writes the DETAIL item and counts it.
         }
     }
     Record-DeployOutcome -Outcome $skillResult -ToolName $ToolName -ItemName $SkillName
@@ -192,37 +195,31 @@ function Deploy-Skill {
 
 # --- Deploy to Claude Code ---
 if ($skillNames.Count -gt 0) {
+    # Each failed item is its own ERROR record (the library's or this
+    # script's Write-AitError); the tracker writes the OK status with its
+    # counts ("N failed" among them) and the DETAIL items, so there is no
+    # aggregate error record (reference/logging.md 8.3 "Managed files").
     Log "Deploying skills to $skillsDest..."
-    $errorsBeforeClaude = $errors
     Initialize-DeployTracker
     foreach ($skillName in $skillNames) {
         Deploy-Skill $skillName $skillsDest "claude skills"
     }
-    if ($errors -eq $errorsBeforeClaude) {
-        Write-DeployTrackerSummary -ToolName "claude skills"
-    } else {
-        Write-Summary "ERROR" "claude skills" "deploy failed"
-    }
+    Write-DeployTrackerSummary -ToolName "claude skills"
 
     # --- Deploy to Cursor ---
     Log "Deploying skills to $skillsDestCursor..."
-    $errorsBeforeCursor = $errors
     Initialize-DeployTracker
     foreach ($skillName in $skillNames) {
         Deploy-Skill $skillName $skillsDestCursor "cursor skills"
     }
-    if ($errors -eq $errorsBeforeCursor) {
-        Write-DeployTrackerSummary -ToolName "cursor skills"
-    } else {
-        Write-Summary "ERROR" "cursor skills" "deploy failed"
-    }
+    Write-DeployTrackerSummary -ToolName "cursor skills"
 }
 
 # --- Harness skill names (fan-out mode only) ---
 # Every name in .aitools\skills, as an entry or as a manifest line (any source,
 # retired included), is a harness skill: the fan-out put it in .claude\skills,
 # so it is never offered for adoption. Compared case-insensitively (HashSet,
-# OrdinalIgnoreCase). Returns $false after LogError + ERROR "skills" when
+# OrdinalIgnoreCase). Returns $false after one Write-AitError "skills" when
 # .aitools\skills or its manifest cannot be read: reverse discovery is then
 # not run, so a harness skill is never mistaken for a user-created one. A
 # manifest with a bad header adds no names (the fan-out reports it); its
@@ -232,8 +229,7 @@ function Get-HarnessSkillNames {
     try {
         $entries = @(Get-ChildItem -LiteralPath $skillsHarnessDir -Force -ErrorAction Stop)
     } catch {
-        LogError "Cannot read ~/.aitools/skills -- reverse discovery not run, so no harness skill is offered for adoption: $($_.Exception.Message)"
-        Write-Summary "ERROR" "skills" "no adopt: harness unreadable"
+        Write-AitError "skills" "no adopt: harness unreadable" (Get-AitErrorReason -ErrorRecord $_)
         return $false
     }
     foreach ($entry in $entries) {
@@ -254,8 +250,7 @@ function Get-HarnessSkillNames {
             }
         }
         if ($null -ne $why) {
-            LogError "Cannot read the skills manifest ~/.aitools/skills/.aitools-skills-manifest -- reverse discovery not run, so no harness skill is offered for adoption: $why"
-            Write-Summary "ERROR" "skills" "no adopt: manifest unreadable"
+            Write-AitError "skills" "no adopt: manifest unreadable" "cannot read ~/.aitools/skills/.aitools-skills-manifest: $why"
             return $false
         }
         if ($m.Status -eq "header-bad") {
@@ -282,7 +277,7 @@ foreach ($n in @("aitool-eval", "aitool-ops")) { [void]$retiredSkillNames.Add($n
 # Fan-out mode: only with a dotprofile (the adopt target) and the harness names.
 $runReverse = $false
 if ($skillsBlocked) {
-    # resolver error: no adopt target (logged and reported above)
+    # resolver error: no adopt target (recorded by the library, logged above)
 } elseif (-not $skillsFannedOut) {
     $runReverse = $true
 } elseif ($userRepoPath) {
@@ -294,8 +289,7 @@ if ($runReverse -and $userRepoPath -and (Test-Path -LiteralPath $skillsDest -Pat
     try {
         $destSkillDirs = @(Get-ChildItem -LiteralPath $skillsDest -Directory -ErrorAction Stop)
     } catch {
-        LogError "Cannot read ~/.claude/skills -- reverse discovery not run, so no user-created skill is offered for adoption: $($_.Exception.Message)"
-        Write-Summary "ERROR" $skillsRowTool "no adopt: target unreadable"
+        Write-AitError $skillsRowTool "no adopt: target unreadable" (Get-AitErrorReason -ErrorRecord $_)
         $destSkillDirs = @()
     }
 }
@@ -340,11 +334,12 @@ if ($destSkillDirs.Count -gt 0) {
                     -Context "adopt skill $skillName" -Prompt "  > "
                 switch ($choice) {
                     { $_ -in @("a", "adopt") } {
-                        $errorsBeforeAdopt = $errors
-                        $adoptedCount = Adopt-ManagedFile -SourceFile (Join-Path $skillDir.FullName "SKILL.md") `
+                        # The library records a failure once (Write-AitError
+                        # under $skillsRowTool, with its reason)
+                        $adoptedCount = Adopt-ManagedFile -Tool $skillsRowTool -SourceFile (Join-Path $skillDir.FullName "SKILL.md") `
                             -Targets @(Join-Path $userRepoPath "claude\skills\$skillName\SKILL.md")
-                        if ($errors -gt $errorsBeforeAdopt -or -not $adoptedCount) {
-                            Write-Summary "ERROR" $skillsRowTool "adopt failed: $skillName"
+                        if (-not $adoptedCount) {
+                            Log "Adoption of $skillName not completed (error above)"
                         }
                     }
                     { $_ -in @("s", "skip") } {
@@ -353,7 +348,7 @@ if ($destSkillDirs.Count -gt 0) {
                     default {
                         # Unreachable: Read-MenuChoice returns only a VALID
                         # answer. Skip (writes nothing) and say so.
-                        LogWarn "Unexpected answer `"$choice`" at adopt skill $skillName -- skipped adoption of $skillName"
+                        Write-AitWarn $skillsRowTool "unexpected answer `"$choice`" at adopt skill $skillName -- adoption skipped"
                     }
                 }
             }

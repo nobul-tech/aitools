@@ -62,10 +62,11 @@ done
 CLAUDE_DIR="$HOME/.claude"
 CLAUDE_MD="$CLAUDE_DIR/CLAUDE.md"
 
-# Ensure ~/.claude/ exists
-if ! mkdir -p "$CLAUDE_DIR"; then
-    log_error "Cannot create $(display_path "$CLAUDE_DIR")"
-    write_summary ERROR "claude.md" "cannot create ~/.claude"
+# Ensure ~/.claude/ exists (stderr captured: mkdir's message is the reason)
+claude_dir_rc=0
+claude_dir_out=$(mkdir -p "$CLAUDE_DIR" 2>&1) || claude_dir_rc=$?
+if [ "$claude_dir_rc" -ne 0 ]; then
+    write_error "claude.md" "cannot create ~/.claude" "$(error_reason "$claude_dir_out" "$claude_dir_rc")"
     exit 1
 fi
 
@@ -73,22 +74,23 @@ fi
 # "Resolution"). This script reads only the wrapper results (PR #80 contract),
 # never profile.json or config.json itself: no alias lookup, no hostname or
 # first-profile fallback. A miss never takes another machine's values: on no
-# match the profile/identity values are identity-level only. The wrappers write
-# the ERROR row and ACTION for their own failures; this script adds none. ---
+# match the profile/identity values are identity-level only. The wrappers record
+# the error and ACTION for their own failures; this script adds none. ---
 URP_RC=0
-resolve_user_repo_path || URP_RC=$?    # 1 = shared-only (expected); 3 = logged error + ERROR row
+resolve_user_repo_path || URP_RC=$?    # 1 = shared-only (expected); 3 = error, recorded by the wrapper
 USER_REPO_PATH="$AITLIB_USER_REPO_PATH"
 USER_REPO_VIA="$AITLIB_USER_REPO_VIA"
 if [ "$URP_RC" -eq 3 ]; then
     # A dotprofile error is not "no dotprofile": deploying the shared template
-    # would replace the personal CLAUDE.md and rules. The wrapper wrote the
-    # ERROR "dotprofile" row; this is the claude.md outcome row (no ACTION).
-    log_error "CLAUDE.md and rules not deployed: the dotprofile could not be resolved"
-    write_summary ERROR "claude.md" "not deployed: dotprofile unresolved"
+    # would replace the personal CLAUDE.md and rules. The wrapper recorded the
+    # error once (write_error "dotprofile", counted here); what is not run
+    # because of it is logged at info, not recorded again (one cause, one red
+    # line: reference/logging.md 8.3). Exit 1: the wrapper's error is counted.
+    log "CLAUDE.md and rules not deployed: the dotprofile could not be resolved"
     exit 1
 fi
 PROFILE_RC=0
-resolve_machine_profile || PROFILE_RC=$?   # 1 = shared-only; 3 = no match / error (logged + ERROR row + ACTION)
+resolve_machine_profile || PROFILE_RC=$?   # 1 = shared-only; 3 = no match / error (recorded by the wrapper, + ACTION)
 MACHINE_ALIAS="$AITLIB_MACHINE_ALIAS"
 MACHINE_VIA="$AITLIB_MACHINE_VIA"
 PROFILE_NAME="$AITLIB_PROFILE_NAME"
@@ -122,8 +124,7 @@ if [ -z "$SOURCE_PATH" ]; then
         SOURCE_PATH="$SHARED_PATH"
         SOURCE_LABEL="shared template"
     else
-        log_error "No template found. Checked user repo and $(display_path "$SHARED_PATH")"
-        write_summary ERROR "claude.md" "no template found"
+        write_error "claude.md" "no template found" "checked the dotprofile and $(display_path "$SHARED_PATH")"
         exit 1
     fi
 fi
@@ -131,14 +132,16 @@ fi
 log "Template source: $(display_path "$SOURCE_PATH") ($SOURCE_LABEL)"
 
 # --- Read template content ---
-if ! SHARED_CONTENT=$(cat "$SOURCE_PATH"); then
-    log_error "Cannot read template: $(display_path "$SOURCE_PATH")"
-    write_summary ERROR "claude.md" "template unreadable"
+# 2>&1: cat writes nothing to stderr when it succeeds; on failure its message
+# (path and cause) is the reason
+tpl_rc=0
+SHARED_CONTENT=$(cat "$SOURCE_PATH" 2>&1) || tpl_rc=$?
+if [ "$tpl_rc" -ne 0 ]; then
+    write_error "claude.md" "template unreadable" "$(error_reason "$SHARED_CONTENT" "$tpl_rc")"
     exit 1
 fi
 if [ -z "$SHARED_CONTENT" ]; then
-    log_error "Template is empty: $(display_path "$SOURCE_PATH")"
-    write_summary ERROR "claude.md" "template empty"
+    write_error "claude.md" "template empty" "$(display_path "$SOURCE_PATH") is empty"
     exit 1
 fi
 
@@ -148,20 +151,30 @@ fi
 # are literal (bash ${var//pat/rep} treats "&" as the match in bash 5.2). An
 # empty value leaves its token in place (visible, not silently blank). One pass:
 # a value that contains token text is not substituted again.
-if ! SHARED_CONTENT=$(printf '%s' "$SHARED_CONTENT" | \
+# perl's stderr goes to a temp file (its stdout is the content): on failure it
+# is the reason. Without a temp file the reason falls back to the exit code.
+interp_err=""
+interp_err=$(mktemp) || interp_err=""
+interp_rc=0
+SHARED_CONTENT=$(printf '%s' "$SHARED_CONTENT" | \
     T_PROFILE_NAME="$PROFILE_NAME" T_PROFILE_COMPANY="$PROFILE_COMPANY" \
     T_IDENTITY_GIT_NAME="$IDENTITY_GIT_NAME" T_IDENTITY_GIT_EMAIL="$IDENTITY_GIT_EMAIL" \
     T_USER_REPO_PATH="$USER_REPO_DISPLAY" \
-    perl -0777 -pe 's/\{\{(PROFILE_NAME|PROFILE_COMPANY|IDENTITY_GIT_NAME|IDENTITY_GIT_EMAIL|USER_REPO_PATH)\}\}/my $v = $ENV{"T_$1"}; (defined $v && length $v) ? $v : $&/ge'); then
-    log_error "Template interpolation failed (perl)"
-    write_summary ERROR "claude.md" "interpolation failed"
+    perl -0777 -pe 's/\{\{(PROFILE_NAME|PROFILE_COMPANY|IDENTITY_GIT_NAME|IDENTITY_GIT_EMAIL|USER_REPO_PATH)\}\}/my $v = $ENV{"T_$1"}; (defined $v && length $v) ? $v : $&/ge' \
+    2>"${interp_err:-/dev/null}") || interp_rc=$?
+interp_msg=""
+if [ -n "$interp_err" ]; then
+    interp_msg=$(<"$interp_err")
+    rm -f "$interp_err"
+fi
+if [ "$interp_rc" -ne 0 ]; then
+    write_error "claude.md" "interpolation failed" "$(error_reason "$interp_msg" "$interp_rc")"
     exit 1
 fi
 
 case "$PROFILE_RC" in
     0) log "Profile interpolation: alias=$MACHINE_ALIAS via=$MACHINE_VIA name=$PROFILE_NAME company=$PROFILE_COMPANY" ;;
-    1) log_warn "No dotprofile -- {{PLACEHOLDER}} tokens will not be resolved"
-       write_summary WARN "claude.md" "template tokens unresolved" ;;
+    1) write_warn "claude.md" "template tokens unresolved: no dotprofile" ;;
     *) log "Profile interpolation: identity-level values only (no machine profile) -- machine-specific tokens may stay unresolved" ;;
 esac
 
@@ -227,8 +240,12 @@ if [ "$DRY_RUN" = "true" ]; then
     if [ -f "$CLAUDE_MD" ]; then
         # Compared as deploy_managed_file compares (trailing newlines removed).
         # The explicit open dies on an unreadable file (perl -p only warns).
-        if ! _dr_existing=$(perl -0777 -e 'open my $f, "<", $ARGV[0] or die "cannot read $ARGV[0]: $!\n"; my $t = <$f>; $t = "" unless defined $t; $t =~ s/[\r\n]+\z//; print $t' "$CLAUDE_MD"); then
-            log_warn "Cannot read $(display_path "$CLAUDE_MD") for the dry-run comparison"
+        # 2>&1: on success this program writes nothing to stderr; on failure
+        # its die message (the cause) is the text of the warning.
+        _dr_rc=0
+        _dr_existing=$(perl -0777 -e 'open my $f, "<", $ARGV[0] or die "$!\n"; my $t = <$f>; $t = "" unless defined $t; $t =~ s/[\r\n]+\z//; print $t' "$CLAUDE_MD" 2>&1) || _dr_rc=$?
+        if [ "$_dr_rc" -ne 0 ]; then
+            write_warn "claude.md" "dry run: cannot read $(display_path "$CLAUDE_MD") for the comparison: $(error_reason "$_dr_existing" "$_dr_rc")"
             _dr_existing=""
         fi
         _dr_new=$(printf '%s' "$NEW_CONTENT" | perl -0777 -pe 's/[\r\n]+\z//')
@@ -255,22 +272,21 @@ else
 
     case "$MANAGED_FILE_RESULT" in
         created|updated|"accept & adopt")
-            # Errors logged before this point (e.g. the machine-profile resolver)
-            # are not validation failures
-            _claude_errs_before=$ERRORS
             # --- BEGIN post-write validation (extracted by build-deploy) ---
-            # Post-write validation: check structure AND content (not just a marker)
+            # Post-write validation: check structure AND content (not just a
+            # marker). The first problem found is the one error (its cause).
+            claude_invalid=""
             if [ ! -s "$CLAUDE_MD" ]; then
-                log_error "Validation failed: $CLAUDE_MD is empty or missing"
-            elif ! grep -q "## Machine-Specific" "$CLAUDE_MD"; then
-                log_error "Validation failed: $CLAUDE_MD missing Machine-Specific section"
-            elif ! grep -qE "## (Coaching|Code Style|Tool)" "$CLAUDE_MD"; then
+                claude_invalid="$(display_path "$CLAUDE_MD") is empty or missing"
+            elif ! grep "## Machine-Specific" "$CLAUDE_MD" >/dev/null; then
+                claude_invalid="missing the Machine-Specific section"
+            elif ! grep -E "## (Coaching|Code Style|Tool)" "$CLAUDE_MD" >/dev/null; then
                 # Template body must be present -- a file with only the footer is corrupt
-                log_error "Validation failed: $CLAUDE_MD missing template body (only footer present?)"
+                claude_invalid="missing the template body (only the footer?)"
             fi
             # --- END post-write validation (extracted by build-deploy) ---
-            if [ "$ERRORS" -ne "$_claude_errs_before" ]; then
-                write_summary ERROR "claude.md" "validation failed"
+            if [ -n "$claude_invalid" ]; then
+                write_error "claude.md" "validation failed" "$claude_invalid"
             elif [ "$MANAGED_FILE_RESULT" = "accept & adopt" ]; then
                 write_summary OK "claude.md" "accepted to profile"
             else
@@ -278,15 +294,15 @@ else
             fi
             ;;
         skipped)
-            write_summary WARN "claude.md" "skipped (user review)"
+            # The library recorded the skip once (write_warn "claude.md")
             ;;
         verified)
             log "CLAUDE.md verified (no differences)"
             write_summary OK "claude.md" "verified"
             ;;
         failed)
-            # The library restored the files and logged the reason (log_error).
-            write_summary ERROR "claude.md" "deploy failed"
+            # The library restored the files and recorded the error once
+            # (write_error "claude.md", with the write, merge or filter error)
             ;;
     esac
 fi
@@ -367,8 +383,7 @@ if [ ! -d "$RULES_SRC" ]; then
     log "No harness rules at $(display_path "$RULES_SRC") (deploy-harness has not run) -- skipping"
     write_summary OK "claude rules" "n/a (no harness rules)"
 elif ! rules_dir_listable "$RULES_SRC"; then
-    log_error "Cannot list $(display_path "$RULES_SRC"): permission denied"
-    write_summary ERROR "claude rules" "cannot read harness rules"
+    write_error "claude rules" "cannot read harness rules" "permission denied: $(display_path "$RULES_SRC")"
 else
     RULES_GO=true
 fi
@@ -377,7 +392,7 @@ fi
 # Without one (deploy-harness before PR #100) every rule is fanned out, none
 # is retired and adopt is not offered.
 MANIFEST_OK=false
-MANIFEST_FAILED=false   # unreadable: counted as a failed item, so the final row is ERROR
+MANIFEST_FAILED=false   # unreadable: one error, and a failed tracker item
 RULE_SOURCE_OF=""   # "<lower-case name><TAB><source>" lines
 RETIRED_NAMES=""    # names the manifest retires, one per line
 RETIRED_LC=""       # the same, lower-cased
@@ -388,20 +403,24 @@ if [ "$RULES_GO" = "true" ]; then
         log "No rules manifest at $(display_path "$RULES_MANIFEST") -- every rule fanned out, none retired, adopt not offered"
     else
         manifest_out=""
-        if ! manifest_out=$(read_rules_manifest "$RULES_MANIFEST" 2>&1); then
-            log_error "Cannot read the rules manifest $(display_path "$RULES_MANIFEST"): $manifest_out -- every rule fanned out, none retired"
-            write_summary ERROR "claude rules" "cannot read rules manifest"
+        manifest_rc=0
+        manifest_out=$(read_rules_manifest "$RULES_MANIFEST" 2>&1) || manifest_rc=$?
+        manifest_bad_lines=false
+        if [ "$manifest_rc" -ne 0 ]; then
+            write_error "claude rules" "cannot read rules manifest" "$(error_reason "$manifest_out" "$manifest_rc")"
+            log "every rule fanned out, none retired"
             MANIFEST_FAILED=true
         elif [ "$manifest_out" = "header-bad" ]; then
-            log_warn "Rules manifest $(display_path "$RULES_MANIFEST"): the first line is not \"$RULES_MANIFEST_HEADER\" -- every rule fanned out, none retired, adopt not offered"
-            write_summary ACTION "" "Run aitools to rebuild ~/.aitools/rules and its manifest"
+            log_detail "rules manifest $(display_path "$RULES_MANIFEST"): the first line is not \"$RULES_MANIFEST_HEADER\""
+            write_action "claude rules" "bad rules manifest header -- run: aitools (every rule fanned out, none retired, adopt not offered)" "Run aitools to rebuild ~/.aitools/rules and its manifest"
         else
             MANIFEST_OK=true
             while IFS= read -r m_line; do
                 [ -n "$m_line" ] || continue
                 case "$m_line" in
                     "invalid$TAB"*)
-                        log_warn "Rules manifest $(display_path "$RULES_MANIFEST"): line ignored: ${m_line#invalid"$TAB"}" ;;
+                        write_warn "claude rules" "rules manifest line ignored: ${m_line#invalid"$TAB"}"
+                        manifest_bad_lines=true ;;
                     "rule$TAB"*)
                         m_rest="${m_line#rule"$TAB"}"
                         m_name="${m_rest%%"$TAB"*}"
@@ -417,6 +436,10 @@ if [ "$RULES_GO" = "true" ]; then
                         fi ;;
                 esac
             done <<< "$manifest_out"
+            # One ACTION for every ignored line (parity with setup-user-cursor)
+            if [ "$manifest_bad_lines" = "true" ]; then
+                write_summary ACTION "" "Run aitools to rebuild ~/.aitools/rules and its manifest"
+            fi
         fi
     fi
 fi
@@ -464,7 +487,7 @@ if [ "$RULES_GO" = "true" ]; then
             RULE_SOURCES="${sort_out}
 "
         else
-            log_warn "Could not sort the harness rules (sort failed): deploying them in directory order"
+            write_warn "claude rules" "could not sort the harness rules (sort failed): deploying them in directory order"
         fi
     fi
     if [ -n "$RULE_BROKEN" ]; then
@@ -472,13 +495,13 @@ if [ "$RULES_GO" = "true" ]; then
             RULE_BROKEN="${sort_out}
 "
         else
-            log_warn "Could not sort the dangling harness rules (sort failed): reporting them in directory order"
+            write_warn "claude rules" "could not sort the dangling harness rules (sort failed): reporting them in directory order"
         fi
     fi
 
     if [ -z "$RULE_SOURCES" ] && [ -z "$RULE_BROKEN" ] && [ -z "$RETIRED_NAMES" ]; then
         log "No rules in $(display_path "$RULES_SRC") -- skipping"
-        # An unreadable manifest already wrote this tool's ERROR row
+        # An unreadable manifest already recorded this tool's error
         if [ "$MANIFEST_FAILED" != "true" ]; then
             write_summary OK "claude rules" "n/a (no harness rules)"
         fi
@@ -487,17 +510,17 @@ if [ "$RULES_GO" = "true" ]; then
         # The dry run previews the error the real run reports: something that
         # is not a directory where ~/.claude/rules goes
         if { [ -e "$RULES_DEST" ] || [ -L "$RULES_DEST" ]; } && [ ! -d "$RULES_DEST" ]; then
-            log_error "Cannot create $(display_path "$RULES_DEST"): not a directory (dry run)"
-            write_summary ERROR "claude rules" "cannot create rules dir"
+            write_error "claude rules" "cannot create rules dir" "$(display_path "$RULES_DEST") is not a directory (dry run)"
             RULES_GO=false
         fi
     else
         backup_dir "$RULES_DEST"
-        # stderr captured into the log line (not printed raw to the console)
+        # stderr captured: mkdir's message is the reason (not printed raw)
         mkdir_out=""
-        if ! mkdir_out=$(mkdir -p "$RULES_DEST" 2>&1) || [ ! -d "$RULES_DEST" ]; then
-            log_error "Cannot create $(display_path "$RULES_DEST"): ${mkdir_out:-not a directory}"
-            write_summary ERROR "claude rules" "cannot create rules dir"
+        mkdir_rc=0
+        mkdir_out=$(mkdir -p "$RULES_DEST" 2>&1) || mkdir_rc=$?
+        if [ "$mkdir_rc" -ne 0 ] || [ ! -d "$RULES_DEST" ]; then
+            write_error "claude rules" "cannot create rules dir" "$(error_reason "${mkdir_out:-$(display_path "$RULES_DEST") is not a directory}" "$mkdir_rc")"
             RULES_GO=false
         fi
     fi
@@ -509,9 +532,12 @@ if [ "$RULES_GO" = "true" ]; then
     if [ "$MANIFEST_FAILED" = "true" ]; then
         deploy_tracker_record "failed" "claude rules" ".aitools-rules-manifest"
     fi
+    # Each failed item below is one error record (write_error "claude rules"
+    # "failed: <item>" <cause>) and one tracker DETAIL item; the tracker's OK
+    # status counts them, with no aggregate error record (logging.md 8.3)
     while IFS= read -r broken_name; do
         [ -n "$broken_name" ] || continue
-        log_error "Failed: $broken_name: dangling symlink in $(display_path "$RULES_SRC")"
+        write_error "claude rules" "failed: $broken_name" "dangling symlink in $(display_path "$RULES_SRC")"
         deploy_tracker_record "failed" "claude rules" "$broken_name"
     done <<< "$RULE_BROKEN"
 
@@ -528,7 +554,7 @@ if [ "$RULES_GO" = "true" ]; then
         # Two harness rules whose names differ only in case (possible on a
         # case-sensitive file system) map to one file here: the first wins
         if in_list "$rule_lc" "$RULE_DESTS_LC"; then
-            log_error "Skipped duplicate: $rule_name (a harness rule whose name differs only in case was already deployed)"
+            write_error "claude rules" "failed: $rule_name" "a harness rule whose name differs only in case was already deployed"
             deploy_tracker_record "failed" "claude rules" "$rule_name"
             continue
         fi
@@ -546,10 +572,12 @@ if [ "$RULES_GO" = "true" ]; then
         fi
         log_detail "claude rules: $rule_name source=${rule_source:-unknown} adopt=${_rule_adopt_path:-none}"
         _rule_content=""
-        # stderr captured: on failure the reason goes into the log line (on
-        # success cat writes nothing to stderr, so the content is unchanged)
-        if ! _rule_content=$(cat "$rule_src" 2>&1); then
-            log_error "Cannot read harness rule $(display_path "$rule_src"): $_rule_content"
+        # stderr captured: on failure it is the reason (on success cat writes
+        # nothing to stderr, so the content is unchanged)
+        rule_rc=0
+        _rule_content=$(cat "$rule_src" 2>&1) || rule_rc=$?
+        if [ "$rule_rc" -ne 0 ]; then
+            write_error "claude rules" "failed: $rule_name" "$(error_reason "$_rule_content" "$rule_rc")"
             deploy_tracker_record "failed" "claude rules" "$rule_name"
             continue
         fi
@@ -557,11 +585,11 @@ if [ "$RULES_GO" = "true" ]; then
         case "$MANAGED_FILE_RESULT" in
             created|updated|verified|"accept & adopt"|skipped|failed)
                 # The library wrote LOCAL and the adopt target itself (it commits
-                # and pushes a dotprofile adopt target, N-Q2); the tracker records
-                # every outcome (failed -> ERROR row, skipped -> WARN row).
+                # and pushes a dotprofile adopt target, N-Q2) and recorded a
+                # failed or skipped file once; the tracker counts every outcome.
                 ;;
             *)
-                log_error "Unexpected deploy result for ${rule_name}: $MANAGED_FILE_RESULT"
+                write_error "claude rules" "failed: $rule_name" "unexpected deploy result: $MANAGED_FILE_RESULT"
                 MANAGED_FILE_RESULT="failed" ;;
         esac
         deploy_tracker_record "$MANAGED_FILE_RESULT" "claude rules" "$rule_name"
@@ -582,7 +610,7 @@ if [ "$RULES_GO" = "true" ]; then
         rm_path=""
         if [ -d "$RULES_DEST" ]; then
             if ! rules_dir_listable "$RULES_DEST"; then
-                log_warn "Cannot list $(display_path "$RULES_DEST") for retired rule ${rm_name}: permission denied"
+                write_warn "claude rules" "cannot list $(display_path "$RULES_DEST") for retired rule $rm_name: permission denied"
             else
                 for rm_existing in "$RULES_DEST"/*; do
                     [ -f "$rm_existing" ] || continue
@@ -596,12 +624,12 @@ if [ "$RULES_GO" = "true" ]; then
         [ -n "$rm_path" ] || continue
         rm_file=$(basename "$rm_path")
         if [ ! -r "$rm_path" ]; then
-            log_error "Cannot read $(display_path "$rm_path") (retired rule not removed): permission denied"
+            write_error "claude rules" "retired rule $rm_file not removed" "cannot read $(display_path "$rm_path"): permission denied"
             deploy_tracker_record "failed" "claude rules" "$rm_file"
             continue
         fi
         if ! rules_dir_listable "$RULES_SRC"; then
-            log_warn "Cannot list the backups of $rm_name in $(display_path "$RULES_SRC"): permission denied"
+            write_warn "claude rules" "cannot list the backups of $rm_name in $(display_path "$RULES_SRC"): permission denied"
         fi
         rm_why=""
         for rm_cand in "$RULES_SRC/$rm_name" "$RULES_SRC/$rm_name".bak.*; do
@@ -613,11 +641,11 @@ if [ "$RULES_GO" = "true" ]; then
                 break
             fi
             if [ "$rm_rc" -ne 1 ]; then
-                log_warn "Cannot compare $(display_path "$rm_path") with $(display_path "$rm_cand")"
+                write_warn "claude rules" "cannot compare $(display_path "$rm_path") with $(display_path "$rm_cand")"
             fi
         done
         if [ -z "$rm_why" ]; then
-            log_warn "Kept $rm_file: the rules manifest retires $rm_name, but this file matches no harness copy (it may be your own) -- Claude Code still loads it; delete it if it is an old fan-out copy"
+            write_warn "claude rules" "kept $rm_file: the rules manifest retires $rm_name, but it matches no harness copy -- delete it if it is an old fan-out copy"
             RM_KEPT="${RM_KEPT:+$RM_KEPT, }$rm_file"
             continue
         fi
@@ -625,35 +653,36 @@ if [ "$RULES_GO" = "true" ]; then
             log "[DRY RUN] Would back up and remove $rm_file (retired rule; $rm_why)"
             continue
         fi
-        backup_file "$rm_path"
-        # Belt and braces: remove only when a backup with the same text exists
-        # beside it (a backup step that reports success without a copy must not
-        # lose the file)
-        rm_backed=false
-        if [ "$BACKUP_FILE_OK" = "true" ]; then
-            if ! rules_dir_listable "$RULES_DEST"; then
-                log_warn "Cannot list the backups of $rm_file in $(display_path "$RULES_DEST"): permission denied"
-            else
-                for rm_bak in "$rm_path".bak.*; do
-                    [ -f "$rm_bak" ] || continue
-                    if fanout_text_equal "$rm_path" "$rm_bak"; then rm_backed=true; break; fi
-                done
-            fi
-        fi
-        if [ "$rm_backed" != "true" ]; then
-            log_error "Not removed: $rm_file (retired rule): backup failed"
+        # The file is removed only with a backup, so this script makes its own
+        # copy (not backup_file, which warns and proceeds): one failure is one
+        # error (the G3 rule for retired-rule backups). Belt and braces: the
+        # copy must exist and hold the same text (a copy that reports success
+        # without writing must not lose the file).
+        rm_bak="$rm_path.bak.$(date -u +%Y-%m-%dT%H%M%SZ)"
+        rm_rc=0
+        rm_out=$(cp "$rm_path" "$rm_bak" 2>&1) || rm_rc=$?
+        if [ "$rm_rc" -ne 0 ]; then
+            write_error "claude rules" "retired rule $rm_file not removed" "backup failed: $(error_reason "$rm_out" "$rm_rc")"
             deploy_tracker_record "failed" "claude rules" "$rm_file"
             continue
         fi
-        # stderr captured into the log line (not printed raw to the console)
+        if [ ! -f "$rm_bak" ] || ! fanout_text_equal "$rm_path" "$rm_bak"; then
+            write_error "claude rules" "retired rule $rm_file not removed" "backup failed: $(display_path "$rm_bak") missing or different after the copy"
+            deploy_tracker_record "failed" "claude rules" "$rm_file"
+            continue
+        fi
+        log "Backed up $(display_path "$rm_path")"
+        # stderr captured: rm's message is the reason (not printed raw)
         rm_out=""
-        if ! rm_out=$(rm -f "$rm_path" 2>&1); then
-            log_error "Cannot remove $(display_path "$rm_path") (retired rule): $rm_out"
+        rm_rc=0
+        rm_out=$(rm -f "$rm_path" 2>&1) || rm_rc=$?
+        if [ "$rm_rc" -ne 0 ]; then
+            write_error "claude rules" "cannot remove retired rule $rm_file" "$(error_reason "$rm_out" "$rm_rc")"
             deploy_tracker_record "failed" "claude rules" "$rm_file"
             continue
         fi
         if [ -e "$rm_path" ] || [ -L "$rm_path" ]; then
-            log_error "Cannot remove $(display_path "$rm_path") (retired rule): still present"
+            write_error "claude rules" "cannot remove retired rule $rm_file" "still present after rm"
             deploy_tracker_record "failed" "claude rules" "$rm_file"
             continue
         fi
@@ -665,15 +694,12 @@ if [ "$RULES_GO" = "true" ]; then
     fi
 
     if [ "$DRY_RUN" = "true" ]; then
-        if [ "$_DT_FAILED" -gt 0 ]; then
-            write_summary ERROR "claude rules" "$_DT_FAILED failed (dry run)"
-        else
-            write_summary OK "claude rules" "dry run (no files written)"
-        fi
+        # Each failed item already recorded its own error
+        write_summary OK "claude rules" "dry run (no files written)"
     else
         # Preserved: rules in ~/.claude/rules not fanned out this run
         if ! rules_dir_listable "$RULES_DEST"; then
-            log_warn "Cannot list $(display_path "$RULES_DEST") for the preserved report: permission denied"
+            write_warn "claude rules" "cannot list $(display_path "$RULES_DEST") for the preserved report: permission denied"
         fi
         # Ordinal order, as the .ps1 (see the RULE_SOURCES sort above)
         preserved_list=""
@@ -686,7 +712,7 @@ if [ "$RULES_GO" = "true" ]; then
             if sort_out=$(printf '%s' "$preserved_list" | LC_ALL=C sort); then
                 preserved_list="$sort_out"
             else
-                log_warn "Could not sort $(display_path "$RULES_DEST") (sort failed): preserved rules reported in directory order"
+                write_warn "claude rules" "could not sort $(display_path "$RULES_DEST") (sort failed): preserved rules reported in directory order"
             fi
         fi
         while IFS= read -r existing <&3; do
@@ -707,19 +733,17 @@ if [ "$RULES_GO" = "true" ]; then
         while IFS= read -r rule_name; do
             [ -n "$rule_name" ] || continue
             if [ -f "$RULES_DEST/$rule_name" ] && [ ! -s "$RULES_DEST/$rule_name" ]; then
-                log_error "Validation failed: $rule_name is empty after deploy"
+                write_error "claude rules" "validation failed: $rule_name" "empty after deploy"
             fi
         done <<< "$RULE_DESTS"
 
-        if [ "$_DT_FAILED" -gt 0 ]; then
-            # deploy_tracker_summary writes the ERROR row ("N failed")
-            deploy_tracker_summary "claude rules"
-            log "Rules: $DEPLOY_TRACKER_TEXT, $_DT_PRESERVED preserved in $(display_path "$RULES_DEST")"
-        elif [ "$ERRORS" -eq "$ERRORS_BEFORE_RULES" ]; then
-            deploy_tracker_summary "claude rules"
+        # The tracker writes the OK status (its counts include "N failed");
+        # every failure, validation included, is already its own error record
+        deploy_tracker_summary "claude rules"
+        if [ "$_DT_FAILED" -eq 0 ] && [ "$ERRORS" -eq "$ERRORS_BEFORE_RULES" ]; then
             log_ok "Rules: $DEPLOY_TRACKER_TEXT, $_DT_PRESERVED preserved in $(display_path "$RULES_DEST")"
         else
-            write_summary ERROR "claude rules" "validation failed"
+            log "Rules: $DEPLOY_TRACKER_TEXT, $_DT_PRESERVED preserved in $(display_path "$RULES_DEST")"
         fi
     fi
 fi
