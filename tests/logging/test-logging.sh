@@ -100,11 +100,11 @@ check "lib: log_error/log_warn increment ERRORS/WARNINGS" "grep -q 'COUNTS=2/1' 
 run_lib reset 'log_error x; logging_init t2; echo "COUNTS=$ERRORS/$WARNINGS"'
 check "lib: logging_init resets the counters" "grep -q 'COUNTS=0/0' '$C/out'"
 
-SUMMARY="" run_lib nosummary 'write_summary ERROR tool detail; echo "RC=$?"'
+SUMMARY="" run_lib nosummary 'write_summary OK tool detail; echo "RC=$?"'
 check "lib: write_summary is a no-op without AITOOLS_SUMMARY_FILE" "grep -q 'RC=0' '$C/out'"
 
-SUMMARY="$TMP_ROOT/summary.txt" run_lib summary 'write_summary ERROR tool "it failed"; write_summary OK tool2 v1'
-check "lib: write_summary writes CAT|tool|detail" "grep -qx 'ERROR|tool|it failed' '$TMP_ROOT/summary.txt'"
+SUMMARY="$TMP_ROOT/summary.txt" run_lib summary 'write_summary DETAIL tool "it ran"; write_summary OK tool2 v1'
+check "lib: write_summary writes CAT|tool|detail" "grep -qx 'DETAIL|tool|it ran' '$TMP_ROOT/summary.txt'"
 check "lib: write_summary OK stays OK with no warnings" "grep -qx 'OK|tool2|v1' '$TMP_ROOT/summary.txt'"
 
 SUMMARY="$TMP_ROOT/summary2.txt" run_lib promote 'log_warn w; write_summary OK tool v1'
@@ -201,15 +201,13 @@ while (my $line = <$fh>) {
     if ($line =~ s/\A\@(sh|ps1) //) { next if $1 eq "ps1" }
     my ($kw, $rest) = $line =~ /\A(\S+)(?: (.*))?\z/s;
     $rest = "" unless defined $rest;
-    if ($kw eq "case") { $c = { id => $rest, lang => "both", steps => [], exp => [], children => {}, env => [], switch => "on", summary => 1 }; push @cases, $c; next }
+    if ($kw eq "case") { $c = { id => $rest, lang => "both", steps => [], exp => [], children => {}, env => [], summary => 1 }; push @cases, $c; next }
     die "fixture error: line outside a case: $line\n" unless $c;
     my $where = "$c->{id}: $line";
     if ($kw =~ /\A(?:plan|title|spec|note)\z/) { next }
     elsif ($kw eq "lang") { $c->{lang} = $rest }
     elsif ($kw eq "needs") { $c->{pty} = 1 }
-    elsif ($kw eq "migration-only") { $c->{migration} = 1 }
     elsif ($kw eq "external") { $c->{external} = $rest }
-    elsif ($kw eq "switch") { $c->{switch} = $rest }
     elsif ($kw eq "summary") { $c->{summary} = 0 if $rest eq "unset" }
     elsif ($kw eq "env") { push @{ $c->{env} }, decode($rest, $where) }
     elsif ($kw eq "stdin") { my ($k, $t) = $rest =~ /\A(\S+) (.*)\z/s; $c->{stdin} = decode($t, $where) }
@@ -305,12 +303,11 @@ for my $c (@cases) {
     $s .= "printf '%s' \"\$ERRORS\" > " . sq("$dir/st.errors") . "\nprintf '%s' \"\$WARNINGS\" > " . sq("$dir/st.warnings") . "\nexit 0\n";
     open(my $o, ">", "$dir/case.sh") or die; print $o $s; close $o;
 
-    # environment: isolated, the switch, the summary file, the case's env lines
+    # environment: isolated, the summary file, the case's env lines
     local %ENV = %ENV;
     delete @ENV{qw(AITOOLS_FORCE FORCE DRY_RUN AITLIB_RELAYED AITOOLS_SUMMARY_FILE AITOOLS_PRESERVE_SUMMARY AITOOLS_ENVIRONMENT)};
     $ENV{HOME} = "$dir/home";
     $ENV{AITOOLS_LOG_DIR} = "$dir/logs";
-    $ENV{AITLIB_RECORD_LOG_CALLS} = $c->{switch} eq "on" ? "true" : "false";
     if ($c->{summary}) { open(my $e, ">", "$dir/summary.txt") or die; close $e; $ENV{AITOOLS_SUMMARY_FILE} = "$dir/summary.txt" }
     for my $kv (@{ $c->{env} }) { my ($k, $v) = split /=/, $kv, 2; $ENV{$k} = $v }
     my $rc;
@@ -384,9 +381,8 @@ for my $c (@cases) {
                 if !defined $code || $code ne $COLOUR{$col} || $plain ne $text;
         }
     }
-    my $tag = $c->{migration} ? " (migration-only)" : "";
-    if (@bad) { print "FAIL fixture $id$tag\n"; print "      | $_\n" for @bad; $fail++ }
-    else { print "PASS fixture $id$tag\n"; $pass++ }
+    if (@bad) { print "FAIL fixture $id\n"; print "      | $_\n" for @bad; $fail++ }
+    else { print "PASS fixture $id\n"; $pass++ }
 }
 print "FIXTURE pass=$pass fail=$fail skip=$skip ext=$ext\n";
 FIXTURE_RUNNER_EOF
@@ -415,7 +411,7 @@ xcase() {
 }
 # xrun [ENV=VALUE...]: run $C/main.sh; stdout -> $C/out, stderr -> $C/err, exit -> $C/rc
 xrun() {
-    env -u AITLIB_RELAYED -u AITOOLS_FORCE -u AITLIB_RECORD_LOG_CALLS HOME="$C/home" AITOOLS_LOG_DIR="$C/logs" \
+    env -u AITLIB_RELAYED -u AITOOLS_FORCE HOME="$C/home" AITOOLS_LOG_DIR="$C/logs" \
         AITOOLS_SUMMARY_FILE="$C/summary.txt" X_LIB="$LIB" X_DIR="$C" "$@" "${BASH:-bash}" "$C/main.sh" \
         < /dev/null > "$C/out" 2> "$C/err"
     echo $? > "$C/rc"
@@ -605,7 +601,7 @@ printf 'RC=%s CE=%s E=%s\n' "$rc" "$AITLIB_CHILD_ERRORS" "$ERRORS"
 EOF
 xrun
 check "nested relay: a grandchild's error line re-printed by a middle script that exits 0 does not fail it" \
-    "grep -q 'RC=0 CE=0 E=0' '$C/out' && [ ! -s '$C/summary.txt' ]"
+    "grep -q 'RC=0 CE=0 E=0' '$C/out' && [ \"\$(cat '$C/summary.txt')\" = 'ERROR|gc|gc-err|' ]"
 
 # repair_uv_tool_env: 1 not applicable; 3 failed and recorded under TOOL
 xcase uv-repair
@@ -657,7 +653,7 @@ write_warn tool "not-recorded"
 write_error tool "what" "why"
 printf 'W=%s E=%s\n' "$WARNINGS" "$ERRORS"
 EOF
-xrun AITLIB_RECORD_LOG_CALLS=true
+xrun
 check "option stderr console: console lines on stderr only" \
     "grep -q 'to-stderr' '$C/err' && ! grep -q 'to-stderr' '$C/out'"
 check "option stderr console: the helpers count but record nothing (library-style tool)" \
