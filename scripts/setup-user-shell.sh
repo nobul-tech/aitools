@@ -167,9 +167,16 @@ if ($mode eq "splice") {
 PERL
 
 # bash_n FILE: 0 when FILE passes `bash -n`; its first error goes to the log.
+# The output and exit code of the last failing check stay in BASH_N_OUT and
+# BASH_N_RC (the reason of the parse-check error below).
+BASH_N_OUT=""
+BASH_N_RC=0
 bash_n() {
-    local out
-    if out=$("${BASH:-bash}" -n "$1" 2>&1); then return 0; fi
+    local out rc=0
+    out=$("${BASH:-bash}" -n "$1" 2>&1) || rc=$?
+    if [ "$rc" -eq 0 ]; then BASH_N_OUT=""; BASH_N_RC=0; return 0; fi
+    BASH_N_OUT="$out"
+    BASH_N_RC=$rc
     log_detail "bash -n $(display_path "$1"): $out"
     return 1
 }
@@ -207,24 +214,28 @@ EOF
     return 0
 }
 
-# report_damage FILE: WARN + ACTION when FILE fails bash -n or has stray lines.
+# report_damage FILE: one warning with its ACTION (write_action) when FILE fails
+# bash -n or has stray lines.
 report_damage() {
-    local file="$1" parse_fail=0 stray chk clean
-    if ! chk=$(perl "$PERL_FILE" check "$file"); then
-        log_error "Cannot read $(display_path "$file") for the damage check"
-        write_summary ERROR "shell" "damage check failed"
+    local file="$1" parse_fail=0 stray chk clean rc=0
+    # stdout is the KEY=VALUE protocol, so perl's stderr goes to a file
+    chk=$(perl "$PERL_FILE" check "$file" 2>"$TMP_DIR/check.err") || rc=$?
+    if [ "$rc" -ne 0 ]; then
+        write_error "shell" "cannot read $(display_path "$file") for the damage check" "$(error_reason "$(<"$TMP_DIR/check.err")" "$rc")"
         return 0
     fi
     stray=$(value_of STRAY "$chk")
     bash_n "$file" || parse_fail=1
     if [ "$parse_fail" -eq 0 ] && [ "$stray" = 0 ]; then return 0; fi
-    log_warn "$(display_path "$PROFILE") is damaged (bash -n fails: $parse_fail, $stray stray aitools line(s) outside the block) -- left in place, not guessed at"
-    write_summary WARN "shell" "profile damage left in place"
+    # write_action logs only its TEXT: the counts go to a detail line
+    log_detail "$(display_path "$PROFILE"): bash -n fails: $parse_fail, $stray stray aitools line(s) outside the block -- left in place, not guessed at"
     clean=$(find_clean_backup)
     if [ -n "$clean" ]; then
-        write_summary ACTION "" "Restore $(display_path "$PROFILE") from $(display_path "$clean")"
+        write_action "shell" "profile damage left in place -- restore $(display_path "$PROFILE") from $(display_path "$clean")" \
+            "Restore $(display_path "$PROFILE") from $(display_path "$clean")"
     else
-        write_summary ACTION "" "Repair $(display_path "$PROFILE") by hand (no clean backup)"
+        write_action "shell" "profile damage left in place -- repair $(display_path "$PROFILE") by hand (no clean backup)" \
+            "Repair $(display_path "$PROFILE") by hand (no clean backup)"
     fi
 }
 
@@ -232,9 +243,11 @@ report_damage() {
 # 1. PATH block in the login profile
 # ============================================================
 SPLICE_OUT=""
-if ! SPLICE_OUT=$(perl "$PERL_FILE" splice "$PROFILE" "$BLOCK_FILE" "$NEW_FILE"); then
-    log_error "Failed to compute the managed block for $(display_path "$PROFILE")"
-    write_summary ERROR "shell" "managed block write failed"
+splice_rc=0
+# stdout is the KEY=VALUE protocol, so perl's stderr goes to a file
+SPLICE_OUT=$(perl "$PERL_FILE" splice "$PROFILE" "$BLOCK_FILE" "$NEW_FILE" 2>"$TMP_DIR/splice.err") || splice_rc=$?
+if [ "$splice_rc" -ne 0 ]; then
+    write_error "shell" "cannot compute the managed block for $(display_path "$PROFILE")" "$(error_reason "$(<"$TMP_DIR/splice.err")" "$splice_rc")"
     exit 1
 fi
 while IFS= read -r line; do
@@ -252,8 +265,10 @@ PARSE_AFTER=0
 bash_n "$NEW_FILE" || PARSE_AFTER=1
 log "Profile $(display_path "$PROFILE"): bash -n fails before: $PARSE_BEFORE, after: $PARSE_AFTER"
 if [ "$PARSE_AFTER" -gt "$PARSE_BEFORE" ]; then
-    log_error "Managed block splice would make $(display_path "$PROFILE") fail bash -n -- left unchanged"
-    write_summary ERROR "shell" "managed block splice failed parse check"
+    # The new profile was the last bash_n call: BASH_N_OUT holds its error
+    # (the file is left unchanged; the exit and report_damage say so). The temp
+    # file's path is dropped, so the reason reads "line N: ..." as on the .ps1.
+    write_error "shell" "managed block splice failed parse check" "$(error_reason "${BASH_N_OUT//"$NEW_FILE: "/}" "$BASH_N_RC")"
     report_damage "$PROFILE"
     exit 1
 fi
@@ -262,26 +277,30 @@ fi
 if [ -f "$PROFILE" ] && cmp -s "$PROFILE" "$NEW_FILE"; then
     log "Profile unchanged: $(display_path "$PROFILE")"
 else
-    if ! mkdir -p "$PROFILE_DIR"; then
-        log_error "Cannot create $(display_path "$PROFILE_DIR")"
-        write_summary ERROR "shell" "profile directory not created"
+    w_rc=0
+    w_out=$(mkdir -p "$PROFILE_DIR" 2>&1) || w_rc=$?
+    if [ "$w_rc" -ne 0 ]; then
+        write_error "shell" "profile directory not created" "$(error_reason "$w_out" "$w_rc")"
         exit 1
     fi
     backup_file "$PROFILE"
-    if ! cp "$NEW_FILE" "$PROFILE"; then
-        log_error "Failed to write managed block to $(display_path "$PROFILE")"
-        write_summary ERROR "shell" "managed block write failed"
+    w_out=$(cp "$NEW_FILE" "$PROFILE" 2>&1) || w_rc=$?
+    if [ "$w_rc" -ne 0 ]; then
+        write_error "shell" "managed block write failed" "$(error_reason "$w_out" "$w_rc")"
         exit 1
     fi
-    if ! cmp -s "$PROFILE" "$NEW_FILE" || ! perl "$PERL_FILE" oneblock "$PROFILE"; then
-        log_error "Profile check after write failed (content or block markers) -- $(display_path "$PROFILE")"
-        write_summary ERROR "shell" "managed block markers missing"
+    if ! cmp -s "$PROFILE" "$NEW_FILE"; then
+        write_error "shell" "profile check after write failed" "the written file differs from the computed profile"
+        exit 1
+    elif ! perl "$PERL_FILE" oneblock "$PROFILE"; then
+        write_error "shell" "managed block markers missing" "not exactly one managed block in $(display_path "$PROFILE")"
         exit 1
     fi
     log_ok "Wrote $(display_path "$PROFILE")"
 fi
 
-# OK rows first: a warning promotes later OK rows to WARN.
+# The OK status records; each warning and error is its own record
+# (reference/logging.md 8.3), so their order changes no colour.
 if [ "$BLOCKS" -eq 0 ]; then
     log_ok "Added managed block to $(display_path "$PROFILE")"
     write_summary OK "shell" "managed block added"
@@ -317,11 +336,13 @@ if [ -f "$ALIASES_PATH" ]; then
         if [ -f "$rcfile" ] && grep -qF "$OLD_MARKER" "$rcfile"; then
             backup_file "$rcfile"
             RC_BACKED_UP=1
-            if perl -i -0777 -pe 's/\n?# ai-tooling shell integration\nsource "[^\n]*"\n?//g' "$rcfile"; then
+            rc_rc=0
+            rc_out=$(perl -i -0777 -pe 's/\n?# ai-tooling shell integration\nsource "[^\n]*"\n?//g' "$rcfile" 2>&1) || rc_rc=$?
+            if [ "$rc_rc" -eq 0 ]; then
                 log "Removed old shell integration marker from $(display_path "$rcfile")"
                 INTEG_MIGRATED=1
             else
-                log_error "Could not remove the legacy integration lines from $(display_path "$rcfile")"
+                write_error "shell" "cannot remove the legacy integration lines from $(display_path "$rcfile")" "$(error_reason "$rc_out" "$rc_rc")"
                 INTEG_FAILED=1
                 continue
             fi
@@ -331,31 +352,39 @@ if [ -f "$ALIASES_PATH" ]; then
             continue
         fi
         if [ "$RC_BACKED_UP" -eq 0 ]; then backup_file "$rcfile"; fi
-        if printf '\n%s\nsource "%s"\n' "$MARKER" "$ALIASES_ABS" >> "$rcfile" && grep -qF "$MARKER" "$rcfile"; then
+        rc_rc=0
+        # The redirect's own error (a read-only file) goes to append.err
+        { printf '\n%s\nsource "%s"\n' "$MARKER" "$ALIASES_ABS" >> "$rcfile"; } 2>"$TMP_DIR/append.err" || rc_rc=$?
+        if [ "$rc_rc" -ne 0 ]; then
+            # The shell's "<script>: line N: " prefix is dropped: "<file>: <error>"
+            rc_out=$(error_reason "$(<"$TMP_DIR/append.err")" "$rc_rc")
+            write_error "shell" "cannot add shell integration to $(display_path "$rcfile")" "${rc_out#*: line *: }"
+            INTEG_FAILED=1
+        elif ! grep -qF "$MARKER" "$rcfile"; then
+            write_error "shell" "cannot add shell integration to $(display_path "$rcfile")" "marker line not found after the append"
+            INTEG_FAILED=1
+        else
             log_ok "Added shell integration to $(display_path "$rcfile")"
             INTEG_ADDED=1
-        else
-            log_error "Could not add shell integration to $(display_path "$rcfile")"
-            INTEG_FAILED=1
         fi
     done
-    if [ "$INTEG_FAILED" -eq 1 ]; then
-        write_summary ERROR "shell" "integration write failed"
-    elif [ "$INTEG_MIGRATED" -eq 1 ]; then
-        write_summary OK "shell" "legacy integration migrated"
-    elif [ "$INTEG_ADDED" -eq 1 ]; then
-        write_summary OK "shell" "integration added"
-    else
-        write_summary OK "shell" "integration unchanged"
+    # Each failed rc file is its own error above; the OK status only when none failed
+    if [ "$INTEG_FAILED" -eq 0 ]; then
+        if [ "$INTEG_MIGRATED" -eq 1 ]; then
+            write_summary OK "shell" "legacy integration migrated"
+        elif [ "$INTEG_ADDED" -eq 1 ]; then
+            write_summary OK "shell" "integration added"
+        else
+            write_summary OK "shell" "integration unchanged"
+        fi
     fi
 fi
 
 # ============================================================
-# 3. Warnings (after the OK rows)
+# 3. Warnings
 # ============================================================
 if [ "$ALIASES_FOUND" -eq 0 ]; then
-    log_warn "aliases.sh not found ($(display_path "$ALIASES_PATH")) -- skipping shell integration (MDM deploy)"
-    write_summary WARN "shell" "aliases.sh not found"
+    write_warn "shell" "aliases.sh not found ($(display_path "$ALIASES_PATH")) -- shell integration skipped (MDM deploy)"
 fi
 
 report_damage "$PROFILE"
@@ -365,9 +394,8 @@ report_damage "$PROFILE"
 # bash cannot run.) Warn but do not auto-remove; line surgery on user content
 # beyond the managed block is out of scope for this script.
 if [ -f "$PROFILE" ] && grep -qE '(^|[[:space:]])(autoload|compinit)([[:space:]]|$)' "$PROFILE"; then
-    log_warn "Found zsh-only constructs (autoload/compinit) in $(display_path "$PROFILE") -- these error under bash"
-    write_summary WARN "shell" "zsh-only lines in bash profile"
-    write_summary ACTION "" "Remove autoload/compinit from .bash_profile (zsh-only)"
+    write_action "shell" "zsh-only lines (autoload/compinit) in $(display_path "$PROFILE") error under bash -- remove them" \
+        "Remove autoload/compinit from .bash_profile (zsh-only)"
 fi
 
 # --- Exit ---
