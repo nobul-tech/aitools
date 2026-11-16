@@ -146,6 +146,15 @@ function Run-Script([string[]]$ScriptArgs = @()) {
 function OutText { Strip (ReadText (Join-Path $C "out")) }
 function OutMatch([string]$Pattern) { [regex]::IsMatch((OutText), $Pattern, [Text.RegularExpressions.RegexOptions]::Multiline) }
 function OutCount([string]$Pattern) { @((Lines (OutText)) | Where-Object { $_ -cmatch $Pattern }).Count }
+# LogHas TEXT: TEXT in the case's log files ($C/logs/*.log, CR removed; detail
+# lines reach only the log, never the console output)
+function LogHas([string]$Text) {
+    $d = Join-Path $C "logs"
+    if (-not (Test-Path -LiteralPath $d -PathType Container)) { return $false }
+    $t = ""
+    foreach ($f in @(Get-ChildItem -LiteralPath $d -File | Where-Object { $_.Name.EndsWith(".log", [StringComparison]::Ordinal) })) { $t += [IO.File]::ReadAllText($f.FullName) }
+    return ($t -replace "`r", "").Contains($Text)
+}
 function SumLines([string]$File = (Join-Path $C "summary")) { Lines ((ReadText $File) -replace "`r", "") }
 function SumHas([string]$Line) { @(SumLines) -ccontains $Line }
 function SumCount([string]$Line) { @(SumLines | Where-Object { $_ -ceq $Line }).Count }
@@ -398,7 +407,9 @@ try {
     Put "$H/.aitools/rules/dd.md" "---`ndescription: before --- after`npaths:`n  - x/**`n---`nBody`n"
     Run-Script
     Check "descdash: exit 0 (warning only)" { $rc -eq 0 }
-    Check "descdash: misparse warned" { OutMatch 'dd.mdc: Cursor would not see alwaysApply' }
+    # One warning that says what to do (Write-AitAction: a WARN record and an
+    # ACTION record); the parser's finding is a detail line of the log
+    Check "descdash: misparse warned, with the fix as its ACTION" { (OutMatch '\[warn\] dd\.mdc: Cursor would misread its frontmatter -- fix the source rule') -and (SumHas 'WARN|cursor rules|dd.mdc: Cursor would misread its frontmatter -- fix the source rule') -and (SumHas 'ACTION||Fix the frontmatter of dd.md in its harness source (a --- inside a frontmatter value)') -and (LogHas '[detail] dd.mdc: Cursor would not see alwaysApply') }
     # The status row is never recoloured (reference/logging.md 8.3)
     Check "descdash: row stays OK (no promotion)" { SumHas 'OK|cursor rules|1 added' }
 
@@ -437,17 +448,31 @@ try {
         [Array]::Sort($sig, [StringComparer]::Ordinal)
         return $sig
     }
-    # ParityRows FILE: the "cursor rules" and ACTION rows, without DETAIL verified
-    function ParityRows([string]$File) {
-        @(SumLines $File | Where-Object { $_ -cmatch '^(ACTION\||[A-Z]+\|cursor rules\|)' -and $_ -cnotmatch '^DETAIL\|cursor rules\|verified' })
+    # ParityRows FILE [WHATS]: the "cursor rules" and ACTION rows, without DETAIL
+    # verified. WHATS: the ERROR records whose reason is the platform's own text
+    # (the .NET exception message here, an OS message on macOS/Linux) have that
+    # reason written <platform reason>; an empty reason stays empty, so the
+    # golden line still requires one. The inline checks pin the reason each
+    # platform gives.
+    function ParityRows([string]$File, [string[]]$PlatformWhat = @()) {
+        @(SumLines $File | Where-Object { $_ -cmatch '^(ACTION\||[A-Z]+\|cursor rules\|)' -and $_ -cnotmatch '^DETAIL\|cursor rules\|verified' } | ForEach-Object {
+            $row1 = $_
+            foreach ($w in $PlatformWhat) { $row1 = $row1 -creplace ('^(ERROR\|[^|]*\|' + [regex]::Escape($w) + ')\|.+$'), '$1|<platform reason>' }
+            $row1
+        })
     }
-    # Parity CASE: this run's exit code, ~/.cursor/rules tree and summary rows
-    # equal the golden result tests/rules-fanout-cursor/golden/CASE.result
-    function Parity([string]$Case) {
+    # HasReason PREFIX: a summary row is PREFIX ("<KIND>|<name>|<what>|") followed
+    # by a non-empty reason (a reason that is the platform's own text)
+    function HasReason([string]$Prefix, [string]$File = (Join-Path $C "summary")) { [bool](@(SumLines $File) | Where-Object { $_.StartsWith($Prefix, [StringComparison]::Ordinal) -and $_.Length -gt $Prefix.Length }) }
+    # Parity CASE [WHAT...]: this run's exit code, ~/.cursor/rules tree and
+    # summary rows equal the golden result tests/rules-fanout-cursor/golden/CASE.result.
+    # Each WHAT names an ERROR record whose reason is the platform's own text
+    # (see ParityRows)
+    function Parity([string]$Case, [string[]]$PlatformWhat = @()) {
         $t = "exit code: $rc`n# ~/.cursor/rules (path md5)`n"
         foreach ($l in (TreeSig "$C/home/.cursor/rules")) { $t += "$l`n" }
         $t += "# summary rows`n"
-        foreach ($l in (ParityRows (Join-Path $C "summary"))) { $t += "$l`n" }
+        foreach ($l in (ParityRows (Join-Path $C "summary") $PlatformWhat)) { $t += "$l`n" }
         Put (Join-Path $C "$Case.result") $t
         Check "parity: ${Case}: exit code, ~/.cursor/rules and summary rows match golden (sh and ps share it)" { Test-GoldenMatch "$Case.result" (Join-Path $C "$Case.result") }
     }
@@ -485,7 +510,7 @@ try {
     Check "users: retired rule with the marker removed, backup kept" { -not (Exists "$Rules/gone.mdc") -and (LsAny $Rules '^gone\.mdc\.bak\.') -and (OutMatch 'Removed gone.mdc \(retired rule; aitools-fanout marker') }
     Check "users: removal is a tracker DETAIL row" { SumHas 'DETAIL|cursor rules|removed: gone.mdc' }
     Check "users: user file at an aitools rule's name now the fan-out's (backup kept)" { (FileContains "$Rules/u.mdc" "${Mark}u.md;") -and (LsAny $Rules '^u\.mdc\.bak\.') -and (SumHas 'DETAIL|cursor rules|updated: u.mdc') }
-    Check "users: user file with a retired rule's name kept" { (FileMatch "$Rules/old.mdc" 'my own old') -and (OutMatch 'Kept old.mdc: the rules manifest retires old.md') }
+    Check "users: user file with a retired rule's name kept, one WARN record" { (FileMatch "$Rules/old.mdc" 'my own old') -and (OutMatch '\[warn\] kept old\.mdc: the rules manifest retires old\.md') -and (SumHas 'WARN|cursor rules|kept old.mdc: the rules manifest retires old.md, but the fan-out did not create it -- delete it if it is an old fan-out copy') }
     Check "users: unrelated user rule kept" { (FileMatch "$Rules/mine.mdc" 'mine') -and (OutMatch 'Preserved unmanaged rule: mine.mdc') }
     Check "users: retired names logged as not fanned out only when present" { -not (OutMatch 'Not fanned out: gone.md') }
     Check "users: *.bak.* source skipped silently" { -not (LsAny $Rules '^s\.md\.bak') -and -not (OutMatch 's.md.bak') }
@@ -520,7 +545,8 @@ try {
     Put "$H/.aitools/rules/s.md" "## Shared rule`n"
     Run-Script
     Check "badheader: exit 0" { $rc -eq 0 }
-    Check "badheader: warned, with the ACTION's instruction" { OutMatch '\[warn\] Rules manifest .*the first line is not.* -- Run aitools to rebuild ~/.aitools/rules and its manifest' }
+    # One warning that says what to do (Write-AitAction); the header found is a detail line
+    Check "badheader: warned, saying what to run, one WARN record" { (OutMatch '\[warn\] bad rules manifest header -- run: aitools \(every rule fanned out, none removed\)') -and (SumHas 'WARN|cursor rules|bad rules manifest header -- run: aitools (every rule fanned out, none removed)') -and (LogHas '[detail] rules manifest ') -and (LogHas 'the first line is not') }
     Check "badheader: ACTION row" { SumHas 'ACTION||Run aitools to rebuild ~/.aitools/rules and its manifest' }
     Check "badheader: fanned out (its retired line not read), row OK 1 added" { (Test-Path -LiteralPath "$H/.cursor/rules/s.mdc" -PathType Leaf) -and (SumHas 'OK|cursor rules|1 added') }
     Parity badheader
@@ -532,10 +558,11 @@ try {
     Put "$H/.aitools/rules/s.md" "## Shared rule`n"
     Run-Script
     Check "badmanifest: exit 1" { $rc -eq 1 }
-    Check "badmanifest: ERROR row cannot read rules manifest" { SumHas 'ERROR|cursor rules|cannot read rules manifest' }
+    # The reason is the exception message (the .sh: "cannot read <path>: is a directory")
+    Check "badmanifest: ERROR row cannot read rules manifest, with its reason" { HasReason 'ERROR|cursor rules|cannot read rules manifest|' }
     Check "badmanifest: fan-out continued" { (Test-Path -LiteralPath "$H/.cursor/rules/s.mdc" -PathType Leaf) -and (SumHas 'DETAIL|cursor rules|added: s.mdc') }
     Check "badmanifest: manifest counted failed, final row OK 1 added, 1 failed" { (SumHas 'DETAIL|cursor rules|failed: .aitools-rules-manifest') -and ((Row) -ceq 'OK|cursor rules|1 added, 1 failed') }
-    Parity badmanifest
+    Parity badmanifest 'cannot read rules manifest'
 
     # D: invalid lines ignored with a warning; case-insensitive names
     Setup-Case invalid
@@ -626,7 +653,7 @@ try {
     Run-Script
     Check "bodymark: exit 0" { $rc -eq 0 }
     Check "bodymark: retired harness copy not fanned out" { OutMatch 'Not fanned out: p.md \(retired in the rules manifest\)' }
-    Check "bodymark: user file kept" { (FileMatch "$H/.cursor/rules/p.mdc" '^mine') -and (OutMatch 'Kept p.mdc') }
+    Check "bodymark: user file kept, one WARN record" { (FileMatch "$H/.cursor/rules/p.mdc" '^mine') -and (OutMatch '\[warn\] kept p\.mdc: the rules manifest retires p\.md') -and (@(SumLines | Where-Object { $_.StartsWith('WARN|cursor rules|kept p.mdc: ', [StringComparison]::Ordinal) }).Count -eq 1) }
     Check "bodymark: OK row (nothing to deploy) and ACTION" { (SumHas 'OK|cursor rules|n/a (nothing to deploy)') -and (SumHas 'ACTION||Cursor still loads retired rules in ~/.cursor/rules: p.mdc -- delete them unless you wrote them') }
     Parity bodymark
 
@@ -657,7 +684,8 @@ try {
     Put "$H/.aitools/rules/s.md" "## Shared rule`n"
     Run-Script
     Check "missingsrc: exit 0" { $rc -eq 0 }
-    Check "missingsrc: warned" { OutMatch 'Not fanned out: t.md is in the rules manifest but not in' }
+    # The record names the directory: compared with the temp root written <TMP>
+    Check "missingsrc: warned, saying what to run, one WARN record" { (OutMatch '\[warn\] not fanned out: t\.md is in the rules manifest but not in .* -- run: aitools') -and (@(SumLines | ForEach-Object { ConvertTo-GoldenText $_ $GoldenTmp }) -ccontains 'WARN|cursor rules|not fanned out: t.md is in the rules manifest but not in <TMP>/missingsrc/home/.aitools/rules -- run: aitools') }
     Check "missingsrc: OK row 1 added" { SumHas 'OK|cursor rules|1 added' }
     Check "missingsrc: ACTION row to rebuild the manifest" { SumHas 'ACTION||Run aitools to rebuild ~/.aitools/rules and its manifest' }
     Parity missingsrc
@@ -678,9 +706,10 @@ try {
     MkDirs @("$H/.cursor")
     Put "$H/.cursor/rules" "a file`n"
     Run-Script
-    Check "nocreate: exit 1, ERROR row" { ($rc -eq 1) -and ((Row) -ceq 'ERROR|cursor rules|cannot create rules dir') }
+    # The reason is the exception message (the .sh: mkdir's own message)
+    Check "nocreate: exit 1, ERROR row with its reason" { ($rc -eq 1) -and (Row).StartsWith('ERROR|cursor rules|cannot create rules dir|', [StringComparison]::Ordinal) -and (HasReason 'ERROR|cursor rules|cannot create rules dir|') }
     Check "nocreate: the file in the way kept" { FileHasLine "$H/.cursor/rules" 'a file' }
-    Parity nocreate
+    Parity nocreate 'cannot create rules dir'
 
     # H1 (audit B1): a dangling symlink at a target name -- not ported (see above)
     Skip "dangtarget (no dangling symlinks here)"

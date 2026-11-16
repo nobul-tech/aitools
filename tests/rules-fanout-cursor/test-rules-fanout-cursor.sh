@@ -328,7 +328,7 @@ if $SYMLINKS; then
     ln -s "$H/nowhere.md" "$H/.aitools/rules/broken.md"
     run_script
     check "broken: exit 1" "[ \"\$(rc)\" = 1 ]"
-    check "broken: dangling symlink logged" "grep -q 'Failed: broken.md: dangling symlink' '$C/out'"
+    check "broken: dangling symlink logged and recorded once, with its reason" "grep -q '\[error\] failed: broken.md: dangling symlink in ' '$C/out' && grep -qxF 'ERROR|cursor rules|failed: broken.md|dangling symlink in $H/.aitools/rules' '$C/summary' && [ \"\$(grep -c '^ERROR|' '$C/summary')\" = 1 ]"
     check "broken: good rule still deployed" "[ -f '$H/.cursor/rules/good.mdc' ]"
     check "broken: OK row counts the failure" "grep -qxF 'OK|cursor rules|1 added, 1 failed' '$C/summary'"
 else
@@ -346,7 +346,7 @@ if [ -r "$H/.aitools/rules" ]; then
 else
     run_script
     check "unreadable: exit 1" "[ \"\$(rc)\" = 1 ]"
-    check "unreadable: ERROR row" "grep -qxF 'ERROR|cursor rules|cannot read harness rules' '$C/summary'"
+    check "unreadable: ERROR row with its reason" "grep -qxF 'ERROR|cursor rules|cannot read harness rules|permission denied: $H/.aitools/rules' '$C/summary'"
 fi
 chmod 755 "$H/.aitools/rules"
 
@@ -356,7 +356,9 @@ manifest "dd.md|shared"
 printf -- '---\ndescription: before --- after\npaths:\n  - x/**\n---\nBody\n' > "$H/.aitools/rules/dd.md"
 run_script
 check "descdash: exit 0 (warning only)" "[ \"\$(rc)\" = 0 ]"
-check "descdash: misparse warned" "grep -q 'dd.mdc: Cursor would not see alwaysApply' '$C/out'"
+# One warning that says what to do (write_action: a WARN record and an ACTION
+# record); the parser's finding is a detail line of the log
+check "descdash: misparse warned, with the fix as its ACTION" "grep -q '\[warn\] dd.mdc: Cursor would misread its frontmatter -- fix the source rule' '$C/out' && grep -qxF 'WARN|cursor rules|dd.mdc: Cursor would misread its frontmatter -- fix the source rule' '$C/summary' && grep -qxF 'ACTION||Fix the frontmatter of dd.md in its harness source (a --- inside a frontmatter value)' '$C/summary' && cat '$C/logs/'*.log | grep -F '[detail] dd.mdc: Cursor would not see alwaysApply' >/dev/null"
 # The status row is never recoloured (reference/logging.md 8.3)
 check "descdash: row stays OK (no promotion)" "grep -qxF 'OK|cursor rules|1 added' '$C/summary'"
 
@@ -377,7 +379,9 @@ if $SYMLINKS; then
     ln -s "$H/nowhere.md" "$H/.aitools/rules/gone.md"
     run_script --dry-run
     check "drydup: exit 1" "[ \"\$(rc)\" = 1 ]"
-    check "drydup: ERROR row" "grep -qxF 'ERROR|cursor rules|1 failed (dry run)' '$C/summary'"
+    # The failed item is its own error record; the status row is the dry run's
+    # (reference/logging.md 8.3: a WARN or ERROR record is never a status)
+    check "drydup: ERROR record for the failed item, row OK dry run" "grep -qxF 'ERROR|cursor rules|failed: gone.md|dangling symlink in $H/.aitools/rules' '$C/summary' && [ \"\$(grep -c '^ERROR|' '$C/summary')\" = 1 ] && [ \"\$(row)\" = 'OK|cursor rules|dry run (no files written)' ]"
 else
     printf 'SKIP drydup (no dangling symlinks here)\n'; SKIP=$((SKIP + 1))
 fi
@@ -406,17 +410,32 @@ tree_sig() {
         print "$_\n" for sort @out;
     ' "$1"
 }
-rows() { grep -E '^(ACTION\||[A-Z]+\|cursor rules\|)' "$1" | grep -v '^DETAIL|cursor rules|verified'; }
+# rows FILE [WHATS]: the cursor rules and ACTION rows, without DETAIL verified.
+# WHATS (one per line): the ERROR records whose reason is the platform's own
+# text (an OS message on macOS/Linux, the .NET exception message on Windows)
+# have that reason written <platform reason>; an empty reason stays empty, so
+# the golden line still requires one. The inline checks pin the reason each
+# platform gives.
+rows() {
+    grep -E '^(ACTION\||[A-Z]+\|cursor rules\|)' "$1" | grep -v '^DETAIL|cursor rules|verified' \
+        | RF_PW="${2:-}" perl -pe '
+            BEGIN { @w = grep { length } split /\n/, $ENV{RF_PW} }
+            for my $w (@w) { s{^(ERROR\|[^|]*\|\Q$w\E)\|.+$}{$1|<platform reason>} }'
+}
 
-# parity <case>: this run's exit code, ~/.cursor/rules tree and summary rows
-# equal the golden result tests/rules-fanout-cursor/golden/<case>.result, which
-# the .sh run (macOS/Linux) and the .ps1 run (Windows) must both give
+# parity <case> [WHAT...]: this run's exit code, ~/.cursor/rules tree and
+# summary rows equal the golden result tests/rules-fanout-cursor/golden/<case>.result,
+# which the .sh run (macOS/Linux) and the .ps1 run (Windows) must both give.
+# Each WHAT names an ERROR record whose reason is the platform's own text (see rows).
 parity() {
+    local case_name="$1" pw="" w
+    shift
+    for w in "$@"; do pw="$pw$w"$'\n'; done
     { printf 'exit code: %s\n' "$(rc)"
       printf '# ~/.cursor/rules (path md5)\n'; tree_sig "$C/home/.cursor/rules"
-      printf '# summary rows\n'; rows "$C/summary"
-    } > "$C/$1.result"
-    check "parity: $1: exit code, ~/.cursor/rules and summary rows match golden (sh and ps share it)" "golden_match '$1.result' '$C/$1.result'"
+      printf '# summary rows\n'; rows "$C/summary" "$pw"
+    } > "$C/$case_name.result"
+    check "parity: $case_name: exit code, ~/.cursor/rules and summary rows match golden (sh and ps share it)" "golden_match '$case_name.result' '$C/$case_name.result'"
 }
 
 # A: every source fanned out (aitools too), retired pruned, user files kept
@@ -455,7 +474,7 @@ check "users: ACTION row lists the kept retired file" "grep -qxF 'ACTION||Cursor
 check "users: retired rule with the marker removed, backup kept" "[ ! -e '$R/gone.mdc' ] && ls '$R' | grep '^gone\.mdc\.bak\.' >/dev/null && grep -q 'Removed gone.mdc (retired rule; aitools-fanout marker' '$C/out'"
 check "users: removal is a tracker DETAIL row" "grep -qxF 'DETAIL|cursor rules|removed: gone.mdc' '$C/summary'"
 check "users: user file at an aitools rule's name now the fan-out's (backup kept)" "grep -qF '${MARK}u.md;' '$R/u.mdc' && ls '$R' | grep '^u\.mdc\.bak\.' >/dev/null && grep -qxF 'DETAIL|cursor rules|updated: u.mdc' '$C/summary'"
-check "users: user file with a retired rule's name kept" "grep -q 'my own old' '$R/old.mdc' && grep -q 'Kept old.mdc: the rules manifest retires old.md' '$C/out'"
+check "users: user file with a retired rule's name kept, one WARN record" "grep -q 'my own old' '$R/old.mdc' && grep -q '\[warn\] kept old.mdc: the rules manifest retires old.md' '$C/out' && grep -qxF 'WARN|cursor rules|kept old.mdc: the rules manifest retires old.md, but the fan-out did not create it -- delete it if it is an old fan-out copy' '$C/summary'"
 check "users: unrelated user rule kept" "grep -q 'mine' '$R/mine.mdc' && grep -q 'Preserved unmanaged rule: mine.mdc' '$C/out'"
 check "users: retired names logged as not fanned out only when present" "! grep -q 'Not fanned out: gone.md' '$C/out'"
 check "users: *.bak.* source skipped silently" "! ls '$R' | grep '^s\.md\.bak' >/dev/null && ! grep -q 's.md.bak' '$C/out'"
@@ -495,7 +514,8 @@ setup_case badheader
 seed_badheader
 run_script
 check "badheader: exit 0" "[ \"\$(rc)\" = 0 ]"
-check "badheader: warned, with the ACTION's instruction" "grep -q '\[warn\] Rules manifest .*the first line is not.* -- Run aitools to rebuild ~/.aitools/rules and its manifest' '$C/out'"
+# One warning that says what to do (write_action); the header found is a detail line
+check "badheader: warned, saying what to run, one WARN record" "grep -q '\[warn\] bad rules manifest header -- run: aitools (every rule fanned out, none removed)' '$C/out' && grep -qxF 'WARN|cursor rules|bad rules manifest header -- run: aitools (every rule fanned out, none removed)' '$C/summary' && cat '$C/logs/'*.log | grep -F '[detail] rules manifest ' | grep -F 'the first line is not' >/dev/null"
 check "badheader: ACTION row" "grep -qxF 'ACTION||Run aitools to rebuild ~/.aitools/rules and its manifest' '$C/summary'"
 check "badheader: fanned out (its retired line not read), row OK 1 added" "[ -f '$H/.cursor/rules/s.mdc' ] && grep -qxF 'OK|cursor rules|1 added' '$C/summary'"
 parity badheader
@@ -510,10 +530,10 @@ setup_case badmanifest
 seed_badmanifest
 run_script
 check "badmanifest: exit 1" "[ \"\$(rc)\" = 1 ]"
-check "badmanifest: ERROR row cannot read rules manifest" "grep -qxF 'ERROR|cursor rules|cannot read rules manifest' '$C/summary'"
+check "badmanifest: ERROR row cannot read rules manifest, with its reason" "grep -qxF 'ERROR|cursor rules|cannot read rules manifest|cannot read $H/.aitools/rules/.aitools-rules-manifest: is a directory' '$C/summary'"
 check "badmanifest: fan-out continued" "[ -f '$H/.cursor/rules/s.mdc' ] && grep -qxF 'DETAIL|cursor rules|added: s.mdc' '$C/summary'"
 check "badmanifest: manifest counted failed, final row OK 1 added, 1 failed" "grep -qxF 'DETAIL|cursor rules|failed: .aitools-rules-manifest' '$C/summary' && [ \"\$(row)\" = 'OK|cursor rules|1 added, 1 failed' ]"
-parity badmanifest
+parity badmanifest 'cannot read rules manifest'
 
 # D: invalid lines ignored with a warning; case-insensitive names
 seed_invalid() {
@@ -620,7 +640,7 @@ seed_bodymark
 run_script
 check "bodymark: exit 0" "[ \"\$(rc)\" = 0 ]"
 check "bodymark: retired harness copy not fanned out" "grep -q 'Not fanned out: p.md (retired in the rules manifest)' '$C/out'"
-check "bodymark: user file kept" "grep -q '^mine' '$H/.cursor/rules/p.mdc' && grep -q 'Kept p.mdc' '$C/out'"
+check "bodymark: user file kept, one WARN record" "grep -q '^mine' '$H/.cursor/rules/p.mdc' && grep -q '\[warn\] kept p.mdc: the rules manifest retires p.md' '$C/out' && [ \"\$(grep -c '^WARN|cursor rules|kept p.mdc: ' '$C/summary')\" = 1 ]"
 check "bodymark: OK row (nothing to deploy) and ACTION" "grep -qxF 'OK|cursor rules|n/a (nothing to deploy)' '$C/summary' && grep -qxF 'ACTION||Cursor still loads retired rules in ~/.cursor/rules: p.mdc -- delete them unless you wrote them' '$C/summary'"
 parity bodymark
 
@@ -657,7 +677,7 @@ setup_case missingsrc
 seed_missing
 run_script
 check "missingsrc: exit 0" "[ \"\$(rc)\" = 0 ]"
-check "missingsrc: warned" "grep -q 'Not fanned out: t.md is in the rules manifest but not in' '$C/out'"
+check "missingsrc: warned, saying what to run, one WARN record" "grep -q '\[warn\] not fanned out: t.md is in the rules manifest but not in .* -- run: aitools' '$C/out' && grep -qxF 'WARN|cursor rules|not fanned out: t.md is in the rules manifest but not in $H/.aitools/rules -- run: aitools' '$C/summary'"
 check "missingsrc: OK row 1 added" "grep -qxF 'OK|cursor rules|1 added' '$C/summary'"
 check "missingsrc: ACTION row to rebuild the manifest" "grep -qxF 'ACTION||Run aitools to rebuild ~/.aitools/rules and its manifest' '$C/summary'"
 parity missingsrc
@@ -684,9 +704,11 @@ seed_nocreate() {
 setup_case nocreate
 seed_nocreate
 run_script
-check "nocreate: exit 1, ERROR row" "[ \"\$(rc)\" = 1 ] && [ \"\$(row)\" = 'ERROR|cursor rules|cannot create rules dir' ]"
+# The reason is mkdir's own message: BSD "mkdir: <path>: File exists", GNU
+# "mkdir: cannot create directory '<path>': File exists"
+check "nocreate: exit 1, ERROR row with mkdir's reason" "[ \"\$(rc)\" = 1 ] && row | grep -E '^ERROR\\|cursor rules\\|cannot create rules dir\\|mkdir: .*File exists\$' >/dev/null"
 check "nocreate: the file in the way kept" "grep -qx 'a file' '$H/.cursor/rules'"
-parity nocreate
+parity nocreate 'cannot create rules dir'
 
 # errors COUNT: the number of [error] log lines a run printed ($C/out)
 errcount() { perl -ne '$n++ if /\[error\]/; END { print $n + 0 }' "$1"; }
@@ -744,7 +766,7 @@ if [ -r "$H/.aitools/rules/s.md" ]; then
 else
     run_script
     check "unreadsrc: exit 1, OK row 1 added, 1 failed, the other rule deployed" "[ \"\$(rc)\" = 1 ] && [ \"\$(row)\" = 'OK|cursor rules|1 added, 1 failed' ] && [ -f '$H/.cursor/rules/t.mdc' ]"
-    check "unreadsrc: the reason is in the log line, no raw shell error" "grep -q '\[error\] Failed: s.md: cannot read .* -- permission denied' '$C/out' && ! perl -pe 's/\e\[[0-9;]*m//g' '$C/out' | grep -v '^\[' | grep -i 'permission denied' >/dev/null"
+    check "unreadsrc: the reason is in the log line and the ERROR record, no raw shell error" "grep -q '\[error\] failed: s.md: cannot read .*/s\.md: permission denied' '$C/out' && grep -qxF 'ERROR|cursor rules|failed: s.md|cannot read $H/.aitools/rules/s.md: permission denied' '$C/summary' && ! perl -pe 's/\e\[[0-9;]*m//g' '$C/out' | grep -v '^\[' | grep -i 'permission denied' >/dev/null"
     parity unreadsrc
     chmod 644 "$C/home/.aitools/rules/s.md"
 fi
