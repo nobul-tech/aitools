@@ -28,39 +28,42 @@ if (Get-Command pandoc -ErrorAction SilentlyContinue) {
     Log "Checking for updates via winget..."
     $upgradeResult = winget upgrade --exact --id JohnMacFarlane.Pandoc --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
     $upgradeRc = $LASTEXITCODE
-    Log-WingetOutput $upgradeResult
     if ($upgradeResult -match "No available upgrade found|No newer package versions") {
+        Log-WingetOutput $upgradeResult
         LogOk "Pandoc already up to date"
         Write-Summary "OK" "pandoc" "$pandocVersion"
     } elseif ($upgradeRc -eq 0) {
+        Log-WingetOutput $upgradeResult
         Refresh-Path
         $pandocVersion = (pandoc --version | Select-Object -First 1)
         LogOk "Pandoc updated ($pandocVersion)"
         Write-Summary "OK" "pandoc" "$pandocVersion"
     } else {
-        LogWarn "winget upgrade returned non-zero (exit $upgradeRc) -- pandoc may be installed via another method"
+        # The installed pandoc still works: a warning plus its OK status
+        # (script-standards-detail Standard 3); Get-AitErrorReason logs the output
+        Write-AitWarn "pandoc" "winget upgrade failed (pandoc may not be a winget install): $(Get-AitErrorReason -Output $upgradeResult -ExitCode $upgradeRc)"
         # Detect non-preferred installs
         # Get-Command exempt: command-existence check with if/else fallback
         if (Get-Command choco -ErrorAction SilentlyContinue) {
             $chocoList = choco list pandoc 2>&1 | Out-String
             $chocoRc = $LASTEXITCODE
             if ($chocoRc -ne 0) {
-                LogDetail "choco-list-pandoc: $($chocoList.Trim())"
-                LogWarn "choco list pandoc failed (exit $chocoRc) -- Chocolatey install not checked"
+                Write-AitWarn "pandoc" "choco list pandoc failed, Chocolatey install not checked: $(Get-AitErrorReason -Output $chocoList -ExitCode $chocoRc)"
             } elseif ($chocoList -match '(?m)^pandoc ') {
-                LogWarn "Pandoc appears to be installed via Chocolatey. Prefer winget for managed installs."
+                Write-AitWarn "pandoc" "installed via Chocolatey -- prefer winget for managed installs"
             }
         }
-        Write-Summary "WARN" "pandoc" "$pandocVersion (upgrade check failed)"
+        Write-Summary "OK" "pandoc" "$pandocVersion"
     }
 } else {
     Log "Installing Pandoc via winget..."
     $wingetOutput = winget install --source winget --exact --id JohnMacFarlane.Pandoc --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
     $installRc = $LASTEXITCODE
-    Log-WingetOutput $wingetOutput
     if ($installRc -ne 0) {
-        LogError "winget install failed (exit $installRc) -- see $logFile"
-        Write-Summary "ERROR" "pandoc" "winget install failed (exit $installRc)"
+        # Get-AitErrorReason logs the output as detail lines
+        Write-AitError "pandoc" "winget install failed" (Get-AitErrorReason -Output $wingetOutput -ExitCode $installRc)
+    } else {
+        Log-WingetOutput $wingetOutput
     }
     Refresh-Path
 
@@ -76,14 +79,15 @@ if (Get-Command pandoc -ErrorAction SilentlyContinue) {
         $pandocDir = Split-Path $pandocPath -Parent
         $persistentPath = [Environment]::GetEnvironmentVariable("Path", "User") + ";" + [Environment]::GetEnvironmentVariable("Path", "Machine")
         if ($persistentPath -notlike "*$pandocDir*") {
-            LogError "Pandoc install dir not in persistent PATH: $pandocDir"
-            Write-Summary "ERROR" "pandoc" "installed but not on PATH"
-            LogWarn "Add $pandocDir to PATH -- tool not accessible to Claude Code"
+            # Standard 4: one error, plus the remedy as an ACTION
+            Write-AitError "pandoc" "installed but not on PATH" "$pandocDir is not in the persistent PATH"
             Write-Summary "ACTION" "" "Add $pandocDir to PATH -- pandoc not accessible"
         }
+    } elseif ($installRc -ne 0) {
+        # One failed install, one red line: the winget error above is the cause
+        Log "pandoc not found after the failed winget install"
     } else {
-        LogError "Pandoc install failed"
-        Write-Summary "ERROR" "pandoc" "install failed"
+        Write-AitError "pandoc" "installed but not on PATH" "winget exited 0 but Get-Command pandoc found nothing"
     }
 }
 

@@ -65,7 +65,8 @@ if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
 
 if ($DryRun) { Log "[DRY RUN] Preview mode -- nothing will be installed" }
 
-# Summary detail: at most 30 characters (script-standards).
+# OK status text: at most 30 characters (script-standards; warning and error text is
+# not held to it).
 function Get-ShortDetail([string]$Text) {
     if ($Text.Length -gt 30) { return $Text.Substring(0, 27) + "..." }
     return $Text
@@ -108,15 +109,14 @@ $importCode = @'
 import sys; sys.path[:] = [p for p in sys.path if p not in ('', '.')]; import importlib.metadata as m, winpty; print('version=' + m.version('pywinpty')); print('file=' + winpty.__file__)
 '@
 
-# WARN + ACTION for an EXTERNALLY-MANAGED interpreter that has no usable user site for
-# the --target install (disabled, or inside the interpreter's install tree).
+# One warning with its ACTION (Write-AitAction) for an EXTERNALLY-MANAGED interpreter
+# that has no usable user site for the --target install (disabled, or inside the
+# interpreter's install tree); the explanation is an info line.
 function Write-ExternallyManaged {
     param([string]$Python, [string]$MajMin, [string]$Reason, [string]$Row = "managed python, no user site")
-    LogWarn "$Python is EXTERNALLY-MANAGED (PEP 668) and $Reason -- nothing installed (--break-system-packages is never used, and nothing is written into the interpreter's install tree)"
-    Write-Summary "WARN" "pywinpty" $Row
+    Log "$Python is EXTERNALLY-MANAGED (PEP 668) and $Reason -- nothing installed (--break-system-packages is never used, and nothing is written into the interpreter's install tree)"
     $action = 'Run once with a non-managed CPython ' + $MajMin + ' (python.org or PyManager): $env:AITOOLS_PYWINPTY_PYTHON=''<path>\python.exe''; pwsh -File ' + $PSCommandPath + ' -- or enable the user site for ' + $Python
-    LogWarn $action
-    Write-Summary "ACTION" "" $action
+    Write-AitAction "pywinpty" "$Row -- run once with a non-managed CPython $MajMin" $action
 }
 
 # Can an EXTERNALLY-MANAGED interpreter take the --target install into its user site?
@@ -144,10 +144,10 @@ function Get-TargetRefusal {
 # After a --target install: remove pywinpty-*.dist-info directories of other versions
 # (pip --target --upgrade replaces same-named items only, so an older version's metadata
 # would stay and could shadow the version check). Returns $false when one cannot be removed,
-# or when the existing target cannot be listed.
+# or when the existing target cannot be listed; the error is recorded here, once (one
+# Write-AitError for the event, however many directories failed).
 function Remove-StaleDistInfo {
     param([string]$Target, [string]$Version)
-    $ok = $true
     $keep = "pywinpty-$Version.dist-info"
     # SilentlyContinue: a missing target lists nothing; the import verify below decides.
     # Any other listing error is checked right below (a dist-info that cannot be listed
@@ -157,29 +157,34 @@ function Remove-StaleDistInfo {
     $stale = @(Get-ChildItem -LiteralPath $Target -Directory -ErrorAction SilentlyContinue -ErrorVariable listErr |
         Where-Object { $_.Name -like 'pywinpty-*.dist-info' -and $_.Name -ne $keep })
     if ($listErr -and (Test-Path -LiteralPath $Target)) {
-        LogError "Could not list $Target for stale pywinpty dist-info: $($listErr[0])"
+        Write-AitError "pywinpty" "stale dist-info not removed" "Could not list $Target for stale pywinpty dist-info: $($listErr[0])"
         return $false
     }
+    $failures = @()
     foreach ($d in $stale) {
         try {
             Remove-Item -LiteralPath $d.FullName -Recurse -Force -ErrorAction Stop
             Log "Removed stale $($d.Name) from $Target (pinned $Version)"
         } catch {
-            LogError "Could not remove stale $($d.FullName): $_"
-            $ok = $false
+            $failures += "Could not remove stale $($d.FullName): $_"
         }
     }
-    return $ok
+    if ($failures.Count -eq 0) { return $true }
+    # Every failure in deploy.log; the first is the reason, the rest are counted
+    foreach ($f in $failures) { LogDetail $f }
+    $reason = $failures[0]
+    if ($failures.Count -gt 1) { $reason += " (+$($failures.Count - 1) more in deploy.log)" }
+    Write-AitError "pywinpty" "stale dist-info not removed" $reason
+    return $false
 }
 
-# WARN + ACTION for a virtual-environment interpreter (pip refuses --user there).
+# One warning with its ACTION (Write-AitAction) for a virtual-environment interpreter
+# (pip refuses --user there); the explanation is an info line.
 function Write-VenvRefused {
     param([string]$Python, [string]$MajMin)
-    LogWarn "$Python runs in a virtual environment: pip refuses --user there, and a venv does not read the user site"
-    Write-Summary "WARN" "pywinpty" "venv python, --user refused"
+    Log "$Python runs in a virtual environment: pip refuses --user there, and a venv does not read the user site"
     $action = 'Deactivate the virtual environment so python3 is a base CPython ' + $MajMin + ' (or set $env:AITOOLS_PYWINPTY_PYTHON to one), then re-run ' + $PSCommandPath
-    LogWarn $action
-    Write-Summary "ACTION" "" $action
+    Write-AitAction "pywinpty" "venv python, --user refused -- deactivate the virtual environment" $action
 }
 
 $script:pinTempFile = $null
@@ -192,8 +197,7 @@ function Invoke-PywinptySetup {
             $pinPath = $env:AITOOLS_PYWINPTY_PIN
             Log "Pin: $pinPath (AITOOLS_PYWINPTY_PIN)"
         } else {
-            LogError "AITOOLS_PYWINPTY_PIN is set but the file does not exist: $env:AITOOLS_PYWINPTY_PIN"
-            Write-Summary "ERROR" "pywinpty" "pin file missing"
+            Write-AitError "pywinpty" "pin file missing" "AITOOLS_PYWINPTY_PIN=$env:AITOOLS_PYWINPTY_PIN does not exist"
             return
         }
     } else {
@@ -205,16 +209,14 @@ function Invoke-PywinptySetup {
             # Defined only in the MDM copy. Undefined (dev, package) -> $null, checked below.
             $embedded = Get-Variable -Name AitoolsEmbeddedPywinptyPin -Scope Script -ValueOnly -ErrorAction SilentlyContinue
             if ([string]::IsNullOrWhiteSpace($embedded)) {
-                LogError "No pywinpty pin: AITOOLS_PYWINPTY_PIN unset, $repoPin missing, no embedded pin"
-                Write-Summary "ERROR" "pywinpty" "pin file missing"
+                Write-AitError "pywinpty" "pin file missing" "AITOOLS_PYWINPTY_PIN unset, $repoPin missing, no embedded pin"
                 return
             }
             try {
                 $script:pinTempFile = [IO.Path]::GetTempFileName()
                 [IO.File]::WriteAllText($script:pinTempFile, $embedded, [Text.UTF8Encoding]::new($false))
             } catch {
-                LogError "Could not write the embedded pin to a temp file: $_"
-                Write-Summary "ERROR" "pywinpty" "pin temp file failed"
+                Write-AitError "pywinpty" "pin temp file failed" $_.Exception.Message
                 return
             }
             $pinPath = $script:pinTempFile
@@ -225,8 +227,7 @@ function Invoke-PywinptySetup {
     try {
         $pinText = [IO.File]::ReadAllText($pinPath)
     } catch {
-        LogError "Could not read the pin $pinPath : $_"
-        Write-Summary "ERROR" "pywinpty" "pin file unreadable"
+        Write-AitError "pywinpty" "pin file unreadable" "${pinPath}: $($_.Exception.Message)"
         return
     }
     $pinVersion = $null
@@ -239,8 +240,7 @@ function Invoke-PywinptySetup {
     }
     $badTags = @($tags | Where-Object { $_ -notmatch '^cp\d+t?-win_(amd64|arm64)$' })
     if (-not $pinVersion -or $tags.Count -eq 0 -or $badTags.Count -gt 0) {
-        LogError "Pin $pinPath unreadable: version '$pinVersion', wheel tags '$($tags -join ' ')' (invalid: '$($badTags -join ' ')')"
-        Write-Summary "ERROR" "pywinpty" "pin file unreadable"
+        Write-AitError "pywinpty" "pin file unreadable" "${pinPath}: version '$pinVersion', wheel tags '$($tags -join ' ')' (invalid: '$($badTags -join ' ')')"
         return
     }
     Log "Pinned pywinpty $pinVersion for: $($tags -join ' ')"
@@ -273,19 +273,22 @@ function Invoke-PywinptySetup {
     if (-not $py) {
         $tried = ($candidates | ForEach-Object { "$($_.Name)=$($_.Path)" }) -join ', '
         if (-not $tried) { $tried = "neither python3 nor python on PATH" }
-        LogWarn "No working Python interpreter (tried: $tried) -- pywinpty needs one"
-        Write-Summary "WARN" "pywinpty" "python not found"
+        Log "No working Python interpreter (tried: $tried) -- pywinpty needs one"
         $action = "Run aitools install (Step 15 Python), then re-run $PSCommandPath"
-        LogWarn $action
-        Write-Summary "ACTION" "" $action
+        Write-AitAction "pywinpty" "python not found -- run aitools install (Step 15 Python)" $action
         return
     }
 
     $probe = Invoke-Python -Python $py -Label "probe" -Arguments @("-c", $probeCode)
     $info = ConvertFrom-KeyValueLines $probe.Lines
     if ($probe.Code -ne 0 -or -not $info['tag'] -or -not $info['majmin']) {
-        LogError "Interpreter probe of $py failed (exit $($probe.Code)) -- see $logFile"
-        Write-Summary "ERROR" "pywinpty" "python probe failed"
+        # A probe that exited 0 but printed no tag has no error line to quote
+        if ($probe.Code -eq 0) {
+            $reason = "$py ran the probe (exit 0) but printed no tag or majmin"
+        } else {
+            $reason = Get-AitErrorReason -Output ($probe.Lines -join "`n") -ExitCode $probe.Code
+        }
+        Write-AitError "pywinpty" "python probe failed" $reason
         return
     }
     Log "Python $($info['version']) ($($info['tag'])) at $($info['executable']); user site $($info['user_site']) (enabled: $($info['user_site_enabled']))"
@@ -309,11 +312,9 @@ function Invoke-PywinptySetup {
 
     # --- 4. Wheel tag covered by the pin? ---
     if ($tags -notcontains $info['tag']) {
-        LogWarn "No pinned pywinpty wheel for $($info['tag']) (Python $($info['version']) at $py); the pin covers: $($tags -join ' ')"
-        Write-Summary "WARN" "pywinpty" (Get-ShortDetail "no wheel for $($info['tag'])")
+        Log "No pinned pywinpty wheel for $($info['tag']) (Python $($info['version']) at $py); the pin covers: $($tags -join ' ')"
         $action = "Python $($info['version']) ($($info['tag'])) has no pinned pywinpty wheel (pinned: $($tags -join ', ')) -- use a covered CPython as python3 (or set AITOOLS_PYWINPTY_PYTHON), then re-run $PSCommandPath"
-        LogWarn $action
-        Write-Summary "ACTION" "" $action
+        Write-AitAction "pywinpty" "no wheel for $($info['tag']) -- use a covered CPython as python3" $action
         return
     }
 
@@ -376,21 +377,19 @@ function Invoke-PywinptySetup {
         } elseif ($pipText -match "Can not perform a '--user' install") {
             Write-VenvRefused -Python $py -MajMin $info['majmin']
         } elseif ($pipText -match 'No module named pip') {
-            LogError "$py has no pip module (exit $($pip.Code))"
-            Write-Summary "ERROR" "pywinpty" "pip not available"
+            # The error, then its remedy as an ACTION (no warning of its own)
+            Write-AitError "pywinpty" "pip not available" (Get-AitErrorReason -Output $pipText -ExitCode $pip.Code)
             $action = "$py -m ensurepip --upgrade, then re-run $PSCommandPath"
-            LogWarn $action
             Write-Summary "ACTION" "" $action
         } else {
-            LogError "pip install failed (exit $($pip.Code)) -- see $logFile"
-            Write-Summary "ERROR" "pywinpty" (Get-ShortDetail "pip install failed (exit $($pip.Code))")
+            Write-AitError "pywinpty" "pip install failed (exit $($pip.Code))" (Get-AitErrorReason -Output $pipText -ExitCode $pip.Code)
         }
         return
     }
     $outcome = "installed"
     if ($mode -eq "target") {
+        # Remove-StaleDistInfo records its own error
         if (-not (Remove-StaleDistInfo -Target $info['user_site'] -Version $pinVersion)) {
-            Write-Summary "ERROR" "pywinpty" "stale dist-info not removed"
             return
         }
     }
@@ -416,8 +415,13 @@ function Invoke-PywinptySetup {
             Write-Summary "OK" "pywinpty" "$pinVersion ($outcome)"
         }
     } else {
-        LogError "pywinpty $pinVersion not importable by $py after pip (exit $($imp2.Code), version '$($imp2Info['version'])') -- see $logFile"
-        Write-Summary "ERROR" "pywinpty" "import failed after install"
+        # An import that exited 0 found another version: no error line to quote
+        if ($imp2.Code -eq 0) {
+            $reason = "$py imports pywinpty '$($imp2Info['version'])', pinned $pinVersion"
+        } else {
+            $reason = Get-AitErrorReason -Output ($imp2.Lines -join "`n") -ExitCode $imp2.Code
+        }
+        Write-AitError "pywinpty" "import failed after install" $reason
     }
 }
 
@@ -429,7 +433,7 @@ try {
             Remove-Item -LiteralPath $script:pinTempFile -Force -ErrorAction Stop
             LogDetail "Removed temp pin $($script:pinTempFile)"
         } catch {
-            LogWarn "Could not remove temp pin $($script:pinTempFile): $_"
+            Write-AitWarn "pywinpty" "could not remove temp pin $($script:pinTempFile): $($_.Exception.Message)"
         }
     }
 }

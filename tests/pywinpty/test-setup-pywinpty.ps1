@@ -204,14 +204,15 @@ try {
     }
 
     # --- d: pin missing ------------------------------------------------------------
-    $c = Run-Setup -Name "d-pin-missing" -ScriptPath $setup -Env @{ AITOOLS_PYWINPTY_PIN = (Join-Path $tmpRoot "no-such-pin.txt") }
-    Check "d pin missing: exit 1, one row 'ERROR|pywinpty|pin file missing'" ((Rc $c) -eq "1" -and (@(Rows $c) -join "`n") -ceq "ERROR|pywinpty|pin file missing")
-    Check "d pin missing: error names AITOOLS_PYWINPTY_PIN" ((LogText $c).Contains("AITOOLS_PYWINPTY_PIN is set but the file does not exist"))
+    $noPin = Join-Path $tmpRoot "no-such-pin.txt"
+    $c = Run-Setup -Name "d-pin-missing" -ScriptPath $setup -Env @{ AITOOLS_PYWINPTY_PIN = $noPin }
+    Check "d pin missing: exit 1, one row 'ERROR|pywinpty|pin file missing|AITOOLS_PYWINPTY_PIN=<path> does not exist'" ((Rc $c) -eq "1" -and (@(Rows $c) -join "`n") -ceq "ERROR|pywinpty|pin file missing|AITOOLS_PYWINPTY_PIN=$noPin does not exist")
+    Check "d pin missing: error names AITOOLS_PYWINPTY_PIN" ((LogText $c).Contains("pin file missing: AITOOLS_PYWINPTY_PIN=$noPin does not exist"))
 
     # --- e: no python --------------------------------------------------------------
     $c = Run-Setup -Name "e-no-python" -ScriptPath $setup -Env @{ AITOOLS_PYWINPTY_PYTHON = (Join-Path $tmpRoot "no-such\python.exe") }
     Check "e no python: exit 0" ((Rc $c) -eq "0")
-    Check "e no python: rows WARN 'python not found' + ACTION 'Run aitools install (Step 15 Python) ...'" ((HasRow $c "WARN|pywinpty|python not found") -and (RowLike $c '^ACTION\|\|Run aitools install \(Step 15 Python\), then re-run ') -and (Rows $c).Count -eq 2)
+    Check "e no python: rows WARN 'python not found -- run aitools install (Step 15 Python)' + ACTION 'Run aitools install (Step 15 Python) ...'" ((HasRow $c "WARN|pywinpty|python not found -- run aitools install (Step 15 Python)") -and (RowLike $c '^ACTION\|\|Run aitools install \(Step 15 Python\), then re-run ') -and (Rows $c).Count -eq 2)
 
     # --- f: fake interpreter -------------------------------------------------------
     # Answers the script's three -c calls (run check, probe, import check) from
@@ -304,7 +305,7 @@ exit 3
             ($A[0] -eq '-m') -and ($A[1] -eq 'pip') -and ($A[2] -eq 'install') -and ($A[-2] -eq '-r') -and ($A[-1] -eq $pin)
     }
     function DistInfos([string]$Dir) { @(Get-ChildItem -LiteralPath $Dir -Directory -Filter 'pywinpty-*.dist-info' -ErrorAction SilentlyContinue | ForEach-Object { $_.Name } | Sort-Object) }
-    $emWarn = "WARN|pywinpty|managed python, no user site"
+    $emWarn = "WARN|pywinpty|managed python, no user site -- run once with a non-managed CPython 3.12"
     $emAction = '^ACTION\|\|Run once with a non-managed CPython 3\.12 .*AITOOLS_PYWINPTY_PYTHON'
     $targetRow = "OK|pywinpty|$pinVer (installed, --target)"
 
@@ -348,7 +349,8 @@ exit 3
     [IO.File]::WriteAllText($lockFile, "Name: pywinpty`nVersion: 3.1.1`n")
     $lock = [IO.File]::Open($lockFile, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::None)
     try { $c = Run-Fake "f-em-locked" @{ FAKE_PY_EM = "True" } } finally { $lock.Dispose() }
-    Check "f fake externally managed, stale dist-info locked: exit 1, one row 'ERROR|pywinpty|stale dist-info not removed', one pip call" ((Rc $c) -eq "1" -and (@(Rows $c) -join "`n") -ceq "ERROR|pywinpty|stale dist-info not removed" -and (PipCalls "f-em-locked") -eq 1 -and (LogText $c).Contains("Could not remove stale "))
+    $lockRows = @(Rows $c)
+    Check "f fake externally managed, stale dist-info locked: exit 1, one row 'ERROR|pywinpty|stale dist-info not removed|Could not remove stale ...', one pip call" ((Rc $c) -eq "1" -and $lockRows.Count -eq 1 -and $lockRows[0].StartsWith("ERROR|pywinpty|stale dist-info not removed|Could not remove stale ", [StringComparison]::Ordinal) -and (PipCalls "f-em-locked") -eq 1 -and (LogText $c).Contains("Could not remove stale "))
 
     # 4c. the target exists but this user may not list it (ListDirectory denied): the
     # stale dist-info cannot be found, so the run fails instead of skipping the removal
@@ -364,7 +366,8 @@ exit 3
             $undoOut = (& icacls $us /remove:d "*$sid" 2>&1 | Out-String).Trim()
             if ($LASTEXITCODE -ne 0) { Write-Output "warning: icacls /remove:d on $us failed (exit $LASTEXITCODE): $undoOut" }
         }
-        Check "f fake externally managed, target not listable: exit 1, one row 'ERROR|pywinpty|stale dist-info not removed', one pip call, log 'Could not list <target>'" ((Rc $c) -eq "1" -and (@(Rows $c) -join "`n") -ceq "ERROR|pywinpty|stale dist-info not removed" -and (PipCalls "f-em-unlistable") -eq 1 -and (LogText $c).Contains("Could not list $us for stale pywinpty dist-info: "))
+        $listRows = @(Rows $c)
+        Check "f fake externally managed, target not listable: exit 1, one row 'ERROR|pywinpty|stale dist-info not removed|Could not list <target> for stale pywinpty dist-info: ...', one pip call, log 'Could not list <target>'" ((Rc $c) -eq "1" -and $listRows.Count -eq 1 -and $listRows[0].StartsWith("ERROR|pywinpty|stale dist-info not removed|Could not list $us for stale pywinpty dist-info: ", [StringComparison]::Ordinal) -and (PipCalls "f-em-unlistable") -eq 1 -and (LogText $c).Contains("Could not list $us for stale pywinpty dist-info: "))
     }
 
     # 7. managed dry run: the --target command is shown, not run
@@ -375,10 +378,10 @@ exit 3
     Check "f fake externally managed, dry run: 'Would run:' has --target <user site> --upgrade and no --user; no pip call, nothing in the user site" ($wr.Count -eq 1 -and $wr[0].Contains("-m pip install --target $us --upgrade ") -and -not $wr[0].Contains("--user") -and (PipCalls "f-em-dryrun") -eq 0 -and -not (LogText $c).Contains("Running: ") -and -not (Test-Path -LiteralPath $us))
 
     $c = Run-Fake "f-venv" @{ FAKE_PY_VENV = "True" }
-    Check "f fake venv: exit 0, rows WARN 'venv python, --user refused' + ACTION, no pip call" ((Rc $c) -eq "0" -and (HasRow $c "WARN|pywinpty|venv python, --user refused") -and (RowLike $c '^ACTION\|\|Deactivate the virtual environment') -and (Rows $c).Count -eq 2 -and (PipCalls "f-venv") -eq 0)
+    Check "f fake venv: exit 0, rows WARN 'venv python, --user refused -- deactivate the virtual environment' + ACTION, no pip call" ((Rc $c) -eq "0" -and (HasRow $c "WARN|pywinpty|venv python, --user refused -- deactivate the virtual environment") -and (RowLike $c '^ACTION\|\|Deactivate the virtual environment') -and (Rows $c).Count -eq 2 -and (PipCalls "f-venv") -eq 0)
 
     $c = Run-Fake "f-tag" @{ FAKE_PY_TAG = "cp399-win_amd64" }
-    Check "f fake uncovered tag: exit 0, rows WARN 'no wheel for cp399-win_amd64' + ACTION, no pip call" ((Rc $c) -eq "0" -and (HasRow $c "WARN|pywinpty|no wheel for cp399-win_amd64") -and (RowLike $c '^ACTION\|\|Python 3\.12\.7 \(cp399-win_amd64\) has no pinned pywinpty wheel') -and (Rows $c).Count -eq 2 -and (PipCalls "f-tag") -eq 0)
+    Check "f fake uncovered tag: exit 0, rows WARN 'no wheel for cp399-win_amd64 -- use a covered CPython as python3' + ACTION, no pip call" ((Rc $c) -eq "0" -and (HasRow $c "WARN|pywinpty|no wheel for cp399-win_amd64 -- use a covered CPython as python3") -and (RowLike $c '^ACTION\|\|Python 3\.12\.7 \(cp399-win_amd64\) has no pinned pywinpty wheel') -and (Rows $c).Count -eq 2 -and (PipCalls "f-tag") -eq 0)
 
     # 5. not managed per the probe, but pip refuses --user: one --target retry
     $us = FakeSite "f-pip-em"
@@ -395,13 +398,14 @@ exit 3
     # 5c. pip refuses --user and then --target as well: WARN after the one retry
     $c = Run-Fake "f-pip-em-both" @{ FAKE_PY_PIP_RC = "1"; FAKE_PY_PIP_OUT = "error: externally-managed-environment" }
     $a = @(PipArgv "f-pip-em-both")
-    Check "f fake pip refuses --user and --target: exit 0, rows WARN 'pip refused (PEP 668)' + ACTION, two pip calls (--user, --target)" ((Rc $c) -eq "0" -and (HasRow $c "WARN|pywinpty|pip refused (PEP 668)") -and (RowLike $c $emAction) -and (Rows $c).Count -eq 2 -and $a.Count -eq 2 -and ($a[0] -contains '--user') -and (IsTargetArgv $a[1] (FakeSite "f-pip-em-both")) -and (LogText $c).Contains("pip refused the install (target mode)"))
+    Check "f fake pip refuses --user and --target: exit 0, rows WARN 'pip refused (PEP 668) -- run once with a non-managed CPython 3.12' + ACTION, two pip calls (--user, --target)" ((Rc $c) -eq "0" -and (HasRow $c "WARN|pywinpty|pip refused (PEP 668) -- run once with a non-managed CPython 3.12") -and (RowLike $c $emAction) -and (Rows $c).Count -eq 2 -and $a.Count -eq 2 -and ($a[0] -contains '--user') -and (IsTargetArgv $a[1] (FakeSite "f-pip-em-both")) -and (LogText $c).Contains("pip refused the install (target mode)"))
 
     $c = Run-Fake "f-pip-fail" @{ FAKE_PY_PIP_RC = "2"; FAKE_PY_PIP_OUT = "ERROR: THESE PACKAGES DO NOT MATCH THE HASHES" }
-    Check "f fake pip fails: exit 1, one row 'ERROR|pywinpty|pip install failed (exit 2)'" ((Rc $c) -eq "1" -and (@(Rows $c) -join "`n") -ceq "ERROR|pywinpty|pip install failed (exit 2)")
+    Check "f fake pip fails: exit 1, one row 'ERROR|pywinpty|pip install failed (exit 2)|ERROR: THESE PACKAGES DO NOT MATCH THE HASHES'" ((Rc $c) -eq "1" -and (@(Rows $c) -join "`n") -ceq "ERROR|pywinpty|pip install failed (exit 2)|ERROR: THESE PACKAGES DO NOT MATCH THE HASHES")
 
     $c = Run-Fake "f-noimport" @{ FAKE_PY_PIP_OUT = "Successfully installed pywinpty-$pinVer" }
-    Check "f fake pip ok, import fails: exit 1, one row 'ERROR|pywinpty|import failed after install'" ((Rc $c) -eq "1" -and (@(Rows $c) -join "`n") -ceq "ERROR|pywinpty|import failed after install" -and (PipCalls "f-noimport") -eq 1)
+    $impRows = @(Rows $c)
+    Check "f fake pip ok, import fails: exit 1, one row 'ERROR|pywinpty|import failed after install|<the import's output>'" ((Rc $c) -eq "1" -and $impRows.Count -eq 1 -and $impRows[0].StartsWith("ERROR|pywinpty|import failed after install|", [StringComparison]::Ordinal) -and (PipCalls "f-noimport") -eq 1)
 
     # --- g: MDM copy ---------------------------------------------------------------
     # Git Bash (not the WSL bash.exe shim): AITOOLS_TEST_BASH, else next to git.

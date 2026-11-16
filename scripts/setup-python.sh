@@ -31,8 +31,7 @@ TARGET_PY_VERSION="3.14"
 # --- Require uv (the manager) ---
 hash -r 2>/dev/null || true
 if ! command -v uv >/dev/null 2>&1; then
-    log_error "uv not found -- setup-uv.sh must run before setup-python.sh"
-    write_summary ERROR "python" "uv not installed (ordering: uv before python)"
+    write_error "python" "uv not installed" "uv is not on PATH; setup-uv must run before setup-python"
     exit 1
 fi
 
@@ -48,22 +47,21 @@ UV_INSTALL_HELP=$(uv python install --help 2>&1) || true
 if [[ "$UV_INSTALL_HELP" == *"--upgrade"* ]]; then
     UPGRADE_ARGS=(--upgrade)
 else
-    log_warn "$(uv --version 2>&1 || echo "uv") does not support 'uv python install --upgrade' -- installing without it"
-    write_summary WARN "python" "uv too old for --upgrade"
-    write_summary ACTION "" "Upgrade uv, then re-run aitools install"
+    UV_VER=$(uv --version 2>&1 || echo "uv")
+    write_action "python" "$UV_VER is too old for 'uv python install --upgrade' (installing without it) -- upgrade uv" "Upgrade uv, then re-run aitools install"
 fi
 log "Installing/updating uv-managed Python $TARGET_PY_VERSION as default..."
 INSTALL_RC=0
 INSTALL_OUTPUT=$(uv python install "$TARGET_PY_VERSION" --default ${UPGRADE_ARGS[@]+"${UPGRADE_ARGS[@]}"} \
     --preview-features python-install-default 2>&1) || INSTALL_RC=$?
+if [ "$INSTALL_RC" -ne 0 ]; then
+    # error_reason logs the output as detail lines
+    write_error "python" "uv python install failed" "$(error_reason "$INSTALL_OUTPUT" "$INSTALL_RC")"
+    exit 1
+fi
 printf '%s\n' "$INSTALL_OUTPUT" | while IFS= read -r line; do
     if [ -n "$line" ]; then log "$line"; fi
 done
-if [ "$INSTALL_RC" -ne 0 ]; then
-    log_error "uv python install failed (see log above)"
-    write_summary ERROR "python" "uv python install failed"
-    exit 1
-fi
 
 # --- Verify python3 resolves to the uv-managed interpreter ---
 hash -r 2>/dev/null || true
@@ -79,15 +77,15 @@ if command -v python3 >/dev/null 2>&1; then
             # Name the ACTUAL shadowing dir (parent of the resolved binary) instead
             # of assuming /usr/bin: on macOS the shadow is usually Homebrew's
             # /opt/homebrew/bin (a python@3.x formula), not the system /usr/bin.
+            # A shadowed managed tool is an error, plus an ACTION (D-TS11;
+            # script-standards-detail "Severity decision guide").
             SHADOW_DIR=$(dirname "$PY_PATH")
-            log_warn "python3 resolves to $PY_PATH ($PY_VERSION), not the uv shim at $HOME/.local/bin/python3"
-            log_warn "$SHADOW_DIR precedes $HOME/.local/bin in PATH -- the uv shim is shadowed"
-            write_summary WARN "python" "$PY_VERSION (uv shim shadowed)"
+            write_error "python" "shadowed" "python3 resolves to $PY_PATH ($PY_VERSION), not the uv shim at $HOME/.local/bin/python3"
+            log "$SHADOW_DIR precedes $HOME/.local/bin in PATH -- the uv shim is shadowed"
             write_summary ACTION "" "Put ~/.local/bin before $SHADOW_DIR in PATH -- python3 default" ;;
     esac
 else
-    log_error "python3 not found after uv install -- is uv's bin dir (~/.local/bin) on PATH?"
-    write_summary ERROR "python" "python3 not on PATH after uv install"
+    write_error "python" "python3 not on PATH after uv install" "command -v python3 found nothing; ~/.local/bin is probably not on PATH"
     write_summary ACTION "" "Add ~/.local/bin to PATH -- uv python shims"
 fi
 
