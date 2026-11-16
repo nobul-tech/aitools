@@ -263,7 +263,15 @@ function Add-Source {
         $relNative = $rel -replace '/', [IO.Path]::DirectorySeparatorChar
         $src = Join-Path $SrcDir $relNative
         if (-not (Test-Path -LiteralPath $src -PathType Leaf)) {
-            Write-AitWarn $tool "${Label}: $rel is tracked but missing on disk -- skipped"
+            # MDM (build-deploy sets $mdmDamaged; unset on the dev path): a file
+            # whose embedded record is damaged was recorded as an error when it
+            # was unpacked; its missing file is that error's consequence, logged
+            # at info (one cause, one red line: logging.md 8.3)
+            if ($script:mdmDamaged -and $script:mdmDamaged.Contains([IO.Path]::GetFullPath($src))) {
+                Log "${Label}: $rel not deployed -- its embedded record is damaged (the error above)"
+            } else {
+                Write-AitWarn $tool "${Label}: $rel is tracked but missing on disk -- skipped"
+            }
             continue
         }
         $plan.Add([pscustomobject]@{ Kind = $Kind; Src = $src; Dest = (Join-Path $DestDir $relNative); Item = "$Kind/$rel" })

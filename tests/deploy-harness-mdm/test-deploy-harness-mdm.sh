@@ -382,7 +382,7 @@ run mdm eq
 # own warning, recorded by the library (reference/logging.md 8.3: "local edits
 # overwritten in a non-interactive run"); the dev path does the same (next check).
 check "edit then rerun (non-interactive): source wins in MDM, 1 updated, overwrite warning" \
-    "cmp -s '$P2' '$TMP_ROOT/eq-mdm/.aitools/rules/tool-ops.md' && grep -q '^OK|harness files|1 updated' '$TMP_ROOT/eq-mdm.summary' && row eq-mdm 'WARN|harness files|Diff in $TMP_ROOT/eq-mdm/.aitools/rules/tool-ops.md -- overwriting (non-interactive)'"
+    "cmp -s '$P2' '$TMP_ROOT/eq-mdm/.aitools/rules/tool-ops.md' && grep -q '^OK|harness files|1 updated' '$TMP_ROOT/eq-mdm.summary' && row eq-mdm 'WARN|harness files|local edits overwritten (non-interactive run, backup kept): $TMP_ROOT/eq-mdm/.aitools/rules/tool-ops.md'"
 check "edit then rerun: same rows (each side's HOME as <HOME>) and files as dev" "same_summary eq && same_trees eq"
 if ! same_summary eq; then diff <(home_rows "$TMP_ROOT/eq-dev.summary") <(home_rows "$TMP_ROOT/eq-mdm.summary") | perl -pe 's/^/      | /'; fi
 rows_golden "$TMP_ROOT/eq-mdm.summary" "$TMP_ROOT/eq-edit.rows"
@@ -405,7 +405,7 @@ if $HAVE_PTY; then
     # The skip is one warning, recorded by the library (logging.md 8.2), and
     # counted in the OK status.
     check "terminal review (MDM): overwrite offered, adopt and merge not; skip keeps LOCAL" \
-        "[ \"\$(rc_of pty-mdm)\" = 0 ] && grep -q '\[o\]verwrite' '$OUT.plain' && ! grep -q '\[a\]ccept & adopt' '$OUT.plain' && ! grep -q '\[m\]erge & adopt' '$OUT.plain' && grep -qx 'local edit' '$TMP_ROOT/eq-mdm/.aitools/rules/scratch.md' && row pty-mdm 'WARN|harness files|Skipped: rules/scratch.md (local differs from source; reviewed again next run)' && [ \"\$(grep -c '^WARN|harness files|Skipped: ' '$TMP_ROOT/pty-mdm.summary')\" = 1 ] && grep -q '^OK|harness files|1 skipped, [0-9]* verified\$' '$TMP_ROOT/pty-mdm.summary'"
+        "[ \"\$(rc_of pty-mdm)\" = 0 ] && grep -q '\[o\]verwrite' '$OUT.plain' && ! grep -q '\[a\]ccept & adopt' '$OUT.plain' && ! grep -q '\[m\]erge & adopt' '$OUT.plain' && grep -qx 'local edit' '$TMP_ROOT/eq-mdm/.aitools/rules/scratch.md' && row pty-mdm 'WARN|harness files|skipped at review, local differs from source: rules/scratch.md' && [ \"\$(grep -c '^WARN|harness files|skipped at review, ' '$TMP_ROOT/pty-mdm.summary')\" = 1 ] && grep -q '^OK|harness files|1 skipped, [0-9]* verified\$' '$TMP_ROOT/pty-mdm.summary'"
     check "terminal review (MDM) without git: diff unavailable, menu still shown" \
         "grep -q 'diff unavailable' '$OUT.plain' && grep -q '\[o\]verwrite' '$OUT.plain'"
 else
@@ -502,6 +502,10 @@ PS_TMPDIR="$TMP_ROOT/pstmp/" run mdm record
 # One ERROR record per damaged file; no aggregate record (the count line is info).
 check "damaged record: exit 1, one ERROR row for that file, that file not deployed, the others are" \
     "[ \"\$(rc_of record-mdm)\" = 1 ] && grep -q '^ERROR|harness files|embedded aitools/shared/rules/scratch.md is damaged or cannot be written|.' '$TMP_ROOT/record-mdm.summary' && [ \"\$(grep -c '^ERROR|' '$TMP_ROOT/record-mdm.summary')\" = 1 ] && ! grep -q 'embedded file(s) damaged' '$TMP_ROOT/record-mdm.summary' && grep -q 'shared/rules/scratch.md is damaged' '$TMP_ROOT/record-mdm.out' && [ ! -e '$TMP_ROOT/record-mdm/.aitools/rules/scratch.md' ] && [ -f '$TMP_ROOT/record-mdm/.aitools/rules/tool-ops.md' ]"
+# Its missing file is the consequence of that error: logged at info, no WARN
+# record (one cause, one red line: logging.md 8.3; fix-forward 5899-6-L2-P1)
+check "damaged record: the missing file is logged at info, no 'tracked but missing' WARN record" \
+    "! grep -q '^WARN|harness files|' '$TMP_ROOT/record-mdm.summary' && grep -q '\[info\] shared/rules: scratch.md not deployed -- its embedded record is damaged (the error above)' '$TMP_ROOT/record-mdm.out' && ! grep -q 'tracked but missing' '$TMP_ROOT/record-mdm.out'"
 # (The .ps1 stage-directory case, removed in a finally block on exit 1, is in
 # the .ps1 harness.)
 # A CRLF copy of the payload (Windows checkout with autocrlf) still verifies

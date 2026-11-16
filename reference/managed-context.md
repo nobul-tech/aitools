@@ -321,8 +321,9 @@ the template's git diff; review the commit.
 ### 4.4 Non-interactive runs, `--force`, dry run
 
 ```
-  no terminal (MDM, CI, piped)  -> overwrite, WARN "Diff in ... -- overwriting
-                                   (non-interactive)"; no adopt, no AI merge
+  no terminal (MDM, CI, piped)  -> overwrite, WARN "local edits overwritten
+                                   (non-interactive run, backup kept): ...";
+                                   no adopt, no AI merge
   EOF at the prompt             -> WARN, overwrite
   aitools --force / -Force,     -> overwrite, logged at info "... (--force)":
   AITOOLS_FORCE=1                  a step the user asked for, not a warning
@@ -444,8 +445,9 @@ templates with tokens, and each endpoint renders its own
   propagation is the commander's `aitools` run
   (`shared/rules/tool-lifecycle.md` "Rebuild + propagate").
 - When the commander reports "my CLAUDE.md change disappeared", check
-  `deploy.log` for `Diff in ~/.claude/CLAUDE.md -- overwriting
-  (non-interactive)` / `(--force)` and the `CLAUDE.md.bak.<timestamp>`
+  `deploy.log` for `local edits overwritten (non-interactive run, backup
+  kept): ~/.claude/CLAUDE.md` / `Diff in ~/.claude/CLAUDE.md -- overwriting
+  (--force)` and the `CLAUDE.md.bak.<timestamp>`
   beside it.
 
 ## 9. Paths

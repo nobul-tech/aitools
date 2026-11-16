@@ -465,7 +465,7 @@ try {
     Run-One
     # Local edits overwritten in a non-interactive run: a warning (logging.md 8.3), its
     # own WARN record; the status stays OK (never recoloured)
-    Check "fanout edited, non-interactive: overwritten, backup kept, OK status, one WARN record" ((Status) -ceq 'OK|claude skills|1 updated, 5 verified' -and (RowSlash ('WARN|claude skills|Diff in ' + (Mixed (S)) + '/s1/SKILL.md -- overwriting (non-interactive)')) -and (NRows WARN) -eq 1 -and (HasLine (PJ (S) s1 SKILL.md) '## shared s1') -and [bool](@(LsNames (PJ (S) s1)) -cmatch '^SKILL\.md\.bak\.'))
+    Check "fanout edited, non-interactive: overwritten, backup kept, OK status, one WARN record" ((Status) -ceq 'OK|claude skills|1 updated, 5 verified' -and (RowSlash ('WARN|claude skills|local edits overwritten (non-interactive run, backup kept): ' + (Mixed (S)) + '/s1/SKILL.md')) -and (NRows WARN) -eq 1 -and (HasLine (PJ (S) s1 SKILL.md) '## shared s1') -and [bool](@(LsNames (PJ (S) s1)) -cmatch '^SKILL\.md\.bak\.'))
     Parity fanout-edited
     WriteText (PJ (S) s1 SKILL.md) "## shared s1`nlocal edit 2`n"
     Run-One "-Force"

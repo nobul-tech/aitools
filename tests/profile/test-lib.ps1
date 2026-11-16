@@ -31,6 +31,8 @@
 # ERROR, a warning line is never a failed child's reason (RFI 5899-31), and a
 # user abort is recorded once: by the child when it recorded it, else by the
 # relay.
+# Fix-forward 5899-6-L2-P1: only an abort record the child wrote counts as the
+# child recording it; its earlier warnings do not (case 9).
 #
 # Platform targeting (plans/ci-platform-targeting.md; commander 2026-11-14:
 # "sh scripts and tests should only run on linux/mac and ps1 on windows"):
@@ -435,12 +437,17 @@ function Invoke-Case([string]$Name, [string]$Call, [string]$Want, [string]$WSum,
 #      the library prints it: logging.md 8.1), exit 0 anyway (a child bug)
 #   3  exit 1 before any row or footer
 #   4  exit 127
-#   5  a user abort the child records itself (LogError "Aborted by user"
-#      records), exit 2 (D-TS13)
+#   5  a user abort the child records itself, as a relay inside it would: one
+#      abort record (Write-AitError "child tool" "child step aborted" "aborted
+#      by user": an ERROR whose reason is "aborted by user", logging.md 8.3),
+#      exit 2 (D-TS13)
 #   6  throws
 #   8  a user abort through the library's abort path (Invoke-ManagedAbort:
 #      logged and counted, not recorded) right after "child info", before the
 #      warnings, so the child records nothing and the relay records the abort (8.3)
+#   9  its two warnings (recorded), then a user abort through the library's
+#      abort path: its warnings are not abort records, so the relay records
+#      the abort (8.3 "A user abort")
 Write-LfFile "$WORK/child.ps1" @'
 . (Join-Path $env:REPO "scripts/aitools-lib.ps1")
 Initialize-Logging "child-ps"
@@ -453,8 +460,9 @@ switch ($env:CHILD_FAIL) {
     "2" { Write-Host "[2026-01-01T00:00:00Z] [child-ps] [error] child error" }
     "3" { exit 1 }
     "4" { exit 127 }
-    "5" { LogError "Aborted by user"; exit 2 }
+    "5" { Write-AitError "child tool" "child step aborted" "aborted by user"; exit 2 }
     "6" { throw "child died" }
+    "9" { Invoke-ManagedAbort }
 }
 # Review m4: the relay's own parameters and locals must not leak into the child (dynamic scope)
 if ($Label -or $ChildScript -or $ChildArgs -or $SummaryTool -or $Detail -or $ErrRows) { LogError "parent's Invoke-ChildRelayed variables are visible" }
@@ -869,9 +877,12 @@ try {
     # marker; a warning line is never the reason, RFI 5899-31)
     Invoke-RelayCase relay-run-crash run 3 (J "rc=1 child_rc=1" "cw=2 ce=0 warnings=0 errors=1") (J "records=3 invalid=0" "msg-ok") (J $W_CHILD "ERROR|child tool|child step failed (exit 1)|child info")
     Invoke-RelayCase relay-run-exit127 run 4 (J "rc=1 child_rc=127" "cw=2 ce=0 warnings=0 errors=1") (J "records=3 invalid=0" "msg-ok") (J $W_CHILD "ERROR|child tool|child step failed (exit 127)|child info")
-    # A user abort (exit 2) the child recorded itself: the relay counts it and
-    # records nothing more (8.3 "A user abort": recorded once)
-    Invoke-RelayCase relay-run-abort run 5 (J "rc=1 child_rc=2" "cw=2 ce=1 warnings=0 errors=1") (J "records=4 invalid=0" "msg-ok") (J $W_CHILD "ERROR|child-ps|Aborted by user|")
+    # A user abort (exit 2) the child recorded itself (an abort record): the relay
+    # counts it and records nothing more (8.3 "A user abort": recorded once)
+    Invoke-RelayCase relay-run-abort run 5 (J "rc=1 child_rc=2" "cw=2 ce=1 warnings=0 errors=1") (J "records=4 invalid=0" "msg-ok") (J $W_CHILD "ERROR|child tool|child step aborted|aborted by user")
+    # Its warnings (recorded), then an abort through the library's abort path: the
+    # warnings are not abort records, so the relay records the abort once (8.3)
+    Invoke-RelayCase relay-run-abort-after-warn run 9 (J "rc=1 child_rc=2" "cw=2 ce=1 warnings=0 errors=1") (J "records=4 invalid=0" "msg-ok") (J $W_CHILD "ERROR|child tool|child step failed (exit 2)|aborted by user")
     # A user abort through the library's abort path (logged, not recorded) by a
     # child that recorded nothing: the relay records it once, ERROR "<label> failed
     # (exit 2)" with the reason "aborted by user" (8.3). The child printed no warning line.

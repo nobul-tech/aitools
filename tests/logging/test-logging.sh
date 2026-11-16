@@ -558,8 +558,9 @@ xrun
 check "nested abort: one record, by the innermost relay; the outer relay counts it without a second record" \
     "[ \"\$(cat '$C/summary.txt')\" = 'ERROR|inner tool|gc step failed (exit 2)|aborted by user' ] && grep -q 'RC=1 CHILD=2 E=1 W=0' '$C/out'"
 
-# --abort-warn when the child recorded a warning while it ran: not recorded again
-xcase abort-warn-recorded
+# --abort-warn when the child recorded a warning, then aborted: its warning is
+# not an abort record, so the relay records the abort (8.3 "A user abort")
+xcase abort-warn-after-warn
 cat > "$C/child.sh" <<'EOF'
 set -euo pipefail
 source "$X_LIB"; logging_init dh
@@ -574,8 +575,68 @@ run_child_relayed --summary-tool "harness files" --abort-warn "deploy-harness" b
 printf 'RC=%s CHILD=%s E=%s W=%s\n' "$rc" "$AITLIB_CHILD_RC" "$ERRORS" "$WARNINGS"
 EOF
 xrun
-check "relay --abort-warn: an abort the child already recorded is counted, not recorded again" \
-    "[ \"\$(cat '$C/summary.txt')\" = 'WARN|harness files|something odd' ] && grep -q 'RC=1 CHILD=2 E=0 W=1' '$C/out'"
+check "relay --abort-warn: a warning, then an abort -- the relay records the abort, one parent warning" \
+    "[ \"\$(cat '$C/summary.txt')\" = 'WARN|harness files|something odd
+WARN|harness files|aborted by user' ] && grep -q 'RC=1 CHILD=2 E=0 W=1' '$C/out'"
+
+# The same without --abort-warn: one ERROR abort record after the child's warning
+xcase abort-after-warn
+cat > "$C/child.sh" <<'EOF'
+set -euo pipefail
+source "$X_LIB"; logging_init fx
+write_warn "fx tool" "skipped one file"
+_managed_abort
+EOF
+cat > "$C/main.sh" <<'EOF'
+set -euo pipefail
+source "$X_LIB"; logging_init t
+rc=0
+run_child_relayed --summary-tool "fx tool" "fx step" bash "$X_DIR/child.sh" || rc=$?
+printf 'RC=%s CHILD=%s E=%s W=%s\n' "$rc" "$AITLIB_CHILD_RC" "$ERRORS" "$WARNINGS"
+EOF
+xrun
+check "relay: a warning, then an abort -- one ERROR abort record from the relay, one parent error" \
+    "[ \"\$(cat '$C/summary.txt')\" = 'WARN|fx tool|skipped one file
+ERROR|fx tool|fx step failed (exit 2)|aborted by user' ] && grep -q 'RC=1 CHILD=2 E=1 W=0' '$C/out' && ! grep -q 'the child recorded it' '$C/logs/deploy.log'"
+
+# --abort-warn when the child wrote the abort record itself: not recorded again
+xcase abort-warn-recorded
+cat > "$C/child.sh" <<'EOF'
+set -euo pipefail
+source "$X_LIB"; logging_init dh
+write_warn "harness files" "aborted by user"
+exit 2
+EOF
+cat > "$C/main.sh" <<'EOF'
+set -euo pipefail
+source "$X_LIB"; logging_init t
+rc=0
+run_child_relayed --summary-tool "harness files" --abort-warn "deploy-harness" bash "$X_DIR/child.sh" || rc=$?
+printf 'RC=%s CHILD=%s E=%s W=%s\n' "$rc" "$AITLIB_CHILD_RC" "$ERRORS" "$WARNINGS"
+EOF
+xrun
+check "relay --abort-warn: an abort record the child wrote is counted, not recorded again" \
+    "[ \"\$(cat '$C/summary.txt')\" = 'WARN|harness files|aborted by user' ] && grep -q 'RC=1 CHILD=2 E=0 W=1' '$C/out' && grep -q 'deploy-harness aborted by user -- the child recorded it' '$C/logs/deploy.log'"
+
+# A failed child that recorded its own error: the relay logs no derived reason
+xcase fail-recorded-log
+cat > "$C/child.sh" <<'EOF'
+set -euo pipefail
+source "$X_LIB"; logging_init fr
+write_error "fr tool" "fr step" "the real cause"
+log "an unrelated last line"
+exit 1
+EOF
+cat > "$C/main.sh" <<'EOF'
+set -euo pipefail
+source "$X_LIB"; logging_init t
+rc=0
+run_child_relayed --summary-tool "fr tool" "fr run" bash "$X_DIR/child.sh" || rc=$?
+printf 'RC=%s E=%s\n' "$rc" "$ERRORS"
+EOF
+xrun
+check "relay: a failed child that recorded its error -- logged '<label> failed (exit N) -- the child recorded its error', no derived reason" \
+    "[ \"\$(cat '$C/summary.txt')\" = 'ERROR|fr tool|fr step|the real cause' ] && grep -q 'RC=1 E=1' '$C/out' && grep -q '\[t\] \[error\] fr run failed (exit 1) -- the child recorded its error\$' '$C/logs/deploy.log' && ! grep -q 'unrelated last line --' '$C/logs/deploy.log'"
 
 # A middle script's own error lines decide, not a grandchild's it re-printed
 xcase own-errors

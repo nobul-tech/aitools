@@ -474,7 +474,7 @@ foreach ($n in @("a.md", "A.MD", "b.Md", "x.md.bak.1", "X.MD.BAK.2026", "odd.bak
     Rerun
     # Local edits overwritten in a non-interactive run: one warning, recorded by the
     # library (reference/logging.md 8.3 "What is a warning"); the status row stays OK
-    Check "fanout edited, non-interactive: overwritten, backup kept, OK row and one WARN record" ((Nondetail) -ceq 'OK|claude rules|1 updated, 3 verified' -and @(SumLines | Where-Object { $_.StartsWith("WARN|claude rules|") }).Count -eq 1 -and (@(Rows (Join-Path $script:C "$L.summary")) -ccontains 'WARN|claude rules|Diff in <HOME>/.claude/rules/s.md -- overwriting (non-interactive)') -and (FileHasLine (Join-Path (RulesDir) "s.md") '## shared s') -and (LsHas (RulesDir) '^s\.md\.bak\.'))
+    Check "fanout edited, non-interactive: overwritten, backup kept, OK row and one WARN record" ((Nondetail) -ceq 'OK|claude rules|1 updated, 3 verified' -and @(SumLines | Where-Object { $_.StartsWith("WARN|claude rules|") }).Count -eq 1 -and (@(Rows (Join-Path $script:C "$L.summary")) -ccontains 'WARN|claude rules|local edits overwritten (non-interactive run, backup kept): <HOME>/.claude/rules/s.md') -and (FileHasLine (Join-Path (RulesDir) "s.md") '## shared s') -and (LsHas (RulesDir) '^s\.md\.bak\.'))
     Parity fanout-edited
     WriteLf (Join-Path (RulesDir) "s.md") "## shared s`nlocal edit 2`n"
     # The edited run's backup is checked above; removed so the tree holds one backup

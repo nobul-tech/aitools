@@ -37,6 +37,10 @@ v2.4 (2026-11-16): the error-marker rule (8.3 rule 3) skips warning lines too
 detail lines keep it; 8.2: a `write_summary` category other than OK, DETAIL
 or ACTION writes no record and is one warning (plan step I5).
 
+v2.5 (2026-11-16): 8.3 "A user abort": the relay records a child's abort
+unless the child recorded an abort record; its other warnings and errors no
+longer suppress the abort record.
+
 > Ratified 2026-06-14 as part of the harvest/archive/logging plan
 > (`plans/harvest-archive-resilience.md` §14). This doc consolidates logging
 > decisions previously scattered across `script-standards.md`,
@@ -342,10 +346,12 @@ record, and its warnings and errors reach the run summary through its caller
     - `error_reason` over its last stdout line that is not a warning line
       (its last warning line when it printed nothing else).
   - **A user abort (exit 2)** keeps its outcome. The relay records it, as
-    one record, only when the child recorded no WARN or ERROR record while
-    it was executing (so an abort inside a relayed child that runs its own
-    relay is recorded once, by the innermost relay); the runner never writes
-    a second one.
+    one record, unless the child recorded an abort record while it was
+    executing: a WARN record with the text `aborted by user`, or an ERROR
+    record with the reason `aborted by user` (so an abort inside a relayed
+    child that runs its own relay is recorded once, by the innermost relay).
+    The child's other WARN and ERROR records do not count. The runner never
+    writes a second one.
     - A runner may ask the relay to record a child's abort as a warning
       instead of an error. `deploy-harness` aborted: one WARN record
       (`harness files`, `aborted by user`), counted as one warning of the

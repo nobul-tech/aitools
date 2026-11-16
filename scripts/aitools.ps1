@@ -1704,7 +1704,7 @@ function Invoke-UserInit {
     # Session archive hook. Exit 2 = the user aborted in the review menu (D-TS13):
     # stop with exit 2 (the relay records it once: ERROR "claude hooks" "user init:
     # setup-user-hooks failed (exit 2)" "aborted by user", unless the hook script
-    # recorded a warning or an error); any other failure is counted by the relay.
+    # recorded an abort record itself); any other failure is counted by the relay.
     Log "user init: deploying the session archive hook"
     $hookSetup = Join-Path $repoPath "scripts" "setup-user-hooks.ps1"
     $hookRc = 0

@@ -534,12 +534,15 @@ tool_exception_record() {
 #   error_reason over the child's last 20 stderr lines, else over its last
 #   stdout line that is not a warning line, or its last warning line when it
 #   printed nothing else) only when the child wrote no ERROR record while it ran;
-#   otherwise the error is logged and counted, not recorded again.
-# - A user abort (exit 2) is recorded once, by the innermost relay: only when
-#   the child wrote no WARN or ERROR record while it ran. With --abort-warn it
-#   is WARN|<name>|aborted by user and one parent warning (deploy-harness);
-#   without, ERROR|<name>|<label> failed (exit 2)|aborted by user and one
-#   parent error.
+#   otherwise the error is logged ("<label> failed (exit N) -- the child
+#   recorded its error", no reason derived) and counted, not recorded again.
+# - A user abort (exit 2) is recorded once, by the innermost relay: unless the
+#   child wrote an abort record while it ran (WARN|<name>|aborted by user, or
+#   an ERROR record whose reason is "aborted by user": a relay inside the
+#   child recorded it). Its other WARN or ERROR records do not count. With
+#   --abort-warn it is WARN|<name>|aborted by user and one parent warning
+#   (deploy-harness); without, ERROR|<name>|<label> failed (exit 2)|aborted by
+#   user and one parent error.
 # Results (set by relay_child_log and run_child_relayed, read after the call):
 #   AITLIB_CHILD_WARNINGS  the child's warn lines (the exit footer
 #                          "COMPLETED with N warning(s)" is relayed, not counted)
@@ -726,6 +729,29 @@ _aitlib_summary_count() {
     printf -v "$1" '%s' "$_aitlib_se_n"
 }
 
+# _aitlib_summary_abort_count VAR -- set VAR to the number of abort records in
+# the run summary (reference/logging.md 8.3 "A user abort"): WARN records whose
+# text is "aborted by user" and ERROR records whose reason is "aborted by user"
+# (0 without a summary file). An unreadable summary counts 0 and is a detail
+# line. VAR must not be one of this function's locals (_aitlib_sa_*). Parity:
+# Get-AitLibAbortRecordCount.
+_aitlib_summary_abort_count() {
+    local _aitlib_sa_n=0 _aitlib_sa_l _aitlib_sa_f="${AITOOLS_SUMMARY_FILE:-}"
+    if [ -n "$_aitlib_sa_f" ] && [ -f "$_aitlib_sa_f" ]; then
+        if [ -r "$_aitlib_sa_f" ]; then
+            while IFS= read -r _aitlib_sa_l || [ -n "$_aitlib_sa_l" ]; do
+                _aitlib_sa_l="${_aitlib_sa_l%$'\r'}"
+                case "$_aitlib_sa_l" in
+                    "WARN|"*"|aborted by user"|"ERROR|"*"|"*"|aborted by user") _aitlib_sa_n=$((_aitlib_sa_n + 1)) ;;
+                esac
+            done < "$_aitlib_sa_f"
+        else
+            log_detail "run summary unreadable ($_aitlib_sa_f) -- its abort records are not counted"
+        fi
+    fi
+    printf -v "$1" '%s' "$_aitlib_sa_n"
+}
+
 # _aitlib_error_norecord TEXT -- the library-internal non-recording error path
 # (reference/logging.md 8.2): an error-level line, counted in ERRORS, no record.
 # Used only by the relay (a failed child whose error the child already recorded,
@@ -815,7 +841,7 @@ _aitlib_relay_exec() {
 # closed them (a background grandchild keeps it waiting).
 run_child_relayed() {
     local tool="" label line rcf="" errf="" rc="" name what reason tail_err="" err=""
-    local abort_warn=false quiet=false mirror=true w0=0 e0=0 w1=0 e1=0
+    local abort_warn=false quiet=false mirror=true a0=0 e0=0 a1=0 e1=0
     AITLIB_CHILD_RC=0; AITLIB_CHILD_WARNINGS=0; AITLIB_CHILD_ERRORS=0
     while [ "$#" -gt 0 ]; do
         case "$1" in
@@ -855,7 +881,7 @@ run_child_relayed() {
     errf="$err"
     # Inside a relayed process the relays do not mirror (only the outermost does)
     if [ "${AITLIB_RELAYED:-}" = "1" ]; then mirror=false; fi
-    _aitlib_summary_count w0 WARN
+    _aitlib_summary_abort_count a0
     _aitlib_summary_count e0 ERROR
     _aitlib_relay_reset "$quiet" "$mirror"
     while IFS= read -r line || [ -n "$line" ]; do
@@ -878,12 +904,14 @@ run_child_relayed() {
         tail_err=$(tail -n 20 "$errf") || tail_err=""
     fi
     _aitlib_rm_tmp "$errf" "$label"
-    _aitlib_summary_count w1 WARN
     _aitlib_summary_count e1 ERROR
     if [ "$rc" -eq 2 ]; then
-        # A user abort (D-TS13): recorded once, by the innermost relay
+        # A user abort (D-TS13): recorded once, by the innermost relay. Only an
+        # abort record the child wrote counts (a relay inside it recorded the
+        # abort), not the other warnings or errors it recorded before aborting.
         log_detail "$label: exited 2 (user abort)"
-        if [ "$w1" -gt "$w0" ] || [ "$e1" -gt "$e0" ]; then
+        _aitlib_summary_abort_count a1
+        if [ "$a1" -gt "$a0" ]; then
             if $abort_warn; then
                 _aitlib_warn_norecord "$label aborted by user -- the child recorded it"
             else
@@ -897,15 +925,17 @@ run_child_relayed() {
         return 1
     fi
     what="$label failed (exit $rc)"
+    if [ "$e1" -gt "$e0" ]; then
+        # The child recorded its error with its own reason: no reason is derived
+        # here (the child's last line may be unrelated to it)
+        _aitlib_error_norecord "$what -- the child recorded its error"
+        return 1
+    fi
     case "$tail_err" in
         *[![:space:]]*) reason=$(error_reason "$tail_err" "$rc") ;;
         *) reason=$(error_reason "$_AITLIB_RELAY_LAST" "$rc") ;;
     esac
-    if [ "$e1" -gt "$e0" ]; then
-        _aitlib_error_norecord "$what: $reason -- the child recorded its error"
-    else
-        write_error "$name" "$what" "$reason"
-    fi
+    write_error "$name" "$what" "$reason"
     return 1
 }
 
@@ -2640,7 +2670,12 @@ _review_diff() {
     if [ -s "$tmp_dir/err" ]; then err=$(cat "$tmp_dir/err"); fi
     rm -rf "$tmp_dir"
     if [ "$rc" -gt 1 ]; then
-        REVIEW_DIFF_ERROR="git diff failed (exit $rc): ${err:-no output}"
+        # Silent failure: the 8.3 form of an empty output, "no output (exit N)"
+        if [ -n "$err" ]; then
+            REVIEW_DIFF_ERROR="git diff failed (exit $rc): $err"
+        else
+            REVIEW_DIFF_ERROR="git diff failed: no output (exit $rc)"
+        fi
         return 1
     fi
 
@@ -2695,9 +2730,11 @@ prompt_diff_review() {
     fi
 
     # Non-interactive: auto-overwrite. Local edits are overwritten without the
-    # user's choice: a warning (8.3)
+    # user's choice: a warning (8.3). The cause comes first, the path last: the
+    # panel cuts a yellow line at 70 characters (8.5). deploy_managed_file
+    # backs LOCAL up before it writes (_managed_write)
     if ! tty_interactive; then
-        write_warn "$_PDR_TOOL" "Diff in $(display_path "$file_path") -- overwriting (non-interactive)"
+        write_warn "$_PDR_TOOL" "local edits overwritten (non-interactive run, backup kept): $(display_path "$file_path")"
         return 0
     fi
 
@@ -2834,7 +2871,7 @@ prompt_diff_review() {
 #   failed   nothing is left half-written (snapshots restored); one write_error,
 #            WHAT "Failed: <item>", REASON the write, read, AI merge, adopt
 #            filter or validation error
-#   skipped  one write_warn "Skipped: <item> (...)"
+#   skipped  one write_warn "skipped at review, local differs from source: <item>"
 #   a non-interactive overwrite of a differing LOCAL: one write_warn; under
 #            --force it is info (the user asked for it)
 # The caller records the outcome with the deploy tracker (OK status and DETAIL
@@ -2958,7 +2995,9 @@ deploy_managed_file() {
     local p_local="$dest" local_out="$src_content" p_repo="" repo_content=""
     case "$DIFF_REVIEW_RESULT" in
         skip)
-            write_warn "$tool_name" "Skipped: $item_name (local differs from source; reviewed again next run)"
+            # The cause first, the item last: the panel cuts at 70 (8.5). It is
+            # reviewed again on the next run
+            write_warn "$tool_name" "skipped at review, local differs from source: $item_name"
             MANAGED_FILE_RESULT="skipped"
             return 0 ;;
         failed)

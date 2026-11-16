@@ -2346,6 +2346,9 @@ MDM_PAYLOAD="$SCRIPT_DIR/deploy-harness.payload"
 MDM_STAGE="$WORK/src"
 MDM_UNPACK_FAILED=0
 MDM_UNPACKED=0
+# The unpacked paths of the damaged records, one per line: the plan (section 4)
+# logs their missing files at info, the consequence of the error recorded here
+MDM_DAMAGED=""
 BLOCK
     printf 'MDM_PAYLOAD_SHA256=%s\n' "$MDM_PAYLOAD_SHA"
     printf 'MDM_EMBEDDED_FILES=%s\n' "$MDM_FILES"
@@ -2419,6 +2422,7 @@ while IFS=$'\t' read -r mdm_st mdm_rel mdm_why; do
         MDM_UNPACKED=$((MDM_UNPACKED + 1))
     else
         MDM_UNPACK_FAILED=$((MDM_UNPACK_FAILED + 1))
+        MDM_DAMAGED="${MDM_DAMAGED}$MDM_STAGE/$mdm_rel"$'\n'
         write_error "$TOOL" "embedded $mdm_rel is damaged or cannot be written" "$mdm_why"
     fi
 done < "$WORK/unpack.tsv"
@@ -2540,6 +2544,9 @@ $mdmStage = Join-Path ([IO.Path]::GetTempPath()) ("aitools-harness-" + [guid]::N
 try {
 $mdmUnpackFailed = 0
 $mdmUnpacked = 0
+# The full paths of the damaged records: the plan (section 4) logs their missing
+# files at info, the consequence of the error recorded here
+$mdmDamaged = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
 $mdmPayload = Join-Path $scriptDir "deploy-harness.payload"
 BLOCK
     printf '$mdmPayloadSha256 = "%s"\n' "$MDM_PAYLOAD_SHA"
@@ -2579,6 +2586,8 @@ function Expand-MdmPayload {
         # One error per damaged record (its cause from the exception); the others unpack.
         Write-AitError $tool "embedded $Rel is damaged or cannot be written" (Get-AitErrorReason -ErrorRecord $_)
         $script:mdmUnpackFailed++
+        try { [void]$script:mdmDamaged.Add([IO.Path]::GetFullPath($dest)) }
+        catch { LogDetail "embedded ${Rel}: not kept in the damaged list ($($_.Exception.Message))" }
     }
 }
 

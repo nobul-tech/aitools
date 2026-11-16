@@ -275,7 +275,7 @@ check "rerun: no backups (nothing written)" "! ls '$R' | grep '\.bak\.' >/dev/nu
 printf 'local edit\n' >> "$R/plain.mdc"
 run_script
 check "edited: exit 0" "[ \"\$(rc)\" = 0 ]"
-check "edited: non-interactive overwrite" "grep -q 'plain.mdc -- overwriting (non-interactive)' '$C/out'"
+check "edited: non-interactive overwrite" "grep -q 'local edits overwritten (non-interactive run, backup kept): .*plain\.mdc' '$C/out'"
 check "edited: source content restored" "! grep -q 'local edit' '$R/plain.mdc'"
 check "edited: backup kept, not loadable by Cursor" "ls '$R' | grep '^plain\.mdc\.bak\.' >/dev/null && ! ls '$R' | grep '\.bak\.' | grep '\.mdc$' >/dev/null"
 check "edited: row reports 1 updated" "row | grep '|cursor rules|1 updated, 1 verified' >/dev/null"
@@ -500,7 +500,7 @@ check "nomanifest: exit 0" "[ \"\$(rc)\" = 0 ]"
 check "nomanifest: info log" "grep -q '\[info\] No rules manifest at .* -- every rule fanned out, none removed' '$C/out'"
 # The one warning is p.mdc overwritten non-interactively: its own WARN record,
 # recorded by the library; the status row stays OK (reference/logging.md 8.3)
-check "nomanifest: no manifest WARN, no ACTION; row OK 1 added, 1 updated; one WARN record for the overwrite" "! grep -q '\[warn\] No rules manifest' '$C/out' && ! grep -q '^ACTION' '$C/summary' && grep -qxF 'OK|cursor rules|1 added, 1 updated' '$C/summary' && grep -q 'p.mdc -- overwriting (non-interactive)' '$C/out' && [ \"\$(grep -c '^WARN|cursor rules|' '$C/summary')\" = 1 ] && grep -qxF 'WARN|cursor rules|Diff in $H/.cursor/rules/p.mdc -- overwriting (non-interactive)' '$C/summary'"
+check "nomanifest: no manifest WARN, no ACTION; row OK 1 added, 1 updated; one WARN record for the overwrite" "! grep -q '\[warn\] No rules manifest' '$C/out' && ! grep -q '^ACTION' '$C/summary' && grep -qxF 'OK|cursor rules|1 added, 1 updated' '$C/summary' && grep -q 'local edits overwritten (non-interactive run, backup kept): .*p\.mdc' '$C/out' && [ \"\$(grep -c '^WARN|cursor rules|' '$C/summary')\" = 1 ] && grep -qxF 'WARN|cursor rules|local edits overwritten (non-interactive run, backup kept): $H/.cursor/rules/p.mdc' '$C/summary'"
 check "nomanifest: both rules fanned out with the marker" "grep -qF '${MARK}s.md;' '$H/.cursor/rules/s.mdc' && grep -qF '${MARK}p.md;' '$H/.cursor/rules/p.mdc'"
 parity nomanifest
 
@@ -806,7 +806,7 @@ if $HAVE_PTY; then
     check "pty $lang: the review menu prompted" "grep -q '\[s\]kip' '$C/pty-$lang.out'"
     # A skipped review is one warning, recorded by the library; the status row
     # stays OK with the count (reference/logging.md 8.3 "Managed files")
-    check "pty $lang: [s]kip keeps the local edit, row OK 1 verified, 1 skipped, one WARN record" "grep -qx 'my edit' '$PR/s.mdc' && [ \"\$(grep -F '|cursor rules|' '$C/summary-$lang' | grep -v '^DETAIL' | tail -n 1)\" = 'OK|cursor rules|1 verified, 1 skipped' ] && [ \"\$(grep -c '^WARN|cursor rules|' '$C/summary-$lang')\" = 1 ] && grep -qxF 'WARN|cursor rules|Skipped: s.mdc (local differs from source; reviewed again next run)' '$C/summary-$lang'"
+    check "pty $lang: [s]kip keeps the local edit, row OK 1 verified, 1 skipped, one WARN record" "grep -qx 'my edit' '$PR/s.mdc' && [ \"\$(grep -F '|cursor rules|' '$C/summary-$lang' | grep -v '^DETAIL' | tail -n 1)\" = 'OK|cursor rules|1 verified, 1 skipped' ] && [ \"\$(grep -c '^WARN|cursor rules|' '$C/summary-$lang')\" = 1 ] && grep -qxF 'WARN|cursor rules|skipped at review, local differs from source: s.mdc' '$C/summary-$lang'"
     run_pty 'x\n'
     check "pty $lang: [x]abort exits 2, no cursor rules row, local file kept" "[ \"\$(cat '$C/rc-$lang')\" = 2 ] && ! grep -F '|cursor rules|' '$C/summary-$lang' | grep -v '^DETAIL' >/dev/null && grep -qx 'my edit' '$PR/s.mdc'"
 else

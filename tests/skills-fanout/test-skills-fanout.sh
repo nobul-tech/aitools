@@ -372,7 +372,7 @@ printf '## shared s1\nlocal edit\n' > "$(S)/s1/SKILL.md"
 rerun
 # Local edits overwritten in a non-interactive run: a warning (logging.md 8.3), its
 # own WARN record; the status stays OK (never recoloured)
-check "fanout edited, non-interactive: overwritten, backup kept, OK status, one WARN record" "[ \"\$(status)\" = 'OK|claude skills|1 updated, 5 verified' ] && row 'WARN|claude skills|Diff in $(S)/s1/SKILL.md -- overwriting (non-interactive)' && [ \"\$(nrows WARN)\" = 1 ] && grep -qx '## shared s1' '$(S)/s1/SKILL.md' && ls '$(S)/s1' | grep '^SKILL\.md\.bak\.' >/dev/null"
+check "fanout edited, non-interactive: overwritten, backup kept, OK status, one WARN record" "[ \"\$(status)\" = 'OK|claude skills|1 updated, 5 verified' ] && row 'WARN|claude skills|local edits overwritten (non-interactive run, backup kept): $(S)/s1/SKILL.md' && [ \"\$(nrows WARN)\" = 1 ] && grep -qx '## shared s1' '$(S)/s1/SKILL.md' && ls '$(S)/s1' | grep '^SKILL\.md\.bak\.' >/dev/null"
 parity fanout-edited
 printf '## shared s1\nlocal edit 2\n' > "$(S)/s1/SKILL.md"
 rerun --force

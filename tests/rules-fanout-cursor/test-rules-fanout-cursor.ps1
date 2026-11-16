@@ -347,7 +347,7 @@ try {
     Append "$Rules/plain.mdc" "local edit`n"
     Run-Script
     Check "edited: exit 0" { $rc -eq 0 }
-    Check "edited: non-interactive overwrite" { OutMatch 'plain.mdc -- overwriting \(non-interactive\)' }
+    Check "edited: non-interactive overwrite" { OutMatch 'local edits overwritten \(non-interactive run, backup kept\): .*plain\.mdc' }
     Check "edited: source content restored" { -not (FileMatch "$Rules/plain.mdc" 'local edit') }
     Check "edited: backup kept, not loadable by Cursor" { (LsAny $Rules '^plain\.mdc\.bak\.') -and -not [bool](@(ListNames -Dir $Rules) | Where-Object { $_ -cmatch '\.bak\.' -and $_ -cmatch '\.mdc$' }) }
     Check "edited: row reports 1 updated" { (Row) -cmatch '\|cursor rules\|1 updated, 1 verified' }
@@ -534,7 +534,7 @@ try {
     # The one warning is p.mdc overwritten non-interactively: its own WARN record,
     # recorded by the library; the status row stays OK (reference/logging.md 8.3).
     # The record names the file: compared with the temp root written <TMP>
-    Check "nomanifest: no manifest WARN, no ACTION; row OK 1 added, 1 updated; one WARN record for the overwrite" { -not (OutMatch '\[warn\] No rules manifest') -and -not (SumMatch '^ACTION') -and (SumHas 'OK|cursor rules|1 added, 1 updated') -and (OutMatch 'p.mdc -- overwriting \(non-interactive\)') -and (@(SumLines | Where-Object { $_.StartsWith("WARN|cursor rules|") }).Count -eq 1) -and (@(SumLines | ForEach-Object { ConvertTo-GoldenText $_ $GoldenTmp }) -ccontains 'WARN|cursor rules|Diff in <TMP>/nomanifest/home/.cursor/rules/p.mdc -- overwriting (non-interactive)') }
+    Check "nomanifest: no manifest WARN, no ACTION; row OK 1 added, 1 updated; one WARN record for the overwrite" { -not (OutMatch '\[warn\] No rules manifest') -and -not (SumMatch '^ACTION') -and (SumHas 'OK|cursor rules|1 added, 1 updated') -and (OutMatch 'local edits overwritten \(non-interactive run, backup kept\): .*p\.mdc') -and (@(SumLines | Where-Object { $_.StartsWith("WARN|cursor rules|") }).Count -eq 1) -and (@(SumLines | ForEach-Object { ConvertTo-GoldenText $_ $GoldenTmp }) -ccontains 'WARN|cursor rules|local edits overwritten (non-interactive run, backup kept): <TMP>/nomanifest/home/.cursor/rules/p.mdc') }
     Check "nomanifest: both rules fanned out with the marker" { (FileContains "$H/.cursor/rules/s.mdc" "${Mark}s.md;") -and (FileContains "$H/.cursor/rules/p.mdc" "${Mark}p.md;") }
     Parity nomanifest
 
@@ -766,7 +766,7 @@ try {
         Check "pty ${lang}: the review menu prompted" { (ReadText (Join-Path $C "pty-$lang.out")).Contains('[s]kip') }
         # A skipped review is one warning, recorded by the library; the status row
         # stays OK with the counts (reference/logging.md 8.3 "Managed files")
-        Check "pty ${lang}: [s]kip keeps the local edit, row OK 1 verified, 1 skipped, one WARN record" { (FileHasLine "$PtyRules/s.mdc" 'my edit') -and ((Row (Join-Path $C "summary-$lang")) -ceq 'OK|cursor rules|1 verified, 1 skipped') -and (@(SumLines (Join-Path $C "summary-$lang") | Where-Object { $_.StartsWith("WARN|cursor rules|") }).Count -eq 1) -and (@(SumLines (Join-Path $C "summary-$lang")) -ccontains 'WARN|cursor rules|Skipped: s.mdc (local differs from source; reviewed again next run)') }
+        Check "pty ${lang}: [s]kip keeps the local edit, row OK 1 verified, 1 skipped, one WARN record" { (FileHasLine "$PtyRules/s.mdc" 'my edit') -and ((Row (Join-Path $C "summary-$lang")) -ceq 'OK|cursor rules|1 verified, 1 skipped') -and (@(SumLines (Join-Path $C "summary-$lang") | Where-Object { $_.StartsWith("WARN|cursor rules|") }).Count -eq 1) -and (@(SumLines (Join-Path $C "summary-$lang")) -ccontains 'WARN|cursor rules|skipped at review, local differs from source: s.mdc') }
         Run-Pty 'x\n'
         Check "pty ${lang}: [x]abort exits 2, no cursor rules row, local file kept" { ($ptyRc -eq 2) -and ((Row (Join-Path $C "summary-$lang")) -eq "") -and (FileHasLine "$PtyRules/s.mdc" 'my edit') }
     } else {

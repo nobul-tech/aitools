@@ -298,7 +298,16 @@ add_source() {
         fi
         if [ -n "$unit" ] && ! $keep_unit; then continue; fi
         if [ ! -f "$src_dir/$rel" ]; then
-            write_warn "$TOOL" "$label: $rel is tracked but missing on disk -- skipped"
+            # MDM (build-deploy sets MDM_DAMAGED; empty on the dev path): a file
+            # whose embedded record is damaged was recorded as an error when it
+            # was unpacked; its missing file is that error's consequence, logged
+            # at info (one cause, one red line: reference/logging.md 8.3)
+            case $'\n'"${MDM_DAMAGED:-}" in
+                *$'\n'"$src_dir/$rel"$'\n'*)
+                    log "$label: $rel not deployed -- its embedded record is damaged (the error above)" ;;
+                *)
+                    write_warn "$TOOL" "$label: $rel is tracked but missing on disk -- skipped" ;;
+            esac
             continue
         fi
         printf '%s\t%s\t%s\t%s\n' "$kind" "$src_dir/$rel" "$dest_dir/$rel" "$kind/$rel" >> "$PLAN"
