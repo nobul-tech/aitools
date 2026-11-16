@@ -47,24 +47,40 @@ SHARED_DIR="$REPO_ROOT/shared"
 # bundled perl (already uses :unix:perlio). See reference/cross-platform-detail.md.
 export PERLIO=:perlio
 
-# --- Build logging (standalone -- does not source aitools-lib.sh) ---
-SCRIPT_NAME="build-deploy"
-blog()       { printf '[%s] [%s] [info] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$SCRIPT_NAME" "$1"; }
-blog_ok()    { printf '[%s] [%s] [ok] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$SCRIPT_NAME" "$1"; }
-# Colour only when stderr is a terminal: `aitools` / aitools.ps1 append this
-# output to deploy.log, which is plain text (script-standards-detail "Log file";
-# S3-MF-Audit A-20).
-_BLOG_YELLOW=""; _BLOG_RED=""; _BLOG_RESET=""
-if [ -t 2 ]; then _BLOG_YELLOW=$'\033[33m'; _BLOG_RED=$'\033[31m'; _BLOG_RESET=$'\033[0m'; fi
-blog_warn()  { printf '%s[%s] [%s] [warn] %s%s\n' "$_BLOG_YELLOW" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$SCRIPT_NAME" "$1" "$_BLOG_RESET" >&2; }
-blog_error() { printf '%s[%s] [%s] [error] %s%s\n' "$_BLOG_RED" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$SCRIPT_NAME" "$1" "$_BLOG_RESET" >&2; }
+# --- Logging: aitools-lib, also in Git Bash on Windows (reference/logging.md 8.1) ---
+# deploy.log lines, the counts and the run summary records come from the library
+# helpers; the tool name of every record is "build-deploy" (the script name).
+# Console lines go to stdout. Where stdout is data (extract_*, replace_once,
+# embed_file_*, inline_lib_*, mdm_write_payload and the { ... } | inline_lib_*
+# generator groups), the helper call ends in >&2 so its console line never lands
+# in a generated file. The library's stderr console option is not used: it also
+# turns recording off (logging.md 8.2, section 7), and this build records its
+# warnings and errors. Colour only when the console stream is a terminal: the
+# entry points capture this output (S3-MF-Audit A-20).
+# shellcheck source=aitools-lib.sh
+source "$SCRIPTS_DIR/aitools-lib.sh"
+logging_init "build-deploy"
+AITLIB_OPT_COLOR_AUTO=true
+
+# Build scratch: embed blocks, pre-processed bodies and captured error output
+# (removed on exit). Made first, so every step can capture a failing command's
+# stderr in it.
+_bt_rc=0
+BUILD_TMP=$(mktemp -d "${TMPDIR:-/tmp}/build-deploy.XXXXXX" 2>&1) || _bt_rc=$?
+if [ "$_bt_rc" -ne 0 ]; then
+    # mktemp prints its error, not a path, on failure
+    write_error "build-deploy" "cannot create the build temp dir" "$(error_reason "$BUILD_TMP" "$_bt_rc")"
+    exit 1
+fi
+_cleanup_build_tmp() { rm -rf "$BUILD_TMP"; }
+trap _cleanup_build_tmp EXIT
 
 # Shared content files
 CLAUDE_SHARED="$SHARED_DIR/claude-shared.md"
 
 # Verify shared files exist
 if [ ! -f "$CLAUDE_SHARED" ]; then
-    blog_error "Required shared file not found: $CLAUDE_SHARED"
+    log_error "Required shared file not found: $CLAUDE_SHARED"
     exit 1
 fi
 # Verify at least one skill file exists in shared/skills/
@@ -74,21 +90,21 @@ for _skill_dir in "$SHARED_DIR/skills"/*/; do
     if [ -f "$_skill_dir/SKILL.md" ]; then
         _skill_count=$((_skill_count + 1))
     else
-        blog_warn "Skill directory missing SKILL.md: $_skill_dir"
+        write_warn "build-deploy" "skill directory missing SKILL.md: $_skill_dir"
     fi
 done
 if [ "$_skill_count" -eq 0 ]; then
-    blog_error "No skill files found in $SHARED_DIR/skills/"
+    log_error "No skill files found in $SHARED_DIR/skills/"
     exit 1
 fi
-blog "Found $_skill_count skill(s) in shared/skills/"
+log "Found $_skill_count skill(s) in shared/skills/"
 # Hook + helper preflight: file list derived from hooks-manifest.json (single
 # source of truth -- no hardcoded hook filenames in this script; see issue #9).
 # Resolution mirrors the embed loops: shared/hooks/ first, then scripts/ (the
 # manifest 'deploy' helpers may live in either).
 HOOKS_MANIFEST="$SHARED_DIR/hooks/hooks-manifest.json"
 if [ ! -f "$HOOKS_MANIFEST" ]; then
-    blog_error "Required manifest not found: $HOOKS_MANIFEST"
+    log_error "Required manifest not found: $HOOKS_MANIFEST"
     exit 1
 fi
 # node is required to build: manifest parsing here, the dotprofile lookup below,
@@ -98,30 +114,33 @@ fi
 # step that installs node. The silent-failure case this preflight closes is node
 # PRESENT but the manifest unparseable -- that is handled (exit 1) just below.
 if ! command -v node >/dev/null 2>&1; then
-    blog_warn "node not found -- skipping deploy build (node is installed by 'aitools install')"
+    write_warn "build-deploy" "node not found -- deploy build skipped (node is installed by 'aitools install')"
     exit 0
 fi
-_manifest_files=$(node -e 'const fs=require("fs");const m=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));console.log([...m.hooks.map(h=>h.file),...(m.deploy||[])].join("\n"))' "$HOOKS_MANIFEST") || {
-    blog_error "Failed to parse $HOOKS_MANIFEST"
+# The hook and helper file list; the embed loops below reuse it (one parse).
+_mf_rc=0
+_manifest_files=$(node -e 'const fs=require("fs");const m=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));console.log([...m.hooks.map(h=>h.file),...(m.deploy||[])].join("\n"))' "$HOOKS_MANIFEST" 2> "$BUILD_TMP/manifest.err") || _mf_rc=$?
+if [ "$_mf_rc" -ne 0 ]; then
+    write_error "build-deploy" "cannot parse $HOOKS_MANIFEST" "$(error_reason "$(cat "$BUILD_TMP/manifest.err")" "$_mf_rc")"
     exit 1
-}
+fi
 _hook_count=0
 while IFS= read -r _hook_file; do
     [ -n "$_hook_file" ] || continue
     if [ ! -f "$SHARED_DIR/hooks/$_hook_file" ] && [ ! -f "$SCRIPTS_DIR/$_hook_file" ]; then
-        blog_error "Manifest-listed hook file not found: $_hook_file (searched shared/hooks/ and scripts/)"
+        log_error "Manifest-listed hook file not found: $_hook_file (searched shared/hooks/ and scripts/)"
         exit 1
     fi
     _hook_count=$((_hook_count + 1))
 done <<< "$_manifest_files"
-blog "Preflight OK: $_hook_count hook/helper file(s) from hooks-manifest.json"
+log "Preflight OK: $_hook_count hook/helper file(s) from hooks-manifest.json"
 
 # Cursor AGENTS mirror (repo runtime — requires .aitools/channel/relay.md; not in deploy/)
 if [ ! -f "$SCRIPTS_DIR/sync-relay-to-cursor-agents.py" ]; then
-    blog_error "Required script not found: $SCRIPTS_DIR/sync-relay-to-cursor-agents.py"
+    log_error "Required script not found: $SCRIPTS_DIR/sync-relay-to-cursor-agents.py"
     exit 1
 fi
-blog "Found sync-relay-to-cursor-agents.py (relay→AGENTS runs from aitools deploy, not from deploy/)"
+log "Found sync-relay-to-cursor-agents.py (relay→AGENTS runs from aitools deploy, not from deploy/)"
 
 # (Hook contents are NOT read into variables here -- the embed loops read each
 # file directly from the hooks-manifest.json list. Keeping per-hook variables
@@ -135,7 +154,11 @@ blog "Found sync-relay-to-cursor-agents.py (relay→AGENTS runs from aitools dep
 # "Hooks cannot source `aitools-lib.sh`" was replaced by the whole lib). A script
 # with no lib-loading line fails the build.
 # Uses perl for performance (single process vs ~2 subprocesses per line with while-read)
+# A failure is one error (perl's stderr is its reason) and returns 1: the pipeline it
+# ends fails, and set -e ends the build. Its stdout is the generated file, so the
+# error's console line goes to stderr.
 inline_lib_bash() {
+    local rc=0
     perl -e '
         open my $lib, "<", $ARGV[0] or die "Cannot open lib: $!";
         my $content = do { local $/; <$lib> };
@@ -156,13 +179,19 @@ inline_lib_bash() {
             }
         }
         die "build-deploy: no line loads aitools-lib.sh -- nothing inlined\n" unless $done;
-    ' "$SCRIPTS_DIR/aitools-lib.sh" "${1:-}"
+    ' "$SCRIPTS_DIR/aitools-lib.sh" "${1:-}" 2> "$BUILD_TMP/inline.err" || rc=$?
+    if [ "$rc" -ne 0 ]; then
+        write_error "build-deploy" "cannot inline aitools-lib.sh" "$(error_reason "$(cat "$BUILD_TMP/inline.err")" "$rc")" >&2
+        return 1
+    fi
 }
 
 # inline_lib_ps1 [BLOCK_FILE]: same for PowerShell -- the FIRST line that dot-sources
 # aitools-lib.ps1 (starts with ". ").
 # Uses perl for performance (single process vs ~2 subprocesses per line with while-read)
+# Failure: as inline_lib_bash.
 inline_lib_ps1() {
+    local rc=0
     perl -e '
         open my $lib, "<", $ARGV[0] or die "Cannot open lib: $!";
         my $content = do { local $/; <$lib> };
@@ -183,7 +212,11 @@ inline_lib_ps1() {
             }
         }
         die "build-deploy: no line dot-sources aitools-lib.ps1 -- nothing inlined\n" unless $done;
-    ' "$SCRIPTS_DIR/aitools-lib.ps1" "${1:-}"
+    ' "$SCRIPTS_DIR/aitools-lib.ps1" "${1:-}" 2> "$BUILD_TMP/inline.err" || rc=$?
+    if [ "$rc" -ne 0 ]; then
+        write_error "build-deploy" "cannot inline aitools-lib.ps1" "$(error_reason "$(cat "$BUILD_TMP/inline.err")" "$rc")" >&2
+        return 1
+    fi
 }
 
 # --- Dotprofile: the build target and the source of the embedded user content ---
@@ -192,9 +225,9 @@ inline_lib_ps1() {
 # untouched. The dotprofile comes from the entry point: `aitools` / `aitools.ps1`
 # export AITOOLS_USER_REPO_PATH, and check-pre-push step 7 passes its temp copy that
 # way. A standalone run asks the resolver every setup script uses
-# (resolve_user_repo_path in aitools-lib.sh; SD-7) in a child bash, so this script
-# keeps its own build logging: the child's console lines go to stderr and only the
-# path comes back, on fd 3. config.json is not read here.
+# (resolve_user_repo_path in aitools-lib.sh; SD-7) in a child bash, so the
+# resolver's own records stay out of this build's: the child's console lines go to
+# stderr and only the path comes back, on fd 3. config.json is not read here.
 # No dotprofile (rc 1) or a resolver error (rc 3) skips the build with exit 0: a
 # failing prebuild would stop `aitools` before setup-user-config, the one step that
 # can repair config.json (review H3). The bootstrap flow runs build-deploy only after
@@ -224,21 +257,25 @@ exit "$rc"' build-deploy "$SCRIPTS_DIR" 3>&1 1>"$_urp_console") || _urp_rc=$?
     case "$_urp_rc" in
         0) : ;;
         1) _urp="" ;;
-        *) blog_warn "Dotprofile resolver failed (exit $_urp_rc; details in ~/.aitools/logs/deploy.log) -- skipping deploy build; run 'aitools' (setup-user-config repairs config.json)"
+        # No ACTION: the resolver wrappers of the setup scripts write the run's one
+        # ACTION for an unresolved dotprofile
+        *) write_warn "build-deploy" "Dotprofile resolver failed (exit $_urp_rc) -- deploy build skipped; run: aitools (setup-user-config repairs config.json)"
            exit 0 ;;
     esac
 fi
 if [ -z "$_urp" ]; then
-    blog_warn "No dotprofile found. Run 'aitools user init' first -- skipping deploy build."
+    # Info, not a warning: a machine with no dotprofile (shared-only) is a supported
+    # state (the resolver's "not an error", rc 1); lead decision, G2 A6
+    log "No dotprofile found -- deploy build skipped; to build deploy/, run: aitools user init"
     exit 0
 fi
 if [ ! -d "$_urp" ]; then
-    blog_warn "Dotprofile $_urp (from $_urp_via) is not a directory -- skipping deploy build."
+    write_warn "build-deploy" "dotprofile $_urp (from $_urp_via) is not a directory -- deploy build skipped"
     exit 0
 fi
 DEPLOY_DIR="$_urp/deploy"
-blog "Dotprofile: $_urp (via $_urp_via)"
-blog "Build target: $DEPLOY_DIR (dotprofile repo)"
+log "Dotprofile: $_urp (via $_urp_via)"
+log "Build target: $DEPLOY_DIR (dotprofile repo)"
 
 # Rules are not embedded in setup-user-claude: they reach an endpoint through
 # deploy/deploy-harness.* (its snapshot holds aitools shared/rules only; the
@@ -259,10 +296,10 @@ if [ -f "$_urp/claude/CLAUDE.md" ]; then
     TEMPLATE_LABEL="dotprofile claude/CLAUDE.md"
 fi
 if [ ! -s "$TEMPLATE_FILE" ]; then
-    blog_error "CLAUDE.md template is empty or unreadable: $TEMPLATE_FILE"
+    log_error "CLAUDE.md template is empty or unreadable: $TEMPLATE_FILE"
     exit 1
 fi
-blog "Template fallback: $TEMPLATE_LABEL (tokens resolved at runtime)"
+log "Template fallback: $TEMPLATE_LABEL (tokens resolved at runtime)"
 
 # JSON reads use the resolver's JSON engine (core perl, every platform), not node.
 JSON_PL="$SCRIPTS_DIR/aitools-json.pl"
@@ -277,34 +314,43 @@ if [ -f "$PROFILE_JSON" ]; then
     _pj_rc=0
     _pj_msg=$(perl "$JSON_PL" check "$PROFILE_JSON" 2>&1) || _pj_rc=$?
     if [ "$_pj_rc" -ne 0 ]; then
-        blog_error "profile.json unreadable: $PROFILE_JSON (${_pj_msg:-engine exit $_pj_rc}) -- fix it before building deploy/"
+        write_error "build-deploy" "profile.json unreadable: $PROFILE_JSON" "$(error_reason "$_pj_msg" "$_pj_rc")"
         exit 1
     fi
+    # stdout is the data: each engine call's stderr goes to pj.err, the reason of
+    # its error
+    _pj_err="$BUILD_TMP/pj.err"
     _pj_rc=0
-    PROFILE_SNAPSHOT=$(perl "$JSON_PL" snapshot "$PROFILE_JSON") || _pj_rc=$?
-    if [ "$_pj_rc" -ne 0 ] || [ -z "$PROFILE_SNAPSHOT" ]; then
-        blog_error "Could not snapshot $PROFILE_JSON (engine exit $_pj_rc)"
+    PROFILE_SNAPSHOT=$(perl "$JSON_PL" snapshot "$PROFILE_JSON" 2> "$_pj_err") || _pj_rc=$?
+    if [ "$_pj_rc" -ne 0 ]; then
+        write_error "build-deploy" "cannot snapshot $PROFILE_JSON" "$(error_reason "$(cat "$_pj_err")" "$_pj_rc")"
+        exit 1
+    fi
+    if [ -z "$PROFILE_SNAPSHOT" ]; then
+        write_error "build-deploy" "cannot snapshot $PROFILE_JSON" "the JSON engine printed no snapshot"
         exit 1
     fi
     # type: exit 1 = absent or null (keep the default); other non-zero = engine error
     _pj_rc=0
-    _pj_type=$(perl "$JSON_PL" type "$PROFILE_JSON" cursor cli vimMode) || _pj_rc=$?
+    _pj_type=$(perl "$JSON_PL" type "$PROFILE_JSON" cursor cli vimMode 2> "$_pj_err") || _pj_rc=$?
     if [ "$_pj_rc" -eq 0 ] && [ "$_pj_type" = "boolean" ]; then
-        CURSOR_CLI_VIMMODE=$(perl "$JSON_PL" get "$PROFILE_JSON" cursor cli vimMode) || {
-            blog_error "Could not read cursor.cli.vimMode from $PROFILE_JSON"
+        CURSOR_CLI_VIMMODE=$(perl "$JSON_PL" get "$PROFILE_JSON" cursor cli vimMode 2> "$_pj_err") || _pj_rc=$?
+        if [ "$_pj_rc" -ne 0 ]; then
+            write_error "build-deploy" "cannot read cursor.cli.vimMode from $PROFILE_JSON" "$(error_reason "$(cat "$_pj_err")" "$_pj_rc")"
             exit 1
-        }
+        fi
     elif [ "$_pj_rc" -gt 1 ]; then
-        blog_error "Could not read cursor.cli.vimMode from $PROFILE_JSON (engine exit $_pj_rc)"
+        write_error "build-deploy" "cannot read cursor.cli.vimMode from $PROFILE_JSON" "$(error_reason "$(cat "$_pj_err")" "$_pj_rc")"
         exit 1
     fi
     _pj_rc=0
-    _pj_type=$(perl "$JSON_PL" type "$PROFILE_JSON" cursor cli model) || _pj_rc=$?
+    _pj_type=$(perl "$JSON_PL" type "$PROFILE_JSON" cursor cli model 2> "$_pj_err") || _pj_rc=$?
     if [ "$_pj_rc" -eq 0 ] && [ "$_pj_type" = "string" ]; then
-        _pj_model=$(perl "$JSON_PL" get "$PROFILE_JSON" cursor cli model) || {
-            blog_error "Could not read cursor.cli.model from $PROFILE_JSON"
+        _pj_model=$(perl "$JSON_PL" get "$PROFILE_JSON" cursor cli model 2> "$_pj_err") || _pj_rc=$?
+        if [ "$_pj_rc" -ne 0 ]; then
+            write_error "build-deploy" "cannot read cursor.cli.model from $PROFILE_JSON" "$(error_reason "$(cat "$_pj_err")" "$_pj_rc")"
             exit 1
-        }
+        fi
         # The value becomes code (a JS and a PowerShell string literal): only a
         # plain model id is embedded.
         # perl -0777: the whole value is read before the test (pipe-safe; an
@@ -312,25 +358,17 @@ if [ -f "$PROFILE_JSON" ]; then
         if printf '%s' "$_pj_model" | perl -0777 -ne 'exit(/\A[A-Za-z0-9._-]+\z/ ? 0 : 1)'; then
             CURSOR_CLI_MODEL="$_pj_model"
         else
-            blog_warn "cursor.cli.model in $PROFILE_JSON is not a plain model id (letters, digits, . _ -) -- the deploy fallback stays 'auto'"
+            write_warn "build-deploy" "cursor.cli.model in $PROFILE_JSON is not a plain model id (letters, digits, . _ -) -- the deploy fallback stays 'auto'"
         fi
     elif [ "$_pj_rc" -gt 1 ]; then
-        blog_error "Could not read cursor.cli.model from $PROFILE_JSON (engine exit $_pj_rc)"
+        write_error "build-deploy" "cannot read cursor.cli.model from $PROFILE_JSON" "$(error_reason "$(cat "$_pj_err")" "$_pj_rc")"
         exit 1
     fi
-    blog "Profile snapshot: $PROFILE_JSON (fallback for machines without the dotprofile)"
+    log "Profile snapshot: $PROFILE_JSON (fallback for machines without the dotprofile)"
 else
-    blog_warn "No profile.json in $_urp -- the deploy scripts embed no profile snapshot"
+    write_warn "build-deploy" "No profile.json in $_urp -- the deploy scripts embed no profile snapshot"
 fi
-blog "Cursor CLI fallback prefs: vimMode=$CURSOR_CLI_VIMMODE model=$CURSOR_CLI_MODEL"
-
-# Build scratch: embed blocks and pre-processed bodies (removed on exit)
-if ! BUILD_TMP=$(mktemp -d "${TMPDIR:-/tmp}/build-deploy.XXXXXX"); then
-    blog_error "mktemp -d failed -- cannot build deploy/"
-    exit 1
-fi
-_cleanup_build_tmp() { rm -rf "$BUILD_TMP"; }
-trap _cleanup_build_tmp EXIT
+log "Cursor CLI fallback prefs: vimMode=$CURSOR_CLI_VIMMODE model=$CURSOR_CLI_MODEL"
 
 GENERATED=0
 
@@ -363,7 +401,8 @@ extract_between() {
             }' "$file")
     fi
     if [ -z "$result" ]; then
-        blog_error "Extraction failed: sentinels not found in $(basename "$file") (start: $start, end: $end)"
+        # >&2: stdout is the extracted text (a generated file)
+        log_error "Extraction failed: sentinels not found in $(basename "$file") (start: $start, end: $end)" >&2
         exit 1
     fi
     printf '%s\n' "$result"
@@ -375,11 +414,14 @@ extract_between() {
 #   Each regex must match exactly one line, START before END, or the build fails.
 #   Unlike extract_between, a missing end marker never runs on to EOF silently.
 #   Used where the source has section headings but no BEGIN/END markers.
+#   Its stdout is the extracted text: every console line of an error goes to stderr.
 extract_span() {
     local file="$1" start="$2" end="$3" crlf="${4:-}"
-    local errf
-    if ! errf=$(mktemp); then
-        blog_error "Extraction from $(basename "$file"): cannot create a temp file"
+    local errf rc=0
+    errf=$(mktemp 2>&1) || rc=$?
+    if [ "$rc" -ne 0 ]; then
+        # mktemp prints its error, not a path, on failure
+        write_error "build-deploy" "extraction from $(basename "$file"): cannot create a temp file" "$(error_reason "$errf" "$rc")" >&2
         exit 1
     fi
     if ! perl -e '
@@ -403,7 +445,7 @@ extract_span() {
             print $x;
         }
     ' -- "$file" "$start" "$end" "$crlf" 2> "$errf"; then
-        blog_error "Extraction failed in $(basename "$file"): $(cat "$errf")"
+        write_error "build-deploy" "extraction failed in $(basename "$file")" "$(error_reason "$(cat "$errf")" 1)" >&2
         rm -f "$errf"
         exit 1
     fi
@@ -427,19 +469,25 @@ extract_marked() { extract_markers "$1" "BEGIN $2" "END $2"; }
 
 # replace_once OLD NEW -- stdin -> stdout with the literal text OLD replaced by
 #   NEW. OLD must occur exactly once, or the build fails (a reworded source line
-#   must not slip through unchanged).
+#   must not slip through unchanged). Its stdout is the text: the error's console
+#   line goes to stderr. perl's stderr (its reason) goes to a file of its own per
+#   call: replace_once calls can run side by side in one pipeline.
 replace_once() {
-    if ! perl -e '
+    local err rc=0
+    err=$(mktemp "$BUILD_TMP/replace.XXXXXX") || err="$BUILD_TMP/replace.err"
+    perl -e '
         my ($old, $new) = @ARGV;
         my $text = do { local $/; <STDIN> };
         my $n = () = $text =~ /\Q$old\E/g;
         die "expected 1 occurrence of [$old], found $n\n" unless $n == 1;
         $text =~ s/\Q$old\E/$new/;
         print $text;
-    ' -- "$1" "$2"; then
-        blog_error "replace_once failed (source line reworded?): $1"
+    ' -- "$1" "$2" 2> "$err" || rc=$?
+    if [ "$rc" -ne 0 ]; then
+        write_error "build-deploy" "replace_once failed (source line reworded?): $1" "$(error_reason "$(cat "$err")" "$rc")" >&2
         exit 1
     fi
+    rm -f "$err"
 }
 
 # ============================================================
@@ -472,7 +520,7 @@ _deps=$(perl -ne 'print "$1\n" while /\$SCRIPT_DIR\/([A-Za-z0-9._-]+)/g' "$SCRIP
 for _dep in $_deps; do
     case " $RESOLVER_SH_FILES " in
         *" $_dep "*) : ;;
-        *) blog_error "aitools-profile.sh loads $_dep, which build-deploy does not embed -- add it to RESOLVER_SH_FILES"
+        *) log_error "aitools-profile.sh loads $_dep, which build-deploy does not embed -- add it to RESOLVER_SH_FILES"
            exit 1 ;;
     esac
 done
@@ -480,7 +528,7 @@ _deps=$(perl -ne 'print "$1\n" while /Join-Path \$PSScriptRoot "([A-Za-z0-9._-]+
 for _dep in $_deps; do
     case " $RESOLVER_PS1_FILES " in
         *" $_dep "*) : ;;
-        *) blog_error "aitools-profile.ps1 loads $_dep, which build-deploy does not embed -- add it to RESOLVER_PS1_FILES"
+        *) log_error "aitools-profile.ps1 loads $_dep, which build-deploy does not embed -- add it to RESOLVER_PS1_FILES"
            exit 1 ;;
     esac
 done
@@ -490,7 +538,8 @@ done
 embed_file_bash() {
     local rel="$1" src="$2"
     if perl -0777 -pe 's/\r\n/\n/g' "$src" | grep -xF "$EMBED_EOF" >/dev/null; then
-        blog_error "Cannot embed $src: it contains the heredoc delimiter line $EMBED_EOF"
+        # >&2: stdout is the generated resolver block
+        log_error "Cannot embed $src: it contains the heredoc delimiter line $EMBED_EOF" >&2
         exit 1
     fi
     printf '    if [ -z "$_AITOOLS_EMBED_ERR" ] && ! cat > "$_AITOOLS_EMBED_DIR"/%s <<'"'"'%s'"'"'\n' "$(printf '%q' "$rel")" "$EMBED_EOF"
@@ -635,7 +684,7 @@ write_resolver_block_bash "$BUILD_TMP/resolver.sh.blk"
 write_resolver_block_bash "$BUILD_TMP/resolver-claude.sh.blk" claude
 write_resolver_block_ps1 "$BUILD_TMP/resolver.ps1.blk"
 write_resolver_block_ps1 "$BUILD_TMP/resolver-claude.ps1.blk" claude
-blog "Embedded resolver: $RESOLVER_SH_FILES / $RESOLVER_PS1_FILES (from scripts/)"
+log "Embedded resolver:$RESOLVER_SH_FILES / $RESOLVER_PS1_FILES (from scripts/)"
 
 # PowerShell cleanup line emitted before each exit footer that embeds the resolver
 EMBED_CLEANUP_PS1='Remove-AitoolsEmbed   # embedded resolver temp dir + environment (build-deploy, M3 B5)'
@@ -661,39 +710,44 @@ if [ -e "$DEPLOY_DIR" ]; then
         _bk_n=$((_bk_n + 1))
         DEPLOY_BACKUP="$_urp/deploy.bak.$_bk_ts-$_bk_n"
     done
-    blog "Backing up $DEPLOY_DIR to $DEPLOY_BACKUP"
-    if ! cp -Rp "$DEPLOY_DIR" "$DEPLOY_BACKUP"; then
-        blog_error "Could not back up $DEPLOY_DIR to $DEPLOY_BACKUP -- nothing built, deploy/ left as it was"
-        if [ -e "$DEPLOY_BACKUP" ] && ! rm -rf "$DEPLOY_BACKUP"; then
-            blog_warn "Could not remove the partial backup $DEPLOY_BACKUP"
+    log "Backing up $DEPLOY_DIR to $DEPLOY_BACKUP"
+    _bk_cp_rc=0
+    _bk_out=$(cp -Rp "$DEPLOY_DIR" "$DEPLOY_BACKUP" 2>&1) || _bk_cp_rc=$?
+    if [ "$_bk_cp_rc" -ne 0 ]; then
+        write_error "build-deploy" "cannot back up $DEPLOY_DIR to $DEPLOY_BACKUP (nothing built, deploy/ left as it was)" "$(error_reason "$_bk_out" "$_bk_cp_rc")"
+        if [ -e "$DEPLOY_BACKUP" ]; then
+            _bk_rm_rc=0
+            _bk_rm_out=$(rm -rf "$DEPLOY_BACKUP" 2>&1) || _bk_rm_rc=$?
+            if [ "$_bk_rm_rc" -ne 0 ]; then
+                write_warn "build-deploy" "could not remove the partial backup $DEPLOY_BACKUP: $(error_reason "$_bk_rm_out" "$_bk_rm_rc")"
+            fi
         fi
         exit 1
     fi
     # diff -rq: 0 identical, 1 differences, 2 trouble. Anything but 0 = no usable backup.
+    # error_reason logs every diff line at detail.
     _bk_rc=0
     _bk_diff=$(diff -rq "$DEPLOY_DIR" "$DEPLOY_BACKUP" 2>&1) || _bk_rc=$?
     if [ "$_bk_rc" -ne 0 ]; then
-        blog_error "Backup $DEPLOY_BACKUP does not match $DEPLOY_DIR (diff exit $_bk_rc) -- nothing built, deploy/ left as it was"
-        while IFS= read -r _bk_line; do
-            if [ -n "$_bk_line" ]; then blog_error "  $_bk_line"; fi
-        done <<< "$_bk_diff"
+        write_error "build-deploy" "backup $DEPLOY_BACKUP does not match $DEPLOY_DIR (nothing built, deploy/ left as it was)" "$(error_reason "$_bk_diff" "$_bk_rc")"
         exit 1
     fi
-    blog_ok "Backed up deploy/ to $DEPLOY_BACKUP (verified identical)"
+    log_ok "Backed up deploy/ to $DEPLOY_BACKUP (verified identical)"
     if command -v git >/dev/null 2>&1 && [ -e "$_urp/.git" ]; then
         # check-ignore: 0 ignored, 1 not ignored, 128 error
         _bk_ign=0
-        git -C "$_urp" check-ignore -q "${DEPLOY_BACKUP##*/}/" || _bk_ign=$?
+        _bk_ign_out=$(git -C "$_urp" check-ignore -q "${DEPLOY_BACKUP##*/}/" 2>&1) || _bk_ign=$?
         case "$_bk_ign" in
             0) : ;;
-            1) blog_warn "The dotprofile does not ignore ${DEPLOY_BACKUP##*/}/ -- add 'deploy.bak.*/' (or '*.bak.*') to $_urp/.gitignore so backups are never committed" ;;
-            *) blog_warn "git check-ignore failed in $_urp (exit $_bk_ign) -- could not confirm the backups are ignored" ;;
+            1) write_action "build-deploy" "The dotprofile does not ignore ${DEPLOY_BACKUP##*/}/ -- add 'deploy.bak.*/' (or '*.bak.*') to $_urp/.gitignore so backups are never committed" \
+                   "Add 'deploy.bak.*/' to $_urp/.gitignore -- keeps deploy/ backups out of git" ;;
+            *) write_warn "build-deploy" "git check-ignore failed in $_urp -- could not confirm the backups are ignored: $(error_reason "$_bk_ign_out" "$_bk_ign")" ;;
         esac
     fi
     # Prune: keep the newest $DEPLOY_BACKUP_KEEP. Names sort by their UTC timestamp.
     _bk_all=""
-    if ! _bk_all=$(find "$_urp" -maxdepth 1 -type d -name 'deploy.bak.*' | LC_ALL=C sort); then
-        blog_warn "Could not list the deploy/ backups in $_urp -- old backups not pruned"
+    if ! _bk_all=$(find "$_urp" -maxdepth 1 -type d -name 'deploy.bak.*' 2> "$BUILD_TMP/find.err" | LC_ALL=C sort); then
+        write_warn "build-deploy" "could not list the deploy/ backups in $_urp -- old backups not pruned: $(error_reason "$(cat "$BUILD_TMP/find.err")" 1)"
         _bk_all=""
     fi
     _bk_total=0
@@ -706,16 +760,18 @@ if [ -e "$DEPLOY_DIR" ]; then
             [ -n "$_bk_old" ] || continue
             if [ "$_bk_drop" -le 0 ]; then break; fi
             _bk_drop=$((_bk_drop - 1))
-            if rm -rf "$_bk_old"; then
-                blog "Pruned old deploy/ backup: $_bk_old"
+            _bk_rm_rc=0
+            _bk_rm_out=$(rm -rf "$_bk_old" 2>&1) || _bk_rm_rc=$?
+            if [ "$_bk_rm_rc" -eq 0 ]; then
+                log "Pruned old deploy/ backup: $_bk_old"
             else
-                blog_warn "Could not prune old deploy/ backup: $_bk_old"
+                write_warn "build-deploy" "could not prune old deploy/ backup $_bk_old: $(error_reason "$_bk_rm_out" "$_bk_rm_rc")"
             fi
         done <<< "$_bk_all"
     fi
-    blog "deploy/ backups: $_bk_total found, keeping at most $DEPLOY_BACKUP_KEEP"
+    log "deploy/ backups: $_bk_total found, keeping at most $DEPLOY_BACKUP_KEEP"
 else
-    blog "No deploy/ in the dotprofile yet -- nothing to back up (first build)"
+    log "No deploy/ in the dotprofile yet -- nothing to back up (first build)"
 fi
 
 # Build into a staging dir; it replaces <dotprofile>/deploy only at the very end, so
@@ -728,7 +784,7 @@ mkdir -p "$DEPLOY_DIR"
 # ============================================================
 # 1. deploy/setup-user-claude.sh
 # ============================================================
-blog "Generating deploy/setup-user-claude.sh"
+log "Generating deploy/setup-user-claude.sh"
 
 # Pure extract from scripts/setup-user-claude.sh (template interpolation, footer,
 # managed-file deploy, rules and skills fan-outs: no duplicated logic, I6), plus one
@@ -819,7 +875,7 @@ GENERATED=$((GENERATED + 1))
 # ============================================================
 # 2. deploy/setup-user-claude.ps1
 # ============================================================
-blog "Generating deploy/setup-user-claude.ps1"
+log "Generating deploy/setup-user-claude.ps1"
 
 # Pure extract from scripts/setup-user-claude.ps1, plus the same generated part as
 # the .sh (parity).
@@ -912,7 +968,7 @@ GENERATED=$((GENERATED + 1))
 # ============================================================
 # 3. deploy/setup-user-cursor.sh
 # ============================================================
-blog "Generating deploy/setup-user-cursor.sh"
+log "Generating deploy/setup-user-cursor.sh"
 
 # The cursor body is extracted whole (the profile preferences block included, so a
 # machine with the dotprofile reads its live profile.json cursor.cli, as scripts/
@@ -945,7 +1001,7 @@ subst_cursor_defaults "$BUILD_TMP/cursor-body.sh" '^// --- BEGIN profile prefere
     "let modelId = 'auto';" "let modelId = '$CURSOR_CLI_MODEL';   // build-time fallback (profile.json cursor.cli)" \
     > "$BUILD_TMP/cursor-body-fallback.sh" || _cursor_rc=$?
 if [ "$_cursor_rc" -ne 0 ]; then
-    blog_error "setup-user-cursor.sh: the profile preferences defaults (let vimMode = false; / let modelId = 'auto';) were not found exactly once -- update build-deploy.sh"
+    log_error "setup-user-cursor.sh: the profile preferences defaults (let vimMode = false; / let modelId = 'auto';) were not found exactly once -- update build-deploy.sh"
     exit 1
 fi
 
@@ -976,7 +1032,7 @@ GENERATED=$((GENERATED + 1))
 # ============================================================
 # 4. deploy/setup-user-cursor.ps1
 # ============================================================
-blog "Generating deploy/setup-user-cursor.ps1"
+log "Generating deploy/setup-user-cursor.ps1"
 
 _cursor_rc=0
 extract_between "$SCRIPTS_DIR/setup-user-cursor.ps1" \
@@ -986,7 +1042,7 @@ subst_cursor_defaults "$BUILD_TMP/cursor-body.ps1" '^# --- BEGIN profile prefere
     '$modelId = "auto"' "\$modelId = \"$CURSOR_CLI_MODEL\"   # build-time fallback (profile.json cursor.cli)" \
     > "$BUILD_TMP/cursor-body-fallback.ps1" || _cursor_rc=$?
 if [ "$_cursor_rc" -ne 0 ]; then
-    blog_error "setup-user-cursor.ps1: the profile preferences defaults (\$vimMode = \$false / \$modelId = \"auto\") were not found exactly once -- update build-deploy.sh"
+    log_error "setup-user-cursor.ps1: the profile preferences defaults (\$vimMode = \$false / \$modelId = \"auto\") were not found exactly once -- update build-deploy.sh"
     exit 1
 fi
 
@@ -1017,7 +1073,7 @@ GENERATED=$((GENERATED + 1))
 # ============================================================
 # 5-6. deploy/setup-cursor-ide-mcp.sh and .ps1 (copy as-is)
 # ============================================================
-blog "Copying deploy/setup-cursor-ide-mcp.sh"
+log "Copying deploy/setup-cursor-ide-mcp.sh"
 {
     echo '#!/usr/bin/env bash'
     echo "$HEADER_COMMENT_BASH"
@@ -1027,7 +1083,7 @@ blog "Copying deploy/setup-cursor-ide-mcp.sh"
 chmod +x "$DEPLOY_DIR/setup-cursor-ide-mcp.sh"
 GENERATED=$((GENERATED + 1))
 
-blog "Copying deploy/setup-cursor-ide-mcp.ps1"
+log "Copying deploy/setup-cursor-ide-mcp.ps1"
 {
     echo "$HEADER_COMMENT_PS1"
     cat "$SCRIPTS_DIR/setup-cursor-ide-mcp.ps1" | inline_lib_ps1
@@ -1037,7 +1093,7 @@ GENERATED=$((GENERATED + 1))
 # ============================================================
 # 7-8. deploy/setup-vercelcli.sh and .ps1 (copy as-is)
 # ============================================================
-blog "Copying deploy/setup-vercelcli.sh"
+log "Copying deploy/setup-vercelcli.sh"
 {
     echo '#!/usr/bin/env bash'
     echo "$HEADER_COMMENT_BASH"
@@ -1046,7 +1102,7 @@ blog "Copying deploy/setup-vercelcli.sh"
 chmod +x "$DEPLOY_DIR/setup-vercelcli.sh"
 GENERATED=$((GENERATED + 1))
 
-blog "Copying deploy/setup-vercelcli.ps1"
+log "Copying deploy/setup-vercelcli.ps1"
 {
     echo "$HEADER_COMMENT_PS1"
     cat "$SCRIPTS_DIR/setup-vercelcli.ps1" | inline_lib_ps1
@@ -1056,7 +1112,7 @@ GENERATED=$((GENERATED + 1))
 # ============================================================
 # 9-10. deploy/setup-pandoc.sh and .ps1 (copy as-is)
 # ============================================================
-blog "Copying deploy/setup-pandoc.sh"
+log "Copying deploy/setup-pandoc.sh"
 {
     echo '#!/usr/bin/env bash'
     echo "$HEADER_COMMENT_BASH"
@@ -1065,7 +1121,7 @@ blog "Copying deploy/setup-pandoc.sh"
 chmod +x "$DEPLOY_DIR/setup-pandoc.sh"
 GENERATED=$((GENERATED + 1))
 
-blog "Copying deploy/setup-pandoc.ps1"
+log "Copying deploy/setup-pandoc.ps1"
 {
     echo "$HEADER_COMMENT_PS1"
     cat "$SCRIPTS_DIR/setup-pandoc.ps1" | inline_lib_ps1
@@ -1075,7 +1131,7 @@ GENERATED=$((GENERATED + 1))
 # ============================================================
 # 11-12. deploy/setup-rust.sh and .ps1 (copy as-is)
 # ============================================================
-blog "Copying deploy/setup-rust.sh"
+log "Copying deploy/setup-rust.sh"
 {
     echo '#!/usr/bin/env bash'
     echo "$HEADER_COMMENT_BASH"
@@ -1084,7 +1140,7 @@ blog "Copying deploy/setup-rust.sh"
 chmod +x "$DEPLOY_DIR/setup-rust.sh"
 GENERATED=$((GENERATED + 1))
 
-blog "Copying deploy/setup-rust.ps1"
+log "Copying deploy/setup-rust.ps1"
 {
     echo "$HEADER_COMMENT_PS1"
     cat "$SCRIPTS_DIR/setup-rust.ps1" | inline_lib_ps1
@@ -1094,7 +1150,7 @@ GENERATED=$((GENERATED + 1))
 # ============================================================
 # 13-14. deploy/setup-typst.sh and .ps1 (copy as-is)
 # ============================================================
-blog "Copying deploy/setup-typst.sh"
+log "Copying deploy/setup-typst.sh"
 {
     echo '#!/usr/bin/env bash'
     echo "$HEADER_COMMENT_BASH"
@@ -1103,7 +1159,7 @@ blog "Copying deploy/setup-typst.sh"
 chmod +x "$DEPLOY_DIR/setup-typst.sh"
 GENERATED=$((GENERATED + 1))
 
-blog "Copying deploy/setup-typst.ps1"
+log "Copying deploy/setup-typst.ps1"
 {
     echo "$HEADER_COMMENT_PS1"
     cat "$SCRIPTS_DIR/setup-typst.ps1" | inline_lib_ps1
@@ -1113,7 +1169,7 @@ GENERATED=$((GENERATED + 1))
 # ============================================================
 # 15-16. deploy/setup-gh-cli.sh and .ps1 (copy as-is)
 # ============================================================
-blog "Copying deploy/setup-gh-cli.sh"
+log "Copying deploy/setup-gh-cli.sh"
 {
     echo '#!/usr/bin/env bash'
     echo "$HEADER_COMMENT_BASH"
@@ -1122,7 +1178,7 @@ blog "Copying deploy/setup-gh-cli.sh"
 chmod +x "$DEPLOY_DIR/setup-gh-cli.sh"
 GENERATED=$((GENERATED + 1))
 
-blog "Copying deploy/setup-gh-cli.ps1"
+log "Copying deploy/setup-gh-cli.ps1"
 {
     echo "$HEADER_COMMENT_PS1"
     cat "$SCRIPTS_DIR/setup-gh-cli.ps1" | inline_lib_ps1
@@ -1132,7 +1188,7 @@ GENERATED=$((GENERATED + 1))
 # ============================================================
 # 17-18. deploy/setup-python.sh and .ps1 (copy as-is)
 # ============================================================
-blog "Copying deploy/setup-python.sh"
+log "Copying deploy/setup-python.sh"
 {
     echo '#!/usr/bin/env bash'
     echo "$HEADER_COMMENT_BASH"
@@ -1141,7 +1197,7 @@ blog "Copying deploy/setup-python.sh"
 chmod +x "$DEPLOY_DIR/setup-python.sh"
 GENERATED=$((GENERATED + 1))
 
-blog "Copying deploy/setup-python.ps1"
+log "Copying deploy/setup-python.ps1"
 {
     echo "$HEADER_COMMENT_PS1"
     cat "$SCRIPTS_DIR/setup-python.ps1" | inline_lib_ps1
@@ -1160,7 +1216,7 @@ GENERATED=$((GENERATED + 1))
 # pywinpty== line, has a line starting with '@ (it would end the here-string), has
 # no "# wheel-tags:" line or no --hash=sha256: entry fails the build
 # (tests/pywinpty/test-setup-pywinpty.sh).
-blog "Copying deploy/setup-pywinpty.sh"
+log "Copying deploy/setup-pywinpty.sh"
 {
     echo '#!/usr/bin/env bash'
     echo "$HEADER_COMMENT_BASH"
@@ -1199,12 +1255,12 @@ _pin_msg=$(perl -e '
     print "pywinpty $ver, $n hash(es)";
 ' "$PYWINPTY_PIN" "$PYWINPTY_PIN_BLK" 2>&1) || _pin_rc=$?
 if [ "$_pin_rc" -ne 0 ]; then
-    blog_error "Cannot embed the pywinpty pin: ${_pin_msg:-perl exit $_pin_rc} -- deploy/setup-pywinpty.ps1 not generated"
+    write_error "build-deploy" "Cannot embed the pywinpty pin" "$(error_reason "$_pin_msg" "$_pin_rc")"
     exit 1
 fi
-blog "Embedding the pywinpty pin ($_pin_msg) from scripts/requirements-pywinpty.txt"
+log "Embedding the pywinpty pin ($_pin_msg) from scripts/requirements-pywinpty.txt"
 
-blog "Copying deploy/setup-pywinpty.ps1"
+log "Copying deploy/setup-pywinpty.ps1"
 {
     echo "$HEADER_COMMENT_PS1"
     cat "$SCRIPTS_DIR/setup-pywinpty.ps1" | inline_lib_ps1 "$PYWINPTY_PIN_BLK"
@@ -1214,7 +1270,7 @@ GENERATED=$((GENERATED + 1))
 # ============================================================
 # 19-20. deploy/setup-uv.sh and .ps1 (copy as-is)
 # ============================================================
-blog "Copying deploy/setup-uv.sh"
+log "Copying deploy/setup-uv.sh"
 {
     echo '#!/usr/bin/env bash'
     echo "$HEADER_COMMENT_BASH"
@@ -1223,7 +1279,7 @@ blog "Copying deploy/setup-uv.sh"
 chmod +x "$DEPLOY_DIR/setup-uv.sh"
 GENERATED=$((GENERATED + 1))
 
-blog "Copying deploy/setup-uv.ps1"
+log "Copying deploy/setup-uv.ps1"
 {
     echo "$HEADER_COMMENT_PS1"
     cat "$SCRIPTS_DIR/setup-uv.ps1" | inline_lib_ps1
@@ -1233,7 +1289,7 @@ GENERATED=$((GENERATED + 1))
 # ============================================================
 # 21-22. deploy/setup-modal.sh and .ps1 (copy as-is)
 # ============================================================
-blog "Copying deploy/setup-modal.sh"
+log "Copying deploy/setup-modal.sh"
 {
     echo '#!/usr/bin/env bash'
     echo "$HEADER_COMMENT_BASH"
@@ -1242,7 +1298,7 @@ blog "Copying deploy/setup-modal.sh"
 chmod +x "$DEPLOY_DIR/setup-modal.sh"
 GENERATED=$((GENERATED + 1))
 
-blog "Copying deploy/setup-modal.ps1"
+log "Copying deploy/setup-modal.ps1"
 {
     echo "$HEADER_COMMENT_PS1"
     cat "$SCRIPTS_DIR/setup-modal.ps1" | inline_lib_ps1
@@ -1252,7 +1308,7 @@ GENERATED=$((GENERATED + 1))
 # ============================================================
 # 23-24. deploy/setup-go.sh and .ps1 (copy as-is)
 # ============================================================
-blog "Copying deploy/setup-go.sh"
+log "Copying deploy/setup-go.sh"
 {
     echo '#!/usr/bin/env bash'
     echo "$HEADER_COMMENT_BASH"
@@ -1261,7 +1317,7 @@ blog "Copying deploy/setup-go.sh"
 chmod +x "$DEPLOY_DIR/setup-go.sh"
 GENERATED=$((GENERATED + 1))
 
-blog "Copying deploy/setup-go.ps1"
+log "Copying deploy/setup-go.ps1"
 {
     echo "$HEADER_COMMENT_PS1"
     cat "$SCRIPTS_DIR/setup-go.ps1" | inline_lib_ps1
@@ -1271,7 +1327,7 @@ GENERATED=$((GENERATED + 1))
 # ============================================================
 # 25-26. deploy/setup-datadog.sh and .ps1 (copy as-is)
 # ============================================================
-blog "Copying deploy/setup-datadog.sh"
+log "Copying deploy/setup-datadog.sh"
 {
     echo '#!/usr/bin/env bash'
     echo "$HEADER_COMMENT_BASH"
@@ -1280,7 +1336,7 @@ blog "Copying deploy/setup-datadog.sh"
 chmod +x "$DEPLOY_DIR/setup-datadog.sh"
 GENERATED=$((GENERATED + 1))
 
-blog "Copying deploy/setup-datadog.ps1"
+log "Copying deploy/setup-datadog.ps1"
 {
     echo "$HEADER_COMMENT_PS1"
     cat "$SCRIPTS_DIR/setup-datadog.ps1" | inline_lib_ps1
@@ -1290,7 +1346,7 @@ GENERATED=$((GENERATED + 1))
 # ============================================================
 # 27-28. deploy/setup-perl.sh and .ps1 (copy as-is)
 # ============================================================
-blog "Copying deploy/setup-perl.sh"
+log "Copying deploy/setup-perl.sh"
 {
     echo '#!/usr/bin/env bash'
     echo "$HEADER_COMMENT_BASH"
@@ -1299,7 +1355,7 @@ blog "Copying deploy/setup-perl.sh"
 chmod +x "$DEPLOY_DIR/setup-perl.sh"
 GENERATED=$((GENERATED + 1))
 
-blog "Copying deploy/setup-perl.ps1"
+log "Copying deploy/setup-perl.ps1"
 {
     echo "$HEADER_COMMENT_PS1"
     cat "$SCRIPTS_DIR/setup-perl.ps1" | inline_lib_ps1
@@ -1309,7 +1365,7 @@ GENERATED=$((GENERATED + 1))
 # ============================================================
 # 29-30. deploy/setup-bash.sh and .ps1 (copy as-is)
 # ============================================================
-blog "Copying deploy/setup-bash.sh"
+log "Copying deploy/setup-bash.sh"
 {
     echo '#!/usr/bin/env bash'
     echo "$HEADER_COMMENT_BASH"
@@ -1318,7 +1374,7 @@ blog "Copying deploy/setup-bash.sh"
 chmod +x "$DEPLOY_DIR/setup-bash.sh"
 GENERATED=$((GENERATED + 1))
 
-blog "Copying deploy/setup-bash.ps1"
+log "Copying deploy/setup-bash.ps1"
 {
     echo "$HEADER_COMMENT_PS1"
     cat "$SCRIPTS_DIR/setup-bash.ps1" | inline_lib_ps1
@@ -1328,7 +1384,7 @@ GENERATED=$((GENERATED + 1))
 # ============================================================
 # deploy/setup-google-chrome.sh and .ps1 (copy as-is)
 # ============================================================
-blog "Copying deploy/setup-google-chrome.sh"
+log "Copying deploy/setup-google-chrome.sh"
 {
     echo '#!/usr/bin/env bash'
     echo "$HEADER_COMMENT_BASH"
@@ -1337,7 +1393,7 @@ blog "Copying deploy/setup-google-chrome.sh"
 chmod +x "$DEPLOY_DIR/setup-google-chrome.sh"
 GENERATED=$((GENERATED + 1))
 
-blog "Copying deploy/setup-google-chrome.ps1"
+log "Copying deploy/setup-google-chrome.ps1"
 {
     echo "$HEADER_COMMENT_PS1"
     cat "$SCRIPTS_DIR/setup-google-chrome.ps1" | inline_lib_ps1
@@ -1347,7 +1403,7 @@ GENERATED=$((GENERATED + 1))
 # ============================================================
 # deploy/setup-user-shell.sh and .ps1 (copy as-is) -- login-profile PATH block
 # ============================================================
-blog "Copying deploy/setup-user-shell.sh"
+log "Copying deploy/setup-user-shell.sh"
 {
     echo '#!/usr/bin/env bash'
     echo "$HEADER_COMMENT_BASH"
@@ -1356,7 +1412,7 @@ blog "Copying deploy/setup-user-shell.sh"
 chmod +x "$DEPLOY_DIR/setup-user-shell.sh"
 GENERATED=$((GENERATED + 1))
 
-blog "Copying deploy/setup-user-shell.ps1"
+log "Copying deploy/setup-user-shell.ps1"
 {
     echo "$HEADER_COMMENT_PS1"
     cat "$SCRIPTS_DIR/setup-user-shell.ps1" | inline_lib_ps1
@@ -1367,7 +1423,7 @@ GENERATED=$((GENERATED + 1))
 # 31-32. deploy/setup-user-mcp.sh and .ps1 (MCP only, skills moved to setup-user-skills)
 # ============================================================
 
-blog "Generating deploy/setup-user-mcp.sh"
+log "Generating deploy/setup-user-mcp.sh"
 {
     echo '#!/usr/bin/env bash'
     echo "$HEADER_COMMENT_BASH"
@@ -1379,7 +1435,7 @@ blog "Generating deploy/setup-user-mcp.sh"
 chmod +x "$DEPLOY_DIR/setup-user-mcp.sh"
 GENERATED=$((GENERATED + 1))
 
-blog "Generating deploy/setup-user-mcp.ps1"
+log "Generating deploy/setup-user-mcp.ps1"
 {
     echo "$HEADER_COMMENT_PS1"
     extract_between "$SCRIPTS_DIR/setup-user-mcp.ps1" \
@@ -1397,7 +1453,7 @@ GENERATED=$((GENERATED + 1))
 # dotprofile resolver (resolve_user_repo_path / Resolve-UserRepoPath, SD-7) -- no
 # build-time value embedding (adopt writes back to the live profile.json, so there
 # is no snapshot fallback; without a dotprofile the sync is skipped, as on scripts/).
-blog "Generating deploy/setup-user-settings.sh"
+log "Generating deploy/setup-user-settings.sh"
 {
     echo '#!/usr/bin/env bash'
     echo "$HEADER_COMMENT_BASH"
@@ -1409,7 +1465,7 @@ blog "Generating deploy/setup-user-settings.sh"
 chmod +x "$DEPLOY_DIR/setup-user-settings.sh"
 GENERATED=$((GENERATED + 1))
 
-blog "Generating deploy/setup-user-settings.ps1"
+log "Generating deploy/setup-user-settings.ps1"
 {
     echo "$HEADER_COMMENT_PS1"
     extract_between "$SCRIPTS_DIR/setup-user-settings.ps1" \
@@ -1427,7 +1483,7 @@ GENERATED=$((GENERATED + 1))
 # The scripts/ versions discover skills from shared/skills/ at runtime.
 # The deploy/ versions embed all SKILL.md content at build time for self-contained deployment.
 
-blog "Generating deploy/setup-user-skills.sh (with embedded skills)"
+log "Generating deploy/setup-user-skills.sh (with embedded skills)"
 {
     echo '#!/usr/bin/env bash'
     echo "$HEADER_COMMENT_BASH"
@@ -1531,7 +1587,7 @@ DEPLOY_SKILL_FUNC
 chmod +x "$DEPLOY_DIR/setup-user-skills.sh"
 GENERATED=$((GENERATED + 1))
 
-blog "Generating deploy/setup-user-skills.ps1 (with embedded skills)"
+log "Generating deploy/setup-user-skills.ps1 (with embedded skills)"
 {
     echo "$HEADER_COMMENT_PS1"
     # Extract boilerplate (param, lib, OS guard, DRY_RUN)
@@ -1630,7 +1686,7 @@ GENERATED=$((GENERATED + 1))
 # ============================================================
 # 15. deploy/setup-user-hooks.sh (extracted from scripts/ + embedded hooks)
 # ============================================================
-blog "Generating deploy/setup-user-hooks.sh (extracted + embedded hooks)"
+log "Generating deploy/setup-user-hooks.sh (extracted + embedded hooks)"
 
 {
     echo '#!/usr/bin/env bash'
@@ -1661,9 +1717,9 @@ if [ "$DRY_RUN" = "true" ]; then
     log "[DRY RUN] Would deploy hooks to $HOOKS_DIR"
 else
 BLOCK
-    # Embed each hook + helper from the manifest (single source of truth).
+    # Embed each hook + helper from the manifest (single source of truth): the
+    # list the preflight parsed and checked ($_manifest_files).
     # Heredoc per file with a unique delimiter derived from the filename.
-    _MANIFEST="$SHARED_DIR/hooks/hooks-manifest.json"
     while IFS= read -r _hookfile; do
         [ -n "$_hookfile" ] || continue
         if [ -f "$SHARED_DIR/hooks/$_hookfile" ]; then
@@ -1675,7 +1731,7 @@ BLOCK
             # so a future edit to one side cannot reintroduce a silent drop.
             # exit leaves the { } | inline_lib_bash subshell; pipefail + set -e
             # then abort the build.
-            blog_error "Hook source not found for embed: $_hookfile"
+            log_error "Hook source not found for embed: $_hookfile" >&2
             exit 1
         fi
         _delim="__EMB_$(echo "$_hookfile" | tr 'a-z.-' 'A-Z__')__"
@@ -1686,7 +1742,7 @@ BLOCK
         # never closes and the generated script is unparseable.
         [ -n "$(tail -c1 "$_src")" ] && echo ""
         echo "$_delim"
-    done < <(node -e 'const fs=require("fs");const m=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));console.log([...m.hooks.map(h=>h.file),...((m.deploy)||[])].join("\n"))' "$_MANIFEST")
+    done <<< "$_manifest_files"
     cat <<'BLOCK'
 
     for _hf in "$HOOKS_DIR"/*.sh; do
@@ -1722,7 +1778,16 @@ GENERATED=$((GENERATED + 1))
 # ============================================================
 # 16. deploy/setup-user-hooks.ps1 (extracted from scripts/ + embedded hooks)
 # ============================================================
-blog "Generating deploy/setup-user-hooks.ps1 (extracted + embedded hooks)"
+log "Generating deploy/setup-user-hooks.ps1 (extracted + embedded hooks)"
+
+# The $regs lines, read before the generator group so a node failure is one
+# error with its reason, not a silent empty list (A2 G2 X5)
+_ps_regs_rc=0
+_PS_REGS=$(node -e 'const fs=require("fs");const m=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));for(const h of m.hooks){console.log("    [pscustomobject]@{ event = \""+h.event+"\"; file = \""+h.file+"\"; matcher = \""+(h.matcher||"")+"\" }")}' "$HOOKS_MANIFEST" 2> "$BUILD_TMP/node.err") || _ps_regs_rc=$?
+if [ "$_ps_regs_rc" -ne 0 ]; then
+    write_error "build-deploy" "cannot read the hook registrations from $HOOKS_MANIFEST" "$(error_reason "$(cat "$BUILD_TMP/node.err")" "$_ps_regs_rc")"
+    exit 1
+fi
 
 {
     echo "$HEADER_COMMENT_PS1"
@@ -1752,8 +1817,8 @@ BLOCK
     printf 'if (-not (Test-Path $hooksDir)) { New-Item -ItemType Directory -Path $hooksDir -Force | Out-Null }\r\n'
     printf '\r\n'
     printf '$hookFiles = @{}\r\n'
-    # Embed each hook + helper from the manifest (single source of truth).
-    _PS_MANIFEST="$SHARED_DIR/hooks/hooks-manifest.json"
+    # Embed each hook + helper from the manifest (single source of truth): the
+    # list the preflight parsed and checked ($_manifest_files).
     while IFS= read -r _hookfile; do
         [ -n "$_hookfile" ] || continue
         if [ -f "$SHARED_DIR/hooks/$_hookfile" ]; then
@@ -1765,7 +1830,7 @@ BLOCK
             # so a future edit to one side cannot reintroduce a silent drop.
             # exit leaves the { } pipeline subshell; pipefail + set -e then abort
             # the build.
-            blog_error "Hook source not found for PS1 embed: $_hookfile"
+            log_error "Hook source not found for PS1 embed: $_hookfile" >&2
             exit 1
         fi
         printf '$hookFiles["%s"] = @'"'"'\r\n' "$_hookfile"
@@ -1775,7 +1840,7 @@ BLOCK
         [ -n "$(tail -c1 "$_src")" ] && printf '\r\n'
         printf ''"'"'@\r\n'
         printf '\r\n'
-    done < <(node -e 'const fs=require("fs");const m=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));console.log([...m.hooks.map(h=>h.file),...((m.deploy)||[])].join("\n"))' "$_PS_MANIFEST")
+    done <<< "$_manifest_files"
     printf 'if ($DryRun) {\r\n'
     printf '    Log "[DRY RUN] Would deploy hooks to ~/.claude/hooks/"\r\n'
     printf '} else {\r\n'
@@ -1794,7 +1859,7 @@ BLOCK
     while IFS= read -r _line; do
         [ -n "$_line" ] || continue
         printf '%s\r\n' "$_line"
-    done < <(node -e 'const fs=require("fs");const m=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));for(const h of m.hooks){console.log("    [pscustomobject]@{ event = \""+h.event+"\"; file = \""+h.file+"\"; matcher = \""+(h.matcher||"")+"\" }")}' "$SHARED_DIR/hooks/hooks-manifest.json")
+    done <<< "$_PS_REGS"
     printf ')\r\n'
 
     printf '\r\n'
@@ -1819,7 +1884,7 @@ GENERATED=$((GENERATED + 1))
 # "$SCRIPT_DIR/setup-user-config.sh" / ".ps1"), plus the two helpers the writer
 # loads from its own directory. Copies with the library inlined: no logic here.
 for _cw in setup-user-config aitools-profile; do
-    blog "Copying deploy/$_cw.sh"
+    log "Copying deploy/$_cw.sh"
     {
         echo '#!/usr/bin/env bash'
         echo "$HEADER_COMMENT_BASH"
@@ -1828,7 +1893,7 @@ for _cw in setup-user-config aitools-profile; do
     chmod +x "$DEPLOY_DIR/$_cw.sh"
     GENERATED=$((GENERATED + 1))
 
-    blog "Copying deploy/$_cw.ps1"
+    log "Copying deploy/$_cw.ps1"
     {
         echo "$HEADER_COMMENT_PS1"
         cat "$SCRIPTS_DIR/$_cw.ps1" | inline_lib_ps1
@@ -1836,7 +1901,7 @@ for _cw in setup-user-config aitools-profile; do
     GENERATED=$((GENERATED + 1))
 done
 
-blog "Copying deploy/aitools-json.pl"
+log "Copying deploy/aitools-json.pl"
 {
     echo '#!/usr/bin/env perl'
     echo "$HEADER_COMMENT_BASH"
@@ -1844,7 +1909,7 @@ blog "Copying deploy/aitools-json.pl"
 } > "$DEPLOY_DIR/aitools-json.pl"
 GENERATED=$((GENERATED + 1))
 
-blog "Copying deploy/aitools-json.ps1"
+log "Copying deploy/aitools-json.ps1"
 {
     echo "$HEADER_COMMENT_PS1"
     cat "$SCRIPTS_DIR/aitools-json.ps1"
@@ -1882,7 +1947,7 @@ HARNESS_SH="$SCRIPTS_DIR/deploy-harness.sh"
 HARNESS_PS1="$SCRIPTS_DIR/deploy-harness.ps1"
 for _hf in "$HARNESS_SH" "$HARNESS_PS1"; do
     if [ ! -f "$_hf" ]; then
-        blog_error "Required script not found: $_hf"
+        log_error "Required script not found: $_hf"
         exit 1
     fi
 done
@@ -1890,8 +1955,10 @@ done
 # Under BUILD_TMP, so its EXIT trap removes it (a second trap here replaced that
 # one and leaked BUILD_TMP).
 MDM_TMP="$BUILD_TMP/mdm"
-if ! mkdir -p "$MDM_TMP"; then
-    blog_error "Could not create a temp directory for the harness snapshot"
+_mk_rc=0
+_mk_out=$(mkdir -p "$MDM_TMP" 2>&1) || _mk_rc=$?
+if [ "$_mk_rc" -ne 0 ]; then
+    write_error "build-deploy" "cannot create a temp directory for the harness snapshot" "$(error_reason "$_mk_out" "$_mk_rc")"
     exit 1
 fi
 MDM_MANIFEST="$MDM_TMP/manifest.tsv"   # stage path <TAB> source file <TAB> exec (0|1)
@@ -1916,24 +1983,24 @@ MDM_SOURCES_PS1=$(perl -ne '
     }
     END { exit($n && $n == $ok ? 0 : 1) }' "$HARNESS_PS1") || MDM_SOURCES_PS1="(unparsed)"
 if [ "$_mdm_calls" -eq 0 ] || [ "$_mdm_calls" -ne "$_mdm_parsed" ]; then
-    blog_error "deploy-harness.sh: parsed $_mdm_parsed of $_mdm_calls add_source calls -- update the parser in build-deploy.sh"
+    log_error "deploy-harness.sh: parsed $_mdm_parsed of $_mdm_calls add_source calls -- update the parser in build-deploy.sh"
     exit 1
 fi
 if [ "$MDM_SOURCES_PS1" != "$MDM_SOURCES" ]; then
-    blog_error "deploy-harness parity: the .ps1 Add-Source directories differ from the .sh add_source directories (or the .ps1 parser in build-deploy.sh needs an update)"
+    log_error "deploy-harness parity: the .ps1 Add-Source directories differ from the .sh add_source directories (or the .ps1 parser in build-deploy.sh needs an update)"
     exit 1
 fi
 # bin CLIs: the dev script's `for cli in ...; do` list (and the .ps1 list must match)
 if ! MDM_BIN=$(perl -ne 'if (/^for cli in ([^;]+); do/) { print join("\n", split(" ", $1)), "\n"; $n++ } END { exit($n == 1 ? 0 : 1) }' "$HARNESS_SH"); then
-    blog_error "deploy-harness.sh: no single 'for cli in ...; do' bin list -- update the parser in build-deploy.sh"
+    log_error "deploy-harness.sh: no single 'for cli in ...; do' bin list -- update the parser in build-deploy.sh"
     exit 1
 fi
 if ! MDM_BIN_PS1=$(perl -ne 'if (/^foreach \(\$cli in \@\(([^)]*)\)\)/) { my @a = $1 =~ /"([^"]+)"/g; print join("\n", @a), "\n"; $n++ } END { exit($n == 1 ? 0 : 1) }' "$HARNESS_PS1"); then
-    blog_error "deploy-harness.ps1: no single 'foreach (\$cli in @(...))' bin list -- update the parser in build-deploy.sh"
+    log_error "deploy-harness.ps1: no single 'foreach (\$cli in @(...))' bin list -- update the parser in build-deploy.sh"
     exit 1
 fi
 if [ "$MDM_BIN" != "$MDM_BIN_PS1" ]; then
-    blog_error "deploy-harness parity: bin lists differ between .sh and .ps1"
+    log_error "deploy-harness parity: bin lists differ between .sh and .ps1"
     exit 1
 fi
 
@@ -1941,9 +2008,9 @@ fi
 # add the listing and every listed file to the manifest.
 MDM_DIRS=0
 mdm_snapshot_dir() {
-    local stage_rel="$1" dir="$2" lsf raw mode st
+    local stage_rel="$1" dir="$2" lsf raw mode st rc=0 err="$MDM_TMP/snapshot.err"
     if [ ! -d "$dir" ]; then
-        blog "Harness snapshot: $stage_rel not found -- not embedded (deploy-harness logs the missing source)"
+        log "Harness snapshot: $stage_rel not found -- not embedded (deploy-harness logs the missing source)"
         return 0
     fi
     MDM_DIRS=$((MDM_DIRS + 1))
@@ -1954,20 +2021,21 @@ mdm_snapshot_dir() {
         mode="git"
         # -s: the executable bit comes from the git mode (100755), the same on
         # every build machine (Win32 perl -x and MSYS [ -x ] do not read it).
-        if ! git -C "$dir" ls-files -s -z > "$raw"; then
-            blog_error "Harness snapshot: git ls-files failed in $dir"
+        git -C "$dir" ls-files -s -z > "$raw" 2> "$err" || rc=$?
+        if [ "$rc" -ne 0 ]; then
+            write_error "build-deploy" "harness snapshot: git ls-files failed in $dir" "$(error_reason "$(cat "$err")" "$rc")"
             exit 1
         fi
         if ! st=$(git -C "$dir" status --porcelain -- . 2>&1); then
-            blog_warn "Harness snapshot: git status failed in $dir ($st) -- cannot tell whether uncommitted changes are embedded"
+            write_warn "build-deploy" "harness snapshot: git status failed in $dir -- cannot tell whether uncommitted changes are embedded: $(error_reason "$st" 1)"
         elif [ -n "$st" ]; then
-            blog_warn "Harness snapshot: $dir has uncommitted changes -- the working tree is what gets embedded"
+            write_warn "build-deploy" "harness snapshot: $dir has uncommitted changes -- the working tree is what gets embedded"
         fi
     else
         mode="disk"
         # e.g. pre-push step 7 builds into a git-archive copy of the dotprofile
-        blog_warn "Harness snapshot: $dir is not in a git work tree -- embedding every file on disk, listed as git would"
-        if ! perl -MFile::Find -e '
+        write_warn "build-deploy" "harness snapshot: $dir is not in a git work tree -- embedding every file on disk, listed as git would"
+        perl -MFile::Find -e '
             my $root = shift;
             my @f;
             find({ no_chdir => 1, wanted => sub {
@@ -1975,8 +2043,9 @@ mdm_snapshot_dir() {
                 push @f, substr($_, length($root) + 1) if -f $_;
             } }, $root);
             print map { "$_\0" } sort @f;
-        ' "$dir" > "$raw"; then
-            blog_error "Harness snapshot: cannot list $dir"
+        ' "$dir" > "$raw" 2> "$err" || rc=$?
+        if [ "$rc" -ne 0 ]; then
+            write_error "build-deploy" "harness snapshot: cannot list $dir" "$(error_reason "$(cat "$err")" "$rc")"
             exit 1
         fi
     fi
@@ -1984,7 +2053,7 @@ mdm_snapshot_dir() {
     # manifest lines. Every path it opens comes from its arguments: on Windows,
     # MSYS converts arguments for native perl, never file contents.
     # Listed but missing on disk: not embedded; deploy-harness WARNs at run time, as in dev.
-    if ! perl -e '
+    perl -e '
         my ($mode, $raw, $lsf, $dir, $stage, $manifest) = @ARGV;
         open my $in, "<:raw", $raw or die "cannot read $raw: $!\n";
         open my $ls, ">:raw", $lsf or die "cannot write $lsf: $!\n";
@@ -2011,8 +2080,9 @@ mdm_snapshot_dir() {
         }
         close $ls or die "cannot write $lsf: $!\n";
         close $mf or die "cannot write $manifest: $!\n";
-    ' "$mode" "$raw" "$lsf" "$dir" "$stage_rel" "$MDM_MANIFEST"; then
-        blog_error "Harness snapshot: cannot add the files of $dir"
+    ' "$mode" "$raw" "$lsf" "$dir" "$stage_rel" "$MDM_MANIFEST" 2> "$err" || rc=$?
+    if [ "$rc" -ne 0 ]; then
+        write_error "build-deploy" "harness snapshot: cannot add the files of $dir" "$(error_reason "$(cat "$err")" "$rc")"
         exit 1
     fi
 }
@@ -2028,12 +2098,12 @@ done <<< "$MDM_SOURCES"
 while IFS= read -r _mdm_cli; do
     [ -n "$_mdm_cli" ] || continue
     if [ ! -f "$SCRIPTS_DIR/$_mdm_cli" ]; then
-        blog_warn "Harness snapshot: bin $_mdm_cli not found -- not embedded (deploy-harness WARNs at run time)"
+        write_warn "build-deploy" "harness snapshot: bin $_mdm_cli not found -- not embedded (deploy-harness WARNs at run time)"
         continue
     fi
     # Executable bit: the git mode when tracked (same on every build machine), else -x.
     if ! _mdm_mode=$(git -C "$SCRIPTS_DIR" ls-files -s -- "$_mdm_cli" 2>&1); then
-        blog_warn "Harness snapshot: git ls-files failed for bin $_mdm_cli ($_mdm_mode) -- executable bit read from disk"
+        write_warn "build-deploy" "harness snapshot: git ls-files failed for bin $_mdm_cli -- executable bit read from disk: $(error_reason "$_mdm_mode" 1)"
         _mdm_mode=""
     fi
     _mdm_x=0
@@ -2042,15 +2112,17 @@ while IFS= read -r _mdm_cli; do
         "") if [ -x "$SCRIPTS_DIR/$_mdm_cli" ]; then _mdm_x=1; fi ;;
     esac
     # Written by perl from its arguments (MSYS converts them on Windows; see above).
-    if ! perl -e 'open my $m, ">>", $ARGV[0] or die "cannot write $ARGV[0]: $!\n"; print $m "$ARGV[1]\t$ARGV[2]\t$ARGV[3]\n"; close $m or die "cannot write $ARGV[0]: $!\n"' \
-            "$MDM_MANIFEST" "aitools/scripts/$_mdm_cli" "$SCRIPTS_DIR/$_mdm_cli" "$_mdm_x"; then
-        blog_error "Harness snapshot: cannot add bin $_mdm_cli"
+    _mdm_rc=0
+    perl -e 'open my $m, ">>", $ARGV[0] or die "cannot write $ARGV[0]: $!\n"; print $m "$ARGV[1]\t$ARGV[2]\t$ARGV[3]\n"; close $m or die "cannot write $ARGV[0]: $!\n"' \
+        "$MDM_MANIFEST" "aitools/scripts/$_mdm_cli" "$SCRIPTS_DIR/$_mdm_cli" "$_mdm_x" 2> "$MDM_TMP/bin.err" || _mdm_rc=$?
+    if [ "$_mdm_rc" -ne 0 ]; then
+        write_error "build-deploy" "harness snapshot: cannot add bin $_mdm_cli" "$(error_reason "$(cat "$MDM_TMP/bin.err")" "$_mdm_rc")"
         exit 1
     fi
 done <<< "$MDM_BIN"
 MDM_FILES=$(perl -ne '$n++ unless /\/\.aitools-mdm-ls-files\t/; END { print $n + 0 }' "$MDM_MANIFEST")
 MDM_RECORDS=$(perl -ne '$n++; END { print $n + 0 }' "$MDM_MANIFEST")
-blog "Harness snapshot: $MDM_FILES files from $MDM_DIRS source directories (+ bin)"
+log "Harness snapshot: $MDM_FILES files from $MDM_DIRS source directories (+ bin)"
 
 # mdm_write_payload MANIFEST OUT -- deploy/deploy-harness.payload (ASCII, LF):
 #   line 1: "# aitools harness payload v1 ..."; then per manifest line a record
@@ -2060,8 +2132,11 @@ blog "Harness snapshot: $MDM_FILES files from $MDM_DIRS source directories (+ bi
 #   file with every CR removed, as the readers compute it: a CRLF checkout of
 #   the dotprofile on Windows must still verify).
 MDM_PAYLOAD_HEADER="# aitools harness payload v1 (generated by scripts/build-deploy.sh -- do not edit)"
+# It runs in $(...): stdout is the sha256, so the error's console line goes to
+# stderr; the error is recorded here and the caller ends the build.
 mdm_write_payload() {
-    if ! perl -MMIME::Base64 -MDigest::SHA=sha256_hex -e '
+    local rc=0
+    perl -MMIME::Base64 -MDigest::SHA=sha256_hex -e '
         my ($manifest, $out, $header) = @ARGV;
         open my $m, "<", $manifest or die "cannot read $manifest: $!\n";
         my $text = "$header\n";
@@ -2079,23 +2154,24 @@ mdm_write_payload() {
         print $o $text;
         close $o or die "cannot write $out: $!\n";
         print sha256_hex($text);
-    ' "$1" "$2" "$MDM_PAYLOAD_HEADER"; then
-        blog_error "Harness snapshot: could not write $2"
+    ' "$1" "$2" "$MDM_PAYLOAD_HEADER" 2> "$MDM_TMP/payload.err" || rc=$?
+    if [ "$rc" -ne 0 ]; then
+        write_error "build-deploy" "harness snapshot: cannot write $2" "$(error_reason "$(cat "$MDM_TMP/payload.err")" "$rc")" >&2
         exit 1
     fi
 }
-blog "Writing deploy/deploy-harness.payload (harness snapshot, read by deploy-harness.sh/.ps1)"
+log "Writing deploy/deploy-harness.payload (harness snapshot, read by deploy-harness.sh/.ps1)"
 if ! MDM_PAYLOAD_SHA=$(mdm_write_payload "$MDM_MANIFEST" "$DEPLOY_DIR/deploy-harness.payload"); then
     exit 1
 fi
 # perl -0777: the whole value is read before the test (pipe-safe); an empty
 # value now fails here (perl -n ran no line on empty input and exited 0)
 if ! printf '%s' "$MDM_PAYLOAD_SHA" | perl -0777 -ne 'exit(/\A[0-9a-f]{64}\z/ ? 0 : 1)'; then
-    blog_error "Harness snapshot: no sha256 for deploy/deploy-harness.payload"
+    log_error "Harness snapshot: no sha256 for deploy/deploy-harness.payload"
     exit 1
 fi
 
-blog "Generating deploy/deploy-harness.sh (extracted + embedded harness snapshot)"
+log "Generating deploy/deploy-harness.sh (extracted + embedded harness snapshot)"
 {
     echo '#!/usr/bin/env bash'
     echo "$HEADER_COMMENT_BASH"
@@ -2311,7 +2387,7 @@ BLOCK
 chmod +x "$DEPLOY_DIR/deploy-harness.sh"
 GENERATED=$((GENERATED + 1))
 
-blog "Generating deploy/deploy-harness.ps1 (extracted + embedded harness snapshot)"
+log "Generating deploy/deploy-harness.ps1 (extracted + embedded harness snapshot)"
 {
     # ASCII header (Intune: "less than 200 KB (ASCII)"); HEADER_COMMENT_PS1 has an em-dash.
     echo "# Generated by scripts/build-deploy.sh -- do not edit directly."
@@ -2537,11 +2613,11 @@ for _emb in setup-user-claude.sh setup-user-claude.ps1 setup-user-settings.sh se
     setup-user-cursor.sh setup-user-cursor.ps1; do
     _emb_count=$(EMB_MARK="$EMBED_MARKER" perl -ne '$n++ if /^\Q$ENV{EMB_MARK}\E\r?$/; END { print $n + 0 }' "$DEPLOY_DIR/$_emb")
     if [ "$_emb_count" != "1" ]; then
-        blog_error "deploy/$_emb holds the embedded profile resolver $_emb_count time(s), expected 1 (the line naming aitools-lib must appear exactly once in its source)"
+        log_error "deploy/$_emb holds the embedded profile resolver $_emb_count time(s), expected 1 (the line naming aitools-lib must appear exactly once in its source)"
         exit 1
     fi
 done
-blog_ok "Embedded profile resolver present once in each resolver-consuming deploy script"
+log_ok "Embedded profile resolver present once in each resolver-consuming deploy script"
 # Every .ps1 that embeds the resolver runs inside the block's "try {" and must close
 # it with $EMBED_FINALLY_PS1 as its last line, once; no other .ps1 may hold that line
 # (S3-MF-Audit A-19). A missing brace is also a parse error below; this names the cause.
@@ -2559,93 +2635,75 @@ for _emb in "$DEPLOY_DIR"/*.ps1; do
             else { print "finally line found $f time(s), last line is not it" }
         }' "$_emb") || _emb_state="perl failed (exit $?)"
     if [ "$_emb_state" != "ok" ]; then
-        blog_error "deploy/$(basename "$_emb"): embedded resolver try/finally not closed by the last line ($_emb_state) -- emit \$EMBED_FINALLY_PS1 after its exit footer"
+        log_error "deploy/$(basename "$_emb"): embedded resolver try/finally not closed by the last line ($_emb_state) -- emit \$EMBED_FINALLY_PS1 after its exit footer"
         exit 1
     fi
 done
-blog_ok "Embedded resolver cleanup runs on every exit (try/finally) in each resolver-consuming .ps1"
+log_ok "Embedded resolver cleanup runs on every exit (try/finally) in each resolver-consuming .ps1"
 
 # ============================================================
-# Post-build: Validate PS1 syntax (Windows only)
+# Post-build: Validate PS1 syntax (every platform with pwsh)
 # ============================================================
-# On Windows (Git Bash), validate all generated .ps1 files with ParseFile.
-# Catches encoding issues and syntax errors at build time rather than install time.
-case "$(uname -s)" in
-    MINGW*|MSYS*|CYGWIN*)
-        blog "Validating generated PS1 scripts..."
-        PS1_ERRORS=0
-        for ps1_file in "$DEPLOY_DIR"/*.ps1; do
-            [ -f "$ps1_file" ] || continue
-            ps1_name=$(basename "$ps1_file")
-            if ! pwsh -NoProfile -Command "
-                \$e = \$null
-                \$null = [System.Management.Automation.Language.Parser]::ParseFile('$(cygpath -w "$ps1_file")', [ref]\$null, [ref]\$e)
-                if (\$e.Count -gt 0) {
-                    foreach (\$err in \$e) { Write-Host \"  line \$(\$err.Extent.StartLineNumber): \$(\$err.Message)\" }
-                    exit 1
-                }
-            " 2>/dev/null; then
-                blog_error "$ps1_name has parse errors on this PowerShell version"
-                PS1_ERRORS=$((PS1_ERRORS + 1))
-            fi
-        done
-        if [ "$PS1_ERRORS" -gt 0 ]; then
-            blog_error "$PS1_ERRORS PS1 file(s) failed validation"
-            exit 1
-        else
-            blog_ok "All PS1 files passed validation"
+# Validate every generated .ps1 with ParseFile: catches encoding issues and syntax
+# errors at build time rather than install time. One path on every platform (A3
+# O3: the Windows arm used to discard the parse errors). The path reaches pwsh in
+# the environment, converted with cygpath where it exists (Git Bash on Windows);
+# the parser's lines ("  line N: <message>") are the error's reason, and every
+# line is logged at detail. No install advice: aitools installs pwsh only on
+# Windows, where it is a prerequisite (lead decision, G2 A6).
+if command -v pwsh >/dev/null 2>&1; then
+    log "Validating generated PS1 scripts via pwsh..."
+    PS1_ERRORS=0
+    for ps1_file in "$DEPLOY_DIR"/*.ps1; do
+        [ -f "$ps1_file" ] || continue
+        ps1_name=$(basename "$ps1_file")
+        ps1_path="$ps1_file"
+        if command -v cygpath >/dev/null 2>&1; then
+            ps1_path=$(cygpath -w "$ps1_file")
         fi
-        ;;
-    *)
-        # macOS/Linux: Validate PS1 via pwsh (managed tool)
-        if command -v pwsh &>/dev/null; then
-            blog "Validating generated PS1 scripts via pwsh..."
-            PS1_ERRORS=0
-            for ps1_file in "$DEPLOY_DIR"/*.ps1; do
-                [ -f "$ps1_file" ] || continue
-                ps1_name=$(basename "$ps1_file")
-                errors_output=$(pwsh -NoProfile -Command "
-                    \$e = \$null
-                    \$null = [System.Management.Automation.Language.Parser]::ParseFile('$ps1_file', [ref]\$null, [ref]\$e)
-                    if (\$e.Count -gt 0) {
-                        foreach (\$err in \$e) { Write-Host \"  line \$(\$err.Extent.StartLineNumber): \$(\$err.Message)\" }
-                        exit 1
-                    }
-                " 2>&1) || {
-                    blog_error "$ps1_name has parse errors:"
-                    echo "$errors_output"
-                    PS1_ERRORS=$((PS1_ERRORS + 1))
-                }
-            done
-            if [ "$PS1_ERRORS" -gt 0 ]; then
-                blog_error "$PS1_ERRORS PS1 file(s) failed validation"
+        _ps_rc=0
+        errors_output=$(AITOOLS_BUILD_PS1="$ps1_path" pwsh -NoProfile -Command '
+            $e = $null
+            $null = [System.Management.Automation.Language.Parser]::ParseFile($env:AITOOLS_BUILD_PS1, [ref]$null, [ref]$e)
+            if ($e.Count -gt 0) {
+                foreach ($err in $e) { Write-Host "  line $($err.Extent.StartLineNumber): $($err.Message)" }
                 exit 1
-            else
-                blog_ok "All PS1 files passed validation (pwsh)"
-            fi
-        else
-            blog_warn "pwsh not found -- PS1 validation skipped (install: brew install powershell/tap/powershell)"
+            }
+        ' 2>&1) || _ps_rc=$?
+        if [ "$_ps_rc" -ne 0 ]; then
+            write_error "build-deploy" "$ps1_name has parse errors" "$(error_reason "$errors_output" "$_ps_rc")"
+            PS1_ERRORS=$((PS1_ERRORS + 1))
         fi
-        ;;
-esac
+    done
+    if [ "$PS1_ERRORS" -gt 0 ]; then
+        # Info: each file is its own error above; this line names the outcome
+        log "$PS1_ERRORS PS1 file(s) failed validation"
+        exit 1
+    else
+        log_ok "All PS1 files passed validation (pwsh)"
+    fi
+else
+    write_warn "build-deploy" "pwsh not found -- the generated .ps1 scripts were not validated"
+fi
 
 # ============================================================
 # Post-build: Fix file permissions and line endings
 # ============================================================
-# 1. Ensure all .sh files are executable on disk (Write tool creates 100644)
-#    2>/dev/null: chmod's own message is replaced by the blog_warn below, which
-#    the result check raises when any .sh could not be made executable.
-if chmod +x "$DEPLOY_DIR"/*.sh 2>/dev/null; then
-    blog_ok "Set +x on all .sh files in deploy/"
+# 1. Ensure all .sh files are executable on disk (Write tool creates 100644).
+#    chmod's own message is the warning's reason.
+_cx_rc=0
+_cx_out=$(chmod +x "$DEPLOY_DIR"/*.sh 2>&1) || _cx_rc=$?
+if [ "$_cx_rc" -eq 0 ]; then
+    log_ok "Set +x on all .sh files in deploy/"
 else
-    blog_warn "Could not set +x on every .sh file in deploy/ -- a generated script may not be executable"
+    write_warn "build-deploy" "could not set +x on every .sh file in deploy/ -- a generated script may not be executable: $(error_reason "$_cx_out" "$_cx_rc")"
 fi
 
 # 2. Convert deploy/*.ps1 to CRLF (.gitattributes requires eol=crlf)
 #    build-deploy.sh writes LF; without this, git sees them as modified.
 #    PERLIO=:perlio (set at top) prevents Strawberry Perl text-mode double-CR.
 perl -pi -e 's/(?<!\r)\n/\r\n/' "$DEPLOY_DIR"/*.ps1
-blog_ok "Converted deploy/*.ps1 to CRLF"
+log_ok "Converted deploy/*.ps1 to CRLF"
 
 # 3. Generated script size limits (HARNESS Q4; final sizes, after CRLF). Intune:
 #    Windows PowerShell scripts "must be less than 200 KB (ASCII)", macOS shell
@@ -2656,17 +2714,20 @@ blog_ok "Converted deploy/*.ps1 to CRLF"
 #    docs do not say decimal or binary; the decimal reading is the stricter one
 #    and is our choice, not Microsoft's wording.
 #    The payload is a data file and does not count. Every generated .ps1/.sh is
-#    measured; over the limit is a WARN, repeated at the end of the build, and
-#    does not fail it (RECONCILE FX-12, decision D3: the MDM per-script delivery
-#    is not decided; deduplicating the inlined lib is FX-35, deferred).
+#    measured; over the limit does not fail the build (RECONCILE FX-12, decision
+#    D3: the MDM per-script delivery is not decided; deduplicating the inlined lib
+#    is FX-35, deferred). Each script over a limit is one detail line in
+#    deploy.log, with its hint; the end of the build writes one warning per limit
+#    exceeded, with the count (lead decision, G2a). Within 5% of the limit is its
+#    own warning (deploy-harness.* only).
 for _sz_name in deploy-harness.ps1 deploy-harness.sh; do
     if [ ! -f "$DEPLOY_DIR/$_sz_name" ]; then
-        blog_error "deploy/$_sz_name was not generated"
+        log_error "deploy/$_sz_name was not generated"
         exit 1
     fi
 done
-SIZE_WARNINGS=""
-SIZE_OVER=0
+SIZE_OVER_PS1=0
+SIZE_OVER_SH=0
 for _sz_f in "$DEPLOY_DIR"/*.ps1 "$DEPLOY_DIR"/*.sh; do
     [ -f "$_sz_f" ] || continue
     _sz_name="${_sz_f##*/}"
@@ -2674,8 +2735,11 @@ for _sz_f in "$DEPLOY_DIR"/*.ps1 "$DEPLOY_DIR"/*.sh; do
         *.ps1) _sz_max=200000 ;;
         *)     _sz_max=1000000 ;;
     esac
-    if ! _sz=$(wc -c < "$_sz_f"); then
-        blog_error "Cannot measure deploy/$_sz_name"
+    # 2>&1 before <: a redirection error is captured too
+    _sz_rc=0
+    _sz=$(wc -c 2>&1 < "$_sz_f") || _sz_rc=$?
+    if [ "$_sz_rc" -ne 0 ]; then
+        write_error "build-deploy" "cannot measure deploy/$_sz_name" "$(error_reason "$_sz" "$_sz_rc")"
         exit 1
     fi
     _sz=$((_sz + 0))
@@ -2684,18 +2748,18 @@ for _sz_f in "$DEPLOY_DIR"/*.ps1 "$DEPLOY_DIR"/*.sh; do
             deploy-harness.*) _sz_hint="move content to deploy-harness.payload" ;;
             *)                _sz_hint="see FX-35 (inlined lib)" ;;
         esac
-        _sz_msg="deploy/$_sz_name is $_sz bytes, over the Intune script limit ($_sz_max) -- $_sz_hint"
-        blog_warn "$_sz_msg"
-        SIZE_OVER=$((SIZE_OVER + 1))
-        SIZE_WARNINGS="$SIZE_WARNINGS$_sz_msg
-"
+        log_detail "deploy/$_sz_name is $_sz bytes, over the Intune script limit ($_sz_max) -- $_sz_hint"
+        case "$_sz_name" in
+            *.ps1) SIZE_OVER_PS1=$((SIZE_OVER_PS1 + 1)) ;;
+            *)     SIZE_OVER_SH=$((SIZE_OVER_SH + 1)) ;;
+        esac
     else
         case "$_sz_name" in
             deploy-harness.*)
                 if [ "$_sz" -ge $((_sz_max * 95 / 100)) ]; then
-                    blog_warn "deploy/$_sz_name is $_sz bytes, within 5% of the Intune script limit ($_sz_max)"
+                    write_warn "build-deploy" "deploy/$_sz_name is $_sz bytes, within 5% of the Intune script limit ($_sz_max)"
                 else
-                    blog_ok "deploy/$_sz_name: $_sz bytes (Intune limit $_sz_max)"
+                    log_ok "deploy/$_sz_name: $_sz bytes (Intune limit $_sz_max)"
                 fi
                 ;;
         esac
@@ -2710,64 +2774,106 @@ done
 # matches `*.bak.*`, so a dotprofile made by `aitools user init` ignores it if a
 # killed run leaves it behind.
 _bk_note="backup: ${DEPLOY_BACKUP:-none (first build)}"
-if ! _swap_dir=$(mktemp -d "$_urp/deploy.swap.bak.XXXXXX"); then
-    blog_error "Could not create a swap directory in $_urp -- deploy/ not replaced ($_bk_note)"
+# _swap_rm -- remove the swap directory on a failed swap; a failure is a warning
+# with rm's message (the build then exits 1 for the error before it)
+_swap_rm() {
+    local out rc=0
+    out=$(rm -rf "$_swap_dir" 2>&1) || rc=$?
+    if [ "$rc" -ne 0 ]; then
+        write_warn "build-deploy" "could not remove the swap directory $_swap_dir: $(error_reason "$out" "$rc")"
+    fi
+}
+_swap_rc=0
+_swap_dir=$(mktemp -d "$_urp/deploy.swap.bak.XXXXXX" 2>&1) || _swap_rc=$?
+if [ "$_swap_rc" -ne 0 ]; then
+    # mktemp prints its error, not a path, on failure
+    write_error "build-deploy" "cannot create a swap directory in $_urp (deploy/ not replaced; $_bk_note)" "$(error_reason "$_swap_dir" "$_swap_rc")"
     exit 1
 fi
-blog "Swapping the new build into $DEPLOY_DIR_FINAL (via $_swap_dir)"
-if ! mv "$DEPLOY_DIR" "$_swap_dir/new"; then
-    blog_error "Could not move the build next to $DEPLOY_DIR_FINAL -- deploy/ not replaced ($_bk_note)"
-    if ! rm -rf "$_swap_dir"; then
-        blog_warn "Could not remove the swap directory $_swap_dir"
-    fi
+log "Swapping the new build into $DEPLOY_DIR_FINAL (via $_swap_dir)"
+_mv_rc=0
+_mv_out=$(mv "$DEPLOY_DIR" "$_swap_dir/new" 2>&1) || _mv_rc=$?
+if [ "$_mv_rc" -ne 0 ]; then
+    write_error "build-deploy" "cannot move the build next to $DEPLOY_DIR_FINAL (deploy/ not replaced; $_bk_note)" "$(error_reason "$_mv_out" "$_mv_rc")"
+    _swap_rm
     exit 1
 fi
 _swap_had_old=false
 if [ -e "$DEPLOY_DIR_FINAL" ]; then
-    if ! mv "$DEPLOY_DIR_FINAL" "$_swap_dir/old"; then
-        blog_error "Could not move the old $DEPLOY_DIR_FINAL aside -- deploy/ not replaced ($_bk_note)"
-        if ! rm -rf "$_swap_dir"; then
-            blog_warn "Could not remove the swap directory $_swap_dir"
-        fi
+    _mv_rc=0
+    _mv_out=$(mv "$DEPLOY_DIR_FINAL" "$_swap_dir/old" 2>&1) || _mv_rc=$?
+    if [ "$_mv_rc" -ne 0 ]; then
+        write_error "build-deploy" "cannot move the old $DEPLOY_DIR_FINAL aside (deploy/ not replaced; $_bk_note)" "$(error_reason "$_mv_out" "$_mv_rc")"
+        _swap_rm
         exit 1
     fi
     _swap_had_old=true
 fi
-if ! mv "$_swap_dir/new" "$DEPLOY_DIR_FINAL"; then
-    blog_error "Could not move the new build into $DEPLOY_DIR_FINAL ($_bk_note)"
+_mv_rc=0
+_mv_out=$(mv "$_swap_dir/new" "$DEPLOY_DIR_FINAL" 2>&1) || _mv_rc=$?
+if [ "$_mv_rc" -ne 0 ]; then
+    write_error "build-deploy" "cannot move the new build into $DEPLOY_DIR_FINAL ($_bk_note)" "$(error_reason "$_mv_out" "$_mv_rc")"
     if $_swap_had_old; then
-        if mv "$_swap_dir/old" "$DEPLOY_DIR_FINAL"; then
-            blog "Old deploy/ put back in $DEPLOY_DIR_FINAL"
+        _mv_rc=0
+        _mv_out=$(mv "$_swap_dir/old" "$DEPLOY_DIR_FINAL" 2>&1) || _mv_rc=$?
+        if [ "$_mv_rc" -eq 0 ]; then
+            log "Old deploy/ put back in $DEPLOY_DIR_FINAL"
         else
-            blog_error "Could not put the old deploy/ back: it is in $_swap_dir/old ($_bk_note)"
+            # A second failure: its own error, after the first
+            write_error "build-deploy" "cannot put the old deploy/ back: it is in $_swap_dir/old ($_bk_note)" "$(error_reason "$_mv_out" "$_mv_rc")"
             exit 1
         fi
     fi
-    if ! rm -rf "$_swap_dir"; then
-        blog_warn "Could not remove the swap directory $_swap_dir"
-    fi
+    _swap_rm
     exit 1
 fi
-if rm -rf "$_swap_dir"; then
+_rm_rc=0
+_rm_out=$(rm -rf "$_swap_dir" 2>&1) || _rm_rc=$?
+if [ "$_rm_rc" -eq 0 ]; then
     if $_swap_had_old; then
-        blog_ok "Replaced deploy/ (old tree removed; $_bk_note)"
+        log_ok "Replaced deploy/ (old tree removed; $_bk_note)"
     else
-        blog_ok "Created deploy/ (first build)"
+        log_ok "Created deploy/ (first build)"
     fi
 else
-    blog_warn "deploy/ replaced, but the swap directory $_swap_dir (old tree) could not be removed -- delete it by hand"
+    # rm's output and its reason go to deploy.log; the warning says what to do
+    log_detail "swap directory not removed: $(error_reason "$_rm_out" "$_rm_rc")"
+    write_action "build-deploy" "deploy/ replaced, but the swap directory $_swap_dir (old tree) could not be removed -- delete it by hand" \
+        "Delete $_swap_dir -- the old deploy/ tree build-deploy left behind"
 fi
 DEPLOY_DIR="$DEPLOY_DIR_FINAL"
 
-blog_ok "Build complete: $GENERATED scripts generated in deploy/"
-ls -la "$DEPLOY_DIR/"
-if [ "$SIZE_OVER" -eq 0 ]; then
-    blog "Scripts are self-contained and ready for MDM deployment"
+log_ok "Build complete: $GENERATED scripts generated in deploy/"
+# The deploy/ listing: deploy.log only (one detail line per entry)
+_ls_rc=0
+_ls_out=$(ls -la "$DEPLOY_DIR/" 2>&1) || _ls_rc=$?
+while IFS= read -r _ls_line; do
+    if [ -n "$_ls_line" ]; then log_detail "deploy/: $_ls_line"; fi
+done <<< "$_ls_out"
+if [ "$_ls_rc" -ne 0 ]; then
+    log_detail "deploy/ listing: ls exited $_ls_rc"
+fi
+if [ "$SIZE_OVER_PS1" -eq 0 ] && [ "$SIZE_OVER_SH" -eq 0 ]; then
+    log "Scripts are self-contained and ready for MDM deployment"
+fi
+# One warning per Intune limit exceeded; each script's line is in deploy.log
+if [ "$SIZE_OVER_PS1" -gt 0 ]; then
+    write_warn "build-deploy" "$SIZE_OVER_PS1 generated script(s) over the Intune script limit (200000)"
+fi
+if [ "$SIZE_OVER_SH" -gt 0 ]; then
+    write_warn "build-deploy" "$SIZE_OVER_SH generated script(s) over the Intune script limit (1000000)"
+fi
+
+# --- Exit ---
+# A failed step ended the build with exit 1 before this point; this footer adds the
+# warning count. build-deploy writes no OK status record (lead decision, G2 A6).
+if [ "$ERRORS" -gt 0 ]; then
+    log "FAILED with $ERRORS error(s)" "error"
+    exit 1
+elif [ "$WARNINGS" -gt 0 ]; then
+    log "COMPLETED with $WARNINGS warning(s)" "warn"
+    exit 0
 else
-    blog_warn "$SIZE_OVER generated script(s) over the Intune script limit (WARN only, the build does not fail):"
-    printf '%s' "$SIZE_WARNINGS" | while IFS= read -r _sz_msg; do
-        if [ -n "$_sz_msg" ]; then
-            blog_warn "  $_sz_msg"
-        fi
-    done
+    log "COMPLETED successfully" "ok"
+    exit 0
 fi
