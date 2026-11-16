@@ -1,6 +1,6 @@
 exit 0
 -- summary rows
-WARN|aitools config|created
+OK|aitools config|created
 DETAIL|aitools config|version updated
 DETAIL|aitools config|reposPath updated
 DETAIL|aitools config|repoPath updated
@@ -9,6 +9,7 @@ DETAIL|aitools config|githubUser updated
 DETAIL|aitools config|userRepoPath updated
 DETAIL|aitools config|machineId updated
 DETAIL|aitools config|machineAlias updated
+WARN|aitools config|profile "nobul-mac" was registered with hostname "other-host", this machine is "nobul-mac" -- renamed or cloned -- run: aitools user init
 ACTION||Run: aitools user init (updates this machine's profile)
 -- config.json
 {

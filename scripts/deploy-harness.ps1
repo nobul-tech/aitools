@@ -32,8 +32,8 @@
 #                                   "<skill name><TAB><source>" line per skill (section 5b)
 #                                   Source: shared | retired (a previous manifest's
 #                                   "aitools" or "dotprofile" lines are retired).
-# Name conflicts: the first source wins; each skipped duplicate is LogError +
-#   an ERROR row. Unit: file name (rules, hooks), skill directory name (skills);
+# Name conflicts: the first source wins; each skipped duplicate is one error
+#   (Write-AitError, reason: the source kept). Unit: file name (rules, hooks), skill directory name (skills);
 #   compared case-insensitively. Files named *.bak.* are never deployed, nor
 #   skill directories whose name starts with "." or contains ".bak." (".bak."
 #   matched case-insensitively).
@@ -95,8 +95,7 @@ if ($Help) {
     exit 0
 }
 if ($args.Count -gt 0) {
-    LogError "Unknown option: $($args -join ' ') (see -Help)"
-    Write-Summary "ERROR" $tool "bad arguments"
+    Write-AitError $tool "bad arguments" "unknown option: $($args -join ' ') (see -Help)"
     exit 1
 }
 if ($env:AITOOLS_DRY_RUN -eq "1") { $DryRun = [switch]::Present }
@@ -133,22 +132,16 @@ if ($configSkip) {
     Log "config.json: setup-user-config.ps1 not run ($configSkip)"
     Write-Summary "OK" "config.json" (Get-ShortDetail "n/a ($configSkip)")
 } elseif (-not (Test-Path -LiteralPath $configWriter)) {
-    LogError "config.json: writer not found at $configWriter -- config.json not generated"
-    Write-Summary "ERROR" $tool "config.json not generated"
+    Write-AitError "config.json" "config.json not generated" "setup-user-config.ps1 not found at $configWriter"
 } else {
     Log "config.json: generating from profile.json (setup-user-config.ps1)"
-    $global:LASTEXITCODE = 0
-    $cwRc = 0
-    try {
-        if ($DryRun) { & $configWriter -DryRun } else { & $configWriter }
-        $cwRc = $LASTEXITCODE
-    } catch {
-        LogError "config.json: setup-user-config.ps1 threw: $_"
-        $cwRc = 1
-    }
-    if ($cwRc -and $cwRc -ne 0) {
-        LogError "config.json: setup-user-config.ps1 failed (exit $cwRc) -- see its log lines above"
-        Write-Summary "ERROR" $tool "config.json not generated"
+    # Relayed (reference/logging.md 8.3): the writer records its own warnings and
+    # errors; a failure or a throw is counted here as one error (exit 1) and recorded
+    # under "aitools config" only when the writer recorded none
+    $cwArgs = if ($DryRun) { @{ DryRun = $true } } else { @{} }
+    $cwRc = Invoke-ChildRelayed "setup-user-config.ps1" $configWriter $cwArgs "aitools config"
+    if ($cwRc -ne 0) {
+        LogDetail "config.json: setup-user-config.ps1 exited $($script:AitLibChildRc)"
     }
 }
 
@@ -174,8 +167,7 @@ foreach ($kind in $kinds) {
         New-Item -ItemType Directory -Path $d -Force -ErrorAction Stop | Out-Null
         Log "Created $d"
     } catch {
-        LogError "Cannot create ${d}: $_"
-        Write-Summary "ERROR" $tool (Get-ShortDetail "cannot create $kind/")
+        Write-AitError $tool "cannot create $d" (Get-AitErrorReason -ErrorRecord $_)
     }
 }
 
@@ -199,12 +191,12 @@ function Add-Source {
         Log "Source $Label not found ($SrcDir) -- skipped"
         return
     }
-    # 2>$null: rev-parse fails outside a git work tree; that failure is the answer
-    # ($LASTEXITCODE checked on the next line).
-    $null = & git -C $SrcDir rev-parse --is-inside-work-tree 2>$null
-    if ($LASTEXITCODE -ne 0) {
-        LogError "Source $Label ($SrcDir) is not in a git work tree -- skipped (only git-tracked files are deployed)"
-        Write-Summary "ERROR" $tool (Get-ShortDetail "${Label}: not a git checkout")
+    # rev-parse fails outside a git work tree: the exit code is the answer, and its
+    # message (fatal: not a git repository ...) the reason
+    $rpOut = & git -C $SrcDir rev-parse --is-inside-work-tree 2>&1
+    $rpRc = $LASTEXITCODE
+    if ($rpRc -ne 0) {
+        Write-AitError $tool "${Label}: not a git checkout -- skipped (only git-tracked files are deployed)" (Get-AitErrorReason -Output $rpOut -ExitCode $rpRc)
         return
     }
     # UTF-8 for git's output (non-ASCII names; cross-platform-detail.md "PowerShell pipeline encoding")
@@ -221,8 +213,7 @@ function Add-Source {
     Remove-Item -LiteralPath $errFile -Force -ErrorAction SilentlyContinue
     # ErrorAction exempt: temp file cleanup; nothing depends on it
     if ($lsRc -ne 0) {
-        LogError "Source ${Label}: git ls-files failed in ${SrcDir}: $lsErr"
-        Write-Summary "ERROR" $tool (Get-ShortDetail "${Label}: git ls-files failed")
+        Write-AitError $tool "${Label}: git ls-files failed in $SrcDir" (Get-AitErrorReason -Output $lsErr -ExitCode $lsRc)
         return
     }
     $listed["$Kind|$Label"] = $true
@@ -264,15 +255,23 @@ function Add-Source {
                 $keepUnit = $false
                 $script:duplicates++
                 $w = $seen[$key]
-                LogError "Duplicate $Kind name: $unit in $Label ($(Join-Path $SrcDir $unit)) skipped; kept $($w.Unit) from $($w.Label) (first source wins)"
-                Write-Summary "ERROR" $tool (Get-ShortDetail "${unit}: dup in $Label")
+                LogDetail "duplicate $Kind name: $(Join-Path $SrcDir $unit)"
+                Write-AitError $tool "duplicate $Kind name $unit in $Label skipped" "kept $($w.Unit) from $($w.Label) (first source wins)"
             }
         }
         if ($unit -and -not $keepUnit) { continue }
         $relNative = $rel -replace '/', [IO.Path]::DirectorySeparatorChar
         $src = Join-Path $SrcDir $relNative
         if (-not (Test-Path -LiteralPath $src -PathType Leaf)) {
-            LogWarn "Source ${Label}: $rel is tracked but missing on disk -- skipped"
+            # MDM (build-deploy sets $mdmDamaged; unset on the dev path): a file
+            # whose embedded record is damaged was recorded as an error when it
+            # was unpacked; its missing file is that error's consequence, logged
+            # at info (one cause, one red line: logging.md 8.3)
+            if ($script:mdmDamaged -and $script:mdmDamaged.Contains([IO.Path]::GetFullPath($src))) {
+                Log "${Label}: $rel not deployed -- its embedded record is damaged (the error above)"
+            } else {
+                Write-AitWarn $tool "${Label}: $rel is tracked but missing on disk -- skipped"
+            }
             continue
         }
         $plan.Add([pscustomobject]@{ Kind = $Kind; Src = $src; Dest = (Join-Path $DestDir $relNative); Item = "$Kind/$rel" })
@@ -294,7 +293,7 @@ foreach ($cli in @("harness-db.py", "read-session.py", "read-session-full.py")) 
     if (Test-Path -LiteralPath $cliSrc -PathType Leaf) {
         $plan.Add([pscustomobject]@{ Kind = "bin"; Src = $cliSrc; Dest = (Join-Path (Join-Path $harnessDir "bin") $cli); Item = "bin/$cli" })
     } else {
-        LogWarn "bin: $cli not found at $cliSrc -- skipped"
+        Write-AitWarn $tool "bin: $cli not found at $cliSrc -- skipped"
     }
 }
 
@@ -308,7 +307,7 @@ foreach ($p in $plan) {
     try {
         $content = "$(Get-Content -LiteralPath $p.Src -Raw -ErrorAction Stop)"
     } catch {
-        LogError "Failed: $($p.Item): cannot read $($p.Src): $_"
+        Write-AitError $tool "failed: $($p.Item)" (Get-AitErrorReason -ErrorRecord $_)
         $nFailed++
         Write-Summary "DETAIL" $tool (Get-ShortDetail "failed: $($p.Item)")
         continue
@@ -321,7 +320,7 @@ foreach ($p in $plan) {
             try {
                 $cur = "$(Get-Content -LiteralPath $p.Dest -Raw -ErrorAction Stop)"
             } catch {
-                LogWarn "Cannot read $($p.Dest) for the dry-run comparison: $_"
+                Write-AitWarn $tool "cannot read $($p.Dest) for the dry-run comparison: $_"
                 $cur = $null
             }
             if ($null -eq $cur -or ($cur -replace '[\r\n]+$', '') -cne ($content -replace '[\r\n]+$', '')) { $nWouldUpdate++ }
@@ -348,12 +347,12 @@ foreach ($p in $plan) {
             Write-Summary "DETAIL" $tool (Get-ShortDetail "skipped: $($p.Item)")
         }
         "failed" {
-            # The library logged the reason with LogError and restored the files.
+            # The library recorded the error once, with its reason, and restored the files.
             $nFailed++
             Write-Summary "DETAIL" $tool (Get-ShortDetail "failed: $($p.Item)")
         }
         default {
-            LogError "Failed: $($p.Item): unexpected deploy result '$result'"
+            Write-AitError $tool "failed: $($p.Item)" "unexpected deploy result '$result'"
             $nFailed++
             Write-Summary "DETAIL" $tool (Get-ShortDetail "failed: $($p.Item)")
         }
@@ -464,24 +463,22 @@ function Remove-RetiredRule([string]$Name) {
     # Not Backup-File: it resolves wildcards ([ ] in a rule name), finds nothing
     # and reports success. Same name as backup_file: <file>.bak.<UTC timestamp>.
     $bak = "$f.bak." + (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHHmmssZ")
-    $backupOk = $true
+    $backupErr = $null
     try {
         Copy-Item -LiteralPath $f -Destination $bak -Force -ErrorAction Stop
     } catch {
-        $backupOk = $false
-        LogDetail "Retired rule ${Name}: backup copy failed: $_"
+        $backupErr = $_
     }
-    if (-not $backupOk -or -not (Test-Path -LiteralPath $bak -PathType Leaf)) {
-        LogError "Retired rule ${Name}: backup failed -- $f not removed"
-        Write-Summary "ERROR" $tool (Get-ShortDetail "retire failed: $Name")
+    if ($backupErr -or -not (Test-Path -LiteralPath $bak -PathType Leaf)) {
+        $why = if ($backupErr) { Get-AitErrorReason -ErrorRecord $backupErr } else { "$bak not found after the copy" }
+        Write-AitError $tool "retire failed: $Name" "backup failed: $why -- $f not removed"
         return
     }
-    Log "Backed up $f"
+    Log "Backed up $f to $bak"
     try {
         Remove-Item -LiteralPath $f -Force -ErrorAction Stop
     } catch {
-        LogError "Retired rule ${Name}: cannot remove ${f}: $_"
-        Write-Summary "ERROR" $tool (Get-ShortDetail "retire failed: $Name")
+        Write-AitError $tool "retire failed: $Name" (Get-AitErrorReason -ErrorRecord $_)
         return
     }
     $script:nRetired++
@@ -507,7 +504,7 @@ function Remove-OldSkillBackups([string]$Name) {
                 $_.Name.Substring($prefix.Length) -cmatch '\A\d{4}-\d\d-\d\dT\d{6}Z\z'
             } | ForEach-Object { $_.Name })
     } catch {
-        LogWarn "Retired skill ${Name}: cannot list old backups: $_"
+        Write-AitWarn $tool "retired skill ${Name}: cannot list old backups: $_"
         return
     }
     $names = [string[]]$found
@@ -520,7 +517,7 @@ function Remove-OldSkillBackups([string]$Name) {
             LogDetail "Retired skill ${Name}: prune of $old failed: $_"
         }
         if (Test-Path -LiteralPath $old) {
-            LogWarn "Retired skill ${Name}: cannot prune old backup $old"
+            Write-AitWarn $tool "retired skill ${Name}: cannot prune old backup $old"
         } else {
             Log "Pruned old backup: $old"
         }
@@ -561,7 +558,7 @@ function Remove-SkillBackupCopy([string]$Name, [string]$Bak) {
             }
         }
     } catch {
-        LogWarn "Retired skill ${Name}: cannot make the incomplete backup writable ($_)"
+        Write-AitWarn $tool "retired skill ${Name}: cannot make the incomplete backup writable ($_)"
     }
     try {
         Remove-SkillTree $Bak
@@ -586,11 +583,10 @@ function Remove-SkillBackupCopy([string]$Name, [string]$Bak) {
         }
     }
     if ($renamed) {
-        LogError "Retired skill ${Name}: cannot remove the incomplete backup -- renamed to $inc; delete it by hand"
+        Write-AitError $tool "bak cleanup failed: $Name" "cannot remove the incomplete backup -- renamed to $inc; delete it by hand"
     } else {
-        LogError "Retired skill ${Name}: cannot remove or rename the incomplete backup $Bak; delete it by hand"
+        Write-AitError $tool "bak cleanup failed: $Name" "cannot remove or rename the incomplete backup $Bak; delete it by hand"
     }
-    Write-Summary "ERROR" $tool (Get-ShortDetail "bak cleanup failed: $Name")
 }
 
 # Get-TreeDifference A B -- "" when directories A and B hold the same relative
@@ -637,15 +633,13 @@ function Remove-RetiredSkill([string]$Name) {
     }
     $bak = "$d.bak." + (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHHmmssZ")
     if (Test-Path -LiteralPath $bak) {
-        LogError "Retired skill ${Name}: backup failed ($bak already exists) -- $d not removed"
-        Write-Summary "ERROR" $tool (Get-ShortDetail "retire failed: $Name")
+        Write-AitError $tool "retire failed: $Name" "backup $bak already exists -- $d not removed"
         return
     }
     try {
         Copy-SkillTree $d $bak
     } catch {
-        LogError "Retired skill ${Name}: backup failed ($_) -- $d not removed"
-        Write-Summary "ERROR" $tool (Get-ShortDetail "retire failed: $Name")
+        Write-AitError $tool "retire failed: $Name" "backup failed: $(Get-AitErrorReason -ErrorRecord $_) -- $d not removed"
         Remove-SkillBackupCopy $Name $bak
         return
     }
@@ -655,19 +649,19 @@ function Remove-RetiredSkill([string]$Name) {
         $diff = "comparison failed: $_"
     }
     if ($diff) {
-        LogError "Retired skill ${Name}: backup $bak differs from the directory ($diff) -- $d not removed"
-        Write-Summary "ERROR" $tool (Get-ShortDetail "retire failed: $Name")
+        Write-AitError $tool "retire failed: $Name" "backup $bak differs from the directory: $diff -- $d not removed"
         Remove-SkillBackupCopy $Name $bak
         return
     }
+    $removeErr = $null
     try {
         Remove-SkillTree $d
     } catch {
-        LogDetail "Retired skill ${Name}: removal failed: $_"
+        $removeErr = $_
     }
     if (Test-Path -LiteralPath $d) {
-        LogError "Retired skill ${Name}: cannot remove $d"
-        Write-Summary "ERROR" $tool (Get-ShortDetail "retire failed: $Name")
+        $why = if ($removeErr) { Get-AitErrorReason -ErrorRecord $removeErr } else { "$d still exists after the removal" }
+        Write-AitError $tool "retire failed: $Name" $why
         return
     }
     $script:nRetired++
@@ -690,13 +684,12 @@ function Write-HarnessManifest([string]$Kind) {
     try {
         $mp = Get-HarnessManifestPlan $Kind $header $manifest
     } catch {
-        LogError "$title manifest: $_ -- manifest not written, nothing retired"
-        Write-Summary "ERROR" $tool "$Kind manifest not written"
+        Write-AitError $tool "$Kind manifest not written, nothing retired" (Get-AitErrorReason -ErrorRecord $_)
         return
     }
     foreach ($a in $mp.Actions) {
         switch ($a.Kind) {
-            "warn" { LogWarn "$title manifest ${manifest}: $($a.Name)" }
+            "warn" { Write-AitWarn $tool "$title manifest ${manifest}: $($a.Name)" }
             "keep" { Log "$title manifest: $($a.Name) kept as $($a.Extra) (source not listed this run -- not retired)" }
             { $_ -in @("retire", "stale") } {
                 if ($a.Kind -eq "retire") {
@@ -714,8 +707,7 @@ function Write-HarnessManifest([string]$Kind) {
                     } catch [System.Management.Automation.ItemNotFoundException] {
                         $item = $null   # absent: nothing to remove (the common case)
                     } catch {
-                        LogWarn "Retired skill $($a.Name): cannot read ${p}: $_ -- left alone"
-                        Write-Summary "WARN" $tool (Get-ShortDetail "cannot read: $($a.Name)")
+                        Write-AitWarn $tool "retired skill $($a.Name): cannot read ${p}: $_ -- left alone"
                         continue
                     }
                     if ($null -eq $item) {
@@ -723,8 +715,7 @@ function Write-HarnessManifest([string]$Kind) {
                     } elseif ($item.PSIsContainer -and -not $item.LinkType) {
                         Remove-RetiredSkill $a.Name
                     } else {
-                        LogWarn "Retired skill $($a.Name): $p is not a directory -- left alone"
-                        Write-Summary "WARN" $tool (Get-ShortDetail "not a dir: $($a.Name)")
+                        Write-AitWarn $tool "retired skill $($a.Name): $p is not a directory -- left alone"
                     }
                 }
             }
@@ -738,8 +729,7 @@ function Write-HarnessManifest([string]$Kind) {
     # A directory at the manifest path: same outcome as the .sh (File.Move would
     # also fail, with a less clear message).
     if (Test-Path -LiteralPath $manifest -PathType Container) {
-        LogError "$title manifest: $manifest is a directory -- manifest not written"
-        Write-Summary "ERROR" $tool "$Kind manifest not written"
+        Write-AitError $tool "$Kind manifest not written" "$manifest is a directory"
         return
     }
     $text = "$header`n"
@@ -748,10 +738,9 @@ function Write-HarnessManifest([string]$Kind) {
         [IO.File]::WriteAllText($tmp, $text, [System.Text.UTF8Encoding]::new($false))
         [IO.File]::Move($tmp, $manifest, $true)
     } catch {
-        LogError "$title manifest: cannot write ${manifest}: $_ -- manifest not written"
-        Write-Summary "ERROR" $tool "$Kind manifest not written"
+        Write-AitError $tool "$Kind manifest not written" (Get-AitErrorReason -ErrorRecord $_)
         if (Test-Path -LiteralPath $tmp) {
-            try { Remove-Item -LiteralPath $tmp -Force -ErrorAction Stop } catch { LogWarn "Cannot remove ${tmp}: $_" }
+            try { Remove-Item -LiteralPath $tmp -Force -ErrorAction Stop } catch { Write-AitWarn $tool "cannot remove ${tmp}: $_" }
         }
         return
     }
@@ -773,7 +762,7 @@ foreach ($kind in $kinds) {
     try {
         $found = @(Get-ChildItem -LiteralPath $d -Recurse -File -ErrorAction Stop)
     } catch {
-        LogWarn "Cannot list $d -- preserved files not checked: $_"
+        Write-AitWarn $tool "cannot list $d -- preserved files not checked: $_"
         continue
     }
     $dFull = [IO.Path]::GetFullPath($d).TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
@@ -798,15 +787,16 @@ if ($DryRun) {
     # Pending retirements ($nWouldRetire) are logged, not in this row: the row is at
     # least 27 characters, so ", N retire" never fits in 30.
     Write-Summary "OK" $tool (Get-ShortDetail "dry-run: $nWouldCreate create, $nWouldUpdate update")
-} elseif ($nFailed -gt 0) {
-    Write-Summary "ERROR" $tool (Get-ShortDetail "$nFailed failed")
-} elseif ($nSkipped -gt 0) {
-    Write-Summary "WARN" $tool (Get-ShortDetail "$nSkipped skipped (user review)")
 } else {
+    # The status record only: each failed file is its own error and each skipped
+    # file its own warning (the library's or this script's, reference/logging.md 8.3);
+    # the counts are part of the status, as the deploy tracker writes them
     $parts = @()
     if ($nAdded -gt 0) { $parts += "$nAdded added" }
     if ($nUpdated -gt 0) { $parts += "$nUpdated updated" }
     if ($nAccepted -gt 0) { $parts += "$nAccepted accepted" }
+    if ($nSkipped -gt 0) { $parts += "$nSkipped skipped" }
+    if ($nFailed -gt 0) { $parts += "$nFailed failed" }
     $text = $parts -join ", "
     if (-not $text) {
         $text = "$nVerified verified"

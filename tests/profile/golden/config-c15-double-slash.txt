@@ -1,6 +1,6 @@
 exit 1
 -- summary rows
-ERROR|aitools config|validation failed
+ERROR|aitools config|merged config rejected -- existing file left untouched|double slash in a path value: "<TMP>/home/repos//x"
 -- config.json
 {
   "version": 2,

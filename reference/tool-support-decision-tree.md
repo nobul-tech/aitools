@@ -24,7 +24,7 @@
 script follows to install, update, keep, or replace a tool on the current
 platform and environment, with the registry fields, library helpers, tool
 exception record, and pre-commit conformance check it depends on. **Scope**:
-Tree nodes and leaves, the log line and summary row for every leaf, the
+Tree nodes and leaves, the log line and run summary records for every leaf, the
 install-method menu, update channels, install-method detection, the
 authoritative field rules of tool registry schema 1.1, the bash/PowerShell
 helper contract, the installer and entry-point contract for exit 2, the tool
@@ -146,7 +146,7 @@ with detail `dry-run: <leaf>`.
 | T3 | Only `knownPaths` entries recorded as verified (section 6) count. A hit = installed the preferred way but off PATH: do not reinstall; T7 reports NOT-ON-PATH | script-standards-detail "Standard 4" |
 | P | `kind` `system` / `bundled` are not installable: absent → PREREQ `not provided by <platform or environment>`. Otherwise the method's manager is on PATH and `check_build_prereqs` / `Check-BuildPrereqs` passes for source builds. No fallback to another method (T-Q4). The same checks run before R1 (node RQ) and before a T4 update that builds from source: a failure there is REPLACE-FAIL `(prereq missing)` with the PREREQ ACTION (the old copy is kept), or for T4 a failed update (warn, continue to T7) | `@.claude/rules/script-standards.md` "Build prerequisite validation" |
 | I | Success judged by the binary the method installs, matched by its detection probe, not by output text | F2 |
-| T4 | Section 4. Source-build kinds pass the P checks first. A failed update only logs a warning and continues to T7; T7's row is then promoted to WARN by `write_summary`, or reports the broken state if the tool no longer works | F3 |
+| T4 | Section 4. Source-build kinds pass the P checks first. A failed update records one warning, `write_warn "<tool>" "update failed: <reason>"` (`<reason>` from `error_reason` over the update's captured output and exit code), and continues to T7, which writes its own record: OK when the tool still works, the broken state's leaf when it no longer does. No record is recoloured (`@reference/logging.md` 8.3): the tool's panel line is the yellow warning | F3 |
 | T5 | Section 8 match rule. A stale exception is logged (info) and ignored; continue at T6 | D-TS4 |
 | T6 | Non-interactive, `--force`, and dry run change nothing. This deliberately differs from managed-file menus (force/non-interactive = overwrite) | D-TS3; `interactive-menus.md` |
 | R1 | Runs only after the RQ checks pass. Install the preferred method, or update an existing shadowed preferred copy; verify its binary; `tool_install` / `tool_update` print the preferred binary path (section 7.2). Failure leaves the old copy untouched | D-TS3; F1; GitHub issue #12 |
@@ -156,42 +156,63 @@ with detail `dry-run: <leaf>`.
 | T7 | Resolves to a binary matched by the preferred method's detection (when tool-ops `resolution` exists for the tool, its `managedPath` is used — `plans/tooling-resolution-and-artifact-registry.md` B1; when `resolveBy` is `knownPaths`, the T2 resolution rule applies and SHADOWED does not); the version probe prints a version; it satisfies `versions.minVersion` and is not in `versions.blocked` | script-standards-detail "Standard 4"; D-TS11 |
 | Kept / held copies | EXCEPTION, KEEP and HOLD skip updates and the resolution half of T7 (the copy is not managed) but still run the version half: below `minVersion` or blocked turns the leaf into BELOW-MIN | review C-15 |
 
-## 3. Leaves: log line, summary row, ACTION, exit
+## 3. Leaves: log line, records, ACTION, exit
 
-Every leaf writes exactly one summary row for the tool (`write_summary` /
-`Write-Summary`). Detail text is at most 30 characters and holds no paths
-(`reference/script-standards-detail.md` "Summary detail text rules"); paths go
-in the log. `<ver>` is the bare version token (`1.26.1`, not the 32-character
-`go version go1.26.1 darwin/arm64`). Every ACTION row pairs with a `log_warn`
-carrying the same text. The installer runners add their own `script failed
-(exit 1)` ERROR row for exit-1 leaves; that second row is expected and
-`show_summary` keeps one row per tool (highest severity).
+Every leaf reports its outcome through the `aitools-lib` helpers.
+`@reference/logging.md` section 8.2 owns each helper's effect on deploy.log,
+the counts and the run summary file; this section says which helper each
+leaf calls, and with what.
 
-| Leaf | Log | Summary | ACTION | Exit |
-|------|-----|---------|--------|------|
-| NA | via `write_environment_skip` / `Write-EnvironmentSkip` (environment), or the platform variant `write_platform_skip` / `Write-PlatformSkip` (new, Q12) | OK `n/a (<environment>)` / `n/a (<platform>)` | -- | 0 |
-| EVALUATING (D-TS12) | `log_warn "<tool> is under evaluation on <platform>/<environment> -- not installed by aitools"` | WARN `under evaluation` | `run /tool-eval <slug> for <platform>` | 0 |
-| NO-METHOD | `log_error "<tool>: no preferred install method for <platform>/<environment> in the tool registry"` (ambiguous: `"... two equally specific preferred methods: <a>, <b>"`) | ERROR `no method for <platform>` / `two methods for <platform>` | `run /tool-eval <slug> -- no <platform> method` / `run /tool-eval <slug> -- duplicate preferred` | 1 |
-| PREREQ | `log_error "<manager or provider> not found -- cannot install <tool> via <method>"` | ERROR `<manager> not found` / `not in <env> image` | install instruction for the manager, or the prerequisite's setup script | 1 |
-| INSTALL-FAIL | `log_error` with exit code; command output as `log_detail` | ERROR `install failed (exit N)` | remedy from `diagnose_build_failure` when it matches | 1 |
-| HOLD | `log_warn "<tool> <ver> at <path> is a <method or unknown-source> install, not <preferred> -- unchanged (<non-interactive / forced / no answer>)"` | WARN `<ver> (not preferred)` / `<ver> (unknown source)` | `run aitools install in a terminal without --force to replace or keep <tool>` | 0 |
-| EXCEPTION (D-TS10) | `log "known exception: <tool> via <method> at <path>, kept <decidedAt> (profile <alias>)"` (info) | OK `<ver> (kept)` | -- | 0 |
-| KEEP | `log "tool exception recorded: <tool> via <method> at <path>"` (info); the writer commits and pushes profile.json (N-Q2, section 8) | OK `<ver> (kept)`; WARN `<ver> (kept, not saved)` when the write is refused or fails; WARN `<ver> (kept, not pushed)` when the commit or push fails | refused or failed write: `log_warn` + ACTION `run aitools user init to remember tool choices`; commit or push failed: `log_warn` + ACTION `run git push in <userRepoPath>` | 0 |
-| ABORT | `log_warn "<tool>: aborted by user -- unchanged"` | WARN `<ver> (aborted)` | `re-run aitools install to decide <tool>` | 2 |
-| REPLACE-FAIL | `log_warn "<preferred> install failed -- kept <method> copy at <path>"`; RQ variant: `log_warn "<manager or prereq> not found -- cannot replace <method> copy at <path> with <preferred>; kept"` | WARN `<ver> (replace failed)` / `<ver> (prereq missing)` | RQ variant: the PREREQ install instruction | 0 |
-| REPLACE-BLOCKED | `log_warn "<reason: preferred dir <pdir> not on PATH / same file as old copy> -- kept <method> copy at <path>"` | WARN `<ver> (replace blocked)` | `add <pdir> to PATH, then re-run aitools install` (PATH reason only) | 0 |
-| REMOVE-MANUAL note | `log_warn "no removal recipe for <method> -- remove <path> manually"` then T7 | (T7's row) | `remove <path> -- old <tool> copy` | (T7) |
-| REMOVE-FAIL note | `log_warn "<removal> failed or refused (<reason>) -- old copy at <path> remains"` then T7 | (T7's row) | `remove <path> -- old <tool> copy` | (T7) |
-| OK | `log_ok "<tool> <ver> at <path> (<method>)"` | OK `<ver>` | -- | 0 |
-| SHADOWED (D-TS11) | `log_error "<cmd> resolves to <path>, not the <preferred> copy at <ppath>"` | ERROR `shadowed (see log)` | `put <pdir> before <dir> in PATH, or remove <path>` | 1 |
-| NOT-ON-PATH | `log_error "<tool> installed at <ppath> but not on PATH"` | ERROR `installed but not on PATH` | `add <pdir> to PATH -- <tool> not accessible` | 1 |
-| VERSION-UNKNOWN | `log_error "<path> resolves but <version probe> failed (exit N)"`; output as detail | ERROR `version check failed` | -- | 1 |
-| BELOW-MIN | `log_error "<tool> <ver> is below minVersion <min>"` (or `is blocked`). Harness runtimes bash and perl (T-Q5): the script first updates them; when the update fails it logs `log_warn` instead, and the run continues | ERROR `<ver> below <min>` / `<ver> blocked`; bash and perl: WARN `<ver> below <min>` | `upgrade <tool> to <min> or later` | 1; bash and perl: 0 |
+- **OK status**: a leaf whose tool works writes one OK record (`write_summary
+  OK` / `Write-Summary "OK"`) with the tool's status. Status text is at most
+  30 characters and holds no paths (`reference/script-standards-detail.md`
+  "Summary detail text rules"); paths go in the log. `<ver>` is the bare
+  version token (`1.26.1`, not the 32-character `go version go1.26.1
+  darwin/arm64`).
+- **Warning**: a warning leaf calls `write_warn "<tool>" "<text>"`, or
+  `write_action "<tool>" "<text>" "<ACTION>"` when the user has a step to
+  take (`Write-AitWarn` / `Write-AitAction`). The text says what is wrong or
+  what to do (logging.md 8.3, "What is a warning"). The helper logs, counts
+  and records it; there is no separate `log_warn` or `write_summary` call.
+- **Error**: an error leaf calls `write_error "<tool>" "<WHAT>" "<REASON>"`
+  (`Write-AitError`): WHAT is the step that failed, REASON why; the table
+  names the source of each REASON. A leaf's ACTION is one `write_summary
+  ACTION` record after the error.
+- **No second record**: no WARN or ERROR record is written with
+  `write_summary`, and no record is recoloured. A runner records a failed
+  child only when the child recorded no ERROR record (logging.md 8.3,
+  "Children"), so an exit-1 leaf, which has recorded its error, is counted
+  by the runner but not recorded again.
+
+`<tool>` is the script's summary name (`TOOL_LABEL`, section 7.1). `ACTION`
+as the last argument of a call stands for the leaf's ACTION column.
+
+| Leaf | Log line and records | ACTION | Exit |
+|------|----------------------|--------|------|
+| NA | via `write_environment_skip` / `Write-EnvironmentSkip` (environment), or the platform variant `write_platform_skip` / `Write-PlatformSkip` (new, Q12): OK `n/a (<environment>)` / `n/a (<platform>)` | -- | 0 |
+| EVALUATING (D-TS12) | `write_action "<tool>" "under evaluation on <platform>/<environment> -- not installed by aitools" ACTION` | `run /tool-eval <slug> for <platform>` | 0 |
+| NO-METHOD | `write_error "<tool>" "no method for <platform>" "no preferred install method for <platform>/<environment> in the tool registry"`; ambiguous: WHAT `two methods for <platform>`, REASON `two equally specific preferred methods: <a>, <b>`. REASON source: the T1 registry check | `run /tool-eval <slug> -- no <platform> method` / `run /tool-eval <slug> -- duplicate preferred` | 1 |
+| PREREQ | `write_error "<tool>" "cannot install via <method>" "<manager or provider> not found"` (environment variant: REASON `not in <environment> image`). REASON source: the P check | install instruction for the manager, or the prerequisite's setup script | 1 |
+| INSTALL-FAIL | `write_error "<tool>" "<method> install failed (exit N)" REASON`. REASON source: `error_reason` over the install command's captured output and exit code (a known build signature first, as `<NAME>: <REMEDY>`); `error_reason` logs the full output as detail lines | remedy from `diagnose_build_failure` when it matches | 1 |
+| HOLD | `write_action "<tool>" "<ver> at <path> is a <method or unknown-source> install, not <preferred> -- unchanged (<non-interactive / forced / no answer>)" ACTION` | `run aitools install in a terminal without --force to replace or keep <tool>` | 0 |
+| EXCEPTION (D-TS10) | `log "known exception: <tool> via <method> at <path>, kept <decidedAt> (profile <alias>)"` (info); OK `<ver> (kept)` | -- | 0 |
+| KEEP | `log "tool exception recorded: <tool> via <method> at <path>"` (info); the writer commits and pushes profile.json (N-Q2, section 8); OK `<ver> (kept)`. Instead of the OK record: when the write is refused or fails, `write_action "<tool>" "<ver> kept, not saved: <reason>" ACTION`; when the commit or push fails, `write_action "<tool>" "<ver> kept, not pushed" ACTION` | refused or failed write: `run aitools user init to remember tool choices`; commit or push failed: `run git push in <userRepoPath>` | 0 |
+| ABORT | `<tool>: aborted by user -- unchanged`, logged at error and counted through the library's non-recording abort path, as the managed-file `[x]abort` (`_managed_abort` / `Invoke-ManagedAbort`). No WARN or ERROR record of its own: the runner records the abort (logging.md 8.3, "A user abort"); the ACTION is a `write_summary ACTION` record | `re-run aitools install to decide <tool>` | 2 |
+| REPLACE-FAIL | `write_warn "<tool>" "<ver>: <preferred> install failed -- kept <method> copy at <path>"`; RQ variant: `write_action "<tool>" "<ver>: <manager or prereq> not found -- cannot replace <method> copy at <path> with <preferred>; kept" ACTION` | RQ variant: the PREREQ install instruction | 0 |
+| REPLACE-BLOCKED | PATH reason: `write_action "<tool>" "<ver>: preferred dir <pdir> not on PATH -- kept <method> copy at <path>" ACTION`; same-file reason: `write_warn "<tool>" "<ver>: preferred copy is the same file as the old copy -- kept <method> copy at <path>"` | `add <pdir> to PATH, then re-run aitools install` (PATH reason only) | 0 |
+| REMOVE-MANUAL note | `write_action "<tool>" "no removal recipe for <method> -- remove <path> manually" ACTION`, then T7, which writes its own record | `remove <path> -- old <tool> copy` | (T7) |
+| REMOVE-FAIL note | `write_action "<tool>" "<removal> failed or refused (<reason>) -- old copy at <path> remains" ACTION`, then T7, which writes its own record | `remove <path> -- old <tool> copy` | (T7) |
+| OK | `log_ok "<tool> <ver> at <path> (<method>)"`; OK `<ver>` | -- | 0 |
+| SHADOWED (D-TS11) | `write_error "<tool>" "shadowed (see log)" "<cmd> resolves to <path>, not the <preferred> copy at <ppath>"`. REASON source: the T7 resolution check | `put <pdir> before <dir> in PATH, or remove <path>` | 1 |
+| NOT-ON-PATH | `write_error "<tool>" "installed but not on PATH" "installed at <ppath>; <pdir> is not on PATH"`. REASON source: the T7 resolution check | `add <pdir> to PATH -- <tool> not accessible` | 1 |
+| VERSION-UNKNOWN | `log_detail "<path> resolves but <version probe> failed"`, then `write_error "<tool>" "version check failed (exit N)" REASON`. REASON source: `error_reason` over the version probe's captured output and exit code | -- | 1 |
+| BELOW-MIN | `write_error "<tool>" "<ver> below <min>" "minVersion is <min> in the tool registry"` (blocked: WHAT `<ver> blocked`, REASON `<ver> is listed in versions.blocked`). REASON source: the T7 version check. Harness runtimes bash and perl (T-Q5): the script first updates them; when the update fails it records `write_action "<tool>" "<ver> below <min>: update failed (<reason>)" ACTION` instead (`<reason>` from `error_reason` over the update's output), and the run continues | `upgrade <tool> to <min> or later` | 1; bash and perl: 0 |
 
 Notes:
-- `write_summary` promotes OK to WARN once the script has logged a warning.
-  EXCEPTION and KEEP therefore log at info level; a failed update (T4) relies on
-  this promotion instead of writing its own row.
+- No record is recoloured (logging.md 8.3). EXCEPTION and KEEP log at info
+  level because a kept install is the user's decision, not a warning
+  (D-TS10). A failed update (T4) records its own warning, and T7 then writes
+  its own record (section 2, node T4).
 - EOF at the menu is logged by `read_tty_choice` / `Read-ConsoleChoice` (warn) and ends at HOLD.
 - Exit 2 means user abort (D-TS13, section 7.5).
 
@@ -309,8 +330,9 @@ error under `set -u` in 3.2); lowercase with perl (`perl -CSD`; `tr` only
 for ASCII-only values), never `${x,,}` / `${x^^}` (bad substitution in 3.2); `printf -v` is
 allowed. Every helper whose normal results include a non-zero return is called
 in conditional context, and no helper except `tool_support_run` uses return
-code 2 (section 7.5). bash helpers that log or count (`log_warn`, `log_error`
-increment `WARNINGS` / `ERRORS`) or set globals never return their result on
+code 2 (section 7.5). bash helpers that log or count (`log_warn`, `write_warn`,
+`write_action`, `log_error`, `write_error` increment `WARNINGS` / `ERRORS`) or
+set globals never return their result on
 stdout: a caller would have to run them in `$(...)`, a subshell that drops
 every counter increment and global they set (probe: after
 `p=$(tool_update ...)`, `WARNINGS=0 TOOL_UPDATE_STATE=none`; S3-GateFix-B
@@ -412,7 +434,7 @@ nothing; the PowerShell helper returns the value. Only the pure helpers
 | `tool_method_menu` | `Read-ToolMethodChoice` | class, method, path, preferred | prints `r`, `i`, `k`, `x`, or empty |
 | `tool_exception_get` | `Get-ToolException` | slug | sets `AITLIB_TOOL_EXC_FOUND` (true/false) and `AITLIB_TOOL_EXC_PLATFORM` / `_METHOD` / `_PATH` / `_DECIDED_AT`; PS1 returns `@{Found; Platform; Method; Path; DecidedAt}` or `$null`; 1 store unavailable (one warn; treated as no exception). Wraps `aitools-profile.sh` / `.ps1 exception-get` (section 8) |
 | `tool_exception_record` | `Set-ToolException` | slug, method, path, version | 0 written (committed and pushed, or a commit/push warning) or nothing to write (`unchanged`, `dry-run`) / 1 failed / 3 refused: no dotprofile, or no machine profile registered to this machine (section 8 Writer). Sets `AITLIB_TOOL_EXC_RESULT` / `AITLIB_TOOL_EXC_PUSHED` (PS1 `$script:AitLibToolExcResult` / `AitLibToolExcPushed`). Wraps `aitools-profile.sh` / `.ps1 exception-set` (its exit 2 and 4 map to 1: no lib helper returns 2) |
-| `tool_report` | `Write-ToolReport` | leaf, fields | writes the section 3 log line, summary row and ACTION |
+| `tool_report` | `Write-ToolReport` | leaf, fields | writes the section 3 log line and records through the `@reference/logging.md` 8.2 helpers |
 | `tool_support_run` | `Invoke-ToolSupport` | slug, label | runs the tree. bash returns the section 3 exit code; PS1 sets `$script:ToolSupportRc` to it and returns nothing |
 
 `tool_remove` returns 4, not 2, for "refused" (section 7.5: no helper uses 2).
@@ -452,8 +474,9 @@ removed`, and the prompt is `Choice [i/k/x]`. Letters are case-insensitive; a
 letter not offered, empty input, or EOF = HOLD.
 
 Under today's runners (section 7.5) the `[x]abort` exit 2 of a tool setup
-script does not stop the run: the installer writes ERROR `script failed
-(exit 2)` and continues with the next step.
+script does not stop the run: the installer's relay records one error, WHAT
+`<label> failed (exit 2)`, REASON `aborted by user`, and continues with the
+next step.
 
 ### 7.5 Contract with the installers and entry points
 
@@ -467,8 +490,9 @@ script does not stop the run: the installer writes ERROR `script failed
   `set -e` death from a command that returns 2 (`grep` and `diff` on error, a
   function's `return 2`) and on a syntax error in a sourced file (observed with
   `/bin/bash` 3.2.57, 2026-10-21); such a failure from `deploy-harness` reads
-  as an abort and stops the run (from any other setup script it is an ERROR
-  row either way). The guards that keep it rare: no helper returns 2 (below), scripts run
+  as an abort and stops the run (from any other setup script it is one ERROR
+  record either way, but with the abort's reason, `aborted by user`:
+  `@reference/logging.md` 8.3). The guards that keep it rare: no helper returns 2 (below), scripts run
   `bash -n` before launch (`validate_and_run`), and probes that can return 2
   run in conditional context.
 - **Launch sites and what each does with exit 2 today** (PR #106; the
@@ -476,29 +500,34 @@ script does not stop the run: the installer writes ERROR `script failed
   - Installer Step 8b, `run_harness_step` (`scripts/aitools-install.sh`) /
     `Invoke-HarnessStep` (`scripts/aitools-install.ps1`), which runs
     `deploy-harness`: exit 2 = user abort. It logs `Step 8b: aborted by user
-    at a review menu -- install stopped (exit 2)` (info), writes WARN
-    `harness files` `aborted by user`, renders the summary and exits 2;
-    Steps 9-22 do not run. The bash step runs `bash -n` first, so a syntax
-    error is an ERROR row, not an abort; in PowerShell a parse error throws
-    and is reported as a failure.
+    at a review menu -- install stopped (exit 2)` (info), records one
+    warning, `write_warn "harness files" "aborted by user"`, renders the
+    summary and exits 2; Steps 9-22 do not run. The bash step runs `bash -n`
+    first, so a syntax error is an ERROR record, not an abort; in PowerShell
+    a parse error throws and is reported as a failure.
   - `validate_and_run` (`scripts/aitools-install.sh`: the tool setup-script
     steps and the Step 21 managed-file deploy loop) and
-    `Invoke-ValidatedScript` (`scripts/aitools-install.ps1`): exit 2 is not
-    distinguished. Every non-zero exit, 2 included, is `log_error "<script>
-    failed (exit N)"` and ERROR `script failed (exit N)`, and the install
-    continues.
+    `Invoke-ValidatedScript` (`scripts/aitools-install.ps1`), through the
+    relay: every non-zero exit, 2 included, is one error of the installer,
+    counted, and the install continues. The relay records it as
+    `logging.md` 8.3 says: exit 2 as WHAT `<label> failed (exit 2)`, REASON
+    `aborted by user`; any other exit as WHAT `<label> failed (exit N)` with
+    the reason the relay derives, and only when the script recorded no
+    ERROR record itself.
   - `deploy_configs` (`scripts/aitools`, used by the no-args sync and the
     `gitpull` branch) and `Deploy-Configs` (`scripts/aitools.ps1`, same two
     branches). `deploy-harness` runs first: its exit 2 calls `deploy_abort` /
-    `Invoke-DeployAbort` (info log, WARN `harness files` `aborted by user`),
+    `Invoke-DeployAbort` (info log; one warning, `write_warn "harness files"
+    "aborted by user"`),
     sets `deploy_aborted` / `$script:deployAborted` and leaves the loop; the
     relay mirror to `~/.cursor/AGENTS.md` is skipped. The entry point reads
     the variable (not the return value, an error count that can itself be 2),
     renders the summary and exits 2 (`gitpull` does not tag). The
     `setup-user-*` and `setup-cursor-*` scripts that follow, where most
-    managed-file `[x]abort` choices happen, are not distinguished: their
-    exit 2 is ERROR `script failed (exit 2)`, counted as an error, and the
-    loop continues.
+    managed-file `[x]abort` choices happen, do not stop the loop: their
+    exit 2 is one error, recorded by the relay as WHAT `<label> failed
+    (exit 2)`, REASON `aborted by user`, counted as an error, and the loop
+    continues.
   - The `aitools install` branch of both entry points reads the installer's
     exit code: 2 = log `Installer aborted by user at a review menu -- run
     stopped (exit 2)`, render the summary, exit 2. The installer's only
@@ -513,8 +542,8 @@ script does not stop the run: the installer writes ERROR `script failed
     `powershell` (5.1) and never checks `$LASTEXITCODE`.
 - The managed-file menus' `[x]abort` therefore stops the run only inside
   `deploy-harness`; in every other setup script it ends that script and the
-  run continues with an ERROR row (the profile-mirror menu's "stop the run"
-  text included).
+  run continues with one ERROR record (the profile-mirror menu's "stop the
+  run" text included).
 - No helper uses return code 2 except `tool_support_run`, whose 2 means
   ABORT and which the script turns into `exit 2` as in
   section 7.6 (`tool_detect_method` internal error = 3, `tool_remove`
@@ -550,8 +579,7 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/aitools-lib.sh"
 logging_init "setup-go"
 # OS guard (cross-platform.md)
 if ! tool_spec_load "go"; then
-    log_error "tool spec for go missing -- regenerate generated/tool-specs"
-    write_summary ERROR "go" "tool spec missing"
+    write_error "go" "tool spec missing" "spec file missing or malformed -- regenerate generated/tool-specs"
     exit 1
 fi
 rc=0
@@ -570,8 +598,7 @@ PowerShell:
 Initialize-Logging "setup-go"
 # OS guard (cross-platform.md)
 if (-not (Import-ToolSpec "go")) {
-    LogError "tool spec for go missing -- regenerate generated/tool-specs"
-    Write-Summary "ERROR" "go" "tool spec missing"
+    Write-AitError "go" "tool spec missing" "spec file missing or malformed -- regenerate generated/tool-specs"
     exit 1
 }
 Invoke-ToolSupport -Slug "go" -Label "go"
@@ -645,9 +672,9 @@ exception keeps a whole install; an override changes a setting.
   whose owner is not `this` is ignored with a warning (`found false`).
 - **Reader**: `tool_exception_get` / `Get-ToolException`, called only at T5
   (install class non-preferred or unknown). It logs resolver warnings as
-  `log_detail`, not `log_warn`, so a kept or preferred tool's OK row is not
-  promoted to WARN by machine-profile warnings that setup-user-config already
-  reports once per run. Returns 1 (no exception; one `log_warn "tool exceptions
+  `log_detail`, not `log_warn`, so machine-profile warnings, which
+  setup-user-config already records once per run, are not recorded again as
+  warnings of the tool's script. Returns 1 (no exception; one `log_warn "tool exceptions
   unavailable (<reason>)"`) when the resolver is missing or fails, or there is
   no dotprofile; the menu then shows again. `Get-ToolException` calls the
   resolver in-process (`& aitools-profile.ps1`), so its output is never decoded
@@ -659,8 +686,9 @@ exception keeps a whole install; an override changes a setting.
   `AITLIB_MACHINE_VIA` / `AITLIB_MACHINE_OWNER`) and writes only when that profile is
   this machine's (`owner` = `this`) and its via is `id`, `environment` or
   `override`. Refused (exit 3 ->
-  return 3, `log_warn` + ACTION `run aitools user init to remember tool choices`)
-  in every other case: `hostname`, `config` (this machine's id could not be
+  return 3; the KEEP leaf then records one `write_action` with ACTION `run
+  aitools user init to remember tool choices`, section 3) in every other
+  case: `hostname`, `config` (this machine's id could not be
   detected), `alias` (the 2.1 config cache), `none`, an override naming another
   machine's or an unregistered profile, no dotprofile, or a profile read from
   `AITOOLS_PROFILE_FILE` (the read-only snapshot in generated deploy scripts).
@@ -678,9 +706,9 @@ exception keeps a whole install; an override changes a setting.
   committed (a warning asks for a manual commit; the wrapper currently also adds
   the push ACTION below, although nothing was committed -- INCIDENT, S3-M3-Docs
   approval page). A failed commit or push is a
-  warning: the file is written, KEEP reports WARN `<ver> (kept, not pushed)` +
-  ACTION `run git push in <userRepoPath>`; a rejected push (the remote is ahead)
-  advises `git pull --rebase`, then `git push`.
+  warning: the file is written, and KEEP records one `write_action` (`<ver>
+  kept, not pushed`, ACTION `run git push in <userRepoPath>`); a rejected
+  push (the remote is ahead) advises `git pull --rebase`, then `git push`.
 - **Bootstrap**: on a fresh machine the gh step (installer Step 1) runs before
   any dotprofile exists, so there is nothing to read. The resolver needs no
   node (bash: perl; PowerShell: built in).
@@ -730,7 +758,7 @@ stubs on PATH, both `AITOOLS_ENVIRONMENT` values where relevant.
 | Case | Setup | Expected |
 |------|-------|----------|
 | fresh | no binary | OK, or PREREQ without the manager stub |
-| preferred | binary matching preferred detection | OK; update stub exits 1 → OK row promoted to WARN |
+| preferred | binary matching preferred detection | OK; update stub exits 1 → one WARN record `update failed: <reason>`, the OK record unchanged (the tool's panel line is yellow) |
 | preferred, linked Homebrew formula | binary at `{brew_prefix}/bin/<cmd>` → Cellar | class preferred (realpath compared with the realpath of `brew --prefix`) |
 | preferred, broken update | update stub deletes the binary | NOT-ON-PATH |
 | version probe fails | binary prints nothing, exits 1 | VERSION-UNKNOWN |
@@ -747,7 +775,7 @@ stubs on PATH, both `AITOOLS_ENVIRONMENT` values where relevant.
 | `k`, profile matched by hostname | resolver `via=hostname` | KEEP with WARN `(kept, not saved)`; nothing written; ACTION `run aitools user init ...` |
 | `k`, push fails | dotprofile remote unreachable | KEEP with WARN `(kept, not pushed)`; profile.json written and committed; ACTION `run git push ...` |
 | exception store unavailable | no dotprofile, non-preferred binary | one warn; menu (pty) or HOLD (piped) |
-| preferred tool, profile matched by hostname | `via=hostname`, preferred binary | OK row not promoted (reader not called outside T5) |
+| preferred tool, profile matched by hostname | `via=hostname`, preferred binary | OK record; no WARN record from the tool's script (reader not called outside T5) |
 | dry run, pty | `AITOOLS_DRY_RUN=1`, non-preferred | HOLD with `dry-run:` detail; no prompt; profile.json unchanged |
 | dry run, fresh | `AITOOLS_DRY_RUN=1`, no binary | OK `dry-run: would install`, exit 0; T7 not run; nothing installed |
 | exception, versioned path | nvm-style method, version dir changed | EXCEPTION |
@@ -756,20 +784,20 @@ stubs on PATH, both `AITOOLS_ENVIRONMENT` values where relevant.
 | directory symlink or junction (PS1) | binary under a linked directory (nvm-windows style) | `Resolve-ToolRealPath` resolves it; same class as bash |
 | `resolveBy: knownPaths` (Windows bash) | WSL `bash.exe` first on PATH, Git Bash at its verified known path | OK for Git Bash; no SHADOWED |
 | pty, EOF | close stdin at prompt | HOLD with EOF warning |
-| pty, `x` | -- | ABORT, the setup script exits 2; the installer (`validate_and_run`) writes ERROR `script failed (exit 2)` and continues |
-| exit 2 from a failure (accepted risk) | a helper returns 2 outside conditional context (stub) | in `deploy-harness`: reads as an abort, the run stops (D-TS13 reversed); in any other setup script: ERROR `script failed (exit 2)`, the run continues; the guards in section 7.5 keep it rare |
+| pty, `x` | -- | ABORT, the setup script exits 2 and records no WARN or ERROR; the installer (`validate_and_run`) records one ERROR (`<label> failed (exit 2)`, `aborted by user`) and continues |
+| exit 2 from a failure (accepted risk) | a helper returns 2 outside conditional context (stub) | in `deploy-harness`: reads as an abort, the run stops (D-TS13 reversed); in any other setup script: one ERROR record (`<label> failed (exit 2)`, `aborted by user`), the run continues; the guards in section 7.5 keep it rare |
 | sync path, `deploy-harness` `x` | `aitools` with no arguments (and `aitools gitpull`), pty, a `deploy-harness` review answered `x` | WARN `harness files` `aborted by user`; the remaining deploy scripts and the relay mirror skipped; summary rendered; exit 2 |
-| sync path, managed-file `x` | `aitools` with no arguments (and `aitools gitpull`), pty, a `setup-user-*` review answered `x` | `deploy_configs` / `Deploy-Configs` write ERROR `script failed (exit 2)` and run the remaining deploy scripts; "Completed with N error(s)", exit 1 |
+| sync path, managed-file `x` | `aitools` with no arguments (and `aitools gitpull`), pty, a `setup-user-*` review answered `x` | `deploy_configs` / `Deploy-Configs` record one ERROR (`<label> failed (exit 2)`, `aborted by user`) and run the remaining deploy scripts; "Completed with N error(s)", exit 1 |
 | sync path, two failures | two deploy-script stubs exit 1 (`deploy_configs` returns 2) | "Completed with 2 error(s)", exit 1; not reported as an abort |
 | install path, `deploy-harness` `x` | `aitools install`, Step 8b review answered `x` | WARN `harness files` `aborted by user`; Steps 9-22 not run; installer exits 2; the entry point logs "Installer aborted by user", renders the summary, exit 2 |
-| install path, managed-file `x` | `aitools install`, Step 21 review answered `x` | ERROR `script failed (exit 2)`; the remaining Step 21 scripts and Step 22 run; the installer does not exit 2 |
+| install path, managed-file `x` | `aitools install`, Step 21 review answered `x` | one ERROR record (`<label> failed (exit 2)`, `aborted by user`); the remaining Step 21 scripts and Step 22 run; the installer does not exit 2 |
 | script run by hand, `x` | pty | menu logs the abort, exits 2 |
 | `aitools user init`, hooks review `x` | pty, `setup-user-hooks` review answered `x` | "aborted by user", not "Done"; exit 2 |
 | bootstrap, installer `x` | `bootstrap.sh` / `.ps1`, a review answered `x` during the install | not distinguished today: `bootstrap.sh` prints "Installer reported issues" and continues to `user init`; `bootstrap.ps1` does not check the exit code |
 | entry point re-exec | deploy list changed, `aitools` re-executes itself | an abort in the re-executed run exits 2 through the outer process |
-| bash helper result in a global | failed update stub, bash 3.2 | `TOOL_UPDATE_STATE=failed` and `WARNINGS` incremented in the script's shell; OK row promoted to WARN |
+| bash helper result in a global | failed update stub, bash 3.2 | `TOOL_UPDATE_STATE=failed` and `WARNINGS` incremented in the script's shell; one WARN record, the OK record unchanged |
 | RP, case spelling (macOS) | PATH spells the preferred dir in another case than the disk | RP uses `-ef`: same file, so the removal is not blocked by a spelling difference |
-| Windows bash runner, pwsh child, `x` | Git Bash `aitools` sync, `deploy-harness.ps1` answered `x` | the pwsh child exits 2; bash reads it; abort reported, run stops, exit 2 (UNVERIFIED until run on Windows). A `setup-user-*.ps1` answered `x`: ERROR `script failed (exit 2)`, loop continues |
+| Windows bash runner, pwsh child, `x` | Git Bash `aitools` sync, `deploy-harness.ps1` answered `x` | the pwsh child exits 2; bash reads it; abort reported, run stops, exit 2 (UNVERIFIED until run on Windows). A `setup-user-*.ps1` answered `x`: one ERROR record (`<label> failed (exit 2)`, `aborted by user`), loop continues |
 | malformed spec | spec file with an unterminated quote | `tool_spec_load` rc 1 → ERROR `tool spec missing`, exit 1 (not 2) |
 | bash 3.2, empty method list | no methods for the platform, `/bin/bash` 3.2, `set -u` | NO-METHOD; no unbound-variable crash |
 | no method | spec without a preferred method | NO-METHOD |

@@ -2,17 +2,25 @@
 # Pre-commit: regenerate deploy/ when shared/ or build-deploy.sh is staged.
 # Enable once per clone: git config core.hooksPath scripts/githooks
 # Or: bash scripts/init-hh-hooks.sh
+# Platform: every platform (Git Bash on Windows); no OS guard
+# (.claude/rules/cross-platform.md "OS guard exemptions", entry points with
+# Windows branches). Logs through aitools-lib (reference/logging.md 8.1).
 
 set -euo pipefail
 
 REPO="$(git rev-parse --show-toplevel)"
 cd "$REPO"
+# shellcheck source=scripts/aitools-lib.sh
+source "$REPO/scripts/aitools-lib.sh"
+logging_init "pre-commit"
 
 STAGED="$(git diff --cached --name-only)"
 
 if echo "$STAGED" | grep -E '^shared/|^scripts/build-deploy\.sh$' >/dev/null; then
-  echo "hh pre-commit: shared/ or build-deploy.sh changed — running build-deploy.sh"
-  bash scripts/build-deploy.sh
+  log "shared/ or build-deploy.sh changed -- running build-deploy.sh"
+  # The relay prints build-deploy's lines, counts a failure and gives it a
+  # reason (reference/logging.md 8.3); a failure still aborts the commit
+  run_child_relayed --summary-tool "build-deploy" "build-deploy" bash scripts/build-deploy.sh || exit 1
   git add deploy/
 fi
 

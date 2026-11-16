@@ -1,7 +1,7 @@
 exit 1
 -- summary rows
 OK|dotprofile|verified
-ERROR|machine profile|alias used by another machine
+ERROR|machine profile|not registered|alias "laptop" is used by another machine's profile (bbbbbbbb-1111-2222-3333-444444444444) and there is no terminal to confirm
 ACTION||Run: aitools user init --alias <another name> (or confirm on a terminal)
 OK|aitools config|updated
 DETAIL|aitools config|googleDrives updated

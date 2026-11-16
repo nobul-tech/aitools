@@ -11,15 +11,16 @@
 # never touched.
 # Cases:
 #   static   -- installer has no ~/.aitools/bin step; Step 8b sits between Step 8
-#               (Node) and Step 9 on both platforms; the sync deploy lists start with
-#               deploy-harness and no longer list setup-user-config (file checks of
-#               both platforms' files)
+#               (Node) and Step 9 on both platforms; the sync deploy lists (one in
+#               scripts/aitools, one in aitools.ps1) start with deploy-harness and no
+#               longer list setup-user-config (file checks of both platforms' files)
 #   install  -- deploy-harness runs once, bin is deployed by it, one run id in
 #               deploy.jsonl, the writer runs once (Step 5); Step 8b passes
 #               --skip-config (OK "config.json" "n/a (written by installer)")
 #   install no Step 5 -- the repos path is unusable, Step 5 skips the writer:
 #               Step 8b runs it (bare, once) and passes no --skip-config
-#   install exit 1 -- a duplicate hook: ERROR row, the install continues, exit 1
+#   install exit 1 -- a duplicate hook: deploy-harness's own ERROR row and no
+#               second one from the relay, the install continues, exit 1
 #   install abort  -- [x]abort at a review menu (pty): exit 2, Step 9 not reached
 #   loop     -- deploy_configs (extracted from scripts/aitools): writer runs once,
 #               deploy-harness first, the other 7 scripts run
@@ -29,9 +30,9 @@
 # "sh scripts and tests should only run on linux/mac and ps1 on windows"):
 # this harness runs on macOS/Linux and refuses Windows: install
 # (aitools-install.sh, deploy-harness.sh carry the POSIX guard) and the loop's
-# .sh list. tests/hookin/test-hookin.ps1 is the Windows harness: the Windows
-# branch of the same loop (scripts/aitools, under Git Bash) and Deploy-Configs /
-# Invoke-HarnessStep (aitools.ps1, aitools-install.ps1) with native pwsh. No
+# .sh list. tests/hookin/test-hookin.ps1 is the Windows harness: Deploy-Configs /
+# Invoke-HarnessStep (aitools.ps1, aitools-install.ps1) with native pwsh
+# (scripts/aitools has no Windows branch: on Windows it forwards to aitools.ps1). No
 # sh-vs-ps1 parity is asserted here, so there are no golden files.
 # Interactive cases use tests/managed-files/pty-run.py (python3); skipped
 # without it. Exit 1 if any case fails.
@@ -210,8 +211,10 @@ for f in aitools-install.sh aitools-install.ps1; do
     check "static: $f Step 8b between Step 8 (Node) and Step 9" \
         "perl -ne '\$a=\$. if /Step 8: Node/; \$b=\$. if /Step 8b: Deployed harness\"/; \$c=\$. if /Step 9: Claude/; END { exit((\$a && \$b && \$c && \$a < \$b && \$b < \$c) ? 0 : 1) }' '$ROOT/scripts/$f'"
 done
-check "static: aitools deploy lists start with deploy-harness, no setup-user-config" \
-    "[ \"\$(grep -cE '^ +local deploy_scripts=\"deploy-harness\.(sh|ps1) ' '$ROOT/scripts/aitools')\" = 2 ] && ! grep -qE '^ +local deploy_scripts=.*setup-user-config' '$ROOT/scripts/aitools'"
+# scripts/aitools has one deploy list, the .sh one: on Windows it forwards to
+# aitools.ps1 before its library loads, so its Windows (.ps1) list is gone (A3-F2)
+check "static: aitools deploy list starts with deploy-harness, no setup-user-config" \
+    "[ \"\$(grep -cE '^ +local deploy_scripts=' '$ROOT/scripts/aitools')\" = 1 ] && grep -qE '^ +local deploy_scripts=\"deploy-harness\.sh ' '$ROOT/scripts/aitools' && ! grep -qE '^ +local deploy_scripts=.*setup-user-config' '$ROOT/scripts/aitools'"
 check "static: aitools.ps1 deploy list starts with deploy-harness, no setup-user-config" \
     "grep -qE '^ +\\\$deployScripts = @\\(\"deploy-harness\.ps1\", ' '$ROOT/scripts/aitools.ps1' && ! grep -qE '^ +\\\$deployScripts = .*setup-user-config' '$ROOT/scripts/aitools.ps1'"
 check "static: loop functions extracted" "grep -q '^deploy_abort() {' '$LOOP_FUNCS' && grep -q '^deploy_configs() {' '$LOOP_FUNCS'"
@@ -247,11 +250,14 @@ check "install no Step 5: writer not run at Step 5, run once bare inside Step 8b
 check "install no Step 5: no n/a config row, deploy-harness ran" \
     "! grep -q '^OK|config.json|n/a' '$C/summary' && row 'OK|harness files|7 added'"
 
+# The duplicate is deploy-harness's own error, recorded at the source; the relay
+# counts the failed child (exit 1) but records no second ERROR (logging.md 8.3)
+DUP_ROW='ERROR|harness files|duplicate hooks name dup.sh in .claude/hooks skipped|kept dup.sh from shared/hooks (first source wins)'
 setup_case install-err
 add_duplicate_rule
 run_install
-check "install exit 1: ERROR row, install continued, exit 1" \
-    "[ \"\$(rc)\" = 1 ] && row 'ERROR|harness files|script failed (exit 1)' && grep -q 'Step 9: Claude' '$C/out' && [ \"\$(calls)\" = '$ALL_STUBS' ]"
+check "install exit 1: one ERROR row (deploy-harness's own), install continued, exit 1" \
+    "[ \"\$(rc)\" = 1 ] && row '$DUP_ROW' && [ \"\$(count '^ERROR|harness files|' '$C/summary')\" = 1 ] && grep -q 'Step 9: Claude' '$C/out' && [ \"\$(calls)\" = '$ALL_STUBS' ]"
 
 if $HAVE_PTY; then
     setup_case install-abort
@@ -260,15 +266,16 @@ if $HAVE_PTY; then
     run_install 'x\n'
     check "install abort: exit 2, Step 9 and Step 21 not run" \
         "[ \"\$(rc)\" = 2 ] && ! grep -q 'Step 9: Claude' '$C/out' && [ ! -s '$H/calls' ]"
-    check "install abort: WARN row, file unchanged" \
-        "row 'WARN|harness files|aborted by user' && grep -qx 'local edit' '$H/.aitools/hooks/h1.sh'"
+    # one WARN record, by the relay (--abort-warn); no ERROR record (logging.md 8.3)
+    check "install abort: one WARN row, no ERROR row, file unchanged" \
+        "row 'WARN|harness files|aborted by user' && [ \"\$(count '^WARN|harness files|' '$C/summary')\" = 1 ] && [ \"\$(count '^ERROR|harness files|' '$C/summary')\" = 0 ] && grep -qx 'local edit' '$H/.aitools/hooks/h1.sh'"
 else
     skip "install abort (no python3 / pty-run.py)"
 fi
 
 # ---------------------------------------------------------------------------
-# deploy_configs (scripts/aitools sync loop): the .sh list. The Windows harness
-# runs its Windows branch (the .ps1 list with pwsh) under Git Bash.
+# deploy_configs (scripts/aitools sync loop): its one list, the .sh list. The
+# Windows harness tests Deploy-Configs (aitools.ps1) instead.
 # ---------------------------------------------------------------------------
 setup_case loop
 run_loop
@@ -282,16 +289,16 @@ check "loop: deploy-harness lines relayed to deploy.jsonl" "grep -q '\"script\":
 setup_case loop-err
 add_duplicate_rule
 run_loop
-check "loop ($LANG_RUN list) exit 1: one error counted, ERROR row, the 7 scripts ran" \
-    "grep -qx 'LOOP rc=1 aborted=false' '$C/out' && row 'ERROR|harness files|script failed (exit 1)' && [ \"\$(calls)\" = '$LOOP_STUBS' ]"
+check "loop ($LANG_RUN list) exit 1: one error counted, one ERROR row (deploy-harness's own), the 7 scripts ran" \
+    "grep -qx 'LOOP rc=1 aborted=false' '$C/out' && row '$DUP_ROW' && [ \"\$(count '^ERROR|harness files|' '$C/summary')\" = 1 ] && [ \"\$(calls)\" = '$LOOP_STUBS' ]"
 
 if $HAVE_PTY; then
     setup_case loop-abort
     run_loop
     printf 'local edit\n' > "$H/.aitools/rules/p1.md"
     run_loop 'x\n'
-    check "loop ($LANG_RUN list) abort: aborted, no later script ran" \
-        "grep -q 'LOOP rc=0 aborted=true' '$C/out' && [ ! -s '$H/calls' ] && row 'WARN|harness files|aborted by user'"
+    check "loop ($LANG_RUN list) abort: aborted, no later script ran, one WARN row, no ERROR row" \
+        "grep -q 'LOOP rc=0 aborted=true' '$C/out' && [ ! -s '$H/calls' ] && row 'WARN|harness files|aborted by user' && [ \"\$(count '^WARN|harness files|' '$C/summary')\" = 1 ] && [ \"\$(count '^ERROR|harness files|' '$C/summary')\" = 0 ]"
 else
     skip "loop abort (no python3 / pty-run.py)"
 fi

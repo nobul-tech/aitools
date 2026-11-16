@@ -1,7 +1,7 @@
 exit 1
 -- summary rows
 OK|dotprofile|verified
-ERROR|machine profile|not registered (local edits)
+ERROR|machine profile|not registered|profile.json in <D>/home/repos/aitools-nobul-jose has uncommitted changes (they would be committed with it)
 ACTION||commit or discard the changes to profile.json in <D>/home/repos/aitools-nobul-jose, then run: aitools user init
 OK|aitools config|updated
 DETAIL|aitools config|googleDrives updated

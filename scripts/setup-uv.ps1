@@ -24,33 +24,46 @@ $uvCmd = Get-Command uv -ErrorAction SilentlyContinue
 if ($uvCmd) {
     Log "uv found -- upgrading via winget..."
     $wingetOutput = winget upgrade --id=astral-sh.uv --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
-    Log-WingetOutput $wingetOutput
+    $upgradeRc = $LASTEXITCODE
     if ($wingetOutput -match 'No available upgrade|No newer package versions|No installed package') {
+        Log-WingetOutput $wingetOutput
         LogOk "uv already up to date"
-    } elseif ($LASTEXITCODE -ne 0) {
-        LogError "winget upgrade uv failed (exit code $LASTEXITCODE)"
-        Write-Summary "ERROR" "uv" "winget upgrade failed (exit $LASTEXITCODE)"
+    } elseif ($upgradeRc -ne 0) {
+        # The installed uv still works: a warning, not an error (Standard 3); the
+        # $errors gate below still writes the OK record. Get-AitErrorReason logs the
+        # output as detail lines.
+        Write-AitWarn "uv" "winget upgrade failed: $(Get-AitErrorReason -Output $wingetOutput -ExitCode $upgradeRc)"
+    } else {
+        Log-WingetOutput $wingetOutput
     }
     Refresh-Path
     if ($errors -eq 0) {
-        $version = (uv --version 2>$null)
-        if ($version) {
+        # stderr is captured with stdout for the error reason; the version is the
+        # line that starts with "uv "
+        $verOut = uv --version 2>&1 | Out-String
+        $verRc = $LASTEXITCODE
+        $version = ($verOut -split "`r?`n" | Where-Object { $_ -match '^uv ' } | Select-Object -First 1)
+        if ($verRc -eq 0 -and $version) {
             LogOk $version
             Write-Summary "OK" "uv" "$version"
         } else {
-            LogError "uv --version failed after upgrade"
-            Write-Summary "ERROR" "uv" "version check failed after upgrade"
+            Write-AitError "uv" "version check failed after upgrade" (Get-AitErrorReason -Output $verOut -ExitCode $verRc)
         }
     }
 } else {
     Log "Installing uv via winget..."
     $wingetOutput = winget install --id=astral-sh.uv -e --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
-    Log-WingetOutput $wingetOutput
+    $installRc = $LASTEXITCODE
+    $installFailed = $false
     if ($wingetOutput -match 'already installed' -and $wingetOutput -match 'No available upgrade|No newer package versions') {
+        Log-WingetOutput $wingetOutput
         LogOk "uv already up to date (winget)"
-    } elseif ($LASTEXITCODE -ne 0) {
-        LogError "winget install uv failed (exit code $LASTEXITCODE)"
-        Write-Summary "ERROR" "uv" "winget install failed (exit $LASTEXITCODE)"
+    } elseif ($installRc -ne 0) {
+        $installFailed = $true
+        # Get-AitErrorReason logs the output as detail lines
+        Write-AitError "uv" "winget install failed" (Get-AitErrorReason -Output $wingetOutput -ExitCode $installRc)
+    } else {
+        Log-WingetOutput $wingetOutput
     }
     Refresh-Path
     # Get-Command exempt: command-existence check with if/else fallback
@@ -66,14 +79,16 @@ if ($uvCmd) {
         $uvDir = Split-Path $uvPath -Parent
         $persistentPath = [Environment]::GetEnvironmentVariable("Path", "User") + ";" + [Environment]::GetEnvironmentVariable("Path", "Machine")
         if ($persistentPath -notlike "*$uvDir*") {
-            LogError "uv install dir not in persistent PATH: $uvDir"
-            Write-Summary "ERROR" "uv" "installed but not on PATH"
-            LogWarn "Add $uvDir to PATH -- tool not accessible to Claude Code"
+            Write-AitError "uv" "installed but not on PATH" "$uvDir is not in the persistent PATH"
             Write-Summary "ACTION" "" "Add $uvDir to PATH -- uv not accessible"
         }
+    } elseif ($installFailed) {
+        # One failure, one red line: the install error above is the cause
+        Log "uv not found after the failed winget install"
+    } elseif ($installRc -eq 0) {
+        Write-AitError "uv" "installed but not on PATH" "winget exited 0 but Get-Command uv found nothing"
     } else {
-        LogError "winget install completed but 'uv' not found in PATH"
-        Write-Summary "ERROR" "uv" "installed but not on PATH"
+        Write-AitError "uv" "installed but not on PATH" "winget reports uv already installed but Get-Command uv found nothing"
     }
 }
 

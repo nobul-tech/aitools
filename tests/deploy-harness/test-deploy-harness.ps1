@@ -283,6 +283,11 @@ function Run-DH([string]$Keys = "", [string[]]$DhArgs = @(), [hashtable]$Extra =
 
 function Row([string]$Line) { GrepX (Join-Path $script:C "summary") $Line }      # exact summary row
 function HasRow([string]$Text) { GrepF (Join-Path $script:C "summary") $Text }   # summary substring
+# RowRe REGEX -- a summary row matches REGEX (the .sh's row_re; '|' escaped). For a
+# record whose reason is an OS or .NET message: the record prefix KIND|tool|WHAT|
+# and the reason's fixed parts are asserted, not the OS text.
+function RowRe([string]$Pattern) { GrepQ (Join-Path $script:C "summary") $Pattern }
+function NRows([string]$Pattern) { GrepC (Join-Path $script:C "summary") $Pattern }   # the .sh's n_rows
 function A { Join-Path $script:H ".aitools" }
 function Fresh-Log { New-Dirs @((Join-Path $script:C "logs")); W (Join-Path $script:C "logs/deploy.log") "" }   # the log accumulates across the runs of a case
 
@@ -380,7 +385,9 @@ try {
         Run-DH
         W "$(A)\skills\s2\SKILL.md" "local edit`n"
         Run-DH 's\n'
-        Check "skip: nothing written, WARN row" ($rc -eq 0 -and (GrepX "$(A)\skills\s2\SKILL.md" 'local edit') -and (Row 'WARN|harness files|1 skipped (user review)'))
+        # The library records the skip warning once (logging.md 8.2); deploy-harness
+        # writes no second one and counts the skip in its OK status.
+        Check "skip: nothing written, one WARN row (the library's), skip in the OK status" ($rc -eq 0 -and (GrepX "$(A)\skills\s2\SKILL.md" 'local edit') -and (Row 'WARN|harness files|skipped at review, local differs from source: skills/s2/SKILL.md') -and (NRows '^WARN\|') -eq 1 -and (Row 'OK|harness files|1 skipped, 13 verified'))
 
         Setup-Case abort
         Run-DH
@@ -418,8 +425,8 @@ try {
     Gitc @("-C", $D, "add", "-A"); Gitc @("-C", $D, "commit", "-q", "-m", "dups")
     Run-DH
     Check "conflict: exit 1" ($rc -eq 1)
-    Check "conflict: ERROR row per duplicate (hooks), none for .claude/ or dotprofile rules and skills" ((Row 'ERROR|harness files|h1.sh: dup in .claude/hooks') -and (Row 'ERROR|harness files|Hooks-Manifest.json: dup in...') -and (GrepC "$C\summary" '^ERROR\|') -eq 2)
-    Check "conflict: log_error names both sources" (GrepQ $LOG '\[error\] Duplicate hooks name: h1.sh in .claude/hooks .* kept h1.sh from shared/hooks')
+    Check "conflict: ERROR row per duplicate (hooks), none for .claude/ or dotprofile rules and skills" ((Row 'ERROR|harness files|duplicate hooks name h1.sh in .claude/hooks skipped|kept h1.sh from shared/hooks (first source wins)') -and (Row 'ERROR|harness files|duplicate hooks name Hooks-Manifest.json in .claude/hooks skipped|kept hooks-manifest.json from shared/hooks (first source wins)') -and (GrepC "$C\summary" '^ERROR\|') -eq 2)
+    Check "conflict: the error line names both sources" (GrepQ $LOG '\[error\] duplicate hooks name h1\.sh in \.claude/hooks skipped: kept h1\.sh from shared/hooks \(first source wins\)')
     Check "conflict: first source wins (hooks); shared rules and skills deployed" ((Same "$R\shared\hooks\h1.sh" "$(A)\hooks\h1.sh") -and (Same "$R\shared\rules\scratch.md" "$(A)\rules\scratch.md") -and (Same "$R\shared\rules\hook-lifecycle.md" "$(A)\rules\hook-lifecycle.md") -and (Same "$R\shared\skills\s1\SKILL.md" "$(A)\skills\s1\SKILL.md"))
     Check "conflict: case-insensitive duplicate not deployed" ((GrepQ "$(A)\hooks\hooks-manifest.json" '"hooks"') -and -not (@(LsNames "$(A)\hooks") -ccontains 'Hooks-Manifest.json') -and -not (@(LsNames "$(A)\rules") -ccontains 'Hook-Lifecycle.md'))
     Check "conflict: other files still deployed" ((IsFile "$(A)\skills\s2\SKILL.md") -and (IsFile "$(A)\skills\s1\tests\t.md"))
@@ -442,13 +449,17 @@ try {
     # ---------------------------------------------------------------------------
     Setup-Case writerfail
     Run-DH "" @() @{ STUB_WRITER_RC = "1" }
-    Check "writer failure: exit 1, ERROR row, files still deployed" ($rc -eq 1 -and (Row 'ERROR|harness files|config.json not generated') -and (IsFile "$(A)\rules\scratch.md"))
+    # The writer is relayed (logging.md 8.3): a writer that fails without a record of
+    # its own gets one ERROR under "aitools config" from the relay; the stub prints
+    # nothing, so the reason is the exit code.
+    Check "writer failure: exit 1, the relay's one ERROR row, files still deployed" ($rc -eq 1 -and (Row "ERROR|aitools config|setup-user-config.$lang failed (exit 1)|no output (exit 1)") -and (NRows '^ERROR\|') -eq 1 -and (IsFile "$(A)\rules\scratch.md"))
 
     Setup-Case realwriter
     Copy-Item -LiteralPath (Join-Path $root "scripts/setup-user-config.ps1"), (Join-Path $root "scripts/aitools-profile.ps1"), (Join-Path $root "scripts/aitools-json.ps1") -Destination "$R\scripts" -Force
     Remove-Item -LiteralPath "$H\.aitools\config.json" -Force
     Run-DH
-    Check "real writer, no bootstrap config: exit 1, ERROR row propagated" ($rc -eq 1 -and (Row 'ERROR|harness files|config.json not generated') -and (GrepQ $LOG '\[setup-user-config\] \[error\]'))
+    # The real writer records its own error; the relay adds none (one cause, one red line).
+    Check "real writer, no bootstrap config: exit 1, the writer's one ERROR row" ($rc -eq 1 -and (RowRe '^ERROR\|aitools config\|merged config rejected -- existing file left untouched\|missing bootstrap .* \(run aitools install\)$') -and (NRows '^ERROR\|') -eq 1 -and (GrepQ $LOG '\[setup-user-config\] \[error\]'))
 
     # ---------------------------------------------------------------------------
     # The dotprofile is not a harness source: missing or not a git checkout changes nothing
@@ -575,13 +586,13 @@ try {
         Deny-Write "$(A)\rules"
         Fresh-Log; Run-DH
         Undeny "$(A)\rules"
-        Check "${lang}: failed backup keeps the file (ERROR row, exit 1)" ($rc -eq 1 -and (IsFile "$(A)\rules\hook-lifecycle.md") -and (Row 'ERROR|harness files|retire failed: hook-lifecyc...') -and (GrepQ $LOG 'backup failed'))
+        Check "${lang}: failed backup keeps the file (ERROR row, exit 1)" ($rc -eq 1 -and (IsFile "$(A)\rules\hook-lifecycle.md") -and (RowRe '^ERROR\|harness files\|retire failed: hook-lifecycle\.md\|backup failed: .* -- .*hook-lifecycle\.md not removed$') -and (GrepQ $LOG '\[error\] retire failed: hook-lifecycle\.md: backup failed: '))
         Fresh-Log; Run-DH
         Check "${lang}: next run retries and removes it" ($rc -eq 0 -and -not (Exists "$(A)\rules\hook-lifecycle.md") -and (GrepX (M) "hook-lifecycle.md${T}retired"))
         Deny-Write "$(A)\rules"
         Run-DH
         Undeny "$(A)\rules"
-        Check "manifest write failure: ERROR row, exit 1, run completes" ($rc -eq 1 -and (Row 'ERROR|harness files|rules manifest not written') -and (GrepQ $LOG 'harness files: .* retired'))
+        Check "manifest write failure: ERROR row, exit 1, run completes" ($rc -eq 1 -and (RowRe '^ERROR\|harness files\|rules manifest not written\|.') -and (GrepQ $LOG 'harness files: .* retired'))
     } else {
         Skip "failed rule backup and manifest write failure (a deny ACE does not block writes here)"
     }
@@ -613,7 +624,10 @@ try {
     # "== STEP rc=N", the summary file, "-- manifest", the manifest (when it is a
     # file), "-- tree", then ". " and "./<path>" for every entry under
     # ~/.aitools/skills (forward slashes, ordinal sort = LC_ALL=C sort); CRs
-    # removed, backup timestamps -> .bak.TS, the glob skill name -> <BN>.
+    # removed, backup timestamps -> .bak.TS, the glob skill name -> <BN>; an
+    # error reason that is an OS or .NET message -> <OS error> (in a failed
+    # retirement's "backup failed: <OS> -- <dir> not removed", and in a manifest
+    # write failure other than "<path> is a directory"), as the .sh's trace().
     function Trace([string]$Step) {
         $sb = [Text.StringBuilder]::new()
         [void]$sb.Append("== $Step rc=$($script:rc)`n")
@@ -633,6 +647,8 @@ try {
         $t = $sb.ToString() -replace "`r", ""
         $t = $t -replace '\.bak\.\d{4}-\d\d-\d\dT\d{6}Z', '.bak.TS'
         $t = $t.Replace($BN, '<BN>')
+        $t = $t -creplace '(?m)^(ERROR\|[^|\n]*\|retire failed: [^|\n]*\|backup failed: ).*( -- \S+ not removed)$', '$1<OS error>$2'
+        $t = $t -creplace '(?m)^(ERROR\|[^|\n]*\|(?:rules|skills) manifest not written\|)(?!.* is a directory$).+$', '$1<OS error>'
         [IO.File]::AppendAllText($script:TRACE, $t)
     }
     function Run-Sk([string[]]$SkArgs = @()) { Fresh-Log; Run-DH "" $SkArgs }
@@ -705,7 +721,7 @@ try {
     W "$(A)\skills\zz" "a file`n"
     W (SM) "# aitools skills manifest v1`nzz`tretired`n../evil`tshared`n.hidden`tshared`nx.bak.1`tshared`na/b`tshared`nok`tbogus`n"
     Run-Sk; Trace invalid
-    Check "$lang skills: invalid lines ignored (5 warnings); a file named like a retired skill left alone" ($rc -eq 0 -and (GrepC $LOG 'line ignored') -eq 5 -and (IsFile "$(A)\skills\zz") -and (GrepQ $LOG 'Retired skill zz: .* is not a directory') -and (Row 'WARN|harness files|not a dir: zz') -and (GrepX (SM) "zz${T}retired") -and -not (GrepQ (SM) 'evil|hidden|bogus'))
+    Check "$lang skills: invalid lines ignored (5 warnings, each recorded); a file named like a retired skill left alone" ($rc -eq 0 -and (GrepC $LOG 'line ignored') -eq 5 -and (NRows '^WARN\|harness files\|Skills manifest .*: line ignored: ') -eq 5 -and (IsFile "$(A)\skills\zz") -and (GrepQ $LOG '\[warn\] retired skill zz: .* is not a directory -- left alone') -and (RowRe '^WARN\|harness files\|retired skill zz: .*[\\/]zz is not a directory -- left alone$') -and (NRows '^WARN\|') -eq 6 -and (GrepX (SM) "zz${T}retired") -and -not (GrepQ (SM) 'evil|hidden|bogus'))
     W (SM) "not a manifest`nd2`tdotprofile`n"
     Run-Sk; Trace header
     Check "$lang skills: unknown header -- warning, nothing retired, rewritten" ($rc -eq 0 -and (GrepQ $LOG '\[warn\] Skills manifest .*the first line is not') -and @(FileLines (SM))[0] -ceq '# aitools skills manifest v1' -and -not (GrepQ (SM) 'retired'))
@@ -715,7 +731,7 @@ try {
     New-Dirs @((SM), (M))
     W "$(SM)\inside" "inside`n"
     Run-Sk; Trace mfdir
-    Check "$lang skills: manifest path is a directory -- ERROR rows (skills, rules), exit 1, nothing written into it, contents not reported preserved" ($rc -eq 1 -and (Row 'ERROR|harness files|skills manifest not written') -and (Row 'ERROR|harness files|rules manifest not written') -and (@(LsA (SM)) -join "|") -ceq 'inside' -and @(LsA (M)).Count -eq 0 -and (GrepQ $LOG 'Skills manifest: .* is a directory') -and -not (GrepQ $LOG 'Preserved: .*aitools-skills-manifest'))
+    Check "$lang skills: manifest path is a directory -- ERROR rows (skills, rules), exit 1, nothing written into it, contents not reported preserved" ($rc -eq 1 -and (RowRe '^ERROR\|harness files\|skills manifest not written\|.*[\\/]\.aitools[\\/]skills[\\/]\.aitools-skills-manifest is a directory$') -and (RowRe '^ERROR\|harness files\|rules manifest not written\|.*[\\/]\.aitools[\\/]rules[\\/]\.aitools-rules-manifest is a directory$') -and (@(LsA (SM)) -join "|") -ceq 'inside' -and @(LsA (M)).Count -eq 0 -and (GrepQ $LOG '\[error\] skills manifest not written: .* is a directory') -and -not (GrepQ $LOG 'Preserved: .*aitools-skills-manifest'))
     foreach ($p in @((SM), (M))) { if (Exists $p) { Remove-Item -LiteralPath $p -Recurse -Force } }
     Run-Sk; Trace mfdirgone
     Check "$lang skills: directory removed -- both manifests written again" ($rc -eq 0 -and (IsFile (SM)) -and (IsFile (M)))
@@ -733,7 +749,7 @@ try {
         Gitc @("-C", $R, "rm", "-q", "-r", "shared/skills/pb"); Gitc @("-C", $R, "commit", "-q", "-m", "pb-gone")
         Run-Sk; Trace pbfail
         Undeny "$(A)\skills\pb\secret.md"
-        Check "$lang skills: partial backup removed again; directory kept (ERROR row, exit 1)" ($rc -eq 1 -and (IsFile "$(A)\skills\pb\SKILL.md") -and (N-Bak pb) -eq 0 -and (Row 'ERROR|harness files|retire failed: pb') -and (GrepQ $LOG 'Retired skill pb: backup failed \(') -and (GrepQ $LOG 'Retired skill pb: removed the incomplete backup'))
+        Check "$lang skills: partial backup removed again; directory kept (ERROR row, exit 1)" ($rc -eq 1 -and (IsFile "$(A)\skills\pb\SKILL.md") -and (N-Bak pb) -eq 0 -and (RowRe '^ERROR\|harness files\|retire failed: pb\|backup failed: .* -- .*pb not removed$') -and (NRows '^ERROR\|') -eq 1 -and (GrepQ $LOG '\[error\] retire failed: pb: backup failed: ') -and (GrepQ $LOG 'Retired skill pb: removed the incomplete backup'))
         Run-Sk; Trace pbretry
         Check "$lang skills: readable again -- backed up and removed" ($rc -eq 0 -and -not (Exists "$(A)\skills\pb") -and (N-Bak pb) -eq 1 -and (BakLine pb 'secret.md' 'secret'))
 
@@ -757,7 +773,7 @@ try {
         Run-Sk; Trace rsfail
         [IO.File]::SetAttributes($roFile, [IO.File]::GetAttributes($roFile) -band (-bnot [IO.FileAttributes]::ReadOnly))
         Undeny "$(A)\skills\rs\ro\secret.md"
-        Check "$lang skills: partial backup with a read-only subdirectory removed (no leftover, nothing renamed)" ($rc -eq 1 -and (IsFile "$(A)\skills\rs\ro\a.md") -and (N-Bak rs) -eq 0 -and (Row 'ERROR|harness files|retire failed: rs') -and -not (HasRow 'bak cleanup failed') -and (GrepQ $LOG 'Retired skill rs: removed the incomplete backup'))
+        Check "$lang skills: partial backup with a read-only subdirectory removed (no leftover, nothing renamed)" ($rc -eq 1 -and (IsFile "$(A)\skills\rs\ro\a.md") -and (N-Bak rs) -eq 0 -and (RowRe '^ERROR\|harness files\|retire failed: rs\|backup failed: .* -- .*rs not removed$') -and -not (HasRow 'bak cleanup failed') -and (GrepQ $LOG 'Retired skill rs: removed the incomplete backup'))
         Run-Sk; Trace rsretry
         Check "$lang skills: read-only case retried -- backed up and removed" ($rc -eq 0 -and -not (Exists "$(A)\skills\rs") -and (N-Bak rs) -eq 1)
 
@@ -765,7 +781,7 @@ try {
         Deny-Write "$(A)\skills"
         Run-Sk; Trace bakfail
         Undeny "$(A)\skills"
-        Check "$lang skills: failed backup keeps the directory (ERROR row, exit 1)" ($rc -eq 1 -and (IsFile "$(A)\skills\s1\SKILL.md") -and (Row 'ERROR|harness files|retire failed: s1') -and (GrepQ $LOG 'Retired skill s1: backup failed') -and (N-Bak s1) -eq 0)
+        Check "$lang skills: failed backup keeps the directory (ERROR row, exit 1)" ($rc -eq 1 -and (IsFile "$(A)\skills\s1\SKILL.md") -and (RowRe '^ERROR\|harness files\|retire failed: s1\|backup failed: .* -- .*s1 not removed$') -and (GrepQ $LOG '\[error\] retire failed: s1: backup failed: ') -and (N-Bak s1) -eq 0)
         Run-Sk; Trace bakretry
         Check "$lang skills: next run retries -- backed up and removed" ($rc -eq 0 -and -not (Exists "$(A)\skills\s1") -and (N-Bak s1) -eq 1 -and (GrepX (SM) "s1${T}retired"))
         Check "skills read-only parity: trace equals the golden file" (Test-GoldenMatch "skills-readonly.trace" $script:TRACE)
@@ -835,7 +851,7 @@ try {
         } finally {
             Release-Held
         }
-        Check "$lang locked: rules manifest held open by a reader -- ERROR row, exit 1, run completes" ($rc -eq 1 -and (Row 'ERROR|harness files|rules manifest not written') -and (GrepQ $LOG '\[error\] Rules manifest: cannot write .* -- manifest not written') -and (IsFile "$(A)\rules\new.md") -and (GrepQ $LOG 'Skills manifest: wrote'))
+        Check "$lang locked: rules manifest held open by a reader -- ERROR row, exit 1, run completes" ($rc -eq 1 -and (RowRe '^ERROR\|harness files\|rules manifest not written\|.') -and (GrepQ $LOG '\[error\] rules manifest not written: .') -and (IsFile "$(A)\rules\new.md") -and (GrepQ $LOG 'Skills manifest: wrote'))
         Check "$lang locked: the old rules manifest unchanged byte for byte, no .tmp left" ((Same "$C\rules-manifest.before" (M)) -and -not (Exists "$(M).tmp"))
         Fresh-Log; Run-DH
         Check "$lang locked: released -- the next run writes the rules manifest" ($rc -eq 0 -and (MfIs @("hook-lifecycle.md${T}shared", "new.md${T}shared", "scratch.md${T}shared")) -and -not (GrepQ "$C\summary" '^ERROR\|'))
@@ -854,7 +870,7 @@ try {
         } finally {
             Release-Held
         }
-        Check "$lang locked: skill file held open with no sharing -- partial backup removed, skill kept (ERROR row, exit 1)" ($rc -eq 1 -and (Row 'ERROR|harness files|retire failed: s2') -and (GrepQ $LOG '\[error\] Retired skill s2: backup failed \(') -and (GrepQ $LOG 'Retired skill s2: removed the incomplete backup') -and (N-Bak s2) -eq 0 -and -not (HasRow 'bak cleanup failed'))
+        Check "$lang locked: skill file held open with no sharing -- partial backup removed, skill kept (ERROR row, exit 1)" ($rc -eq 1 -and (RowRe '^ERROR\|harness files\|retire failed: s2\|backup failed: .* -- .*s2 not removed$') -and (GrepQ $LOG '\[error\] retire failed: s2: backup failed: ') -and (GrepQ $LOG 'Retired skill s2: removed the incomplete backup') -and (N-Bak s2) -eq 0 -and -not (HasRow 'bak cleanup failed'))
         Check "$lang locked: the skill unchanged byte for byte" ((Same "$C\s2-skill.before" "$(A)\skills\s2\SKILL.md") -and (@(LsA "$(A)\skills\s2") -join "|") -ceq 'SKILL.md')
         Fresh-Log; Run-DH
         Check "$lang locked: released -- the next run backs up and removes the skill" ($rc -eq 0 -and -not (Exists "$(A)\skills\s2") -and (N-Bak s2) -eq 1 -and (BakLine s2 'SKILL.md' 'skill two') -and (GrepX (SM) "s2${T}retired"))
@@ -898,15 +914,17 @@ try {
         try {
             Hold-File "$sk1\SKILL.md" Read Read
             Fresh-Log; Run-DH    # run 1
-            Check "$lang locked retry: run 1 -- delete tried (tests\ gone, held SKILL.md left), 'cannot remove' logged, ERROR row, exit 1, line retired" ($rc -eq 1 -and -not (Exists "$sk1\tests") -and (@(LsA $sk1) -join "|") -ceq 'SKILL.md' -and (GrepC $LOG '\[error\] Retired skill s1: cannot remove .*/\.aitools/skills/s1$') -eq 1 -and (Row 'ERROR|harness files|retire failed: s1') -and -not (HasRow 'retired: skills/s1') -and (GrepX (SM) "s1${T}retired"))
+            # The removal error's reason is the .NET message (Get-AitErrorReason
+            # -ErrorRecord): the record prefix and one error line are asserted.
+            Check "$lang locked retry: run 1 -- delete tried (tests\ gone, held SKILL.md left), the removal error logged once, ERROR row, exit 1, line retired" ($rc -eq 1 -and -not (Exists "$sk1\tests") -and (@(LsA $sk1) -join "|") -ceq 'SKILL.md' -and (GrepC $LOG '\[error\] retire failed: s1: .') -eq 1 -and (RowRe '^ERROR\|harness files\|retire failed: s1\|.') -and (NRows '^ERROR\|') -eq 1 -and -not (HasRow 'retired: skills/s1') -and (GrepX (SM) "s1${T}retired"))
             Check "$lang locked retry: run 1 -- one complete backup (both files)" ((N-Bak s1) -eq 1 -and (BakLine s1 'SKILL.md' 'skill one') -and (BakLine s1 'tests\t.md' 'skill one test'))
             # Backup names have one-second resolution (<name>.bak.<UTC>): a run in the
-            # same second as the last backup finds the name taken ("backup failed
-            # (... already exists)") and tries no delete. A run takes under a second
+            # same second as the last backup finds the name taken ("backup <bak>
+            # already exists -- <dir> not removed") and tries no delete. A run takes under a second
             # here, so wait for the next second before each later run.
             Start-Sleep -Milliseconds 1100
             Fresh-Log; Run-DH    # run 2: still held
-            Check "$lang locked retry: run 2, still held -- tried again: 'cannot remove' logged, ERROR row, exit 1, line still retired" ($rc -eq 1 -and (@(LsA $sk1) -join "|") -ceq 'SKILL.md' -and (GrepC $LOG '\[error\] Retired skill s1: cannot remove .*/\.aitools/skills/s1$') -eq 1 -and (Row 'ERROR|harness files|retire failed: s1') -and -not (HasRow 'retired: skills/s1') -and (GrepX (SM) "s1${T}retired"))
+            Check "$lang locked retry: run 2, still held -- tried again: the removal error logged once, ERROR row, exit 1, line still retired" ($rc -eq 1 -and (@(LsA $sk1) -join "|") -ceq 'SKILL.md' -and (GrepC $LOG '\[error\] retire failed: s1: .') -eq 1 -and (RowRe '^ERROR\|harness files\|retire failed: s1\|.') -and (NRows '^ERROR\|') -eq 1 -and -not (HasRow 'retired: skills/s1') -and (GrepX (SM) "s1${T}retired"))
             Check "$lang locked retry: run 2 -- a second backup (what is left), the complete one kept" ((N-Bak s1) -eq 2 -and (BakLine s1 'tests\t.md' 'skill one test'))
         } finally {
             Release-Held
@@ -993,7 +1011,7 @@ foreach ($x in $r.Invalid) { [void]$out.Append("invalid`t$x`n") }
     # ---------------------------------------------------------------------------
     Setup-Case args
     Run-DH "" @('--bogus')
-    Check "bad argument: exit 1, ERROR row" ($rc -eq 1 -and (Row 'ERROR|harness files|bad arguments'))
+    Check "bad argument: exit 1, ERROR row with the option as its reason" ($rc -eq 1 -and (RowRe '^ERROR\|harness files\|bad arguments\|unknown option: -*bogus \(see -Help\)$'))
     Run-DH "" @('-Help')
     Check "--help: exit 0, usage shown, nothing deployed" ($rc -eq 0 -and (GrepQ "$C\out" "Usage: deploy-harness.$lang") -and -not (Exists "$(A)\rules"))
 } finally {

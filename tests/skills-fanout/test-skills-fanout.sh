@@ -22,8 +22,11 @@
 # Parity between the halves: each parity point writes one record (exit code;
 # the skills tree as "path md5 [x]", relative, LC_ALL=C sorted, a backup file
 # once as "path.bak.TS (backup)", symlinks left out -- they are checked
-# explicitly; the ACTION and skills summary rows, sorted; HOME as "HOME", the
-# temp root as <TMP>) that must equal tests/skills-fanout/golden/<case>.txt,
+# explicitly; the ACTION and skills summary rows, sorted; HOME as "HOME" with
+# slashes after it, the temp root as <TMP>, the run's backup directory as
+# skills.bak.<UTC>, an error reason that is an OS message (mkdir, rm; BSD, GNU
+# and .NET word them differently) as <OS error>, asserted per platform inline)
+# that must equal tests/skills-fanout/golden/<case>.txt,
 # which the Windows harness checks too (tests/lib/platform-lib.sh
 # golden_match). AITOOLS_TEST_UPDATE_GOLDEN=1 on macOS/Linux rewrites the files
 # from the .sh run. Cases a platform cannot build (chmod 000 reads as root;
@@ -226,6 +229,15 @@ rerun() {  # rerun [FLAG]: run again in the same HOME
 rc() { cat "$C/${1:-$L}.rc"; }
 row() { grep -qxF "$1" "$C/${2:-$L}.summary"; }                  # exact summary row
 nondetail() { grep -F '|claude skills|' "$C/${1:-$L}.summary" | grep -v '^DETAIL' | tail -n 1; }
+# status [LANG]: the tool's status, its last OK record (reference/logging.md 8.3:
+# warnings and errors are records of their own, never the status)
+status() { grep '^OK|claude skills|' "$C/${1:-$L}.summary" | tail -n 1; }
+# nrows KIND [TOOL]: how many KIND (WARN, ERROR) records TOOL has: each warning
+# and each error is recorded once
+nrows() { grep -c "^$1|${2:-claude skills}|" "$C/$L.summary"; }
+# err_reason WHAT_PREFIX: the reason field of the claude skills ERROR record whose
+# WHAT starts with WHAT_PREFIX (the 4th field; reasons hold no "|")
+err_reason() { grep -F "ERROR|claude skills|$1" "$C/$L.summary" | perl -ne 'chomp; my @f = split /\|/, $_, 4; print "$f[3]\n"'; }
 S() { printf '%s' "$C/${1:-$L}/.claude/skills"; }                 # the deployed skills dir
 # lognorm [LANG]: the run's log files, CR removed, every backslash a slash, the
 # temp root (TMP_FORMS; case-insensitive) as <TMP>, so the expected texts are the
@@ -282,7 +294,17 @@ golden_record() {
         for my $h (grep { length } ($ENV{HP})) {
             (my $b = $h) =~ s{/}{\\}g;
             s/\Q$h\E/HOME/g; s/\Q$b\E/HOME/g;
-        }' > "$f"
+        }
+        # The same rules as Golden-Record in test-skills-fanout.ps1:
+        # a path under HOME with slashes (the .ps1 lib joins with backslashes)
+        s{HOME([\\/][^\s|"]*)}{my $r = $1; $r =~ tr{\\}{/}; "HOME$r"}ge;
+        # the backup directory the run creates beside the skills dir
+        s/(skills\.bak\.)[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{6}Z(?:-[0-9]+)?/$1<UTC>/g;
+        # an error reason that is an OS message (BSD, GNU and .NET texts differ;
+        # the inline checks assert it per platform): <OS error>
+        s{^(ERROR\|[^|]*\|cannot create skills dir\|HOME/[^|:]*): .*$}{$1: <OS error>};
+        s{^(ERROR\|[^|]*\|Cannot remove [^|]*)\|.*$}{$1|<OS error>};
+        ' > "$f"
     check "golden $L: $name: exit code, tree, summary rows" "golden_match '$name.txt' '$f'"
 }
 # parity CASE [EXTRA_FILE]: the ~/.claude/skills record of the case (see golden_record)
@@ -348,11 +370,14 @@ check "fanout rerun: row 6 verified, nothing written" "[ \"\$(nondetail)\" = 'OK
 parity fanout-rerun
 printf '## shared s1\nlocal edit\n' > "$(S)/s1/SKILL.md"
 rerun
-check "fanout edited, non-interactive: overwritten, backup kept, WARN row" "[ \"\$(nondetail)\" = 'WARN|claude skills|1 updated, 5 verified' ] && grep -qx '## shared s1' '$(S)/s1/SKILL.md' && ls '$(S)/s1' | grep '^SKILL\.md\.bak\.' >/dev/null"
+# Local edits overwritten in a non-interactive run: a warning (logging.md 8.3), its
+# own WARN record; the status stays OK (never recoloured)
+check "fanout edited, non-interactive: overwritten, backup kept, OK status, one WARN record" "[ \"\$(status)\" = 'OK|claude skills|1 updated, 5 verified' ] && row 'WARN|claude skills|local edits overwritten (non-interactive run, backup kept): $(S)/s1/SKILL.md' && [ \"\$(nrows WARN)\" = 1 ] && grep -qx '## shared s1' '$(S)/s1/SKILL.md' && ls '$(S)/s1' | grep '^SKILL\.md\.bak\.' >/dev/null"
 parity fanout-edited
 printf '## shared s1\nlocal edit 2\n' > "$(S)/s1/SKILL.md"
 rerun --force
-check "fanout --force: overwritten" "[ \"\$(rc)\" = 0 ] && grep -qx '## shared s1' '$(S)/s1/SKILL.md' && [ \"\$(nondetail)\" = 'WARN|claude skills|1 updated, 5 verified' ]"
+# An overwrite the user asked for (--force) is info, not a warning (logging.md 8.3)
+check "fanout --force: overwritten, OK status, no WARN record" "[ \"\$(rc)\" = 0 ] && grep -qx '## shared s1' '$(S)/s1/SKILL.md' && [ \"\$(status)\" = 'OK|claude skills|1 updated, 5 verified' ] && [ \"\$(nrows WARN)\" = 0 ] && grep -q 'Diff in .*/s1/SKILL.md -- overwriting (--force)' '$C/$L.out'"
 parity fanout-force
 chmod 644 "$(S)/s1/scripts/run.sh"
 rerun
@@ -372,7 +397,7 @@ seed_kept() {
     printf 'a file\n' > "$H/.claude/skills/p1"
 }
 case_run kept seed_kept
-check "kept: exit 0, row 1 added (WARN)" "[ \"\$(rc)\" = 0 ] && [ \"\$(nondetail)\" = 'WARN|claude skills|1 added' ]"
+check "kept: exit 0, OK status 1 added, one WARN record per kept name" "[ \"\$(rc)\" = 0 ] && [ \"\$(status)\" = 'OK|claude skills|1 added' ] && [ \"\$(nrows WARN)\" = 2 ] && row 'WARN|claude skills|Kept p1: not a directory this fan-out owns ($(S)/p1 is a symlink or a file) -- the harness copy is not deployed; move it aside to get the aitools copy' && row 'WARN|claude skills|Kept s1: not a directory this fan-out owns ($(S)/s1 is a symlink or a file) -- the harness copy is not deployed; move it aside to get the aitools copy'"
 check "kept: symlink and file untouched" "[ -L '$(S)/s1' ] && grep -qx theirs '$C/$L/elsewhere/s1/SKILL.md' && [ \"\$(ls '$C/$L/elsewhere/s1')\" = SKILL.md ] && grep -qx 'a file' '$(S)/p1'"
 check "kept: ACTION row names both" "row 'ACTION||Claude Code skills in ~/.claude/skills not updated (a symlink or a file, not a directory the fan-out owns): p1, s1 -- move them aside to get the aitools copy'"
 parity kept
@@ -396,7 +421,8 @@ seed_retired() {
     dskill '[r]' SKILL.md 'r'
 }
 case_run retired seed_retired
-check "retired: exit 0, row 1 added, 3 removed (WARN: a kept dir still loads)" "[ \"\$(rc)\" = 0 ] && [ \"\$(nondetail)\" = 'WARN|claude skills|1 added, 3 removed' ]"
+KEPT_MINE2='WARN|claude skills|Kept mine2: the skills manifest retires mine2, but this directory matches no harness copy (it may be your own) -- Claude Code still loads it; delete it if it is an old fan-out copy'
+check "retired: exit 0, OK status 1 added, 3 removed; the kept dir is one WARN record" "[ \"\$(rc)\" = 0 ] && [ \"\$(status)\" = 'OK|claude skills|1 added, 3 removed' ] && row '$KEPT_MINE2' && [ \"\$(nrows WARN)\" = 1 ]"
 check "retired: copies removed from ~/.claude/skills" "[ ! -e '$(S)/gone' ] && [ ! -e '$(S)/old' ] && [ ! -e '$(S)/[r]' ]"
 check "retired: OS junk files did not block the prune; the backup keeps them" "b=\$(ls -d '$C/$L/.claude/'skills.bak.* | LC_ALL=C sort | tail -n 1) && [ -f \"\$b/gone/.DS_Store\" ] && [ -f \"\$b/gone/tests/Thumbs.db\" ]"
 check "retired: the newest backup dir beside ~/.claude/skills holds them" "b=\$(ls -d '$C/$L/.claude/'skills.bak.* | LC_ALL=C sort | tail -n 1) && grep -qx gone \"\$b/gone/SKILL.md\" && grep -qx gx \"\$b/gone/tests/x.md\" && grep -qx old \"\$b/old/SKILL.md\" && grep -qx r \"\$b/[r]/SKILL.md\""
@@ -406,7 +432,7 @@ check "retired: a retired skill still in ~/.aitools/skills is not fanned out" "g
 check "retired: user dir with a retired name kept, ACTION row" "grep -qx 'my own' '$(S)/mine2/SKILL.md' && row 'ACTION||Claude Code still loads retired skills in ~/.claude/skills: mine2 -- delete them unless you wrote them'"
 parity retired
 case_run retired-dry seed_retired --dry-run
-check "retired dry run: nothing removed, row dry run, removal previewed" "[ \"\$(rc)\" = 0 ] && [ \"\$(nondetail)\" = 'WARN|claude skills|dry run (no files written)' ] && [ -d '$(S)/gone' ] && [ -d '$(S)/old' ] && [ ! -e '$(S)/a' ] && [ \"\$(bakdirs)\" = 6 ] && grep -q 'DRY RUN\] Would back up and remove gone' '$C/$L.out'"
+check "retired dry run: nothing removed, OK status dry run, the kept dir one WARN record, removal previewed" "[ \"\$(rc)\" = 0 ] && [ \"\$(status)\" = 'OK|claude skills|dry run (no files written)' ] && row '$KEPT_MINE2' && [ \"\$(nrows WARN)\" = 1 ] && [ -d '$(S)/gone' ] && [ -d '$(S)/old' ] && [ ! -e '$(S)/a' ] && [ \"\$(bakdirs)\" = 6 ] && grep -q 'DRY RUN\] Would back up and remove gone' '$C/$L.out'"
 parity retired-dry
 
 # A retired name whose copy differs only in case (Gone for gone)
@@ -428,7 +454,7 @@ seed_retired_mod() {
     dskill gone SKILL.md 'gone, edited by me'
 }
 case_run retired-mod seed_retired_mod
-check "retired, user-modified: kept, ACTION row" "[ \"\$(rc)\" = 0 ] && [ \"\$(nondetail)\" = 'WARN|claude skills|1 added' ] && grep -qx 'gone, edited by me' '$(S)/gone/SKILL.md' && row 'ACTION||Claude Code still loads retired skills in ~/.claude/skills: gone -- delete them unless you wrote them'"
+check "retired, user-modified: kept, OK status, one WARN record, ACTION row" "[ \"\$(rc)\" = 0 ] && [ \"\$(status)\" = 'OK|claude skills|1 added' ] && row 'WARN|claude skills|Kept gone: the skills manifest retires gone, but this directory matches no harness copy (it may be your own) -- Claude Code still loads it; delete it if it is an old fan-out copy' && [ \"\$(nrows WARN)\" = 1 ] && grep -qx 'gone, edited by me' '$(S)/gone/SKILL.md' && row 'ACTION||Claude Code still loads retired skills in ~/.claude/skills: gone -- delete them unless you wrote them'"
 check "retired, user-modified: not counted again as preserved" "! grep -q 'Preserved unmanaged skill: gone' '$C/$L.out' && grep -q 'Skills (claude skills): 1 added, 0 preserved' '$C/$L.out'"
 parity retired-mod
 
@@ -443,7 +469,17 @@ if $CAN_CHMOD_READ; then
         chmod 555 "$H/.claude/skills/gone/sub"
     }
     case_run rmfail seed_rmfail
-    check "retired, cannot remove: exit 1, row 1 failed, the error names the backup" "[ \"\$(rc)\" = 1 ] && [ \"\$(nondetail)\" = 'ERROR|claude skills|1 failed' ] && grep -q 'Cannot remove .*gone (retired skill; it may be partly removed; backup in .*skills\.bak\..*/gone)' '$C/$L.out'"
+    # The failure is one ERROR record at the source (WHAT names the backup, REASON
+    # is rm's output); the tracker's OK status counts it (logging.md 8.3)
+    check "retired, cannot remove: exit 1, OK status 1 added, 1 failed, one ERROR record naming the backup" "[ \"\$(rc)\" = 1 ] && [ \"\$(status)\" = 'OK|claude skills|1 added, 1 failed' ] && [ \"\$(nrows ERROR)\" = 1 ] && grep -E '^ERROR\|claude skills\|Cannot remove $(S)/gone \(retired skill; it may be partly removed; backup in $C/$L/\.claude/skills\.bak\.[0-9TZ-]+/gone\)\|' '$C/$L.summary' >/dev/null && grep -q 'Cannot remove .*gone (retired skill; it may be partly removed; backup in .*skills\.bak\..*/gone)' '$C/$L.out'"
+    # The reason is rm's own output (the golden record holds <OS error>): BSD rm
+    # names each path it could not remove; GNU rm words it differently, but both
+    # report the denied unlink with strerror(EACCES)
+    if [ "$TEST_PLATFORM" = macos ]; then
+        check "retired, cannot remove: reason is BSD rm's output, one line per path" "[ \"\$(err_reason 'Cannot remove ')\" = 'rm: $(S)/gone/sub/x.md: Permission denied; rm: $(S)/gone/sub: Directory not empty; rm: $(S)/gone: Directory not empty' ]"
+    else
+        check "retired, cannot remove: reason is rm's output (Permission denied for gone/sub/x.md)" "err_reason 'Cannot remove ' | grep -E '^rm: .*gone/sub/x\.md.*: Permission denied' >/dev/null"
+    fi
     check "retired, cannot remove: not counted again as preserved" "! grep -q 'Preserved unmanaged skill: gone' '$C/$L.out'"
     # The backup directory's mode (sh = ps before; now part of the golden record)
     b=$(ls -d "$C/$L/.claude/"skills.bak.* | LC_ALL=C sort | tail -n 1)
@@ -481,24 +517,25 @@ seed_badheader() {
     hskill a SKILL.md 'skill a'; hskill x.bak.2026-10-25T000000Z SKILL.md 'x'; dskill x SKILL.md 'x'
 }
 case_run badheader seed_badheader
-check "bad header: fanned out, nothing retired, WARN + ACTION" "[ \"\$(rc)\" = 0 ] && [ \"\$(nondetail)\" = 'WARN|claude skills|1 added' ] && [ -d '$(S)/x' ] && row 'ACTION||Run aitools to rebuild ~/.aitools/skills and its manifest'"
+check "bad header: fanned out, nothing retired, OK status, one WARN record + ACTION" "[ \"\$(rc)\" = 0 ] && [ \"\$(status)\" = 'OK|claude skills|1 added' ] && [ -d '$(S)/x' ] && [ \"\$(nrows WARN)\" = 1 ] && row 'WARN|claude skills|Skills manifest $C/$L/.aitools/skills/.aitools-skills-manifest: the first line is not \"# aitools skills manifest v1\" -- every skill fanned out, none retired, adopt not offered -- Run aitools to rebuild ~/.aitools/skills and its manifest' && row 'ACTION||Run aitools to rebuild ~/.aitools/skills and its manifest'"
 parity badheader
 
 seed_invalid() { manifest '.dot|shared' 'a|unknown' 'b|shared'; hskill a SKILL.md 'skill a'; hskill b SKILL.md 'skill b'; }
 case_run invalid seed_invalid
-check "invalid lines: warned, skills still fanned out" "[ \"\$(rc)\" = 0 ] && [ \"\$(nondetail)\" = 'WARN|claude skills|2 added' ] && grep -q 'line ignored: .dot<TAB>shared' '$C/$L.out' && logged 'claude skills: a/SKILL.md source=unknown adopt=none'"
+check "invalid lines: one WARN record per ignored line, the ACTION once, OK status, skills still fanned out" "[ \"\$(rc)\" = 0 ] && [ \"\$(status)\" = 'OK|claude skills|2 added' ] && [ \"\$(nrows WARN)\" = 2 ] && row 'WARN|claude skills|Skills manifest $C/$L/.aitools/skills/.aitools-skills-manifest: line ignored: .dot<TAB>shared -- Run aitools to rebuild ~/.aitools/skills and its manifest' && row 'WARN|claude skills|Skills manifest $C/$L/.aitools/skills/.aitools-skills-manifest: line ignored: a<TAB>unknown -- Run aitools to rebuild ~/.aitools/skills and its manifest' && [ \"\$(grep -c '^ACTION|' '$C/$L.summary')\" = 1 ] && grep -q 'line ignored: .dot<TAB>shared' '$C/$L.out' && logged 'claude skills: a/SKILL.md source=unknown adopt=none'"
 parity invalid
 
 if $CAN_CHMOD_READ; then
     seed_unreadable() { hskill a SKILL.md 'skill a'; chmod 000 "$H/.aitools/skills"; }
     case_run unreadable seed_unreadable
-    check "unreadable harness dir: ERROR row, exit 1" "[ \"\$(rc)\" = 1 ] && [ \"\$(nondetail)\" = 'ERROR|claude skills|cannot read harness skills' ]"
+    check "unreadable harness dir: one ERROR record with its reason, no status, exit 1" "[ \"\$(rc)\" = 1 ] && [ \"\$(nondetail)\" = 'ERROR|claude skills|cannot read harness skills|cannot list $C/$L/.aitools/skills: permission denied' ] && [ \"\$(nrows ERROR)\" = 1 ] && [ -z \"\$(status)\" ]"
     parity unreadable
     chmod 755 "$C/$L/.aitools/skills"
 
     seed_manifest_unreadable() { manifest 'a|shared'; hskill a SKILL.md 'skill a'; chmod 000 "$H/.aitools/skills/.aitools-skills-manifest"; }
     case_run manifest-unreadable seed_manifest_unreadable
-    check "unreadable manifest: skills fanned out, ERROR rows, final row ERROR, exit 1" "[ \"\$(rc)\" = 1 ] && [ -f '$(S)/a/SKILL.md' ] && row 'ERROR|claude skills|cannot read skills manifest' && row 'DETAIL|claude skills|failed: .aitools-skills-manifest' && [ \"\$(nondetail)\" = 'ERROR|claude skills|1 failed' ]"
+    # The reason ends in perl's $! (strerror(EACCES)): "Permission denied" on macOS and glibc alike
+    check "unreadable manifest: skills fanned out, one ERROR record with its reason, OK status counts it failed, exit 1" "[ \"\$(rc)\" = 1 ] && [ -f '$(S)/a/SKILL.md' ] && row 'ERROR|claude skills|cannot read skills manifest|$C/$L/.aitools/skills/.aitools-skills-manifest: cannot read $C/$L/.aitools/skills/.aitools-skills-manifest: Permission denied -- every skill fanned out, none retired' && [ \"\$(nrows ERROR)\" = 1 ] && row 'DETAIL|claude skills|failed: .aitools-skills-manifest' && [ \"\$(status)\" = 'OK|claude skills|1 added, 1 failed' ]"
     parity manifest-unreadable
 else
     skip "unreadable harness dir and manifest (root)"
@@ -623,14 +660,14 @@ seed_reserved() {
     dskill anthropic-skills-old SKILL.md 'o'
 }
 case_run reserved seed_reserved
-check "reserved: exit 1, row 2 failed, failed DETAIL rows" "[ \"\$(rc)\" = 1 ] && [ \"\$(nondetail)\" = 'ERROR|claude skills|2 failed' ] && row 'DETAIL|claude skills|failed: synced' && row 'DETAIL|claude skills|failed: Anthropic-Skills-pack'"
+check "reserved: exit 1, one ERROR record per name, OK status 1 added, 2 failed, failed DETAIL rows" "[ \"\$(rc)\" = 1 ] && [ \"\$(status)\" = 'OK|claude skills|1 added, 2 failed' ] && [ \"\$(nrows ERROR)\" = 2 ] && row 'ERROR|claude skills|Not fanned out: synced|a reserved skills directory name (synced and anthropic-skills* belong to Claude Code) -- rename the harness skill' && row 'ERROR|claude skills|Not fanned out: Anthropic-Skills-pack|a reserved skills directory name (synced and anthropic-skills* belong to Claude Code) -- rename the harness skill' && row 'DETAIL|claude skills|failed: synced' && row 'DETAIL|claude skills|failed: Anthropic-Skills-pack'"
 check "reserved: nothing written into or removed from them" "[ ! -e '$(S)/synced/SKILL.md' ] && grep -qx theirs '$(S)/synced/keep.txt' && [ ! -e '$(S)/Anthropic-Skills-pack' ] && grep -qx o '$(S)/anthropic-skills-old/SKILL.md' && [ -f '$(S)/a/SKILL.md' ] && ! row 'DETAIL|claude skills|removed: anthropic-skills-old'"
 parity reserved
 
 if $CASE_SENSITIVE_FS; then
     seed_dupcase() { hskill a SKILL.md 'lower'; hskill A SKILL.md 'upper'; }
     case_run dupcase seed_dupcase
-    check "case-only duplicate: the first wins, the second failed" "[ \"\$(rc)\" = 1 ] && [ \"\$(nondetail)\" = 'ERROR|claude skills|1 failed' ]"
+    check "case-only duplicate: the first wins, the second one ERROR record, OK status 1 added, 1 failed" "[ \"\$(rc)\" = 1 ] && [ \"\$(status)\" = 'OK|claude skills|1 added, 1 failed' ] && [ \"\$(nrows ERROR)\" = 1 ] && grep -E '^ERROR\|claude skills\|Skipped duplicate: [aA]\|a harness skill whose name differs only in case was already fanned out\$' '$C/$L.summary' >/dev/null"
     # No golden record: only a case-sensitive file system (Linux) builds this
     # fixture, so the Windows harness never runs it and the macOS run that writes
     # the golden files cannot produce one
@@ -640,17 +677,25 @@ fi
 
 seed_broken() { hskill a SKILL.md 'skill a'; ln -s "$H/nowhere" "$H/.aitools/skills/broken"; }
 case_run broken seed_broken
-check "dangling symlink: failed, others deployed" "[ \"\$(rc)\" = 1 ] && [ \"\$(nondetail)\" = 'ERROR|claude skills|1 failed' ] && [ -f '$(S)/a/SKILL.md' ] && row 'DETAIL|claude skills|failed: broken'"
+check "dangling symlink: one ERROR record, OK status 1 added, 1 failed, others deployed" "[ \"\$(rc)\" = 1 ] && [ \"\$(status)\" = 'OK|claude skills|1 added, 1 failed' ] && [ \"\$(nrows ERROR)\" = 1 ] && row 'ERROR|claude skills|Failed: broken|dangling symlink in $C/$L/.aitools/skills' && [ -f '$(S)/a/SKILL.md' ] && row 'DETAIL|claude skills|failed: broken'"
 parity broken
 
 # ~/.claude/skills cannot be created (a file is in the way): ERROR row, exit 1,
 # the script still reaches its exit footer
 seed_nocreate() { hskill a SKILL.md 'skill a'; mkdir -p "$H/.claude"; printf 'not a dir\n' > "$H/.claude/skills"; }
 case_run nocreate seed_nocreate
-check "cannot create skills dir: ERROR row, exit 1, file untouched" "[ \"\$(rc)\" = 1 ] && [ \"\$(nondetail)\" = 'ERROR|claude skills|cannot create skills dir' ] && grep -qx 'not a dir' '$C/$L/.claude/skills' && grep -q 'FAILED with' '$C/$L.out'"
+check "cannot create skills dir: one ERROR record, exit 1, file untouched" "[ \"\$(rc)\" = 1 ] && [ \"\$(nrows ERROR)\" = 1 ] && [ -z \"\$(status)\" ] && grep -F 'ERROR|claude skills|cannot create skills dir|$(S): ' '$C/$L.summary' >/dev/null && grep -qx 'not a dir' '$C/$L/.claude/skills' && grep -q 'FAILED with' '$C/$L.out'"
+# The reason is mkdir's own message after the path (the golden record holds
+# <OS error>): BSD mkdir prints "mkdir: <path>: File exists"; GNU mkdir words it
+# differently, but both end in strerror(EEXIST)
+if [ "$TEST_PLATFORM" = macos ]; then
+    check "cannot create skills dir: reason is the path and BSD mkdir's message" "[ \"\$(err_reason 'cannot create skills dir')\" = '$(S): mkdir: $(S): File exists' ]"
+else
+    check "cannot create skills dir: reason is the path and mkdir's message (File exists)" "err_reason 'cannot create skills dir' | grep -E '^$(S): mkdir: .*File exists\$' >/dev/null"
+fi
 parity nocreate
 case_run nocreate-dry seed_nocreate --dry-run
-check "cannot create skills dir, dry run: the same ERROR row as the real run" "[ \"\$(rc)\" = 1 ] && [ \"\$(nondetail)\" = 'ERROR|claude skills|cannot create skills dir' ] && grep -qx 'not a dir' '$C/$L/.claude/skills'"
+check "cannot create skills dir, dry run: the same error (WHAT) as the real run, the reason marked DRY RUN" "[ \"\$(rc)\" = 1 ] && [ \"\$(nondetail)\" = 'ERROR|claude skills|cannot create skills dir|$(S) (a file is in the way) [DRY RUN]' ] && [ \"\$(nrows ERROR)\" = 1 ] && grep -qx 'not a dir' '$C/$L/.claude/skills'"
 parity nocreate-dry
 
 # ---------------------------------------------------------------------------
@@ -713,6 +758,7 @@ cursor_case() {
     run_cursor "${3:-}"
 }
 cnondetail() { grep -F '|cursor skills|' "$C/${1:-$L}.summary" | grep -v '^DETAIL' | tail -n 1; }
+cstatus() { grep '^OK|cursor skills|' "$C/${1:-$L}.summary" | tail -n 1; }   # status, for cursor skills
 CS() { printf '%s' "$C/${1:-$L}/.cursor/skills"; }
 crows() { grep -E '^(ACTION\||[A-Z]+\|cursor skills\|)' "$1" | LC_ALL=C sort; }
 # cparity CASE: the ~/.cursor/skills record of the case (see golden_record)
@@ -735,7 +781,8 @@ seed_cursor() {
     ln -s ../../.agents/skills/firecrawl "$H/.cursor/skills/firecrawl"
 }
 cursor_case cursor seed_cursor
-check "cursor: exit 0, row 4 added, 1 removed (WARN: a kept dir still loads)" "[ \"\$(rc)\" = 0 ] && [ \"\$(cnondetail)\" = 'WARN|cursor skills|4 added, 1 removed' ]"
+CKEPT_MINE2='WARN|cursor skills|Kept mine2: the skills manifest retires mine2, but this directory matches no harness copy (it may be your own) -- Cursor still loads it; delete it if it is an old fan-out copy'
+check "cursor: exit 0, OK status 4 added, 1 removed; the kept dir is one WARN record" "[ \"\$(rc)\" = 0 ] && [ \"\$(cstatus)\" = 'OK|cursor skills|4 added, 1 removed' ] && grep -qxF '$CKEPT_MINE2' '$C/$L.summary' && [ \"\$(nrows WARN 'cursor skills')\" = 1 ]"
 check "cursor: shared, aitools, dotprofile skills in ~/.cursor/skills, x bit kept" "grep -qx '## shared s1' '$(CS)/s1/SKILL.md' && grep -qx '## project p1' '$(CS)/p1/SKILL.md' && grep -qx '## dot d1' '$(CS)/d1/SKILL.md' && [ -x '$(CS)/s1/scripts/run.sh' ]"
 check "cursor: nothing written to ~/.claude/skills" "[ ! -e '$C/$L/.claude/skills' ]"
 for lang in $L; do
@@ -748,7 +795,7 @@ check "cursor: firecrawl symlink preserved, never followed" "[ -L '$(CS)/firecra
 check "cursor: step 5 logged after step 4" "grep -q 'Step 5: Cursor user skills' '$C/$L.out'"
 cparity cursor
 run_cursor
-check "cursor rerun: 4 verified (WARN: the kept dir)" "[ \"\$(cnondetail)\" = 'WARN|cursor skills|4 verified' ]"
+check "cursor rerun: OK status 4 verified; the kept dir is one WARN record" "[ \"\$(cstatus)\" = 'OK|cursor skills|4 verified' ] && grep -qxF '$CKEPT_MINE2' '$C/$L.summary' && [ \"\$(nrows WARN 'cursor skills')\" = 1 ]"
 cparity cursor-rerun
 
 seed_cursor_none() { cskill mine SKILL.md 'mine'; }

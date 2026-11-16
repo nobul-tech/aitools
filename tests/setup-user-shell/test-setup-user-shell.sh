@@ -11,7 +11,9 @@
 # backup); user lines around a stale block kept; duplicate blocks collapsed; stray
 # block lines and a profile failing bash -n reported as WARN + ACTION with the
 # backup choice; a splice that would break the profile refused; .zshrc only when it
-# exists; the legacy "# ai-tooling" pair migrated; MDM (no aliases.sh).
+# exists; the legacy "# ai-tooling" pair migrated; MDM (no aliases.sh); the block's
+# Go line (no existence check, ${GOPATH:-$HOME/go}/bin; issue #185) and a block with
+# the old Go line refreshed to it.
 #
 # Usage: bash tests/setup-user-shell/test-setup-user-shell.sh [--help]
 #        AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/setup-user-shell/test-setup-user-shell.sh
@@ -51,6 +53,10 @@ NO_ALIASES="$TMP_ROOT/absent/aliases.sh"
 PS="# >>> aitools managed >>>"
 PE="# <<< aitools managed <<<"
 MARKER="# aitools shell integration"
+# The block's Go line, and the line it replaced (issue #185). Single quotes: literal.
+GO_LINE='export PATH="$PATH:${GOPATH:-$HOME/go}/bin"'
+OLD_GO_LINE='[ -d "$HOME/go/bin" ] && export PATH="$PATH:$HOME/go/bin"'
+BASH_ABS=$(command -v "$BASH_BIN")
 
 PASS=0
 FAIL=0
@@ -82,6 +88,21 @@ summary_has() { grep -qF -- "$2" "$TMP_ROOT/$1/summary.txt"; }
 backups() { find "$1" -maxdepth 1 -name "$2.bak.*" | wc -l | tr -d ' '; }
 new_dir() { mkdir -p "$TMP_ROOT/p-$1"; printf '%s' "$TMP_ROOT/p-$1"; }
 
+# go_dir_on_path PROFILE GOPATH WANT: 0 when a bash that sources PROFILE, with HOME
+# set to a temp dir, PATH=/usr/bin:/bin and GOPATH set to GOPATH (unset when empty),
+# has WANT on PATH. WANT may name $HOME as the literal text "HOME" (expanded inside).
+go_dir_on_path() {
+    local home="$TMP_ROOT/gohome" want
+    mkdir -p "$home"
+    want="${3/#HOME/$home}"
+    (
+        unset GOPATH
+        if [ -n "$2" ]; then export GOPATH="$2"; fi
+        HOME="$home" PATH=/usr/bin:/bin "$BASH_ABS" -c \
+            '. "$1" >/dev/null 2>&1; case ":$PATH:" in *":$2:"*) exit 0 ;; esac; exit 1' _ "$1" "$want"
+    )
+}
+
 # The current block, as a fresh run writes it.
 D=$(new_dir new)
 run_setup new "$D"
@@ -94,6 +115,12 @@ check "new: exit 0, OK managed block added + integration added" \
 check "new: one block, passes bash -n" "[ \"\$(cl '$D/.bash_profile' '$PS')\" = 1 ] && \"\$BASH_BIN\" -n '$D/.bash_profile'"
 check "new: .bashrc created with the source line, .zshrc not created" \
     "grep -qxF '$MARKER' '$D/.bashrc' && grep -qxF 'source \"$ALIASES\"' '$D/.bashrc' && [ ! -e '$D/.zshrc' ]"
+check "new: block has the Go line with no existence check, not the old [ -d ] line" \
+    "[ \"\$(cl '$D/.bash_profile' \"\$GO_LINE\")\" = 1 ] && [ \"\$(cl '$D/.bash_profile' \"\$OLD_GO_LINE\")\" = 0 ] && ! grep -qF '[ -d \"\$HOME/go/bin\" ]' '$D/.bash_profile'"
+check "new: sourced with GOPATH unset and no ~/go/bin, PATH has \$HOME/go/bin" \
+    "[ ! -d '$TMP_ROOT/gohome/go/bin' ] && go_dir_on_path '$D/.bash_profile' '' 'HOME/go/bin'"
+check "new: sourced with GOPATH=/opt/gp, PATH has /opt/gp/bin" \
+    "go_dir_on_path '$D/.bash_profile' '/opt/gp' '/opt/gp/bin'"
 cp "$D/.bash_profile" "$TMP_ROOT/new-profile.1"
 cp "$D/.bashrc" "$TMP_ROOT/new-bashrc.1"
 run_setup new2 "$D"
@@ -112,6 +139,22 @@ run_setup user "$D"
 check "stale block: replaced in place, user lines kept (OK refreshed)" \
     "[ \"\$(rc_of user)\" = 0 ] && cmp -s '$D/.bash_profile' '$TMP_ROOT/user.expected' && summary_has user 'OK|shell|managed block refreshed'"
 check "stale block: one backup of the old profile" "[ \"\$(backups '$D' .bash_profile)\" = 1 ]"
+
+# --- A block with the old Go line (issue #185) is refreshed to the new one ---
+D=$(new_dir oldgo)
+{ printf 'export FOO=1\n'; GO_NEW="$GO_LINE" GO_OLD="$OLD_GO_LINE" perl -pe 's/^\Q$ENV{GO_NEW}\E$/$ENV{GO_OLD}/' "$BLOCK_TEXT"; } > "$D/.bash_profile"
+{ printf 'export FOO=1\n'; cat "$BLOCK_TEXT"; } > "$TMP_ROOT/oldgo.expected"
+cp "$D/.bash_profile" "$TMP_ROOT/oldgo.before"
+check "fixture: the old-Go profile has the old line and not the new one" \
+    "[ \"\$(cl '$D/.bash_profile' \"\$OLD_GO_LINE\")\" = 1 ] && [ \"\$(cl '$D/.bash_profile' \"\$GO_LINE\")\" = 0 ]"
+run_setup oldgo "$D"
+check "old Go line: block refreshed to the new Go line, user line kept (OK refreshed)" \
+    "[ \"\$(rc_of oldgo)\" = 0 ] && cmp -s '$D/.bash_profile' '$TMP_ROOT/oldgo.expected' && summary_has oldgo 'OK|shell|managed block refreshed'"
+check "old Go line: one backup, holding the old profile" \
+    "[ \"\$(backups '$D' .bash_profile)\" = 1 ] && cmp -s \"\$(find '$D' -maxdepth 1 -name '.bash_profile.bak.*')\" '$TMP_ROOT/oldgo.before'"
+run_setup oldgo2 "$D"
+check "old Go line: next run reports the block unchanged, no new backup" \
+    "[ \"\$(rc_of oldgo2)\" = 0 ] && summary_has oldgo2 'OK|shell|managed block unchanged' && [ \"\$(backups '$D' .bash_profile)\" = 1 ]"
 
 # --- Duplicate blocks and stray marker lines ---
 D=$(new_dir dup)
@@ -135,6 +178,8 @@ check "stray lines: left in place, one block" \
     "grep -qF 'Owned by aitools (scripts/setup-user-shell.sh). Placed last so it re-asserts' '$D/.bash_profile' && [ \"\$(cl '$D/.bash_profile' '$PS')\" = 1 ]"
 check "stray lines: ACTION names the newest clean backup (01; 02 two blocks, 03 a stray line)" \
     "summary_has stray 'ACTION||Restore $D/.bash_profile from $D/.bash_profile.bak.2026-01-01T000000Z'"
+check "stray lines: one warning, saying what to do (logging.md 8.2 write_action)" \
+    "summary_has stray 'WARN|shell|profile damage left in place -- restore $D/.bash_profile from $D/.bash_profile.bak.2026-01-01T000000Z' && [ \"\$(grep -c '^WARN|' '$TMP_ROOT/stray/summary.txt')\" = 1 ]"
 
 D=$(new_dir nobak)
 { cat "$BLOCK_TEXT"; printf '__aitoolsLocalBin=1\n'; } > "$D/.bash_profile"
@@ -159,6 +204,8 @@ cp "$D/.bash_profile" "$TMP_ROOT/guard.before"
 run_setup guard "$D"
 check "breaking splice: exit 1, ERROR row, profile unchanged" \
     "[ \"\$(rc_of guard)\" = 1 ] && summary_has guard 'ERROR|shell|managed block splice failed parse check' && cmp -s '$D/.bash_profile' '$TMP_ROOT/guard.before'"
+check "breaking splice: the error's reason is the bash -n syntax error (logging.md 8.3)" \
+    "grep -q '^ERROR|shell|managed block splice failed parse check|.*syntax error' '$TMP_ROOT/guard/summary.txt'"
 
 # --- rc files: .zshrc when present, legacy pair migrated, user lines kept ---
 D=$(new_dir rc)
@@ -181,6 +228,31 @@ D=$(new_dir mdm)
 run_setup mdm "$D" "$NO_ALIASES"
 check "MDM: exit 0, WARN aliases.sh not found, block still written, no .bashrc" \
     "[ \"\$(rc_of mdm)\" = 0 ] && summary_has mdm 'WARN|shell|aliases.sh not found' && [ \"\$(cl '$D/.bash_profile' '$PS')\" = 1 ] && [ ! -e '$D/.bashrc' ]"
+check "MDM: the warning names the missing path" \
+    "summary_has mdm 'WARN|shell|aliases.sh not found ($NO_ALIASES) -- shell integration skipped (MDM deploy)'"
+
+# --- An rc file that cannot be written: one error with its reason, no OK status ---
+# (chmod does not block writes for root: skipped there)
+if [ "$(id -u)" != 0 ]; then
+    D=$(new_dir rcro)
+    printf 'export A=1\n' > "$D/.bashrc"
+    chmod 444 "$D/.bashrc"
+    run_setup rcro "$D"
+    chmod 644 "$D/.bashrc"
+    check "read-only .bashrc: exit 1, ERROR with the write error as its reason, no integration OK record" \
+        "[ \"\$(rc_of rcro)\" = 1 ] && grep -q '^ERROR|shell|cannot add shell integration to $D/.bashrc|.' '$TMP_ROOT/rcro/summary.txt' && ! grep -q '^OK|shell|integration' '$TMP_ROOT/rcro/summary.txt'"
+    check "read-only .bashrc: the PATH block is still written (OK managed block added)" \
+        "summary_has rcro 'OK|shell|managed block added'"
+else
+    printf 'SKIP read-only .bashrc case (running as root)\n'; SKIP=$((SKIP + 1))
+fi
+
+# --- zsh-only lines in the bash login profile: one warning with its ACTION ---
+D=$(new_dir zsh)
+printf 'autoload -Uz compinit\ncompinit\n' > "$D/.bash_profile"
+run_setup zsh "$D"
+check "zsh-only lines: exit 0, one WARN saying what to do, the ACTION" \
+    "[ \"\$(rc_of zsh)\" = 0 ] && summary_has zsh 'WARN|shell|zsh-only lines (autoload/compinit) in $D/.bash_profile error under bash -- remove them' && summary_has zsh 'ACTION||Remove autoload/compinit from .bash_profile (zsh-only)'"
 
 printf '\n%d passed, %d failed, %d skipped (bash: %s)\n' "$PASS" "$FAIL" "$SKIP" "$("$BASH_BIN" -c 'echo $BASH_VERSION')"
 if [ "$FAIL" -gt 0 ]; then exit 1; fi

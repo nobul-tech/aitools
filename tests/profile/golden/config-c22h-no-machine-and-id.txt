@@ -1,6 +1,6 @@
 exit 1
 -- summary rows
-ERROR|aitools config|bad arguments
+ERROR|aitools config|bad arguments|--no-machine leaves the machine to the caller: not with --machine-id or --machine-alias (see --help)
 -- config.json
 {
   "version": 2,

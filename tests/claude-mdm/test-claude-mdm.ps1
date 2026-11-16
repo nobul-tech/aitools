@@ -104,11 +104,14 @@ function Invoke-Git {
 # Set-TestEnv HASHTABLE: set the variables ($null removes one); returns the old values
 function Set-TestEnv([hashtable]$Vars) {
     $old = @{}
-    foreach ($k in @($Vars.Keys)) { $old[$k] = [Environment]::GetEnvironmentVariable($k); [Environment]::SetEnvironmentVariable($k, $Vars[$k]) }
+    # Set-TestEnvVar (tests/lib/platform-lib.ps1): a $null value removes the
+    # variable instead of leaving it set to "" (an empty TMPDIR broke
+    # build-deploy.sh's mktemp under Git Bash)
+    foreach ($k in @($Vars.Keys)) { $old[$k] = [Environment]::GetEnvironmentVariable($k); Set-TestEnvVar $k $Vars[$k] }
     return $old
 }
 function Restore-TestEnv([hashtable]$Old) {
-    foreach ($k in @($Old.Keys)) { [Environment]::SetEnvironmentVariable($k, $Old[$k]) }
+    foreach ($k in @($Old.Keys)) { Set-TestEnvVar $k $Old[$k] }
 }
 
 try {
@@ -240,9 +243,11 @@ try {
     WriteRows "$lang-dry" (Join-Path $tmpRoot "dry-3.rows")
     Check "parity A-26 (edited CLAUDE.md): claude.md rows match golden" `
         (Test-GoldenMatch "dry-3.rows" (Join-Path $tmpRoot "dry-3.rows"))
-    # Unreadable CLAUDE.md (review B-1, golden dry-4.rows): the .sh harness makes the
-    # file unreadable with chmod 000, which NTFS does not honour; the Git Bash harness
-    # skipped it on Windows, and so does this one (same SKIP line).
+    # Unreadable CLAUDE.md (review B-1, golden dry-4.rows: the OK row plus one WARN
+    # claude.md record whose text holds the .sh case path and the read error, so it
+    # is a .sh-only golden): the .sh harness makes the file unreadable with chmod
+    # 000, which NTFS does not honour; the Git Bash harness skipped it on Windows,
+    # and so does this one (same SKIP line).
     Skip "$lang unreadable CLAUDE.md case (chmod does not block reads here)"
 
     # ---------------------------------------------------------------------------
@@ -415,8 +420,11 @@ try {
         $bfText = ReadText $script:OUT
         Check "A-20 resolver error: build skips (exit 0) with a plain-text warning" `
             ((RcOf "build-fail") -eq 0 -and (CountMatch $script:OUT '\[build-deploy\] \[warn\] Dotprofile resolver failed') -ge 1 -and -not $bfText.Contains($ESC))
+        # The resolver failure is one error (reference/logging.md 8.2, write_error):
+        # deploy.log has "[error] <WHAT>: <REASON>", WHAT "resolver failed", REASON the
+        # child's first error line.
         Check "A-20 resolver error: the child's error line is in deploy.log once, not in the build output" `
-            ((CountMatch $script:OUT 'stub resolver failure') -eq 0 -and (CountMatch (Join-Path $HF "logs/deploy.log") '\[error\] dotprofile: stub resolver failure') -eq 1)
+            ((CountMatch $script:OUT 'stub resolver failure') -eq 0 -and (CountMatch (Join-Path $HF "logs/deploy.log") '\[error\] resolver failed: stub resolver failure') -eq 1)
         if ($havePty) {
             $script:OUT = Join-Path $tmpRoot "build-fail-tty.out"
             $old = Set-TestEnv $failEnv

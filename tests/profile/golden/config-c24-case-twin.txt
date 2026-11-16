@@ -1,6 +1,6 @@
 exit 1
 -- summary rows
-ERROR|aitools config|merge failed
+ERROR|aitools config|config merge failed -- existing file left untouched|key "MachineId" differs only in case from the managed key "machineId": rename or remove it
 -- config.json
 {
   "version": 2,

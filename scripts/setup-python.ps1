@@ -11,7 +11,8 @@
 #
 # NOTE: Replaces the previous pymanager-based flow. A legacy pymanager, Microsoft
 # Store (MSIX) Python, or winget Python.Python.3.x may still shadow the uv shim on
-# PATH -- this script WARNS (does not auto-remove) so you can clean those up.
+# PATH -- this script reports the shadowed shim as an error, with an ACTION (D-TS11),
+# and does not auto-remove it, so you can clean those up.
 #
 # See the /tool-registry skill (registries/tool-registry.json) for install source details.
 
@@ -34,8 +35,7 @@ Refresh-Path
 # --- Require uv (the manager) ---
 # Get-Command exempt: command-existence check with explicit error/exit
 if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
-    LogError "uv not found -- setup-uv.ps1 must run before setup-python.ps1"
-    Write-Summary "ERROR" "python" "uv not installed (ordering: uv before python)"
+    Write-AitError "python" "uv not installed" "uv is not on PATH; setup-uv must run before setup-python"
     exit 1
 }
 
@@ -52,20 +52,19 @@ if ($uvInstallHelp -match '--upgrade') {
     $upgradeArgs = @('--upgrade')
 } else {
     $uvVersion = (uv --version 2>&1 | Out-String).Trim()
-    LogWarn "$uvVersion does not support 'uv python install --upgrade' -- installing without it"
-    Write-Summary "WARN" "python" "uv too old for --upgrade"
-    Write-Summary "ACTION" "" "Upgrade uv, then re-run aitools install"
+    Write-AitAction "python" "$uvVersion is too old for 'uv python install --upgrade' (installing without it) -- upgrade uv" "Upgrade uv, then re-run aitools install"
 }
 Log "Installing/updating uv-managed Python $targetPyVersion as default..."
 $installOutput = uv python install $targetPyVersion --default @upgradeArgs --preview-features python-install-default 2>&1 | Out-String
+$installRc = $LASTEXITCODE
+if ($installRc -ne 0) {
+    # Get-AitErrorReason logs the output as detail lines
+    Write-AitError "python" "uv python install failed" (Get-AitErrorReason -Output $installOutput -ExitCode $installRc)
+    exit 1
+}
 $installOutput.Trim().Split("`n") | ForEach-Object {
     $l = $_.TrimEnd()
     if ($l.Trim()) { Log $l }
-}
-if ($LASTEXITCODE -ne 0) {
-    LogError "uv python install failed (exit code $LASTEXITCODE)"
-    Write-Summary "ERROR" "python" "uv python install failed"
-    exit 1
 }
 
 Refresh-Path
@@ -80,15 +79,15 @@ if ($pythonCmd) {
         LogOk "$pyVersion (uv-managed at $src)"
         Write-Summary "OK" "python" "$pyVersion (uv)"
     } else {
+        # A shadowed managed tool is an error, plus an ACTION (D-TS11;
+        # script-standards-detail "Severity decision guide")
         $shadowDir = Split-Path $src -Parent
-        LogWarn "python resolves to $src ($pyVersion), not the uv shim at $env:USERPROFILE\.local\bin\python.exe"
-        LogWarn "$shadowDir precedes %USERPROFILE%\.local\bin in PATH -- the uv shim is shadowed (legacy pymanager / MS Store / winget Python?)"
-        Write-Summary "WARN" "python" "$pyVersion (uv shim shadowed)"
+        Write-AitError "python" "shadowed" "python resolves to $src ($pyVersion), not the uv shim at $env:USERPROFILE\.local\bin\python.exe"
+        Log "$shadowDir precedes %USERPROFILE%\.local\bin in PATH -- the uv shim is shadowed (legacy pymanager / MS Store / winget Python?)"
         Write-Summary "ACTION" "" "Put %USERPROFILE%\.local\bin before $shadowDir in PATH -- python default"
     }
 } else {
-    LogError "'python' not found after uv install -- is uv's bin dir (%USERPROFILE%\.local\bin) on PATH?"
-    Write-Summary "ERROR" "python" "python not on PATH after uv install"
+    Write-AitError "python" "python not on PATH after uv install" "Get-Command python found nothing; %USERPROFILE%\.local\bin is probably not on PATH"
     Write-Summary "ACTION" "" "Add %USERPROFILE%\.local\bin to PATH -- uv python shims"
 }
 

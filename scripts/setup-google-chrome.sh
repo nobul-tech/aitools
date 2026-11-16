@@ -61,9 +61,13 @@ write_output_detail() {  # label, output
 }
 
 # apt-get install with one retry after `apt-get update` (a fresh container may have
-# stale package lists). Returns apt-get's exit code; output goes to the log as detail.
+# stale package lists). Returns apt-get's exit code and sets APT_INSTALL_OUTPUT /
+# APT_INSTALL_RC (the last attempt's output and exit code). Output goes to the log as
+# detail, except a failed last attempt's: the caller passes it to error_reason, which
+# logs it (reference/logging.md 8.2).
 apt_install() {  # label, package-or-deb-path
     local label="$1" target="$2" out rc=0
+    APT_INSTALL_OUTPUT=""; APT_INSTALL_RC=0
     out=$(DEBIAN_FRONTEND=noninteractive apt-get install -y "$target" 2>&1) || rc=$?
     write_output_detail "apt-get install $label (exit $rc)" "$out"
     if [ "$rc" -eq 0 ]; then return 0; fi
@@ -73,7 +77,8 @@ apt_install() {  # label, package-or-deb-path
     write_output_detail "apt-get update (exit $urc)" "$out"
     rc=0
     out=$(DEBIAN_FRONTEND=noninteractive apt-get install -y "$target" 2>&1) || rc=$?
-    write_output_detail "apt-get install $label retry (exit $rc)" "$out"
+    APT_INSTALL_OUTPUT="$out"; APT_INSTALL_RC="$rc"
+    if [ "$rc" -eq 0 ]; then write_output_detail "apt-get install $label retry (exit $rc)" "$out"; fi
     return "$rc"
 }
 
@@ -92,15 +97,18 @@ pem_fingerprints() {
 trust_ok() { case "${1%%,*}" in *C*) return 0 ;; *) return 1 ;; esac; }
 
 # Read every certificate in the store into parallel arrays STORE_NICKS / STORE_TRUSTS /
-# STORE_FPS. Returns non-zero (and logs) when the store cannot be listed.
+# STORE_FPS. Returns non-zero, with SCAN_STORE_RC 1, when the store cannot be listed:
+# the error is recorded here, at the source, for every caller (no caller records it again).
 scan_store() {
     STORE_NICKS=(); STORE_TRUSTS=(); STORE_FPS=()
+    SCAN_STORE_RC=0
     [ -f "$NSSDB/cert9.db" ] || return 0
     local out rc=0 rows nick trust cert_out crc fp n=0
     out=$(certutil -L -d "sql:$NSSDB" 2>&1) || rc=$?
     if [ "$rc" -ne 0 ]; then
-        write_output_detail "certutil -L (exit $rc)" "$out"
-        log_error "Could not list the NSS store $(display_path "$NSSDB") (certutil exit $rc)"
+        SCAN_STORE_RC=1
+        # error_reason logs the output as detail lines
+        write_error "chrome proxy ca" "could not list the NSS store $(display_path "$NSSDB")" "$(error_reason "$out" "$rc")"
         return 1
     fi
     # Data rows only: the two header lines start with "Certificate Nickname" and a space.
@@ -150,25 +158,42 @@ in_bundle() {  # fingerprint
     return 1
 }
 
-# Run certutil with output captured to the log; returns certutil's exit code.
+# Run certutil with output captured; returns certutil's exit code and sets
+# RUN_CERTUTIL_OUTPUT / RUN_CERTUTIL_RC. The output goes to the log as detail on success;
+# a failed run's output is left to the caller's error_reason, which logs it (logging.md 8.2).
 run_certutil() {  # label, certutil args...
     local label="$1" out rc=0
     shift
     out=$(certutil "$@" 2>&1 < /dev/null) || rc=$?   # never wait for a prompt
-    write_output_detail "certutil $label (exit $rc)" "$out"
+    RUN_CERTUTIL_OUTPUT="$out"; RUN_CERTUTIL_RC="$rc"
+    if [ "$rc" -eq 0 ]; then write_output_detail "certutil $label (exit $rc)" "$out"; fi
     return "$rc"
 }
+
+# The reason a certificate is not trusted C after a certutil step (-M or -A): certutil's
+# own error when it failed, else the given text; nothing when scan_store failed (that
+# error is already recorded at its source). Prints the reason; returns 1 when there is
+# nothing to record.
+trust_fail_reason() {  # reason when certutil succeeded but the trust is still not C
+    if [ "$RUN_CERTUTIL_RC" -ne 0 ]; then
+        error_reason "$RUN_CERTUTIL_OUTPUT" "$RUN_CERTUTIL_RC"
+    elif [ "$SCAN_STORE_RC" -ne 0 ]; then
+        return 1
+    else
+        printf '%s\n' "$1"
+    fi
+}
+
+RUN_CERTUTIL_OUTPUT=""; RUN_CERTUTIL_RC=0; SCAN_STORE_RC=0
 
 # --- Environment gate (D-CHR1: managed only in the Claude Code web environment) ---
 if ! is_claude_code_web; then
     write_environment_skip "google chrome" "Google Chrome is managed only in the Claude Code web environment (D-CHR1); nothing changed"
 elif [ "$(id -u)" -ne 0 ]; then
-    log_error "apt-get and the root NSS store need root; running as uid $(id -u)"
-    write_summary ERROR "google chrome" "requires root"
+    write_error "google chrome" "requires root" "apt-get and the root NSS store need root; running as uid $(id -u)"
 elif ! command -v apt-get >/dev/null 2>&1 || [ "$(dpkg --print-architecture 2>/dev/null)" != "amd64" ]; then
     # dpkg's stderr is dropped: a missing dpkg yields "" and fails the same test.
-    log_error "Needs apt and an amd64 dpkg architecture (Google's .deb is amd64 only)"
-    write_summary ERROR "google chrome" "needs apt on amd64"
+    write_error "google chrome" "needs apt on amd64" "Google's .deb is amd64 only; apt-get missing or dpkg architecture is not amd64"
 else
     # --- 1. Google Chrome ---
     if [ -x "$CHROME_BIN" ]; then
@@ -176,34 +201,34 @@ else
         # Chrome logs a channel WARNING on stderr for --version (observed 2026-10-05):
         # stdout is the version; stderr is captured separately into the log.
         chrome_err_file="$LOG_DIR/.setup-google-chrome.stderr"
+        chrome_err=""
         chrome_version=$("$CHROME_BIN" --version 2>"$chrome_err_file") || chrome_rc=$?
         if [ -f "$chrome_err_file" ]; then
-            write_output_detail "chrome --version stderr" "$(cat "$chrome_err_file")"
+            chrome_err=$(cat "$chrome_err_file")
             rm -f "$chrome_err_file"
         fi
         chrome_version="${chrome_version%"${chrome_version##*[![:space:]]}"}"
         if [ "$chrome_rc" -eq 0 ] && [ -n "$chrome_version" ]; then
+            write_output_detail "chrome --version stderr" "$chrome_err"
             log_ok "Google Chrome present: $chrome_version"
             write_summary OK "google chrome" "$chrome_version"
         else
-            log_error "$CHROME_BIN exists but --version failed (exit $chrome_rc)"
-            write_summary ERROR "google chrome" "binary broken (exit $chrome_rc)"
+            # error_reason logs the stderr as detail lines
+            write_error "google chrome" "binary broken" "$(error_reason "$chrome_err" "$chrome_rc")"
         fi
     elif [ "$DRY_RUN" = "true" ]; then
         log "[DRY RUN] Would download $CHROME_DEB_URL and apt-get install it"
         write_summary OK "google chrome" "dry-run: would install"
     elif ! deb_dir=$(mktemp -d); then
-        log_error "mktemp -d failed -- cannot download the Chrome .deb"
-        write_summary ERROR "google chrome" "temp dir failed"
+        write_error "google chrome" "temp dir failed" "mktemp -d failed -- cannot download the Chrome .deb"
     else
         log "Installing Google Chrome from $CHROME_DEB_URL"
         deb="$deb_dir/google-chrome-stable_current_amd64.deb"
         curl_rc=0
         curl_out=$(curl -fsSL -o "$deb" "$CHROME_DEB_URL" 2>&1) || curl_rc=$?
         if [ "$curl_rc" -ne 0 ]; then
-            write_output_detail "curl (exit $curl_rc)" "$curl_out"
-            log_error "Download failed (curl exit $curl_rc)"
-            write_summary ERROR "google chrome" "download failed (exit $curl_rc)"
+            # error_reason logs the output as detail lines
+            write_error "google chrome" "download failed" "$(error_reason "$curl_out" "$curl_rc")"
         elif apt_install "google-chrome-stable" "$deb"; then
             if [ -x "$CHROME_BIN" ]; then
                 # stderr dropped: a failing --version leaves the fallback text below.
@@ -212,12 +237,10 @@ else
                 log_ok "Google Chrome installed: $chrome_version"
                 write_summary OK "google chrome" "$chrome_version"
             else
-                log_error "apt-get succeeded but $CHROME_BIN is missing"
-                write_summary ERROR "google chrome" "installed, binary missing"
+                write_error "google chrome" "installed, binary missing" "$CHROME_BIN not found after apt-get install"
             fi
         else
-            log_error "apt-get install of the Chrome .deb failed -- see $(display_path "$LOG_FILE")"
-            write_summary ERROR "google chrome" "apt-get install failed"
+            write_error "google chrome" "apt-get install failed" "$(error_reason "$APT_INSTALL_OUTPUT" "$APT_INSTALL_RC")"
         fi
         rm -rf "$deb_dir"
     fi
@@ -229,12 +252,13 @@ else
     elif [ "$DRY_RUN" = "true" ]; then
         log "[DRY RUN] Would apt-get install libnss3-tools"
         write_summary OK "nss tools" "dry-run: would install"
-    elif apt_install "libnss3-tools" "libnss3-tools" && command -v certutil >/dev/null 2>&1; then
+    elif ! apt_install "libnss3-tools" "libnss3-tools"; then
+        write_error "nss tools" "install failed" "$(error_reason "$APT_INSTALL_OUTPUT" "$APT_INSTALL_RC")"
+    elif command -v certutil >/dev/null 2>&1; then
         log_ok "libnss3-tools installed ($(command -v certutil))"
         write_summary OK "nss tools" "installed"
     else
-        log_error "libnss3-tools install failed or certutil not on PATH -- see $(display_path "$LOG_FILE")"
-        write_summary ERROR "nss tools" "install failed"
+        write_error "nss tools" "install failed" "certutil not on PATH after installing libnss3-tools"
     fi
 
     # --- 3. Agent-proxy CA certificates in Chrome's NSS store (D-CHR3, D-ENV9) ---
@@ -244,29 +268,30 @@ else
         ca_count=$(perl -ne '$n++ if /-----BEGIN CERTIFICATE-----/; END { print $n + 0 }' "$PROXY_CA")
     fi
     if [ ! -r "$PROXY_CA" ]; then
-        log_warn "$PROXY_CA not found -- Chrome will fail every HTTPS page (net_error -202)"
-        write_summary WARN "chrome proxy ca" "CA file not found"
+        # No OK record: there is nothing to verify
+        write_warn "chrome proxy ca" "$PROXY_CA not found -- Chrome will fail every HTTPS page (net_error -202)"
     elif [ "$ca_count" -eq 0 ]; then
-        log_error "$PROXY_CA holds no PEM certificate"
-        write_summary ERROR "chrome proxy ca" "CA file unreadable"
+        write_error "chrome proxy ca" "CA file unreadable" "$PROXY_CA holds no PEM certificate"
     elif ! command -v certutil >/dev/null 2>&1; then
         if [ "$DRY_RUN" = "true" ]; then
             log "[DRY RUN] Would create $(display_path "$NSSDB") and import $ca_count certificate(s) from $PROXY_CA"
             write_summary OK "chrome proxy ca" "dry-run: $ca_count of $ca_count to change"
         else
-            log_error "certutil unavailable -- cannot import $PROXY_CA"
-            write_summary ERROR "chrome proxy ca" "certutil unavailable"
+            # Only reached after the nss tools step failed (its error is recorded above):
+            # a consequence of that failure, logged at info (one cause, one red line)
+            log "certutil unavailable (the nss tools step failed) -- $PROXY_CA not imported"
         fi
     else
         nss_ok=true
         if [ ! -f "$NSSDB/cert9.db" ] && [ "$DRY_RUN" != "true" ]; then
             n_rc=0
             n_out=$( { mkdir -p "$NSSDB" && certutil -N -d "sql:$NSSDB" --empty-password; } 2>&1) || n_rc=$?
-            write_output_detail "certutil -N (exit $n_rc)" "$n_out"
             if [ "$n_rc" -ne 0 ]; then
                 nss_ok=false
-                log_error "Could not create NSS store $(display_path "$NSSDB") (exit $n_rc)"
-                write_summary ERROR "chrome proxy ca" "NSS store create failed"
+                # error_reason logs the output as detail lines
+                write_error "chrome proxy ca" "NSS store create failed" "$(error_reason "$n_out" "$n_rc")"
+            else
+                write_output_detail "certutil -N (exit $n_rc)" "$n_out"
             fi
         fi
         BUNDLE_FPS=()
@@ -276,11 +301,10 @@ else
             done <<< "$(pem_fingerprints < "$PROXY_CA")"
             if [ "${#BUNDLE_FPS[@]}" -ne "$ca_count" ]; then
                 nss_ok=false
-                log_error "$PROXY_CA: $ca_count PEM block(s) but ${#BUNDLE_FPS[@]} decodable certificate(s)"
-                write_summary ERROR "chrome proxy ca" "CA file unreadable"
+                write_error "chrome proxy ca" "CA file unreadable" "$ca_count PEM block(s) but ${#BUNDLE_FPS[@]} decodable certificate(s)"
             elif ! scan_store; then
+                # scan_store recorded the error at its source
                 nss_ok=false
-                write_summary ERROR "chrome proxy ca" "NSS store unreadable"
             fi
         fi
         if [ "$nss_ok" = "true" ]; then
@@ -312,7 +336,9 @@ else
                         log_ok "Set trust C,, on ${STORE_NICKS[$j]} (certificate $i, sha256 $short...)"
                     else
                         n_failed=$((n_failed + 1))
-                        log_error "Could not set trust C,, on the store copy of certificate $i (sha256 $short...) -- see $(display_path "$LOG_FILE")"
+                        if reason=$(trust_fail_reason "trust still not C after certutil -M"); then
+                            write_error "chrome proxy ca" "could not set trust C,, on certificate $i (sha256 $short...)" "$reason"
+                        fi
                     fi
                 else
                     # Not in the store: choose the nickname.
@@ -340,10 +366,10 @@ else
                         fi
                     elif ! { pem_cert "$PROXY_CA" "$i" > "$pem_file" && [ -s "$pem_file" ]; }; then
                         n_failed=$((n_failed + 1))
-                        log_error "Could not extract certificate $i from $PROXY_CA"
+                        write_error "chrome proxy ca" "could not extract certificate $i" "no PEM block $i in $PROXY_CA"
                     elif [ "$stale" = "true" ] && ! run_certutil "-D $nick" -D -d "sql:$NSSDB" -n "$nick"; then
                         n_failed=$((n_failed + 1))
-                        log_error "Could not remove $nick (certificate not in $PROXY_CA) -- see $(display_path "$LOG_FILE")"
+                        write_error "chrome proxy ca" "could not remove $nick (certificate not in $PROXY_CA)" "$(error_reason "$RUN_CERTUTIL_OUTPUT" "$RUN_CERTUTIL_RC")"
                     elif run_certutil "-A $nick" -A -d "sql:$NSSDB" -n "$nick" -t "C,," -i "$pem_file" \
                             && scan_store && j=$(store_index_of_fp "$fp") && [ -n "$j" ] && trust_ok "${STORE_TRUSTS[$j]}"; then
                         if [ "$stale" = "true" ]; then
@@ -355,9 +381,12 @@ else
                         fi
                     else
                         n_failed=$((n_failed + 1))
-                        log_error "Certificate $i (sha256 $short...) is not trusted in the store after importing it as $nick -- see $(display_path "$LOG_FILE")"
+                        if reason=$(trust_fail_reason "trust not C after certutil -A"); then
+                            write_error "chrome proxy ca" "certificate $i (sha256 $short...) not trusted after import as $nick" "$reason"
+                        fi
                     fi
-                    # Keep the in-memory view current for the next certificate's checks.
+                    # Keep the in-memory view current for the next certificate's checks
+                    # (a failure is recorded by scan_store).
                     if [ "$DRY_RUN" != "true" ] && ! scan_store; then
                         n_failed=$((n_failed + 1))
                     fi
@@ -387,11 +416,12 @@ else
             [ "$n_replaced" -gt 0 ] && parts="$parts, $n_replaced replaced"
             [ "$n_updated" -gt 0 ] && parts="$parts, $n_updated updated"
             row="$ca_count certs: ${parts#, }"
-            # Summary detail is at most 30 characters (script-standards); fall back to a total.
+            # OK status text is at most 30 characters (script-standards); fall back to a total.
             [ "${#row}" -le 30 ] || row="$ca_count certs, $n_changed changed"
             log "CA certificates: $ca_count in bundle, $n_verified verified, $n_created created, $n_replaced replaced, $n_updated trust updated, $n_failed failed, $n_dry dry-run"
             if [ "$n_failed" -gt 0 ]; then
-                write_summary ERROR "chrome proxy ca" "failed ($n_failed of $ca_count)"
+                # Each failure is recorded at its source; no OK record
+                :
             elif [ "$n_dry" -gt 0 ]; then
                 write_summary OK "chrome proxy ca" "dry-run: $n_dry of $ca_count to change"
             elif [ "$n_changed" -eq 0 ]; then

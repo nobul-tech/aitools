@@ -1,6 +1,7 @@
 exit 0
 -- summary rows
-WARN|aitools config|rebuilt (was invalid)
+WARN|aitools config|machine id unavailable: no machine id (test value)
+WARN|aitools config|<TMP>/home/.aitools/config.json was not valid JSON (<TMP>/home/.aitools/config.json is invalid JSON: <PARSE-ERROR>) -- rebuilt; the invalid copy was backed up
 DETAIL|aitools config|version updated
 DETAIL|aitools config|reposPath updated
 DETAIL|aitools config|repoPath updated
@@ -8,6 +9,7 @@ DETAIL|aitools config|googleDrives updated
 DETAIL|aitools config|githubUser updated
 DETAIL|aitools config|userRepoPath updated
 DETAIL|aitools config|machineId updated
+WARN|aitools config|machine matched by hostname only (legacy) -- run: aitools user init
 ACTION||Run: aitools user init (registers this machine)
 -- config.json
 {

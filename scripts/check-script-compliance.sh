@@ -7,7 +7,11 @@
 #          in a pipefail bash file under scripts/, shared/hooks/ or tests/; WARN:
 #          other pipeline greps without || true in setup scripts), OS guards,
 #          logging init, cross-platform
-#          pairing, SilentlyContinue result checks, summary categories.
+#          pairing, SilentlyContinue result checks, summary categories, the
+#          summary rules of reference/logging.md section 8 (step 13) and the
+#          log writers outside aitools-lib (step 14, logging.md 8.1).
+#          STRICT_SUMMARY (below; true since plan step I5) makes step 12, step
+#          13 rule 4 and step 14 FAIL instead of report (WARN).
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -32,6 +36,19 @@ cd "$REPO_ROOT"
 echo ""
 echo "${BOLD}=== SCRIPT STANDARDS COMPLIANCE ===${RESET}"
 echo ""
+
+# ---------------------------------------------------------------------------
+# Report, then fail (plan summary-warn-reporting, steps I2 and I5). With
+# STRICT_SUMMARY true (set in step I5, once every call site had migrated),
+# step 12 accepts only the categories OK, DETAIL and ACTION, in upper case, as
+# write_summary does (it records no other category), and step 13 rule 4
+# (legacy write_summary WARN / ERROR calls) and step 14 (log writers outside
+# aitools-lib) FAIL on any site. With it false (the migration, steps I2-I3),
+# step 12 accepted OK, WARN, ERROR, ACTION and DETAIL in any case, and rule 4
+# and step 14 reported their sites as a WARN. The .ps1 twin has the same
+# switch ($StrictSummary), set the same way.
+# ---------------------------------------------------------------------------
+STRICT_SUMMARY=true
 
 # Collect target scripts
 SH_SCRIPTS=()
@@ -90,13 +107,16 @@ fi
 # ---------------------------------------------------------------------------
 # 3. write_summary coverage -- every exit 1 has preceding write_summary
 #    Exempt: OS guard exits (MINGW/MSYS/CYGWIN in context), main exit footer
-#    (ERRORS in context), Windows forwarding blocks (ps1_installer/PowerShell).
+#    (ERRORS in context), Windows forwarding blocks (ps1_installer/PowerShell),
+#    and an exit after an error or warning helper: log_error, write_error,
+#    write_warn, write_action (each records itself: logging.md 8.2).
 # ---------------------------------------------------------------------------
 step3_fail=0
 step3_details=""
 for f in "${SH_SCRIPTS[@]}"; do
-    # Find lines with 'exit 1' (not in comments)
-    exit_lines=$(grep -n 'exit 1' "$f" 2>/dev/null | grep -v '^\s*#' | grep -v 'esac' || true)
+    # Find lines with 'exit 1' (not in comments: grep -n puts "N:" before the
+    # line, so the comment filter matches after that prefix)
+    exit_lines=$(grep -n 'exit 1' "$f" 2>/dev/null | grep -v '^[0-9]*:[[:space:]]*#' | grep -v 'esac' || true)
     while IFS= read -r eline; do
         [ -z "$eline" ] && continue
         lineno=$(echo "$eline" | cut -d: -f1)
@@ -113,6 +133,8 @@ for f in "${SH_SCRIPTS[@]}"; do
         if echo "$context" | grep 'ps1_installer\|PowerShell\|ps_args\|cygpath' >/dev/null 2>/dev/null; then continue; fi
         # Skip log_error exits in script body (error is tracked by counter)
         if echo "$context" | grep 'log_error' >/dev/null 2>/dev/null; then continue; fi
+        # Skip exits after a warning or error helper (it logs, counts and records)
+        if echo "$context" | grep 'write_error\|write_warn\|write_action' >/dev/null 2>/dev/null; then continue; fi
         step3_fail=$((step3_fail + 1))
         step3_details="${step3_details} $(basename "$f"):${lineno}"
     done <<< "$exit_lines"
@@ -151,7 +173,7 @@ for f in "${SH_SCRIPTS[@]}"; do
     # Skip aitools-install.sh (has legitimate echo for help text and prompts)
     [ "$(basename "$f")" = "aitools-install.sh" ] && continue
     # Look for bare 'echo' not in comments, not in heredocs
-    raw_echos=$(grep -n '^\s*echo ' "$f" 2>/dev/null | grep -v '^\s*#' | grep -v 'echo ""' || true)
+    raw_echos=$(grep -n '^\s*echo ' "$f" 2>/dev/null | grep -v '^[0-9]*:[[:space:]]*#' | grep -v 'echo ""' || true)
     if [ -n "$raw_echos" ]; then
         count=$(echo "$raw_echos" | wc -l | tr -d ' ')
         step6_fail=$((step6_fail + count))
@@ -305,8 +327,9 @@ for f in "${SH_SCRIPTS[@]}"; do
     # Only check scripts with set -euo pipefail
     if ! grep -q 'set -euo pipefail' "$f" 2>/dev/null; then continue; fi
     # Find grep in $() command substitutions without || true
-    # Match: $(... grep ... | head ...) without || true
-    unsafe=$(grep -n 'grep' "$f" 2>/dev/null | grep -v '^\s*#' | grep -v '|| true' | grep -v 'if ' | grep -v 'command -v' | grep -v '&>/dev/null' || true)
+    # Match: $(... grep ... | head ...) without || true. A comment line is
+    # skipped: grep -n puts "N:" before it, so the filter matches after that
+    unsafe=$(grep -n 'grep' "$f" 2>/dev/null | grep -v '^[0-9]*:[[:space:]]*#' | grep -v '|| true' | grep -v 'if ' | grep -v 'command -v' | grep -v '&>/dev/null' || true)
     if [ -n "$unsafe" ]; then
         # Filter to only pipeline greps (most dangerous)
         pipeline_unsafe=$(echo "$unsafe" | grep '|' || true)
@@ -398,8 +421,10 @@ fi
 step11_fail=0
 step11_details=""
 for f in "${PS1_SCRIPTS[@]}"; do
-    # Find lines with -ErrorAction SilentlyContinue (not in comments)
-    sc_lines=$(grep -n 'ErrorAction SilentlyContinue' "$f" 2>/dev/null | grep -v '^\s*#' || true)
+    # Find lines with -ErrorAction SilentlyContinue (not in comments: grep -n
+    # puts "N:" before the line, so the comment filter matches after that
+    # prefix, as the .ps1 twin skips a comment line)
+    sc_lines=$(grep -n 'ErrorAction SilentlyContinue' "$f" 2>/dev/null | grep -v '^[0-9]*:[[:space:]]*#' || true)
     while IFS= read -r sc_line; do
         [ -z "$sc_line" ] && continue
         lineno=$(echo "$sc_line" | cut -d: -f1)
@@ -431,10 +456,20 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 12. write_summary uses valid categories
+# 12. write_summary uses valid categories: with STRICT_SUMMARY on, only OK,
+#     DETAIL and ACTION, in upper case (WARN and ERROR records come from the
+#     warning and error helpers: logging.md 8.2; write_summary records no
+#     other category); with it off, OK, WARN, ERROR, ACTION, DETAIL in any case
 # ---------------------------------------------------------------------------
 step12_fail=0
 step12_details=""
+if [ "$STRICT_SUMMARY" = true ]; then
+    S12_VALID="OK DETAIL ACTION"
+    S12_CASE=exact
+else
+    S12_VALID="OK WARN ERROR ACTION DETAIL"
+    S12_CASE=any
+fi
 # Same rule as the .ps1 twin (check-script-compliance.ps1 step 12): per line,
 # a comment line is skipped, and a call is judged by the category word right
 # after the function name. The old `grep -n | grep -v '^\s*#'` pipeline never
@@ -443,10 +478,10 @@ step12_details=""
 # step12_check FILE REGEX: count and record "name:line(category)" per invalid one
 step12_check() {
     local f="$1" found
-    if ! found=$(S12_RE="$2" S12_NAME="$(basename "$f")" perl -ne '
-        BEGIN { $re = qr/$ENV{S12_RE}/i; %ok = map { $_ => 1 } qw(OK WARN ERROR ACTION DETAIL) }
+    if ! found=$(S12_RE="$2" S12_NAME="$(basename "$f")" S12_OK="$S12_VALID" S12_CASE="$S12_CASE" perl -ne '
+        BEGIN { $re = qr/$ENV{S12_RE}/i; %ok = map { $_ => 1 } split(" ", $ENV{S12_OK}) }
         next if /^\s*#/;
-        print "$ENV{S12_NAME}:$.($1)\n" if /$re/ && !$ok{uc $1};
+        print "$ENV{S12_NAME}:$.($1)\n" if /$re/ && !$ok{$ENV{S12_CASE} eq "exact" ? $1 : uc $1};
     ' "$f"); then
         step12_fail=$((step12_fail + 1))
         step12_details="${step12_details} $(basename "$f")(scan failed)"
@@ -460,29 +495,626 @@ for f in "${PS1_SCRIPTS[@]}"; do step12_check "$f" 'Write-Summary\s+"(\w+)"'; do
 for f in "${SH_SCRIPTS[@]}"; do step12_check "$f" 'write_summary\s+(\w+)\s'; done
 
 if [ "$step12_fail" -eq 0 ]; then
-    step_pass "12" "write_summary valid categories" "all use OK/WARN/ERROR/ACTION/DETAIL"
+    step_pass "12" "write_summary valid categories" "all use ${S12_VALID// //}"
 else
     step_fail "12" "write_summary valid categories" "${step12_fail} invalid:${step12_details}"
 fi
 
 # ---------------------------------------------------------------------------
-# 13. write_summary auto-promotion -- OK promoted to WARN when WARNINGS > 0
+# 13. Summary rules (reference/logging.md 8.2, 8.3)
+#     Rule 1: write_summary / Write-Summary never change the category: the
+#             function body neither reads the warning or error count nor sets
+#             a category word (the old promotion of OK to WARN fails here).
+#     Rule 2: every write_error / Write-AitError call passes a non-empty
+#             reason, its third argument (-Reason in PowerShell): "" and ''
+#             (and $null in PowerShell) fail.
+#     Rule 3: the relay changes no parent warning count: no library function
+#             whose name contains relay or child changes WARNINGS /
+#             $script:warnings.
+#     Rule 4: legacy write_summary WARN / ERROR calls (Write-Summary "WARN" /
+#             "ERROR") are reported (WARN) while STRICT_SUMMARY is false and
+#             FAIL when it is true.
+#     Rules 1 and 3 read scripts/aitools-lib.sh and .ps1; rules 2 and 4 read
+#     the step 14 scripts and the library.
+# 14. Log writers through aitools-lib (reference/logging.md 8.1). In every
+#     bash and PowerShell script under scripts/, except the 8.1 exceptions
+#     (the program's %EXEMPT_FILE, $EXEMPT_CHECK and @EXEMPT_LINE), a site is
+#     listed as file:line(kind):
+#       log-func       a logging function defined outside the library (log,
+#                      log_*, blog*, jsonl_*, write_summary ..., function Log,
+#                      LogWarn, Write-Summary, ...)
+#       log-append     an append to a .log, a .jsonl, a log file or directory
+#                      variable, or $AITOOLS_SUMMARY_FILE (>>, tee -a,
+#                      Add-Content, Out-File -Append, Tee-Object -Append,
+#                      AppendAllText / AppendAllLines)
+#       raw-primitive  a call of the library's raw writers
+#                      (_aitlib_log_append, Add-AitLibLogText, jsonl_record,
+#                      Write-JsonlRecord)
+#       ccr-read       CLAUDE_CODE_REMOTE (the environment comes from the
+#                      library API only: .claude/rules/cross-platform.md)
+#     Reported (WARN) while STRICT_SUMMARY is false, FAIL when it is true.
+# Both steps run one perl program, kept byte-identical in the .ps1 twin
+# (tests/check-script-compliance/test-logging-spec.sh compares the two).
+# Blind spots (a line-based lexer, not a parser): an append whose target
+# names no log (>> "$f"), a heredoc body read as code, a call split over
+# lines without a continuation character, a reason that is not empty but says
+# nothing (a check cannot judge it: the plan's section 5.5, limit 3).
+# A program that cannot run is a FAIL "(scan failed)", never a silent pass.
 # ---------------------------------------------------------------------------
-step13_ok=true
-ws_body_sh=$(perl -0777 -ne 'print $1 if /^write_summary\(\)\s*\{(.*?)^\}/sm' scripts/aitools-lib.sh)
-if [ -z "$ws_body_sh" ] || ! printf '%s' "$ws_body_sh" | grep 'WARNINGS' >/dev/null; then
-    step13_ok=false
-fi
-ws_body_ps1=$(perl -0777 -ne 'print $1 if /^function Write-Summary.*?\{(.*?)^\}/sm' scripts/aitools-lib.ps1)
-if [ -z "$ws_body_ps1" ] || ! printf '%s' "$ws_body_ps1" | grep 'warnings' >/dev/null; then
-    step13_ok=false
-fi
+LOGSPEC_PROG=""
+# read -d '' returns 1 at the end of the here-document, which is where it
+# always stops: || true keeps set -e, and logspec_run checks LOGSPEC_PROG
+IFS= read -r -d '' LOGSPEC_PROG <<'LOGSPEC_PERL' || true
+# logspec: the reference/logging.md section 8 checks of check-script-compliance
+# (step 13, the summary rules; step 14, the log writers). This program is kept
+# byte-identical in check-script-compliance.sh and check-script-compliance.ps1
+# (tests/check-script-compliance/test-logging-spec.sh compares them), so the two
+# twins report the same results: change both together.
+# Usage: perl -e PROG MODE STRICT ROOT
+#   MODE    summary (step 13) or writers (step 14): one line
+#           "RESULT<TAB>PASS|WARN|FAIL<TAB>detail"; list-writers, list-legacy,
+#           list-scope: one site or file per line
+#   STRICT  true or false: the calling twin's STRICT_SUMMARY
+#   ROOT    the repository root
+# Exit 0; a file it cannot read ends it with a message and a non-zero exit.
+use strict;
+use warnings;
 
-if $step13_ok; then
-    step_pass "13" "write_summary auto-promotion" "OK->WARN when WARNINGS > 0"
-else
-    step_fail "13" "write_summary auto-promotion" "write_summary missing WARNINGS auto-promotion"
-fi
+my ($MODE, $STRICT, $ROOT) = @ARGV;
+die "logspec: usage: MODE STRICT ROOT\n" unless defined $ROOT;
+$STRICT = $STRICT eq "true" ? 1 : 0;
+chdir($ROOT) or die "logspec: cannot enter $ROOT: $!\n";
+
+# --- The files (logging.md 8.1 "Writers") -------------------------------------
+# In scope: every bash and PowerShell script under scripts/: *.sh, *.ps1, and an
+# extensionless file whose first line is a sh or bash shebang (scripts/aitools,
+# scripts/githooks/*). The exceptions are exactly the writers that logging.md
+# 8.1 lists under scripts/; change this list and 8.1 together.
+my %EXEMPT_FILE = (
+    "scripts/aitools-lib.sh"           => "the library",
+    "scripts/aitools-lib.ps1"          => "the library",
+    "scripts/check-lib.sh"             => "the check library (checks.log, section 6)",
+    "scripts/check-lib.ps1"            => "the check library (checks.log, section 6)",
+    "scripts/bootstrap.sh"             => "executes before the repository is cloned",
+    "scripts/bootstrap.ps1"            => "executes before the repository is cloned",
+    "scripts/hh.sh"                    => "installed alone in ~/.local/bin",
+    "scripts/hh.ps1"                   => "the Windows hh, no library",
+    "scripts/relay-outbound-prompt.sh" => "sourced into its caller",
+);
+# The check scripts, which log through the check library
+my $EXEMPT_CHECK = qr{\Ascripts/check-[^/]+[.](?:sh|ps1)\z};
+# One line of an in-scope file: [file, kind, line pattern, reason]
+my @EXEMPT_LINE = (
+    ["scripts/build-deploy.sh", "log-append", qr/ERROR[|]harness files[|]/,
+     "the truncation guard of the generated deploy-harness.sh writes one ERROR record by hand before the library loads"],
+);
+my %LIB = ("scripts/aitools-lib.sh" => "sh", "scripts/aitools-lib.ps1" => "ps1");
+
+sub read_lines {
+    my ($f) = @_;
+    open(my $fh, "<", $f) or die "logspec: cannot read $f: $!\n";
+    my @l = <$fh>;
+    close($fh) or die "logspec: cannot close $f: $!\n";
+    s/\r?\n?\z// for @l;
+    return @l;
+}
+
+# script_files: [path, kind] of every bash and PowerShell script under scripts/
+sub script_files {
+    my @out;
+    for my $p (sort(glob("scripts/*")), sort(glob("scripts/githooks/*"))) {
+        next unless -f $p;
+        (my $b = $p) =~ s{.*/}{};
+        if ($b =~ /[.]sh\z/)  { push @out, [$p, "sh"];  next }
+        if ($b =~ /[.]ps1\z/) { push @out, [$p, "ps1"]; next }
+        next if $b =~ /[.]/;
+        my ($first) = read_lines($p);
+        push @out, [$p, "sh"] if defined $first && $first =~ /\A#![^\n]*\b(?:ba)?sh\b/;
+    }
+    return @out;
+}
+sub in_scope { my ($f) = @_; return !$EXEMPT_FILE{$f} && $f !~ $EXEMPT_CHECK }
+
+# --- A small shell and PowerShell lexer (one line at a time) ------------------
+sub is_esc { my ($kind, $c) = @_; return $kind eq "sh" ? $c eq "\\" : $c eq "`" }
+
+# skip_string KIND S I: the index of the quote that closes the string opening
+# at I (length S when it does not close on this line)
+sub skip_string {
+    my ($kind, $s, $i) = @_;
+    my $q = substr($s, $i, 1);
+    my $n = length $s;
+    my $j = $i + 1;
+    while ($j < $n) {
+        my $x = substr($s, $j, 1);
+        if ($q eq "\x27") {
+            if ($x eq "\x27") {
+                return $j unless $kind eq "ps1" && substr($s, $j + 1, 1) eq "\x27";
+                $j += 2;
+                next;
+            }
+            $j++;
+            next;
+        }
+        if (is_esc($kind, $x)) { $j += 2; next }
+        if ($x eq "\$" && substr($s, $j + 1, 1) eq "(") { $j = skip_group($kind, $s, $j + 1) + 1; next }
+        if ($x eq "\"") {
+            return $j unless $kind eq "ps1" && substr($s, $j + 1, 1) eq "\"";
+            $j += 2;
+            next;
+        }
+        $j++;
+    }
+    return $n;
+}
+
+# skip_group KIND S I: the index of the bracket that closes the one at I
+sub skip_group {
+    my ($kind, $s, $i) = @_;
+    my $d = 0;
+    my $n = length $s;
+    my $j = $i;
+    while ($j < $n) {
+        my $x = substr($s, $j, 1);
+        if ($x eq "\"" || $x eq "\x27") { $j = skip_string($kind, $s, $j) + 1; next }
+        if (is_esc($kind, $x)) { $j += 2; next }
+        if ($x eq "(" || $x eq "[" || $x eq "{") { $d++ }
+        elsif ($x eq ")" || $x eq "]" || $x eq "}") { $d--; return $j if $d <= 0 }
+        $j++;
+    }
+    return $n;
+}
+
+# string_at KIND S POS: the index of the quote that opens the string POS is in,
+# or -1 when POS is not inside a quoted string
+sub string_at {
+    my ($kind, $s, $pos) = @_;
+    my $i = 0;
+    while ($i < $pos) {
+        my $c = substr($s, $i, 1);
+        if ($c eq "\"" || $c eq "\x27") {
+            my $j = skip_string($kind, $s, $i);
+            return $i if $j >= $pos;
+            $i = $j + 1;
+            next;
+        }
+        if (is_esc($kind, $c)) { $i += 2; next }
+        $i++;
+    }
+    return -1;
+}
+sub quoted_at { my ($kind, $s, $pos) = @_; return string_at($kind, $s, $pos) >= 0 }
+
+# strip_comment KIND L: L without its comment
+sub strip_comment {
+    my ($kind, $l) = @_;
+    my $n = length $l;
+    my $i = 0;
+    while ($i < $n) {
+        my $c = substr($l, $i, 1);
+        if ($c eq "\"" || $c eq "\x27") { $i = skip_string($kind, $l, $i) + 1; next }
+        if (is_esc($kind, $c)) { $i += 2; next }
+        return substr($l, 0, $i) if $c eq "#" && ($i == 0 || substr($l, $i - 1, 1) =~ /[ \t;]/);
+        $i++;
+    }
+    return $l;
+}
+
+# code_lines KIND LINES: the lines with comments removed (PowerShell <# #> too)
+sub code_lines {
+    my ($kind, @lines) = @_;
+    my @out;
+    my $block = 0;
+    for my $l (@lines) {
+        if ($kind eq "ps1") {
+            if ($block) {
+                if ($l =~ /#>/) { $l = substr($l, $+[0]); $block = 0 }
+                else { push @out, ""; next }
+            }
+            while ($l =~ /<#/) {
+                my $s = $-[0];
+                if (substr($l, $s) =~ /#>/) { $l = substr($l, 0, $s) . substr($l, $s + $+[0]) }
+                else { $l = substr($l, 0, $s); $block = 1; last }
+            }
+        }
+        push @out, strip_comment($kind, $l);
+    }
+    return @out;
+}
+
+# logical KIND CODE: [first line number, text] with continued lines joined
+# (a trailing backslash in bash, a trailing backtick in PowerShell)
+sub logical {
+    my ($kind, @code) = @_;
+    my @out;
+    my $k = 0;
+    while ($k <= $#code) {
+        my ($start, $t) = ($k + 1, $code[$k]);
+        my $cont = $kind eq "sh" ? qr/(?<!\\)(?:\\\\)*\\[ \t]*\z/ : qr/`[ \t]*\z/;
+        while ($t =~ $cont && $k < $#code) {
+            $t =~ s/.[ \t]*\z//;
+            $k++;
+            $t .= " " . $code[$k];
+        }
+        push @out, [$start, $t];
+        $k++;
+    }
+    return @out;
+}
+
+# words KIND S: the words of the command that starts at the beginning of S
+sub words {
+    my ($kind, $s) = @_;
+    my @w;
+    my $cur = "";
+    my $has = 0;
+    my $n = length $s;
+    my $i = 0;
+    my $stop = $kind eq "sh" ? qr/[;&|)}]/ : qr/[;|)}]/;
+    while ($i < $n) {
+        my $c = substr($s, $i, 1);
+        if ($c eq " " || $c eq "\t") {
+            if ($has) { push @w, $cur; $cur = ""; $has = 0 }
+            $i++;
+            next;
+        }
+        last if $c =~ $stop;
+        my $j = $i;
+        if ($c eq "\"" || $c eq "\x27") { $j = skip_string($kind, $s, $i) }
+        elsif ($c eq "(" || $c eq "[" || $c eq "{") { $j = skip_group($kind, $s, $i) }
+        elsif (is_esc($kind, $c)) { $j = $i + 1 }
+        $j = $n - 1 if $j >= $n;
+        $cur .= substr($s, $i, $j - $i + 1);
+        $has = 1;
+        $i = $j + 1;
+    }
+    push @w, $cur if $has;
+    return @w;
+}
+
+# calls KIND TEXT NAME: [position, words] of each call of NAME at a command
+# position that is not a function definition. A call inside a quoted string
+# counts only when the string is what echo or printf prints and starts with
+# the call (generated code, such as echo '    write_summary ERROR ...'); its
+# words end where the string ends.
+sub calls {
+    my ($kind, $t, $name) = @_;
+    my @out;
+    my $re = $kind eq "sh" ? qr/(?<![\w-])\Q$name\E(?![\w-])/ : qr/(?<![\w-])\Q$name\E(?![\w-])/i;
+    my $pre = $kind eq "sh"
+        ? qr/(?:\A|[;&|({!)]|\b(?:then|do|else|if|elif|while|until))[ \t]*\z/
+        : qr/(?:\A|[;|({=&]|\b(?:else|elseif|if|try|finally))[ \t]*\z/i;
+    while ($t =~ /$re/g) {
+        my $p = $-[0];
+        my $before = substr($t, 0, $p);
+        next if $before =~ /\bfunction[ \t]+\z/i;
+        my $open = string_at($kind, $t, $p);
+        my $rest = substr($t, $p);
+        if ($open >= 0) {
+            next unless substr($t, $open + 1, $p - $open - 1) =~ /\A[ \t]*\z/;
+            next unless substr($t, 0, $open) =~ /(?:\A|[;&|({ \t])(?:echo|printf)(?:[ \t]+-[A-Za-z]+)*[ \t]+\z/;
+            $rest = substr($t, $p, skip_string($kind, $t, $open) - $p);
+        } else {
+            next unless $before =~ $pre;
+        }
+        next if $rest =~ /\A[\w-]+[ \t]*\(\)/;
+        push @out, [$p, [words($kind, $rest)]];
+    }
+    return @out;
+}
+
+# call_sites KIND TEXT SHNAME PSNAME: the calls in one logical line; a bash
+# file is also searched for PowerShell calls (the PowerShell code a generator
+# such as build-deploy.sh writes out)
+sub call_sites {
+    my ($kind, $t, $shname, $psname) = @_;
+    my @c;
+    push @c, map { ["sh", @$_] } calls("sh", $t, $shname) if $kind eq "sh";
+    push @c, map { ["ps1", @$_] } calls("ps1", $t, $psname);
+    return @c;
+}
+
+# functions KIND CODE: name (lower case for PowerShell) => [[line, text], ...]
+# for each function defined at column 0
+sub functions {
+    my ($kind, @code) = @_;
+    my %fn;
+    my $cur;
+    for my $k (0 .. $#code) {
+        my $l = $code[$k];
+        if (!defined $cur) {
+            my $name;
+            if ($kind eq "sh" && $l =~ /\A(?:function[ \t]+)?([A-Za-z_][\w-]*)[ \t]*\(\)/) { $name = $1 }
+            elsif ($kind eq "sh" && $l =~ /\Afunction[ \t]+([A-Za-z_][\w-]*)/) { $name = $1 }
+            elsif ($kind eq "ps1" && $l =~ /\Afunction[ \t]+(?:(?:script|global):)?([\w-]+)/i) { $name = lc $1 }
+            next unless defined $name;
+            $cur = $name;
+            $fn{$cur} = [[$k + 1, $l]];
+            my $open = () = $l =~ /\{/g;
+            my $close = () = $l =~ /\}/g;
+            undef $cur if $open > 0 && $open == $close;
+            next;
+        }
+        push @{$fn{$cur}}, [$k + 1, $l];
+        undef $cur if $l =~ /\A\}/;
+    }
+    return %fn;
+}
+
+sub is_empty_arg {
+    my ($kind, $w) = @_;
+    return 1 if $w eq "\"\"" || $w eq "\x27\x27";
+    return 1 if $kind eq "ps1" && $w =~ /\A(?:\$null|\(\[string\]::Empty\))\z/i;
+    return 0;
+}
+
+# --- Step 14: log writers outside the library ---------------------------------
+my $SH_LOGFN = qr/b?log(?:_\w+)?|jsonl_\w+|write_(?:summary|warn|action|error)|error_reason|logging_init/;
+my $PS_LOGFN = qr/Log|LogOk|LogWarn|LogError|LogDetail|Write-Summary|Write-AitWarn|Write-AitAction|Write-AitError|Get-AitErrorReason|Write-Jsonl\w*|Add-AitLibLogText|Initialize-Logging/i;
+my $LOG_TARGET = qr/[.]log\b|[.]jsonl\b|(?<![A-Za-z])log_?(?:file|dir)\b|AITOOLS_SUMMARY_FILE/i;
+my $RAW = qr/(?<![\w-])(?:_aitlib_log_append|Add-AitLibLogText|jsonl_record|Write-JsonlRecord)(?![\w-])/;
+
+sub line_exempt {
+    my ($f, $kind, $text) = @_;
+    for my $e (@EXEMPT_LINE) {
+        return 1 if $e->[0] eq $f && $e->[1] eq $kind && $text =~ $e->[2];
+    }
+    return 0;
+}
+
+sub writer_hits {
+    my @hits;
+    for my $fk (script_files()) {
+        my ($f, $kind) = @$fk;
+        next unless in_scope($f);
+        my @code = code_lines($kind, read_lines($f));
+        for my $k (0 .. $#code) {
+            my $l = $code[$k];
+            next unless $l =~ /\S/;
+            my %found;
+            if ($kind eq "sh") {
+                $found{"log-func"} = 1
+                    if $l =~ /\A[ \t]*(?:function[ \t]+)?(?:$SH_LOGFN)[ \t]*\(\)/ || $l =~ /\A[ \t]*function[ \t]+(?:$SH_LOGFN)(?![\w-])/;
+                while ($l =~ />>/g) {
+                    my $p = $-[0];
+                    next if quoted_at($kind, $l, $p);
+                    my ($target) = substr($l, $p + 2) =~ /\A[ \t]*(\S+)/;
+                    $found{"log-append"} = 1 if defined $target && $target =~ $LOG_TARGET;
+                }
+                $found{"log-append"} = 1
+                    if $l =~ /(?<![\w-])tee[ \t]+(?:-[A-Za-z]*a[A-Za-z]*|--append)(?![\w-])(.*)/ && $1 =~ $LOG_TARGET;
+                $found{"raw-primitive"} = 1 if $l =~ $RAW;
+            }
+            # PowerShell forms; in a bash file, the PowerShell code a generator
+            # (build-deploy.sh) writes out
+            $found{"log-func"} = 1 if $l =~ /\A[ \t]*function[ \t]+(?:(?:script|global):)?(?:$PS_LOGFN)(?![\w-])/;
+            my $psapp = $kind eq "sh"
+                ? qr/(?<![\w-])(?:Add-Content|AppendAll(?:Text|Lines))(?![\w-])|(?<![\w-])(?:Out-File|Tee-Object)(?![\w-])(?=.*-Append\b)/i
+                : qr/(?<![\w-])(?:Add-Content|AppendAll(?:Text|Lines))(?![\w-])|>>|(?<![\w-])(?:Out-File|Tee-Object)(?![\w-])(?=.*-Append\b)/i;
+            while ($l =~ /$psapp/g) {
+                my $p = $-[0];
+                next if quoted_at("ps1", $l, $p);
+                $found{"log-append"} = 1 if substr($l, $p) =~ $LOG_TARGET;
+            }
+            $found{"raw-primitive"} = 1 if $kind eq "ps1" && $l =~ /(?<![\w-])(?:_aitlib_log_append|Add-AitLibLogText|jsonl_record|Write-JsonlRecord)(?![\w-])/i;
+            $found{"ccr-read"} = 1 if $l =~ /CLAUDE_CODE_REMOTE/;
+            for my $kd (sort keys %found) {
+                next if line_exempt($f, $kd, $l);
+                push @hits, "$f:" . ($k + 1) . "($kd)";
+            }
+        }
+    }
+    return @hits;
+}
+
+# --- Step 13: the summary rules -----------------------------------------------
+sub lib_functions {
+    my ($f) = @_;
+    my $kind = $LIB{$f};
+    return functions($kind, code_lines($kind, read_lines($f)));
+}
+
+# Rule 1: write_summary / Write-Summary never change the category: the body
+# neither reads the warning or error count nor assigns a category word
+sub rule1 {
+    my @p;
+    for my $f (sort keys %LIB) {
+        my $kind = $LIB{$f};
+        my $name = $kind eq "sh" ? "write_summary" : "write-summary";
+        if (!-f $f) { push @p, "$f missing"; next }
+        my %fn = lib_functions($f);
+        if (!$fn{$name}) { push @p, "$f: $name not found"; next }
+        for my $e (@{$fn{$name}}) {
+            my ($n, $l) = @$e;
+            if ($kind eq "sh") {
+                push @p, "$f:$n(reads the count)" if $l =~ /\b(?:WARNINGS|ERRORS)\b/;
+                push @p, "$f:$n(sets the category)"
+                    if $l =~ /(?:\A|[ \t;])(?:local[ \t]+|declare[ \t]+(?:-\w+[ \t]+)*)?[A-Za-z_]\w*=(["\x27]?)(?:OK|WARN|ERROR|ACTION|DETAIL)\1(?=[ \t;]|\z)/;
+            } else {
+                push @p, "$f:$n(reads the count)" if $l =~ /\$(?:script:|global:)?(?:warnings|errors)\b/i;
+                push @p, "$f:$n(sets the category)" if $l =~ /\$[\w:]+[ \t]*=[ \t]*(["\x27])(?:OK|WARN|ERROR|ACTION|DETAIL)\1/i;
+            }
+        }
+    }
+    return @p;
+}
+
+# Rule 2: every write_error / Write-AitError call passes a non-empty reason (its
+# third argument; -Reason in PowerShell). A splatted or "$@" argument list is
+# not judged.
+sub rule2 {
+    my @p;
+    my $n = 0;
+    for my $fk (script_files()) {
+        my ($f, $kind) = @$fk;
+        next unless in_scope($f) || $LIB{$f};
+        for my $ll (logical($kind, code_lines($kind, read_lines($f)))) {
+            my ($line, $t) = @$ll;
+            for my $c (call_sites($kind, $t, "write_error", "Write-AitError")) {
+                my ($ck, $pos, $w) = @$c;
+                my @a = @$w;
+                shift @a;
+                $n++;
+                my $why = reason_problem($ck, @a);
+                push @p, "$f:$line($why)" if $why;
+            }
+        }
+    }
+    return ($n, @p);
+}
+
+sub reason_problem {
+    my ($kind, @a) = @_;
+    my $reason;
+    if ($kind eq "sh") {
+        return "" if grep { /\$[@*]|\[[@*]\]/ } @a;
+        $reason = $a[2];
+    } else {
+        return "" if grep { /\A@\w/ } @a;
+        my @pos;
+        my %named;
+        my $i = 0;
+        while ($i <= $#a) {
+            my $w = $a[$i];
+            if ($w =~ /\A-([A-Za-z]\w*)(?::(.*))?\z/s) {
+                my ($pn, $val) = (lc $1, $2);
+                if (!defined $val) { $i++; $val = $a[$i] }
+                for my $full (qw(tool what reason)) {
+                    $named{$full} = $val if index($full, $pn) == 0;
+                }
+            } else {
+                push @pos, $w;
+            }
+            $i++;
+        }
+        $reason = exists $named{reason} ? $named{reason} : $pos[2 - (exists $named{tool} ? 1 : 0) - (exists $named{what} ? 1 : 0)];
+    }
+    return "no reason" unless defined $reason;
+    return "empty reason" if is_empty_arg($kind, $reason);
+    return "";
+}
+
+# Rule 3: the relay changes no parent warning count: no relay function (a
+# library function whose name contains relay or child) changes WARNINGS /
+# $script:warnings
+sub rule3 {
+    my @p;
+    my %need = ("scripts/aitools-lib.sh" => [qw(run_child_relayed relay_child_log)],
+                "scripts/aitools-lib.ps1" => [qw(invoke-childrelayed send-childlog)]);
+    for my $f (sort keys %LIB) {
+        my $kind = $LIB{$f};
+        if (!-f $f) { push @p, "$f missing"; next }
+        my %fn = lib_functions($f);
+        for my $r (@{$need{$f}}) { push @p, "$f: $r not found" unless $fn{$r} }
+        for my $name (sort grep { /relay|child/i } keys %fn) {
+            for my $e (@{$fn{$name}}) {
+                my ($n, $l) = @$e;
+                my $hit = $kind eq "sh"
+                    ? ($l =~ /(?<![\w\$])WARNINGS[ \t]*(?:\+\+|--|[-+]?=(?!=))/ || $l =~ /(?:\+\+|--)[ \t]*WARNINGS\b/ || $l =~ /\b(?:printf[ \t]+-v|let)[ \t]+["\x27]?WARNINGS\b/)
+                    : ($l =~ /\$script:warnings[ \t]*(?:\+\+|--|[-+]?=(?!=))/i || $l =~ /(?:\+\+|--)[ \t]*\$script:warnings\b/i);
+                push @p, "$f:$n($name)" if $hit;
+            }
+        }
+    }
+    return @p;
+}
+
+# Rule 4: legacy write_summary WARN / ERROR calls (retired: logging.md 8.2, 8.3)
+sub legacy_calls {
+    my @hits;
+    for my $fk (script_files()) {
+        my ($f, $kind) = @$fk;
+        next unless in_scope($f) || $LIB{$f};
+        for my $ll (logical($kind, code_lines($kind, read_lines($f)))) {
+            my ($line, $t) = @$ll;
+            for my $c (call_sites($kind, $t, "write_summary", "Write-Summary")) {
+                my ($ck, $pos, $w) = @$c;
+                my $cat = $w->[1];
+                next unless defined $cat;
+                my $re = $ck eq "sh" ? qr/\A(["\x27]?)(WARN|ERROR)\1\z/ : qr/\A(["\x27]?)(WARN|ERROR)\1\z/i;
+                push @hits, [$f, $line, uc $2] if $cat =~ $re;
+            }
+        }
+    }
+    return @hits;
+}
+
+sub result { my ($v, $d) = @_; print "RESULT\t$v\t$d\n" }
+
+if ($MODE eq "list-scope") {
+    for my $fk (script_files()) { print "$fk->[0]\n" if in_scope($fk->[0]) }
+} elsif ($MODE eq "list-writers") {
+    print "$_\n" for writer_hits();
+} elsif ($MODE eq "list-legacy") {
+    print "$_->[0]:$_->[1]($_->[2])\n" for legacy_calls();
+} elsif ($MODE eq "writers") {
+    my @h = writer_hits();
+    if (!@h) {
+        result("PASS", "no log writer outside aitools-lib (exceptions: logging.md 8.1)");
+    } else {
+        my $d = scalar(@h) . " log writer site(s) outside aitools-lib (logging.md 8.1): " . join(" ", @h);
+        result($STRICT ? "FAIL" : "WARN", $STRICT ? $d : "$d -- reported until STRICT_SUMMARY is on");
+    }
+} elsif ($MODE eq "summary") {
+    my @r1 = rule1();
+    my ($n2, @r2) = rule2();
+    my @r3 = rule3();
+    my @r4 = legacy_calls();
+    my ($fail, $warn) = (0, 0);
+    my @d;
+    if (@r1) { $fail = 1; push @d, "rule 1 FAIL, write_summary changes the category: @r1" }
+    else { push @d, "rule 1 ok" }
+    if (@r2) { $fail = 1; push @d, "rule 2 FAIL, write_error without a reason: @r2" }
+    else { push @d, "rule 2 ok ($n2 write_error call(s))" }
+    if (@r3) { $fail = 1; push @d, "rule 3 FAIL, the relay changes the parent warning count: @r3" }
+    else { push @d, "rule 3 ok" }
+    if (@r4) {
+        my %c;
+        $c{$_->[0]}++ for @r4;
+        my $list = join(" ", map { "$_($c{$_})" } sort keys %c);
+        if ($STRICT) { $fail = 1; push @d, "rule 4 FAIL, " . scalar(@r4) . " legacy write_summary WARN/ERROR call(s): $list" }
+        else { $warn = 1; push @d, "rule 4 reported, " . scalar(@r4) . " legacy write_summary WARN/ERROR call(s), a FAIL once STRICT_SUMMARY is on: $list" }
+    } else {
+        push @d, "rule 4 ok (no legacy WARN/ERROR call)";
+    }
+    result($fail ? "FAIL" : $warn ? "WARN" : "PASS", join("; ", @d));
+} else {
+    die "logspec: unknown mode \"$MODE\"\n";
+}
+exit 0;
+LOGSPEC_PERL
+
+# logspec_run MODE: run the logspec program in MODE (summary or writers); sets
+# LOGSPEC_RESULT (PASS, WARN or FAIL) and LOGSPEC_DETAIL
+logspec_run() {
+    local out="" line rest
+    LOGSPEC_RESULT=FAIL
+    LOGSPEC_DETAIL="(scan failed)"
+    if [ -z "$LOGSPEC_PROG" ]; then LOGSPEC_DETAIL="(scan failed: no program)"; return 0; fi
+    if ! out=$(perl -e "$LOGSPEC_PROG" -- "$1" "$STRICT_SUMMARY" "$REPO_ROOT"); then return 0; fi
+    while IFS= read -r line; do
+        case "$line" in
+            RESULT$'\t'*)
+                rest="${line#RESULT$'\t'}"
+                case "${rest%%$'\t'*}" in
+                    PASS|WARN|FAIL) LOGSPEC_RESULT="${rest%%$'\t'*}"; LOGSPEC_DETAIL="${rest#*$'\t'}" ;;
+                esac ;;
+        esac
+    done <<< "$out"
+}
+
+# logspec_step NUM LABEL MODE: one step result from logspec_run MODE
+logspec_step() {
+    logspec_run "$3"
+    case "$LOGSPEC_RESULT" in
+        PASS) step_pass "$1" "$2" "$LOGSPEC_DETAIL" ;;
+        WARN) step_warn "$1" "$2" "$LOGSPEC_DETAIL" ;;
+        *)    step_fail "$1" "$2" "$LOGSPEC_DETAIL" ;;
+    esac
+}
+
+logspec_step "13" "Summary rules (logging.md 8.2, 8.3)" summary
+logspec_step "14" "Log writers through aitools-lib (8.1)" writers
 
 # ---------------------------------------------------------------------------
 # Summary + exit

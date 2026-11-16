@@ -8,4 +8,5 @@ s.md 5b0855d8da7155bbf6093a816dad767b
 s.md.bak.TS b97cb19c43c4f0041eae4ea081898be7
 # summary rows
 DETAIL|claude rules|updated: s.md
-WARN|claude rules|1 updated, 3 verified
+OK|claude rules|1 updated, 3 verified
+WARN|claude rules|local edits overwritten (non-interactive run, backup kept): <HOME>/.claude/rules/s.md

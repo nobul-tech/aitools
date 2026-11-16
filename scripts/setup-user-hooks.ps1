@@ -45,11 +45,15 @@ $repoDir = Split-Path -Parent $scriptDir
 
 $manifestPath = Join-Path $repoDir "shared\hooks\hooks-manifest.json"
 if (-not (Test-Path $manifestPath)) {
-    LogError "Hook manifest not found: $manifestPath"
-    Write-Summary "ERROR" "claude hooks" "hook manifest not found"
+    Write-AitError "claude hooks" "hooks not deployed" "hook manifest not found: $manifestPath"
     exit 1
 }
-$manifestObj = Get-Content $manifestPath -Raw | ConvertFrom-Json
+try {
+    $manifestObj = Get-Content $manifestPath -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+} catch {
+    Write-AitError "claude hooks" "hook manifest unreadable" (Get-AitErrorReason -ErrorRecord $_)
+    exit 1
+}
 
 # User repo: home of user-created (non-manifest) hooks only (SD-2, incident #80).
 # Manifest hooks have one version, in shared/hooks; a dotprofile copy is never
@@ -78,22 +82,25 @@ function Resolve-HookSource {
 # Registration list + file list, from the manifest (single source of truth).
 # build-deploy embeds $regs statically for the self-contained MDM path.
 $regs = @($manifestObj.hooks)
-$hookFiles = @($manifestObj.hooks | ForEach-Object { $_.file })
+$hookFiles = @($manifestObj.hooks | ForEach-Object { $_.file } | Where-Object { $_ })
 if ($manifestObj.deploy) { $hookFiles += @($manifestObj.deploy) }
+if ($hookFiles.Count -eq 0) {
+    Write-AitError "claude hooks" "hooks not deployed" "manifest lists no hooks"
+    exit 1
+}
 
 # Existence check (resolve every manifest file before deploying any).
 foreach ($hookName in $hookFiles) {
     $src = Resolve-HookSource $hookName
     if (-not (Test-Path $src)) {
-        LogError "Hook script not found: $src"
-        Write-Summary "ERROR" "claude hooks" "hook script missing: $hookName"
+        Write-AitError "claude hooks" "hooks not deployed" "hook script not found: $src"
         exit 1
     }
     # A dotprofile copy of a manifest hook is ignored (SD-2): say so, so the
-    # user can delete it instead of believing their edit is live.
+    # user can delete it instead of believing their edit is live. One warning
+    # per copy, named.
     if ($dotprofileHooks -and (Test-Path (Join-Path $dotprofileHooks $hookName))) {
-        LogWarn "Ignoring dotprofile copy of managed hook $hookName ($(Join-Path $dotprofileHooks $hookName)): shared/hooks is the only source -- delete the copy"
-        Write-Summary "WARN" "claude hooks" "dotprofile copy ignored"
+        Write-AitWarn "claude hooks" "dotprofile copy of $hookName ignored -- delete $(Join-Path $dotprofileHooks $hookName)"
     }
 }
 
@@ -127,7 +134,14 @@ if ($DryRun) {
     foreach ($hookName in $hookFiles) {
         $src = Resolve-HookSource $hookName
         $dst = Join-Path $hooksDir $hookName
-        $srcContent = Get-Content $src -Raw -ErrorAction Stop
+        try {
+            $srcContent = Get-Content $src -Raw -ErrorAction Stop
+        } catch {
+            # Without the guard a read error would end the script with no record
+            Write-AitError "claude hooks" "cannot read $hookName" (Get-AitErrorReason -ErrorRecord $_)
+            Record-DeployOutcome -Outcome failed -ToolName "claude hooks" -ItemName $hookName
+            continue
+        }
 
         $hookResult = Deploy-ManagedFile -Content $srcContent -DestPath $dst -ToolName "claude hooks" -ItemName $hookName -AdoptPath $src
 
@@ -137,7 +151,8 @@ if ($DryRun) {
                 $hooksChanged = $true
             }
             { $_ -in @("skipped", "verified", "failed") } {
-                # The tracker records the outcome (failed -> ERROR row).
+                # The library recorded a skipped (warning) or failed (error)
+                # deploy once; the tracker writes the OK status and DETAIL only.
             }
         }
         Record-DeployOutcome -Outcome $hookResult -ToolName "claude hooks" -ItemName $hookName
@@ -196,12 +211,15 @@ if ($DryRun) {
                 switch ($choice) {
                     { $_ -in @("a", "adopt") } {
                         # Net-new user hook -> dotprofile only (not a managed
-                        # shared/ hook). Same helper for consistent backups.
+                        # shared/ hook). Same helper for consistent backups. The
+                        # library records each failure once under -Tool; a
+                        # failure it did not record (no file adopted) is
+                        # recorded here.
                         $errorsBeforeAdopt = $errors
                         $adoptedCount = Adopt-ManagedFile -SourceFile $hookFile.FullName `
-                            -Targets @(Join-Path $userRepoPath "claude\hooks\$hookName")
-                        if ($errors -gt $errorsBeforeAdopt -or -not $adoptedCount) {
-                            Write-Summary "ERROR" "claude hooks" "adopt failed: $hookName"
+                            -Targets @(Join-Path $userRepoPath "claude\hooks\$hookName") -Tool "claude hooks"
+                        if (-not $adoptedCount -and $errors -eq $errorsBeforeAdopt) {
+                            Write-AitError "claude hooks" "adopt failed: $hookName" "no file adopted"
                         }
                     }
                     { $_ -in @("s", "skip") } {
@@ -210,7 +228,7 @@ if ($DryRun) {
                     default {
                         # Unreachable: Read-MenuChoice returns only a VALID
                         # answer. Skip (writes nothing) and say so.
-                        LogWarn "Unexpected answer `"$choice`" at adopt hook $hookName -- skipped adoption of $hookName"
+                        Write-AitWarn "claude hooks" "unexpected answer `"$choice`" at adopt hook $hookName -- adoption skipped"
                     }
                 }
             }
@@ -236,13 +254,16 @@ if (-not (Test-Path $claudeDir)) {
 # Read existing settings
 $settings = @{}
 $corrupt = $false
+$corruptReason = ""
 if (Test-Path $settingsFile) {
     try {
-        $raw = Get-Content $settingsFile -Raw
-        $settings = ConvertPSObjectToHashtable ($raw | ConvertFrom-Json)
+        $raw = Get-Content $settingsFile -Raw -ErrorAction Stop
+        $settings = ConvertPSObjectToHashtable ($raw | ConvertFrom-Json -ErrorAction Stop)
     } catch {
+        # Recorded once, below: an error, or a warning under -Force
         $corrupt = $true
-        LogWarn "$settingsFile could not be parsed ($_)"
+        $corruptReason = ($_.Exception.Message -replace '\s+', ' ').Trim()
+        $settings = @{}
     }
 }
 $beforeKeys = @($settings.Keys)
@@ -351,86 +372,108 @@ if ($DryRun) {
     Log "[DRY RUN] $settingsFile`: merge"
     Log "  Managed fields: $($managedKeys -join ', ')"
     if ($lostKeys.Count -gt 0) {
-        LogWarn "[DRY RUN] CLOBBER: would lose non-managed fields: $($lostKeys -join ', ')"
+        Write-AitWarn "claude hooks" "[DRY RUN] CLOBBER: would lose non-managed fields: $($lostKeys -join ', ')"
     }
     if ($corrupt) {
-        LogWarn "[DRY RUN] File is corrupt -- -Force required to overwrite"
+        Write-AitWarn "claude hooks" "[DRY RUN] File is corrupt -- -Force required to overwrite"
     }
     Log "[DRY RUN] Registered hooks: $($regs.Count)"
 } else {
     if ($corrupt -and -not $Force) {
-        LogError "$settingsFile is corrupt. Use -Force to overwrite, or fix manually."
-        Write-Summary "ERROR" "claude hooks" "settings corrupt"
+        Write-AitError "claude hooks" "settings.json is corrupt -- use -Force to overwrite" $corruptReason
     } elseif ($lostKeys.Count -gt 0 -and -not $Force) {
-        LogError "$settingsFile merge would lose fields: $($lostKeys -join ', '). Use -Force to proceed."
-        Write-Summary "ERROR" "claude hooks" "merge would lose fields"
+        Write-AitError "claude hooks" "merge would lose fields -- use -Force to proceed" "would lose: $($lostKeys -join ', ')"
     } else {
-        if ($corrupt) { LogWarn "Proceeding with -Force on corrupt file" }
-        if ($lostKeys.Count -gt 0) { LogWarn "Proceeding with -Force, losing fields: $($lostKeys -join ', ')" }
+        # -Force writes that lose data stay warnings (reference/logging.md 8.3)
+        if ($corrupt) { Write-AitWarn "claude hooks" "settings.json was invalid JSON ($corruptReason) -- overwritten (-Force)" }
+        if ($lostKeys.Count -gt 0) { Write-AitWarn "claude hooks" "fields dropped (-Force): $($lostKeys -join ', ')" }
 
         $mergedJson = $settings | ConvertTo-Json -Depth 10
         $mergedNorm = Normalize-JsonForComparison $settings -Depth 10
-        $existingNorm = if (Test-Path $settingsFile) {
+        # A corrupt file (rewritten under -Force) is never equal to the merge
+        $existingNorm = if ((Test-Path $settingsFile) -and -not $corrupt) {
             try { Normalize-JsonForComparison (ConvertPSObjectToHashtable (Get-Content $settingsFile -Raw -ErrorAction Stop | ConvertFrom-Json)) -Depth 10 }
             catch { $null }
         } else { $null }
         if ($mergedNorm -eq $existingNorm) {
             LogOk "Settings unchanged: $settingsFile"
         } else {
-            $resolvedPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($settingsFile)
-            $errorsBeforeWrite = $errors
+            # Validate the merged content before it is written (parity with the
+            # .sh, which validates a staging file): invalid content is never
+            # written. Each failure is collected; the first is the reason of one
+            # error, the rest are detail lines.
+            $valErrs = @()
+            $vParsed = $null
             try {
-                [System.IO.File]::WriteAllText($resolvedPath, $mergedJson, [System.Text.UTF8Encoding]::new($false))
+                $vParsed = $mergedJson | ConvertFrom-Json -ErrorAction Stop
             } catch {
-                LogError "Could not write $settingsFile -- $_"
+                $valErrs += "validation failed: the merged settings are not valid JSON: $($_.Exception.Message)"
             }
-            $hooksChanged = $true
-
-            # Post-write validation
-            try {
-                $vContent = [System.IO.File]::ReadAllText($resolvedPath)
-                $vParsed = $vContent | ConvertFrom-Json
+            if ($vParsed) {
                 $requiredKeys = @("hooks")
                 foreach ($rk in $requiredKeys) {
                     if (-not ($vParsed.PSObject.Properties.Name -contains $rk)) {
-                        LogError "Validation failed: $settingsFile missing required field '$rk'"
+                        $valErrs += "validation failed: missing $rk"
                     }
                 }
-            } catch {
-                LogError "Validation failed: $settingsFile is not valid JSON -- $_"
-            }
 
-            # Validate: every manifest hook registered exactly once (generated check).
-            foreach ($r in $regs) {
-                $rc = @($vParsed.hooks.$($r.event) | Where-Object { $_.hooks.command -match [regex]::Escape($r.file) }).Count
-                if ($rc -ne 1) { LogError "Validation failed: expected 1 $($r.event) $($r.file) hook, got $rc" }
-            }
+                # Validate: every manifest hook registered exactly once (generated check).
+                foreach ($r in $regs) {
+                    $rc = @($vParsed.hooks.$($r.event) | Where-Object { $_.hooks.command -match [regex]::Escape($r.file) }).Count
+                    if ($rc -ne 1) { $valErrs += "validation failed: expected 1 $($r.event) $($r.file) hook, got $rc" }
+                }
 
-            # Validate hook schema: command-type must have command,
-            # prompt-type must have prompt (not command).
-            foreach ($eventName in $vParsed.hooks.PSObject.Properties.Name) {
-                foreach ($rule in @($vParsed.hooks.$eventName)) {
-                    foreach ($h in @($rule.hooks)) {
-                        if ($h.type -eq "command" -and -not $h.command) {
-                            LogError "Validation failed: $eventName hook has type 'command' but no command field"
-                        }
-                        if ($h.type -eq "prompt") {
-                            if (-not $h.prompt) {
-                                LogError "Validation failed: $eventName hook has type 'prompt' but no prompt field. Prompt-type hooks require a static string."
+                # Validate hook schema: command-type must have command,
+                # prompt-type must have prompt (not command).
+                foreach ($eventName in $vParsed.hooks.PSObject.Properties.Name) {
+                    foreach ($rule in @($vParsed.hooks.$eventName)) {
+                        foreach ($h in @($rule.hooks)) {
+                            if ($h.type -eq "command" -and -not $h.command) {
+                                $valErrs += "validation failed: $eventName hook has type `"command`" but no command field"
                             }
-                            if ($h.command) {
-                                LogError "Validation failed: $eventName hook has type 'prompt' with command field. Use type 'command' for scripts."
+                            if ($h.type -eq "prompt") {
+                                if (-not $h.prompt) {
+                                    $valErrs += "validation failed: $eventName hook has type `"prompt`" but no prompt field."
+                                }
+                                if ($h.command) {
+                                    $valErrs += "validation failed: $eventName hook has type `"prompt`" with a command field."
+                                }
                             }
                         }
                     }
                 }
             }
 
-            if ($errors -gt $errorsBeforeWrite) {
-                # Write or post-write validation failed: ERROR row, never "deployed"
-                Write-Summary "ERROR" "claude hooks" "settings write/validation failed"
+            if ($valErrs.Count -gt 0) {
+                foreach ($ve in ($valErrs | Select-Object -Skip 1)) { LogDetail "settings-merge: $ve" }
+                Write-AitError "claude hooks" "settings.json hooks merge failed" $valErrs[0]
             } else {
-                LogOk "Hooks deployed to $settingsFile"
+                # Back up only now that the file changes (config-file-safety.md
+                # "Backup before overwrite"); then write and read it back.
+                Backup-File -FilePath $settingsFile
+                $resolvedPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($settingsFile)
+                $written = $false
+                try {
+                    [System.IO.File]::WriteAllText($resolvedPath, $mergedJson, [System.Text.UTF8Encoding]::new($false))
+                    $written = $true
+                } catch {
+                    Write-AitError "claude hooks" "could not write $settingsFile" (Get-AitErrorReason -ErrorRecord $_)
+                }
+                if ($written) {
+                    $readBack = $null
+                    try { $readBack = [System.IO.File]::ReadAllText($resolvedPath) } catch {
+                        Write-AitError "claude hooks" "could not write $settingsFile" (Get-AitErrorReason -ErrorRecord $_)
+                        $written = $false
+                    }
+                    if ($written -and $readBack -cne $mergedJson) {
+                        Write-AitError "claude hooks" "could not write $settingsFile" "the written file differs from the merged settings"
+                        $written = $false
+                    }
+                }
+                if ($written) {
+                    $hooksChanged = $true
+                    LogOk "Hooks deployed to $settingsFile"
+                }
             }
         }
     }

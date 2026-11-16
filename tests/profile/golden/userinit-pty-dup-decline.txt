@@ -1,7 +1,7 @@
 exit 1
 -- summary rows
 OK|dotprofile|verified
-WARN|machine profile|skipped
+WARN|machine profile|registration skipped: alias "laptop" is used by another machine's profile (bbbbbbbb-1111-2222-3333-444444444444)
 OK|aitools config|updated
 DETAIL|aitools config|googleDrives updated
 DETAIL|aitools config|githubUser updated

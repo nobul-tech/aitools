@@ -4,9 +4,11 @@
 # dotprofile resolver error (rc 3) and on the cursor dry run.
 #
 # Checks the S3-MF-Audit fixes: A-22 (skills .sh/.ps1 write the same rows and
-# message on rc 3), A-23 (cursor counts its own rc 3 error, row "not merged:
-# dotprofile error"), A-24 (a check run with a resolver error reports a WARN
-# step), A-26 cursor part (the cli-config dry run writes a summary row).
+# message on rc 3), A-23 (cursor fails on rc 3), A-24 (a check run with a
+# resolver error reports a WARN step), A-26 cursor part (the cli-config dry run
+# writes a summary row). Since logging.md section 8 (plan summary-warn-reporting
+# v4.5), the resolver's ERROR record is the only one on rc 3: the consumers log
+# their "not deployed" / "not merged" consequence at info.
 #
 # Platform targeting (plans/ci-platform-targeting.md; commander 2026-11-14:
 # "sh scripts and tests should only run on linux/mac and ps1 on windows"):
@@ -40,7 +42,7 @@ case "${BASH_VERSINFO[5]:-}" in
 esac
 
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
-    perl -ne 'print if $. >= 2 && $. <= 24' "$0"
+    perl -ne 'print if $. >= 2 && $. <= 26' "$0"
     exit 0
 fi
 
@@ -94,7 +96,10 @@ rc() { cat "$C/rc"; }
 rows() { grep -v '^DETAIL' "$C/summary" | perl -pe 's/\r//' | LC_ALL=C sort; }  # summary rows, order-free
 has_row() { perl -pe 's/\r//' "$C/summary" | grep -xF "$1" >/dev/null; }
 in_log() { perl -pe 's/\e\[[0-9;]*m//g; s/\r//' "$C/out" "$C/logs/deploy.log" 2>/dev/null | grep -F -- "$1" >/dev/null; }
-nowhere() { printf 'AITOOLS_USER_REPO_PATH=%s/nowhere' "$C"; }
+# A dotprofile path that does not exist: under the temp root, not the case directory
+# (named -sh / -ps1 per harness), because the resolver's error line, which names it,
+# is the reason of the shared golden's ERROR|dotprofile|resolver failed record.
+nowhere() { printf 'AITOOLS_USER_REPO_PATH=%s/nowhere' "$TMP_ROOT"; }
 
 lang=sh
 
@@ -104,11 +109,15 @@ CASE_ENV="$(nowhere)"
 run_script setup-user-skills
 check "skills $lang rc3: exit 1" "[ \"\$(rc)\" = 1 ]"
 check "skills $lang rc3: lib ERROR row dotprofile" "grep -q '^ERROR|dotprofile|' '$C/summary'"
-check "skills $lang rc3: ERROR row claude skills" "has_row 'ERROR|claude skills|not deployed: dotprofile error'"
-check "skills $lang rc3: ERROR row cursor skills" "has_row 'ERROR|cursor skills|not deployed: dotprofile error'"
+# logging.md 8.3 (one cause, one red line): the resolver's error is the only
+# ERROR record; the consumers' "not deployed" lines are consequences, logged at info.
+check "skills $lang rc3: one ERROR record (the resolver's)" "[ \"\$(grep -c '^ERROR|' '$C/summary')\" = 1 ]"
+check "skills $lang rc3: no ERROR row claude skills" "! grep -q '^ERROR|claude skills|' '$C/summary'"
+check "skills $lang rc3: no ERROR row cursor skills" "! grep -q '^ERROR|cursor skills|' '$C/summary'"
 check "skills $lang rc3: no non-canonical 'skills' row" "! grep -q '^[A-Z]*|skills|' '$C/summary'"
 check "skills $lang rc3: no 'skipped' detail" "! grep -qi 'skipped' '$C/summary'"
-check "skills $lang rc3: consumer error logged" "in_log 'Dotprofile unresolved (resolver error above) -- skills not deployed, so shared copies cannot replace dotprofile versions'"
+check "skills $lang rc3: consumer line logged at info" "perl -pe 's/\e\[[0-9;]*m//g' '$C/logs/deploy.log' | grep -F '[info] Dotprofile unresolved (resolver error above) -- skills not deployed, so shared copies cannot replace dotprofile versions' >/dev/null"
+check "skills $lang rc3: error counted once (lib)" "in_log 'FAILED with 1 error(s)'"
 check "skills $lang rc3: nothing deployed" "[ ! -e '$H/.claude/skills' ] && [ ! -e '$H/.cursor/skills' ]"
 rows > "$TMP_ROOT/skills-rc3.rows"
 check "skills rc3 parity: summary rows match golden (sh and ps1 share it)" "golden_match skills-rc3.rows '$TMP_ROOT/skills-rc3.rows'"
@@ -119,10 +128,13 @@ setup_case "cursor-rc3-$lang"
 CASE_ENV="$(nowhere)"
 run_script setup-user-cursor --dry-run
 check "cursor $lang rc3: exit 1" "[ \"\$(rc)\" = 1 ]"
-check "cursor $lang rc3: ERROR row not merged" "has_row 'ERROR|cursor cli|not merged: dotprofile error'"
+check "cursor $lang rc3: lib ERROR row dotprofile" "grep -q '^ERROR|dotprofile|' '$C/summary'"
+# logging.md 8.3 (one cause, one red line): no consumer ERROR record, line at info.
+check "cursor $lang rc3: one ERROR record (the resolver's)" "[ \"\$(grep -c '^ERROR|' '$C/summary')\" = 1 ]"
+check "cursor $lang rc3: no ERROR row cursor cli" "! grep -q '^ERROR|cursor cli|' '$C/summary'"
 check "cursor $lang rc3: no 'skipped' detail" "! grep -qi 'skipped' '$C/summary'"
-check "cursor $lang rc3: consumer error logged as error" "perl -pe 's/\e\[[0-9;]*m//g' '$C/logs/deploy.log' | grep -E '\[error\] Dotprofile unresolved \(resolver error above\) -- .*cli-config.json not merged, so defaults cannot replace the profile preferences' >/dev/null"
-check "cursor $lang rc3: error counted (consumer + lib)" "in_log 'FAILED with 2 error(s)'"
+check "cursor $lang rc3: consumer line logged at info" "perl -pe 's/\e\[[0-9;]*m//g' '$C/logs/deploy.log' | grep -E '\[info\] Dotprofile unresolved \(resolver error above\) -- .*cli-config.json not merged, so defaults cannot replace the profile preferences' >/dev/null"
+check "cursor $lang rc3: error counted once (lib)" "in_log 'FAILED with 1 error(s)'"
 check "cursor $lang rc3: no cli-config written" "[ ! -e '$H/.cursor/cli-config.json' ]"
 rows > "$TMP_ROOT/cursor-rc3.rows"
 check "cursor rc3 parity: summary rows match golden" "golden_match cursor-rc3.rows '$TMP_ROOT/cursor-rc3.rows'"

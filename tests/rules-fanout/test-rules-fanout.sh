@@ -226,17 +226,36 @@ tree_sig() {
         print "$_\n" for sort @out;
     ' "$1"
 }
-rows() { grep -E '^(ACTION\||[A-Z]+\|claude rules\|)' "$1" | LC_ALL=C sort; }
+# rows FILE [WHATS]: the ACTION and claude rules rows, the case HOME ($C/$L, which
+# holds the language: sh here, ps on Windows) in a record's text written <HOME>
+# so both languages give one golden line (a WARN record names the file it is
+# about). WHATS (one per line): the ERROR records whose reason is the
+# platform's own text (an OS message on macOS/Linux, the .NET exception message
+# on Windows) have that reason written <OS error>; an empty reason stays
+# empty, so the golden line still requires one. The inline checks pin the
+# reason each platform gives.
+rows() {
+    grep -E '^(ACTION\||[A-Z]+\|claude rules\|)' "$1" \
+        | RF_HOME="$C/$L/" RF_PW="${2:-}" perl -pe '
+            BEGIN { @w = grep { length } split /\n/, $ENV{RF_PW} }
+            s{\Q$ENV{RF_HOME}\E}{<HOME>/}g;
+            for my $w (@w) { s{^(ERROR\|[^|]*\|\Q$w\E)\|.+$}{$1|<OS error>} }' \
+        | LC_ALL=C sort
+}
 
-# parity CASE: this run's exit code, ~/.claude/rules tree and summary rows equal
-# the golden result tests/rules-fanout/golden/CASE.result, which the .sh run
-# (macOS/Linux) and the .ps1 run (Windows) must both give
+# parity CASE [WHAT...]: this run's exit code, ~/.claude/rules tree and summary
+# rows equal the golden result tests/rules-fanout/golden/CASE.result, which the
+# .sh run (macOS/Linux) and the .ps1 run (Windows) must both give. Each WHAT
+# names an ERROR record whose reason is the platform's own text (see rows).
 parity() {
+    local case_name="$1" pw="" w
+    shift
+    for w in "$@"; do pw="$pw$w"$'\n'; done
     { printf 'exit code: %s\n' "$(rc)"
       printf '# ~/.claude/rules (path md5)\n'; tree_sig "$(R)"
-      printf '# summary rows\n'; rows "$C/$L.summary"
-    } > "$C/$1.result"
-    check "parity: $1: exit code, ~/.claude/rules and summary rows match golden (sh and ps share it)" "golden_match '$1.result' '$C/$1.result'"
+      printf '# summary rows\n'; rows "$C/$L.summary" "$pw"
+    } > "$C/$case_name.result"
+    check "parity: $case_name: exit code, ~/.claude/rules and summary rows match golden (sh and ps share it)" "golden_match '$case_name.result' '$C/$case_name.result'"
 }
 
 # ---------------------------------------------------------------------------
@@ -253,7 +272,11 @@ env HOME="$C" AITOOLS_LOG_DIR="$C/logs" AITOOLS_SUMMARY_FILE="$C/sh.summary" "$T
     for n in a.md A.MD b.Md x.md.bak.1 X.MD.BAK.2026 odd.bak.2026.md .hidden.md notes.txt; do printf "%s=%s\n" "$n" "$(rule_name_kind "$n")"; done
 ' _ "$A" > "$C/sh.out" 2>&1
 check "lib $L: removed outcome: DETAIL row and count" "row 'DETAIL|t|removed: x.md' && grep -qx 'TEXT=1 removed, 1 failed' '$C/$L.out'"
-check "lib $L: unknown outcome: logged, counted as failed, ERROR row" "row 'DETAIL|t|failed: y.md' && row 'ERROR|t|1 failed' && grep -q 'unknown outcome \"bogus\"' '$C/$L.out'"
+# The tracker writes the tool's OK status only (reference/logging.md 8.3
+# "Managed files"): the failure is a count in it, never an ERROR row of the
+# tool. The unknown outcome itself is one error of the script (log_error
+# records it under the script name, 8.2): that record is in golden lib.summary
+check "lib $L: unknown outcome: logged, counted as failed in the OK status, no tracker ERROR row" "row 'DETAIL|t|failed: y.md' && row 'OK|t|1 removed, 1 failed' && ! grep -q '^ERROR|t|' '$C/$L.summary' && grep -q 'unknown outcome \"bogus\"' '$C/$L.out'"
 check "lib $L: rule_name_kind is case-insensitive" "grep -qx 'A.MD=rule' '$C/$L.out' && grep -qx 'b.Md=rule' '$C/$L.out' && grep -qx 'X.MD.BAK.2026=backup' '$C/$L.out' && grep -qx 'odd.bak.2026.md=backup' '$C/$L.out' && grep -qx '.hidden.md=hidden' '$C/$L.out' && grep -qx 'notes.txt=other' '$C/$L.out'"
 # Parity (was: sh and ps output compared on one machine): both match the golden files
 grep -E '^(TEXT=|[^ ]+=(rule|backup|hidden|other)$)' "$C/$L.out" > "$C/lib.kinds"
@@ -301,14 +324,18 @@ check "fanout rerun: row 4 verified, nothing written" "[ \"\$(nondetail)\" = 'OK
 parity fanout-rerun
 printf '## shared s\nlocal edit\n' > "$(R)/s.md"
 rerun
-check "fanout edited, non-interactive: overwritten, backup kept, WARN row" "[ \"\$(nondetail)\" = 'WARN|claude rules|1 updated, 3 verified' ] && grep -qx '## shared s' '$(R)/s.md' && ls '$(R)' | grep '^s\.md\.bak\.' >/dev/null"
+# Local edits overwritten in a non-interactive run: one warning, recorded by the
+# library (reference/logging.md 8.3 "What is a warning"); the status row stays OK
+check "fanout edited, non-interactive: overwritten, backup kept, OK row and one WARN record" "[ \"\$(nondetail)\" = 'OK|claude rules|1 updated, 3 verified' ] && [ \"\$(grep -c '^WARN|claude rules|' '$C/$L.summary')\" = 1 ] && rows '$C/$L.summary' | grep -xF 'WARN|claude rules|local edits overwritten (non-interactive run, backup kept): <HOME>/.claude/rules/s.md' >/dev/null && grep -qx '## shared s' '$(R)/s.md' && ls '$(R)' | grep '^s\.md\.bak\.' >/dev/null"
 parity fanout-edited
 printf '## shared s\nlocal edit 2\n' > "$(R)/s.md"
 # The edited run's backup is checked above; removed so the tree holds one backup
 # whether or not the next run's stamp falls in the same second (golden file)
 rm -f "$(R)"/s.md.bak.*
 rerun --force
-check "fanout --force: overwritten" "[ \"\$(rc)\" = 0 ] && grep -qx '## shared s' '$(R)/s.md' && [ \"\$(nondetail)\" = 'WARN|claude rules|1 updated, 3 verified' ]"
+# An overwrite the user asked for (--force) is logged at info, not a warning
+# (reference/logging.md 8.3 "What is a warning")
+check "fanout --force: overwritten, logged at info, OK row, no WARN record" "[ \"\$(rc)\" = 0 ] && grep -qx '## shared s' '$(R)/s.md' && [ \"\$(nondetail)\" = 'OK|claude rules|1 updated, 3 verified' ] && ! grep -q '^WARN|claude rules|' '$C/$L.summary' && grep -q '\[info\] Diff in .*s\.md -- overwriting (--force)' '$C/$L.out'"
 parity fanout-force
 
 # ---------------------------------------------------------------------------
@@ -322,14 +349,16 @@ seed_retired() {
     deployed gone.md 'gone rule'; deployed old.md 'old rule'; deployed mine2.md 'my own'
 }
 case_run retired seed_retired
-check "retired: exit 0, row 1 added, 2 removed (WARN: a kept file still loads)" "[ \"\$(rc)\" = 0 ] && [ \"\$(nondetail)\" = 'WARN|claude rules|1 added, 2 removed' ]"
+# The status row stays OK: the kept file is reported by its own warning and the
+# ACTION row below, not by recolouring the row (reference/logging.md 8.3)
+check "retired: exit 0, row OK 1 added, 2 removed (a kept file: its own warning, not the row's)" "[ \"\$(rc)\" = 0 ] && [ \"\$(nondetail)\" = 'OK|claude rules|1 added, 2 removed' ]"
 check "retired: copies removed, backups kept" "[ ! -e '$(R)/gone.md' ] && [ ! -e '$(R)/old.md' ] && ls '$(R)' | grep '^gone\.md\.bak\.' >/dev/null && ls '$(R)' | grep '^old\.md\.bak\.' >/dev/null"
 check "retired: removals in DETAIL rows" "row 'DETAIL|claude rules|removed: gone.md' && row 'DETAIL|claude rules|removed: old.md'"
 check "retired: a retired rule still in ~/.aitools/rules is not fanned out" "grep -q 'Not fanned out: old.md (retired in the rules manifest)' '$C/$L.out' && ! row 'DETAIL|claude rules|added: old.md'"
-check "retired: user file with a retired name kept, ACTION row" "grep -qx 'my own' '$(R)/mine2.md' && row 'ACTION||Claude Code still loads retired rules in ~/.claude/rules: mine2.md -- delete them unless you wrote them'"
+check "retired: user file with a retired name kept, its WARN record and the ACTION row" "grep -qx 'my own' '$(R)/mine2.md' && row 'WARN|claude rules|kept mine2.md: the rules manifest retires mine2.md, but it matches no harness copy -- delete it if it is an old fan-out copy' && row 'ACTION||Claude Code still loads retired rules in ~/.claude/rules: mine2.md -- delete them unless you wrote them'"
 parity retired
 case_run retired-dry seed_retired --dry-run
-check "retired dry run: nothing written, row dry run, removal previewed" "[ \"\$(rc)\" = 0 ] && [ \"\$(nondetail)\" = 'WARN|claude rules|dry run (no files written)' ] && [ -f '$(R)/gone.md' ] && [ -f '$(R)/old.md' ] && [ ! -e '$(R)/a.md' ] && grep -q 'DRY RUN\] Would back up and remove gone.md' '$C/$L.out'"
+check "retired dry run: nothing written, row dry run, removal previewed" "[ \"\$(rc)\" = 0 ] && [ \"\$(nondetail)\" = 'OK|claude rules|dry run (no files written)' ] && [ -f '$(R)/gone.md' ] && [ -f '$(R)/old.md' ] && [ ! -e '$(R)/a.md' ] && grep -q 'DRY RUN\] Would back up and remove gone.md' '$C/$L.out'"
 parity retired-dry
 
 # A retired name holding [ ]: removed only with its backup (review RC-1: a
@@ -369,12 +398,12 @@ seed_badheader() {
     harness a.md 'rule a'; harness x.md.bak.2026-10-25T000000Z 'x rule'; deployed x.md 'x rule'
 }
 case_run badheader seed_badheader
-check "bad header: fanned out, nothing retired, WARN + ACTION" "[ \"\$(rc)\" = 0 ] && [ \"\$(nondetail)\" = 'WARN|claude rules|1 added' ] && [ -f '$(R)/x.md' ] && row 'ACTION||Run aitools to rebuild ~/.aitools/rules and its manifest'"
+check "bad header: fanned out, nothing retired, OK row + one warning with its ACTION" "[ \"\$(rc)\" = 0 ] && [ \"\$(nondetail)\" = 'OK|claude rules|1 added' ] && [ -f '$(R)/x.md' ] && row 'WARN|claude rules|bad rules manifest header -- run: aitools (every rule fanned out, none retired, adopt not offered)' && row 'ACTION||Run aitools to rebuild ~/.aitools/rules and its manifest'"
 parity badheader
 
 seed_invalid() { manifest 'bad.txt|shared' 'a.md|unknown' 'b.md|shared'; harness a.md 'rule a'; harness b.md 'rule b'; }
 case_run invalid seed_invalid
-check "invalid lines: warned, rules still fanned out" "[ \"\$(rc)\" = 0 ] && [ \"\$(nondetail)\" = 'WARN|claude rules|2 added' ] && grep -q 'line ignored: bad.txt<TAB>shared' '$C/$L.out' && logged 'claude rules: a.md source=unknown adopt=none'"
+check "invalid lines: warned (one WARN record each), rules still fanned out, OK row" "[ \"\$(rc)\" = 0 ] && [ \"\$(nondetail)\" = 'OK|claude rules|2 added' ] && grep -q 'line ignored: bad.txt<TAB>shared' '$C/$L.out' && row 'WARN|claude rules|rules manifest line ignored: bad.txt<TAB>shared' && row 'WARN|claude rules|rules manifest line ignored: a.md<TAB>unknown' && logged 'claude rules: a.md source=unknown adopt=none'"
 parity invalid
 
 # ---------------------------------------------------------------------------
@@ -438,7 +467,9 @@ if $CASE_SENSITIVE_FS; then
     # a.md (0x61). No golden parity file: only Linux runs this case (macOS and
     # Windows file systems are case-insensitive, so the .ps1 never runs it and
     # macOS cannot write the golden file); the checks pin the result.
-    check "case-only duplicate: the first wins, the second failed" "[ \"\$(rc)\" = 1 ] && [ \"\$(nondetail)\" = 'ERROR|claude rules|1 failed' ]"
+    # The tracker writes the OK status with the counts; the failure is the
+    # script's own error (reference/logging.md 8.3 "Managed files")
+    check "case-only duplicate: the first wins, the second failed" "[ \"\$(rc)\" = 1 ] && [ \"\$(nondetail)\" = 'OK|claude rules|1 added, 1 failed' ]"
     check "case-only duplicate: ordinal order, A.md deployed and a.md failed" "[ -f '$(R)/A.md' ] && [ ! -e '$(R)/a.md' ] && row 'DETAIL|claude rules|failed: a.md'"
 else
     skip "case-only duplicate (case-insensitive file system)"
@@ -446,21 +477,21 @@ fi
 
 seed_broken() { harness a.md 'rule a'; ln -s "$H/nowhere.md" "$H/.aitools/rules/broken.md"; }
 case_run broken seed_broken
-check "dangling symlink: failed, others deployed" "[ \"\$(rc)\" = 1 ] && [ \"\$(nondetail)\" = 'ERROR|claude rules|1 failed' ] && [ -f '$(R)/a.md' ]"
+check "dangling symlink: failed (exit 1, OK status counts it, one ERROR record with its reason), others deployed" "[ \"\$(rc)\" = 1 ] && [ \"\$(nondetail)\" = 'OK|claude rules|1 added, 1 failed' ] && row 'ERROR|claude rules|failed: broken.md|dangling symlink in $C/$L/.aitools/rules' && [ -f '$(R)/a.md' ]"
 parity broken
 
 if $CAN_CHMOD_READ; then
     seed_unreadable() { harness a.md 'rule a'; chmod 000 "$H/.aitools/rules"; }
     case_run unreadable seed_unreadable
-    check "unreadable harness dir: ERROR row, exit 1" "[ \"\$(rc)\" = 1 ] && [ \"\$(nondetail)\" = 'ERROR|claude rules|cannot read harness rules' ]"
-    parity unreadable
+    check "unreadable harness dir: ERROR row with its reason, exit 1" "[ \"\$(rc)\" = 1 ] && [ \"\$(nondetail)\" = 'ERROR|claude rules|cannot read harness rules|permission denied: $C/$L/.aitools/rules' ]"
+    parity unreadable 'cannot read harness rules'
     chmod 755 "$C/$L/.aitools/rules"
 
     # Unreadable manifest (review RC-2): the fan-out still runs, the final row is ERROR
     seed_manifest_unreadable() { manifest 'a.md|shared'; harness a.md 'rule a'; chmod 000 "$H/.aitools/rules/.aitools-rules-manifest"; }
     case_run manifest-unreadable seed_manifest_unreadable
-    check "unreadable manifest: rules fanned out, ERROR rows, final row ERROR, exit 1" "[ \"\$(rc)\" = 1 ] && [ -f '$(R)/a.md' ] && row 'ERROR|claude rules|cannot read rules manifest' && row 'DETAIL|claude rules|failed: .aitools-rules-manifest' && [ \"\$(nondetail)\" = 'ERROR|claude rules|1 failed' ]"
-    parity manifest-unreadable
+    check "unreadable manifest: rules fanned out, ERROR row with its reason, final row OK with 1 failed, exit 1" "[ \"\$(rc)\" = 1 ] && [ -f '$(R)/a.md' ] && row 'ERROR|claude rules|cannot read rules manifest|cannot read $C/$L/.aitools/rules/.aitools-rules-manifest: Permission denied' && row 'DETAIL|claude rules|failed: .aitools-rules-manifest' && [ \"\$(nondetail)\" = 'OK|claude rules|1 added, 1 failed' ]"
+    parity manifest-unreadable 'cannot read rules manifest'
 else
     skip "unreadable harness dir and manifest (root or Git Bash)"
 fi
@@ -469,19 +500,21 @@ fi
 # the script still reaches its exit footer
 seed_nocreate() { harness a.md 'rule a'; mkdir -p "$H/.claude"; printf 'not a dir\n' > "$H/.claude/rules"; }
 case_run nocreate seed_nocreate
-check "cannot create rules dir: ERROR row, exit 1, file untouched" "[ \"\$(rc)\" = 1 ] && [ \"\$(nondetail)\" = 'ERROR|claude rules|cannot create rules dir' ] && grep -qx 'not a dir' '$C/$L/.claude/rules' && grep -q 'FAILED with' '$C/$L.out'"
-parity nocreate
+# The reason is mkdir's own message: BSD "mkdir: <path>: File exists", GNU
+# "mkdir: cannot create directory '<path>': File exists"
+check "cannot create rules dir: ERROR row with mkdir's reason, exit 1, file untouched" "[ \"\$(rc)\" = 1 ] && nondetail | grep -E '^ERROR\\|claude rules\\|cannot create rules dir\\|mkdir: .*File exists\$' >/dev/null && grep -qx 'not a dir' '$C/$L/.claude/rules' && grep -q 'FAILED with' '$C/$L.out'"
+parity nocreate 'cannot create rules dir'
 # The dry run previews that error (audit B N3): same row, exit 1, nothing written
 case_run nocreate-dry seed_nocreate --dry-run
-check "cannot create rules dir, dry run: same ERROR row, exit 1, file untouched" "[ \"\$(rc)\" = 1 ] && [ \"\$(nondetail)\" = 'ERROR|claude rules|cannot create rules dir' ] && grep -qx 'not a dir' '$C/$L/.claude/rules' && grep -q 'not a directory (dry run)' '$C/$L.out'"
+check "cannot create rules dir, dry run: same ERROR row, exit 1, file untouched" "[ \"\$(rc)\" = 1 ] && [ \"\$(nondetail)\" = 'ERROR|claude rules|cannot create rules dir|$C/$L/.claude/rules is not a directory (dry run)' ] && grep -qx 'not a dir' '$C/$L/.claude/rules' && grep -q 'not a directory (dry run)' '$C/$L.out'"
 parity nocreate-dry
 
 # A directory at the manifest path is unreadable, not absent (audit B N5): the
 # fan-out runs, the manifest is a failed item, the final row is ERROR
 seed_manifest_dir() { harness a.md 'rule a'; mkdir -p "$H/.aitools/rules/.aitools-rules-manifest"; }
 case_run manifest-dir seed_manifest_dir
-check "manifest is a directory: unreadable, rules fanned out, final row ERROR, exit 1" "[ \"\$(rc)\" = 1 ] && [ -f '$(R)/a.md' ] && row 'ERROR|claude rules|cannot read rules manifest' && row 'DETAIL|claude rules|failed: .aitools-rules-manifest' && [ \"\$(nondetail)\" = 'ERROR|claude rules|1 failed' ] && ! grep -q 'No rules manifest' '$C/$L.out'"
-parity manifest-dir
+check "manifest is a directory: unreadable, ERROR row with its reason, rules fanned out, final row OK with 1 failed, exit 1" "[ \"\$(rc)\" = 1 ] && [ -f '$(R)/a.md' ] && row 'ERROR|claude rules|cannot read rules manifest|cannot read $C/$L/.aitools/rules/.aitools-rules-manifest: is a directory' && row 'DETAIL|claude rules|failed: .aitools-rules-manifest' && [ \"\$(nondetail)\" = 'OK|claude rules|1 added, 1 failed' ] && ! grep -q 'No rules manifest' '$C/$L.out'"
+parity manifest-dir 'cannot read rules manifest'
 
 printf '\n%d passed, %d failed, %d skipped\n' "$PASS" "$FAIL" "$SKIP"
 [ "$FAIL" -eq 0 ]

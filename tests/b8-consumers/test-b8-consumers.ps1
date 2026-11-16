@@ -5,9 +5,11 @@
 # the macOS/Linux harness of the same cases for the .sh scripts.
 #
 # Checks the S3-MF-Audit fixes: A-22 (skills writes the same rows and message on
-# rc 3 as the .sh), A-23 (cursor counts its own rc 3 error, row "not merged:
-# dotprofile error"), A-24 (a check run with a resolver error reports a WARN
-# step), A-26 cursor part (the cli-config dry run writes a summary row).
+# rc 3 as the .sh), A-23 (cursor fails on rc 3), A-24 (a check run with a
+# resolver error reports a WARN step), A-26 cursor part (the cli-config dry run
+# writes a summary row). Since logging.md section 8 (plan summary-warn-reporting
+# v4.5), the resolver's ERROR record is the only one on rc 3: the consumers log
+# their "not deployed" / "not merged" consequence at info.
 #
 # Platform targeting (plans/ci-platform-targeting.md; commander 2026-11-14:
 # "sh scripts and tests should only run on linux/mac and ps1 on windows"):
@@ -23,7 +25,7 @@
 # Usage: pwsh -NoProfile -File tests/b8-consumers/test-b8-consumers.ps1 [-Help]
 
 param([switch]$Help)
-if ($Help) { Get-Content $PSCommandPath -TotalCount 23 | ForEach-Object { $_ -replace '^# ?', '' }; exit 0 }
+if ($Help) { Get-Content $PSCommandPath -TotalCount 25 | ForEach-Object { $_ -replace '^# ?', '' }; exit 0 }
 
 if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
     [Console]::Error.WriteLine("This script is for Windows. On macOS/Linux, run tests/b8-consumers/test-b8-consumers.sh with bash.")
@@ -93,7 +95,10 @@ function SummaryMatch([string]$Pattern) { [bool](@(SummaryLines) | Where-Object 
 function InLog([string]$Text) {
     (Strip ((ReadText (Join-Path $script:C "out")) + "`n" + (ReadText (Join-Path $script:C "logs/deploy.log")))).Contains($Text)
 }
-function Nowhere { @{ AITOOLS_USER_REPO_PATH = (($script:C -replace '\\', '/') + "/nowhere") } }
+# A dotprofile path that does not exist: under the temp root, not the case directory
+# (named -sh / -ps1 per harness), because the resolver's error line, which names it,
+# is the reason of the shared golden's ERROR|dotprofile|resolver failed record.
+function Nowhere { @{ AITOOLS_USER_REPO_PATH = (($tmpRoot -replace '\\', '/') + "/nowhere") } }
 
 try {
     # --- A-22: setup-user-skills on a resolver error (rc 3) ------------------------
@@ -102,11 +107,15 @@ try {
     Run-Script setup-user-skills
     Check "skills $lang rc3: exit 1" ($script:rc -eq 1)
     Check "skills $lang rc3: lib ERROR row dotprofile" (SummaryMatch '^ERROR\|dotprofile\|')
-    Check "skills $lang rc3: ERROR row claude skills" (HasRow 'ERROR|claude skills|not deployed: dotprofile error')
-    Check "skills $lang rc3: ERROR row cursor skills" (HasRow 'ERROR|cursor skills|not deployed: dotprofile error')
+    # logging.md 8.3 (one cause, one red line): the resolver's error is the only
+    # ERROR record; the consumers' "not deployed" lines are consequences, logged at info.
+    Check "skills $lang rc3: one ERROR record (the resolver's)" (@(SummaryLines | Where-Object { $_ -cmatch '^ERROR\|' }).Count -eq 1)
+    Check "skills $lang rc3: no ERROR row claude skills" (-not (SummaryMatch '^ERROR\|claude skills\|'))
+    Check "skills $lang rc3: no ERROR row cursor skills" (-not (SummaryMatch '^ERROR\|cursor skills\|'))
     Check "skills $lang rc3: no non-canonical 'skills' row" (-not (SummaryMatch '^[A-Z]*\|skills\|'))
     Check "skills $lang rc3: no 'skipped' detail" (-not ((ReadText (Join-Path $C "summary")) -match 'skipped'))
-    Check "skills $lang rc3: consumer error logged" (InLog 'Dotprofile unresolved (resolver error above) -- skills not deployed, so shared copies cannot replace dotprofile versions')
+    Check "skills $lang rc3: consumer line logged at info" ((Strip (ReadText (Join-Path $C "logs/deploy.log"))).Contains('[info] Dotprofile unresolved (resolver error above) -- skills not deployed, so shared copies cannot replace dotprofile versions'))
+    Check "skills $lang rc3: error counted once (lib)" (InLog 'FAILED with 1 error(s)')
     Check "skills $lang rc3: nothing deployed" (-not (Test-Path (Join-Path $H ".claude/skills")) -and -not (Test-Path (Join-Path $H ".cursor/skills")))
     Write-Rows (Join-Path $tmpRoot "skills-rc3.rows")
     Check "skills rc3 parity: summary rows match golden (sh and ps1 share it)" (Test-GoldenMatch "skills-rc3.rows" (Join-Path $tmpRoot "skills-rc3.rows"))
@@ -117,10 +126,13 @@ try {
     $script:CaseEnv = Nowhere
     Run-Script setup-user-cursor @("-DryRun")
     Check "cursor $lang rc3: exit 1" ($script:rc -eq 1)
-    Check "cursor $lang rc3: ERROR row not merged" (HasRow 'ERROR|cursor cli|not merged: dotprofile error')
+    Check "cursor $lang rc3: lib ERROR row dotprofile" (SummaryMatch '^ERROR\|dotprofile\|')
+    # logging.md 8.3 (one cause, one red line): no consumer ERROR record, line at info.
+    Check "cursor $lang rc3: one ERROR record (the resolver's)" (@(SummaryLines | Where-Object { $_ -cmatch '^ERROR\|' }).Count -eq 1)
+    Check "cursor $lang rc3: no ERROR row cursor cli" (-not (SummaryMatch '^ERROR\|cursor cli\|'))
     Check "cursor $lang rc3: no 'skipped' detail" (-not ((ReadText (Join-Path $C "summary")) -match 'skipped'))
-    Check "cursor $lang rc3: consumer error logged as error" ((Strip (ReadText (Join-Path $C "logs/deploy.log"))) -match '\[error\] Dotprofile unresolved \(resolver error above\) -- .*cli-config.json not merged, so defaults cannot replace the profile preferences')
-    Check "cursor $lang rc3: error counted (consumer + lib)" (InLog 'FAILED with 2 error(s)')
+    Check "cursor $lang rc3: consumer line logged at info" ((Strip (ReadText (Join-Path $C "logs/deploy.log"))) -match '\[info\] Dotprofile unresolved \(resolver error above\) -- .*cli-config.json not merged, so defaults cannot replace the profile preferences')
+    Check "cursor $lang rc3: error counted once (lib)" (InLog 'FAILED with 1 error(s)')
     Check "cursor $lang rc3: no cli-config written" (-not (Test-Path (Join-Path $H ".cursor/cli-config.json")))
     Write-Rows (Join-Path $tmpRoot "cursor-rc3.rows")
     Check "cursor rc3 parity: summary rows match golden" (Test-GoldenMatch "cursor-rc3.rows" (Join-Path $tmpRoot "cursor-rc3.rows"))

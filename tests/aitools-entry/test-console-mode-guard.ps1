@@ -15,7 +15,8 @@
 # compile nothing; Read-ConsoleChoice returns the piped line, or "" and a warn at
 # EOF; the C# type has Get/Set/EnterCooked; Read-ConsoleChoice enters cooked mode
 # and restores the mode in a finally; aitools.ps1 has no copy of the helpers and
-# Step 2 gives build-deploy a pipe for stdin inside the save/restore.
+# Step 2 runs build-deploy relayed (Invoke-NativeRelayed) with /dev/null for its
+# stdin, inside the save/restore.
 # AI-merge spinner (Start-/Stop-AiSpinner): in-process (no Start-Job), stops a
 # running spinner first, no-op with redirected stdout, Stop disposes and clears
 # like bash _stop_spinner; Invoke-AiMerge stops it in a finally; Invoke-AI
@@ -474,22 +475,29 @@ try {
     # -----------------------------------------------------------------------
     # aitools.ps1: the lib is dot-sourced before Step 2
     # -----------------------------------------------------------------------
-    $builds = @($ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.PipelineAst] -and $n.Extent.Text -match 'build-deploy\.sh' }, $true))
+    # The pipelines that run a command naming build-deploy.sh (not the expressions
+    # nested in its arguments)
+    $builds = @($ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.PipelineAst] -and $n.Extent.Text -match 'build-deploy\.sh' -and
+        $n.PipelineElements[0] -is [System.Management.Automation.Language.CommandAst] }, $true))
     $dotLib = $ast.Find({ param($n) $n -is [System.Management.Automation.Language.CommandAst] -and $n.InvocationOperator -eq 'Dot' -and
         $n.CommandElements[0].Extent.Text -eq '$aitoolsLib' }, $true)
     Check "entry: the lib is dot-sourced (. `$aitoolsLib) before Step 2 runs build-deploy" (($null -ne $dotLib) -and ($builds.Count -ge 1) -and ($dotLib.Extent.EndOffset -lt $builds[0].Extent.StartOffset))
 
     # -----------------------------------------------------------------------
-    # Structure of Step 2: pipe stdin + save before the try + restore in finally
+    # Structure of Step 2: relayed, stdin /dev/null + save before the try + restore in finally
     # -----------------------------------------------------------------------
     Check "step 2: build-deploy.sh is run from exactly one pipeline" ($builds.Count -eq 1) "found $($builds.Count)"
     if ($builds.Count -ge 1) {
         $pipe = $builds[0]
         $first = $pipe.PipelineElements[0]
-        $nullFirst = ($first -is [System.Management.Automation.Language.CommandExpressionAst]) -and
-            ($first.Expression -is [System.Management.Automation.Language.VariableExpressionAst]) -and
-            ($first.Expression.VariablePath.UserPath -eq "null")
-        Check "step 2: build-deploy gets a pipe for stdin (`$null | & `$bashExe ...)" $nullFirst $pipe.Extent.Text
+        # Step 2 runs the build through the relay (Invoke-NativeRelayed, plan G1
+        # X10), which hands the child this console's stdin: the build itself gets
+        # /dev/null (bash -c 'exec bash "$0" < /dev/null'), so its MSYS processes
+        # never see the console
+        $relayed = ($first -is [System.Management.Automation.Language.CommandAst]) -and
+            ($first.GetCommandName() -eq "Invoke-NativeRelayed")
+        Check "step 2: build-deploy is run by Invoke-NativeRelayed" $relayed $pipe.Extent.Text
+        Check "step 2: build-deploy's stdin is /dev/null, not the console (< /dev/null)" ($pipe.Extent.Text.Contains("< /dev/null")) $pipe.Extent.Text
         $try = $pipe.Parent
         while ($try -and -not ($try -is [System.Management.Automation.Language.TryStatementAst])) { $try = $try.Parent }
         Check "step 2: build-deploy runs inside a try statement" ($null -ne $try)

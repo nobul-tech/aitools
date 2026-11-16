@@ -71,8 +71,9 @@ to_native_path() {
 # the repo copy (<repoPath>/scripts/aitools.ps1, repoPath read from
 # ~/.aitools/config.json as below), else the copy beside this script
 # (~/.local/bin/aitools.ps1, installed by aitools-install.ps1; it clones a missing
-# repo itself). The Windows branches further down are not reached on Windows.
-# aitools.ps1 does its own config migration, repo clone and argument checks.
+# repo itself). Nothing below this forwarder branches on Windows (A3-F2: the
+# unreachable Windows branches were removed). aitools.ps1 does its own config
+# migration, repo clone and argument checks.
 
 # aitools_ps1_args ARGS... -- AITOOLS_PS1_ARGS: ARGS as aitools.ps1 parameters.
 # pwsh -File binds a GNU-style flag to a parameter only when its name matches
@@ -206,23 +207,25 @@ check_profile() {
                     try{const r=JSON.parse(d);console.log((r.issues[0]&&r.issues[0].message)||'profile.json has issues')}catch{console.log('profile.json has issues')}
                 })
             " 2>/dev/null)
-            printf '\033[33mprofile: %s\033[0m\n' "$msg"
+            write_warn "profile.json" "${msg:-profile.json has issues}"
             ;;
         warn)
-            # Print each issue as a warning
-            printf '%s' "$result" | node -e "
+            # One warning per issue. The issues are read into a variable first: a
+            # write_warn inside a `| while read` subshell would lose its count.
+            local issues="" line
+            issues=$(printf '%s' "$result" | node -e "
                 let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{
-                    try{const r=JSON.parse(d);r.issues.forEach(i=>console.log(i.message))}catch(e){console.error('profile parse error: '+e.message)}
+                    try{const r=JSON.parse(d);r.issues.forEach(i=>console.log(i.message))}catch(e){console.log('profile-check output unreadable: '+e.message)}
                 })
-            " 2>/dev/null | while IFS= read -r line; do
-                printf '\033[33mprofile: %s\033[0m\n' "$line"
-            done
-            if [ "$mode" = "interactive" ] && [ -t 0 ]; then
-                printf '\033[33mRun '\''aitools user init'\'' to fix.\033[0m\n'
-            fi
+            " 2>/dev/null) || issues="profile-check output unreadable"
+            while IFS= read -r line; do
+                if [ -n "$line" ]; then write_warn "profile.json" "$line"; fi
+            done <<< "$issues"
+            write_summary ACTION "" "Run: aitools user init (fixes profile.json)"
             ;;
         migrate)
-            printf '\033[33mprofile: profile.json is v1 (legacy). Migration to v2 recommended.\033[0m\n'
+            write_action "profile.json" "profile.json is v1 (legacy) -- migrate it to v2: aitools user init" \
+                "Run: aitools user init (migrates profile.json to v2)"
             if [ "$mode" = "interactive" ] && ui_can_ask; then
                 local answer="" ppath=""
                 read_menu_choice answer "y yes n no" n "no" "profile migrate" "Migrate profile.json to v2 now? [y/n]: "
@@ -271,15 +274,11 @@ ui_can_ask() {
     tty_interactive
 }
 
-# ui_machine_shell -- the machine.shell value (Review3 #82 minor 6): one stable
-# value per platform, so the two Windows entry points (Git Bash aitools and
-# aitools.ps1) do not rewrite it on alternate runs. Windows: pwsh, the managed
-# shell there, whichever entry point runs. macOS/Linux: the login shell ($SHELL).
+# ui_machine_shell -- the machine.shell value (Review3 #82 minor 6): the login
+# shell ($SHELL) on macOS/Linux. On Windows aitools.ps1 runs (this entry point
+# forwards to it) and records pwsh, the managed shell there.
 ui_machine_shell() {
-    case "$(uname -s)" in
-        MINGW*|MSYS*|CYGWIN*) printf 'pwsh' ;;
-        *) basename "${SHELL:-/bin/bash}" ;;
-    esac
+    basename "${SHELL:-/bin/bash}"
 }
 
 # ui_log_lines PREFIX TEXT -- each non-empty line of TEXT as a detail line
@@ -291,20 +290,9 @@ ui_log_lines() {
     done <<< "$2"
 }
 
-# ui_action TEXT -- one ACTION row TEXT per run (show_summary does not dedupe
-# ACTIONs). The caller's log_warn / log_error line carries the same instruction.
-ui_action() {
-    if [ -n "${AITOOLS_SUMMARY_FILE:-}" ] && [ -f "$AITOOLS_SUMMARY_FILE" ] \
-        && grep -qxF -- "ACTION||$1" "$AITOOLS_SUMMARY_FILE"; then
-        log_detail "ACTION already in the run summary: $1"
-        return 0
-    fi
-    write_summary ACTION "" "$1"
-}
-
 # ui_rm_tmp FILE -- remove a temp file; a failure is a warning, never silent
 ui_rm_tmp() {
-    if [ -e "$1" ] && ! rm -f "$1"; then log_warn "could not remove $(display_path "$1")"; fi
+    if [ -e "$1" ] && ! rm -f "$1"; then write_warn "machine profile" "could not remove the temporary file $(display_path "$1")"; fi
     return 0
 }
 
@@ -358,30 +346,33 @@ ui_handled() {
     return 1
 }
 
-# ui_relay_warnings -- log the last resolver call's warn lines (handled: info)
+# ui_relay_warnings -- the last resolver call's warn lines: handled ones at info,
+# every other one a warning of "machine profile" (logging.md section 7: the caller
+# logs a resolver warning with write_warn <tool>)
 ui_relay_warnings() {
     local w
     while IFS= read -r w; do
         if [ -z "$w" ]; then continue; fi
         if ui_handled "$w"; then log "machine profile: $w (user init handles this)"
-        else log_warn "machine profile: $w"; fi
+        else write_warn "machine profile" "$w"; fi
     done <<< "$(ui_lines warn)"
 }
 
 # ui_push_action DIR -- the ACTION for a commit or push the resolver reported as
-# failed (its warning, logged by ui_relay_warnings, says why)
+# failed (its warning, recorded by ui_relay_warnings, says why; identical ACTIONs
+# show once in the panel)
 ui_push_action() {
     local d
     d=$(display_path "$1")
-    if [ "$(ui_tag committed)" != "true" ]; then ui_action "commit and push profile.json in $d"
-    elif grep -q "pull --rebase" <<< "$(ui_lines warn)"; then ui_action "git pull --rebase, then git push in $d"
-    else ui_action "run git push in $d"; fi
+    if [ "$(ui_tag committed)" != "true" ]; then write_summary ACTION "" "commit and push profile.json in $d"
+    elif grep -q "pull --rebase" <<< "$(ui_lines warn)"; then write_summary ACTION "" "git pull --rebase, then git push in $d"
+    else write_summary ACTION "" "run git push in $d"; fi
 }
 
 # ui_push DIR -- push DIR. Without a terminal git may not prompt
 # (GIT_TERMINAL_PROMPT=0; ssh BatchMode unless GIT_SSH_COMMAND is set). A push the
 # remote rejected (it has newer commits) is told to pull --rebase first (Review3
-# #82 minor 4). Returns 0 pushed, 1 not pushed (log_warn + ACTION).
+# #82 minor 4). Returns 0 pushed, 1 not pushed (one write_action "dotprofile").
 ui_push() {
     local dir="$1" out rc=0 d
     d=$(display_path "$dir")
@@ -394,11 +385,10 @@ ui_push() {
     if [ "$rc" -eq 0 ]; then return 0; fi
     case "$out" in
         *rejected*|*non-fast-forward*|*"fetch first"*)
-            log_warn "dotprofile push rejected (exit $rc): the remote has newer commits -- run git pull --rebase, then git push in $d"
-            ui_action "git pull --rebase, then git push in $d" ;;
+            write_action "dotprofile" "dotprofile push rejected (exit $rc): the remote has newer commits -- run git pull --rebase, then git push in $d" \
+                "git pull --rebase, then git push in $d" ;;
         *)
-            log_warn "dotprofile push failed (exit $rc) -- run git push in $d"
-            ui_action "run git push in $d" ;;
+            write_action "dotprofile" "dotprofile push failed (exit $rc) -- run git push in $d" "run git push in $d" ;;
     esac
     return 1
 }
@@ -406,7 +396,7 @@ ui_push() {
 # ui_commit DIR MESSAGE FILE... -- commit only FILE... in DIR, then push (N-Q2).
 # No git identity on this machine yet: commits as the profile's identity.git (the
 # person the dotprofile belongs to). Returns 0 committed and pushed, 1 commit
-# failed, 2 committed but not pushed; each failure is a log_warn + one ACTION.
+# failed, 2 committed but not pushed; each failure is one write_action.
 ui_commit() {
     local dir="$1" msg="$2"; shift 2
     local out rc=0 who=() gname="" gmail="" cur_name="" cur_mail="" d
@@ -422,8 +412,7 @@ ui_commit() {
     if [ "$rc" -eq 0 ]; then out=$(git -C "$dir" ${who[@]+"${who[@]}"} commit -m "$msg" -- "$@" 2>&1) || rc=$?; fi
     ui_log_lines "git commit: " "$out"
     if [ "$rc" -ne 0 ]; then
-        log_warn "dotprofile commit failed (exit $rc) -- commit and push $* in $d by hand"
-        ui_action "commit and push $* in $d"
+        write_action "dotprofile" "dotprofile commit failed (exit $rc) -- commit and push $* in $d by hand" "commit and push $* in $d"
         return 1
     fi
     if ! ui_push "$dir"; then return 2; fi
@@ -481,15 +470,14 @@ ui_entries() {
 # another machine is shown as "[-] ... (registered to another machine)" and cannot
 # be picked; the profile the resolver suggests (cached alias, hostname match) is
 # marked "(suggested)". Sets UI_CHOICE_KIND (claim | new) and UI_CHOICE (the key to
-# claim, or the new alias). Returns 0 chosen; 1 no terminal to ask (log_error +
-# ERROR row + ACTION); 2 skipped at the prompt (log_warn; the caller writes the row).
+# claim, or the new alias). Returns 0 chosen; 1 no terminal to ask (one error +
+# ACTION); 2 skipped at the prompt (one warning, recorded here).
 ui_choose() {
     local pf="$1" sug="$2" i n=0 nums=() label choice valid=""
     UI_CHOICE_KIND=""; UI_CHOICE=""
     if ! ui_can_ask; then
-        log_error "machine profile: this machine has no profile and there is no terminal to ask -- run: aitools user init --alias <name> (or aitools user init on a terminal)"
-        write_summary ERROR "machine profile" "not registered (no terminal)"
-        ui_action "Run: aitools user init --alias <name> (or on a terminal)"
+        write_error "machine profile" "not registered" "this machine has no profile and there is no terminal to ask"
+        write_summary ACTION "" "Run: aitools user init --alias <name> (or on a terminal)"
         return 1
     fi
     ui_entries "$pf" "$3"
@@ -517,13 +505,13 @@ ui_choose() {
     read_menu_choice choice "${valid}n s" s "skip" "which profile" "Choice: "
     case "$choice" in
         s)
-            log_warn "machine profile: registration skipped -- deploys will report no machine match"
+            write_warn "machine profile" "registration skipped -- deploys will report no machine match"
             return 2 ;;
         n)
             printf 'New alias (e.g., laptop, workstation): ' > /dev/tty
             read_tty_choice UI_CHOICE "skip"
             if [ -z "$UI_CHOICE" ]; then
-                log_warn "machine profile: no alias entered -- registration skipped"
+                write_warn "machine profile" "no alias entered -- registration skipped"
                 return 2
             fi
             UI_CHOICE_KIND=new ;;
@@ -555,11 +543,12 @@ ui_ask_name_company() {
 # another machine's needs a confirm on a terminal, then --allow-duplicate-alias
 # (that profile is never rewritten); without a terminal it is refused.
 # COMMIT=true commits and pushes profile.json. Sets UI_KEY, UI_ALIAS, UI_OWNER.
-# Writes the "machine profile" row. Returns 0 registered or verified, 1 failed
-# (log_error + ERROR row), 2 skipped at the confirm (log_warn + WARN row).
+# Writes the "machine profile" OK record. Returns 0 registered or verified, 1
+# failed (one error), 2 skipped at the confirm (one warning).
 ui_register() {
     local dir="$1" mode="$2" value="$3" commit="$4" name="${5:-}" company="${6:-}" email="${7:-}"
     local pf="$1/profile.json" tmp extra=() tries=0 rc result owner okey e ans claimed js="$repo_path/scripts/aitools-json.pl"
+    local mv_out="" mv_rc=0
     tmp="$pf.tmp.$$"
     if [ "$mode" = "claim" ]; then extra=(--claim "$value")
     elif [ -n "$value" ]; then extra=(--alias "$value"); fi
@@ -581,9 +570,8 @@ ui_register() {
             continue
         fi
         if ! ui_can_ask; then
-            log_error "machine profile: alias \"$value\" is used by another machine's profile ($okey) -- not registered without a confirm on a terminal; run: aitools user init --alias <another name>"
-            write_summary ERROR "machine profile" "alias used by another machine"
-            ui_action "Run: aitools user init --alias <another name> (or confirm on a terminal)"
+            write_error "machine profile" "not registered" "alias \"$value\" is used by another machine's profile ($okey) and there is no terminal to confirm"
+            write_summary ACTION "" "Run: aitools user init --alias <another name> (or confirm on a terminal)"
             return 1
         fi
         read_menu_choice ans "y yes n no" n "no" "alias $value" "Alias \"$value\" is used by another machine's profile ($okey). Use it for this machine too? [y/n]: "
@@ -592,8 +580,7 @@ ui_register() {
                 log "machine profile: alias \"$value\" shared with profile $okey (confirmed at the prompt)"
                 extra+=(--allow-duplicate-alias) ;;
             *)
-                log_warn "machine profile: alias \"$value\" is used by another machine's profile ($okey) -- registration skipped"
-                write_summary WARN "machine profile" "skipped"
+                write_warn "machine profile" "registration skipped: alias \"$value\" is used by another machine's profile ($okey)"
                 return 2 ;;
         esac
     done
@@ -601,13 +588,11 @@ ui_register() {
         ui_rm_tmp "$tmp"
         e=$(ui_first_error)
         if [ "$rc" -eq 3 ] || [ "$rc" -eq 4 ]; then
-            log_error "machine profile: registration refused (resolver exit $rc): ${e:-see deploy.log}"
-            write_summary ERROR "machine profile" "registration refused"
+            write_error "machine profile" "registration refused (resolver exit $rc)" "${e:-no error line from the resolver}"
         else
-            log_error "machine profile: register failed (resolver exit $rc): ${e:-see deploy.log}"
-            write_summary ERROR "machine profile" "register failed"
+            write_error "machine profile" "register failed (resolver exit $rc)" "${e:-no error line from the resolver}"
         fi
-        ui_action "see deploy.log -- fix profile.json, then run: aitools user init"
+        write_summary ACTION "" "see deploy.log -- fix profile.json, then run: aitools user init"
         return 1
     fi
     result=$(ui_tag result); UI_KEY=$(ui_tag key); UI_ALIAS=$(ui_tag alias); UI_OWNER=$(ui_tag owner); claimed=$(ui_tag claimed)
@@ -619,20 +604,19 @@ ui_register() {
     fi
     if ! e=$(perl "$js" check "$tmp" 2>&1); then
         ui_rm_tmp "$tmp"
-        log_error "machine profile: register wrote an invalid file ($e) -- profile.json left untouched"
-        write_summary ERROR "machine profile" "register validation failed"
+        write_error "machine profile" "register wrote an invalid file -- profile.json left untouched" "$e"
         return 1
     fi
     backup_file "$pf"
-    if ! mv "$tmp" "$pf"; then
+    mv_out=$(mv "$tmp" "$pf" 2>&1) || mv_rc=$?
+    if [ "$mv_rc" -ne 0 ]; then
         ui_rm_tmp "$tmp"
-        log_error "machine profile: could not replace $(display_path "$pf")"
-        write_summary ERROR "machine profile" "write failed"
+        write_error "machine profile" "could not replace $(display_path "$pf")" "$(error_reason "$mv_out" "$mv_rc")"
         return 1
     fi
     log_ok "machine profile: registered this machine as '$UI_ALIAS' ($result, profile $UI_KEY${claimed:+, claimed from $claimed})"
     if [ "$commit" = "true" ] && [ -d "$dir/.git" ]; then
-        ui_commit "$dir" "Register machine profile: $UI_ALIAS" profile.json  # failures: log_warn + ACTION inside
+        ui_commit "$dir" "Register machine profile: $UI_ALIAS" profile.json  # failures: write_action inside
     fi
     write_summary OK "machine profile" "$result ($UI_ALIAS)"
     return 0
@@ -643,15 +627,19 @@ ui_register() {
 # design (f); clears setup-user-config's "re-keys machine profiles" ACTION). Row
 # "profile keys": OK when it re-keyed, ERROR when it failed. Returns 0, 1 failed.
 ui_migrate() {
-    local dir="$1" rc e
+    local dir="$1" rc e first=""
     ui_profile_run migrate --profile "$dir/profile.json"
     rc=$UI_PROF_RC
     ui_relay_warnings
     if [ "$rc" -ne 0 ]; then
-        while IFS= read -r e; do if [ -n "$e" ]; then log_error "machine profile: re-key failed: $e"; fi; done <<< "$(ui_lines error)"
-        if [ -z "$(ui_first_error)" ]; then log_error "machine profile: re-key failed (resolver exit $rc)"; fi
-        write_summary ERROR "profile keys" "re-key failed"
-        ui_action "see deploy.log -- fix profile.json, then run: aitools user init"
+        # One error: the resolver's first error line is its reason, the others are
+        # detail lines (lead decision for the resolver wrappers)
+        first=$(ui_first_error)
+        while IFS= read -r e; do
+            if [ -n "$e" ] && [ "$e" != "$first" ]; then log_detail "machine profile: re-key: $e"; fi
+        done <<< "$(ui_lines error)"
+        write_error "profile keys" "re-key failed (resolver exit $rc)" "${first:-no error line from the resolver}"
+        write_summary ACTION "" "see deploy.log -- fix profile.json, then run: aitools user init"
         return 1
     fi
     case "$(ui_tag result)" in
@@ -667,9 +655,10 @@ ui_migrate() {
 # ui_resolve DIR -- which profile this machine is. No override is passed: --alias
 # goes to register, which creates a new profile (Review3 #82 M1). Sets UI_VIA,
 # UI_KEY, UI_ALIAS, UI_OWNER, UI_THIS_ID. Returns 0, or 1 on a resolver error user
-# init cannot resolve (log_error + ERROR row + ACTION).
+# init cannot resolve (one error, its reason the first such resolver error line,
+# the others detail lines; plus an ACTION).
 ui_resolve() {
-    local dir="$1" e real=false
+    local dir="$1" e real=false first=""
     ui_profile_run resolve --profile "$dir/profile.json" --environment "$AITOOLS_ENVIRONMENT"
     UI_VIA=$(ui_tag via); UI_KEY=$(ui_tag key); UI_ALIAS=$(ui_tag alias); UI_OWNER=$(ui_tag owner); UI_THIS_ID=$(ui_tag machineId)
     if [ -z "$UI_KEY" ]; then UI_VIA=none; fi
@@ -679,12 +668,13 @@ ui_resolve() {
     while IFS= read -r e; do
         if [ -z "$e" ]; then continue; fi
         if ui_handled "$e"; then log "machine profile: $e (user init handles this)"
-        else log_error "machine profile: $e"; real=true; fi
+        elif ! $real; then first="$e"; real=true
+        else log_detail "machine profile: resolver error: $e"; fi
     done <<< "$(ui_lines error)"
-    if [ -z "$(ui_first_error)" ]; then log_error "machine profile: resolver failed (exit $UI_PROF_RC)"; real=true; fi
+    if [ -z "$(ui_first_error)" ]; then real=true; fi
     if ! $real; then return 0; fi
-    write_summary ERROR "machine profile" "resolver error"
-    ui_action "see deploy.log -- fix profile.json, then run: aitools user init"
+    write_error "machine profile" "resolver error (exit $UI_PROF_RC)" "${first:-no error line from the resolver}"
+    write_summary ACTION "" "see deploy.log -- fix profile.json, then run: aitools user init"
     return 1
 }
 
@@ -740,14 +730,12 @@ ui_register_flow() {
         ui_resolve "$dir" || return 1
         if [ "$UI_OWNER" = "this" ] && { [ "$UI_VIA" = "id" ] || [ "$UI_VIA" = "environment" ]; }; then
             machine_key="$UI_KEY"; machine_alias="$UI_ALIAS"; machine_owner=this
-            log_warn "machine profile: profile.json in $d has uncommitted changes -- this machine's profile ('$UI_ALIAS') was not refreshed; commit or discard them, then run: aitools user init"
-            write_summary WARN "machine profile" "not refreshed (local edits)"
-            ui_action "commit or discard the changes to profile.json in $d, then run: aitools user init"
+            write_action "machine profile" "profile.json in $d has uncommitted changes -- this machine's profile was not refreshed; commit or discard them, then run: aitools user init" \
+                "commit or discard the changes to profile.json in $d, then run: aitools user init"
             return 0
         fi
-        log_error "machine profile: profile.json in $d has uncommitted changes -- not registered (they would be committed with it); commit or discard them, then run: aitools user init"
-        write_summary ERROR "machine profile" "not registered (local edits)"
-        ui_action "commit or discard the changes to profile.json in $d, then run: aitools user init"
+        write_error "machine profile" "not registered" "profile.json in $d has uncommitted changes (they would be committed with it)"
+        write_summary ACTION "" "commit or discard the changes to profile.json in $d, then run: aitools user init"
         return 1
     else
         ui_migrate "$dir"  # failure: logged + ERROR row; resolution still reads legacy profiles
@@ -767,8 +755,7 @@ ui_register_flow() {
                 config)
                     # This machine's id cannot be detected: config.json's cached key vouches for
                     # the profile, but register needs the id (it would refuse with exit 3)
-                    log_warn "machine profile: this machine's id cannot be detected -- profile '$UI_ALIAS' (from config.json machineId) was not refreshed"
-                    write_summary WARN "machine profile" "not refreshed (no machine id)"
+                    write_warn "machine profile" "profile '$UI_ALIAS' not refreshed: this machine's id cannot be detected (key from config.json machineId)"
                     # owner "config": the key is NOT passed to setup-user-config, which re-derives it
                     # (via=config) and keeps the cached machineId (review M2: with --machine-id it
                     # would read it as an override and drop the cache)
@@ -794,7 +781,7 @@ ui_register_flow() {
                             ui_ask_name_company "$UI_CHOICE"
                             ui_register "$dir" alias "$UI_CHOICE" "$commit" "$UI_NAME" "$UI_COMPANY" ""; rc=$?
                         fi ;;
-                    2) write_summary WARN "machine profile" "skipped" ;;
+                    # 2: skipped at the prompt -- ui_choose recorded its warning
                 esac
             fi
         fi
@@ -816,19 +803,19 @@ ui_register_flow() {
 # changes is not migrated. Returns 0 (also when nothing to do), 1 failed.
 migrate_profile_v1_to_v2() {
     local dir="$1" pf="$1/profile.json" js="$repo_path/scripts/aitools-json.pl" ver tmp out rc=0 reg=0 host alias="$user_alias" d
+    local chk="" mv_out="" mv_rc=0
     d=$(display_path "$dir")
     if [ ! -f "$pf" ]; then return 0; fi
     ver=$(perl "$js" get "$pf" version 2>/dev/null) || ver=""  # absent or unreadable: v1 (the node step below reports a parse error)
     if [ "$ver" = "2" ]; then return 0; fi
     if ! command -v node >/dev/null 2>&1; then
-        log_warn "profile.json in $d is v1 (legacy) -- node is needed to migrate it; install node, then run: aitools user init"
-        write_summary WARN "machine profile" "v1 profile not migrated"
+        write_action "machine profile" "profile.json in $d is v1 and was not migrated -- install node, then run: aitools user init" \
+            "install node, then run: aitools user init"
         return 0
     fi
     if ui_profile_dirty "$dir"; then
-        log_warn "profile.json in $d is v1 and has uncommitted changes -- not migrated; commit or discard them, then run: aitools user init"
-        write_summary WARN "machine profile" "v1 profile not migrated"
-        ui_action "commit or discard the changes to profile.json in $d, then run: aitools user init"
+        write_action "machine profile" "profile.json in $d is v1 and has uncommitted changes -- not migrated; commit or discard them, then run: aitools user init" \
+            "commit or discard the changes to profile.json in $d, then run: aitools user init"
         return 0
     fi
     log "profile.json in $d is v1 (legacy) -- migrating to v2 (profiles keyed by machine id)"
@@ -859,18 +846,19 @@ const v1Keys = ["name", "email", "github", "company", "git", "machines", "versio
 for (const k of Object.keys(old)) { if (!v1Keys.includes(k) && !(k in v2)) v2[k] = old[k]; }
 fs.writeFileSync(dst, JSON.stringify(v2, null, 2) + "\n");
 ' "$pf" "$tmp" "$host" 2>&1) || rc=$?
-    if [ "$rc" -ne 0 ] || ! perl "$js" check "$tmp" > /dev/null 2>&1; then  # check prints its reason to stderr; the log line below names the failure
-        ui_log_lines "v1 migration: " "$out"
+    # The check's own message (stderr) is part of the reason
+    if [ "$rc" -eq 0 ]; then chk=$(perl "$js" check "$tmp" 2>&1) || rc=$?; fi
+    if [ "$rc" -ne 0 ]; then
         ui_rm_tmp "$tmp"
-        log_error "profile.json in $d could not be migrated from v1 (see deploy.log) -- left untouched"
-        write_summary ERROR "machine profile" "v1 migration failed"
+        # error_reason logs node's and the check's output as detail lines
+        write_error "machine profile" "v1 migration failed -- profile.json left untouched" "$(error_reason "$out"$'\n'"$chk" "$rc")"
         return 1
     fi
     backup_file "$pf"
-    if ! mv "$tmp" "$pf"; then
+    mv_out=$(mv "$tmp" "$pf" 2>&1) || mv_rc=$?
+    if [ "$mv_rc" -ne 0 ]; then
         ui_rm_tmp "$tmp"
-        log_error "profile.json in $d could not be replaced -- v1 migration not written"
-        write_summary ERROR "machine profile" "v1 migration failed"
+        write_error "machine profile" "v1 migration not written: could not replace profile.json in $d" "$(error_reason "$mv_out" "$mv_rc")"
         return 1
     fi
     log_ok "profile.json in $d migrated to v2"
@@ -878,8 +866,8 @@ fs.writeFileSync(dst, JSON.stringify(v2, null, 2) + "\n");
         printf 'Alias for this machine (Enter = hostname): ' > /dev/tty
         read_tty_choice alias "the hostname"
     fi
-    ui_register "$dir" alias "$alias" false || reg=$?  # failure or skip: logged + row inside; the migration is committed either way
-    if [ -d "$dir/.git" ]; then ui_commit "$dir" "Migrate profile.json from v1 to v2" profile.json; fi  # failures: log_warn + ACTION inside
+    ui_register "$dir" alias "$alias" false || reg=$?  # failure or skip: recorded inside; the migration is committed either way
+    if [ -d "$dir/.git" ]; then ui_commit "$dir" "Migrate profile.json from v1 to v2" profile.json; fi  # failures: write_action inside
     if [ "$reg" -eq 1 ]; then return 1; fi
     return 0
 }
@@ -888,42 +876,43 @@ fs.writeFileSync(dst, JSON.stringify(v2, null, 2) + "\n");
 # scaffolded with this machine's profile (decision 6), sessions/, .gitattributes,
 # .gitignore, README; committed; then a private GitHub repo is created and pushed
 # (the scaffold reaches the remote, N-Q2; asked on a terminal, default yes).
-# Writes the "dotprofile" row. Returns 0, 1 failed (ERROR row).
+# Writes the "dotprofile" OK record. Returns 0, 1 failed (one error).
 ui_create_dotprofile() {
-    local dir="$1" out grc=0 ans="y" reg=0 d
+    local dir="$1" out grc=0 ans="y" reg=0 d mk_out="" mk_rc=0 wr_out="" wr_rc=0
     d=$(display_path "$dir")
     log "user init: creating the dotprofile $d"
-    if ! mkdir -p "$dir/sessions"; then
-        log_error "user init: could not create $d"
-        write_summary ERROR "dotprofile" "create failed"
+    mk_out=$(mkdir -p "$dir/sessions" 2>&1) || mk_rc=$?
+    if [ "$mk_rc" -ne 0 ]; then
+        write_error "dotprofile" "could not create $d" "$(error_reason "$mk_out" "$mk_rc")"
         return 1
     fi
-    ui_register_flow "$dir" false || reg=1  # failure: logged + ERROR row inside; the repo is still created
-    if ! { printf '* text=auto eol=lf\n*.jsonl text eol=lf\n' > "$dir/.gitattributes" \
+    ui_register_flow "$dir" false || reg=1  # failure: recorded inside; the repo is still created
+    # 2>&1 on the group: a failed redirection's message is the reason
+    wr_out=$( { printf '* text=auto eol=lf\n*.jsonl text eol=lf\n' > "$dir/.gitattributes" \
         && printf '.scratch/\n*.bak.*\n.DS_Store\n' > "$dir/.gitignore" \
         && printf '# %s\n\nPrivate user repo for session archives and profile data.\nSee [aitools](https://github.com/%s/aitools) for details.\n' \
-            "$repo_name" "$gh_user" > "$dir/README.md"; }; then
-        log_error "user init: could not write the dotprofile files in $d"
-        write_summary ERROR "dotprofile" "create failed"
+            "$repo_name" "$gh_user" > "$dir/README.md"; } 2>&1 ) || wr_rc=$?
+    if [ "$wr_rc" -ne 0 ]; then
+        write_error "dotprofile" "could not write the dotprofile files in $d" "$(error_reason "$wr_out" "$wr_rc")"
         return 1
     fi
+    # The chain stops at the first failing git command, so out holds its output
     out=$(git -C "$dir" init -b main 2>&1) || grc=$?
     if [ "$grc" -eq 0 ] && [ -n "${UI_ID_NAME:-}" ]; then out=$(git -C "$dir" config user.name "$UI_ID_NAME" 2>&1) || grc=$?; fi
     if [ "$grc" -eq 0 ] && [ -n "${UI_ID_EMAIL:-}" ]; then out=$(git -C "$dir" config user.email "$UI_ID_EMAIL" 2>&1) || grc=$?; fi
     if [ "$grc" -eq 0 ]; then out=$(git -C "$dir" add -A 2>&1) || grc=$?; fi
     if [ "$grc" -eq 0 ]; then out=$(git -C "$dir" commit -m "Initial commit: profile and session archive structure" 2>&1) || grc=$?; fi
-    ui_log_lines "git: " "$out"
     if [ "$grc" -ne 0 ]; then
-        log_error "user init: git init / first commit failed in $d (exit $grc, see deploy.log) -- commit it by hand, then run: aitools user init"
-        write_summary ERROR "dotprofile" "first commit failed"
-        ui_action "commit the dotprofile in $d, then run: aitools user init"
+        # error_reason logs git's output as detail lines
+        write_error "dotprofile" "git init / first commit failed in $d (exit $grc)" "$(error_reason "$out" "$grc")"
+        write_summary ACTION "" "commit the dotprofile in $d, then run: aitools user init"
         return 1
     fi
+    ui_log_lines "git: " "$out"
     log_ok "user init: dotprofile created and committed"
     if ! command -v gh >/dev/null 2>&1; then
-        log_warn "user init: gh not found -- the dotprofile was not pushed; create the private GitHub repo $repo_name and push it"
-        write_summary WARN "dotprofile" "created, not pushed"
-        ui_action "Run: gh repo create $repo_name --private --source $d --push"
+        write_action "dotprofile" "dotprofile created, not pushed: gh not found -- create the private GitHub repo $repo_name and push it" \
+            "Run: gh repo create $repo_name --private --source $d --push"
         return "$reg"
     fi
     if ui_can_ask; then
@@ -932,9 +921,9 @@ ui_create_dotprofile() {
     case "$ans" in
         y|yes) ;;
         *)
-            log_warn "user init: GitHub repo not created -- the dotprofile stays local; create it and push: gh repo create $repo_name --private --source $d --push"
-            write_summary WARN "dotprofile" "created, not pushed"
-            ui_action "Run: gh repo create $repo_name --private --source $d --push"
+            # A decline stays a warning: it leaves the dotprofile unpushed
+            write_action "dotprofile" "dotprofile created, not pushed (you answered no) -- create it and push: gh repo create $repo_name --private --source $d --push" \
+                "Run: gh repo create $repo_name --private --source $d --push"
             return "$reg" ;;
     esac
     grc=0
@@ -943,13 +932,14 @@ ui_create_dotprofile() {
     else
         out=$(GIT_TERMINAL_PROMPT=0 GIT_SSH_COMMAND="${GIT_SSH_COMMAND:-ssh -o BatchMode=yes}" gh repo create "$repo_name" --private --source "$dir" --push 2>&1) || grc=$?
     fi
-    ui_log_lines "gh repo create: " "$out"
     if [ "$grc" -ne 0 ]; then
-        log_warn "user init: gh repo create failed (exit $grc, see deploy.log) -- the dotprofile stays local; run: gh repo create $repo_name --private --source $d --push"
-        write_summary WARN "dotprofile" "created, not pushed"
-        ui_action "Run: gh repo create $repo_name --private --source $d --push"
+        # A failed optional step: a warning, with its reason (error_reason logs gh's
+        # output as detail lines)
+        write_action "dotprofile" "gh repo create failed (exit $grc): $(error_reason "$out" "$grc") -- the dotprofile stays local" \
+            "Run: gh repo create $repo_name --private --source $d --push"
         return "$reg"
     fi
+    ui_log_lines "gh repo create: " "$out"
     log_ok "user init: private GitHub repo $gh_user/$repo_name created and pushed"
     write_summary OK "dotprofile" "created"
     return "$reg"
@@ -959,20 +949,19 @@ ui_create_dotprofile() {
 # template when it is missing, committed (only that file) and pushed (Review3
 # INCIDENT: identity fallback, results checked, no `|| true`). Returns 0, 1 failed.
 ui_scaffold_claude_md() {
-    local dir="$1" dest="$1/claude/CLAUDE.md" src="$repo_path/shared/claude-shared.md"
+    local dir="$1" dest="$1/claude/CLAUDE.md" src="$repo_path/shared/claude-shared.md" cp_out="" cp_rc=0
     if [ -f "$dest" ]; then return 0; fi
     if [ ! -f "$src" ]; then
-        log_warn "user init: $(display_path "$src") not found -- claude/CLAUDE.md not created in the dotprofile"
-        write_summary WARN "claude template" "template missing"
+        write_warn "claude template" "$(display_path "$src") not found -- claude/CLAUDE.md not created in the dotprofile"
         return 0
     fi
-    if ! { mkdir -p "$dir/claude" && cp "$src" "$dest"; }; then
-        log_error "user init: could not create $(display_path "$dest")"
-        write_summary ERROR "claude template" "create failed"
+    cp_out=$( { mkdir -p "$dir/claude" && cp "$src" "$dest"; } 2>&1 ) || cp_rc=$?
+    if [ "$cp_rc" -ne 0 ]; then
+        write_error "claude template" "could not create claude/CLAUDE.md in the dotprofile" "$(error_reason "$cp_out" "$cp_rc")"
         return 1
     fi
     log_ok "user init: created claude/CLAUDE.md in the dotprofile (template with placeholders)"
-    if [ -d "$dir/.git" ]; then ui_commit "$dir" "Add claude/CLAUDE.md template" claude/CLAUDE.md; fi  # failures: log_warn + ACTION inside
+    if [ -d "$dir/.git" ]; then ui_commit "$dir" "Add claude/CLAUDE.md template" claude/CLAUDE.md; fi  # failures: write_action inside
     write_summary OK "claude template" "created"
     return 0
 }
@@ -984,7 +973,7 @@ ui_scaffold_claude_md() {
 # (D-TS13). The caller creates and shows the run summary (decision 3).
 user_init() {
     local rc=0 raw repos_dir user_repo_dir out crc=0 dn de hook_rc=0 hook_setup
-    local writer_args=() writer_cmd=() hook_cmd=() no_machine=false hook_direct=false hook_errs0=0 hook_detail=""
+    local writer_args=() writer_cmd=() hook_cmd=() no_machine=false
     gh_user=""; repo_name=""; machine_key=""; machine_alias=""; machine_owner=""
     # --force: no prompts here, and the review menus of setup-user-hooks take the source
     if $force; then export AITOOLS_FORCE=1; fi
@@ -1000,9 +989,8 @@ user_init() {
         read_tty_choice gh_user "none"
     fi
     if [ -z "$gh_user" ]; then
-        log_error "user init: GitHub username unknown (gh not signed in, no githubUser in config.json, no terminal to ask) -- run: gh auth login, then aitools user init"
-        write_summary ERROR "dotprofile" "GitHub user unknown"
-        ui_action "Run: gh auth login, then aitools user init"
+        write_error "dotprofile" "GitHub username unknown" "gh not signed in, no githubUser in config.json, no terminal to ask"
+        write_summary ACTION "" "Run: gh auth login, then aitools user init"
         return 1
     fi
     log "user init: GitHub user $gh_user"
@@ -1021,9 +1009,8 @@ user_init() {
     case "$repos_dir" in
         /*) ;;
         *)
-            log_error "user init: reposPath in $(display_path "$config") is not an absolute path ($repos_dir) -- set an absolute reposPath (or run: aitools install --repos-path <absolute path>), then run: aitools user init"
-            write_summary ERROR "dotprofile" "reposPath not absolute"
-            ui_action "Set an absolute reposPath in $(display_path "$config"), then run: aitools user init"
+            write_error "dotprofile" "reposPath not absolute" "'$repos_dir' in $(display_path "$config")"
+            write_summary ACTION "" "Set an absolute reposPath in $(display_path "$config"), then run: aitools user init"
             return 1 ;;
     esac
     user_repo_dir="$repos_dir/$repo_name"
@@ -1045,13 +1032,13 @@ user_init() {
         # --- Path 2: GitHub repo present, no local clone ---
         log "user init: cloning $gh_user/$repo_name to $(display_path "$user_repo_dir")"
         out=$(gh repo clone "$gh_user/$repo_name" "$user_repo_dir" 2>&1) || crc=$?
-        ui_log_lines "gh repo clone: " "$out"
         if [ "$crc" -ne 0 ]; then
-            log_error "user init: gh repo clone $gh_user/$repo_name failed (exit $crc, see deploy.log) -- clone it, then run: aitools user init"
-            write_summary ERROR "dotprofile" "clone failed"
-            ui_action "Run: gh repo clone $gh_user/$repo_name $(display_path "$user_repo_dir"), then aitools user init"
+            # error_reason logs gh's output as detail lines
+            write_error "dotprofile" "gh repo clone $gh_user/$repo_name failed (exit $crc)" "$(error_reason "$out" "$crc")"
+            write_summary ACTION "" "Run: gh repo clone $gh_user/$repo_name $(display_path "$user_repo_dir"), then aitools user init"
             return 1
         fi
+        ui_log_lines "gh repo clone: " "$out"
         write_summary OK "dotprofile" "cloned"
         # Git identity for this clone from the profile, so the commits below work on a
         # fresh machine (Review3 #82 minor 8: results checked)
@@ -1063,7 +1050,7 @@ user_init() {
                 out=$(git -C "$user_repo_dir" config user.name "$dn" 2>&1) || crc=$?
                 if [ "$crc" -eq 0 ]; then out=$(git -C "$user_repo_dir" config user.email "$de" 2>&1) || crc=$?; fi
                 if [ "$crc" -ne 0 ]; then
-                    log_warn "user init: could not set the git identity of the clone (exit $crc: $out) -- commits use git's own identity"
+                    write_warn "dotprofile" "could not set the git identity of the clone (exit $crc: $out) -- commits use git's own identity"
                 fi
             fi
         fi
@@ -1076,8 +1063,9 @@ user_init() {
     # This machine without a profile at the end (skipped at a prompt, refused, failed)
     # is one outcome with one exit code, 1 (Review3 #82 minor 3)
     if [ -z "$machine_key" ]; then
-        # A skip at a prompt wrote a WARN row only: name the reason for the exit code (review n1)
-        if [ "$rc" -eq 0 ]; then log_error "machine profile: this machine is not registered (skipped) -- run: aitools user init"; fi
+        # A skip at a prompt recorded its warning: name the reason for the exit code
+        # (review n1), at info (lead decision: the skip already has its warning)
+        if [ "$rc" -eq 0 ]; then log "machine profile: this machine is not registered (skipped) -- run: aitools user init"; fi
         rc=1
         # Reported here: setup-user-config gets --no-machine, so it adds no second
         # machine-profile ERROR / ACTION (M3-FINISH item 2). Decided here, not from an
@@ -1097,67 +1085,31 @@ user_init() {
         log_detail "user init: machine id undetectable -- --machine-id not passed (the writer keeps the cached machineId)"
         machine_key=""
     elif [ -n "$machine_key" ] && [ "$machine_owner" != "this" ]; then
-        log_error "user init: profile $machine_key is not this machine's (owner ${machine_owner:-unknown}) -- not passed to setup-user-config"
-        write_summary ERROR "machine profile" "not this machine's profile"
+        write_error "machine profile" "profile $machine_key not passed to setup-user-config" "it is not this machine's (owner ${machine_owner:-unknown})"
         machine_key=""; rc=1
     fi
     # Both child scripts run through the lib relay (audit A-12, A-13): their lines
-    # are shown and mirrored to deploy.jsonl, their warnings are counted here, and a
-    # failed child is one error (logged by the relay) with an ERROR row of its own,
-    # or the relay's ("script failed (exit N)") when it died before writing one.
-    case "$(uname -s)" in
-        MINGW*|MSYS*|CYGWIN*)
-            writer_args=(-GithubUser "$gh_user" -UserRepoPath "$(cygpath -w "$user_repo_dir")")
-            if [ -n "$machine_key" ]; then writer_args+=(-MachineId "$machine_key")
-            elif $no_machine; then writer_args+=(-NoMachine); fi
-            writer_cmd=(pwsh -NoProfile -ExecutionPolicy Bypass
-                -File "$(cygpath -w "$repo_path/scripts/setup-user-config.ps1")" "${writer_args[@]}")
-            ;;
-        *)
-            writer_args=(--github-user "$gh_user" --user-repo-path "$user_repo_dir")
-            if [ -n "$machine_key" ]; then writer_args+=(--machine-id "$machine_key")
-            elif $no_machine; then writer_args+=(--no-machine); fi
-            writer_cmd=("${BASH:-bash}" "$repo_path/scripts/setup-user-config.sh" "${writer_args[@]}")
-            ;;
-    esac
+    # are shown and mirrored to deploy.jsonl, and a failed child is one error of user
+    # init, recorded by the relay only when the child recorded none
+    # (reference/logging.md 8.3).
+    writer_args=(--github-user "$gh_user" --user-repo-path "$user_repo_dir")
+    if [ -n "$machine_key" ]; then writer_args+=(--machine-id "$machine_key")
+    elif $no_machine; then writer_args+=(--no-machine); fi
+    writer_cmd=("${BASH:-bash}" "$repo_path/scripts/setup-user-config.sh" "${writer_args[@]}")
     if ! run_child_relayed --summary-tool "aitools config" "user init: setup-user-config" "${writer_cmd[@]}"; then
-        rc=1   # the relay logged the failure (exit $AITLIB_CHILD_RC) and its row
+        rc=1   # the relay counted the failure (exit $AITLIB_CHILD_RC) and, when needed, recorded it
     fi
 
     # Session archive hook. Exit 2 = the user aborted in the review menu (D-TS13):
-    # stop with exit 2 (the relay records it: one error, ERROR "claude hooks"
-    # "aborted (exit 2)" unless the hook script wrote a row); any other failure is
-    # logged by the relay.
+    # stop with exit 2 (the relay records it once: ERROR "claude hooks" "user init:
+    # setup-user-hooks failed (exit 2)" "aborted by user", unless the hook script
+    # recorded an abort record itself); any other failure is counted by the relay.
     log "user init: deploying the session archive hook"
-    case "$(uname -s)" in
-        MINGW*|MSYS*|CYGWIN*)
-            # Not relayed (review B M-1): the PowerShell review menus write their prompt
-            # with [Console]::Write and no newline; through the relay's line reader it
-            # would stay hidden until the user answered. Run directly, as before; the
-            # failure is counted and its ERROR row written by the relay's rule below.
-            hook_setup="$repo_path/scripts/setup-user-hooks.ps1"
-            hook_cmd=(pwsh -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$hook_setup")")
-            hook_direct=true
-            ;;
-        *)
-            hook_setup="$repo_path/scripts/setup-user-hooks.sh"
-            hook_cmd=("${BASH:-bash}" "$hook_setup")
-            ;;
-    esac
+    hook_setup="$repo_path/scripts/setup-user-hooks.sh"
+    hook_cmd=("${BASH:-bash}" "$hook_setup")
     if [ ! -f "$hook_setup" ]; then
         hook_rc=127
-    elif $hook_direct; then
-        _aitlib_summary_errors hook_errs0
-        "${hook_cmd[@]}" || hook_rc=$?
-        if [ "$hook_rc" -ne 0 ]; then
-            # The relay's outcome for the same exit (run_child_relayed): one error and
-            # the row "aborted (exit 2)" / "script failed (exit N)" unless the child
-            # wrote an ERROR row of its own
-            if [ "$hook_rc" -eq 2 ]; then hook_detail="aborted (exit 2)"; else hook_detail="script failed (exit $hook_rc)"; fi
-            log_error "user init: $(basename "$hook_setup") ${hook_detail#script } -- see $LOG_DISPLAY"
-            _aitlib_child_row "claude hooks" "$hook_errs0" "$hook_detail"
-        fi
-    elif ! run_child_relayed --summary-tool "claude hooks" "user init: $(basename "$hook_setup")" "${hook_cmd[@]}"; then
+    elif ! run_child_relayed --summary-tool "claude hooks" "user init: setup-user-hooks" "${hook_cmd[@]}"; then
         hook_rc="$AITLIB_CHILD_RC"
         if [ "$hook_rc" -eq 0 ]; then hook_rc=1; fi   # error lines with exit 0: a failure
     fi
@@ -1166,11 +1118,10 @@ user_init() {
         return 2
     fi
     if [ "$hook_rc" -eq 127 ]; then
-        log_error "user init: $(display_path "$hook_setup") not found -- the session archive hook was not deployed"
-        write_summary ERROR "claude hooks" "setup script missing"
+        write_error "claude hooks" "session archive hook not deployed" "$(display_path "$hook_setup") not found"
         rc=1
     elif [ "$hook_rc" -ne 0 ]; then
-        rc=1   # the relay logged the failure and its row
+        rc=1   # the relay counted the failure and, when needed, recorded it
     fi
     if [ "$rc" -eq 0 ]; then
         log_ok "user init: done -- sessions will be archived to $(display_path "$user_repo_dir/sessions/")"
@@ -1201,19 +1152,23 @@ repo_version() {
 }
 
 # deploy_abort SCRIPT -- deploy-harness exited 2: the user chose [x]abort at a review
-# menu (D-TS13; abort ends the whole run, T-Q3). The remaining deploy steps are not
-# run; the caller shows the summary and returns 2. Parity: Invoke-DeployAbort in
-# aitools.ps1.
+# menu (D-TS13; abort ends the whole run, T-Q3). The relay (--abort-warn) recorded
+# the one warning, "harness files" "aborted by user"; this only logs it. The
+# remaining deploy steps are not run; the caller shows the summary and returns 2.
+# Parity: Invoke-DeployAbort in aitools.ps1.
 deploy_abort() {
     deploy_aborted=true
     log "$1: aborted by user at a review menu -- remaining deploy steps not run"
-    write_summary WARN "harness files" "aborted by user"
 }
 
-# Deploy all config scripts from the repo's scripts/ directory.
-# On Windows (Git Bash), calls .ps1 variants via pwsh.
-# Child scripts log to LOG_FILE themselves (via tee/Add-Content), so we
-# redirect stdout to /dev/null to prevent double-logging.
+# Deploy all config scripts from the repo's scripts/ directory. Each script is
+# checked with bash -n (a syntax error would exit 2, which reads as an abort) and
+# run relayed with its tool name (run_child_relayed --summary-tool): its lines reach
+# the console and deploy.jsonl, stdin stays the terminal (the review menus read
+# /dev/tty), and a failed script is one error of this run, recorded by the relay
+# only when the script recorded none (reference/logging.md 8.3). deploy-harness
+# runs first with --abort-warn: its [x]abort is one warning and stops the run.
+# Returns the number of failed scripts.
 deploy_configs() {
     local script_dir="$1"
     local errors=0
@@ -1221,121 +1176,52 @@ deploy_configs() {
     export AITOOLS_DEPLOY=1
     if $dry_run; then export AITOOLS_DRY_RUN=1; fi
     if $force; then export AITOOLS_FORCE=1; fi
-    case "$(uname -s)" in
-        MINGW*|MSYS*|CYGWIN*)
-            if ! command -v pwsh &>/dev/null; then
-                log_error "pwsh (PowerShell 7) not found. Install: winget install --id Microsoft.PowerShell --source winget"
-                return 1
+    # deploy-harness first: it fills ~/.aitools and runs the config writer
+    # (setup-user-config) itself, so the writer is not in this list (once per run)
+    local deploy_scripts="deploy-harness.sh setup-user-claude.sh setup-user-mcp.sh setup-user-skills.sh setup-cursor-ide-mcp.sh setup-user-cursor.sh setup-user-settings.sh setup-user-hooks.sh"
+    for script in $deploy_scripts; do
+        local script_path="$script_dir/$script" tool
+        # The tool name the script records under (the tool name table,
+        # reference/script-standards-detail.md), the relay's --summary-tool; a
+        # script that records under several tools gets the first (A6 Q7). Parity:
+        # Deploy-Configs in aitools.ps1.
+        case "${script%.sh}" in
+            deploy-harness)       tool="harness files" ;;
+            setup-user-claude)    tool="claude.md" ;;
+            setup-user-mcp)       tool="claude mcp" ;;
+            setup-user-skills)    tool="skills" ;;
+            setup-cursor-ide-mcp) tool="cursor ide mcp" ;;
+            setup-user-cursor)    tool="cursor cli" ;;
+            setup-user-settings)  tool="claude settings" ;;
+            setup-user-hooks)     tool="claude hooks" ;;
+            *)                    tool="${script%.sh}" ;;
+        esac
+        if [ -f "$script_path" ]; then
+            local syntax_out syntax_rc=0
+            syntax_out=$(bash -n "$script_path" 2>&1) || syntax_rc=$?
+            if [ "$syntax_rc" -ne 0 ]; then
+                write_error "$tool" "$script syntax check failed -- skipped" "$(error_reason "$syntax_out" "$syntax_rc")"
+                errors=$((errors + 1))
+                continue
             fi
-            # deploy-harness first: it fills ~/.aitools and runs the config writer
-            # (setup-user-config) itself, so the writer is not in this list (once per run)
-            local deploy_scripts="deploy-harness.ps1 setup-user-claude.ps1 setup-user-mcp.ps1 setup-user-skills.ps1 setup-cursor-ide-mcp.ps1 setup-user-cursor.ps1 setup-user-settings.ps1 setup-user-hooks.ps1"
-            for script in $deploy_scripts; do
-                local script_path="$script_dir/$script"
-                if [ -f "$script_path" ]; then
-                    # Validate PS1 syntax before executing; each parse error is
-                    # printed by the check and logged as detail.
-                    local parse_out parse_rc=0 parse_line
-                    parse_out=$(pwsh -NoProfile -Command "
-                        \$e = \$null
-                        \$null = [System.Management.Automation.Language.Parser]::ParseFile('$(cygpath -w "$script_path")', [ref]\$null, [ref]\$e)
-                        foreach (\$x in \$e) { 'line ' + \$x.Extent.StartLineNumber + ': ' + \$x.Message }
-                        if (\$e.Count -gt 0) { exit 1 }
-                    " 2>&1) || parse_rc=$?
-                    if [ "$parse_rc" -ne 0 ]; then
-                        while IFS= read -r parse_line; do
-                            if [ -n "$parse_line" ]; then log_detail "$script parse: $parse_line"; fi
-                        done <<< "$parse_out"
-                        log_error "$script has parse errors -- skipped (see $LOG_DISPLAY)"
-                        write_summary ERROR "${script%.ps1}" "parse errors -- skipped"
-                        errors=$((errors + 1))
-                        continue
-                    fi
-                    # Run without output redirection -- child PS1 scripts log to
-                    # deploy.log via [IO.File]::AppendAllText. PowerShell's 2>> holds
-                    # an exclusive file lock that blocks the child's AppendAllText.
-                    # deploy-harness.ps1 is not relayed here: a PS1 review prompt is
-                    # written to stdout without a newline, and a relay reading pwsh's
-                    # stdout line by line would hold it until the user answered.
-                    local script_rc=0 row_tool="${script%.ps1}"
-                    if [ "$script" = "deploy-harness.ps1" ]; then row_tool="harness files"; fi
-                    pwsh -NoProfile -ExecutionPolicy Bypass \
-                        -File "$(cygpath -w "$script_path")" || script_rc=$?
-                    if [ "$script" = "deploy-harness.ps1" ] && [ "$script_rc" -eq 2 ]; then
-                        deploy_abort "$script"
-                        break
-                    fi
-                    if [ "$script_rc" -ne 0 ]; then
-                        log_error "$script failed (exit $script_rc) -- see $LOG_DISPLAY"
-                        write_summary ERROR "$row_tool" "script failed (exit $script_rc)"
-                        errors=$((errors + 1))
-                    fi
-                else
-                    log_warn "$script not found -- skipping"
+            local abort_opt=()
+            if [ "$script" = "deploy-harness.sh" ]; then abort_opt=(--abort-warn); fi
+            if ! run_child_relayed --summary-tool "$tool" ${abort_opt[@]+"${abort_opt[@]}"} "$script" "${BASH:-bash}" "$script_path"; then
+                if [ "$script" = "deploy-harness.sh" ] && [ "$AITLIB_CHILD_RC" -eq 2 ]; then
+                    deploy_abort "$script"
+                    break
                 fi
-                # Show cloud MCP status after setup-user-mcp
-                case "$script" in
-                    setup-user-mcp.*) show_cloud_mcp install setup-user-mcp ;;
-                esac
-            done
-            ;;
-        *)
-            # deploy-harness first: it fills ~/.aitools and runs the config writer
-            # (setup-user-config) itself, so the writer is not in this list (once per run)
-            local deploy_scripts="deploy-harness.sh setup-user-claude.sh setup-user-mcp.sh setup-user-skills.sh setup-cursor-ide-mcp.sh setup-user-cursor.sh setup-user-settings.sh setup-user-hooks.sh"
-            for script in $deploy_scripts; do
-                local script_path="$script_dir/$script"
-                if [ -f "$script_path" ]; then
-                    # Validate bash syntax before executing; bash -n's messages
-                    # are logged as detail.
-                    local syntax_out syntax_rc=0 syntax_line
-                    syntax_out=$(bash -n "$script_path" 2>&1) || syntax_rc=$?
-                    if [ "$syntax_rc" -ne 0 ]; then
-                        while IFS= read -r syntax_line; do
-                            if [ -n "$syntax_line" ]; then log_detail "$script syntax: $syntax_line"; fi
-                        done <<< "$syntax_out"
-                        log_error "$script has syntax errors -- skipped (see $LOG_DISPLAY)"
-                        write_summary ERROR "${script%.sh}" "syntax errors -- skipped"
-                        errors=$((errors + 1))
-                        continue
-                    fi
-                    # Run without output redirection -- child scripts log to
-                    # deploy.log via >> append. Removing redirection ensures
-                    # parity with the Windows fix and lets errors surface.
-                    local script_rc=0
-                    if [ "$script" = "deploy-harness.sh" ]; then
-                        # Relayed (aitools-lib run_child_relayed): stdout to the console
-                        # and deploy.jsonl; stdin stays the terminal (the review menu
-                        # reads /dev/tty). The lib logs the error for a failed run.
-                        run_child_relayed "$script" "${BASH:-bash}" "$script_path" || script_rc="$AITLIB_CHILD_RC"
-                        # Exit 0 with error lines: the lib logged it; count it as a failure
-                        if [ "$script_rc" -eq 0 ] && [ "$AITLIB_CHILD_ERRORS" -gt 0 ]; then script_rc=1; fi
-                        if [ "$script_rc" -eq 2 ]; then
-                            deploy_abort "$script"
-                            break
-                        fi
-                        if [ "$script_rc" -ne 0 ]; then
-                            write_summary ERROR "harness files" "script failed (exit $script_rc)"
-                            errors=$((errors + 1))
-                        fi
-                        continue
-                    fi
-                    bash "$script_path" || script_rc=$?
-                    if [ "$script_rc" -ne 0 ]; then
-                        log_error "$script failed (exit $script_rc) -- see $LOG_DISPLAY"
-                        write_summary ERROR "${script%.sh}" "script failed (exit $script_rc)"
-                        errors=$((errors + 1))
-                    fi
-                else
-                    log_warn "$script not found -- skipping"
-                fi
-                # Show cloud MCP status after setup-user-mcp
-                case "$script" in
-                    setup-user-mcp.*) show_cloud_mcp install setup-user-mcp ;;
-                esac
-            done
-            ;;
-    esac
+                # Counted (and, when needed, recorded) by the relay: one error of this run
+                errors=$((errors + 1))
+            fi
+        else
+            write_warn "$tool" "$script not found -- skipped"
+        fi
+        # Show cloud MCP status after setup-user-mcp
+        case "$script" in
+            setup-user-mcp.*) show_cloud_mcp install ;;
+        esac
+    done
 
     # [x]abort in deploy-harness: the run stops here (the caller returns 2)
     if $deploy_aborted; then
@@ -1345,8 +1231,9 @@ deploy_configs() {
         return "$errors"
     fi
 
-    # Best-effort: mirror relay.md into ~/.cursor/AGENTS.md (Cursor IDE).
-    # Non-fatal if Python or sync fails.
+    # Best-effort: mirror relay.md into ~/.cursor/AGENTS.md (Cursor IDE). The
+    # library's run_relay_sync logs the sync's output as detail lines and records a
+    # failure as one "relay sync" warning, with its reason.
     local sync_py="$script_dir/sync-relay-to-cursor-agents.py"
     if [ -f "$sync_py" ]; then
         local sync_args=()
@@ -1354,21 +1241,19 @@ deploy_configs() {
         # Deploy-formatted line comes from Python when AITOOLS_SYNC_DEPLOY_LOG=1 (not --dry-run).
         if ! $dry_run; then export AITOOLS_SYNC_DEPLOY_LOG=1; fi
         if command -v python3 &>/dev/null; then
-            if python3 "$sync_py" "${sync_args[@]}" >>"$LOG_FILE" 2>&1; then
-                if $dry_run; then log_ok "relay→AGENTS sync (dry-run)"; fi
-            else
-                log_warn "sync-relay-to-cursor-agents.py failed (non-fatal)"
+            if run_relay_sync python3 "$sync_py" ${sync_args[@]+"${sync_args[@]}"}; then
+                if $dry_run; then log_ok "relay -> AGENTS.md sync (dry-run)"; fi
             fi
         elif command -v py &>/dev/null; then
-            if py -3 "$sync_py" "${sync_args[@]}" >>"$LOG_FILE" 2>&1; then
-                if $dry_run; then log_ok "relay→AGENTS sync (dry-run)"; fi
-            else
-                log_warn "sync-relay-to-cursor-agents.py failed (non-fatal)"
+            if run_relay_sync py -3 "$sync_py" ${sync_args[@]+"${sync_args[@]}"}; then
+                if $dry_run; then log_ok "relay -> AGENTS.md sync (dry-run)"; fi
             fi
         else
-            log_warn "Python not found — skipping relay→AGENTS sync"
+            write_warn "relay sync" "Python not found -- relay -> AGENTS.md sync skipped"
         fi
-        unset AITOOLS_SYNC_DEPLOY_LOG 2>/dev/null || true
+        unset AITOOLS_SYNC_DEPLOY_LOG
+    else
+        write_warn "relay sync" "sync-relay-to-cursor-agents.py not found -- sync skipped"
     fi
 
     unset AITOOLS_DEPLOY
@@ -1391,13 +1276,13 @@ mcp_server_url() {
 }
 
 # Display cloud MCP servers from claude.ai configuration.
-# Usage: show_cloud_mcp <context> [script_name]
-#   context: "mcp" (concise header) or "install" (descriptive header)
-#   script_name: if set, uses structured logging with [timestamp] [script_name] prefix
+# Usage: show_cloud_mcp <context>
+#   context: "mcp" (`aitools mcp`: plain console lines) or "install" (the deploy
+#   sequence: one info log line per server, through the library, under this
+#   script's name)
 # Silent no-op if claude CLI unavailable or no cloud servers found.
 show_cloud_mcp() {
     local context="${1:-mcp}"
-    local script_name="${2:-}"
     command -v claude &>/dev/null || return 0
 
     local saved_claudecode="${CLAUDECODE:-}"
@@ -1424,13 +1309,12 @@ show_cloud_mcp() {
 
     [ -n "$parsed" ] || return 0
 
-    if [ -n "$script_name" ]; then
-        # Structured logging for deploy sequence
-        local ts
-        ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-        printf '[%s] [%s] Cloud MCP servers (configured at claude.ai):\n' "$ts" "$script_name"
+    if [ "$context" = "install" ]; then
+        # Deploy sequence: info lines through the library (also in deploy.log)
+        local line
+        log "Cloud MCP servers (configured at claude.ai):"
         while IFS= read -r line; do
-            printf '[%s] [%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$script_name" "$line"
+            log "$line"
         done <<< "$parsed"
     else
         echo ""
@@ -1807,22 +1691,9 @@ fi
 # ---------------------------------------------------------------------------
 
 if $do_dashboard; then
-    # Dashboard is a standalone script that handles its own logging and summary.
-    # Dispatch to aitools-dashboard.sh (macOS) or aitools-dashboard.ps1 (Windows).
-    case "$(uname -s)" in
-        MINGW*|MSYS*|CYGWIN*)
-            if ! command -v pwsh &>/dev/null; then
-                log_error "pwsh (PowerShell 7) not found"
-                return 1
-            fi
-            pwsh -NoProfile -ExecutionPolicy Bypass \
-                -File "$(cygpath -w "$repo_path/scripts/aitools-dashboard.ps1")" \
-                "${dashboard_args[@]}"
-            ;;
-        *)
-            bash "$repo_path/scripts/aitools-dashboard.sh" "${dashboard_args[@]}"
-            ;;
-    esac
+    # Dashboard is a standalone script that handles its own logging and summary
+    # (aitools-dashboard.sh; on Windows aitools.ps1 runs aitools-dashboard.ps1).
+    bash "$repo_path/scripts/aitools-dashboard.sh" ${dashboard_args[@]+"${dashboard_args[@]}"}
     return $?
 fi
 
@@ -1919,20 +1790,14 @@ if $do_user; then
     case "$user_subcmd" in
         init)
             # Decision 3: user init has its own run summary -- created before the user
-            # block (its rows and those of its child scripts), shown before it returns
-            AITOOLS_SUMMARY_FILE="$HOME/.aitools/run-summary.txt"
-            # A stale summary that cannot be removed would show an earlier run's rows (A-14)
-            if [ -e "$AITOOLS_SUMMARY_FILE" ] && ! rm -f "$AITOOLS_SUMMARY_FILE"; then
-                log_warn "user init: could not remove the old run summary $(display_path "$AITOOLS_SUMMARY_FILE") -- the summary panel may show an earlier run's rows"
-            fi
-            if ! { mkdir -p "$HOME/.aitools" && touch "$AITOOLS_SUMMARY_FILE"; }; then
-                log_warn "user init: could not create the run summary $(display_path "$AITOOLS_SUMMARY_FILE") -- the summary panel is not shown"
-            fi
-            export AITOOLS_SUMMARY_FILE
+            # block (its records and those of its child scripts) when no caller set
+            # one, and drawn before it returns only when it created it
+            # (reference/logging.md 8.4, 8.5: summary_begin / summary_end; a new temp
+            # file per run, so no earlier run's records can show)
+            summary_begin
             user_init_rc=0
             user_init || user_init_rc=$?
-            show_summary
-            unset AITOOLS_SUMMARY_FILE
+            summary_end
             return "$user_init_rc"
             ;;
         "")
@@ -2059,8 +1924,14 @@ if $do_sessions; then
             fi
             # No git push for a manual CLI archive (do_git left to the helper's
             # default; --no-op-on-missing handled inside). Pass the transcript.
+            archive_rc=0
             "$archive_py" "$archive_helper" archive \
-                --session "$full_id" --transcript "$transcript"
+                --session "$full_id" --transcript "$transcript" || archive_rc=$?
+            if [ "$archive_rc" -ne 0 ]; then
+                # The archiver logs its own cause in ait-harvest.log
+                log_error "session archive failed (exit $archive_rc) -- see ~/.aitools/logs/ait-harvest.log"
+                return 1
+            fi
             echo "Archive requested for $full_id (see ~/.aitools/logs/ait-harvest.log)"
             ;;
         move)
@@ -2117,13 +1988,22 @@ fi
 
 export AITOOLS_RUN_ID=$(head -c 6 /dev/urandom | od -An -tx1 | tr -d ' \n')
 
-# Init summary file for this run; child scripts append via AITOOLS_SUMMARY_FILE.
-# SUPPRESS=1 tells aitools-install.sh not to display it (we display after it returns).
-AITOOLS_SUMMARY_FILE="$HOME/.aitools/run-summary.txt"
-rm -f "$AITOOLS_SUMMARY_FILE"
-touch "$AITOOLS_SUMMARY_FILE"
-export AITOOLS_SUMMARY_FILE
-export AITOOLS_SUPPRESS_SUMMARY_DISPLAY=1
+# The run summary file (reference/logging.md 8.4, 8.5): created and exported here
+# when no caller set one (summary_begin); child scripts, the installer included,
+# record into it and draw nothing. Drawn once at the end, only by the process that
+# created it (summary_end).
+# Smart reload (below): the re-executed entry point inherits the file. The process
+# that created it is gone (exec), so it hands the ownership on
+# (AITOOLS_SUMMARY_OWNER_HANDOFF=1, exported only by the owner) and the reloaded
+# one takes it: it draws the panel, and the records written before the reload are
+# kept. (aitools-lib's summary_begin has no hand-off of its own: this sets its
+# owner flag.)
+summary_begin
+if [ "${AITOOLS_SUMMARY_OWNER_HANDOFF:-}" = "1" ] && [ -n "${AITOOLS_SUMMARY_FILE:-}" ]; then
+    AITLIB_SUMMARY_OWNER=true
+    log_detail "run summary: ownership taken over after the reload ($AITOOLS_SUMMARY_FILE)"
+fi
+unset AITOOLS_SUMMARY_OWNER_HANDOFF
 
 log "aitools $AITOOLS_INSTALLED_VERSION"
 
@@ -2154,7 +2034,9 @@ if $do_gitpull; then
     pulled_updates=false
     # Reset generated files before pull (line-ending diffs, mode changes)
     git -C "$repo_path" checkout HEAD -- deploy/ 2>/dev/null || true
-    if pull_out=$(cd "$repo_path" && git pull --tags origin main 2>&1); then
+    pull_rc=0
+    pull_out=$(cd "$repo_path" && git pull --tags origin main 2>&1) || pull_rc=$?
+    if [ "$pull_rc" -eq 0 ]; then
         if echo "$pull_out" | grep -q "Already up to date"; then
             log_ok "Already up to date"
         else
@@ -2162,11 +2044,9 @@ if $do_gitpull; then
             log_ok "Updated"
         fi
     else
-        while IFS= read -r _pull_line; do
-            if [ -n "$_pull_line" ]; then log_detail "git-pull: $_pull_line"; fi
-        done <<< "$pull_out"
-        log_error "git pull failed (see $LOG_DISPLAY)"
-        printf '%s\n' "$pull_out" >&2
+        # error_reason logs git's output as detail lines
+        write_error "source" "git pull failed" "$(error_reason "$pull_out" "$pull_rc")"
+        summary_end
         return 1
     fi
 else
@@ -2175,7 +2055,9 @@ else
     pulled_updates=false
     # Reset generated files before pull (line-ending diffs, mode changes)
     git -C "$repo_path" checkout HEAD -- deploy/ 2>/dev/null || true
-    if pull_out=$(cd "$repo_path" && git pull origin main 2>&1); then
+    pull_rc=0
+    pull_out=$(cd "$repo_path" && git pull origin main 2>&1) || pull_rc=$?
+    if [ "$pull_rc" -eq 0 ]; then
         if echo "$pull_out" | grep -q "Already up to date"; then
             log_ok "Already up to date"
         else
@@ -2183,17 +2065,9 @@ else
             log_ok "Updated"
         fi
     else
-        # Full output to the log first; the console keeps a 3-line preview.
-        while IFS= read -r _pull_line; do
-            if [ -n "$_pull_line" ]; then log_detail "git-pull: $_pull_line"; fi
-        done <<< "$pull_out"
-        if echo "$pull_out" | grep -qiE "could not resolve|unable to access|connection refused|connection timed out|no route to host"; then
-            log_warn "Could not reach remote — deploying from local checkout"
-        else
-            log_warn "git pull failed -- deploying from local checkout (see $LOG_DISPLAY)"
-            printf '%s\n' "$pull_out" | head -3 | sed 's/^/    /' >&2
-        fi
-        write_summary WARN "source" "stale local checkout (git pull failed)"
+        # One warning; its reason is git's own (e.g. "fatal: unable to access ...:
+        # Could not resolve host"); error_reason logs git's output as detail lines
+        write_warn "source" "git pull failed -- deploying from the local checkout: $(error_reason "$pull_out" "$pull_rc")"
     fi
 fi
 
@@ -2208,26 +2082,26 @@ if resolve_user_repo_path; then
         ur_pull_exit=0
         ur_pull_out=$(git -C "$user_repo_path" pull --ff-only --quiet 2>&1) || ur_pull_exit=$?
         if [ "$ur_pull_exit" -ne 0 ]; then
-            log_warn "user repo pull failed -- using local copy."
-            log_detail "user-repo-pull: $ur_pull_out"
+            # error_reason logs git's output as detail lines
+            write_warn "dotprofile" "dotprofile pull failed -- using the local copy: $(error_reason "$ur_pull_out" "$ur_pull_exit")"
         fi
     fi
-    # Forward slashes on Windows (C:/Users/...), the form Git Bash and pwsh both read
-    case "$(uname -s)" in
-        MINGW*|MSYS*|CYGWIN*)
-            if _urp_m=$(cygpath -m "$user_repo_path"); then user_repo_path="$_urp_m"
-            else log_detail "cygpath -m failed for $user_repo_path -- passed to build-deploy unchanged"; fi ;;
-    esac
     build_env=(AITOOLS_USER_REPO_PATH="$user_repo_path")
 fi
 
 # [2/N] Rebuild deploy scripts. The dotprofile resolved above reaches the build as
-# AITOOLS_USER_REPO_PATH, scoped to this one call (B5a Q1; PR #95 follow-up)
+# AITOOLS_USER_REPO_PATH, scoped to this one call (B5a Q1; PR #95 follow-up).
+# Relayed (run_child_relayed --summary-tool "build-deploy" --quiet): build-deploy
+# logs through the library itself (every line in deploy.log), the relay shows only
+# its warn and error lines, and a failed build is one error, recorded by the relay
+# when the build recorded none.
 log "Step 2/$STEPS: Rebuilding deploy scripts"
-if env ${build_env[@]+"${build_env[@]}"} bash "$repo_path/scripts/build-deploy.sh" >> "$LOG_FILE" 2>&1; then
+if run_child_relayed --summary-tool "build-deploy" --quiet "Step 2: build-deploy.sh" \
+    env ${build_env[@]+"${build_env[@]}"} "${BASH:-bash}" "$repo_path/scripts/build-deploy.sh"; then
     log_ok "Rebuilt"
 else
-    log_error "build failed (see $LOG_DISPLAY)"
+    # Counted and, when needed, recorded by the relay; the run stops here
+    summary_end
     return 1
 fi
 
@@ -2235,10 +2109,7 @@ fi
 # If so, self-update and re-exec so deploy_configs uses the current list.
 # Cost when lists match: one perl comparison (~1ms). No extra work.
 if [ -f "$repo_path/scripts/aitools" ]; then
-    case "$(uname -s)" in
-        MINGW*|MSYS*|CYGWIN*) _lp='local deploy_scripts=".*\.ps1"' ;;
-        *) _lp='local deploy_scripts=".*\.sh"' ;;
-    esac
+    _lp='local deploy_scripts=".*\.sh"'
     _repo_list=$(perl -ne "print if /^\s+$_lp/" "$repo_path/scripts/aitools" | tail -1)
     _self_list=$(perl -ne "print if /^\s+$_lp/" "$0" | tail -1)
     if [ -n "$_repo_list" ] && [ "$_repo_list" != "$_self_list" ]; then
@@ -2252,6 +2123,9 @@ if [ -f "$repo_path/scripts/aitools" ]; then
             chmod +x "$HOME/.local/bin/aitools"
             export AITOOLS_PREBUILD_DONE=1
             [ "$pulled_updates" = "true" ] && export AITOOLS_PULLED_UPDATES=1
+            # The reloaded entry point keeps this run's summary file and, when this
+            # process created it, draws it (X2: summary_begin above)
+            if [ "${AITLIB_SUMMARY_OWNER:-false}" = "true" ]; then export AITOOLS_SUMMARY_OWNER_HANDOFF=1; fi
             # Replay the ORIGINAL args (parse loop already shifted "$@" empty);
             # otherwise `install` degrades to the sync path on reload.
             exec "$HOME/.local/bin/aitools" ${_ORIG_ARGS[@]+"${_ORIG_ARGS[@]}"}
@@ -2276,50 +2150,36 @@ if $do_install; then
     # inherit this stdin and decide for themselves. --force makes every review
     # prompt take the source version (backup kept), terminal or not.
     if $force; then export AITOOLS_FORCE=1; fi
-    case "$(uname -s)" in
-        MINGW*|MSYS*|CYGWIN*)
-            # Windows: forward to PowerShell installer with translated flags
-            ps_args=()
-            local i=0
-            while [ $i -lt ${#passthrough[@]} ]; do
-                case "${passthrough[$i]}" in
-                    --skip-gh-auth)         ps_args+=("-SkipGhAuth") ;;
-                    --skip-drive-detection) ps_args+=("-SkipDriveDetection") ;;
-                    --repos-path)
-                        ps_args+=("-ReposPath")
-                        i=$((i + 1))
-                        ps_args+=("$(cygpath -w "${passthrough[$i]}")")
-                        ;;
-                    *) ps_args+=("${passthrough[$i]}") ;;
-                esac
-                i=$((i + 1))
-            done
-            pwsh -NoProfile -ExecutionPolicy Bypass \
-                -File "$(cygpath -w "$repo_path/scripts/aitools-install.ps1")" \
-                "${ps_args[@]}"
-            ;;
-        *)
-            bash "$repo_path/scripts/aitools-install.sh" "${passthrough[@]}"
-            ;;
-    esac
-    installer_rc=$?
+    # Relayed (run_child_relayed --summary-tool "aitools install" --abort-warn): its
+    # lines reach the console and, mirrored by this outermost relay, deploy.jsonl
+    # (inside the relay the installer writes no records of its own: logging.md
+    # 8.3); stdin stays the terminal (its prompts read /dev/tty); it records into
+    # this run's summary file and draws nothing. A failed installer is one error of
+    # this run (recorded by the relay only when the installer recorded none); its
+    # [x]abort (exit 2) was recorded inside it, once, as a warning.
+    installer_rc=0
+    if ! run_child_relayed --summary-tool "aitools install" --abort-warn "Step 3: aitools-install.sh" \
+        "${BASH:-bash}" "$repo_path/scripts/aitools-install.sh" ${passthrough[@]+"${passthrough[@]}"}; then
+        installer_rc="$AITLIB_CHILD_RC"
+        if [ "$installer_rc" -eq 0 ]; then installer_rc=1; fi   # error lines with exit 0: a failure
+    fi
     unset AITOOLS_FORCE
     echo ""
     # Exit 2 = the user chose [x]abort at a review menu (D-TS13): the run stops
-    if [ $installer_rc -eq 2 ]; then
+    if [ "$installer_rc" -eq 2 ]; then
         log "Installer aborted by user at a review menu -- run stopped (exit 2)"
-        show_summary
+        summary_end
         return 2
     fi
-    if [ $installer_rc -eq 0 ]; then
+    if [ "$installer_rc" -eq 0 ]; then
         log_ok "All up to date ($(repo_version "$repo_path"))"
-        # Session archive hint (after final status line)
+        # Session archive hint (after final status line): a hint, not a warning
         if ! read_config_key "$config" "userRepoPath" >/dev/null 2>&1; then
-            printf '\033[33mhint: To archive sessions across machines, run '\''aitools user init'\''.\033[0m\n'
+            log "hint: To archive sessions across machines, run 'aitools user init'."
         fi
         check_profile interactive
     else
-        log "Completed with errors (see $LOG_DISPLAY)" "error"
+        # Counted (and, when needed, recorded) by the relay
         overall_rc=1
     fi
 
@@ -2330,13 +2190,14 @@ elif $do_gitpull; then
     deploy_rc=$?
     # [x]abort in deploy-harness (D-TS13): show what ran and stop with exit 2
     if $deploy_aborted; then
-        show_summary
+        summary_end
         return 2
     fi
     if [ $deploy_rc -eq 0 ]; then
         log_ok "Done"
     else
-        log "Completed with $deploy_rc error(s)" "error"
+        # The errors were counted and recorded where they happened
+        log "Completed with $deploy_rc error(s) (see $LOG_DISPLAY)"
         overall_rc=1
     fi
 
@@ -2369,10 +2230,13 @@ elif $do_gitpull; then
             tag="(skipped)"
         else
             git -C "$repo_path" tag "$tag"
-            if git -C "$repo_path" push origin "$tag" 2>/dev/null; then
+            push_rc=0
+            push_out=$(git -C "$repo_path" push origin "$tag" 2>&1) || push_rc=$?
+            if [ "$push_rc" -eq 0 ]; then
                 log_ok "Tagged $tag"
             else
-                log_warn "Tagged $tag (local only -- push failed)"
+                # error_reason logs git's output as detail lines
+                log_warn "Tagged $tag (local only -- push failed): $(error_reason "$push_out" "$push_rc")"
             fi
         fi
     fi
@@ -2392,13 +2256,14 @@ else
     deploy_rc=$?
     # [x]abort in deploy-harness (D-TS13): show what ran and stop with exit 2
     if $deploy_aborted; then
-        show_summary
+        summary_end
         return 2
     fi
     if [ $deploy_rc -eq 0 ]; then
         log_ok "Done"
     else
-        log "Completed with $deploy_rc error(s)" "error"
+        # The errors were counted and recorded where they happened
+        log "Completed with $deploy_rc error(s) (see $LOG_DISPLAY)"
         overall_rc=1
     fi
 
@@ -2406,7 +2271,7 @@ else
 
     check_profile interactive
 
-    # Session archive hint (after final status line)
+    # Session archive hook (after the final status line, before the panel)
     settings_file="$HOME/.claude/settings.json"
     hook_installed=false
     if [ -f "$settings_file" ] && grep -q "session-archive.sh" "$settings_file" 2>/dev/null; then
@@ -2414,10 +2279,12 @@ else
     fi
     if [ "$hook_installed" = true ]; then
         if ! read_config_key "$config" "userRepoPath" >/dev/null 2>&1; then
-            printf '\033[33mWARNING: session archive hook installed but inactive -- userRepoPath not configured. Run '\''aitools user init'\''.\033[0m\n'
+            write_action "claude hooks" "session archive hook installed but inactive: userRepoPath not configured -- run: aitools user init" \
+                "Run: aitools user init (activates session archiving)"
         fi
     else
-        printf '\033[33mhint: session archive hook not installed. Run '\''aitools user init'\'' to set up.\033[0m\n'
+        # A hint, not a warning
+        log "hint: session archive hook not installed. Run 'aitools user init' to set up."
     fi
 fi
 
@@ -2439,33 +2306,10 @@ if [ -f "$repo_path/scripts/aitools" ]; then
         done <<< "$_syntax_out"
         log_warn "skipping bash self-update (new aitools has syntax errors; see $LOG_DISPLAY)"
     fi
-
-    # On Windows, also self-update aitools.ps1 (validate with current PS version first)
-    case "$(uname -s)" in
-        MINGW*|MSYS*|CYGWIN*)
-            if [ -f "$repo_path/scripts/aitools.ps1" ]; then
-                _parse_rc=0
-                _parse_out=$(pwsh -NoProfile -Command "
-                    \$e = \$null
-                    \$null = [System.Management.Automation.Language.Parser]::ParseFile('$(cygpath -w "$repo_path/scripts/aitools.ps1")', [ref]\$null, [ref]\$e)
-                    foreach (\$x in \$e) { 'line ' + \$x.Extent.StartLineNumber + ': ' + \$x.Message }
-                    if (\$e.Count -gt 0) { exit 1 }
-                " 2>&1) || _parse_rc=$?
-                if [ "$_parse_rc" -eq 0 ]; then
-                    sed 's/^\$AITOOLS_INSTALLED_VERSION = ".*"/$AITOOLS_INSTALLED_VERSION = "'"$new_version"'"/' \
-                        "$repo_path/scripts/aitools.ps1" > "$HOME/.local/bin/aitools.ps1"
-                else
-                    while IFS= read -r _parse_line; do
-                        if [ -n "$_parse_line" ]; then log_detail "aitools.ps1 parse: $_parse_line"; fi
-                    done <<< "$_parse_out"
-                    log_warn "skipping PS1 self-update (parse errors on this PowerShell version; see $LOG_DISPLAY)"
-                fi
-            fi
-            ;;
-    esac
 fi
 
-show_summary
+# The panel, only when this process created the run summary file (summary_begin)
+summary_end
 
 # Relay outbound: prompt if relay.md is dirty or main is ahead of origin (cross-machine OL)
 _rob="$repo_path/scripts/relay-outbound-prompt.sh"
@@ -2477,8 +2321,6 @@ if [ -f "$_rob" ]; then
 fi
 
 unset AITOOLS_RUN_ID
-unset AITOOLS_SUMMARY_FILE
-unset AITOOLS_SUPPRESS_SUMMARY_DISPLAY
 
 return "$overall_rc"
 }

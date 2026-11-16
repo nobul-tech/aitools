@@ -2,6 +2,7 @@ exit code: 1
 # ~/.cursor/rules (path md5)
 t.mdc 4e20e570eca9962c11c479c465eff448
 # summary rows
+ERROR|cursor rules|Failed: s.mdc|<TMP>/dangtarget/home/.cursor/rules/s.mdc is a dangling symlink -- not written through it
 DETAIL|cursor rules|failed: s.mdc
 DETAIL|cursor rules|added: t.mdc
-ERROR|cursor rules|1 failed
+OK|cursor rules|1 added, 1 failed

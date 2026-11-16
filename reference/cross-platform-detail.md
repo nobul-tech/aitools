@@ -102,10 +102,13 @@ compares each copy with the library is planned for when one does.
 
 ### Reporting a step that does not apply
 
-`write_environment_skip` / `Write-EnvironmentSkip` writes `OK` with detail
-`n/a (<environment>)`, matching the tool platform state `n/a`. Not `WARN`: nothing is wrong,
-and a WARN row promotes the script's later OK rows. Not "skipped": that word is governed as
-the user's choice in managed file deployment.
+`write_environment_skip` / `Write-EnvironmentSkip` logs one info line and writes one `OK`
+record with status `n/a (<environment>)`, matching the tool platform state `n/a`. The panel
+shows it as the tool's green line unless a warning or an error is recorded under the same
+tool name (`reference/logging.md` 8.5). Not a warning: a warning reports something that is
+wrong or that still needs the user (`reference/logging.md` 8.3 "What is a warning"), and a
+step that does not apply here is neither. Not "skipped": that word is governed as the
+user's choice in managed file deployment.
 
 ### Example (setup-user-mcp.sh, D-CHR2)
 

@@ -45,15 +45,13 @@ esac
 
 # Check that claude CLI is available
 if ! command -v claude &> /dev/null; then
-    log_error "'claude' CLI not found in PATH. Install Claude Code first: https://claude.ai/download"
-    write_summary ERROR "claude mcp" "claude CLI not found"
+    write_error "claude mcp" "MCP servers not registered" "'claude' CLI not found in PATH -- install Claude Code first: https://claude.ai/download"
     exit 1
 fi
 
 # Check that Node.js is available (required for Chrome DevTools MCP and settings merge)
 if ! command -v node &> /dev/null; then
-    log_error "Node.js not found. Install via 'aitools install' or manually: https://nodejs.org"
-    write_summary ERROR "claude mcp" "node not found"
+    write_error "claude mcp" "MCP servers not registered" "Node.js not found -- install it with aitools install or from https://nodejs.org"
     exit 1
 else
     log_ok "Node.js $(node --version) found"
@@ -79,8 +77,22 @@ mcp_current_count=0
 saved_claudecode="${CLAUDECODE:-}"
 unset CLAUDECODE
 
+# stderr goes to a temp file, not into the captured stdout: stdout is parsed by the
+# `name: details - status` pattern below, and stderr text could match it.
+LIST_ERR=""
+# 2>/dev/null: a mktemp failure is checked on the next line (fallback /dev/null)
+if ! LIST_ERR=$(mktemp 2>/dev/null); then LIST_ERR=""; fi
+if [ -z "$LIST_ERR" ] || [ ! -f "$LIST_ERR" ]; then
+    log_detail "mktemp failed -- the stderr of claude mcp list is not captured"
+    LIST_ERR=/dev/null
+fi
 mcp_list_rc=0
-mcp_list_output=$(claude mcp list 2>/dev/null) || mcp_list_rc=$?
+mcp_list_output=$(claude mcp list 2>"$LIST_ERR") || mcp_list_rc=$?
+mcp_list_err=""
+if [ "$LIST_ERR" != "/dev/null" ]; then
+    mcp_list_err=$(<"$LIST_ERR")
+    rm -f "$LIST_ERR"
+fi
 
 if [ -n "$saved_claudecode" ]; then
     export CLAUDECODE="$saved_claudecode"
@@ -100,7 +112,8 @@ if [ $mcp_list_rc -eq 0 ] && [ -n "$mcp_list_output" ]; then
     fi
     log_ok "Checked existing MCP config ($mcp_current_count servers found)"
 else
-    log_warn "Could not check existing MCP config; will re-add all servers"
+    # The reason: the command's stderr, else its stdout (error_reason logs it as detail)
+    write_warn "claude mcp" "could not read the MCP server list -- re-adding all servers: $(error_reason "${mcp_list_err:-$mcp_list_output}" "$mcp_list_rc")"
 fi
 
 # Check if a server's current config matches expected.
@@ -130,12 +143,18 @@ add_mcp_server() {
     fi
 
     log "Adding $name..."
-    if claude mcp add "$@"; then
+    # Captured, not streamed, so a failure carries its reason (reference/logging.md 8.3)
+    local add_rc=0 add_out="" add_line
+    add_out=$(claude mcp add "$@" 2>&1) || add_rc=$?
+    if [ "$add_rc" -eq 0 ]; then
+        while IFS= read -r add_line; do
+            if [ -n "$add_line" ]; then log_detail "claude mcp add $name: $add_line"; fi
+        done <<< "$add_out"
         log_ok "$name configured"
         MCP_CHANGED=true
     else
-        log_error "Failed to add $name"
-        write_summary ERROR "claude mcp" "failed to add $name"
+        # error_reason logs the output as detail lines
+        write_error "claude mcp" "claude mcp add $name failed" "$(error_reason "$add_out" "$add_rc")"
     fi
 
     # Restore CLAUDECODE

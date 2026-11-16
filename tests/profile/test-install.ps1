@@ -1,35 +1,38 @@
-# test-install.ps1 -- the installer's Step 3 and Step 5 helpers and log override on
+# test-install.ps1 -- the installer's Step 3 and Step 5 helpers and log options on
 # the lib relay (M3-FINISH item 7, FIX-2; audit A-1, A-16, A-17, A-18), PowerShell
 # half: scripts/aitools-install.ps1 with scripts/aitools-lib.ps1. The Windows
 # harness of this suite; tests/profile/test-install.sh is the macOS/Linux harness
 # (scripts/aitools-install.sh with scripts/aitools-lib.sh).
 #
 # The full installer cannot run here (incident #89). Each case extracts the two
-# blocks "# --- BEGIN install log helpers" and "# --- BEGIN install log override"
+# blocks "# --- BEGIN install log helpers" and "# --- BEGIN install log options"
 # from the installer, dot-sources aitools-lib.ps1 with Initialize-Logging
 # "aitools-install" in a child pwsh under an isolated HOME, and runs one step
 # against a stub:
-#   step5-warn     a writer warning is counted in the installer's warnings, its
-#                  lines reach deploy.jsonl (one run_id with the installer's own)
-#                  and the console; its own OK row is kept
+#   step5-warn     a writer warning is the writer's own, not counted in the
+#                  installer's warnings (reference/logging.md 8.3); its lines
+#                  reach deploy.jsonl (one run_id with the installer's own) and
+#                  the console; its own OK row is kept
 #   step5-runid    the child sees the installer's AITOOLS_RUN_ID, every record has it
 #   step5-crash    a writer that dies without a row: one error and the relay's
-#                  "ERROR|aitools config|script failed (exit 1)"
+#                  "ERROR|aitools config|<label> failed (exit 1)|<reason>"
 #   step5-ownrow   a writer that wrote its own ERROR row and exits 1: one error,
 #                  no second row
-#   jsonl-blocked  deploy.jsonl cannot be written: one warning, the run goes on
+#   jsonl-blocked  deploy.jsonl cannot be written: one warning of the installer
+#                  (the writer's warning stays the writer's), the run goes on
 #   step3-*        Step 3 (Resolve-ReposDir): a relative path made absolute and
 #                  created; a path that cannot be created is one error and one
 #                  ERROR row "aitools config"
-#   log-*          the log override's deploy.log write is fail-safe
+#   log-*          the library's deploy.log write is fail-safe
 #                  (reference/logging.md section 5; incident #174): with deploy.log
 #                  a directory, or held open with no sharing, under
 #                  $ErrorActionPreference = "Stop" and inside a try, the run goes
 #                  on, the console lines print and the counters count; a writable
 #                  deploy.log still gets the lines
-#   relaysync-*    Step 22's Invoke-RelaySync: the sync runs and its exit code is
-#                  returned whether or not deploy.log can be written; its output
-#                  (stdout and stderr) reaches a writable one
+#   relaysync-*    Step 22's Invoke-RelaySync (aitools-lib): the sync runs and its
+#                  exit code is returned whether or not deploy.log can be written;
+#                  its output (stdout and stderr) reaches a writable one; a failed
+#                  sync is one "relay sync" warning with its reason
 #
 # Platform targeting (plans/ci-platform-targeting.md; commander 2026-11-14: "sh
 # scripts and tests should only run on linux/mac and ps1 on windows"): this
@@ -142,7 +145,7 @@ param([string]$Repo, [string]$Mode, [string]$ReposPath = "")
 . (Join-Path $Repo "scripts/aitools-lib.ps1")
 Initialize-Logging "aitools-install"
 $text = [IO.File]::ReadAllText((Join-Path $Repo "scripts/aitools-install.ps1"))
-$ms = [regex]::Matches($text, '(?ms)^# --- BEGIN install log (?:helpers|override)[^\n]*\n(.*?)^# --- END install log (?:helpers|override) ---')
+$ms = [regex]::Matches($text, '(?ms)^# --- BEGIN install log (?:helpers|options)[^\n]*\n(.*?)^# --- END install log (?:helpers|options) ---')
 if ($ms.Count -ne 2) { Write-Output "installer blocks: $($ms.Count), want 2"; exit 3 }
 foreach ($m in $ms) { Invoke-Expression $m.Groups[1].Value }
 Log "harness start"
@@ -219,6 +222,18 @@ Write-Output "END errors=$($script:errors) warnings=$($script:warnings)"
         if ($script:SUM -ceq $Want) { ok "${Name}: summary rows" }
         else { bad "${Name}: summary '$($script:SUM)', want '$Want'" }
     }
+    # want_sum_match NAME REGEX -- the whole summary matches REGEX (case-sensitive, as
+    # perl; \A ... \z), for a record whose text holds a path
+    function want_sum_match([string]$Name, [string]$Re) {
+        if ($script:SUM -cmatch $Re) { ok "${Name}: summary rows" }
+        else { bad "${Name}: summary '$($script:SUM)', want /$Re/" }
+    }
+    # want_sum_prefix NAME PREFIX -- one record, starting with PREFIX (its reason is the
+    # OS's or the exception's own message)
+    function want_sum_prefix([string]$Name, [string]$Prefix) {
+        if (-not $script:SUM.Contains("`n") -and $script:SUM.Length -gt $Prefix.Length -and $script:SUM.StartsWith($Prefix, [StringComparison]::Ordinal)) { ok "${Name}: summary record '$($script:SUM)'" }
+        else { bad "${Name}: summary '$($script:SUM)', want one record starting '$Prefix'" }
+    }
     function want_out([string]$Name, [string]$Text) {
         if (@(OutLines | Where-Object { $_.Contains($Text) }).Count -gt 0) { ok "${Name}: console has '$Text'" }
         else { bad "${Name}: console lacks '$Text'"; Show-Indented (ReadText $script:OUT) }
@@ -246,9 +261,10 @@ Write-Output "END errors=$($script:errors) warnings=$($script:warnings)"
         want_out $Name "[aitools-install] [error] probe-error"
         want_no_out $Name 'CAUGHT|Exception|Add-Content|tee:|Is a directory|Permission denied|cannot access|being used by another process'
     }
-    # The sync ran (marker), returned WANT_RC, and the installer went on
-    function want_sync([string]$Name, [string]$WantRc) {
-        want_end $Name "errors=0 warnings=0"
+    # The sync ran (marker), returned WANT_RC, and the installer went on (a failed
+    # sync is one warning of the installer: the library's Invoke-RelaySync)
+    function want_sync([string]$Name, [string]$WantRc, [int]$Warnings = 0) {
+        want_end $Name "errors=0 warnings=$Warnings"
         want_out $Name "SYNC-RC=$WantRc"
         if (Test-Path -LiteralPath "$H/sync.mark" -PathType Leaf) { ok "${Name}: the sync ran" } else { bad "${Name}: the sync did not run" }
         want_no_out $Name 'Exception|Add-Content|Is a directory|Permission denied|cannot access'
@@ -330,9 +346,10 @@ Write-Output "END errors=$($script:errors) warnings=$($script:warnings)"
     $impl = "ps"
     Write-Output "installer Step 3 / Step 5 on the lib relay (windows: $impl)"
 
-    # A-1: a writer warning is counted, its lines reach deploy.jsonl and the console
+    # A-1: a writer warning is the writer's (8.3: not added to the installer's
+    # count); its lines reach deploy.jsonl and the console
     fresh; run_h step5 -Vars @{ WRITER_MODE = "warn" }
-    want_end "step5-warn ($impl)" "errors=0 warnings=1"
+    want_end "step5-warn ($impl)" "errors=0 warnings=0"
     want_sum "step5-warn ($impl)" "OK|aitools config|stub"
     want_out "step5-warn ($impl)" "[setup-user-config] [warn] stub warning"
     $got = jsonl_check "$H/.aitools/logs/deploy.jsonl"
@@ -347,10 +364,13 @@ Write-Output "END errors=$($script:errors) warnings=$($script:warnings)"
     if ($got -ceq "same") { ok "step5-runid ($impl): the child's AITOOLS_RUN_ID is every record's run_id" }
     else { bad "step5-runid ($impl): $got" }
 
-    # A-18 / A-3: a writer that dies without a row gets the relay's ERROR row
+    # A-18 / A-3: a writer that dies without a row gets the relay's ERROR row: WHAT
+    # "<label> failed (exit 1)", REASON from its output (no error record: its last
+    # relayed line that is not a warning line, 8.3; RFI 5899-31: a warning line is
+    # never the reason)
     fresh; run_h step5 -Vars @{ WRITER_MODE = "crash" }
-    want_end "step5-crash ($impl)" "errors=1 warnings=1"
-    want_sum "step5-crash ($impl)" "ERROR|aitools config|script failed (exit 1)"
+    want_end "step5-crash ($impl)" "errors=1 warnings=0"
+    want_sum "step5-crash ($impl)" "ERROR|aitools config|Step 5: setup-user-config.ps1 failed (exit 1)|stub writer"
     want_out "step5-crash ($impl)" "Step 5: setup-user-config"
 
     # ... and a writer that wrote its own ERROR row gets no second one
@@ -358,14 +378,17 @@ Write-Output "END errors=$($script:errors) warnings=$($script:warnings)"
     want_end "step5-ownrow ($impl)" "errors=1 warnings=0"
     want_sum "step5-ownrow ($impl)" "ERROR|aitools config|stub failed"
 
-    # A-16: deploy.jsonl cannot be written (a directory in its place): one warning,
-    # the installer goes on, the writer still runs
+    # A-16: deploy.jsonl cannot be written (a directory in its place): one warning
+    # of the installer (the writer's is not added), recorded once under the
+    # installer's name (LogWarn, logging.md 8.2) before the writer's OK record; the
+    # installer goes on, the writer still runs. The path in the warning is the OS's
+    # spelling of the log directory, so it is not compared
     fresh; New-Item -ItemType Directory -Path "$H/.aitools/logs/deploy.jsonl" -Force | Out-Null
     run_h step5 -Vars @{ WRITER_MODE = "warn" }
-    want_end "jsonl-blocked ($impl)" "errors=0 warnings=2"
+    want_end "jsonl-blocked ($impl)" "errors=0 warnings=1"
     count_out "jsonl-blocked ($impl)" "deploy.jsonl: cannot write" 1
     want_out "jsonl-blocked ($impl)" "[aitools-install] [info] harness end"
-    want_sum "jsonl-blocked ($impl)" "OK|aitools config|stub"
+    want_sum_match "jsonl-blocked ($impl)" '\AWARN\|aitools-install\|deploy\.jsonl: cannot write \S.* -- structured log records are skipped for the rest of this run\nOK\|aitools config\|stub\z'
 
     # A-17: Step 3. A relative path is made absolute (relative to the current
     # directory, $H) and created. pwsh prints a Windows path (C:\...\home\repos);
@@ -387,9 +410,10 @@ Write-Output "END errors=$($script:errors) warnings=$($script:warnings)"
     run_h step3 "$H/afile/repos"
     want_out "step3-uncreatable ($impl)" "REPOS_FAILED"
     want_end "step3-uncreatable ($impl)" "errors=1 warnings=0"
-    want_sum "step3-uncreatable ($impl)" "ERROR|aitools config|repos dir not created"
+    want_sum_prefix "step3-uncreatable ($impl)" "ERROR|aitools config|repos directory '$H/afile/repos' not created -- config.json will not be written|"
 
-    # Incident #174: the log override's deploy.log write is fail-safe. A writable
+    # Incident #174: the library's deploy.log write is fail-safe (the installer
+    # no longer overrides the logging functions; it sets the jsonl option). A writable
     # deploy.log still gets the lines ...
     fresh; run_h logprobe
     want_probe "log-written ($impl)"
@@ -400,14 +424,18 @@ Write-Output "END errors=$($script:errors) warnings=$($script:warnings)"
     run_h logprobe
     want_probe "log-blocked ($impl)"
 
-    # Step 22 relay sync: its output (stdout and stderr) reaches deploy.log ...
+    # Step 22 relay sync (the library's Invoke-RelaySync): its output (stdout and
+    # stderr) reaches deploy.log ...
     fresh; run_h relaysync
     want_sync "relaysync-ok ($impl)" 0
     log_has "relaysync-ok ($impl)" "sync-out-line"
     log_has "relaysync-ok ($impl)" "sync-err-line"
-    # ... its exit code comes back ...
+    want_sum "relaysync-ok ($impl)" ""
+    # ... its exit code comes back, and a failure is one warning "relay sync" with
+    # its reason ...
     fresh; run_h relaysync -Vars @{ SYNC_RC = "3" }
-    want_sync "relaysync-rc ($impl)" 3
+    want_sync "relaysync-rc ($impl)" 3 1
+    want_sum_prefix "relaysync-rc ($impl)" "WARN|relay sync|relay -> AGENTS.md sync failed (exit 3, non-fatal): "
     # ... and a deploy.log that cannot be written neither skips it nor ends the run
     fresh; New-Item -ItemType Directory -Path "$H/.aitools/logs/deploy.log" -Force | Out-Null
     run_h relaysync
