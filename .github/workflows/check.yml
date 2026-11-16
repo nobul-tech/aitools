@@ -186,6 +186,16 @@ jobs:
         if: ${{ !cancelled() }}
         run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/profile/test-install.sh --bash-only
 
+      # The pasted run replayed through the relay on a pty: the panel of
+      # reference/logging.md 8.5, a review menu and gh auth login in relayed children
+      - name: Replay test, panel through the relay (.sh, bash 5, pty)
+        if: ${{ !cancelled() }}
+        run: bash tests/replay/test-replay.sh
+
+      - name: Replay test, panel through the relay (macOS /bin/bash 3.2, pty)
+        if: ${{ !cancelled() }}
+        run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/replay/test-replay.sh
+
       - name: setup-user-claude dev + MDM tests (.sh, bash 5)
         run: bash tests/claude-mdm/test-claude-mdm.sh
 
@@ -611,6 +621,10 @@ jobs:
       - name: Installer Step 3/5 relay tests (.sh)
         if: ${{ !cancelled() }}
         run: bash tests/profile/test-install.sh
+
+      - name: Replay test, panel through the relay (.sh, pty)
+        if: ${{ !cancelled() }}
+        run: bash tests/replay/test-replay.sh
 
       - name: setup-user-claude dev + MDM tests (.sh)
         run: bash tests/claude-mdm/test-claude-mdm.sh
