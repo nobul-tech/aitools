@@ -41,7 +41,7 @@ s3	shared
 ./s3/SKILL.md
 ./zz
 == pbfail rc=1
-ERROR|harness files|retire failed: pb
+ERROR|harness files|retire failed: pb|backup failed: <OS error> -- <TMP>/skills/home/.aitools/skills/pb not removed
 OK|harness files|15 verified
 -- manifest
 # aitools skills manifest v1
@@ -177,7 +177,7 @@ s3	shared
 ./s3/SKILL.md
 ./zz
 == rsfail rc=1
-ERROR|harness files|retire failed: rs
+ERROR|harness files|retire failed: rs|backup failed: <OS error> -- <TMP>/skills/home/.aitools/skills/rs not removed
 OK|harness files|15 verified
 -- manifest
 # aitools skills manifest v1
@@ -277,8 +277,8 @@ s3	shared
 ./s3/SKILL.md
 ./zz
 == bakfail rc=1
-ERROR|harness files|retire failed: s1
-ERROR|harness files|skills manifest not written
+ERROR|harness files|retire failed: s1|backup failed: <OS error> -- <TMP>/skills/home/.aitools/skills/s1 not removed
+ERROR|harness files|skills manifest not written|<OS error>
 OK|harness files|13 verified
 -- manifest
 # aitools skills manifest v1

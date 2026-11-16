@@ -191,6 +191,11 @@ run_dh() {
 rc() { cat "$C/rc"; }
 row() { grep -qxF "$1" "$C/summary"; }          # exact summary row
 has_row() { grep -qF "$1" "$C/summary"; }       # summary substring
+# row_re BRE -- a summary row matches BRE ('|' is literal). For a record whose
+# reason is an OS or .NET message (cp, mkdir, an exception): the record prefix
+# KIND|tool|WHAT| and the reason's fixed parts are asserted, not the OS text.
+row_re() { grep -q -- "$1" "$C/summary"; }
+n_rows() { grep -c -- "$1" "$C/summary"; }      # number of summary rows matching BRE
 A() { printf '%s' "$H/.aitools"; }
 lang=sh
 
@@ -283,8 +288,10 @@ if $HAVE_PTY; then
     run_dh "" --
     printf 'local edit\n' > "$(A)/skills/s2/SKILL.md"
     run_dh 's\n' --
-    check "skip: nothing written, WARN row" \
-        "[ \"\$(rc)\" = 0 ] && grep -qx 'local edit' '$(A)/skills/s2/SKILL.md' && row 'WARN|harness files|1 skipped (user review)'"
+    # The library records the skip warning once (logging.md 8.2); deploy-harness
+    # writes no second one and counts the skip in its OK status.
+    check "skip: nothing written, one WARN row (the library's), skip in the OK status" \
+        "[ \"\$(rc)\" = 0 ] && grep -qx 'local edit' '$(A)/skills/s2/SKILL.md' && row 'WARN|harness files|Skipped: skills/s2/SKILL.md (local differs from source; reviewed again next run)' && [ \"\$(n_rows '^WARN|')\" = 1 ] && row 'OK|harness files|1 skipped, 13 verified'"
 
     setup_case abort
     run_dh "" --
@@ -325,8 +332,8 @@ gitc -C "$D" add -A; gitc -C "$D" commit -q -m dups
 run_dh "" --
 check "conflict: exit 1" "[ \"\$(rc)\" = 1 ]"
 check "conflict: ERROR row per duplicate (hooks), none for .claude/ or dotprofile rules and skills" \
-    "row 'ERROR|harness files|h1.sh: dup in .claude/hooks' && row 'ERROR|harness files|Hooks-Manifest.json: dup in...' && [ \"\$(grep -c '^ERROR|' '$C/summary')\" = 2 ]"
-check "conflict: log_error names both sources" "grep -q '\[error\] Duplicate hooks name: h1.sh in .claude/hooks .* kept h1.sh from shared/hooks' '$LOG'"
+    "row 'ERROR|harness files|duplicate hooks name h1.sh in .claude/hooks skipped|kept h1.sh from shared/hooks (first source wins)' && row 'ERROR|harness files|duplicate hooks name Hooks-Manifest.json in .claude/hooks skipped|kept hooks-manifest.json from shared/hooks (first source wins)' && [ \"\$(grep -c '^ERROR|' '$C/summary')\" = 2 ]"
+check "conflict: the error line names both sources" "grep -q '\[error\] duplicate hooks name h1.sh in .claude/hooks skipped: kept h1.sh from shared/hooks (first source wins)' '$LOG'"
 check "conflict: first source wins (hooks); shared rules and skills deployed" \
     "cmp -s '$R/shared/hooks/h1.sh' '$(A)/hooks/h1.sh' && cmp -s '$R/shared/rules/scratch.md' '$(A)/rules/scratch.md' && cmp -s '$R/shared/rules/hook-lifecycle.md' '$(A)/rules/hook-lifecycle.md' && cmp -s '$R/shared/skills/s1/SKILL.md' '$(A)/skills/s1/SKILL.md'"
 check "conflict: case-insensitive duplicate not deployed" "grep -q '\"hooks\"' '$(A)/hooks/hooks-manifest.json' && ! ls '$(A)/hooks' | grep -x 'Hooks-Manifest.json' >/dev/null && ! ls '$(A)/rules' | grep -x 'Hook-Lifecycle.md' >/dev/null"
@@ -352,15 +359,19 @@ check "AITOOLS_DRY_RUN=1: would update 1, file untouched" \
 # ---------------------------------------------------------------------------
 setup_case writerfail
 EXTRA_ENV="STUB_WRITER_RC=1" run_dh "" --
-check "writer failure: exit 1, ERROR row, files still deployed" \
-    "[ \"\$(rc)\" = 1 ] && row 'ERROR|harness files|config.json not generated' && [ -f '$(A)/rules/scratch.md' ]"
+# The writer is relayed (logging.md 8.3): a writer that fails without a record of
+# its own gets one ERROR under "aitools config" from the relay; the stub prints
+# nothing, so the reason is the exit code.
+check "writer failure: exit 1, the relay's one ERROR row, files still deployed" \
+    "[ \"\$(rc)\" = 1 ] && row 'ERROR|aitools config|setup-user-config.$lang failed (exit 1)|no output (exit 1)' && [ \"\$(n_rows '^ERROR|')\" = 1 ] && [ -f '$(A)/rules/scratch.md' ]"
 
 setup_case realwriter
 cp "$ROOT/scripts/setup-user-config.sh" "$ROOT/scripts/aitools-profile.sh" "$ROOT/scripts/aitools-json.pl" "$R/scripts/"
 rm -f "$H/.aitools/config.json"
 run_dh "" --
-check "real writer, no bootstrap config: exit 1, ERROR row propagated" \
-    "[ \"\$(rc)\" = 1 ] && row 'ERROR|harness files|config.json not generated' && grep -q '\[setup-user-config\] \[error\]' '$LOG'"
+# The real writer records its own error; the relay adds none (one cause, one red line).
+check "real writer, no bootstrap config: exit 1, the writer's one ERROR row" \
+    "[ \"\$(rc)\" = 1 ] && row_re '^ERROR|aitools config|merged config rejected -- existing file left untouched|missing bootstrap .* (run aitools install)\$' && [ \"\$(n_rows '^ERROR|')\" = 1 ] && grep -q '\[setup-user-config\] \[error\]' '$LOG'"
 
 # ---------------------------------------------------------------------------
 # The dotprofile is not a harness source: missing or not a git checkout changes nothing
@@ -506,7 +517,7 @@ if $HAVE_READONLY; then
     fresh_log; run_dh_plain
     chmod 755 "$(A)/rules"
     check "$lang: failed backup keeps the file (ERROR row, exit 1)" \
-        "[ \"\$(rc)\" = 1 ] && [ -f '$(A)/rules/hook-lifecycle.md' ] && row 'ERROR|harness files|retire failed: hook-lifecyc...' && grep -q 'backup failed' '$LOG'"
+        "[ \"\$(rc)\" = 1 ] && [ -f '$(A)/rules/hook-lifecycle.md' ] && row_re '^ERROR|harness files|retire failed: hook-lifecycle\.md|backup failed: .* -- .*hook-lifecycle\.md not removed\$' && grep -q '\[error\] retire failed: hook-lifecycle.md: backup failed: ' '$LOG'"
     fresh_log; run_dh_plain
     check "$lang: next run retries and removes it" \
         "[ \"\$(rc)\" = 0 ] && [ ! -e '$(A)/rules/hook-lifecycle.md' ] && grep -qx 'hook-lifecycle.md${T}retired' '$(M)'"
@@ -514,7 +525,7 @@ if $HAVE_READONLY; then
     run_dh "" --
     chmod 755 "$(A)/rules"
     check "manifest write failure: ERROR row, exit 1, run completes" \
-        "[ \"\$(rc)\" = 1 ] && row 'ERROR|harness files|rules manifest not written' && grep -q 'harness files: .* retired' '$LOG'"
+        "[ \"\$(rc)\" = 1 ] && row_re '^ERROR|harness files|rules manifest not written|.' && grep -q 'harness files: .* retired' '$LOG'"
 else
     printf 'SKIP failed rule backup and manifest write failure (chmod does not block writes here)\n'; SKIP=$((SKIP + 1))
 fi
@@ -541,7 +552,11 @@ n_bak() {
 # ('*' and '?' cannot be in a Windows file name: the .ps1 harness uses 'b[1]').
 BN='b[1] *?'
 # trace STEP -- append the observable state (timestamps and the glob skill name
-# normalized) to $TRACE
+# normalized) to $TRACE. An error reason that is an OS or .NET message (cp's
+# "Permission denied", an exception text) differs between BSD, GNU and .NET, so
+# it is written <OS error>: in a failed retirement's "backup failed: <OS> --
+# <dir> not removed", and in a manifest write failure other than "<path> is a
+# directory". The .ps1 harness's Trace does the same.
 TRACE=""
 trace() {
     {
@@ -551,7 +566,11 @@ trace() {
         if [ -f "$(SM)" ]; then cat "$(SM)"; fi
         printf -- '-- tree\n'
         (cd "$(A)/skills" && find . | LC_ALL=C sort)
-    } | BN="$BN" perl -pe 's/\r//g; s/\.bak\.\d{4}-\d\d-\d\dT\d{6}Z/.bak.TS/g; s/\Q$ENV{BN}\E/<BN>/g' >> "$TRACE"
+    } | BN="$BN" perl -pe '
+        s/\r//g; s/\.bak\.\d{4}-\d\d-\d\dT\d{6}Z/.bak.TS/g; s/\Q$ENV{BN}\E/<BN>/g;
+        s/^(ERROR\|[^|]*\|retire failed: [^|]*\|backup failed: ).*( -- \S+ not removed)$/$1<OS error>$2/;
+        s/^(ERROR\|[^|]*\|(?:rules|skills) manifest not written\|)(?!.* is a directory$).+$/$1<OS error>/;
+    ' >> "$TRACE"
 }
 run_sk() { fresh_log; run_dh "" -- "$@"; }
 
@@ -636,8 +655,8 @@ check "$lang skills: glob-named skill retired; its backups pruned to 5 (oldest t
 printf 'a file\n' > "$(A)/skills/zz"
 printf '# aitools skills manifest v1\nzz\tretired\n../evil\tshared\n.hidden\tshared\nx.bak.1\tshared\na/b\tshared\nok\tbogus\n' > "$(SM)"
 run_sk; trace invalid
-check "$lang skills: invalid lines ignored (5 warnings); a file named like a retired skill left alone" \
-    "[ \"\$(rc)\" = 0 ] && [ \"\$(grep -c 'line ignored' '$LOG')\" = 5 ] && [ -f '$(A)/skills/zz' ] && grep -q 'Retired skill zz: .* is not a directory' '$LOG' && row 'WARN|harness files|not a dir: zz' && grep -qx 'zz${T}retired' '$(SM)' && ! grep -q 'evil\|hidden\|bogus' '$(SM)'"
+check "$lang skills: invalid lines ignored (5 warnings, each recorded); a file named like a retired skill left alone" \
+    "[ \"\$(rc)\" = 0 ] && [ \"\$(grep -c 'line ignored' '$LOG')\" = 5 ] && [ \"\$(n_rows '^WARN|harness files|Skills manifest .*: line ignored: ')\" = 5 ] && [ -f '$(A)/skills/zz' ] && grep -q '\[warn\] retired skill zz: .* is not a directory -- left alone' '$LOG' && row_re '^WARN|harness files|retired skill zz: .*/zz is not a directory -- left alone\$' && [ \"\$(n_rows '^WARN|')\" = 6 ] && grep -qx 'zz${T}retired' '$(SM)' && ! grep -q 'evil\|hidden\|bogus' '$(SM)'"
 printf 'not a manifest\nd2\tdotprofile\n' > "$(SM)"
 run_sk; trace header
 check "$lang skills: unknown header -- warning, nothing retired, rewritten" \
@@ -649,7 +668,7 @@ mkdir -p "$(SM)" "$(M)"
 printf 'inside\n' > "$(SM)/inside"
 run_sk; trace mfdir
 check "$lang skills: manifest path is a directory -- ERROR rows (skills, rules), exit 1, nothing written into it, contents not reported preserved" \
-    "[ \"\$(rc)\" = 1 ] && row 'ERROR|harness files|skills manifest not written' && row 'ERROR|harness files|rules manifest not written' && [ \"\$(ls -A '$(SM)')\" = inside ] && [ -z \"\$(ls -A '$(M)')\" ] && grep -q 'Skills manifest: .* is a directory' '$LOG' && ! grep -q 'Preserved: .*aitools-skills-manifest' '$LOG'"
+    "[ \"\$(rc)\" = 1 ] && row 'ERROR|harness files|skills manifest not written|$(SM) is a directory' && row 'ERROR|harness files|rules manifest not written|$(M) is a directory' && [ \"\$(ls -A '$(SM)')\" = inside ] && [ -z \"\$(ls -A '$(M)')\" ] && grep -q '\[error\] skills manifest not written: .* is a directory' '$LOG' && ! grep -q 'Preserved: .*aitools-skills-manifest' '$LOG'"
 rm -rf "$(SM)" "$(M)"
 run_sk; trace mfdirgone
 check "$lang skills: directory removed -- both manifests written again" \
@@ -670,7 +689,7 @@ if $HAVE_READONLY; then
     run_sk; trace pbfail
     chmod 644 "$(A)/skills/pb/secret.md"
     check "$lang skills: partial backup removed again; directory kept (ERROR row, exit 1)" \
-        "[ \"\$(rc)\" = 1 ] && [ -f '$(A)/skills/pb/SKILL.md' ] && [ \"\$(n_bak pb)\" = 0 ] && row 'ERROR|harness files|retire failed: pb' && grep -q 'Retired skill pb: backup failed (' '$LOG' && grep -q 'Retired skill pb: removed the incomplete backup' '$LOG'"
+        "[ \"\$(rc)\" = 1 ] && [ -f '$(A)/skills/pb/SKILL.md' ] && [ \"\$(n_bak pb)\" = 0 ] && row_re '^ERROR|harness files|retire failed: pb|backup failed: .* -- .*pb not removed\$' && [ \"\$(n_rows '^ERROR|')\" = 1 ] && grep -q '\[error\] retire failed: pb: backup failed: ' '$LOG' && grep -q 'Retired skill pb: removed the incomplete backup' '$LOG'"
     run_sk; trace pbretry
     check "$lang skills: readable again -- backed up and removed" \
         "[ \"\$(rc)\" = 0 ] && [ ! -e '$(A)/skills/pb' ] && [ \"\$(n_bak pb)\" = 1 ] && grep -rqx 'secret' '$(A)/skills/'pb.bak.*/secret.md"
@@ -689,7 +708,7 @@ if $HAVE_READONLY; then
     chmod 755 "$(A)/skills/rs/ro"
     chmod 644 "$(A)/skills/rs/ro/secret.md"
     check "$lang skills: partial backup with a read-only subdirectory removed (no leftover, nothing renamed)" \
-        "[ \"\$(rc)\" = 1 ] && [ -f '$(A)/skills/rs/ro/a.md' ] && [ \"\$(n_bak rs)\" = 0 ] && row 'ERROR|harness files|retire failed: rs' && ! has_row 'bak cleanup failed' && grep -q 'Retired skill rs: removed the incomplete backup' '$LOG'"
+        "[ \"\$(rc)\" = 1 ] && [ -f '$(A)/skills/rs/ro/a.md' ] && [ \"\$(n_bak rs)\" = 0 ] && row_re '^ERROR|harness files|retire failed: rs|backup failed: .* -- .*rs not removed\$' && ! has_row 'bak cleanup failed' && grep -q 'Retired skill rs: removed the incomplete backup' '$LOG'"
     run_sk; trace rsretry
     check "$lang skills: read-only case retried -- backed up and removed" \
         "[ \"\$(rc)\" = 0 ] && [ ! -e '$(A)/skills/rs' ] && [ \"\$(n_bak rs)\" = 1 ]"
@@ -699,7 +718,7 @@ if $HAVE_READONLY; then
     run_sk; trace bakfail
     chmod 755 "$(A)/skills"
     check "$lang skills: failed backup keeps the directory (ERROR row, exit 1)" \
-        "[ \"\$(rc)\" = 1 ] && [ -f '$(A)/skills/s1/SKILL.md' ] && row 'ERROR|harness files|retire failed: s1' && grep -q 'Retired skill s1: backup failed' '$LOG' && [ \"\$(n_bak s1)\" = 0 ]"
+        "[ \"\$(rc)\" = 1 ] && [ -f '$(A)/skills/s1/SKILL.md' ] && row_re '^ERROR|harness files|retire failed: s1|backup failed: .* -- .*s1 not removed\$' && grep -q '\[error\] retire failed: s1: backup failed: ' '$LOG' && [ \"\$(n_bak s1)\" = 0 ]"
     run_sk; trace bakretry
     check "$lang skills: next run retries -- backed up and removed" \
         "[ \"\$(rc)\" = 0 ] && [ ! -e '$(A)/skills/s1' ] && [ \"\$(n_bak s1)\" = 1 ] && grep -qx 's1${T}retired' '$(SM)'"
@@ -774,7 +793,7 @@ check "reader $lang: X.MD and Mixed.Md valid; case-only duplicate and .bak. inva
 # ---------------------------------------------------------------------------
 setup_case args
 run_dh "" -- --bogus
-check "bad argument: exit 1, ERROR row" "[ \"\$(rc)\" = 1 ] && row 'ERROR|harness files|bad arguments'"
+check "bad argument: exit 1, ERROR row with the option as its reason" "[ \"\$(rc)\" = 1 ] && row 'ERROR|harness files|bad arguments|unknown option: --bogus (see --help)'"
 run_dh "" -- --help
 check "--help: exit 0, usage shown, nothing deployed" \
     "[ \"\$(rc)\" = 0 ] && grep -q 'Usage: deploy-harness.$lang' '$C/out' && [ ! -e '$(A)/rules' ]"
