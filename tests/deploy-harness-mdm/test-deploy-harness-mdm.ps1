@@ -672,6 +672,9 @@ try {
     Run-Case mdm record @() ((Mixed $pstmp) + "/")
     # One ERROR record per damaged file; no aggregate record (the count line is info).
     Check "damaged record: exit 1, one ERROR row for that file, that file not deployed, the others are" ($script:RC["record-mdm"] -eq 1 -and (SumMatch record-mdm '^ERROR\|harness files\|embedded aitools/shared/rules/scratch\.md is damaged or cannot be written\|.') -and (GrepCount (Join-Path $tmpRoot "record-mdm.summary") 'ERROR|') -eq 1 -and -not (SumMatch record-mdm 'embedded file\(s\) damaged') -and (GrepQ (Join-Path $tmpRoot "record-mdm.out") 'shared/rules/scratch.md is damaged') -and -not (Test-Path -LiteralPath (Join-Path $tmpRoot "record-mdm/.aitools/rules/scratch.md")) -and (Test-Path -LiteralPath (Join-Path $tmpRoot "record-mdm/.aitools/rules/tool-ops.md") -PathType Leaf))
+    # Its missing file is the consequence of that error: logged at info, no WARN
+    # record (one cause, one red line: logging.md 8.3; fix-forward 5899-6-L2-P1)
+    Check "damaged record: the missing file is logged at info, no 'tracked but missing' WARN record" (-not (SumMatch record-mdm '^WARN\|harness files\|') -and (GrepQ (Join-Path $tmpRoot "record-mdm.out") '\[info\] shared/rules: scratch\.md not deployed -- its embedded record is damaged \(the error above\)') -and -not (GrepQ (Join-Path $tmpRoot "record-mdm.out") 'tracked but missing'))
     # .ps1: the stage directory is removed in a finally block, also on exit 1.
     # Where it was made: the "unpacked in" path's parent is pstmp, compared as the
     # same directory (long path, case-insensitive), not by spelling: .NET may print

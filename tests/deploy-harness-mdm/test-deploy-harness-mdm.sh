@@ -502,6 +502,10 @@ PS_TMPDIR="$TMP_ROOT/pstmp/" run mdm record
 # One ERROR record per damaged file; no aggregate record (the count line is info).
 check "damaged record: exit 1, one ERROR row for that file, that file not deployed, the others are" \
     "[ \"\$(rc_of record-mdm)\" = 1 ] && grep -q '^ERROR|harness files|embedded aitools/shared/rules/scratch.md is damaged or cannot be written|.' '$TMP_ROOT/record-mdm.summary' && [ \"\$(grep -c '^ERROR|' '$TMP_ROOT/record-mdm.summary')\" = 1 ] && ! grep -q 'embedded file(s) damaged' '$TMP_ROOT/record-mdm.summary' && grep -q 'shared/rules/scratch.md is damaged' '$TMP_ROOT/record-mdm.out' && [ ! -e '$TMP_ROOT/record-mdm/.aitools/rules/scratch.md' ] && [ -f '$TMP_ROOT/record-mdm/.aitools/rules/tool-ops.md' ]"
+# Its missing file is the consequence of that error: logged at info, no WARN
+# record (one cause, one red line: logging.md 8.3; fix-forward 5899-6-L2-P1)
+check "damaged record: the missing file is logged at info, no 'tracked but missing' WARN record" \
+    "! grep -q '^WARN|harness files|' '$TMP_ROOT/record-mdm.summary' && grep -q '\[info\] shared/rules: scratch.md not deployed -- its embedded record is damaged (the error above)' '$TMP_ROOT/record-mdm.out' && ! grep -q 'tracked but missing' '$TMP_ROOT/record-mdm.out'"
 # (The .ps1 stage-directory case, removed in a finally block on exit 1, is in
 # the .ps1 harness.)
 # A CRLF copy of the payload (Windows checkout with autocrlf) still verifies
