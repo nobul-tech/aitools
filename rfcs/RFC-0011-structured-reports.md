@@ -25,6 +25,16 @@ one SessionEnd job; the scope of `--session`; definitions of `<repo>`, the
 record's date and project, and a session; the security exposure in the
 public repo; appendix A. The settled points (section 4) are extended to
 S-25.
+v1.2 (2026-11-16), session dbd05b0c: the commander's answers of L3394,
+L3479 and L3589 (D874d-54 to D874d-70). The brief's `rules[]` and
+`skills[]` become `artifacts[]` (D874d-65); the brief drops `ambiguities`,
+`access`, `name_prefix` and `duties`, and `return` becomes a structured
+`deliverables[]` (D874d-70); S-18 and S-19 are accepted (D874d-55, D874d-56);
+standing duties stay out of the brief (D874d-64); other repos get
+`.git/info/exclude` entries (D874d-58); no WP-0 verdict is kept
+(D874d-68). Also: RFC 2119 keywords where a rule had none, the issue's
+ASM and AMB ids marked as such, the delegation guards' check of the
+brief path, and the `<project>` definition.
 
 | Field | Value |
 |-------|--------|
@@ -34,7 +44,7 @@ S-25.
 | **Status** | Proposed |
 | **Created** | 2026-11-16 |
 | **Updated** | 2026-11-16 |
-| **Issue** | [nobul-tech/aitools#180](https://github.com/nobul-tech/aitools/issues/180), body v5.2 |
+| **Issue** | [nobul-tech/aitools#180](https://github.com/nobul-tech/aitools/issues/180), body v5.4 |
 | **Session** | dbd05b0c-2365-4159-9976-bc64a2af874d |
 | **Plan** | `plans/structured-reports/implementation-plan.md` |
 | **Related** | RFC 0005-v2 (session intelligence), RFC 0006 (delegation), RFC 0010 (Python and SQLite engineering) |
@@ -83,12 +93,14 @@ It turns the commander's decisions recorded in issue #180 (D874d-1 to D874d-53) 
 ## 2. Terminology
 
 - **RFC 2119.** The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD", "SHOULD NOT", "RECOMMENDED", "MAY" and "OPTIONAL" are to be interpreted as in [RFC 2119](https://www.rfc-editor.org/rfc/rfc2119).
-- **Governed terms** (`/glossary` skill): mission brief (synonyms: brief, delegate briefing, D874d-18), after action review (AAR), running estimate, deliverable, deviation, process deviation, observation, ambiguity, assumption, fact, operational learning, proposal, blocker, session RFI, delegating agent, delegate, provenance (D874d-37). This RFC uses them in their glossary meanings. Where this RFC refines a meaning (`observation`, `assumption`), plan batch 2.2 brings the glossary in line.
+- **Governed terms** (`/glossary` skill): mission brief (synonyms: brief, delegate briefing, D874d-18), after action review (AAR), running estimate, deliverable, deviation, process deviation, observation, ambiguity, assumption, fact, operational learning, proposal, blocker, session RFI, delegating agent, delegate, provenance (D874d-37). This RFC uses them in their glossary meanings. Where this RFC changes a meaning (`mission brief`, `observation`, `assumption`, `artifact`, the session RFI's id), plan batch 2.2 brings the glossary in line. The schema's nodes and fields get no glossary entries for now (D874d-66).
+- **Artifact** (the brief's `artifacts[]`, and `source.kind` `artifact`): a file the harness or a mission uses: a harness artifact (rule, skill, hook, reference, registry) or a mission's working file (plan, specification, transcript, a file it changes). This is wider than the glossary's `artifact`, a harness file (D874d-67).
+- **`ASM-<n>` and `AMB-<n>` with no prefix in this RFC** are the assumptions and ambiguities of issue #180 section 6, not item ids of a document (3.2.4).
 - **Session:** one Claude Code session id. `/clear` starts a new session (a new id, DB and estimate); `/resume` continues the same one (S-25).
 - **Session agent:** the agent of the top-level Claude Code session.
 - **Delegate:** any agent launched by another agent, at any level.
 - **`<repo>`:** the session's project root, recorded in the session DB at session start (`session.project_dir`). It is never the current working directory, which can change during a session (S-22).
-- **`<project>`:** the base name of `<repo>`, for example `aitools`.
+- **`<project>`:** the base name of `<repo>`'s main worktree (the parent of `git rev-parse --path-format=absolute --git-common-dir`), so a session started in a git worktree files under its project, for example `aitools`.
 - **`<sid4>`:** the last four hex digits of the top-level session id (for example `874d`).
 - **Session id prefix:** the first 10 characters of the session id, hyphen included (for example `dbd05b0c-2`).
 - **`<mission name>`:** `<commanderid>-<n>-<slug>`, where `<commanderid>` is the delegating agent's own four hex digits (`/delegate` naming conventions).
@@ -113,7 +125,7 @@ It turns the commander's decisions recorded in issue #180 (D874d-1 to D874d-53) 
 | `constraints` | yes | | |
 | `assumptions` | given | + end state | yes |
 | `decisions` | to honour | | yes |
-| `ambiguities` | already resolved, or flagged | found, how resolved | yes |
+| `ambiguities` | | found, how resolved | yes |
 | `deviations` | | yes | yes |
 | `observations` | | yes | yes |
 | `operational_learning` | carried forward | new | yes |
@@ -121,9 +133,10 @@ It turns the commander's decisions recorded in issue #180 (D874d-1 to D874d-53) 
 | `rfis` | | yes | yes |
 | `missions` | | | derived (3.5.4) |
 | `assessment` | | | yes |
-| `rules`, `skills`, `access`, `name_prefix`, `duties`, `return` | yes | | |
+| `artifacts` | yes (D874d-65) | | |
+| `deliverables` | yes: what the delegate is to produce (D874d-70) | per objective (3.2.6) | per objective (3.2.6) |
 
-3.1.3. No document has a `facts` node (D874d-32), a `report_at_once_if` node (D874d-26), a `meta` node (D874d-19) or a `findings` node (D874d-22). A mission brief has no `conflict_priority` and no `permissions` node: they are standing duties in `/delegate` and the delegation rule (D-DEL13, 3.9.2).
+3.1.3. No document has a `facts` node (D874d-32), a `report_at_once_if` node (D874d-26), a `meta` node (D874d-19) or a `findings` node (D874d-22). A mission brief has no `conflict_priority` and no `permissions` node: standing duties are documented in `/delegate`, never in the brief (D874d-64). A mission brief has no `rules` and no `skills` node: `artifacts` replaces both (D874d-65). A mission brief has no `ambiguities`, `access`, `name_prefix`, `duties` or `return` node (D874d-70): what the delegating agent resolved before launch is a decision or a constraint; the scratch directory, the paths the delegate may write, the sources that are not files and the name prefix (D-DEL1) are in the delegation prompt (3.3.5); what the delegate must or must not do is a constraint; and what it returns is a deliverable.
 
 3.1.4. `provenance` is every document's header (D874d-29). It records what the document is, who wrote it, when, and for which session and mission.
 
@@ -151,17 +164,17 @@ severity       critical | high | medium | low   (OPTIONAL; deviation and observa
 ```
 
 - Who *wrote* an item is `agent_id`. Who *said* it is `source.kind` with `quote`.
-- In a brief or an AAR, an item MAY omit `version`, `agent_id`, `agent_type`, `mission` and `created_at`; it inherits them from the document's `provenance`. In the session DB, every row MUST carry them. *Settled by this RFC (S-18, R874d-30).*
+- In a brief or an AAR, an item MAY omit `version`, `agent_id`, `agent_type`, `mission` and `created_at`; it inherits them from the document's `provenance`. In the session DB, every row MUST carry them (D874d-55, which accepted S-18).
 - A quote MUST NOT carry a credential or a token. Such a passage is copied with the secret replaced by `[redacted]`, the one permitted change to a verbatim quote. *Settled by this RFC (S-24).*
 
 3.2.1a. The other list nodes hold **plain entries**, not items:
 
 | Node | Entry |
 |---|---|
-| `constraints` | `{text, source}` |
-| `rules` | `{path, kind}`, where `kind` is `rule` (binding, D-DEL6 tier 4) or `reference` (read in full; not binding). *Settled by this RFC (S-8)* |
-| `skills` | `{name, use, override}` |
-| `duties` | a string |
+| `constraints` | `{text, source}`: what the delegate must do or must not do, including every skill conflict the delegating agent pre-resolved (allowed or overridden) |
+| `artifacts` | `{path, instruction}` (3.3.3a; D874d-65) |
+| `deliverables` (brief) | `{kind, ref, objective, text}` (3.2.6; D874d-70) |
+| `objective.deliverables` (AAR, running estimate) | `{kind, ref, text}`: the same entry, its objective implicit (3.2.6) |
 | `identity.parallel_missions` | `{mission, scope}` |
 | `provenance.chain_of_command` | a transcript path |
 
@@ -176,7 +189,7 @@ objective  OBJ-n
   how                a brief summary of how it was done, or why not
   deviation_refs[]   DEV ids
   observation_refs[] OBS ids
-  deliverables[]     what it produced: PR or issue URL, commit SHA, file path (D874d-34)
+  deliverables[]     what it produced, as deliverable entries (3.2.6; D874d-34)
 
 deviation  DEV-n                 acted on: done differently from what was given (D874d-22)
   from.kind          brief | order | plan | rule | spec | standard     (3.2.3)
@@ -219,8 +232,10 @@ fact  FACT-n                     a session-DB type kept by D874d-43; no document
 decision  D<sid4>-<n>, or its record id
   text, decided_by, date, quote,
   status             decided | implemented | verified | deferred | reversed | superseded
-  superseded_by[]    {decision, part}, when status is superseded or partly superseded
-                     (S-19, R874d-31)
+  superseded_by[]    {decision, part}: the decision that supersedes it, and the part
+                     ("whole", or the part named) (D874d-56, which accepted S-19).
+                     status is superseded only when the whole decision is; a decision
+                     superseded in part keeps its status and names the part
 
 operational_learning  OL-n       (its own node, D874d-29)
   text               what worked, what failed, what to do differently
@@ -261,18 +276,33 @@ rfi  R<sid4>-<n>                 (D874d-41; a delegate's provisional id: 3.2.4)
 - When a document's items are written into the DB (3.4.8), the DB assigns new ids, keeps the document's id in `fields.doc_id`, and rewrites the document's refs to the new ids.
 - A delegate cannot see the session's RFI counter, so it numbers its RFIs `R<mission name>-<n>`. The session agent renumbers them into `R<sid4>-<n>` when it raises them.
 
-3.2.5. An item is never changed in place, because provenance is never deleted ("provenance is eternal", the commander, 2026-03-30). A change appends a new version of the item:
+3.2.5. Writers MUST NOT change an item in place, because provenance is never deleted ("provenance is eternal", the commander, 2026-03-30). A change appends a new version of the item:
 - The key of an item row is (`id`, `version`).
 - A ref points to an `id` and means its latest version.
 - Every reader, including the export, `aar`, the compatibility views (3.6.7) and the derived `missions[]`, reads the latest version of each id.
 
 *Settled by this RFC (S-4).*
 
+3.2.6. A **deliverable** entry has one shape wherever it appears: in the brief's `deliverables[]`, what the delegate is to produce; in an objective's `deliverables[]` (AAR and running estimate), what it produced (D874d-34, D874d-70):
+
+```
+kind               aar | pr | issue | commit | file
+ref                the pointer a reader can open and check: a file's absolute path,
+                   a PR or issue URL, a commit SHA. In a brief, where the deliverable
+                   is expected: a file's absolute path, the repo and base branch for a
+                   PR, the repo for an issue or commit; for the AAR, the AAR file's
+                   path when one is requested, else empty (the hand-back only)
+objective          the OBJ id it serves (brief only; in an objective it is implicit)
+text               what it is
+```
+
+Every brief lists the AAR as a deliverable (`kind` `aar`): the hand-back, JSON in the AAR schema in one fenced block, and the file only when its `ref` names one (D874d-47, D874d-50). *Settled by this RFC (S-26).*
+
 ### 3.3 Mission brief
 
 3.3.1. The delegating agent MUST write a mission brief for every delegate before it launches the delegate (D-DEL10). The brief MUST be written to `<session scratch dir>/<mission name>-brief.json` (D874d-36 location, D874d-42 name). The planning brief defines the delegate's mission objectives (D874d-12): the brief is where they are written.
 
-3.3.2. The brief MUST be one JSON object with these top-level keys: `provenance`, `identity`, `intent`, `objectives`, `constraints`, `assumptions`, `decisions`, `ambiguities`, `operational_learning`, `rules`, `skills`, `access`, `name_prefix`, `duties`, `return`.
+3.3.2. The brief MUST be one JSON object with these top-level keys: `provenance`, `identity`, `intent`, `objectives`, `constraints`, `assumptions`, `decisions`, `operational_learning`, `artifacts`, `deliverables`.
 
 3.3.3. The nodes hold:
 
@@ -290,37 +320,42 @@ provenance
   created_at
 identity             name, level, delegated_by, parallel_missions[] {mission, scope}
 intent               purpose, scope, out_of_scope[], audience
-objectives[]         objective items: text verbatim + source                 (D-DEL8)
-constraints[]        {text, source}: what the delegate must not do or cannot use
+objectives[]         objective items: text verbatim + source            (D-DEL8, D874d-13)
+constraints[]        {text, source}: what the delegate must do or must not do (for
+                     example shipping a code change, D-DEL4), and every skill conflict
+                     pre-resolved (allowed or overridden); standing duties are documented
+                     in /delegate, never in the brief (D874d-64)
 assumptions[]        assumption items: what the delegating agent assumes; the delegate
                      verifies or falsifies each
 decisions[]          decision items: the decisions the delegate must honour, quoted
-ambiguities[]        ambiguity items: points already resolved for the delegate, or flagged
 operational_learning[]  operational learning items, carried forward, each with its source
-rules[]              {path, kind}: every file to read in full, line by line, by absolute
-                     path; kind rule (binding) or reference (S-8)
-skills[]             {name, use, override}: /delegate first, then the task skills
-access               read_only[], writable[], scratch
-name_prefix          "<mission name>-"                                       (D-DEL1)
-duties[]             strings: the duties specific to this mission (for example shipping a
-                     code change, D-DEL4); standing duties are not restated (D-DEL13)
-return               {hand_back, file}: hand_back says the AAR is the hand-back message,
-                     JSON in one fenced block (D874d-47, D874d-50); file is null, or the
-                     AAR file's path when one is requested (3.4.7)
+artifacts[]          {path, instruction}: every file the delegate needs (3.3.3a, D874d-65)
+  path               the file's absolute path
+  instruction        "read in full" | "use as reference for answers"
+deliverables[]       {kind, ref, objective, text}: what the delegate is to produce, the
+                     AAR always among them (3.2.6, D874d-70)
 ```
+
+3.3.3a. `artifacts[]` lists every file the delegate needs, one entry per file, by absolute path, each with an explicit instruction (D874d-65):
+- **`read in full`:** every user- and project-scope CLAUDE.md file and rule, and any nested CLAUDE.md in the directories the delegate works in (user rule `delegation.md`); the SKILL.md of every skill the mission uses, `/delegate` first; the mission's specifications; every file the delegate changes or verifies. The prompt adds "line by line" (D874d-27).
+- **`use as reference for answers`:** the chain-of-command transcripts (D874d-27, "what to use as reference material (sessions)"), large reports and extracted documents, and files a mission that orchestrates other delegates needs only to brief them. The delegate searches these when a question comes up and never loads them whole.
+- **Never listed:** a governed registry's JSON file (its skill's SKILL.md is listed instead; `.claude/rules/governed-data-access.md`), and anything that is not a file, such as an issue, a PR or a web page, which the delegation prompt names with the command to read it (3.3.5).
+- **Not in `artifacts[]`:** what a skill is for goes in the prompt body (D874d-32); a skill conflict the delegating agent pre-resolved goes in `constraints[]` (`/delegate` writing step 6). Whether a file binds the delegate follows from what it is (D-DEL6 tiers), not from its instruction.
 
 3.3.4. Only structured content goes in the brief. Anything unstructured, such as facts or background, MUST go in the body of the delegation prompt, outside the brief (D874d-32, D-DEL12).
 
 3.3.5. The delegation prompt MUST:
 - give the brief's path with the instruction "Before any other work, read your mission brief in full, line by line: `<path>`" (D874d-27);
 - carry the mission objectives verbatim, each with its source (D-DEL8, D874d-13);
-- tell the delegate explicitly what it reads in full, line by line (the brief and every file in its `rules[]`), and what it uses only as reference material, searched and never loaded whole (the chain-of-command transcripts, large registries and reports) (D874d-27).
+- tell the delegate explicitly to read in full, line by line, every artifact whose instruction is `read in full`, and to search every artifact whose instruction is `use as reference for answers` when a question comes up, never loading it whole (D874d-27, D874d-65);
+- tell the delegate to load `/delegate` at start, where its standing duties are documented (D-DEL13, D874d-64);
+- give, as `/delegate` prompt elements, what the brief no longer holds (D874d-70): the delegate's scratch directory by absolute path (user rule `scratch.md`), the paths it may write, the sources that are not files with the command to read each, and the name prefix `<mission name>-` for every `*.md` file it writes (D-DEL1).
 
 3.3.6. Every delegate launched through a workflow (each `agent()` call) MUST get its own brief, written by the delegating agent before the workflow runs, and its prompt MUST give the brief's path. *Settled by this RFC (S-3).*
 
 3.3.7. A blocker the delegating agent already knows at launch MUST be written as a constraint or in the prompt body, and the objective it affects MUST say so. The brief has no list of conditions to report at once: reporting a blocker at once is a standing duty (D-DEL9, D874d-26).
 
-3.3.8. A delegating agent that cannot write into the top-level session's scratch directory, because worktree isolation confines its writes (ASM-4), MUST write the brief into its own scratch directory, under the same name. The prompt gives that path, and the delegate's AAR names it in `provenance.brief`, so `missions[]` still finds it (3.5.4). *Settled by this RFC (S-9).*
+3.3.8. A delegating agent SHOULD give a delegate that writes briefs or DB rows a worktree made with `git worktree add`, which does not confine writes, rather than the Agent tool's worktree isolation. A delegating agent that cannot write into the top-level session's scratch directory, because worktree isolation confines its writes (ASM-4), MUST write the brief into its own scratch directory, under the same name. The prompt gives that path, and the delegate's AAR names it in `provenance.brief`, so `missions[]` still finds it (3.5.4). *Settled by this RFC (S-9).*
 
 ### 3.4 After action review (AAR)
 
@@ -334,6 +369,7 @@ return               {hand_back, file}: hand_back says the AAR is the hand-back 
 - Each objective gives `how`, cites deviations or observations, or both (D874d-23).
 - An objective that is not accomplished MUST cite the deviation that explains it.
 - `deliverables` lists what the delegate produced for it (D874d-34).
+- An artifact whose instruction is `read in full` and that the delegate did not read in full is a deviation, `from.kind` `brief`.
 
 3.4.5. The free-text lines of the old hand-back fold into these nodes (D874d-29, D-DEL11):
 - a `WRITE_BLOCKED` denial becomes a deviation with cause `blocker` and `from.kind` `rule`, reported at once (D-DEL9);
@@ -351,7 +387,7 @@ What a delegate learns after its merge is recorded the same way, as observations
 
 The blocker was also reported at once, with a recommended course of action (D-DEL9).
 
-3.4.7. An AAR file is written only when one is requested. It then MUST be the same JSON, at `<session scratch dir>/<mission name>-aar.json` (D874d-47).
+3.4.7. An AAR file is written only when one is requested: the brief's AAR deliverable names it in `ref` (3.2.6). It then MUST be the same JSON, at `<session scratch dir>/<mission name>-aar.json` (D874d-47).
 
 3.4.8. Once schema 5 ships:
 - every item of the AAR MUST also be a row in the session DB, written by the delegate as it works;
@@ -389,7 +425,7 @@ operational_learning[], proposals[], rfis[]
 - The duty is added to the prompt-turn checklist, item 12 (plan batch 2.3).
 - Before schema 5, nothing is written (3.6.11).
 
-3.5.4. `missions[]` is derived on export and never written. It has one entry per `<mission name>-brief.json` in the session scratch directory, and per brief path named in a delegate's AAR `provenance.brief` (3.3.8). Each entry carries the `agent_id` and the objectives' status found on that mission's rows (latest versions, 3.2.5).
+3.5.4. `missions[]` MUST be derived on export; no writer writes it. It has one entry per `<mission name>-brief.json` in the session scratch directory, and per brief path named in a delegate's AAR `provenance.brief` (3.3.8). Each entry carries the `agent_id` and the objectives' status found on that mission's rows (latest versions, 3.2.5).
 
 3.5.5. At session end, one detached job, started by `harness-db-sessionend.sh`, MUST run these steps in this order:
 1. export the estimate to `<repo>/.aitools/channel/estimates/<session id prefix>.json`, untracked (D874d-44, D874d-52);
@@ -401,9 +437,9 @@ The job MUST also:
 - take a single-flight lock on the dotprofile, so it never contends with `ait-harvest.py archive` for the git index;
 - pull with rebase before it pushes, and refuse to push from a branch other than `main`.
 
-The next session's catch-up (`session-catchup.sh`) MUST recover a missing export, copy, commit or push. Because the date is the start date, a resumed session (`/resume`) rewrites the same record file. *Settled by this RFC (S-21, S-22).*
+The next session's catch-up (`session-catchup.sh`) MUST recover a missing export, copy, commit or push, and a step that failed MUST be reported in the next SessionStart output, not only in a log. Because the date is the start date, a resumed session (`/resume`) rewrites the same record file. *Settled by this RFC (S-21, S-22).*
 
-3.5.6. The SessionEnd hook MUST stop writing the single `.aitools/channel/running-estimate.json`. That file and `.aitools/templates/mission-running-estimate.json` are retired (S-13). Every reader and description of the old file is repointed to the per-session export or updated: `scripts/generate-dashboard.py`, `scripts/aitools-dashboard.sh/.ps1`, `shared/hooks/dashboard-serve.sh`, the `/mission-control` and `/aitool-continue` skills, `.claude/rules/aitools-workspace.md` and `reference/artifact-harvesting.md`. Stopping the tracking of the old file is a security matter (section 7, R874d-29).
+3.5.6. The SessionEnd hook MUST stop writing the single `.aitools/channel/running-estimate.json`. That file and `.aitools/templates/mission-running-estimate.json` are retired (S-13). Every reader and description of the old file is repointed to the per-session export or updated: `scripts/generate-dashboard.py`, `scripts/aitools-dashboard.sh/.ps1`, `shared/hooks/dashboard-serve.sh`, the `/mission-control` and `/aitool-continue` skills, `.claude/rules/aitools-workspace.md` and `reference/artifact-harvesting.md` (D874d-61). The hook stops writing the old file when it switches to the per-session export (plan WP-3); the tracked file and its template are removed in plan WP-5. Nothing is done earlier about the file already published (D874d-54).
 
 ### 3.6 Store (session DB, schema 5)
 
@@ -411,7 +447,7 @@ The next session's catch-up (`session-catchup.sh`) MUST recover a missing export
 
 3.6.2. At session start, `harness-db.py` MUST compare the full session id stored in an existing DB with the starting session's id. On a mismatch, two sessions share the 10-character prefix: it MUST log an error, never write the other session's DB, and use `<repo>/.aitools/sessions/<full session id>.db` instead (ASM-6). *Settled by this RFC (S-11).*
 
-3.6.3. All session-DB items go in one `items` table, whatever the type and whatever the agent; there is no table per agent (D874d-25, D874d-31):
+3.6.3. All session-DB items MUST be stored in one `items` table, whatever the type and whatever the agent; there is no table per agent (D874d-25, D874d-31):
 
 ```
 items   id, version, type, text, status, severity, fields, agent_id, agent_type, mission,
@@ -457,7 +493,7 @@ After the migration, views named `observations`, `decisions` and `deviations` ov
 
 3.6.8. `scripts/harness-db.py` is the schema's source of truth, and `reference/harness-db-schema.sql` is generated from it (PR #181). This supersedes RFC 0010 section 5, which called the `.sql` file canonical, and RFC 0010 section 7, which called the export git-tracked (D874d-52).
 
-3.6.9. `--session` is removed from the **session-DB write verbs** (3.6.10) and replaced by `--db` (D874d-31). The harness-DB verbs (`knowledge`, `edge`, `nogood`) and the lifecycle verbs (`session start | end`, `process-events`, `mission`) keep their `--session`: there it names a session in the cross-session harness DB, or finds `.scratch/session-<full id>/`, which the 10-character DB name cannot do. The removal ships in the same change as the hooks' switch, and the helper and hooks deploy together (3.6.12). *Settled by this RFC (S-15).*
+3.6.9. `--session` is removed from the **session-DB write verbs** (3.6.10) and replaced by `--db` (D874d-31). The harness-DB verbs (`knowledge`, `edge`, `nogood`) and the lifecycle verbs (`session start | end`, `process-events`, `mission`) keep their `--session`: there it names a session in the cross-session harness DB, or finds `.scratch/session-<full id>/`, which the 10-character DB name cannot do. The removal ships in the same change as the hooks' switch, and the helper and hooks deploy together (3.6.12). There is no deprecated alias (D874d-57). *Settled by this RFC (S-15).*
 
 3.6.10. The session-DB write verbs are:
 - `item add | update | list` (new);
@@ -499,9 +535,11 @@ These keep their stores unchanged: `log` (the `messages` table), `directive add`
   - an objective that is not accomplished cites a deviation;
   - ids match `<TYPE>-<n>`, `R<sid4>-<n>`, `R<mission name>-<n>` or `D<sid4>-<n>`;
   - timestamps are UTC with a Z suffix;
-  - item nodes hold items, and plain nodes hold plain entries (3.2.1a).
+  - item nodes hold items, and plain nodes hold plain entries (3.2.1a);
+  - every `artifacts[]` path is absolute, and its instruction is one of the two values (3.3.3a);
+  - every deliverable's `kind` is one of its values, and a brief has exactly one deliverable of kind `aar` (3.2.6).
 
-No third-party validator is added. For an AAR, `validate` reads the last fenced JSON block of a hand-back (3.4.1).
+A third-party validator MUST NOT be added. For an AAR, `validate` reads the last fenced JSON block of a hand-back (3.4.1).
 
 ### 3.8 Names and ids
 
@@ -528,19 +566,19 @@ The directories and files the harness creates MUST NOT have spaces in their name
 | D-DEL10 | A brief for every delegate; the prompt gives its path and says to read it in full (D874d-27) | commander |
 | D-DEL11 | The final report is the AAR (D874d-29) | commander |
 | D-DEL12 | Unstructured content goes in the prompt body, not the brief (D874d-32) | commander |
-| D-DEL13 | Every delegate loads `/delegate` at start | the session agent dbd05b0c, review-after (D-DEL5); not the commander's words |
+| D-DEL13 | Every delegate loads `/delegate` at start | the session agent dbd05b0c, review-after (D-DEL5); the commander placed the standing duties in the skill (D874d-64) |
 
-3.9.2. Two of these depend on deployment:
-- **D-DEL13.** On the strength of D-DEL13, 3.1.3 leaves `conflict_priority` and `permissions` out of the brief. Until the commander confirms D-DEL13, a delegation prompt MUST still carry those two `/delegate` prompt elements (6 and 7), as it does today.
-- **D-DEL9 to D-DEL13.** These reach a delegate only once `aitools` deploys the updated `/delegate` and rule, and the deployed copy can lag the source. Until then, the delegation prompt restates the duties a delegate needs.
+3.9.2. **Deployment lag.** D-DEL9 to D-DEL13 reach a delegate only once `aitools` deploys the updated `/delegate` and rule, and the deployed copy can lag the source. Until then, the delegation prompt restates the standing duties a delegate needs. The brief never carries them (D874d-64); the prompt still carries the prompt elements `/delegate` lists.
 
-3.9.3. The working copy of those files still names the brief `<sid4>_<mission name>-brief.md` in Markdown, and does not yet say the hand-back is JSON. Plan WP-2 brings them in line with this RFC (D874d-49).
+3.9.3. The delegation guards (`delegation-duty-guard.sh`, `workflow-delegation-guard.sh`) MUST check that a delegation prompt gives a brief path and the instruction to read it in full (D874d-27), in observe mode first (`.claude/rules/hook-rollout.md`).
+
+3.9.4. The working copy of those files still names the brief `<sid4>_<mission name>-brief.md` in Markdown, and does not yet say the hand-back is JSON. Plan WP-2 brings them in line with this RFC (D874d-49).
 
 ---
 
 ## 4. Settled by this RFC
 
-Each point below is decided here, not by the commander, and is reviewed after (D-DEL5). S-18 and S-19 change the issue's item schema and are put to the commander as RFIs.
+Each point below is decided here, not by the commander, and is reviewed after (D-DEL5). The commander has since decided three of them: S-18 (accepted, D874d-55), S-19 (accepted, D874d-56) and S-8 (replaced by `artifacts[]`, D874d-65).
 
 | ID | Point | Settled as | Why |
 |---|---|---|---|
@@ -551,7 +589,7 @@ Each point below is decided here, not by the commander, and is reviewed after (D
 | S-5 | Type-specific fields (issue AMB-8) | One `fields` column of JSON text, parsed in Python (3.6.4) | Keeps the store independent of the SQLite build |
 | S-6 | Validating documents (issue ASM-7) | A stdlib validator: the JSON Schema subset plus coded rules (3.7.2) | RFC 0010 section 2: stdlib only; JSON Schema cannot express all of the MUSTs |
 | S-7 | Item ids in documents | Numbered from 1, or the copied record's ids (3.2.4) | Traceability to the issue's ASM and AMB ids |
-| S-8 | Where a brief lists the mission's references | `rules[]` entries `{path, kind}`, with kind `rule` or `reference` (3.2.1a) | One reading list, with binding and non-binding files told apart |
+| S-8 | Where a brief lists the mission's references | *Superseded by D874d-65:* `artifacts[]` entries `{path, instruction}` (3.3.3a) | The commander's decision; whether a file binds follows from what it is |
 | S-9 | Delegates confined to their worktree (ASM-3, ASM-4) | The brief goes in the delegating agent's own scratch and the AAR names it; the delegating agent records the delegate's missing items (3.3.8, 3.4.8) | `/delegate`: worktree isolation "confines writes to the worktree" |
 | S-10 | Lock contention (ASM-2) | Agents retry three times, then exit 1 and record a blocker; hooks never retry; `ensure_schema` runs at session start only (3.6.6) | A locked DB fails loudly without stalling a hook |
 | S-11 | Prefix collision (ASM-6) | Checked at session start; the colliding session uses its full id as the DB name (3.6.2) | No session is left without a DB |
@@ -561,14 +599,15 @@ Each point below is decided here, not by the commander, and is reviewed after (D
 | S-15 | Removing `--session` | From the session-DB write verbs only, in the same change as the hooks; helper and hooks deploy together (3.6.9) | Elsewhere `--session` names a session in the cross-session DB |
 | S-16 | Key order | Writers emit the spec's order; readers do not depend on it (3.1.5) | JSON objects are unordered |
 | S-17 | The v4 to v5 mapping | The table in 3.6.7, every column and table accounted for | No v4 data is lost |
-| S-18 | Writer fields of items inside a document | Inherited from `provenance`; required on every DB row (3.2.1) | A document has one writer and one time. Changes the issue's schema: R874d-30 |
-| S-19 | A superseded decision | Status `superseded` and `superseded_by[]` (3.2.2) | The issue keeps superseded decisions as the record. Changes the issue's schema: R874d-31 |
+| S-18 | Writer fields of items inside a document | Inherited from `provenance`; required on every DB row (3.2.1) | A document has one writer and one time. Accepted by the commander (D874d-55) |
+| S-19 | A superseded decision | Status `superseded` and `superseded_by[]` (3.2.2) | The issue keeps superseded decisions as the record. Accepted by the commander (D874d-56) |
 | S-20 | Version skew between helper, hooks and DB | Version check first; migration only through the deployed v5 pair; a skipped deploy is a WARN (3.6.12) | A v4 helper crashes on a v5 DB (observed on a throwaway DB) |
 | S-21 | The SessionEnd sequence | One detached job: export, copy, commit, push, with a lock and a rebase; catch-up recovers each step (3.5.5) | Two separate hooks have no order, and the SessionEnd window is 1.5 seconds |
 | S-22 | `<repo>`, `<project>`, the record's date, spaces in paths | The recorded project root, its base name, the session's start date; no spaces in names the harness creates (section 2, 3.5.5, 3.8) | The working directory changes; the start date fits D874d-53's example |
 | S-23 | Document ids against DB ids | The DB assigns new ids, keeps `fields.doc_id` and rewrites refs; delegates' RFIs are `R<mission name>-<n>` (3.2.4) | Parallel documents would collide |
 | S-24 | Credentials in verbatim quotes | Replaced by `[redacted]`, the one permitted change (3.2.1) | The verbatim rule and the no-secrets rule otherwise conflict |
 | S-25 | What a session is | One Claude Code session id; `/clear` starts a new one, `/resume` continues it (section 2) | SessionEnd fires on both |
+| S-26 | The structure of a deliverable (D874d-70: "structured and match the RFC") | One shape, `{kind, ref, text}`, in the brief (with the `objective` it serves) and in an objective's `deliverables[]`; the AAR is always one (3.2.6) | One definition serves what is asked and what is produced; a delegating agent checks each `ref` it gets back |
 
 ---
 
@@ -585,7 +624,10 @@ Each point below is decided here, not by the commander, and is reviewed after (D
 | A list of conditions to report at once in each brief | Dropped: reporting a blocker at once is a standing duty (D874d-26) |
 | A third-party JSON Schema validator | Rejected: stdlib only (RFC 0010 section 2) |
 | Committing the export in the project repo | Rejected: the export stays untracked and the record goes to the dotprofile (D874d-52) |
-| A deprecated `--session` alias for one release | Not adopted: D874d-31 drops the argument; skew is handled by S-20. Put to the commander as R874d-32 |
+| A deprecated `--session` alias for one release | Rejected by the commander (D874d-57); skew is handled by S-20 |
+| `rules[]` and `skills[]` in the brief (S-8: `rules[]` entries `{path, kind}`) | Replaced by `artifacts[]` (D874d-65) |
+| Separate `rules[]` and `references[]` lists, binding and not | Not adopted: `artifacts[]` says how to read each file; whether it binds follows from what it is (D-DEL6) |
+| `ambiguities`, `access`, `name_prefix`, `duties` and `return {hand_back, file}` in the brief | Removed by the commander (D874d-70); their content moves to decisions, constraints, the prompt and `deliverables[]` (3.1.3) |
 
 ---
 
@@ -603,12 +645,12 @@ Each point below is decided here, not by the commander, and is reviewed after (D
 
 - **The aitools repo is public** (`gh repo view`: visibility PUBLIC). Briefs, AARs, running estimates and copies of transcripts, prompts and issue bodies carry the commander's words verbatim and the session's content. They MUST NOT be committed to a project repo.
 - **The project-repo export stays untracked; the record goes to the commander's dotprofile** (D874d-52). The dotprofile already receives the full session transcripts (`ait-harvest.py archive`), so the record adds no new kind of exposure there.
-- **Existing exposure.** Before this RFC, the single export `.aitools/channel/running-estimate.json` is tracked: last committed in `5d8fa521` (2026-11-15), holding one observation. `harvesting/` holds tracked files whose names show session content, among them prompts, AARs, briefs and issue bodies. Whether to stop tracking the export now, add ignore patterns, and treat the files already published is the commander's call (R874d-29). A history rewrite is destructive and is never done without his order.
+- **Existing exposure.** Before this RFC, the single export `.aitools/channel/running-estimate.json` is tracked: last committed in `5d8fa521` (2026-11-15), holding one observation. `harvesting/` holds tracked files whose names show session content, among them prompts, AARs, briefs and issue bodies. The commander decided that this work takes no action on them (D874d-54). The old export stops being written in plan WP-3 and is removed in WP-5 (3.5.6). A history rewrite is destructive and is never done without his order.
 - **Harvester (S-14).** The SessionEnd and SessionStart harvester copies every non-ephemeral top-level file of a session's scratch directory into the tracked `harvesting/`. Among `.json` files it exempts only `package-lock*`, `node_modules*`, `tsconfig*` and `*.config.json` (`ait-harvest.py` `_is_ephemeral`).
   - It MUST treat `*-brief.json`, `*-aar.json` and `*.tmp` as ephemeral.
   - Agents MUST save copies of transcripts, prompts and issue bodies under a `.tmp` name.
   - Until this ships, harvested copies of such files MUST NOT be committed.
-- **Other repos.** The SessionStart hook creates `.aitools/` and `.scratch/` in whatever repo a session runs in. Outside aitools, nothing ignores them. Whether the harness adds both to that repo's `.git/info/exclude` is R874d-33.
+- **Other repos.** The SessionStart hook creates `.aitools/` and `.scratch/` in whatever repo a session runs in, and outside aitools nothing ignores them. At session start, in any git repo where no ignore rule covers them, the harness MUST add both to that repo's `.git/info/exclude` (local, never committed) and report it once per repo (D874d-58).
 - **No credentials.** Writers MUST NOT copy credentials or tokens into any item; a quote replaces them with `[redacted]` (S-24).
 
 ---
@@ -619,7 +661,7 @@ The plan, `plans/structured-reports/implementation-plan.md`, splits the work int
 
 | WP | What |
 |---|---|
-| WP-0 | This RFC, the plan, and the four verifiers' review (this change) |
+| WP-0 | This RFC and the plan, on main (D874d-59, D874d-69); the four verifiers' findings applied; no separate verdict is kept (D874d-68) |
 | WP-1 | Reference, schemas, templates, and the `validate` verb |
 | WP-2 | The harness text brought in line (D874d-49) |
 | WP-3 | Session DB schema 5: migration, views, version skew, the hooks' switch to `--db` |
@@ -638,20 +680,13 @@ The implementing mission's brief is `874d-2-structured-reports-brief.json` in th
 
 ## 9. Open questions
 
-These questions go to the commander, each as an RFI with a suggested answer:
-- R874d-29: the existing exposure in the public repo (section 7);
-- R874d-30: S-18;
-- R874d-31: S-19;
-- R874d-32: a `--session` alias;
-- R874d-33: `.git/info/exclude` in other repos.
-
-The other points of section 4 are open to the commander's review (D-DEL5).
+None open. R874d-29 to R874d-33 were answered on L3394 (D874d-54 to D874d-58), and R874d-40 to R874d-43 on L3479 (D874d-66 to D874d-69). The other points of section 4 are open to the commander's review (D-DEL5). A point the implementer finds unclear goes to the commander as an RFI with a suggested answer.
 
 ---
 
 ## 10. References
 
-- **Issue** nobul-tech/aitools#180, body v5.2: decisions D874d-1 to D874d-53 (section 1), naming (2), schema (3), store (4), assumptions and ambiguities (6), implementation (7). Comments: the commander's answers (2026-11-15), the March history, "Doctrine behind the design", "Answers recorded".
+- **Issue** nobul-tech/aitools#180, body v5.4: decisions D874d-1 to D874d-70 (section 1), naming (2), schema (3), store (4), implementation (7). Comments: the commander's answers (2026-11-15), the March history, "Doctrine behind the design", "Answers recorded", "Sections 5 and 6 (moved in v5.4)" (the assumptions and ambiguities).
 - **RFCs:** 0005-v2 (session intelligence), 0006 (delegation, P1 briefing-first), 0010 (Python and SQLite engineering).
 - **Harness:** `shared/rules/delegation.md`, `shared/skills/delegate/SKILL.md`, `reference/framework-intelligence-types.md`, the glossary (`/glossary`), `reference/prompt-turn-checklist.md`, `reference/tool-ops-claude-code.md` (item #35).
 - **Code:** `scripts/harness-db.py`, `scripts/ait-harvest.py`, `scripts/generate-dashboard.py`, `shared/hooks/harness-db-sessionstart.sh`, `harness-db-sessionend.sh`, `session-archive.sh`, `session-catchup.sh`, `intelligence-stop.py`, `dashboard-serve.sh`, `delegation-duty-guard.sh`, `workflow-delegation-guard.sh`.
@@ -695,7 +730,7 @@ Every decision of issue #180 section 1. "Superseded" means a newer decision repl
 | D874d-27 | 3.3.5, 3.9.1 | |
 | D874d-28 | 3.2.1, 3.6.7 | |
 | D874d-29 | 3.1.4, 3.2.3, 3.4.5 | |
-| D874d-30 | 3.2.2 (`deliverables`; no `artifact_refs`) | Plan batch 2.2 governs the node and item-type names |
+| D874d-30 | 3.2.2 (`deliverables`; no `artifact_refs`) | Its glossary requirement is set aside for now (D874d-66) |
 | D874d-31 | 3.6.3, 3.6.5, 3.6.9 | |
 | D874d-32 | 3.1.3, 3.3.4 | |
 | D874d-33 | 3.4.9, section 6, section 8 | |
@@ -714,8 +749,25 @@ Every decision of issue #180 section 1. "Superseded" means a newer decision repl
 | D874d-46 | | Session only (issue v4.1) |
 | D874d-47 | 3.4.1, 3.4.7 | |
 | D874d-48 | 3.6.1 | |
-| D874d-49 | 3.9.3, section 8 (WP-2) | |
+| D874d-49 | 3.9.4, section 8 (WP-2) | |
 | D874d-50 | 3.4.1 | |
 | D874d-51 | 3.5.5 | |
 | D874d-52 | 3.5.5, section 7 | |
 | D874d-53 | 3.5.5, 3.8 | |
+| D874d-54 | 3.5.6, section 7 | |
+| D874d-55 | 3.2.1 (S-18) | |
+| D874d-56 | 3.2.2 (S-19) | |
+| D874d-57 | 3.6.9, section 5 | |
+| D874d-58 | section 7 | |
+| D874d-59 | section 8 (WP-0) | Session only (commit 419d32dd) |
+| D874d-60 | | The plan ("How every batch is shipped") |
+| D874d-61 | 3.5.6 | And plan WP-2, WP-5 |
+| D874d-62 | | Superseded by -66 |
+| D874d-63 | | Session only (issue body v5.3) |
+| D874d-64 | 3.1.3, 3.3.3, 3.3.5, 3.9.1, 3.9.2 | |
+| D874d-65 | 3.1.2, 3.1.3, 3.2.1a, 3.3.2, 3.3.3, 3.3.3a, 3.3.5, 3.7.2, section 5 | |
+| D874d-66 | section 2, D874d-30 above | |
+| D874d-67 | section 2 | And plan batch 2.2 |
+| D874d-68 | section 8 (WP-0) | |
+| D874d-69 | section 8 (WP-0) | Session only |
+| D874d-70 | 3.1.2, 3.1.3, 3.2.1a, 3.2.6, 3.3.2, 3.3.3, 3.3.5, 3.4.7, 3.7.2, section 5 | |
