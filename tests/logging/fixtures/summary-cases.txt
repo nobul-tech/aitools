@@ -1,8 +1,14 @@
 # summary-cases.txt -- the shared fixture of tests L1-L32 (plan
-# summary-warn-reporting section 13), L33 (RFI 5899-31) and L34 (step I5): for each case, its
+# summary-warn-reporting section 13), L33 (RFI 5899-31), L34 (step I5) and L35
+# (fix-forward after I5): for each case, its
 # input and its expected run summary records, counts, deploy.log lines and
 # panel lines.
 #
+# v1.4 (2026-11-16, fix-forward 5899-6-L2-P1): L35a-L35d: a child's warning
+# or error no longer suppresses the relay's abort record (only an abort record
+# the child wrote does, logging.md 8.3 v2.5); a failed child that recorded its
+# error is logged with no reason derived from its last line. L32b, L32c: the
+# non-interactive overwrite and the skip warnings name the cause first.
 # v1.3 (2026-11-16, plan step I5): the migration switch and the legacy
 # write_summary WARN / ERROR are gone: the "switch" and "migration-only" keywords
 # are removed (log_warn / log_error always record); L27 is now the final
@@ -953,7 +959,9 @@ expect result updated
 expect record-count 1 WARN|
 expect record-count 1 WARN|fx tool|
 expect count warnings 1
-expect logsub warn overwriting (non-interactive)
+expect record-count 1 WARN|fx tool|local edits overwritten (non-interactive run, backup kept):\s
+expect logsub warn local edits overwritten (non-interactive run, backup kept):
+note v1.4: the cause comes first and the path last, so the panel's 70-character cut keeps the cause (plan 2.1)
 
 case L32c
 plan L32
@@ -968,8 +976,9 @@ call deploy_tracker_record|{RESULT}|fx tool|fx.md
 call deploy_tracker_summary|fx tool
 expect result skipped
 expect record-count 1 WARN|
-expect record-count 1 WARN|fx tool|
+expect record-count 1 WARN|fx tool|skipped at review, local differs from source: fx.md
 expect count warnings 1
+note v1.4: the cause comes first and the item last, so the panel's 70-character cut keeps the cause (plan 2.1)
 note the menu prompt needs a terminal (tty_interactive / the PowerShell console check); the pty harness of tests/profile can drive it, as plan I6 does
 
 # ===========================================================================

@@ -746,7 +746,7 @@ function Complete-AitLibChildRun {
         } else {
             "no output (exit $rc)"
         }
-        Write-AitLibChildRow $Name $ErrBefore "$Label failed (exit $rc)" $reason
+        Write-AitLibChildRow $Name $what $reason
         return 1
     }
     return 0
@@ -2692,8 +2692,8 @@ function Get-ReviewDiff {
         $err = $errTask.Result
         # git diff exits 1 when the files differ (expected) and >1 on error.
         if ($proc.ExitCode -gt 1) {
-            $detail = if ($err) { $err.Trim() } else { "no output" }
-            $script:ReviewDiffError = "git diff failed (exit $($proc.ExitCode)): $detail"
+            # Silent failure: the 8.3 form of an empty output, "no output (exit N)"
+            $script:ReviewDiffError = if ($err -and $err.Trim()) { "git diff failed (exit $($proc.ExitCode)): $($err.Trim())" } else { "git diff failed: no output (exit $($proc.ExitCode))" }
             return $false
         }
     } catch {
@@ -2756,9 +2756,11 @@ function Prompt-DiffReview {
         return "overwrite"
     }
 
-    # Non-interactive: auto-overwrite; local edits are lost, so a warning
+    # Non-interactive: auto-overwrite; local edits are lost, so a warning. The
+    # cause comes first, the path last: the panel cuts a yellow line at 70
+    # characters (8.5). Deploy-ManagedFile backs LOCAL up before it writes
     if (-not (Test-InteractiveConsole)) {
-        Write-AitWarn $pdrTool "Diff in $FilePath -- overwriting (non-interactive)"
+        Write-AitWarn $pdrTool "local edits overwritten (non-interactive run, backup kept): $FilePath"
         return "overwrite"
     }
 
@@ -3034,7 +3036,9 @@ function Deploy-ManagedFile {
     $script:PdrToolName = ""
 
     if ($choice -eq "skip") {
-        Write-AitWarn $ToolName "Skipped: $ItemName (local differs from source; reviewed again next run)"
+        # The cause first, the item last: the panel cuts at 70 (8.5). It is
+        # reviewed again on the next run
+        Write-AitWarn $ToolName "skipped at review, local differs from source: $ItemName"
         return "skipped"
     }
     if ($choice -eq "failed") {

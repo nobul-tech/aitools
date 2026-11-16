@@ -387,7 +387,7 @@ try {
         Run-DH 's\n'
         # The library records the skip warning once (logging.md 8.2); deploy-harness
         # writes no second one and counts the skip in its OK status.
-        Check "skip: nothing written, one WARN row (the library's), skip in the OK status" ($rc -eq 0 -and (GrepX "$(A)\skills\s2\SKILL.md" 'local edit') -and (Row 'WARN|harness files|Skipped: skills/s2/SKILL.md (local differs from source; reviewed again next run)') -and (NRows '^WARN\|') -eq 1 -and (Row 'OK|harness files|1 skipped, 13 verified'))
+        Check "skip: nothing written, one WARN row (the library's), skip in the OK status" ($rc -eq 0 -and (GrepX "$(A)\skills\s2\SKILL.md" 'local edit') -and (Row 'WARN|harness files|skipped at review, local differs from source: skills/s2/SKILL.md') -and (NRows '^WARN\|') -eq 1 -and (Row 'OK|harness files|1 skipped, 13 verified'))
 
         Setup-Case abort
         Run-DH

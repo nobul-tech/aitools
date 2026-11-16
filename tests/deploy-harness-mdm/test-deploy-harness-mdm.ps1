@@ -528,7 +528,7 @@ try {
     # The status stays OK; the non-interactive overwrite of the local edit is its
     # own warning, recorded by the library (reference/logging.md 8.3: "local edits
     # overwritten in a non-interactive run"); the dev path does the same (next check).
-    Check "edit then rerun (non-interactive): source wins in MDM, 1 updated, overwrite warning" ((SameBytes $P2 (Join-Path $tmpRoot "eq-mdm/.aitools/rules/tool-ops.md")) -and (SumMatch eq-mdm '^OK\|harness files\|1 updated') -and ((HomeRows (Join-Path $tmpRoot "eq-mdm.summary")) -split "`n" -ccontains 'WARN|harness files|Diff in <HOME>/.aitools/rules/tool-ops.md -- overwriting (non-interactive)'))
+    Check "edit then rerun (non-interactive): source wins in MDM, 1 updated, overwrite warning" ((SameBytes $P2 (Join-Path $tmpRoot "eq-mdm/.aitools/rules/tool-ops.md")) -and (SumMatch eq-mdm '^OK\|harness files\|1 updated') -and ((HomeRows (Join-Path $tmpRoot "eq-mdm.summary")) -split "`n" -ccontains 'WARN|harness files|local edits overwritten (non-interactive run, backup kept): <HOME>/.aitools/rules/tool-ops.md'))
     Check "edit then rerun: same rows (each side's HOME as <HOME>) and files as dev" ((SameSummary eq) -and (SameTrees eq))
     if (-not (SameSummary eq)) {
         Compare-Object @((HomeRows (Join-Path $tmpRoot "eq-dev.summary")) -split "`n") @((HomeRows (Join-Path $tmpRoot "eq-mdm.summary")) -split "`n") -CaseSensitive |
@@ -565,7 +565,7 @@ try {
         WriteLf $plainFile (Strip (ReadText $script:OUT))
         # The skip is one warning, recorded by the library (logging.md 8.2), and
         # counted in the OK status.
-        Check "terminal review (MDM): overwrite offered, adopt and merge not; skip keeps LOCAL" ($script:RC["pty-mdm"] -eq 0 -and (GrepQ $plainFile '\[o\]verwrite') -and -not (GrepQ $plainFile '\[a\]ccept & adopt') -and -not (GrepQ $plainFile '\[m\]erge & adopt') -and (GrepQ (Join-Path $tmpRoot "eq-mdm/.aitools/rules/scratch.md") 'local edit' -Fixed -Whole) -and (Row pty-mdm 'WARN|harness files|Skipped: rules/scratch.md (local differs from source; reviewed again next run)') -and (GrepCount $ptySum 'WARN|harness files|Skipped: ') -eq 1 -and (SumMatch pty-mdm '^OK\|harness files\|1 skipped, [0-9]* verified$'))
+        Check "terminal review (MDM): overwrite offered, adopt and merge not; skip keeps LOCAL" ($script:RC["pty-mdm"] -eq 0 -and (GrepQ $plainFile '\[o\]verwrite') -and -not (GrepQ $plainFile '\[a\]ccept & adopt') -and -not (GrepQ $plainFile '\[m\]erge & adopt') -and (GrepQ (Join-Path $tmpRoot "eq-mdm/.aitools/rules/scratch.md") 'local edit' -Fixed -Whole) -and (Row pty-mdm 'WARN|harness files|skipped at review, local differs from source: rules/scratch.md') -and (GrepCount $ptySum 'WARN|harness files|skipped at review, ') -eq 1 -and (SumMatch pty-mdm '^OK\|harness files\|1 skipped, [0-9]* verified$'))
         if ($fakeGitExe) {
             Check "terminal review (MDM) without git: diff unavailable, menu still shown" ((GrepQ $plainFile 'diff unavailable') -and (GrepQ $plainFile '\[o\]verwrite'))
         } else {

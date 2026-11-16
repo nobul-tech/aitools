@@ -326,7 +326,7 @@ printf '## shared s\nlocal edit\n' > "$(R)/s.md"
 rerun
 # Local edits overwritten in a non-interactive run: one warning, recorded by the
 # library (reference/logging.md 8.3 "What is a warning"); the status row stays OK
-check "fanout edited, non-interactive: overwritten, backup kept, OK row and one WARN record" "[ \"\$(nondetail)\" = 'OK|claude rules|1 updated, 3 verified' ] && [ \"\$(grep -c '^WARN|claude rules|' '$C/$L.summary')\" = 1 ] && rows '$C/$L.summary' | grep -xF 'WARN|claude rules|Diff in <HOME>/.claude/rules/s.md -- overwriting (non-interactive)' >/dev/null && grep -qx '## shared s' '$(R)/s.md' && ls '$(R)' | grep '^s\.md\.bak\.' >/dev/null"
+check "fanout edited, non-interactive: overwritten, backup kept, OK row and one WARN record" "[ \"\$(nondetail)\" = 'OK|claude rules|1 updated, 3 verified' ] && [ \"\$(grep -c '^WARN|claude rules|' '$C/$L.summary')\" = 1 ] && rows '$C/$L.summary' | grep -xF 'WARN|claude rules|local edits overwritten (non-interactive run, backup kept): <HOME>/.claude/rules/s.md' >/dev/null && grep -qx '## shared s' '$(R)/s.md' && ls '$(R)' | grep '^s\.md\.bak\.' >/dev/null"
 parity fanout-edited
 printf '## shared s\nlocal edit 2\n' > "$(R)/s.md"
 # The edited run's backup is checked above; removed so the tree holds one backup

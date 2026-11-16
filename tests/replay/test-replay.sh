@@ -302,7 +302,7 @@ else bad "replay: the parent exits $RC1, want 1"; show "$WORK/replay.out"; show 
     printf '  [ok]  %-16s %s\n' "claude skills" "1 added"
     printf '%26s%s\n' "" "added: replay-skill/SKILL.md"
     printf '  [!]   %-16s %s\n' "aitools config" "$(cut70 "this machine is not registered -- run: aitools user init")"
-    printf '  [!]   %-16s %s\n' "claude.md" "$(cut70 "Skipped: CLAUDE.md (local differs from source; reviewed again next run)")"
+    printf '  [!]   %-16s %s\n' "claude.md" "$(cut70 "skipped at review, local differs from source: CLAUDE.md")"
     printf '  [ERR] %-16s %s\n' "crash test" "setup-crash.sh failed (exit 3): boom"
     printf '\n  ACTION REQUIRED -- run before tools are ready:\n'
     printf '  >>  %s\n' "Run: aitools user init (registers this machine)"
@@ -351,7 +351,7 @@ else bad "replay: duplicate panel line(s): $dups"; fi
 if [ -f "$SUM1" ]; then
     for want in 'OK|node.js|v26' 'WARN|aitools config|this machine is not registered -- run: aitools user init' \
         'ACTION||Run: aitools user init (registers this machine)' \
-        'WARN|claude.md|Skipped: CLAUDE.md (local differs from source; reviewed again next run)' \
+        'WARN|claude.md|skipped at review, local differs from source: CLAUDE.md' \
         'ERROR|crash test|setup-crash.sh failed (exit 3)|boom'; do
         n=$(count_lines "$SUM1" "$want")
         if [ "$n" -eq 1 ]; then ok "replay: record '$want' once"

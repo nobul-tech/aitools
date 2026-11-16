@@ -291,7 +291,7 @@ if $HAVE_PTY; then
     # The library records the skip warning once (logging.md 8.2); deploy-harness
     # writes no second one and counts the skip in its OK status.
     check "skip: nothing written, one WARN row (the library's), skip in the OK status" \
-        "[ \"\$(rc)\" = 0 ] && grep -qx 'local edit' '$(A)/skills/s2/SKILL.md' && row 'WARN|harness files|Skipped: skills/s2/SKILL.md (local differs from source; reviewed again next run)' && [ \"\$(n_rows '^WARN|')\" = 1 ] && row 'OK|harness files|1 skipped, 13 verified'"
+        "[ \"\$(rc)\" = 0 ] && grep -qx 'local edit' '$(A)/skills/s2/SKILL.md' && row 'WARN|harness files|skipped at review, local differs from source: skills/s2/SKILL.md' && [ \"\$(n_rows '^WARN|')\" = 1 ] && row 'OK|harness files|1 skipped, 13 verified'"
 
     setup_case abort
     run_dh "" --

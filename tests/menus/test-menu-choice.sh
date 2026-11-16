@@ -297,7 +297,7 @@ if $HAVE_PTY; then
     check "text review (adopt): empty, word and letter logged as not offered" \
         eval 'has "[detail] menu answer (review a.md): \"\" -> not one of o/a/m/s/x, asked again" "$LOG" && has "[detail] menu answer (review a.md): \"skip\" -> not one of o/a/m/s/x, asked again" "$LOG" && has "[detail] menu answer (review a.md): \"q\" -> not one of o/a/m/s/x, asked again" "$LOG"'
     check "text review (adopt): s logged" has '[detail] menu answer (review a.md): "s" -> s' "$LOG"
-    check "text review (adopt): skipped logged" has "Skipped: item (local differs from source" "$LOG"
+    check "text review (adopt): skipped logged" has "skipped at review, local differs from source: item" "$LOG"
     check "text review (adopt): re-ask prints the hint and the prompt, not the menu again" \
         occ_is 1 "  [s]kip            : nothing written; asked again next run" "$C/plain"
 

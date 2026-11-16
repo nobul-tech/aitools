@@ -2670,7 +2670,12 @@ _review_diff() {
     if [ -s "$tmp_dir/err" ]; then err=$(cat "$tmp_dir/err"); fi
     rm -rf "$tmp_dir"
     if [ "$rc" -gt 1 ]; then
-        REVIEW_DIFF_ERROR="git diff failed (exit $rc): ${err:-no output}"
+        # Silent failure: the 8.3 form of an empty output, "no output (exit N)"
+        if [ -n "$err" ]; then
+            REVIEW_DIFF_ERROR="git diff failed (exit $rc): $err"
+        else
+            REVIEW_DIFF_ERROR="git diff failed: no output (exit $rc)"
+        fi
         return 1
     fi
 
@@ -2725,9 +2730,11 @@ prompt_diff_review() {
     fi
 
     # Non-interactive: auto-overwrite. Local edits are overwritten without the
-    # user's choice: a warning (8.3)
+    # user's choice: a warning (8.3). The cause comes first, the path last: the
+    # panel cuts a yellow line at 70 characters (8.5). deploy_managed_file
+    # backs LOCAL up before it writes (_managed_write)
     if ! tty_interactive; then
-        write_warn "$_PDR_TOOL" "Diff in $(display_path "$file_path") -- overwriting (non-interactive)"
+        write_warn "$_PDR_TOOL" "local edits overwritten (non-interactive run, backup kept): $(display_path "$file_path")"
         return 0
     fi
 
@@ -2864,7 +2871,7 @@ prompt_diff_review() {
 #   failed   nothing is left half-written (snapshots restored); one write_error,
 #            WHAT "Failed: <item>", REASON the write, read, AI merge, adopt
 #            filter or validation error
-#   skipped  one write_warn "Skipped: <item> (...)"
+#   skipped  one write_warn "skipped at review, local differs from source: <item>"
 #   a non-interactive overwrite of a differing LOCAL: one write_warn; under
 #            --force it is info (the user asked for it)
 # The caller records the outcome with the deploy tracker (OK status and DETAIL
@@ -2988,7 +2995,9 @@ deploy_managed_file() {
     local p_local="$dest" local_out="$src_content" p_repo="" repo_content=""
     case "$DIFF_REVIEW_RESULT" in
         skip)
-            write_warn "$tool_name" "Skipped: $item_name (local differs from source; reviewed again next run)"
+            # The cause first, the item last: the panel cuts at 70 (8.5). It is
+            # reviewed again on the next run
+            write_warn "$tool_name" "skipped at review, local differs from source: $item_name"
             MANAGED_FILE_RESULT="skipped"
             return 0 ;;
         failed)

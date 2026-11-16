@@ -282,6 +282,9 @@ if $HAVE_PTY; then
     run_lib "C='$C' SRCF='$C/src.md' DEST='$C/dest/a.md' ADOPT=''; $DMF" "s\n"
     check "display, git diff fails: warning logged, menu still works" \
         "grep -q '\[warn\] Review diff unavailable' '$LOG' && has_line '$C/plain' '  (diff unavailable -- see deploy log)' && [ \"\$(result)\" = skipped ]"
+    # A git that fails silently: the reason in the 8.3 form, "no output (exit N)"
+    check "display, git diff fails with no output: reason 'git diff failed: no output (exit 128)'" \
+        "grep -q '\[warn\] Review diff unavailable for .*: git diff failed: no output (exit 128)\$' '$LOG'"
 else
     printf 'SKIP interactive cases (no pseudo-terminal: python3 missing, or pywinpty not installed on Windows)\n'; SKIP=$((SKIP + 1))
 fi
