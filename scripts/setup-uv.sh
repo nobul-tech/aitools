@@ -26,64 +26,99 @@ if command -v uv >/dev/null 2>&1; then
     uv_path=$(command -v uv)
     if [[ "$uv_path" == /opt/homebrew/* ]] || [[ "$uv_path" == /usr/local/* ]]; then
         log "uv already installed via Homebrew -- upgrading..."
-        UPGRADE_OUTPUT=$(brew upgrade uv 2>&1) || true
-        if printf '%s\n' "$UPGRADE_OUTPUT" | grep -i 'already installed\|up.to.date\|No available upgrade' >/dev/null; then
+        # The exit code is kept (C-F2); the output grep stays for brew upgrade (Standard 3)
+        UPGRADE_RC=0
+        UPGRADE_OUTPUT=$(brew upgrade uv 2>&1) || UPGRADE_RC=$?
+        if [ "$UPGRADE_RC" -eq 0 ] && printf '%s\n' "$UPGRADE_OUTPUT" | grep -i 'already installed\|up.to.date\|No available upgrade' >/dev/null; then
             log_ok "uv already up to date"
             UV_VERSION=$(uv --version 2>/dev/null || echo "version unknown")
             write_summary OK "uv" "$UV_VERSION"
+        elif [ "$UPGRADE_RC" -ne 0 ] || printf '%s\n' "$UPGRADE_OUTPUT" | grep -i 'error\|fatal' >/dev/null; then
+            # The installed uv still works: a warning, not an error (Standard 3).
+            # error_reason logs the output as detail lines.
+            # 2>/dev/null: version probe only; falls back to a placeholder string
+            UV_VERSION=$(uv --version 2>/dev/null || echo "version unknown")
+            write_warn "uv" "brew upgrade failed: $(error_reason "$UPGRADE_OUTPUT" "$UPGRADE_RC")"
+            write_summary OK "uv" "$UV_VERSION"
         else
             printf '%s\n' "$UPGRADE_OUTPUT" | while IFS= read -r line; do log "$line"; done
-            if printf '%s\n' "$UPGRADE_OUTPUT" | grep -i 'error\|fatal' >/dev/null; then
-                log_error "brew upgrade uv failed (see log above)"
-                write_summary ERROR "uv" "brew upgrade failed"
-            else
-                UV_VERSION=$(uv --version 2>/dev/null || echo "version unknown")
-                log_ok "$UV_VERSION"
-                write_summary OK "uv" "$UV_VERSION"
-            fi
+            UV_VERSION=$(uv --version 2>/dev/null || echo "version unknown")
+            log_ok "$UV_VERSION"
+            write_summary OK "uv" "$UV_VERSION"
         fi
     else
         # 2>/dev/null: version probe only; falls back to a placeholder string
         UV_VERSION=$(uv --version 2>/dev/null || echo "version unknown")
         if ! command -v brew >/dev/null 2>&1; then
             # The existing uv works; without Homebrew there is nothing to migrate to
-            log_warn "uv at $uv_path ($UV_VERSION) is not a Homebrew install and Homebrew is not available -- keeping it"
-            write_summary WARN "uv" "$UV_VERSION (not Homebrew)"
+            write_warn "uv" "uv at $uv_path is not a Homebrew install and Homebrew is not available -- keeping it"
+            write_summary OK "uv" "$UV_VERSION"
         else
-            log_warn "uv installed via non-preferred method at $uv_path"
+            write_warn "uv" "installed via a non-preferred method at $uv_path -- installing the Homebrew copy"
             log "Installing via Homebrew (will take precedence on PATH)..."
-            BREW_RC=0
-            # || records the pipeline status (pipefail) so set -e does not abort before it is reported
-            brew install uv 2>&1 | while IFS= read -r line; do log "$line"; done || BREW_RC=$?
+            # brew's output streams to the console and deploy.log as it arrives and is
+            # teed to a temporary file for the reason (a failed install's output is then
+            # in deploy.log twice: logging.md 8.2). The || records the pipeline status
+            # (pipefail) so set -e does not abort before it is reported.
+            INSTALL_OUTPUT=""
+            INSTALL_RC=0
+            # A failed mktemp is checked on the next line: the install then streams uncaptured
+            INSTALL_FILE=$(mktemp "${TMPDIR:-/tmp}/setup-uv.XXXXXX") || INSTALL_FILE=""
+            if [ -n "$INSTALL_FILE" ]; then
+                brew install uv 2>&1 | tee "$INSTALL_FILE" | while IFS= read -r line; do log "$line"; done || INSTALL_RC=$?
+                INSTALL_OUTPUT=$(cat "$INSTALL_FILE")
+                rm -f "$INSTALL_FILE"
+            else
+                log_detail "mktemp failed -- the brew install output is not captured; the reason falls back to its exit code"
+                brew install uv 2>&1 | while IFS= read -r line; do log "$line"; done || INSTALL_RC=$?
+            fi
             BREW_UV="$(brew --prefix)/bin/uv"
-            if [ "$BREW_RC" -eq 0 ] && [ -x "$BREW_UV" ]; then
+            if [ "$INSTALL_RC" -eq 0 ] && [ -x "$BREW_UV" ]; then
                 # 2>/dev/null: version probe only; falls back to a placeholder string
                 UV_VERSION=$("$BREW_UV" --version 2>/dev/null || echo "version unknown")
                 log_ok "uv installed via Homebrew ($UV_VERSION)"
                 write_summary OK "uv" "$UV_VERSION"
             else
                 # The pre-existing uv still works, so this is a warning, not a failure
-                log_warn "brew install uv failed (exit $BREW_RC) -- keeping existing uv at $uv_path ($UV_VERSION)"
-                write_summary WARN "uv" "$UV_VERSION (brew failed)"
+                if [ "$INSTALL_RC" -ne 0 ]; then
+                    keep_reason="$(error_reason "$INSTALL_OUTPUT" "$INSTALL_RC")"
+                else
+                    keep_reason="brew exited 0 but $BREW_UV is not executable"
+                fi
+                write_warn "uv" "brew install failed, keeping $uv_path ($UV_VERSION): $keep_reason"
+                write_summary OK "uv" "$UV_VERSION"
             fi
         fi
     fi
 elif ! command -v brew >/dev/null 2>&1; then
-    log_error "uv is not installed and Homebrew is not available -- cannot install uv"
-    write_summary ERROR "uv" "Homebrew not found"
+    write_error "uv" "cannot install uv" "uv is not installed and Homebrew is not available"
 else
     log "Installing uv via Homebrew..."
-    if ! brew install uv 2>&1 | while IFS= read -r line; do log "$line"; done; then
-        log_error "brew install uv failed"
-        write_summary ERROR "uv" "brew install failed"
+    # Streamed and teed, as above
+    INSTALL_OUTPUT=""
+    INSTALL_RC=0
+    # A failed mktemp is checked on the next line: the install then streams uncaptured
+    INSTALL_FILE=$(mktemp "${TMPDIR:-/tmp}/setup-uv.XXXXXX") || INSTALL_FILE=""
+    if [ -n "$INSTALL_FILE" ]; then
+        brew install uv 2>&1 | tee "$INSTALL_FILE" | while IFS= read -r line; do log "$line"; done || INSTALL_RC=$?
+        INSTALL_OUTPUT=$(cat "$INSTALL_FILE")
+        rm -f "$INSTALL_FILE"
+    else
+        log_detail "mktemp failed -- the brew install output is not captured; the error reason falls back to its exit code"
+        brew install uv 2>&1 | while IFS= read -r line; do log "$line"; done || INSTALL_RC=$?
+    fi
+    if [ "$INSTALL_RC" -ne 0 ]; then
+        write_error "uv" "brew install failed" "$(error_reason "$INSTALL_OUTPUT" "$INSTALL_RC")"
     fi
     if command -v uv >/dev/null 2>&1; then
         UV_VERSION=$(uv --version 2>/dev/null || echo "version unknown")
         log_ok "uv installed ($UV_VERSION)"
         write_summary OK "uv" "$UV_VERSION"
+    elif [ "$INSTALL_RC" -ne 0 ]; then
+        # One failure, one red line: the install error above is the cause
+        log "uv not on PATH after the failed brew install"
     else
-        log_error "brew install completed but 'uv' not found in PATH"
-        write_summary ERROR "uv" "installed but not on PATH"
+        write_error "uv" "installed but not on PATH" "command -v uv found nothing after brew install"
     fi
 fi
 
