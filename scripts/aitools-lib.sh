@@ -86,13 +86,6 @@ WARNINGS=0
 AITLIB_OPT_JSONL=false
 AITLIB_OPT_CONSOLE_STDERR=false
 AITLIB_OPT_COLOR_AUTO=false
-# Migration switch (plan summary-warn-reporting step I1; removed in step I5):
-# false = log_warn / log_error log and count but write no run summary record
-# (a script not yet migrated still writes its own legacy write_summary WARN /
-# ERROR, so each warning or error is recorded once); true = they record
-# WARN|<script>|TEXT and ERROR|<script>|TEXT| (reference/logging.md 8.2).
-# Inherited from the environment, so a relayed child records like its parent.
-AITLIB_RECORD_LOG_CALLS="${AITLIB_RECORD_LOG_CALLS:-false}"
 # summary_begin: true when this process created the run summary file
 AITLIB_SUMMARY_OWNER=false
 
@@ -733,28 +726,6 @@ _aitlib_summary_count() {
     printf -v "$1" '%s' "$_aitlib_se_n"
 }
 
-# _aitlib_summary_errors VAR -- set VAR to the number of ERROR records in the run
-# summary (_aitlib_summary_count VAR ERROR; kept for scripts/aitools)
-_aitlib_summary_errors() {
-    _aitlib_summary_count "$1" ERROR
-}
-
-# _aitlib_child_row TOOL BEFORE DETAIL -- legacy, kept for scripts/aitools until
-# it relays its children through run_child_relayed (plan step G1): for a failed
-# child, write the legacy record "ERROR|TOOL|DETAIL" unless TOOL is "" or the
-# child wrote an ERROR record of its own (the run summary now holds more than
-# BEFORE ERROR records). The library's own relay does not use it.
-_aitlib_child_row() {
-    local _aitlib_cr_now=0
-    if [ -z "$1" ]; then return 0; fi
-    _aitlib_summary_errors _aitlib_cr_now
-    if [ "$_aitlib_cr_now" -gt "$2" ]; then
-        log_detail "$1: the child wrote its own ERROR row -- none added"
-        return 0
-    fi
-    write_summary ERROR "$1" "$3"
-}
-
 # _aitlib_error_norecord TEXT -- the library-internal non-recording error path
 # (reference/logging.md 8.2): an error-level line, counted in ERRORS, no record.
 # Used only by the relay (a failed child whose error the child already recorded,
@@ -1068,10 +1039,8 @@ log_detail() {
 # ---------------------------------------------------------------------------
 # Warnings, errors and run summary records (reference/logging.md 8.2-8.4)
 #   log_warn TEXT                   [warn] TEXT; WARNINGS +1; WARN|<script>|TEXT
-#                                   (only with AITLIB_RECORD_LOG_CALLS=true)
-#   log_error TEXT                  [error] TEXT; ERRORS +1; ERROR|<script>|TEXT|
-#                                   (only with AITLIB_RECORD_LOG_CALLS=true). Only
-#                                   for an error whose TEXT states its cause
+#   log_error TEXT                  [error] TEXT; ERRORS +1; ERROR|<script>|TEXT|.
+#                                   Only for an error whose TEXT states its cause
 #   write_warn TOOL TEXT            [warn] TEXT; WARNINGS +1; WARN|TOOL|TEXT
 #   write_action TOOL TEXT ACTION   write_warn TOOL TEXT, then ACTION||ACTION
 #                                   (an identical ACTION already in the file is
@@ -1079,7 +1048,8 @@ log_detail() {
 #   write_error TOOL WHAT REASON    [error] WHAT: REASON (WHAT alone when REASON
 #                                   is empty); ERRORS +1; ERROR|TOOL|WHAT|REASON
 #   error_reason OUTPUT EXIT_CODE   prints one REASON (8.3); OUTPUT -> detail lines
-#   write_summary OK|DETAIL|ACTION TOOL TEXT   the record as written
+#   write_summary OK|DETAIL|ACTION TOOL TEXT   the record as written (any other
+#                                   category: no record, one log_warn; below)
 # An empty TOOL is the logging script's name (SCRIPT_NAME). Every record goes
 # through _aitlib_record: CR and LF become a space in every field, "|" becomes
 # "/" in every field except an ACTION's instruction; nothing is written outside
@@ -1129,12 +1099,12 @@ _aitlib_action_record() {
 log_warn() {
     log "$1" "warn"
     WARNINGS=$((WARNINGS + 1))
-    if [ "$AITLIB_RECORD_LOG_CALLS" = "true" ]; then _aitlib_record WARN "${SCRIPT_NAME:-unknown}" "$1"; fi
+    _aitlib_record WARN "${SCRIPT_NAME:-unknown}" "$1"
 }
 log_error() {
     log "$1" "error"
     ERRORS=$((ERRORS + 1))
-    if [ "$AITLIB_RECORD_LOG_CALLS" = "true" ]; then _aitlib_record ERROR "${SCRIPT_NAME:-unknown}" "$1" ""; fi
+    _aitlib_record ERROR "${SCRIPT_NAME:-unknown}" "$1" ""
 }
 write_warn() {
     local name="${1:-}"
@@ -1177,22 +1147,24 @@ OpenSSL	openssl.*not found|OPENSSL_DIR	brew install openssl / apt-get install li
 #   1. a known build-failure signature (AITLIB_BUILD_SIGNATURES), as
 #      "<NAME>: <REMEDY>";
 #   2. (PowerShell only: the exception message)
-#   3. the first line matching an error marker: a word that ends in "error:",
-#      any case (letters, digits, - and _), at the start of the line or after a
-#      space; "fatal:", any case, at the start or after a space; "E: " at the
-#      start; "syntax error", any case, anywhere;
+#   3. the first line that is not a warning line matching an error marker: a
+#      word that ends in "error:", any case (letters, digits, - and _), at the
+#      start of the line or after a space; "fatal:", any case, at the start or
+#      after a space; "E: " at the start; "syntax error", any case, anywhere;
 #   4. the last non-empty line that is not a warning line;
 #   5. "exit <EXIT_CODE>" when the output has a warning line (every non-empty
 #      line is one);
 #   6. "no output (exit <EXIT_CODE>)".
 # Before matching, CR, ANSI CSI sequences and a leading "[<time>] [<script>]
-# [<level>] " are removed from each line; whitespace-only lines are empty; the
-# reason printed is that line with its leading and trailing blanks trimmed. A
-# warning line is one whose prefix has the level warn ("[<time>] [<script>]
-# [warn] "), decided after CR and ANSI are removed and before the prefix is
-# removed (RFI 5899-31: rule 4 never takes a warning line as the reason).
-# OUTPUT is logged to deploy.log as detail lines ("output: <line>", CR and ANSI
-# removed, empty lines skipped), so a caller does not log it as well (8.2). One
+# [<level>] " (the level in any case) are removed from each line;
+# whitespace-only lines are empty; the reason printed is that line with its
+# leading and trailing blanks trimmed. A warning line is one whose prefix has
+# the level warn ("[<time>] [<script>] [warn] "), decided after CR and ANSI are
+# removed and before the prefix is removed (RFI 5899-31: rules 3 and 4 never
+# take a warning line as the reason). OUTPUT is logged to deploy.log as detail
+# lines ("output: <line>", CR and ANSI removed, the prefix kept, empty lines
+# skipped; the same lines as Get-AitErrorReason), so a caller does not log it
+# as well (8.2). One
 # perl process; no grep -P, no early-exit pipeline (bash 3.2 safe). Without
 # perl (setup-perl runs before perl exists), or when perl fails, the reason
 # comes from _aitlib_error_reason_noperl: rules 3-6 in bash, no build-failure
@@ -1216,7 +1188,7 @@ error_reason() {
             $l =~ s/\e\[[\x30-\x3f]*[\x20-\x2f]*[\x40-\x7e]//g;
             push @raw, $l;
             push @warn, ($l =~ /^\[[^\]]*\] \[[^\]]*\] \[warn\] / ? 1 : 0);
-            (my $c = $l) =~ s/^\[[^\]]*\] \[[^\]]*\] \[[a-z]+\] //;
+            (my $c = $l) =~ s/^\[[^\]]*\] \[[^\]]*\] \[[A-Za-z]+\] //;
             push @clean, $c;
         }
         # The full output, as detail lines (fail-safe: a log that cannot be
@@ -1233,7 +1205,9 @@ error_reason() {
             if ($in =~ /$pat/i) { $out = "$name: $remedy"; last }
         }
         if (!defined $out) {
-            for my $c (@clean) {
+            for my $i (0 .. $#clean) {
+                next if $warn[$i];
+                my $c = $clean[$i];
                 if ($c =~ /(?:^| )[A-Za-z0-9_-]*error:/i || $c =~ /(?:^| )fatal:/i
                     || $c =~ /^E: / || $c =~ /syntax error/i) { $out = trim($c); last }
             }
@@ -1293,8 +1267,8 @@ _aitlib_strip_csi() {
 }
 
 # _aitlib_error_reason_noperl OUTPUT EXIT_CODE LOG -- error_reason without perl:
-# rules 3-6 of error_reason (the first error-marker line; the last non-empty
-# line that is not a warning line; "exit <N>"; "no output (exit <N>)"), with the
+# rules 3-6 of error_reason (the first error-marker line and the last non-empty
+# line, each not a warning line; "exit <N>"; "no output (exit <N>)"), with the
 # same line cleaning (CR, ANSI CSI, the "[<time>] [<script>] [<level>] "
 # prefix), in bash 3.2 (ERE through [[ =~ ]], no subprocess). Character classes
 # are spelled out, never ranges (a range in [[ =~ ]] depends on the locale: bash
@@ -1306,7 +1280,7 @@ _aitlib_error_reason_noperl() {
     local in="${1:-}" code="${2:-}" dolog="${3:-true}" l c
     local lc='abcdefghijklmnopqrstuvwxyz' uc='ABCDEFGHIJKLMNOPQRSTUVWXYZ'
     local wre='^\[[^]]*\] \[[^]]*\] \[warn\] '
-    local pfx="^\\[[^]]*\\] \\[[^]]*\\] \\[[$lc]+\\] (.*)\$"
+    local pfx="^\\[[^]]*\\] \\[[^]]*\\] \\[[$uc$lc]+\\] (.*)\$"
     local mk1="(^| )[${uc}${lc}0123456789_-]*[Ee][Rr][Rr][Oo][Rr]:"
     local mk2='(^| )[Ff][Aa][Tt][Aa][Ll]:'
     local mk3='^E: '
@@ -1321,7 +1295,7 @@ _aitlib_error_reason_noperl() {
         if [[ "$l" =~ $wre ]]; then iswarn=true; sawwarn=true; fi
         c="$l"
         if [[ "$l" =~ $pfx ]]; then c="${BASH_REMATCH[1]}"; fi
-        if [ -z "$marker" ]; then
+        if [ -z "$marker" ] && [ "$iswarn" = "false" ]; then
             if [[ "$c" =~ $mk1 ]] || [[ "$c" =~ $mk2 ]] || [[ "$c" =~ $mk3 ]] || [[ "$c" =~ $mk4 ]]; then
                 marker="$c"
             fi
@@ -1500,18 +1474,22 @@ invoke_ai() {
 # 8.4). The record is written as given; the category is never changed (a
 # warning or error never recolours a tool's OK record: 8.3). ACTION writes
 # ACTION||TEXT (TOOL ignored), not de-duplicated (write_action and
-# _aitlib_action_once de-duplicate). Legacy, until plan step I5:
-# write_summary WARN|ERROR TOOL TEXT writes the 3-field WARN|TOOL|TEXT /
-# ERROR|TOOL|TEXT (the reader gives a 3-field ERROR an empty reason) -- a
-# migrated script uses write_warn / write_action / write_error instead.
+# _aitlib_action_once de-duplicate). Any other category (the retired WARN and
+# ERROR, a lower-case word, a typo) writes no record: a WARN or ERROR record
+# comes only from the warning and error helpers (8.2: write_warn, write_action,
+# log_warn, write_error, log_error). So that such a call never vanishes, it is
+# one log_warn under the script name, quoting the call: "invalid summary
+# category CAT -- not recorded: TOOL: TEXT" (something wrong in the calling
+# script: 8.3 "What is a warning"). check-script-compliance steps 12 and 13
+# fail on such a call in scripts/. Parity: Write-Summary.
 # ---------------------------------------------------------------------------
 write_summary() {
     local cat="${1:-}"
-    if [ "$cat" = "ACTION" ]; then
-        _aitlib_record ACTION "" "${3:-}"
-    else
-        _aitlib_record "$cat" "${2:-}" "${3:-}"
-    fi
+    case "$cat" in
+        OK|DETAIL) _aitlib_record "$cat" "${2:-}" "${3:-}" ;;
+        ACTION)    _aitlib_record ACTION "" "${3:-}" ;;
+        *)         log_warn "invalid summary category $cat -- not recorded: ${2:-}: ${3:-}" ;;
+    esac
 }
 
 # ---------------------------------------------------------------------------
@@ -1918,6 +1896,8 @@ _managed_adopt_notice() {
 # write_error (a failed restore below is one more log_error: it states its cause).
 # ---------------------------------------------------------------------------
 MANAGED_WRITE_ERROR=""
+# The "<script>: line N: " prefix bash puts before a failed redirection's error
+_AITLIB_SHELL_ERR_RE='^[^:]+: line [0-9]+: (.*)$'
 MANAGED_WRITE_REQUIRED_1=""
 MANAGED_WRITE_REQUIRED_2=""
 _managed_write() {
@@ -1964,6 +1944,10 @@ _managed_write() {
             rc=1; break
         fi
         if ! werr=$( { printf '%s\n' "$c" > "$p"; } 2>&1 ); then
+            # bash prefixes a failed redirection with "<script>: line N: ": the
+            # reason is the rest (the path and the system error), as the
+            # PowerShell twin's (Get-AitErrorReason -ErrorRecord)
+            if [[ "$werr" =~ $_AITLIB_SHELL_ERR_RE ]]; then werr="${BASH_REMATCH[1]}"; fi
             MANAGED_WRITE_ERROR="write failed for $(display_path "$p"): $werr"
             rc=1; break
         fi
@@ -3272,7 +3256,9 @@ REVIEW_JSON_NODE_EOF
         local src_json
         node "$work/review.js" keys "$src_file" "$work/keys.json" 2> "$work/err" || rc=$?
         if [ "$rc" -ne 0 ] || ! src_json=$(cat "$src_file"); then
-            write_error "$tool" "Failed: $item" "cannot read the source JSON (node exit $rc): $(cat "$work/err")"
+            # The reason is one line (error_reason: 8.3); node's whole stderr is
+            # logged as detail lines
+            write_error "$tool" "Failed: $item" "cannot read the source JSON (node exit $rc): $(error_reason "$(cat "$work/err")" "$rc")"
             rm -rf "$work"
             MANAGED_FILE_RESULT="failed"
             return 0
@@ -3291,7 +3277,7 @@ REVIEW_JSON_NODE_EOF
 
     node "$work/review.js" plan "$src_file" "$dest" "$work/plan.tsv" 2> "$work/err" || rc=$?
     if [ "$rc" -ne 0 ]; then
-        write_error "$tool" "Failed: $item" "field comparison failed (node exit $rc): $(cat "$work/err")"
+        write_error "$tool" "Failed: $item" "field comparison failed (node exit $rc): $(error_reason "$(cat "$work/err")" "$rc")"
         rm -rf "$work"
         MANAGED_FILE_RESULT="failed"
         return 0
@@ -3333,7 +3319,7 @@ REVIEW_JSON_NODE_EOF
         "$work/local.out" "$work/adopt.out" "$work/result.txt" \
         "$work/req-local.json" "$work/req-adopt.json" 2> "$work/err" || rc=$?
     if [ "$rc" -ne 0 ]; then
-        write_error "$tool" "Failed: $item" "applying the field choices failed (node exit $rc): $(cat "$work/err")"
+        write_error "$tool" "Failed: $item" "applying the field choices failed (node exit $rc): $(error_reason "$(cat "$work/err")" "$rc")"
         rm -rf "$work"
         MANAGED_FILE_RESULT="failed"
         return 0
@@ -3475,7 +3461,8 @@ deploy_tracker_record() {
                    write_summary DETAIL "$tool_name" "removed: $item_name" ;;
         verified)  _DT_VERIFIED=$((_DT_VERIFIED + 1)) ;;
         preserved) _DT_PRESERVED=$((_DT_PRESERVED + 1)) ;;
-        *)         log_error "deploy_tracker_record: unknown outcome \"$outcome\" for $item_name ($tool_name) -- counted as failed"
+        # The same text in Record-DeployOutcome: its record is in the shared golden files
+        *)         log_error "deploy tracker: unknown outcome \"$outcome\" for $item_name ($tool_name) -- counted as failed"
                    _DT_FAILED=$((_DT_FAILED + 1))
                    write_summary DETAIL "$tool_name" "failed: $item_name" ;;
     esac

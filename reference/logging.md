@@ -32,6 +32,11 @@ lines, else gives `exit <N>` (8.3 rules 4 and 5, the relay's REASON; RFI
 8.5: the entry point that did not create the run summary file draws nothing
 (no suppress variable).
 
+v2.4 (2026-11-16): the error-marker rule (8.3 rule 3) skips warning lines too
+(RFI 5899-31); the prefix is removed whatever the case of its level, and the
+detail lines keep it; 8.2: a `write_summary` category other than OK, DETAIL
+or ACTION writes no record and is one warning (plan step I5).
+
 > Ratified 2026-06-14 as part of the harvest/archive/logging plan
 > (`plans/harvest-archive-resilience.md` §14). This doc consolidates logging
 > decisions previously scattered across `script-standards.md`,
@@ -269,6 +274,12 @@ The PowerShell helpers take the same arguments as their bash twins, in the
 same order. "The script" is the logging script's script name (8.0). A helper
 given an empty TOOL uses the logging script's name.
 
+`write_summary` / `Write-Summary` given any other category (`WARN` and
+`ERROR` included: a WARN or ERROR record comes only from the warning and
+error helpers) writes no record. So that the call is not lost, it is one
+`log_warn` of the calling script: `invalid summary category <CAT> -- not
+recorded: <TOOL>: <TEXT>`.
+
 The library's abort path (`_managed_abort` / `Invoke-ManagedAbort`) and the
 relay (for a failed child that 8.3 says it does not record) log their own
 error line at error level and count it without recording it; no other code
@@ -352,7 +363,8 @@ record, and its warnings and errors reach the run summary through its caller
   1. a known build-failure signature (`diagnose_build_failure` /
      `Diagnose-BuildFailure`), as `<NAME>: <REMEDY>`;
   2. the exception message, when an exception is given (PowerShell);
-  3. the first line of the output that matches an error marker:
+  3. the first line of the output that is not a warning line and matches an
+     error marker:
      - a word that ends in `error:`, in any case (for example `error:`,
        `Error:`, `ERROR:`, `SyntaxError:`, `Write-Error:`; the word may
        contain letters, digits, `-` and `_`), at the start of the line or
@@ -366,12 +378,13 @@ record, and its warnings and errors reach the run summary through its caller
   6. `no output (exit <N>)`.
 
   Before matching, CR, ANSI CSI sequences (`ESC [` ... final byte) and a
-  leading `[<time>] [<script>] [<level>] ` prefix are removed from each
-  line. A warning line, one whose prefix has the level `warn`
-  (`[<time>] [<script>] [warn] `, decided before the prefix is removed), is
-  never taken as the reason by rule 4. The full output is logged as detail
-  lines, empty lines skipped. Where perl is missing or fails, the bash
-  `error_reason` skips rule 1 and says so in a detail line.
+  leading `[<time>] [<script>] [<level>] ` prefix (the level in any case)
+  are removed from each line. A warning line, one whose prefix has the level
+  `warn` (`[<time>] [<script>] [warn] `, decided before the prefix is
+  removed), is never taken as the reason by rules 3 and 4. The full output
+  is logged as detail lines (`output: <line>`, CR and ANSI CSI sequences
+  removed, the prefix kept), empty lines skipped. Where perl is missing or
+  fails, the bash `error_reason` skips rule 1 and says so in a detail line.
 - **What is a warning.**
   - A warning reports something that is wrong, or that still needs the
     user. Examples: a tool not authenticated; a managed file left differing

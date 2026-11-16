@@ -5,8 +5,8 @@
 #          SilentlyContinue result checks, summary categories, the summary
 #          rules of reference/logging.md section 8 (step 13) and the log
 #          writers outside aitools-lib (step 14, logging.md 8.1).
-#          $StrictSummary (below) switches step 12, step 13 rule 4 and step 14
-#          from report (WARN) to FAIL.
+#          $StrictSummary (below; $true since plan step I5) makes step 12,
+#          step 13 rule 4 and step 14 FAIL instead of report (WARN).
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = Split-Path -Parent $scriptDir
@@ -29,15 +29,17 @@ Write-Host "=== SCRIPT STANDARDS COMPLIANCE ===" -ForegroundColor White
 Write-Host ""
 
 # ---------------------------------------------------------------------------
-# Report, then fail (plan summary-warn-reporting, steps I2 and I5). While
-# $StrictSummary is $false, step 12 accepts the categories OK, WARN, ERROR,
-# ACTION and DETAIL, and step 13 rule 4 (legacy write_summary WARN / ERROR
-# calls) and step 14 (log writers outside aitools-lib) report their sites as a
-# WARN, so the tree passes while the call sites migrate. When it is $true, step
-# 12 accepts only OK, DETAIL and ACTION, and both FAIL. The .sh twin has the
-# same switch (STRICT_SUMMARY); step I5 sets both to true.
+# Report, then fail (plan summary-warn-reporting, steps I2 and I5). With
+# $StrictSummary $true (set in step I5, once every call site had migrated),
+# step 12 accepts only the categories OK, DETAIL and ACTION, in upper case, as
+# Write-Summary does (it records no other category), and step 13 rule 4
+# (legacy write_summary WARN / ERROR calls) and step 14 (log writers outside
+# aitools-lib) FAIL on any site. With it $false (the migration, steps I2-I3),
+# step 12 accepted OK, WARN, ERROR, ACTION and DETAIL in any case, and rule 4
+# and step 14 reported their sites as a WARN. The .sh twin has the same switch
+# (STRICT_SUMMARY), set the same way.
 # ---------------------------------------------------------------------------
-$StrictSummary = $false
+$StrictSummary = $true
 
 # Collect target scripts
 $shScripts = @(Get-ChildItem "scripts/setup-*.sh" -ErrorAction SilentlyContinue)
@@ -269,19 +271,25 @@ if ($step11Fail -eq 0) {
 }
 
 # ---------------------------------------------------------------------------
-# 12. Write-Summary uses valid categories: OK, WARN, ERROR, ACTION, DETAIL;
-#     with $StrictSummary on, only OK, DETAIL and ACTION (WARN and ERROR
-#     records come from the warning and error helpers: logging.md 8.2)
+# 12. Write-Summary uses valid categories: with $StrictSummary on, only OK,
+#     DETAIL and ACTION, in upper case (WARN and ERROR records come from the
+#     warning and error helpers: logging.md 8.2; Write-Summary records no
+#     other category); with it off, OK, WARN, ERROR, ACTION, DETAIL in any case
 # ---------------------------------------------------------------------------
 $step12Fail = 0
 $step12Details = @()
 $validCats = if ($StrictSummary) { @('OK', 'DETAIL', 'ACTION') } else { @('OK', 'WARN', 'ERROR', 'ACTION', 'DETAIL') }
+# Test-S12Valid CAT: valid with the rule above (exact case when strict)
+function Test-S12Valid([string]$Cat) {
+    if ($StrictSummary) { return ($validCats -ccontains $Cat) }
+    return ($validCats -contains $Cat)
+}
 foreach ($f in $ps1Scripts) {
     $lines = Get-Content $f -ErrorAction Stop
     for ($i = 0; $i -lt $lines.Count; $i++) {
         if ($lines[$i] -match 'Write-Summary\s+"(\w+)"' -and $lines[$i] -notmatch '^\s*#') {
             $cat = $Matches[1]
-            if ($cat -notin $validCats) {
+            if (-not (Test-S12Valid $cat)) {
                 $step12Fail++
                 $step12Details += "$(Split-Path $f -Leaf):$($i+1)($cat)"
             }
@@ -293,7 +301,7 @@ foreach ($f in $shScripts) {
     for ($i = 0; $i -lt $lines.Count; $i++) {
         if ($lines[$i] -match 'write_summary\s+(\w+)\s' -and $lines[$i] -notmatch '^\s*#') {
             $cat = $Matches[1]
-            if ($cat -notin $validCats) {
+            if (-not (Test-S12Valid $cat)) {
                 $step12Fail++
                 $step12Details += "$(Split-Path $f -Leaf):$($i+1)($cat)"
             }

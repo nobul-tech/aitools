@@ -84,13 +84,13 @@ try {
     $r = Invoke-LibCase "reset" 'LogError x; Initialize-Logging "t2"; Write-Output "COUNTS=$($script:errors)/$($script:warnings)"'
     Check "lib: Initialize-Logging resets the counters" ($r.Out -match 'COUNTS=0/0')
 
-    $r = Invoke-LibCase "nosummary" 'Write-Summary "ERROR" "tool" "detail"; Write-Output "DONE"'
+    $r = Invoke-LibCase "nosummary" 'Write-Summary "OK" "tool" "detail"; Write-Output "DONE"'
     Check "lib: Write-Summary is a no-op without AITOOLS_SUMMARY_FILE" ($r.Out -match 'DONE')
 
     $sum = Join-Path $tmpRoot "summary.txt"
-    $r = Invoke-LibCase "summary" 'Write-Summary "ERROR" "tool" "it failed"; Write-Summary "OK" "tool2" "v1"' $sum
+    $r = Invoke-LibCase "summary" 'Write-Summary "DETAIL" "tool" "it ran"; Write-Summary "OK" "tool2" "v1"' $sum
     $rows = if (Test-Path $sum) { Get-Content $sum } else { @() }
-    Check "lib: Write-Summary writes CAT|tool|detail" ($rows -contains "ERROR|tool|it failed")
+    Check "lib: Write-Summary writes CAT|tool|detail" ($rows -contains "DETAIL|tool|it ran")
     Check "lib: Write-Summary OK stays OK with no warnings" ($rows -contains "OK|tool2|v1")
 
     # The promotion is gone (logging.md 8.3: an OK record is never recoloured)
@@ -150,16 +150,16 @@ try {
         return $res
     }
 
-    # Options: stderr console (recording off), jsonl, the migration switch
+    # Options: stderr console (recording off), jsonl; LogWarn / LogError record
     $s = Join-Path $tmpRoot "opt-stderr.txt"; [IO.File]::WriteAllText($s, "")
-    $r = Invoke-LibScript "opt-stderr" '$script:AitLibOptConsoleStderr = $true; $script:AitLibRecordLogCalls = $true; LogWarn "w2"; Write-AitWarn "t" "w3"; Write-Output "COUNTS=$($script:errors)/$($script:warnings)"' $s
+    $r = Invoke-LibScript "opt-stderr" '$script:AitLibOptConsoleStderr = $true; LogWarn "w2"; Write-AitWarn "t" "w3"; Write-Output "COUNTS=$($script:errors)/$($script:warnings)"' $s
     Check "lib: stderr console option -- console lines on stderr, none on stdout" (($r.Err -match '\[warn\] w2') -and ($r.Err -match '\[warn\] w3') -and -not ($r.Out -match '\[warn\]'))
     Check "lib: stderr console option -- recording off, counts still count" (($r.Summary.Count -eq 0) -and ($r.Out -match 'COUNTS=0/2'))
     $r = Invoke-LibScript "opt-jsonl" '$script:AitLibOptJsonl = $true; Log "j-line"; LogDetail "j-detail"'
     Check "lib: jsonl option -- Log writes one deploy.jsonl record, LogDetail none" ((@($r.Jsonl | Where-Object { $_.msg -ceq 'j-line' -and $_.script -ceq 't' -and $_.level -ceq 'info' }).Count -eq 1) -and (@($r.Jsonl | Where-Object { $_.msg -ceq 'j-detail' }).Count -eq 0))
-    $s = Join-Path $tmpRoot "opt-switch.txt"; [IO.File]::WriteAllText($s, "")
-    $r = Invoke-LibScript "opt-switch" 'LogWarn "lw"; LogError "le"; Write-AitWarn "tool" "ww"' $s
-    Check "lib: migration switch off (default) -- LogWarn / LogError record nothing, Write-AitWarn records" (($r.Summary.Count -eq 1) -and ($r.Summary[0] -ceq 'WARN|tool|ww'))
+    $s = Join-Path $tmpRoot "log-records.txt"; [IO.File]::WriteAllText($s, "")
+    $r = Invoke-LibScript "log-records" 'LogWarn "lw"; LogError "le"; Write-AitWarn "tool" "ww"' $s
+    Check "lib: LogWarn / LogError record under the script name, Write-AitWarn under its tool (no switch: plan step I5)" (($r.Summary.Count -eq 3) -and ($r.Summary[0] -ceq 'WARN|t|lw') -and ($r.Summary[1] -ceq 'ERROR|t|le|') -and ($r.Summary[2] -ceq 'WARN|tool|ww'))
 
     # Summary file lifecycle (addendum 1)
     $r = Invoke-LibScript "life-owner" 'Start-AitSummary; $f = $env:AITOOLS_SUMMARY_FILE; Write-AitWarn "tool" "w"; Write-Output "OWNER=$($script:AitLibSummaryOwner)"; Complete-AitSummary; Write-Output "GONE=$(-not (Test-Path -LiteralPath $f)) ENV=[$env:AITOOLS_SUMMARY_FILE]"'

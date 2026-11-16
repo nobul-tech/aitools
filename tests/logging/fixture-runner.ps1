@@ -20,11 +20,11 @@
 # How a case runs (the fixture header "CASES"): a fresh pwsh process per case,
 # in its own directory {CASEDIR}, stdin closed (EOF; not a terminal),
 # AITOOLS_LOG_DIR={CASEDIR}/logs, AITOOLS_SUMMARY_FILE={CASEDIR}/summary.txt
-# (created empty) unless "summary unset", the library loaded with script name
-# test-logging, and the migration switch set ($script:AitLibRecordLogCalls).
+# (created empty) unless "summary unset", and the library loaded with script
+# name test-logging.
 # The steps are data (a JSON file the case script interprets), so no fixture
 # text is ever pasted into PowerShell code. Child scripts {CASEDIR}/CHILD.ps1 load
-# the library, Initialize-Logging CHILD, set the switch, run their actions, then
+# the library, Initialize-Logging CHILD, run their actions, then
 # "exit N". "relay" runs the child in-process (Invoke-ChildRelayed), "relay-native"
 # as a separate process (Invoke-NativeRelayed: pwsh -NoProfile -File CHILD.ps1).
 # "render" draws with Show-Summary -Keep (the file stays, so "expect record"
@@ -161,14 +161,12 @@ function Save-FixtureObs([string]$Path) {
 # ---------------------------------------------------------------------------
 function ConvertTo-FixturePsLiteral([string]$s) { return "'" + $s.Replace("'", "''") + "'" }
 
-function New-FixtureScript([string]$Path, [string]$Lib, [string]$Name, [bool]$SwitchOn, [string]$StepsFile, [string]$Tail) {
-    $sw = if ($SwitchOn) { '$true' } else { '$false' }
+function New-FixtureScript([string]$Path, [string]$Lib, [string]$Name, [string]$StepsFile, [string]$Tail) {
     $text = @"
 `$ErrorActionPreference = "Continue"
 . $(ConvertTo-FixturePsLiteral $Lib)
 . $(ConvertTo-FixturePsLiteral $script:FixtureRunnerPath)
 Initialize-Logging $(ConvertTo-FixturePsLiteral $Name)
-`$script:AitLibRecordLogCalls = $sw
 `$script:FixtureObs = [ordered]@{ reason = `$null; result = `$null; relayRc = `$null; childRc = `$null; rendered = `$false; summary = `$null; panel = @() }
 $Tail
 "@
@@ -182,7 +180,7 @@ function Invoke-LoggingFixtureCase {
     # A bash-only case is not this harness's (not counted)
     $langLine = @($lines | Where-Object { $_.Kw -ceq 'lang' }) | Select-Object -Last 1
     if ($langLine -and $langLine.Rest -ceq 'sh') { return @{ Status = 'NA'; Why = @() } }
-    $lang = 'both'; $switchOn = $true; $summaryUnset = $false; $envs = [ordered]@{}
+    $lang = 'both'; $summaryUnset = $false; $envs = [ordered]@{}
     $steps = [System.Collections.Generic.List[object]]::new()
     $children = [ordered]@{}
     $expects = [System.Collections.Generic.List[object]]::new()
@@ -192,7 +190,6 @@ function Invoke-LoggingFixtureCase {
             'lang' { $lang = $l.Rest }
             'external' { return @{ Status = 'SKIP'; Why = @("external: covered by $($l.Rest) and its .ps1 twin") } }
             'needs' { return @{ Status = 'SKIP'; Why = @("needs $($l.Rest): this harness has no terminal") } }
-            'switch' { $switchOn = ($l.Rest -ceq 'on') }
             'summary' { if ($l.Rest -ceq 'unset') { $summaryUnset = $true } }
             'env' { $kv = (ConvertFrom-FixtureEscape $l.Rest) -split '=', 2; $envs[$kv[0]] = $kv[1] }
             'record' { $steps.Add(@{ kw = 'record'; args = @(ConvertFrom-FixtureEscape $l.Rest) }) }
@@ -213,7 +210,7 @@ function Invoke-LoggingFixtureCase {
             }
             'expect' { $expects.Add($l.Rest) }
             'panel' { $panel.Add($l.Rest) }
-            { $_ -in 'plan', 'title', 'spec', 'note', 'migration-only' } { }
+            { $_ -in 'plan', 'title', 'spec', 'note' } { }
             default { throw "fixture error: unknown keyword '$($l.Kw)' in case $Id" }
         }
     }
@@ -226,7 +223,7 @@ function Invoke-LoggingFixtureCase {
     foreach ($cn in $children.Keys) {
         $cs = Join-Path $casedir "$cn.steps.json"
         [IO.File]::WriteAllText($cs, (@{ casedir = $casedir; steps = @($children[$cn].steps) } | ConvertTo-Json -Depth 6), [Text.UTF8Encoding]::new($false))
-        New-FixtureScript (Join-Path $casedir "$cn.ps1") $Lib $cn $switchOn $cs `
+        New-FixtureScript (Join-Path $casedir "$cn.ps1") $Lib $cn $cs `
             "Invoke-FixtureSteps $(ConvertTo-FixturePsLiteral $cs)`nexit $($children[$cn].exit)"
     }
     $stepsFile = Join-Path $casedir "case.steps.json"
@@ -237,7 +234,7 @@ function Invoke-LoggingFixtureCase {
     $tail = ""
     if ($stop) { $tail += "`$ErrorActionPreference = `"Stop`"`n" }
     $tail += "try { Invoke-FixtureSteps $(ConvertTo-FixturePsLiteral $stepsFile) } finally { Save-FixtureObs $(ConvertTo-FixturePsLiteral $obsFile) }`nexit 0"
-    New-FixtureScript $caseScript $Lib "test-logging" $switchOn $stepsFile $tail
+    New-FixtureScript $caseScript $Lib "test-logging" $stepsFile $tail
 
     # Run the case: a fresh pwsh, stdin closed, its console output to out.txt
     $psi = [System.Diagnostics.ProcessStartInfo]::new((Get-Process -Id $PID).Path)

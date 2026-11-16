@@ -10,8 +10,8 @@
 #          pairing, SilentlyContinue result checks, summary categories, the
 #          summary rules of reference/logging.md section 8 (step 13) and the
 #          log writers outside aitools-lib (step 14, logging.md 8.1).
-#          STRICT_SUMMARY (below) switches step 12, step 13 rule 4 and step 14
-#          from report (WARN) to FAIL.
+#          STRICT_SUMMARY (below; true since plan step I5) makes step 12, step
+#          13 rule 4 and step 14 FAIL instead of report (WARN).
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -38,15 +38,17 @@ echo "${BOLD}=== SCRIPT STANDARDS COMPLIANCE ===${RESET}"
 echo ""
 
 # ---------------------------------------------------------------------------
-# Report, then fail (plan summary-warn-reporting, steps I2 and I5). While
-# STRICT_SUMMARY is false, step 12 accepts the categories OK, WARN, ERROR,
-# ACTION and DETAIL, and step 13 rule 4 (legacy write_summary WARN / ERROR
-# calls) and step 14 (log writers outside aitools-lib) report their sites as a
-# WARN, so the tree passes while the call sites migrate. When it is true, step
-# 12 accepts only OK, DETAIL and ACTION, and both FAIL. The .ps1 twin has the
-# same switch ($StrictSummary); step I5 sets both to true.
+# Report, then fail (plan summary-warn-reporting, steps I2 and I5). With
+# STRICT_SUMMARY true (set in step I5, once every call site had migrated),
+# step 12 accepts only the categories OK, DETAIL and ACTION, in upper case, as
+# write_summary does (it records no other category), and step 13 rule 4
+# (legacy write_summary WARN / ERROR calls) and step 14 (log writers outside
+# aitools-lib) FAIL on any site. With it false (the migration, steps I2-I3),
+# step 12 accepted OK, WARN, ERROR, ACTION and DETAIL in any case, and rule 4
+# and step 14 reported their sites as a WARN. The .ps1 twin has the same
+# switch ($StrictSummary), set the same way.
 # ---------------------------------------------------------------------------
-STRICT_SUMMARY=false
+STRICT_SUMMARY=true
 
 # Collect target scripts
 SH_SCRIPTS=()
@@ -171,7 +173,7 @@ for f in "${SH_SCRIPTS[@]}"; do
     # Skip aitools-install.sh (has legitimate echo for help text and prompts)
     [ "$(basename "$f")" = "aitools-install.sh" ] && continue
     # Look for bare 'echo' not in comments, not in heredocs
-    raw_echos=$(grep -n '^\s*echo ' "$f" 2>/dev/null | grep -v '^\s*#' | grep -v 'echo ""' || true)
+    raw_echos=$(grep -n '^\s*echo ' "$f" 2>/dev/null | grep -v '^[0-9]*:[[:space:]]*#' | grep -v 'echo ""' || true)
     if [ -n "$raw_echos" ]; then
         count=$(echo "$raw_echos" | wc -l | tr -d ' ')
         step6_fail=$((step6_fail + count))
@@ -325,8 +327,9 @@ for f in "${SH_SCRIPTS[@]}"; do
     # Only check scripts with set -euo pipefail
     if ! grep -q 'set -euo pipefail' "$f" 2>/dev/null; then continue; fi
     # Find grep in $() command substitutions without || true
-    # Match: $(... grep ... | head ...) without || true
-    unsafe=$(grep -n 'grep' "$f" 2>/dev/null | grep -v '^\s*#' | grep -v '|| true' | grep -v 'if ' | grep -v 'command -v' | grep -v '&>/dev/null' || true)
+    # Match: $(... grep ... | head ...) without || true. A comment line is
+    # skipped: grep -n puts "N:" before it, so the filter matches after that
+    unsafe=$(grep -n 'grep' "$f" 2>/dev/null | grep -v '^[0-9]*:[[:space:]]*#' | grep -v '|| true' | grep -v 'if ' | grep -v 'command -v' | grep -v '&>/dev/null' || true)
     if [ -n "$unsafe" ]; then
         # Filter to only pipeline greps (most dangerous)
         pipeline_unsafe=$(echo "$unsafe" | grep '|' || true)
@@ -418,8 +421,10 @@ fi
 step11_fail=0
 step11_details=""
 for f in "${PS1_SCRIPTS[@]}"; do
-    # Find lines with -ErrorAction SilentlyContinue (not in comments)
-    sc_lines=$(grep -n 'ErrorAction SilentlyContinue' "$f" 2>/dev/null | grep -v '^\s*#' || true)
+    # Find lines with -ErrorAction SilentlyContinue (not in comments: grep -n
+    # puts "N:" before the line, so the comment filter matches after that
+    # prefix, as the .ps1 twin skips a comment line)
+    sc_lines=$(grep -n 'ErrorAction SilentlyContinue' "$f" 2>/dev/null | grep -v '^[0-9]*:[[:space:]]*#' || true)
     while IFS= read -r sc_line; do
         [ -z "$sc_line" ] && continue
         lineno=$(echo "$sc_line" | cut -d: -f1)
@@ -451,16 +456,19 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 12. write_summary uses valid categories: OK, WARN, ERROR, ACTION, DETAIL;
-#     with STRICT_SUMMARY on, only OK, DETAIL and ACTION (WARN and ERROR
-#     records come from the warning and error helpers: logging.md 8.2)
+# 12. write_summary uses valid categories: with STRICT_SUMMARY on, only OK,
+#     DETAIL and ACTION, in upper case (WARN and ERROR records come from the
+#     warning and error helpers: logging.md 8.2; write_summary records no
+#     other category); with it off, OK, WARN, ERROR, ACTION, DETAIL in any case
 # ---------------------------------------------------------------------------
 step12_fail=0
 step12_details=""
 if [ "$STRICT_SUMMARY" = true ]; then
     S12_VALID="OK DETAIL ACTION"
+    S12_CASE=exact
 else
     S12_VALID="OK WARN ERROR ACTION DETAIL"
+    S12_CASE=any
 fi
 # Same rule as the .ps1 twin (check-script-compliance.ps1 step 12): per line,
 # a comment line is skipped, and a call is judged by the category word right
@@ -470,10 +478,10 @@ fi
 # step12_check FILE REGEX: count and record "name:line(category)" per invalid one
 step12_check() {
     local f="$1" found
-    if ! found=$(S12_RE="$2" S12_NAME="$(basename "$f")" S12_OK="$S12_VALID" perl -ne '
+    if ! found=$(S12_RE="$2" S12_NAME="$(basename "$f")" S12_OK="$S12_VALID" S12_CASE="$S12_CASE" perl -ne '
         BEGIN { $re = qr/$ENV{S12_RE}/i; %ok = map { $_ => 1 } split(" ", $ENV{S12_OK}) }
         next if /^\s*#/;
-        print "$ENV{S12_NAME}:$.($1)\n" if /$re/ && !$ok{uc $1};
+        print "$ENV{S12_NAME}:$.($1)\n" if /$re/ && !$ok{$ENV{S12_CASE} eq "exact" ? $1 : uc $1};
     ' "$f"); then
         step12_fail=$((step12_fail + 1))
         step12_details="${step12_details} $(basename "$f")(scan failed)"

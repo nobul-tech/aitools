@@ -660,7 +660,7 @@ function Get-AitLibSummaryErrorCount { return (Get-AitLibSummaryCount @("ERROR")
 # error, logged "WHAT: REASON" at error level through the non-recording path,
 # and recorded ERROR|NAME|WHAT|REASON unless the child wrote an ERROR record of
 # its own while it ran (the run summary now holds more than BEFORE ERROR
-# records). Parity: _aitlib_child_row.
+# records). Parity: the failed-child branch of run_child_relayed.
 function Write-AitLibChildRow([string]$Name, [int]$Before, [string]$What, [string]$Reason) {
     Write-AitLibUnrecordedError "${What}: $Reason"
     if ((Get-AitLibSummaryCount @("ERROR")) -gt $Before) {
@@ -943,17 +943,11 @@ function Invoke-RelaySync([string]$Exe, [string[]]$SyncArgs) {
 #                                          when the console stream in use is not
 #                                          redirected ([Console]::IsOutputRedirected /
 #                                          IsErrorRedirected)
-# Migration switch (plan summary-warn-reporting 5.2; removed in I5):
-#   $script:AitLibRecordLogCalls = $false  LogWarn / LogError log and count but
-#                                          record nothing; legacy Write-Summary WARN /
-#                                          ERROR write their 3-field record.
-#   $script:AitLibRecordLogCalls = $true   LogWarn records WARN|<script>|TEXT,
-#                                          LogError records ERROR|<script>|TEXT|.
-#   The Write-Ait* helpers always record (logging.md 8.2).
+# LogWarn records WARN|<script>|TEXT and LogError ERROR|<script>|TEXT|, as the
+# Write-Ait* helpers record theirs (logging.md 8.2).
 if ($null -eq (Get-Variable -Name AitLibOptJsonl -Scope Script -ErrorAction SilentlyContinue)) { $script:AitLibOptJsonl = $false }
 if ($null -eq (Get-Variable -Name AitLibOptConsoleStderr -Scope Script -ErrorAction SilentlyContinue)) { $script:AitLibOptConsoleStderr = $false }
 if ($null -eq (Get-Variable -Name AitLibOptColorAuto -Scope Script -ErrorAction SilentlyContinue)) { $script:AitLibOptColorAuto = $false }
-if ($null -eq (Get-Variable -Name AitLibRecordLogCalls -Scope Script -ErrorAction SilentlyContinue)) { $script:AitLibRecordLogCalls = $false }
 $script:LogMaxBytes = 5242880   # 5 MB
 $script:LogBackupCount = 5
 function Rotate-Log {
@@ -1043,15 +1037,15 @@ function Log($msg, $level = "info") {
     if ($script:AitLibOptJsonl -and -not (Test-AitLibRelayed)) { Write-JsonlRecord $ts $scriptName $level $msg }
 }
 function LogOk($msg)    { Log $msg "ok" }
-# LogError / LogWarn: logged and counted; recorded (ERROR|<script>|TEXT| /
-# WARN|<script>|TEXT) only when the migration switch is on (see Initialize-Logging)
+# LogError / LogWarn: logged, counted and recorded (ERROR|<script>|TEXT| /
+# WARN|<script>|TEXT; logging.md 8.2). Parity: log_error / log_warn.
 function LogError($msg) {
     Log $msg "error"; $script:errors++
-    if ($script:AitLibRecordLogCalls) { Write-AitLibRecord "ERROR" $script:scriptName "$msg" "" }
+    Write-AitLibRecord "ERROR" $script:scriptName "$msg" ""
 }
 function LogWarn($msg)  {
     Log $msg "warn"; $script:warnings++
-    if ($script:AitLibRecordLogCalls) { Write-AitLibRecord "WARN" $script:scriptName "$msg" }
+    Write-AitLibRecord "WARN" $script:scriptName "$msg"
 }
 function LogDetail($msg) {
     $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
@@ -1142,8 +1136,10 @@ function Write-AitError([string]$Tool, [string]$What, [string]$Reason) {
 # line for a failed command (reference/logging.md 8.3 "Every error has a
 # reason"), the first that applies:
 #   1. a known build-failure signature (Diagnose-BuildFailure): "<NAME>: <REMEDY>"
-#   2. the exception message of -ErrorRecord
-#   3. the first output line with an error marker: a word that ends in "error:"
+#   2. the exception message of -ErrorRecord (of the exception it wraps when a
+#      .NET method threw: not 'Exception calling "X" with "N" argument(s): ...')
+#   3. the first output line that is not a warning line with an error marker:
+#      a word that ends in "error:"
 #      ("error:", "Error:", "ERROR:", "SyntaxError:", "Write-Error:"; the word may
 #      hold letters, digits, - and _) or "fatal:", any case, at the start of the
 #      line or after whitespace; "E: " at the start of the line; "syntax error"
@@ -1152,19 +1148,21 @@ function Write-AitError([string]$Tool, [string]$What, [string]$Reason) {
 #   5. "exit N" when the output has a warning line (every non-empty line is one)
 #   6. "no output (exit N)"
 # Before matching, CR, ANSI CSI sequences and a leading "[ts] [script] [level] "
-# prefix are removed from each line; the reason returned is trimmed, and a
-# line of only whitespace counts as empty. A warning line is one whose prefix
-# has the level warn ("[ts] [script] [warn] "), decided after CR and ANSI are
-# removed and before the prefix is removed (RFI 5899-31: rule 4 never takes a
-# warning line as the reason). OUTPUT (a string, or the items of a
-# captured stream: strings, ErrorRecords, objects) is logged as detail lines,
-# empty lines skipped (as bash); the caller does not log it again. Writes nothing to the output stream but the
-# reason. Parity: error_reason in aitools-lib.sh.
+# prefix (the level in any case) are removed from each line; the reason
+# returned is trimmed, and a line of only whitespace counts as empty. A warning
+# line is one whose prefix has the level warn ("[ts] [script] [warn] "), decided
+# after CR and ANSI are removed and before the prefix is removed (RFI 5899-31:
+# rules 3 and 4 never take a warning line as the reason). OUTPUT (a string, or
+# the items of a captured stream: strings, ErrorRecords, objects) is logged as
+# detail lines ("output: <line>", CR and ANSI removed, the prefix kept, empty
+# lines skipped: the same lines as bash); the caller does not log it again.
+# Writes nothing to the output stream but the reason. Parity: error_reason in
+# aitools-lib.sh.
 # ---------------------------------------------------------------------------
 function ConvertTo-AitLibReasonLine([string]$Line) {
     $l = $Line -replace "`r", ''
     $l = $l -replace "$([char]27)\[[0-?]*[ -/]*[@-~]", ''
-    return ($l -replace '^\[[^\]]*\] \[[^\]]*\] \[[^\]]*\] ', '')
+    return ($l -creplace '^\[[^\]]*\] \[[^\]]*\] \[[A-Za-z]+\] ', '')
 }
 function Test-AitLibReasonWarnLine([string]$Line) {
     $l = $Line -replace "`r", ''
@@ -1186,7 +1184,7 @@ function Get-AitErrorReason {
         # Empty lines (after CR and ANSI are removed) are not logged, as in bash
         foreach ($l in $lines) {
             $r = ($l -replace "`r", '') -replace "$([char]27)\[[0-?]*[ -/]*[@-~]", ''
-            if ($r.Trim()) { LogDetail "output: $(ConvertTo-AitLibReasonLine $l)" }
+            if ($r.Trim()) { LogDetail "output: $r" }
         }
     }
     $clean = @($lines | ForEach-Object { ConvertTo-AitLibReasonLine $_ })
@@ -1197,7 +1195,15 @@ function Get-AitErrorReason {
         if ($sig) { return "$($sig.Name): $($sig.Remedy)" }
     }
     if ($ErrorRecord) {
-        $m = ($ErrorRecord.Exception.Message -replace '\s*\r?\n\s*', ' ').Trim()
+        # A .NET method that throws reaches PowerShell wrapped in a
+        # MethodInvocationException ('Exception calling "X" with "N" argument(s):
+        # "..."'): the reason is the message of the exception it wraps
+        $ex = $ErrorRecord.Exception
+        while ($ex -and $ex.InnerException -and ($ex -is [System.Management.Automation.MethodInvocationException] -or
+                $ex -is [System.Reflection.TargetInvocationException])) {
+            $ex = $ex.InnerException
+        }
+        $m = if ($ex) { ("$($ex.Message)" -replace '\s*\r?\n\s*', ' ').Trim() } else { "" }
         if ($m) { return $m }
     }
     $markers = @(
@@ -1206,9 +1212,10 @@ function Get-AitErrorReason {
         '^E: '
         '(?i)syntax error'
     )
-    foreach ($l in $clean) {
+    for ($i = 0; $i -lt $clean.Count; $i++) {
+        if ($warn[$i]) { continue }
         foreach ($re in $markers) {
-            if ($l -cmatch $re) { return $l.Trim() }
+            if ($clean[$i] -cmatch $re) { return $clean[$i].Trim() }
         }
     }
     for ($i = $clean.Count - 1; $i -ge 0; $i--) {
@@ -1375,20 +1382,22 @@ function Invoke-AI {
 # Write-Summary CAT TOOL TEXT -- one run summary record, written as given
 # (reference/logging.md 8.4): OK|TOOL|STATUS, DETAIL|TOOL|DETAIL, or
 # ACTION||INSTRUCTION (TOOL is ignored for ACTION). It never changes the
-# category. Legacy, until plan step I5: "WARN" / "ERROR" write the old 3-field
-# record (WARN|TOOL|TEXT, ERROR|TOOL|TEXT), which the reader accepts; they log
-# and count nothing (use Write-AitWarn / Write-AitError). Any other CAT is a
-# caller bug: one detail line, nothing written. Fail-safe and outside a run as
-# Write-AitLibRecord. Parity: write_summary in aitools-lib.sh.
+# category. Any other CAT (the retired "WARN" and "ERROR", a lower-case word, a
+# typo) writes no record: a WARN or ERROR record comes only from the warning
+# and error helpers (8.2: Write-AitWarn, Write-AitAction, LogWarn,
+# Write-AitError, LogError). So that such a call never vanishes, it is one
+# LogWarn under the script name, quoting the call: "invalid summary category
+# CAT -- not recorded: TOOL: TEXT" (8.3 "What is a warning").
+# check-script-compliance steps 12 and 13 fail on such a call in scripts/.
+# Fail-safe and outside a run as Write-AitLibRecord. Parity: write_summary in
+# aitools-lib.sh.
 # ---------------------------------------------------------------------------
 function Write-Summary($cat, $tool, $detail) {
     switch -CaseSensitive ("$cat") {
         "OK"     { Write-AitLibRecord "OK" "$tool" "$detail" }
         "DETAIL" { Write-AitLibRecord "DETAIL" "$tool" "$detail" }
         "ACTION" { Write-AitLibRecord "ACTION" "" "$detail" }
-        "WARN"   { Write-AitLibRecord "WARN" "$tool" "$detail" }
-        "ERROR"  { Write-AitLibRecord "ERROR" "$tool" "$detail" }
-        default  { LogDetail "Write-Summary: unknown category '$cat' for ${tool}: $detail -- not written" }
+        default  { LogWarn "invalid summary category $cat -- not recorded: ${tool}: $detail" }
     }
 }
 
@@ -1867,7 +1876,10 @@ function Write-ManagedFiles {
             }
             [IO.File]::WriteAllText($e.Path, "$($e.Content)`n", [System.Text.UTF8Encoding]::new($false))
         } catch {
-            $script:ManagedWriteError = "write failed for $($e.Path): $($_.Exception.Message)"
+            # The message of the exception WriteAllText threw, not its
+            # 'Exception calling "WriteAllText" ...' wrapper (as bash, without
+            # its "<script>: line N: " prefix)
+            $script:ManagedWriteError = "write failed for $($e.Path): $(Get-AitErrorReason -ErrorRecord $_)"
             $ok = $false
             break
         }
@@ -3293,12 +3305,21 @@ function Review-JsonFields {
         $keysFile = Join-Path $work "keys.json"
         $nodeErr = & node $js keys $SourceFile $keysFile 2>&1
         $keysRc = $LASTEXITCODE
-        try {
-            if ($keysRc -ne 0) { throw "node exit ${keysRc}: $nodeErr" }
-            $srcJson = [IO.File]::ReadAllText($SourceFile, [Text.Encoding]::UTF8) -replace '[\r\n]+$', ''
-            $reqKeys = [IO.File]::ReadAllText($keysFile, [Text.Encoding]::UTF8).Trim()
-        } catch {
-            Write-AitError $ToolName "Failed: $item" "cannot read the source JSON: $_"
+        $readWhy = $null
+        if ($keysRc -ne 0) {
+            # The reason is one line (Get-AitErrorReason: 8.3); node's whole
+            # stderr is logged as detail lines. Parity: review_json_fields.
+            $readWhy = Get-AitErrorReason -Output $nodeErr -ExitCode $keysRc
+        } else {
+            try {
+                $srcJson = [IO.File]::ReadAllText($SourceFile, [Text.Encoding]::UTF8) -replace '[\r\n]+$', ''
+                $reqKeys = [IO.File]::ReadAllText($keysFile, [Text.Encoding]::UTF8).Trim()
+            } catch {
+                $readWhy = Get-AitErrorReason -ErrorRecord $_
+            }
+        }
+        if ($null -ne $readWhy) {
+            Write-AitError $ToolName "Failed: $item" "cannot read the source JSON (node exit $keysRc): $readWhy"
             Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
             # ErrorAction exempt: work directory cleanup; the failure is already reported
             return "failed"
@@ -3315,8 +3336,9 @@ function Review-JsonFields {
 
     $planFile = Join-Path $work "plan.tsv"
     $nodeErr = & node $js plan $SourceFile $destResolved $planFile 2>&1
-    if ($LASTEXITCODE -ne 0) {
-        Write-AitError $ToolName "Failed: $item" "field comparison failed (node exit $LASTEXITCODE): $nodeErr"
+    $planRc = $LASTEXITCODE
+    if ($planRc -ne 0) {
+        Write-AitError $ToolName "Failed: $item" "field comparison failed (node exit $planRc): $(Get-AitErrorReason -Output $nodeErr -ExitCode $planRc)"
         Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
         # ErrorAction exempt: work directory cleanup; the failure is already reported
         return "failed"
@@ -3370,8 +3392,9 @@ function Review-JsonFields {
     # "-" = no adopt target (an empty argument can be dropped by native-argument passing)
     $adoptArg = if ($AdoptPath) { $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($AdoptPath) } else { "-" }
     $nodeErr = & node $js apply $SourceFile $destResolved $adoptArg $choicesFile $localOutFile $adoptOutFile $resultFile $reqLocalFile $reqAdoptFile 2>&1
-    if ($LASTEXITCODE -ne 0) {
-        Write-AitError $ToolName "Failed: $item" "applying the field choices failed (node exit $LASTEXITCODE): $nodeErr"
+    $applyRc = $LASTEXITCODE
+    if ($applyRc -ne 0) {
+        Write-AitError $ToolName "Failed: $item" "applying the field choices failed (node exit $applyRc): $(Get-AitErrorReason -Output $nodeErr -ExitCode $applyRc)"
         Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
         # ErrorAction exempt: work directory cleanup; the failure is already reported
         return "failed"
@@ -3518,7 +3541,8 @@ function Record-DeployOutcome {
         "verified"  { $script:dtVerified++ }
         "preserved" { $script:dtPreserved++ }
         default {
-            LogError "Record-DeployOutcome: unknown outcome `"$Outcome`" for $ItemName ($ToolName) -- counted as failed"
+            # The same text in deploy_tracker_record: its record is in the shared golden files
+            LogError "deploy tracker: unknown outcome `"$Outcome`" for $ItemName ($ToolName) -- counted as failed"
             $script:dtFailed++
             Write-Summary "DETAIL" $ToolName "failed: $ItemName"
         }

@@ -1,8 +1,15 @@
 # summary-cases.txt -- the shared fixture of tests L1-L32 (plan
-# summary-warn-reporting section 13) and L33 (RFI 5899-31): for each case, its
+# summary-warn-reporting section 13), L33 (RFI 5899-31) and L34 (step I5): for each case, its
 # input and its expected run summary records, counts, deploy.log lines and
 # panel lines.
 #
+# v1.3 (2026-11-16, plan step I5): the migration switch and the legacy
+# write_summary WARN / ERROR are gone: the "switch" and "migration-only" keywords
+# are removed (log_warn / log_error always record); L27 is now the final
+# behaviour (a write_summary category other than OK, DETAIL or ACTION writes no
+# record and is one warning); L33e, L33f: the error marker (rule 3) skips
+# warning lines too (RFI 5899-31); L34a: the prefix is removed whatever the
+# case of its level, and the detail lines keep it, in both languages.
 # v1.2 (2026-11-16): L33a-L33d: the last-line fallback of an error's reason
 # skips warning lines (8.3 v2.3 rules 4 and 5, RFI 5899-31); L15a and L15b cite rule 6 ("no
 # output"), renumbered.
@@ -54,9 +61,6 @@
 # note TEXT        a remark: a difference from plan section 13, an open point
 # needs pty        the case needs a terminal: a harness without one reports
 #                  the case as SKIP with the reason, never as PASS
-# migration-only   valid only while the recording switch and the legacy
-#                  write_summary WARN / ERROR exist (until plan step I5);
-#                  I5 deletes the case
 # external PATH    the case is covered by another suite (PATH and its .ps1
 #                  twin); the harness runs nothing for it
 #
@@ -66,9 +70,6 @@
 # Initialize-Logging "test-logging"). "the script" below is that process.
 #
 # Setup lines (before the steps):
-# switch on|off    the migration switch that makes log_warn / log_error
-#                  record (plan 5.2); default on. After I5 there is no switch
-#                  and "on" is the only behaviour.
 # summary unset    AITOOLS_SUMMARY_FILE is unset for the case. Default: set
 #                  to a new empty file {CASEDIR}/summary.txt
 # env NAME=VALUE   set for the case process and its children
@@ -127,8 +128,8 @@
 # Child scripts. The harness writes {CASEDIR}/CHILD.sh or CHILD.ps1: the
 # library loaded, logging_init CHILD / Initialize-Logging CHILD (so the
 # child's script name is CHILD), then its action lines in order, then
-# "exit N" (default exit 0). The child inherits the run summary file, the
-# log directory and the switch. Actions:
+# "exit N" (default exit 0). The child inherits the run summary file and
+# the log directory. Actions:
 #   call HELPER|ARG|...    as the step "call"
 #   stdout TEXT            bash: printf '%s\n' TEXT   PowerShell: Write-Host TEXT
 #   stderr TEXT            bash: printf '%s\n' TEXT >&2 (bash children only)
@@ -178,7 +179,6 @@ case L1
 plan L1
 title log_warn records a WARN under the script name; a later OK record is written as it is
 spec 8.2 log_warn, write_summary; 8.3 "never recoloured"; 8.5 Green
-switch on
 call log_warn|w
 call write_summary|OK|tool|v1
 expect record WARN|test-logging|w
@@ -232,7 +232,6 @@ case L4
 plan L4
 title write_error records WHAT and REASON; log_error records an empty reason
 spec 8.2 write_error, log_error; 8.5 red-line
-switch on
 call write_error|tool|what|why
 call log_error|f
 expect record ERROR|tool|what|why
@@ -252,7 +251,6 @@ case L5
 plan L5
 title a relayed child's warning is recorded by the child, not counted in the parent
 spec 8.3 Recorded at the source, Children (Relayed lines); 8.6
-switch on
 child fx-warn call log_warn|w
 child fx-warn exit 0
 relay-native fx warn||fx-warn
@@ -462,7 +460,6 @@ plan L12
 lang ps1
 title an in-process child (Invoke-ChildRelayed) that logs a warning: one WARN record, parent count unchanged
 spec 8.3 Children (Relayed lines); 8.0 Relay
-switch on
 child fx-warn call log_warn|w
 child fx-warn exit 0
 relay fx warn||fx-warn
@@ -629,7 +626,6 @@ case L20
 plan L20
 title log_error: an empty reason gives no trailing ": "; a 100-character text is cut at 70
 spec 8.2 log_error; 8.5 Cutting (empty reason)
-switch on
 call log_error|x
 call log_error|error-txt-error-txt-error-txt-error-txt-error-txt-error-txt-error-txt-error-txt-error-txt-error-txt-
 expect record ERROR|test-logging|x|
@@ -810,27 +806,34 @@ panel rule
 
 case L27
 plan L27
-migration-only
-title switch off: a legacy write_summary WARN / ERROR and its log_warn / log_error give one record each, never two
-spec plan 5.2 "During the migration only"; 8.4 Reader rules (3-field ERROR)
-switch off
+title log_warn / log_error record; write_summary WARN / ERROR (retired) and any other category but OK, DETAIL, ACTION write no record and are one warning each
+spec 8.2 log_warn, log_error, write_summary OK|DETAIL|ACTION; 8.3 What is a warning
 call log_warn|w
 call write_summary|WARN|tool|w
 call log_error|e
 call write_summary|ERROR|tool|e
+call write_summary|ok|tool|v0
 call write_summary|OK|tool2|v1
-expect record WARN|tool|w
-expect record ERROR|tool|e
+expect record WARN|test-logging|w
+expect record WARN|test-logging|invalid summary category WARN -- not recorded: tool: w
+expect record ERROR|test-logging|e|
+expect record WARN|test-logging|invalid summary category ERROR -- not recorded: tool: e
+expect record WARN|test-logging|invalid summary category ok -- not recorded: tool: v0
 expect record OK|tool2|v1
-expect count warnings 1
+expect count warnings 4
 expect count errors 1
+expect log [test-logging] [warn] invalid summary category ERROR -- not recorded: tool: e
 render
 panel blank
 panel rule
 panel green   [ok]  tool2            v1
-panel yellow   [!]   tool             w
-panel red   [ERR] tool             e
+panel yellow   [!]   test-logging     w
+panel yellow   [!]   test-logging     invalid summary category WARN -- not recorded: tool: w
+panel yellow   [!]   test-logging     invalid summary category ERROR -- not recorded: tool: e
+panel yellow   [!]   test-logging     invalid summary category ok -- not recorded: tool: v0
+panel red   [ERR] test-logging     e
 panel rule
+note plan I5 ("Remove write_summary WARN / ERROR"): a leftover call must not vanish silently, so the library logs, counts and records it as one warning of the calling script (lead brief, 5899-6-L2-I5core); before I5 this case was migration-only (switch off, 3-field legacy records)
 
 case L28a
 plan L28
@@ -1018,3 +1021,39 @@ expect count errors 1
 expect count warnings 0
 expect relay-rc 1
 expect child-rc 1
+
+case L33e
+plan RFI 5899-31
+title error_reason: an error marker on a warning line is not the reason (rule 3 skips warning lines); the last line that is not a warning line is
+spec 8.3 rules 3 and 4 (a warning line is never taken as the reason by rules 3 and 4)
+call error_reason|[2026-11-16T10:00:00Z] [fx-child] [info] step\n\e[33m[2026-11-16T10:00:00Z] [fx-child] [warn] retry error: transient\e[0m\n[2026-11-16T10:00:00Z] [fx-child] [warn] second warning|1
+expect reason step
+expect logsub detail retry error: transient
+note 5899-6-L2, relaying the answer to RFI 5899-31 ("31) fix in this pr"): rule 3 skips warning lines, as rule 4 does
+
+case L33f
+plan RFI 5899-31
+title a failed child whose only "error:" text is on a warning line, its only line: the relay's reason is "exit N"
+spec 8.3 A failed child (REASON: its last warning line when it printed nothing else); rules 3 and 5
+child fx-warnerr stdout [2026-11-16T10:00:00Z] [fx-warnerr] [warn] retry error: transient
+child fx-warnerr exit 1
+relay fx warnerr||fx-warnerr
+expect record ERROR|fx-warnerr|fx warnerr failed (exit 1)|exit 1
+expect count errors 1
+expect count warnings 0
+expect relay-rc 1
+expect child-rc 1
+note before rule 3 skipped warning lines, the reason was "retry error: transient", a warning's text
+
+# ===========================================================================
+# L34: library parity (plan step I5, items found in I3)
+# ===========================================================================
+
+case L34a
+plan I5 parity
+title error_reason removes a [<time>] [<script>] [<level>] prefix whatever the case of the level, and logs each line as it came (CR and ANSI removed, the prefix kept)
+spec 8.3 "Before matching"; 8.2 error_reason (OUTPUT as detail lines)
+call error_reason|[2026-11-16T10:00:00Z] [fx-child] [INFO] Done here\r\n|1
+expect reason Done here
+expect logsub detail output: [2026-11-16T10:00:00Z] [fx-child] [INFO] Done here
+note before I5 bash removed the prefix only for a lower-case level (the reason kept the prefix), and PowerShell logged the detail line without its prefix
