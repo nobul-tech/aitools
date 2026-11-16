@@ -14,4 +14,5 @@ DETAIL|cursor skills|added: p1/SKILL.md
 DETAIL|cursor skills|added: s1/SKILL.md
 DETAIL|cursor skills|added: s1/scripts/run.sh
 DETAIL|cursor skills|removed: gone
-WARN|cursor skills|4 added, 1 removed
+OK|cursor skills|4 added, 1 removed
+WARN|cursor skills|Kept mine2: the skills manifest retires mine2, but this directory matches no harness copy (it may be your own) -- Cursor still loads it; delete it if it is an old fan-out copy

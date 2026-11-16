@@ -11,4 +11,5 @@ s1/scripts/run.sh 3e2b31c72181b87149ff995e7202c0e3 x
 s1/tests/expected-behaviors.md 6983b4cd210aab338877de6d3b33c926
 # summary rows (ACTION and skills, sorted)
 DETAIL|claude skills|updated: s1/SKILL.md
-WARN|claude skills|1 updated, 5 verified
+OK|claude skills|1 updated, 5 verified
+WARN|claude skills|Diff in HOME/.claude/skills/s1/SKILL.md -- overwriting (non-interactive)

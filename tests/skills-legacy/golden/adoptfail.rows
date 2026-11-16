@@ -1,2 +1,3 @@
+ERROR|setup-user-skills|adopt to <TMP>/dp-<lang>-adoptfail/claude/skills/mine/SKILL.md failed|<OS error>
 ERROR|skills|adopt failed: mine
 OK|skills|n/a (fanned out)

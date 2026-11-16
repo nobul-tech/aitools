@@ -7,4 +7,6 @@ b/SKILL.md 6556d9aa037ce00cf0de2d111d566ab0
 ACTION||Run aitools to rebuild ~/.aitools/skills and its manifest
 DETAIL|claude skills|added: a/SKILL.md
 DETAIL|claude skills|added: b/SKILL.md
-WARN|claude skills|2 added
+OK|claude skills|2 added
+WARN|claude skills|Skills manifest HOME/.aitools/skills/.aitools-skills-manifest: line ignored: .dot<TAB>shared -- Run aitools to rebuild ~/.aitools/skills and its manifest
+WARN|claude skills|Skills manifest HOME/.aitools/skills/.aitools-skills-manifest: line ignored: a<TAB>unknown -- Run aitools to rebuild ~/.aitools/skills and its manifest

@@ -268,10 +268,17 @@ no_rows_for() { ! grep -q "^[A-Z]*|$2|" "$TMP_ROOT/$1.summary"; }
 # skill rows: every row except the resolver's own (dotprofile, ACTION)
 rows_of() { grep -v -e '^ACTION|' -e '|dotprofile|' "$TMP_ROOT/$1.summary" | LC_ALL=C sort; }
 # golden_rows CASE: the skill rows of CASE ("<lang>-<name>") equal golden/<name>.rows,
-# the same file for the .sh run (macOS/Linux) and the .ps1 run (Windows)
+# the same file for the .sh run (macOS/Linux) and the .ps1 run (Windows). The
+# same rules as Golden-Rows in test-skills-legacy.ps1: the case's own dotprofile
+# copy (dp-sh-<name>, dp-ps-<name>) as dp-<lang>-<name>; the reason of a failed
+# adopt, an OS message (BSD and GNU mkdir, .NET word it differently; asserted
+# per platform inline), as <OS error>
 golden_rows() {
     local name="${1#*-}"
-    rows_of "$1" > "$TMP_ROOT/$1.rows"
+    rows_of "$1" | perl -pe '
+        s/\bdp-(?:sh|ps)-/dp-<lang>-/g;
+        s{^(ERROR\|[^|]*\|adopt to [^|]* failed)\|.*$}{$1|<OS error>};
+    ' > "$TMP_ROOT/$1.rows"
     check "golden $L: $name: summary rows" "golden_match '$name.rows' '$TMP_ROOT/$1.rows'"
 }
 found() { grep -q "Found user-created skill: $2\$" "$TMP_ROOT/$1.out"; }
@@ -418,6 +425,19 @@ for lang in $L; do
             chmod 755 "$TMP_ROOT/dp-$c/claude/skills"
             check "$lang pty adopt failure (fanned out): exit 1, ERROR skills 'adopt failed: mine', no claude skills row" \
                 "[ \"\$(rc_of $c)\" = 1 ] && row $c 'ERROR|skills|adopt failed: mine' && no_rows_for $c 'claude skills' && [ ! -e '$TMP_ROOT/dp-$c/claude/skills/mine' ]"
+            # The library records the failed write at the source (logging.md 8.3;
+            # adopt_managed_file: WHAT the target, REASON mkdir's output). Its record
+            # name is not pinned here: setup-user-skills passes no --tool yet (G3)
+            AF_WHAT="adopt to $TMP_ROOT/dp-$c/claude/skills/mine/SKILL.md failed"
+            check "$lang pty adopt failure: the library's ERROR record for the write, with its reason" \
+                "[ \"\$(grep -cF '|$AF_WHAT|' '$TMP_ROOT/$c.summary')\" = 1 ]"
+            if [ "$TEST_PLATFORM" = macos ]; then
+                check "$lang pty adopt failure: reason is BSD mkdir's message" \
+                    "perl -ne 'BEGIN { \$s = shift } chomp; \$n++ if /^ERROR\|[^|]+\|\Q\$s\E\z/; END { exit(\$n == 1 ? 0 : 1) }' '$AF_WHAT|cannot create its directory: mkdir: $TMP_ROOT/dp-$c/claude/skills/mine: Permission denied' '$TMP_ROOT/$c.summary'"
+            else
+                check "$lang pty adopt failure: reason is mkdir's message (Permission denied)" \
+                    "grep -F '|$AF_WHAT|cannot create its directory: mkdir: ' '$TMP_ROOT/$c.summary' | grep -E 'Permission denied\$' >/dev/null"
+            fi
             golden_rows "$c"
         else
             skip "$lang pty adopt failure (chmod does not block writes here)"
