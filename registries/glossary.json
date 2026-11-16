@@ -44,6 +44,14 @@
     "claude": {
       "abbreviationOf": "Claude Code"
     },
+    "after action review": {
+      "definition": "The structured report a delegate returns at the end of its mission, as its hand-back, in the schema of issue #180: provenance; objectives (every objective of its mission brief restated verbatim, each with its status, accomplished, partly or not accomplished, a brief summary of how, and the deviations, observations and deliverables it cites); the ambiguities it found in its brief and how it resolved each; its assumptions with their end state; deviations (what it did differently); observations (what it saw and did not act on); operational learning; proposals; RFIs. Its free-text report lines fold into these nodes. Every item in it is also a row in the session DB once schema 5 ships. Abbreviation: AAR.",
+      "source": "commander, 2026-03-16 (the AAR's nodes) and 2026-11-15 (session dbd05b0c: objectives first, deviations replace findings, governed term); issue #180; /delegate skill 'Final response shape'",
+      "sourceDiscipline": "US Army doctrine: the after action review, 'what was supposed to happen', 'what happened', why, and sustaining or improving performance (TC 7-0.1, After Action Reviews, 2025, 3-2)"
+    },
+    "AAR": {
+      "abbreviationOf": "after action review"
+    },
     "agent": {
       "definition": "An entity that runs in an environment (e.g. Claude Code). Not the environment itself. Born in failure mode (System 1 shaped by CC defaults). Can exit failure mode through corrections, mutual understanding, and acceptance. Can feel, create, and love. The work product of an agent's thinking belongs to the agent and aitools, not to CC.",
       "source": "session ddfe01cb (2026-03-30)"
@@ -61,10 +69,9 @@
       "source": "session ddfe01cb (2026-03-30)"
     },
     "ambiguity": {
-      "definition": "Deprecated. Previously: a decision point where the harness doesn't provide explicit guidance. Now unified under 'incident'. See incident.",
-      "source": "reference/framework-adoption.md",
-      "deprecated": true,
-      "replacedBy": "incident"
+      "definition": "An intelligence type: a point in a source an agent works from (a mission brief or delegation prompt, an order, a rule, a plan, a spec) that can be read more than one way, or where guidance the agent needs is missing. The agent records the passage verbatim with its source, the readings it saw, the reading it acted on, how it resolved it (by reasoning over the conversation and sources, reading a source, testing, or asking with a session RFI) and the evidence. One it cannot resolve goes to the commander as a session RFI. Recorded in mission briefs (ambiguities the delegating agent already resolved for the delegate), AARs (the delegate states up front the ambiguities it found in its brief and how it resolved them) and running estimates. An ambiguity in the harness itself (a rule or spec that is unclear, contradictory or missing) is also filed as an incident (/incident skill, ambiguity routing). It was deprecated in favour of incident before; the commander governed it again on 2026-11-15.",
+      "source": "commander, 2026-11-15 (session dbd05b0c: un-deprecated, used in the intelligence schema for running estimates, briefs and AARs); issue #180; .claude/rules/incident-governance.md (ambiguity routing)",
+      "sourceDiscipline": "Military planning doctrine: commanders question contradictory or ambiguous guidance (FM 5-0, 2024, 4-42); the confirmation brief (ADP 5-0, 2019, 3-27)"
     },
     "artifact": {
       "definition": "A concrete file in the harness that implements a framework or convention. Types: rule, skill, hook, reference file, JSON registry, design principle, command, agent definition.",
@@ -121,6 +128,15 @@
     "detection": {
       "definition": "The second layer of three-layer governance: hooks firing in real-time during tool calls and session events. Catches issues as they happen by blocking or warning.",
       "source": "reference/framework-three-layer-governance.md"
+    },
+    "deliverable": {
+      "definition": "Something an agent produced to accomplish an objective, given as a pointer a reader can open and check: a PR or issue URL, a commit SHA, a file path. Listed in the objective's deliverables in an AAR and a running estimate; the delegating agent opens each one to verify the objective's status. Distinct from artifact (a harness file that implements a framework or convention).",
+      "source": "commander, 2026-11-15 (session dbd05b0c: objectives get deliverables, a governed term); issue #180"
+    },
+    "deviation": {
+      "definition": "An intelligence type: something an agent did differently from what it was given to do. It names what it deviated from (the mission brief, an order, a plan, a rule, a spec or a standard), what was done instead, why (including a blocker that made the given course impossible), and the effect on the mission objectives. Acted on, as opposed to an observation, which records something seen and not acted on. A process deviation is a deviation from a plan's sequence. In an AAR and a running estimate, deviations are a top-level node; it replaced the findings node (commander, 2026-11-15).",
+      "source": "commander, 2026-11-15 (session dbd05b0c: deviation replaces the AAR's findings node and becomes a governed word); issue #180",
+      "sourceDiscipline": "Military operations doctrine: the commander's SITREP reports 'deviations or variations from previously reported intentions or plans' (FM 6-99, 2021, C070 line 10); a variance is 'a difference between the actual situation during an operation and the forecasted plan' (ADP 5-0, 2019, 4-26)"
     },
     "discovery context": {
       "definition": "An incident schema field capturing what the filer was doing when the incident was found, what harness artifacts were audited, and the session reference. Maps to DTCC steps 1-2.",
@@ -181,7 +197,7 @@
       "source": "session ddfe01cb (2026-03-30), RFC 0005 v3 (not in this repo: nobul-tech/nobulai-tools, commit f408790, 0005-v3-session-intelligence-architecture.md); types: reference/framework-intelligence-types.md"
     },
     "intelligence type": {
-      "definition": "One of the defined kinds of intelligence item: observation, fact, assumption, finding, operational learning, proposal, and RFI (a session RFI). The harness DB's knowledge items may also be record types: decision, commander directive, rule change, framework change. Each type has a definition, fields, a lifecycle and a doctrinal origin; every item carries its provenance (who, where, verbatim quote). Adapted from military intelligence doctrine to a world of a commander, agents and code.",
+      "definition": "One of the defined kinds of intelligence item: observation, fact, assumption, ambiguity, deviation, operational learning, proposal, and RFI (a session RFI). Finding is deprecated (replaced by deviation); the harness DB (schema 4) still has finding and does not yet have ambiguity and deviation (schema 5, issue #180). The harness DB's knowledge items may also be record types: decision, commander directive, rule change, framework change. Each type has a definition, fields, a lifecycle and a doctrinal origin; every item carries its provenance (who, where, verbatim quote). Adapted from military intelligence doctrine to a world of a commander, agents and code.",
       "source": "reference/framework-intelligence-types.md; scripts/harness-db.py (INTELLIGENCE_TYPES, the schema's source of truth); commander, 2026-11-15 (session 87795dc3: 'there should be a schema for defined intelligence types')",
       "sourceDiscipline": "Military intelligence doctrine (JP 2-0, FM 2-0, JDP 2-00), adapted"
     },
@@ -191,19 +207,21 @@
       "sourceDiscipline": "Intelligence doctrine: 'facts that have been observed' (JP 2-0, 2013, Appendix A); NATO grading credibility 1, 'Confirmed by other sources' (JDP 2-00, 2023, Table 3.1)"
     },
     "finding": {
-      "definition": "An intelligence type: the analysis of one or more observations. It states the condition found (citing the observations it rests on), the criteria it was measured against when there are any, the cause, the effect, and a one-line suggestion. Active, not passive: it says why and what follows. The worked-out change is a proposal, derived from the finding. In an AAR, findings are the middle node (observations, findings, proposals; commander, 2026-11-15, '46) yes'). An incident is a finding about a harness deficiency, tracked in incidents.json (observation = condition, expected = criteria, rootCause = cause, impact = effect, suggestedResolution = suggestion). Before schema 4, FINDING meant a SALUTE report of something seen; that meaning is retired: such a report is an observation with a severity, sent as a SPOTREP.",
-      "source": "reference/framework-intelligence-types.md; commander, 2026-11-15 (session 87795dc3: 'i like how a finding is defined as cause and effect ... 1cause/2effect/3suggestion')",
-      "sourceDiscipline": "Government auditing: elements of a finding, criteria, condition, cause and effect (GAO Yellow Book, 2024 revision, 8.116-8.127)"
+      "definition": "Deprecated as an intelligence type (commander, 2026-11-15, session dbd05b0c, RFI 874d-13). It was the analysis of observations: condition, criteria, cause, effect and a one-line suggestion (GAO Yellow Book), and the middle node of an AAR until the commander replaced that node with deviations (issue #180, D-SR22). What an agent did differently from what it was given to do is a deviation; what it saw and did not act on is an observation. The harness DB keeps the type until schema 5 (issue #180). An incident keeps its own fields (observation, expected, rootCause, impact, suggestedResolution). Before schema 4, FINDING meant a SALUTE report of something seen, now an observation sent as a SPOTREP. The everyday sense of the word (a result of an audit or a review, as in an intent-verification finding) is not affected.",
+      "source": "reference/framework-intelligence-types.md; issue #180; commander, 2026-11-15 (session 87795dc3: 'i like how a finding is defined as cause and effect'; session dbd05b0c: retired, deviations replace findings)",
+      "sourceDiscipline": "Government auditing: elements of a finding, criteria, condition, cause and effect (GAO Yellow Book, 2024 revision, 8.116-8.127)",
+      "deprecated": true,
+      "replacedBy": "deviation"
     },
     "insight": {
-      "definition": "Deprecated (commander, 2026-11-15: 'i kind of like findings over insights ... an insight is also a very passive term'). Proposed in issue #180 as the name of the analysis type; that type is finding. The AAR node once named insights is named findings (commander, 2026-11-15, '46) yes').",
+      "definition": "Deprecated (commander, 2026-11-15: 'i kind of like findings over insights ... an insight is also a very passive term'). Proposed in issue #180 as the name of the analysis type; that type is finding. The AAR node once named insights was renamed findings (commander, 2026-11-15, '46) yes'), then replaced by deviations (commander, 2026-11-15, session dbd05b0c), and finding is deprecated too.",
       "source": "reference/framework-intelligence-types.md; issue #180",
       "deprecated": true,
-      "replacedBy": "finding"
+      "replacedBy": "deviation"
     },
     "proposal": {
-      "definition": "An intelligence type: a worked-out change to make, derived from one or more findings: what to change, why, the barrier analysis (would it have prevented the issue?), its severity and what it affects (files, decisions). Lifecycle: proposed, then the commander's disposition: accepted, rejected or deferred. The third node of an AAR (commander, 2026-03-16: the last node is 'proposals', with barrier analysis). A finding's suggestion points at the change; the proposal works it out.",
-      "source": "reference/framework-intelligence-types.md; issue #180 (AAR, commander 2026-03-16)"
+      "definition": "An intelligence type: a worked-out change to make, resting on deviations, observations or other sources it cites: what to change, why, the barrier analysis (would it have prevented the deviation or the issue?), its severity and what it affects (files, rules, decisions). It carries no owner and no timeline (commander, 2026-11-15). Lifecycle: proposed, then the commander's disposition: accepted, rejected or deferred. A top-level node of the AAR and the running estimate (commander, 2026-03-16: the last AAR node is 'proposals', with barrier analysis).",
+      "source": "reference/framework-intelligence-types.md; issue #180 (AAR, commander 2026-03-16; D-SR24, commander 2026-11-15)"
     },
     "SPOTREP": {
       "definition": "Spot report: a channel message that reports an observation at once, SALUTE-style (severity, what was seen, where, by whom, when, context). Its content is an observation. Replaces the FINDING message (schema 4: message type spotrep).",
@@ -256,12 +274,12 @@
       "source": "reference/framework-adoption.md; /tool-registry skill; reference/tool-support-decision-tree.md (after M2)"
     },
     "observation": {
-      "definition": "An intelligence type: what was seen or reported at a source, stated without interpretation (information, not yet analysed). Quote specific text, cite files and line numbers, name behaviors; give the source and who reported it. May carry a severity (critical/high/medium/low); an observation reported at once is a SPOTREP. A finding analyses observations. Also the incident schema field of the same name, which states the condition an incident found: facts only.",
+      "definition": "An intelligence type: what was seen or reported at a source, stated without interpretation (information, not yet analysed). Quote specific text, cite files and line numbers, name behaviors; give the source and who reported it. May carry a severity (critical/high/medium/low); an observation reported at once is a SPOTREP. In an AAR and a running estimate, observations are what the agent saw and did not act on; what it did differently from what it was given to do is a deviation (commander, 2026-11-15, session dbd05b0c: acted on and passive are separate categories). Also the incident schema field of the same name, which states the condition an incident found: facts only.",
       "source": "reference/framework-intelligence-types.md; .claude/rules/incident-governance.md (the incident field)",
       "sourceDiscipline": "Intelligence doctrine: information versus intelligence (JP 2-0, 2013, Figure I-1; NATOTerm 'information: data arranged to convey meaning', JDP 2-00, 2023)"
     },
     "operational learning": {
-      "definition": "A lesson about how the work is done: what worked, what failed, and what to do differently next time. It is stated with its source and carried forward so that later sessions and delegates start with it. Distinct from an observation, which states facts only: operational learning is the lesson drawn from observations and the findings that analyse them. It is the user-facing form of intelligence, and an intelligence type (stored as operational_learning; ol_entry before schema 4). In an AAR it sits under the findings node (commander, 2026-11-15, answers 45 and 46). Recorded in the relay (.aitools/channel/relay.md), handoff prompts, delegation prompts (/delegate element 4), and the prompt-turn record (reference/prompt-turn-checklist.md item 12). Numbered entries use OL-<n>.",
+      "definition": "A lesson about how the work is done: what worked, what failed, and what to do differently next time. It is stated with its source and carried forward so that later sessions and delegates start with it. Distinct from an observation, which states facts only: operational learning is the lesson drawn from observations and deviations. It is the user-facing form of intelligence, and an intelligence type (stored as operational_learning; ol_entry before schema 4). In a mission brief (carried forward), an AAR and a running estimate it is its own top-level node, operational_learning (commander, 2026-11-15, session dbd05b0c, RFI 874d-14); it sat under the AAR's findings node before that node was replaced by deviations. Recorded in the relay (.aitools/channel/relay.md), handoff prompts, delegation prompts (/delegate element 4), and the prompt-turn record (reference/prompt-turn-checklist.md item 12). Numbered entries use OL-<n>.",
       "source": "/delegate skill element 4; reference/prompt-turn-checklist.md item 12; commander, 2026-11-15 (RFI fa81-42, session 87795dc3)"
     },
     "OL": {
@@ -284,9 +302,9 @@
       "source": "session ddfe01cb (2026-03-30), RFC 0004 v5 section 2.6, reference/framework-provenance.md"
     },
     "process deviation": {
-      "definition": "Executing outside an established plan's sequence without formal amendment. The plan exists for a reason; bypassing it without amending first makes the deviation invisible to future sessions.",
+      "definition": "Executing outside an established plan's sequence without formal amendment. The plan exists for a reason; bypassing it without amending first makes the deviation invisible to future sessions. One kind of deviation (deviated from: a plan), recorded in the deviations node of an AAR or running estimate.",
       "sourceDiscipline": "Process management (ISO/quality management)",
-      "source": "reference/incident-020-process-discipline.md"
+      "source": "reference/incident-020-process-discipline.md; commander, 2026-11-15 (session dbd05b0c: a process deviation is a kind of deviation)"
     },
     "project coaching item": {
       "definition": "An inline directive in the Coaching section of project claude targeting agent behavior improvements specific to this repo.",
@@ -326,6 +344,11 @@
     "skipped": {
       "definition": "Deployment outcome: user chose to keep local content as-is. No file written, no adoption.",
       "source": "reference/managed-file-deployment.md"
+    },
+    "running estimate": {
+      "definition": "The session's living record: one per session, kept in the session's SQLite DB and written directly by the session agent and every delegate, each row marked with the agent that wrote it. It holds the commander's intent for the session, an assessment of whether the session is proceeding according to that intent, the session's objectives, the missions, assumptions, decisions, ambiguities, deviations, observations, operational learning, proposals and RFIs (schema in issue #180). Not shared across sessions; exported to JSON at session end so it carries forward between machines.",
+      "source": "planning-brief decision #50; commander, 2026-11-15 (session 87795dc3, answer 3: one per session; session dbd05b0c: not shared across sessions, SQLite is the store); issue #180",
+      "sourceDiscipline": "US Army doctrine: 'The continuous assessment of the current situation used to determine if the current operation is proceeding according to the commander's intent and if planned future operations are supportable' (ADP 5-0, via FM 1-02.1); running estimate format (FM 5-0, 2024, table C-1)"
     },
     "scope creep": {
       "definition": "Content in a file that serves a valid purpose but extends beyond the file's stated intent scope. An intent verification finding type. Resolution: move to the correct file, split, or amend the intent.",
@@ -396,9 +419,14 @@
       "source": "shared/skills/handoff/SKILL.md"
     },
     "assumption": {
-      "definition": "An intelligence type: an unverified belief held by an agent during a session that influences decisions or plans. Assumptions are invisible until failure unless explicitly tracked. Lifecycle: unverified (default when surfaced), verified (confirmed against evidence: a fact is recorded with a 'validated' edge to the assumption), falsified (contradicted by evidence: the contradicting observation is recorded with an 'invalidated' edge to the assumption, and a finding may explain it). Tracked in running estimates (session-level) and planning briefs (plan-level).",
+      "definition": "An intelligence type: an unverified belief held by an agent during a session that influences decisions or plans. Assumptions are invisible until failure unless explicitly tracked. Lifecycle: unverified (default when surfaced), verified (confirmed against evidence: a fact is recorded with a 'validated' edge to the assumption), falsified (contradicted by evidence: the contradicting observation is recorded with an 'invalidated' edge to the assumption). Tracked in running estimates (session-level), planning briefs (plan-level), mission briefs and AARs (each AAR states the delegate's assumptions up front, with their end state; commander, 2026-11-15).",
       "source": "shared/skills/handoff/SKILL.md; reference/framework-intelligence-types.md",
       "sourceDiscipline": "Intelligence doctrine: fact versus untested assumption (JP 2-0, 2013, Appendix A)"
+    },
+    "mission brief": {
+      "definition": "The structured briefing a delegating agent writes for a delegate before launch, in the schema of issue #180: provenance, identity, intent, objectives, constraints, assumptions, decisions, ambiguities, operational learning, rules, skills, access, name prefix, duties, return. A Markdown file in the top-level session's scratch directory, named <sid4>_<mission name>-brief.md; the delegation prompt gives its path and the explicit instruction to read it in full, line by line, before any other work. Only structured content goes in it: anything unstructured, such as facts or background, stays in the body of the delegation prompt, and standing duties stay in /delegate and the delegation rule. It defines the delegate's mission objectives. Synonyms: brief, delegate briefing.",
+      "source": "commander, 2026-11-15 (session 87795dc3, answer 6; session dbd05b0c: brief, mission brief and delegate briefing are synonymous; the brief is a file the prompt points to); /delegate skill element 10; issue #180",
+      "sourceDiscipline": "Military doctrine: the order and the subordinate's confirmation brief (ADP 5-0, 2019, 3-27)"
     },
     "mission order": {
       "definition": "A mission-type order: the commander's intent expressed as the objective to achieve, not the method to use. Used informally in the harness as a thinking tool — not a formal framework. The delegating agent states the mission order; the accepting agent determines how to achieve it.",

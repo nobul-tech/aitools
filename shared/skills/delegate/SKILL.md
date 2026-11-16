@@ -46,6 +46,17 @@ v2.4 (2026-11-14, 38dc-25): "Environment limits" corrected by the 2.1.325
 probes (which repeat hand-back is refused, TaskStop by the main session, what
 a sub-agent receives, the level-3 tool set); "In the aitools repo" no longer
 says every aitools rule and skill is deployed at user level.
+v2.5 (2026-11-15, session dbd05b0c): element 10 states the mission
+objectives verbatim (D-DEL8); duties 8 and 9 (report blockers at once, a
+standing duty of every delegate, D-DEL9; objectives verbatim down the chain);
+the prompt skeleton gains a Mission Brief section.
+v2.6 (2026-11-15, session dbd05b0c, issue #180): the mission brief is a file
+the prompt points to (element 10, new section "Mission brief file", D-DEL10);
+unstructured content stays in the prompt body (D-DEL12); every delegate loads
+this skill at start (element 3, D-DEL13); the final report is an after action
+review (AAR, D-DEL11): "The delegate owes back", "Final response shape",
+elements 6 and 7, the skeleton and "Verifying what comes back" follow it;
+the permission signal is `WRITE_BLOCKED` everywhere.
 
 ## When to use
 
@@ -91,19 +102,88 @@ An agent launching a subagent by any tool call or other means has the duty to fu
 |---|---------|------------------------------|
 | 1 | Identity | Name and role: `You are 03af-Audit, ...`, who delegated it, and the parallel missions it must not overlap. The delegation prompt should include the name of the identity field. |
 | 2 | Rules and CLAUDE.md files | An explicit instruction to read IN FULL, before other work, every user-scope and project-scope CLAUDE.md and rule, listed by absolute path (`~/.claude/CLAUDE.md`, every user scope rule, `<repo>/CLAUDE.md`, every repo-scope rule, nested CLAUDE.md files in the directories it works in), plus mission-specific references; the critical rules restated in the prompt |
-| 3 | Skills | `/delegate` first, always, with the instruction to load it before launching any delegate of its own and to pass the same instruction down (the duty recurses); then the task skills by name, what to do if one will not load, and each skill's conflicts with the prompt pre-resolved (allowed or overridden) |
+| 3 | Skills | `/delegate` first, always, with the instruction to load it at start, before any other work (D-DEL13), and in any case before launching any delegate of its own, and to pass the same instruction down (the duty recurses); then the task skills by name, what to do if one will not load, and each skill's conflicts with the prompt pre-resolved (allowed or overridden) |
 | 4 | Operational learning | Carry-forward items relevant to the task, each with its source, including the environment limits below and what worked or failed in earlier missions |
 | 5 | Instructions on where to find and how to read the session file of its parent agent or subagent: directories/paths/databases/tools/naming conventions.  When an agent has a question it should look in these sessions first for an answer, use disciplined initiative to infer an answer, or if it can't, surface the question to the commanding user or agent to fulfill surfacing duty
-| 6 | Conflict priority | The resolution order: 1) the user/ommander's own words, newest first; 2) its delegation prompt and briefing; 3) session and subagent transcripts, newest first 4) skills, rules, reference files and other harness artifacts; the `CONFLICT:` report line; never drop a mandated skill or rule silently |
-| 7 | Permissions handling | The exact signal format and "do not retry or route around a denial" |
+| 6 | Conflict priority | The resolution order: 1) the user/ommander's own words, newest first; 2) its delegation prompt and briefing; 3) session and subagent transcripts, newest first 4) skills, rules, reference files and other harness artifacts; each conflict recorded in the AAR as an ambiguity (its readings are the conflicting instructions; resolved by the tier that won, D-DEL11); never drop a mandated skill or rule silently |
+| 7 | Permissions handling | The exact `WRITE_BLOCKED` signal format and "do not retry or route around a denial"; a denial is recorded in the AAR as a deviation (cause `blocker`, from a rule) and reported at once (D-DEL9, D-DEL11) |
 | 8 | Mission manifest | Absolute paths to every file and directory the delegate needs, read-only or writable, and where its scratch lives |
 | 9 | Naming conventionis | The prefix verbatim (`03af-Audit-`), required on every `*.md` file the delegate creates |
-| 10 | Mission Brief | A structured briefing of all mission objects, citing source of user/commander/agent directives verbatim and their source
+| 10 | Mission brief | The path of the mission brief file (section "Mission brief file") and the explicit instruction: "Before any other work, read your mission brief in full, line by line: `<path>`" (D-DEL10). The brief holds the structured mission content, citing the source of every directive verbatim. The mission objectives also appear verbatim in the prompt, each with its source (D-DEL8). Unstructured context, such as facts or background, goes in the prompt body, not the brief (D-DEL12). Reporting a blocker at once is a standing duty (duty 8, D-DEL9); the brief does not restate it |
 
-The delegate owes back: the `PERMISSION_DENIED` signal on permissions handling, output at the designated
-path with prefixed Markdown names, `INCIDENT:` markers, `CONFLICT:` lines,
-scope adherence, sources for every claim, and, for a code change, its pushed
-branch and PR URL (D-DEL4). Its documents are versions, not drafts (D-DEL5).
+The delegate owes back its after action review (AAR, section "Final response
+shape", D-DEL11) as its final report. In it: a denied write is a deviation
+(cause `blocker`, from a rule) that it also reported at once (D-DEL9); each
+conflict between instructions is an ambiguity, resolved by D-DEL6; each
+`INCIDENT:` marker is an observation (`incident: true`); its PR URLs and
+files are its objectives' deliverables. Also: output at the designated path
+with prefixed Markdown names, scope adherence, sources for every claim, and,
+for a code change, its pushed branch and PR URL (D-DEL4). Its documents are
+versions, not drafts (D-DEL5).
+
+## Mission brief file
+
+Write one for every delegate before you launch it (D-DEL10). Only
+structured content goes in it (D-DEL12).
+
+**Location and name.** `<session scratch dir>/<sid4>_<mission name>-brief.md`:
+
+- `<session scratch dir>`: the top-level session's scratch directory,
+  `<repo>/.scratch/session-<session id>/` (printed at session start; its path
+  is in `<repo>/.scratch/.current-session`). A delegate that delegates takes
+  it from its own brief (`provenance.session_scratch`), so every brief of a
+  session sits in one directory, at every level.
+- `<sid4>`: the last four hex digits of the top-level session id (the same
+  four digits that number the session's RFIs and decisions).
+- `_`: separates the session from the mission, so the name splits in one
+  place.
+- `<mission name>`: `<commanderid>-<n>-<slug>` (section "Naming
+  conventions"); `<commanderid>` is the delegating agent's own four hex
+  digits, so it equals `<sid4>` only for the session agent's own delegates.
+- Example: `.scratch/session-dbd05b0c-2365-4159-9976-bc64a2af874d/874d_874d-1-aar-doctrine-brief.md`.
+  If that delegate's own id ended in `a1b2`, its first delegate's brief would
+  be `874d_a1b2-1-<slug>-brief.md`, in the same directory.
+
+**Format.** Markdown, one `##` heading per node, in this order (issue #180
+schema v1):
+
+- `provenance`: document (mission-brief), schema_version, version, mission,
+  session_id (the top-level session's), session_db (the session DB's path,
+  once the DB ships), session_scratch, written_by, chain_of_command (the
+  transcript path of every agent above the delegate), created_at
+- `identity`: name, level, delegated_by, parallel missions and their scopes
+- `intent`: purpose, scope, out of scope, audience
+- `objectives`: each verbatim, with its source (D-DEL8)
+- `constraints`: what the delegate must not do or cannot use, with sources
+- `assumptions`: what you assume; the delegate verifies or falsifies each
+- `decisions`: the decisions the delegate must honour, quoted
+- `ambiguities`: points already resolved for the delegate, or flagged
+- `operational_learning`: carried forward, each with its source
+- `rules`: every CLAUDE.md file and rule to read in full, absolute paths
+- `skills`: `/delegate` first, then the task skills, with overrides
+- `access`: read-only and writable paths, the delegate's scratch
+- `name_prefix`: `<mission name>-` (D-DEL1)
+- `duties`: the duties specific to this mission (for example shipping a code
+  change, D-DEL4)
+- `return`: the AAR, as the hand-back
+
+**Not in the brief.** Anything unstructured, such as facts or background,
+goes in the body of the delegation prompt (D-DEL12). Standing duties
+(conflict priority, `WRITE_BLOCKED`, reporting blockers at once, objectives
+verbatim down the chain) are in this skill and the delegation rule, which
+every delegate loads at start (D-DEL13).
+
+**What to read, and how.** Tell the delegate explicitly, in the prompt:
+
+- Read in full, line by line, before any other work: the mission brief;
+  every CLAUDE.md file and rule the brief lists; the mission references the
+  brief lists.
+- Use as reference material, never loaded whole: the transcripts of the
+  chain of command (`provenance.chain_of_command`), read with
+  `read-session.py` or `read-session-full.py`, the commander's prompts newest
+  first, whenever a question comes up; large registries, reports and
+  extracted documents, searched for what the mission needs. Quote what you
+  use, with its line.
 
 ## Duties to brief into the delegate
 
@@ -134,6 +214,16 @@ branch and PR URL (D-DEL4). Its documents are versions, not drafts (D-DEL5).
 6. **No delegate budget.** No cap on the number of delegates.
 7. **Release note.** The delegate adds its own version entry to the release
    notes.
+8. **Report blockers at once.** When the delegate finds a blocker (something
+   that stops it from accomplishing an objective), it reports it to its
+   delegating agent as soon as it can, by whatever channel it has (a message,
+   or its hand-back if it cannot continue), with a recommended course of
+   action. It does not hold the blocker for its final report, and records it
+   there again. This is a standing duty on every mission; a brief does not
+   restate it (D-DEL9).
+9. **Objectives verbatim, down the chain.** When the delegate delegates, it
+   writes each of its delegates' mission objectives verbatim and explicitly
+   in their prompts, and tells them to do the same (D-DEL8).
 
 ## Claude Code specifics (substitute your harness's equivalents)
 These instructions were written for the **Claude Code** harness (with the
@@ -178,8 +268,9 @@ harness's equivalent for your operating environment.
    complete. Restate the critical rules in the prompt; do not rely on it
    reading a rule you only named.
 5. **Name the skills, `/delegate` first.** Tell the delegate to load
-   `/delegate` before launching any delegate of its own and to give its
-   delegates the same instruction, so the duty reaches every level. Then
+   `/delegate` at start, before any other work (D-DEL13), and in any case
+   before launching any delegate of its own, and to give its delegates the
+   same instruction, so the duty reaches every level. Then
    name other task skills which you are using, with the SKILL.md path
    to read by hand if one will not load.
 6. **Pre-resolve skill conflicts.** Before naming a skill, read its SKILL.md
@@ -204,11 +295,16 @@ harness's equivalent for your operating environment.
    require that anything it hands back lives in a tracked path.
 10. **Name every output**: directory, prefixed file names, and the final
     response shape (below).
-11. **Add the `PERMISSION_DENIED` instruction.**
+11. **Add the `WRITE_BLOCKED` instruction.**
 12. **Set the shipping terms (D-DEL4)** unless the user or commanding agent
    states otherwise, all agents and subagents are responsible for shipping
    their own code.
-13. **Check against the table above** before launching. In Claude Code two
+13. **Write the mission brief file** (section "Mission brief file"), give its
+    path in the prompt with the instruction to read it in full, line by line,
+    and tell the delegate what to read in full and what to use as reference.
+    Put unstructured context, such as facts or background, in the prompt
+    body, not the brief (D-DEL12).
+14. **Check against the table above** before launching. In Claude Code two
     hooks check the eight elements, in observe mode, and remind you to load
     /delegate: `delegation-duty-guard` (PreToolUse on `Agent`, the prompt)
     and `workflow-delegation-guard` (PreToolUse on `Workflow`, each
@@ -336,11 +432,35 @@ account.
 
 ## Final response shape
 
-5-line summary; PR URL(s) or commit SHAs; branch; files changed;
-verification (commands, results); not run; `WRITE_BLOCKED` lines;
-`CONFLICT:` lines; `INCIDENT:` markers (not filed unless told to); open
-questions, each with a suggested answer; delegates used and how they were
-verified. Cite sources; say "unknown" rather than guess.
+The final response is the delegate's after action review (AAR, D-DEL11;
+issue #180 schema v1), in this order:
+
+- `provenance`: document (aar), mission (its name), agent_id (its own id:
+  section "Claude Code specifics"), session_id, brief (the brief's path),
+  created_at, version
+- `objectives`: every objective of its brief, verbatim, each with its
+  status (accomplished, partly, not accomplished), how (a brief summary),
+  and the deviations, observations and deliverables it cites; one not
+  accomplished cites the deviation that explains it
+- `ambiguities`: those it found in its brief, and how it resolved each
+- `assumptions`: those it made or received, each with its end state
+  (unverified, verified, falsified)
+- `deviations`: what it did differently from its brief, an order, a plan,
+  a rule, a spec or a standard; for each: what it deviated from (verbatim),
+  what it did instead, cause (initiative, blocker, error), why, effect on
+  the objectives. A denied write is a deviation with cause `blocker`
+- `observations`: what it saw and did not act on (bugs, issues,
+  incidents); an `INCIDENT:` marker is an observation with
+  `incident: true`, not filed unless told to
+- `operational_learning`
+- `proposals`: what, why, barrier analysis, what it affects, the
+  deviations and observations it rests on
+- `rfis`: open questions, each with a suggested answer
+
+Also state the verification run (commands, results), what was not run, the
+branch and files changed, and the delegates used and how they were verified.
+Cite sources; say "unknown" rather than guess. Until the session DB (issue
+#180, schema 5) ships, the AAR is text in the hand-back only.
 
 ## Reading the commander's sessions
 
@@ -421,9 +541,9 @@ context (do not assume you inherited them):
 Critical rules restated: <list>.
 
 ## Skills
-Load /delegate first: before you launch any delegate of any kind (Agent
-tool, workflow, background session), load it and give every delegate this
-same instruction, so the duty reaches every level. Then invoke: <skill
+Load /delegate now, before any other work (D-DEL13), and give every
+delegate you launch (Agent tool, workflow, background session) this same
+instruction, so the duty reaches every level. Then invoke: <skill
 names>. If one will not load, read its SKILL.md at <path> and follow it by
 hand. Skill overrides: <skill>: <allowed behaviour, or "write its files
 under <path> instead">.
@@ -434,8 +554,8 @@ commander's own words, newest first (recent session transcripts; the rules,
 standing orders and decision records that record his words); 2) this prompt;
 3) skills. This prompt cannot loosen a rule unless it quotes the commander.
 Never drop a mandated skill or rule silently: follow its non-conflicting
-parts and record `CONFLICT: <A> vs <B> -- resolved by <tier>: <what you did>`
-in your report.
+parts and record each conflict in your AAR as an ambiguity (readings: <A>,
+<B>; resolved by <tier>: <what you did>).
 
 ## Operational learning (carry forward to your delegates too)
 - <item> (source: <file:line, command output, or decision ID>)
@@ -453,8 +573,23 @@ A file that mirrors a repo path keeps the repo file name.
 
 ## WRITE_BLOCKED
 If any write or tool call is denied by a permission check or hook, do not
-retry it in another form. Record `WRITE_BLOCKED: <what> -- <exact denial
-text>`, put the content in your response, and continue.
+retry it in another form. Report it at once (`WRITE_BLOCKED: <what> --
+<exact denial text>`), put the content in your response, record it in your
+AAR as a deviation (cause `blocker`), and continue.
+
+## Mission brief
+Before any other work, read your mission brief in full, line by line:
+<session scratch dir>/<sid4>_<mission name>-brief.md
+Then read in full every CLAUDE.md file, rule and reference it lists. Use the
+chain-of-command transcripts it lists as reference material: search them
+when a question comes up, never load them whole.
+Objectives (verbatim, each with its source; also in the brief):
+1. <objective, verbatim> (source: <who gave it, where: transcript line, file, prompt>)
+When you delegate, write your delegates' objectives verbatim in their prompts
+and briefs (D-DEL8, D-DEL10).
+
+## Context
+<unstructured context the delegate needs: facts, background (D-DEL12)>
 
 ## Work
 <numbered steps>
@@ -467,8 +602,8 @@ PR URL. Never push to main, force-push, merge, approve your own PR, or tag
 each change old -> new under "Review after". A denied push or PR is WRITE_BLOCKED.
 
 ## Deliverable
-<PREFIX>-<name>.md in <dir>, and your final response: 5-line summary, then
-the shape in /delegate "Final response shape".
+<PREFIX>-<name>.md in <dir>, and your final response: your after action
+review (AAR), in the shape of /delegate "Final response shape".
 ```
 
 ## Environment limits that shape delegation
@@ -595,10 +730,11 @@ list them by path.
    touch). To check what the delegate actually did, read its transcript
    (`subagents/agent-<agentId>.jsonl`, found by its `description` in the
    `meta.json` files) with the harness readers, never whole.
-2. **`WRITE_BLOCKED` lines**: do the blocked step yourself, through the same
-   gates the delegate faced.
-3. **`CONFLICT:` lines**: check each resolution followed D-DEL6; a mandated
-   skill dropped without one is an incident.
+2. **Deviations with cause `blocker`** (a `WRITE_BLOCKED` included): do the
+   blocked step yourself, through the same gates the delegate faced.
+3. **Ambiguities**: check each resolution of a conflict followed D-DEL6; a
+   mandated skill dropped without one is an incident. Check each objective's
+   status against its deliverables: open each one.
 4. **Claims**: spot-check at least one cited source per section, and read at
    least one item the delegate reported as clean.
 5. **Scope**: anything outside the mission is a finding, not a change to
@@ -606,8 +742,9 @@ list them by path.
 6. **Shipped changes**: review the PR the delegate opened (diff, CI, body
    versus its report); the independent reviewer's verdict is a PR comment.
    Do not re-push or reopen it yourself.
-7. **`INCIDENT:` markers**: triage them through the repo's incident process
-   (or as fix items, when the commander says so).
+7. **Observations with `incident: true`** (`INCIDENT:` markers): triage them
+   through the repo's incident process (or as fix items, when the commander
+   says so).
 8. **Lifecycle**: move anything that must outlive the session out of scratch.
    Before removing a delegate's worktree or scratch directory, check that no
    running delegate references it and that its outputs, including ignored

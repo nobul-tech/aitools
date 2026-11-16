@@ -27,6 +27,8 @@ skill
 
 accept & adopt
 adoption
+after action review
+AAR
 agent
 aitools
 aitools config
@@ -50,6 +52,8 @@ design principle
 DP
 detection
 detection signature
+deliverable
+deviation
 discovery context
 discovery-to-continuation cycle
 DTCC
@@ -100,6 +104,7 @@ PSO
 purpose
 recovered
 registry
+running estimate
 scope creep
 skill-as-capability
 skipped
@@ -137,6 +142,7 @@ handoff
 harness files
 lifecycle transition
 main effort
+mission brief
 mission order
 removed
 retired

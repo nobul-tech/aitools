@@ -12,8 +12,10 @@ the schema-4 migration rule, maintenance. NOT the table definitions
 (`scripts/harness-db.py`, the source of truth; generated copy
 `@reference/harness-db-schema.sql`). NOT the provenance graph
 (`@reference/framework-provenance.md`). NOT the AAR, running-estimate and
-briefing structures (issue #180, deferred by the commander: "5) not now").
-NOT the term definitions (`/glossary` skill). **Audience**: Agents that
+briefing structures (issue #180; only the `/debrief`, `/brief` and
+`/channel` skills are deferred, by the commander: "not now, dont do
+anything on this yet", answer 5, D-SR11 in issue #180). NOT the term
+definitions (`/glossary` skill). **Audience**: Agents that
 write intelligence items (`harness-db.py`, AARs, hand-backs); whoever
 builds issue #180; the commander, reviewing the adoption.
 
@@ -21,6 +23,13 @@ v1.0 (2026-11-15), mission fa81-04-intel-schema (session 87795dc3).
 v1.1 (2026-11-15): after the independent review (PR #181): the FM 1-02.1
 edition date, the spot report's usage note, what the CLI writes to
 `status`, and facts versus what a delegate learns after a merge.
+v1.2 (2026-11-15, session dbd05b0c, RFI 874d-2): the intent no longer
+calls issue #180 deferred (answer 5 deferred only the three skills); "How
+the types sit in an AAR" records the commander's decisions that supersede
+its table (deviations replace findings; objectives, assumptions and
+ambiguities at the top; the finding type retired); "Not read" corrects
+the AR 11-33 entry (public on armypubs, read by mission
+874d-1-aar-doctrine).
 
 ## The commander's orders behind this document
 
@@ -230,6 +239,18 @@ https://guides.gaoinnovations.gov/yellowbook/2024/evidence.html#findings-2
 - AR 11-33 and the Center for Army Lessons Learned taxonomy (observation,
   insight, lesson): no copy at irp.fas.org (404). The AAR's node names are
   the commander's (2026-03-16, renamed 2026-11-15), not taken from CALL.
+  Correction (v1.2): AR 11-33, Army Lessons Learned Program (28 July 2022),
+  is public on armypubs
+  (https://armypubs.army.mil/epubs/DR_pubs/DR_a/ARN34074-AR_11-33-000-WEB-1.pdf),
+  read 2026-11-15 by mission 874d-1-aar-doctrine (session dbd05b0c). Its
+  glossary defines "Observation — Notes or comments on an operation, event,
+  or exercise from the perspective of the person(s) who perceived or
+  experienced it first-hand." and "Issue — An observed, analyzed, and
+  validated shortcoming, deficiency, or problem that precludes performance
+  to standard and requires resolution-focused problem solving.", and also
+  lesson, lessons learned, best practice and trend. It defines no
+  "insight". Full quotes: `.aitools/channel/handoffs/2026-11-15_dbd05b0c-missions/874d-1-aar-doctrine/874d-1-aar-doctrine-report.md`
+  section 6.
 
 ## How We Adopted It
 
@@ -329,6 +350,30 @@ The AAR is the commander's three nodes, `observations`, `findings`,
 | `observations` | observation, fact, assumption (with its status) |
 | `findings` | finding, operational learning (answer 45, "keep under insights", carried to the renamed node) |
 | `proposals` | proposal, rfi |
+
+**Superseded for the AAR (the commander, 2026-11-15, session dbd05b0c).**
+The table above is the AAR as PR #181 shipped it. The same day the
+commander decided:
+
+- `deviations` replaces the `findings` node, and `deviation` is a governed
+  term: something the agent did differently from what it was given to do;
+- the objectives sit at the top of the AAR, with the assumptions and the
+  ambiguities found in the brief, and `ambiguity` is governed again;
+- what the agent acted on (deviations) and what it only saw (observations)
+  stay separate categories;
+- references are typed: a proposal names the deviations and observations
+  it rests on (`deviation_refs[]`, `observation_refs[]`; `finding_refs[]`
+  was asked for on L79 before the node was replaced).
+
+- the `finding` type is retired (RFI 874d-13): deprecated in the glossary,
+  `replacedBy: deviation`. The harness DB keeps it in `INTELLIGENCE_TYPES`
+  until schema 5 (issue #180), which adds `deviation` and `ambiguity` and
+  maps v4 findings to observations;
+- operational learning is its own top-level node, and `provenance` replaces
+  `meta` as the document header (RFI 874d-14).
+
+The full schemas for the mission brief, the AAR and the running estimate are
+in issue #180. Until schema 5 ships, the DB types above stand.
 
 ### RFI 44: retire FINDING as a separate type
 

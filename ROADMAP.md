@@ -38,6 +38,7 @@ Detailed plans live in `plans/`. See `RELEASE_NOTES.md` for completed work.
 | aitools inside Modal containers | -- | Future | `aitools install` / setup scripts provision Modal environments; configure managed tools (pandoc, typst, etc.) in Modal images |
 | Nobul Auth0 platform | plans/nobul-auth0-platform.md | High | Auth0 tenant (auth.nobul.tech) for centralized credential management. Phase 1: `aitools auth` CLI + GitHub token via device flow. Phase 2: Vercel + Datadog. Phase 3: token lifecycle. Phase 4: vcard/credits web apps. Phase 5: multi-machine + RBAC. Resolves gap #23. |
 | Elevation-aware installs | -- | Medium | `Install-WingetPackage` lib function with user scope -> machine scope -> `Start-Process -Verb RunAs` cascade. For tools that genuinely need admin (MSVC Build Tools). |
+| Distributed sessions coordinated through running estimates | -- | Future | Several sessions work in a distributed way with no root session, and communicate and coordinate through running estimates and channels; the commander answers RFIs and steers every running session. Decision D-SR10 in issue [#180](https://github.com/nobul-tech/aitools/issues/180) (commander, 2026-11-15: "that roadmap item is a decision"). Not built now: running estimates are not shared across sessions (D-SR9). |
 
 ### aitools user sync — managed CLAUDE.md merging (near-term)
 
