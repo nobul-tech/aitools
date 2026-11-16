@@ -1,7 +1,11 @@
 # summary-cases.txt -- the shared fixture of tests L1-L32 (plan
-# summary-warn-reporting section 13): for each case, its input and its expected
-# run summary records, counts, deploy.log lines and panel lines.
+# summary-warn-reporting section 13) and L33 (RFI 5899-31): for each case, its
+# input and its expected run summary records, counts, deploy.log lines and
+# panel lines.
 #
+# v1.2 (2026-11-16): L33a-L33d: the last-line fallback of an error's reason
+# skips warning lines (8.3 v2.3 rules 4 and 5, RFI 5899-31); L15a and L15b cite rule 6 ("no
+# output"), renumbered.
 # v1.1 (2026-11-15): L18c's first line no longer matches the 8.3 v2.1 marker
 # rule; L19 expects the aligned build-signature table (one expectation).
 # v1.0 (2026-11-15). Read by tests/logging/test-logging.sh (macOS, Linux) and
@@ -493,14 +497,14 @@ note the line "\e[0m" is empty once its CSI sequence is removed, so it is not th
 case L15a
 plan L15
 title error_reason with no output
-spec 8.3 rule 5
+spec 8.3 rule 6
 call error_reason||2
 expect reason no output (exit 2)
 
 case L15b
 plan L15
 title error_reason over output that is empty once CR is removed
-spec 8.3 rules 4, 5 and "Before matching"
+spec 8.3 rules 4, 6 and "Before matching"
 call error_reason|\r\n\r\n|5
 expect reason no output (exit 5)
 note an addition to plan L15: lines of only CR are empty after the CR is removed
@@ -964,3 +968,53 @@ expect record-count 1 WARN|
 expect record-count 1 WARN|fx tool|
 expect count warnings 1
 note the menu prompt needs a terminal (tty_interactive / the PowerShell console check); the pty harness of tests/profile can drive it, as plan I6 does
+
+# ===========================================================================
+# L33: the last-line fallback of an error's reason skips warning lines (RFI 5899-31)
+# ===========================================================================
+
+case L33a
+plan RFI 5899-31
+title error_reason: the last line is a warning line (coloured): the reason is the last line that is not one
+spec 8.3 rule 4 and "Before matching" (a warning line is decided after CR and ANSI are removed, before the prefix is)
+call error_reason|[2026-11-16T10:00:00Z] [fx-child] [info] step\n\e[33m[2026-11-16T10:00:00Z] [fx-child] [warn] something\e[0m\r\n|1
+expect reason step
+expect logsub detail something
+note commander, RFI 5899-31 answered 2026-11-16: "31) fix in this pr"
+
+case L33b
+plan RFI 5899-31
+title error_reason: every non-empty line is a warning line: the reason is "exit N"
+spec 8.3 rules 4 and 5
+call error_reason|[2026-11-16T10:00:00Z] [fx-child] [warn] first\n\e[33m[2026-11-16T10:00:00Z] [fx-child] [warn] second\e[0m\n\n|1
+expect reason exit 1
+note "no output (exit N)" (rule 6) stays for output with no non-empty line (L15a, L15b)
+
+case L33c
+plan RFI 5899-31
+title a failed child whose last stdout line is a warning line: the relay's reason is its last line that is not one
+spec 8.3 A failed child (REASON: the last stdout line that is not a warning line); rule 4
+child fx-warnlast stdout [2026-11-16T10:00:00Z] [fx-warnlast] [info] step
+child fx-warnlast stdout [2026-11-16T10:00:00Z] [fx-warnlast] [warn] something
+child fx-warnlast exit 1
+relay fx warnlast||fx-warnlast
+expect record ERROR|fx-warnlast|fx warnlast failed (exit 1)|step
+expect count errors 1
+expect count warnings 0
+expect relay-rc 1
+expect child-rc 1
+note the child prints its lines and records nothing; its warning is a child warning, not the parent's (8.3 Relayed lines)
+
+case L33d
+plan RFI 5899-31
+title a failed child that printed only warning lines: the relay's reason is "exit N"
+spec 8.3 A failed child (REASON: its last warning line when it printed nothing else); rule 5
+child fx-allwarn stdout [2026-11-16T10:00:00Z] [fx-allwarn] [warn] first
+child fx-allwarn stdout [2026-11-16T10:00:00Z] [fx-allwarn] [warn] second
+child fx-allwarn exit 1
+relay fx allwarn||fx-allwarn
+expect record ERROR|fx-allwarn|fx allwarn failed (exit 1)|exit 1
+expect count errors 1
+expect count warnings 0
+expect relay-rc 1
+expect child-rc 1

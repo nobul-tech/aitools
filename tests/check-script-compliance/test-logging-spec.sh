@@ -530,6 +530,8 @@ true
 true
 true
 exit 1  # X3
+# a comment that names exit 1  # X4C
+    # an indented comment that names exit 1  # X5C
 E_SH
 
 # run_check <label>: the copied check under a temp HOME and log dir; output ->
@@ -557,6 +559,10 @@ X2=$(line_of X2 "$FIX/scripts/setup-zz.sh")
 X3=$(line_of X3 "$FIX/scripts/setup-zz.sh")
 check "E step 3: the exit 1 after write_error (setup-zz.sh:$X1E) is not listed" "! listed 'setup-zz.sh:$X1E' '$TMP_ROOT/step3-off'"
 check "E step 3: the uncovered exit 1 (setup-zz.sh:$X3) is listed" "listed 'setup-zz.sh:$X3' '$TMP_ROOT/step3-off'"
+X4C=$(line_of X4C "$FIX/scripts/setup-zz.sh")
+X5C=$(line_of X5C "$FIX/scripts/setup-zz.sh")
+check "E step 3: a comment naming exit 1 (setup-zz.sh:$X4C) is not listed" "[ -n '$X4C' ] && ! listed 'setup-zz.sh:$X4C' '$TMP_ROOT/step3-off'"
+check "E step 3: an indented comment naming exit 1 (setup-zz.sh:$X5C) is not listed" "[ -n '$X5C' ] && ! listed 'setup-zz.sh:$X5C' '$TMP_ROOT/step3-off'"
 check "E STRICT false: step 12 does not list write_summary WARN (setup-zz.sh:$X2)" "[ -s '$TMP_ROOT/step12-off' ] && ! listed 'setup-zz.sh:$X2' '$TMP_ROOT/step12-off'"
 check "E STRICT false: step 13 is there, with rule 4 counting setup-zz.sh" "has 'scripts/setup-zz.sh(1)' '$TMP_ROOT/step13-off'"
 S14_OFF=$(step_result "$TMP_ROOT/step14-off")

@@ -467,7 +467,9 @@ function Set-ToolException([string]$Slug, [string]$Method, [string]$Path, [strin
 #            "<label> failed (exception)" when an in-process child threw
 #   <REASON> the exception message; else Get-AitErrorReason over the child's
 #            error records (in-process) or its last 20 stderr lines (native);
-#            else over its last stdout line (the exit footer excluded)
+#            else over its last stdout line (the exit footer excluded) that is
+#            not a warning line, or its last warning line when it printed
+#            nothing else
 # A user abort (exit 2) is recorded once, and only when the child recorded no
 # WARN or ERROR record while it ran (an abort inside a relayed installer is
 # recorded by the innermost relay). With -AbortAsWarning (the runner's request,
@@ -488,7 +490,7 @@ function Set-ToolException([string]$Slug, [string]$Method, [string]$Path, [strin
 # Return value: 0 when the child exited 0 with no own error line; otherwise 1.
 # Private caches: $script:AitLibRunId, AitLibJsonlHost, AitLibJsonlOs; relay
 # state $script:AitLibRelayName, AitLibRelayNoMirror, AitLibRelayQuiet,
-# AitLibRelayLastOut (set by each relay call).
+# AitLibRelayLastOut, AitLibRelayLastOther (set by each relay call).
 # ---------------------------------------------------------------------------
 
 # Initialize-AitLibJsonl -- the host, os and run id fields, computed once
@@ -549,7 +551,9 @@ function Write-JsonlRecord($Ts, $ScriptLabel, $Level, $Msg) {
 # (with -Quiet only a warn or error line), mirror it to deploy.jsonl when it is
 # a structured log line (not with -NoMirror), and count its warn / error level
 # when it is the child's own line (see the section comment). Remembers the last
-# non-footer line ($script:AitLibRelayLastOut) for the failure reason.
+# non-footer line ($script:AitLibRelayLastOut) for the failure reason: a warning
+# line only while no other line has been (reference/logging.md 8.3, RFI 5899-31;
+# parity: _aitlib_relay_line).
 function Send-AitLibChildLine($Record) {
     $line = [string]$Record
     if (-not $line) { return }
@@ -557,7 +561,7 @@ function Send-AitLibChildLine($Record) {
     $m = [regex]::Match($clean, '^\[([^\]]+)\] \[([^\]]+)\] \[([a-z]+)\] (.*)$')
     if (-not $m.Success) {
         if (-not $script:AitLibRelayQuiet) { Write-Host $line }
-        if ($clean.Trim()) { $script:AitLibRelayLastOut = $clean }
+        if ($clean.Trim()) { $script:AitLibRelayLastOut = $clean; $script:AitLibRelayLastOther = $true }
         return
     }
     $level = $m.Groups[3].Value
@@ -570,7 +574,11 @@ function Send-AitLibChildLine($Record) {
     $text = $m.Groups[4].Value
     # The exit footer restates the counts: relayed, not counted
     if ($text.StartsWith("COMPLETED with ") -or $text.StartsWith("FAILED with ")) { return }
-    $script:AitLibRelayLastOut = $clean
+    if ($level -cne "warn") {
+        $script:AitLibRelayLastOut = $clean; $script:AitLibRelayLastOther = $true
+    } elseif (-not $script:AitLibRelayLastOther) {
+        $script:AitLibRelayLastOut = $clean
+    }
     # Every line counts in the "all" counts; the child's own lines also in the
     # child counts (Resolve-AitLibChildCounts picks after the run)
     if ($level -ceq "warn") { $script:AitLibRelayAllWarnings++ }
@@ -610,6 +618,7 @@ function Set-AitLibRelayState([string]$Name, [bool]$NoMirror, [bool]$Quiet) {
     $script:AitLibRelayNoMirror = ($NoMirror -or (Test-AitLibRelayed))
     $script:AitLibRelayQuiet = $Quiet
     $script:AitLibRelayLastOut = ""
+    $script:AitLibRelayLastOther = $false
     $script:AitLibRelaySawOwn = $false
     $script:AitLibRelayAllWarnings = 0
     $script:AitLibRelayAllErrors = 0
@@ -1139,19 +1148,28 @@ function Write-AitError([string]$Tool, [string]$What, [string]$Reason) {
 #      hold letters, digits, - and _) or "fatal:", any case, at the start of the
 #      line or after whitespace; "E: " at the start of the line; "syntax error"
 #      anywhere, any case
-#   4. the last non-empty output line
-#   5. "no output (exit N)"
+#   4. the last non-empty output line that is not a warning line
+#   5. "exit N" when the output has a warning line (every non-empty line is one)
+#   6. "no output (exit N)"
 # Before matching, CR, ANSI CSI sequences and a leading "[ts] [script] [level] "
 # prefix are removed from each line; the reason returned is trimmed, and a
-# line of only whitespace counts as empty. OUTPUT (a string, or the items of a
-# captured stream: strings, ErrorRecords, objects) is logged as detail lines;
-# the caller does not log it again. Writes nothing to the output stream but the
+# line of only whitespace counts as empty. A warning line is one whose prefix
+# has the level warn ("[ts] [script] [warn] "), decided after CR and ANSI are
+# removed and before the prefix is removed (RFI 5899-31: rule 4 never takes a
+# warning line as the reason). OUTPUT (a string, or the items of a
+# captured stream: strings, ErrorRecords, objects) is logged as detail lines,
+# empty lines skipped (as bash); the caller does not log it again. Writes nothing to the output stream but the
 # reason. Parity: error_reason in aitools-lib.sh.
 # ---------------------------------------------------------------------------
 function ConvertTo-AitLibReasonLine([string]$Line) {
     $l = $Line -replace "`r", ''
     $l = $l -replace "$([char]27)\[[0-?]*[ -/]*[@-~]", ''
     return ($l -replace '^\[[^\]]*\] \[[^\]]*\] \[[^\]]*\] ', '')
+}
+function Test-AitLibReasonWarnLine([string]$Line) {
+    $l = $Line -replace "`r", ''
+    $l = $l -replace "$([char]27)\[[0-?]*[ -/]*[@-~]", ''
+    return ($l -cmatch '^\[[^\]]*\] \[[^\]]*\] \[warn\] ')
 }
 function Get-AitErrorReason {
     param(
@@ -1165,9 +1183,14 @@ function Get-AitErrorReason {
     }) -join "`n")
     $lines = @($text -split "`n")
     if ($text) {
-        foreach ($l in $lines) { LogDetail "output: $(ConvertTo-AitLibReasonLine $l)" }
+        # Empty lines (after CR and ANSI are removed) are not logged, as in bash
+        foreach ($l in $lines) {
+            $r = ($l -replace "`r", '') -replace "$([char]27)\[[0-?]*[ -/]*[@-~]", ''
+            if ($r.Trim()) { LogDetail "output: $(ConvertTo-AitLibReasonLine $l)" }
+        }
     }
     $clean = @($lines | ForEach-Object { ConvertTo-AitLibReasonLine $_ })
+    $warn = @($lines | ForEach-Object { Test-AitLibReasonWarnLine $_ })
     $joined = $clean -join "`n"
     if ($joined.Trim()) {
         $sig = Diagnose-BuildFailure -Output $joined
@@ -1189,8 +1212,10 @@ function Get-AitErrorReason {
         }
     }
     for ($i = $clean.Count - 1; $i -ge 0; $i--) {
+        if ($warn[$i]) { continue }
         if ($clean[$i].Trim()) { return $clean[$i].Trim() }
     }
+    if ($warn -contains $true) { return "exit $ExitCode" }
     return "no output (exit $ExitCode)"
 }
 
@@ -3411,7 +3436,9 @@ function Review-JsonFields {
 # optional path without branching.
 #
 # -Tool: the record name of its errors ("" = the script name; Write-AitError).
-# Returns the count of targets written.
+# Each failure is one Write-AitError with its reason ("cannot create its
+# directory: <error>" when the parent directory cannot be made, else the copy
+# error), as adopt_managed_file. Returns the count of targets written.
 # ---------------------------------------------------------------------------
 function Adopt-ManagedFile {
     param(
@@ -3431,7 +3458,18 @@ function Adopt-ManagedFile {
         Backup-File -FilePath $target          # rotation; no-op if target absent
         $targetDir = Split-Path -Parent $target
         if ($targetDir -and -not (Test-Path $targetDir)) {
-            New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
+            # Parity with adopt_managed_file: the same reason prefix, the next target.
+            # New-Item -Force returns without an error when a file blocks the path
+            # (pwsh 7, macOS, 2026-11-16), so the directory is checked as well
+            try {
+                New-Item -ItemType Directory -Path $targetDir -Force -ErrorAction Stop | Out-Null
+                if (-not (Test-Path -LiteralPath $targetDir -PathType Container)) {
+                    throw "not created (a file is in its path?): $targetDir"
+                }
+            } catch {
+                Write-AitError $Tool "adopt to $target failed" "cannot create its directory: $($_.Exception.Message -replace '\s*\r?\n\s*', ' ')"
+                continue
+            }
         }
         try {
             Copy-Item -Path $SourceFile -Destination $target -Force -ErrorAction Stop
@@ -4701,11 +4739,14 @@ if (mode === 'plan') {
     # --- Plan pass --- (node stdout = decisions TSV; stderr = counts)
     $errFile = [System.IO.Path]::GetTempFileName()
     $decContent = & node $ns plan $LiveFile $ProfileFile $SubPath $ExcludeKeys $DeprecatedRules $planJson 2>$errFile
+    $planRc = $LASTEXITCODE
     $planStderr = (Get-Content $errFile -Raw -ErrorAction SilentlyContinue)
     if ($planStderr) { $planStderr = $planStderr.Trim() }
     Remove-Item $errFile -ErrorAction SilentlyContinue
-    if ($LASTEXITCODE -ne 0) {
-        Write-AitError $Tool "settings sync failed" "plan pass: $planStderr"
+    if ($planRc -ne 0) {
+        # node's stderr is multi-line (a stack, a temp path): one reason line,
+        # the whole of it logged as detail lines by Get-AitErrorReason (8.3)
+        Write-AitError $Tool "settings sync failed" "plan pass: $(Get-AitErrorReason -Output $planStderr -ExitCode $planRc)"
         Remove-Item $ns, $planJson, $choicesTsv -ErrorAction SilentlyContinue
         return
     }
@@ -5067,7 +5108,8 @@ function Ensure-GopathBinOnPath {
 #                        temp file, export its path, and own it
 #                        ($script:AitLibSummaryOwner = $true); when it is set:
 #                        nothing (not the owner). A file that cannot be created
-#                        leaves it unset (one detail line): nothing is recorded.
+#                        leaves it unset and is one LogWarn (as summary_begin):
+#                        the run goes on with nothing recorded and no panel.
 #   Complete-AitSummary  when this script owns the file: draw the panel
 #                        (Show-Summary: draw, keep last-summary.txt when
 #                        AITOOLS_PRESERVE_SUMMARY=1, delete) and unset the
@@ -5082,7 +5124,7 @@ function Start-AitSummary {
         $env:AITOOLS_SUMMARY_FILE = $f
         $script:AitLibSummaryOwner = $true
     } catch {
-        LogDetail "run summary file not created ($($_.Exception.Message)) -- nothing is recorded in this run"
+        LogWarn "run summary: cannot create a temp file ($($_.Exception.Message -replace '\s*\r?\n\s*', ' ')) -- no end-of-run panel this run"
     }
 }
 function Complete-AitSummary {

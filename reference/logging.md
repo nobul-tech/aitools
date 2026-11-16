@@ -26,6 +26,12 @@ v2.2 (2026-11-15): a nested abort is recorded once; only the outermost relay
 mirrors to deploy.jsonl; the relay's mirror and quiet options; streamed
 output that fails is logged twice; 8.1 names its check.
 
+v2.3 (2026-11-16): the last-line fallback of an error's reason skips warning
+lines, else gives `exit <N>` (8.3 rules 4 and 5, the relay's REASON; RFI
+5899-31); empty output lines are not logged; without perl, bash skips rule 1;
+8.5: the entry point that did not create the run summary file draws nothing
+(no suppress variable).
+
 > Ratified 2026-06-14 as part of the harvest/archive/logging plan
 > (`plans/harvest-archive-resilience.md` §14). This doc consolidates logging
 > decisions previously scattered across `script-standards.md`,
@@ -322,7 +328,8 @@ record, and its warnings and errors reach the run summary through its caller
     - `error_reason` over the child's last 20 stderr lines (bash and native
       children: the relay tees stderr, which still reaches the console), or
       over the error records it wrote (in-process PowerShell children);
-    - `error_reason` over its last stdout line.
+    - `error_reason` over its last stdout line that is not a warning line
+      (its last warning line when it printed nothing else).
   - **A user abort (exit 2)** keeps its outcome. The relay records it, as
     one record, only when the child recorded no WARN or ERROR record while
     it was executing (so an abort inside a relayed child that runs its own
@@ -353,12 +360,18 @@ record, and its warnings and errors reach the run summary through its caller
      - `fatal:`, in any case, at the start of the line or after a space;
      - `E: ` at the start of the line;
      - `syntax error`, in any case, anywhere in the line;
-  4. the last non-empty line of the output;
-  5. `no output (exit <N>)`.
+  4. the last non-empty line of the output that is not a warning line;
+  5. `exit <N>`, when the output has a warning line (every non-empty line
+     is one);
+  6. `no output (exit <N>)`.
 
   Before matching, CR, ANSI CSI sequences (`ESC [` ... final byte) and a
   leading `[<time>] [<script>] [<level>] ` prefix are removed from each
-  line. The full output is logged as detail lines.
+  line. A warning line, one whose prefix has the level `warn`
+  (`[<time>] [<script>] [warn] `, decided before the prefix is removed), is
+  never taken as the reason by rule 4. The full output is logged as detail
+  lines, empty lines skipped. Where perl is missing or fails, the bash
+  `error_reason` skips rule 1 and says so in a detail line.
 - **What is a warning.**
   - A warning reports something that is wrong, or that still needs the
     user. Examples: a tool not authenticated; a managed file left differing
@@ -412,9 +425,9 @@ ACTION||<instruction>
 #### 8.5 Panel format
 
 **When it is drawn.** The entry point that created the file draws it once,
-at the end of the run, and then deletes it. An entry point that found the
-file already set draws nothing. (`AITOOLS_SUPPRESS_SUMMARY_DISPLAY` is how
-the creator tells a nested installer so.) When `AITOOLS_PRESERVE_SUMMARY=1`,
+at the end of the run, and then deletes it. An entry point that did not
+create the file draws nothing (`summary_begin` / `Start-AitSummary`). When
+`AITOOLS_PRESERVE_SUMMARY=1`,
 a copy is kept as `last-summary.txt` in the log directory. Nothing is drawn
 when the file is missing or empty.
 
