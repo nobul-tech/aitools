@@ -43,7 +43,7 @@ if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
 # --- PS 7 version guard ---
 if ($PSVersionTable.PSVersion.Major -lt 7) {
     LogError "This script requires PowerShell 7+. Current: $($PSVersionTable.PSVersion)"
-    LogWarn "Install: winget install --id Microsoft.PowerShell --source winget"
+    Log "Install: winget install --id Microsoft.PowerShell --source winget"
     exit 1
 }
 
@@ -64,8 +64,7 @@ if (-not (Test-Path $claudeDir)) {
         try {
             New-Item -ItemType Directory -Path $claudeDir -Force -ErrorAction Stop | Out-Null
         } catch {
-            LogError "Cannot create $claudeDir ($_)"
-            Write-Summary "ERROR" "claude.md" "cannot create ~/.claude"
+            Write-AitError "claude.md" "cannot create ~/.claude" (Get-AitErrorReason -ErrorRecord $_)
             exit 1
         }
         Log "Created $claudeDir"
@@ -76,20 +75,21 @@ if (-not (Test-Path $claudeDir)) {
 # "Resolution"). This script reads only the wrapper results (PR #80 contract),
 # never profile.json or config.json itself: no alias lookup, no hostname or
 # first-profile fallback. A miss never takes another machine's values: on no
-# match the profile/identity values are identity-level only. The wrappers write
-# the ERROR row and ACTION for their own failures; this script adds none. ---
-$urpRc = Resolve-UserRepoPath       # 1 = shared-only (expected); 3 = logged error + ERROR row
+# match the profile/identity values are identity-level only. The wrappers record
+# the error and ACTION for their own failures; this script adds none. ---
+$urpRc = Resolve-UserRepoPath       # 1 = shared-only (expected); 3 = error, recorded by the wrapper
 $userRepoPath = $script:AitLibUserRepoPath
 $userRepoVia = $script:AitLibUserRepoVia
 if ($urpRc -eq 3) {
     # A dotprofile error is not "no dotprofile": deploying the shared template
-    # would replace the personal CLAUDE.md and rules. The wrapper wrote the
-    # ERROR "dotprofile" row; this is the claude.md outcome row (no ACTION).
-    LogError "CLAUDE.md and rules not deployed: the dotprofile could not be resolved"
-    Write-Summary "ERROR" "claude.md" "not deployed: dotprofile unresolved"
+    # would replace the personal CLAUDE.md and rules. The wrapper recorded the
+    # error once (Write-AitError "dotprofile", counted here); what is not run
+    # because of it is logged at info, not recorded again (one cause, one red
+    # line: reference/logging.md 8.3). Exit 1: the wrapper's error is counted.
+    Log "CLAUDE.md and rules not deployed: the dotprofile could not be resolved"
     exit 1
 }
-$profileRc = Resolve-MachineProfile # 1 = shared-only; 3 = no match / error (logged + ERROR row + ACTION)
+$profileRc = Resolve-MachineProfile # 1 = shared-only; 3 = no match / error (recorded by the wrapper, + ACTION)
 $machineAlias = $script:AitLibMachineAlias
 $machineVia = $script:AitLibMachineVia
 $profileName = $script:AitLibProfileName
@@ -123,8 +123,7 @@ if (-not $sourcePath) {
         $sourcePath = $SharedPath
         $sourceLabel = "shared template"
     } else {
-        LogError "No template found. Checked user repo and $SharedPath"
-        Write-Summary "ERROR" "claude.md" "no template found"
+        Write-AitError "claude.md" "no template found" "checked the dotprofile and $SharedPath"
         exit 1
     }
 }
@@ -135,13 +134,11 @@ Log "Template source: $sourcePath ($sourceLabel)"
 try {
     $sharedContent = Get-Content -Path $sourcePath -Raw -ErrorAction Stop
 } catch {
-    LogError "Cannot read template: $sourcePath ($_)"
-    Write-Summary "ERROR" "claude.md" "template unreadable"
+    Write-AitError "claude.md" "template unreadable" (Get-AitErrorReason -ErrorRecord $_)
     exit 1
 }
 if (-not $sharedContent) {
-    LogError "Template is empty: $sourcePath"
-    Write-Summary "ERROR" "claude.md" "template empty"
+    Write-AitError "claude.md" "template empty" "$sourcePath is empty"
     exit 1
 }
 
@@ -165,8 +162,7 @@ $sharedContent = [regex]::Replace($sharedContent,
 if ($profileRc -eq 0) {
     Log "Profile interpolation: alias=$machineAlias via=$machineVia name=$profileName company=$profileCompany"
 } elseif ($profileRc -eq 1) {
-    LogWarn "No dotprofile -- {{PLACEHOLDER}} tokens will not be resolved"
-    Write-Summary "WARN" "claude.md" "template tokens unresolved"
+    Write-AitWarn "claude.md" "template tokens unresolved: no dotprofile"
 } else {
     Log "Profile interpolation: identity-level values only (no machine profile) -- machine-specific tokens may stay unresolved"
 }
@@ -257,7 +253,7 @@ if ($DryRun) {
         try {
             $existingContent = Get-Content -LiteralPath $claudeMd -Raw -ErrorAction Stop
         } catch {
-            LogWarn "Cannot read $claudeMd for the dry-run comparison: $_"
+            Write-AitWarn "claude.md" "dry run: cannot read $claudeMd for the comparison: $_"
             $existingContent = ""
         }
         # Compared as Deploy-ManagedFile compares (trailing newlines removed,
@@ -284,26 +280,25 @@ if ($DryRun) {
 
     switch ($claudeResult) {
         { $_ -eq "created" -or $_ -eq "updated" -or $_ -eq "accept & adopt" } {
-            # Errors logged before this point (e.g. the machine-profile resolver)
-            # are not validation failures
-            $claudeErrsBefore = $errors
             # --- BEGIN post-write validation (extracted by build-deploy) ---
-            # Post-write validation: check structure AND content (not just a marker)
+            # Post-write validation: check structure AND content (not just a
+            # marker). The first problem found is the one error (its cause;
+            # parity with setup-user-claude.sh).
+            $claudeInvalid = ""
             if (-not (Test-Path $claudeMd) -or (Get-Item $claudeMd).Length -eq 0) {
-                LogError "Validation failed: $claudeMd is empty or missing"
+                $claudeInvalid = "$claudeMd is empty or missing"
             } else {
                 $written = Get-Content $claudeMd -Raw
                 if ($written -notmatch '## Machine-Specific') {
-                    LogError "Validation failed: $claudeMd missing Machine-Specific section"
-                }
-                # Template body must be present -- a file with only the footer is corrupt
-                if ($written -notmatch '## Coaching|## Code Style|## Tool') {
-                    LogError "Validation failed: $claudeMd missing template body (only footer present?)"
+                    $claudeInvalid = "missing the Machine-Specific section"
+                } elseif ($written -notmatch '## Coaching|## Code Style|## Tool') {
+                    # Template body must be present -- a file with only the footer is corrupt
+                    $claudeInvalid = "missing the template body (only the footer?)"
                 }
             }
             # --- END post-write validation (extracted by build-deploy) ---
-            if ($errors -ne $claudeErrsBefore) {
-                Write-Summary "ERROR" "claude.md" "validation failed"
+            if ($claudeInvalid) {
+                Write-AitError "claude.md" "validation failed" $claudeInvalid
             } elseif ($claudeResult -eq "accept & adopt") {
                 Write-Summary "OK" "claude.md" "accepted to profile"
             } else {
@@ -311,15 +306,15 @@ if ($DryRun) {
             }
         }
         "skipped" {
-            Write-Summary "WARN" "claude.md" "skipped (user review)"
+            # The library recorded the skip once (Write-AitWarn "claude.md")
         }
         "verified" {
             Log "CLAUDE.md verified (no differences)"
             Write-Summary "OK" "claude.md" "verified"
         }
         "failed" {
-            # The library restored the files and logged the reason (LogError).
-            Write-Summary "ERROR" "claude.md" "deploy failed"
+            # The library restored the files and recorded the error once
+            # (Write-AitError "claude.md", with the write, merge or filter error)
         }
     }
 }
@@ -391,8 +386,7 @@ if (-not (Test-Path -LiteralPath $rulesSrc -PathType Container)) {
         [Array]::Sort($rulesEntries, [Comparison[object]]{ param($x, $y) [string]::CompareOrdinal($x.Name, $y.Name) })
         $rulesGo = $true
     } catch {
-        LogError "Cannot list ${rulesSrc}: $_"
-        Write-Summary "ERROR" "claude rules" "cannot read harness rules"
+        Write-AitError "claude rules" "cannot read harness rules" (Get-AitErrorReason -ErrorRecord $_)
     }
 }
 
@@ -400,7 +394,7 @@ if (-not (Test-Path -LiteralPath $rulesSrc -PathType Container)) {
 # Without one (deploy-harness before PR #100) every rule is fanned out, none
 # is retired and adopt is not offered.
 $manifestOk = $false
-$manifestFailed = $false   # unreadable: counted as a failed item, so the final row is ERROR
+$manifestFailed = $false   # unreadable: one error, and a failed tracker item
 $ruleSourceOf = @{}   # name -> source; PowerShell hashtable keys are case-insensitive
 $retiredNames = New-Object System.Collections.Generic.List[string]
 $retiredSet = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
@@ -415,16 +409,20 @@ if ($rulesGo) {
         try {
             $manifest = Read-RulesManifest $rulesManifest
         } catch {
-            LogError "Cannot read the rules manifest ${rulesManifest}: $_ -- every rule fanned out, none retired"
-            Write-Summary "ERROR" "claude rules" "cannot read rules manifest"
+            Write-AitError "claude rules" "cannot read rules manifest" (Get-AitErrorReason -ErrorRecord $_)
+            Log "every rule fanned out, none retired"
             $manifestFailed = $true
         }
         if ($manifest -and $manifest.Status -eq "header-bad") {
-            LogWarn "Rules manifest ${rulesManifest}: the first line is not `"$rulesManifestHeader`" -- every rule fanned out, none retired, adopt not offered"
-            Write-Summary "ACTION" "" "Run aitools to rebuild ~/.aitools/rules and its manifest"
+            LogDetail "rules manifest ${rulesManifest}: the first line is not `"$rulesManifestHeader`""
+            Write-AitAction "claude rules" "bad rules manifest header -- run: aitools (every rule fanned out, none retired, adopt not offered)" "Run aitools to rebuild ~/.aitools/rules and its manifest"
         } elseif ($manifest) {
             $manifestOk = $true
-            foreach ($bad in $manifest.Invalid) { LogWarn "Rules manifest ${rulesManifest}: line ignored: $bad" }
+            foreach ($bad in $manifest.Invalid) { Write-AitWarn "claude rules" "rules manifest line ignored: $bad" }
+            # One ACTION for every ignored line (parity with setup-user-cursor)
+            if (@($manifest.Invalid).Count -gt 0) {
+                Write-Summary "ACTION" "" "Run aitools to rebuild ~/.aitools/rules and its manifest"
+            }
             foreach ($r in $manifest.Rules) {
                 if ($r.Source -ceq "retired") {
                     $retiredNames.Add($r.Name); [void]$retiredSet.Add($r.Name)
@@ -469,15 +467,14 @@ if ($rulesGo) {
 
     if ($ruleSources.Count -eq 0 -and $ruleBroken.Count -eq 0 -and $retiredNames.Count -eq 0) {
         Log "No rules in $rulesSrc -- skipping"
-        # An unreadable manifest already wrote this tool's ERROR row
+        # An unreadable manifest already recorded this tool's error
         if (-not $manifestFailed) { Write-Summary "OK" "claude rules" "n/a (no harness rules)" }
         $rulesGo = $false
     } elseif ($DryRun) {
         # The dry run previews the error the real run reports: something that
         # is not a directory where .claude\rules goes
         if ((Test-Path -LiteralPath $rulesDest) -and -not (Test-Path -LiteralPath $rulesDest -PathType Container)) {
-            LogError "Cannot create ${rulesDest}: not a directory (dry run)"
-            Write-Summary "ERROR" "claude rules" "cannot create rules dir"
+            Write-AitError "claude rules" "cannot create rules dir" "$rulesDest is not a directory (dry run)"
             $rulesGo = $false
         }
     } else {
@@ -492,9 +489,8 @@ if ($rulesGo) {
             # New-Item -Force can return without an error when a file is in
             # the way: check the result (parity with mkdir -p in the .sh)
             if (-not (Test-Path -LiteralPath $rulesDest -PathType Container)) {
-                if (-not $mkdirError) { $mkdirError = "not a directory" }
-                LogError "Cannot create ${rulesDest}: $mkdirError"
-                Write-Summary "ERROR" "claude rules" "cannot create rules dir"
+                if (-not $mkdirError) { $mkdirError = "$rulesDest is not a directory" }
+                Write-AitError "claude rules" "cannot create rules dir" $mkdirError
                 $rulesGo = $false
             }
         }
@@ -507,8 +503,11 @@ if ($rulesGo) {
     if ($manifestFailed) {
         Record-DeployOutcome -Outcome "failed" -ToolName "claude rules" -ItemName ".aitools-rules-manifest"
     }
+    # Each failed item below is one error record (Write-AitError "claude rules"
+    # "failed: <item>" <cause>) and one tracker DETAIL item; the tracker's OK
+    # status counts them, with no aggregate error record (logging.md 8.3)
     foreach ($brokenName in $ruleBroken) {
-        LogError "Failed: ${brokenName}: dangling symlink in $rulesSrc"
+        Write-AitError "claude rules" "failed: $brokenName" "dangling symlink in $rulesSrc"
         Record-DeployOutcome -Outcome "failed" -ToolName "claude rules" -ItemName $brokenName
     }
 
@@ -522,7 +521,7 @@ if ($rulesGo) {
         # Two harness rules whose names differ only in case (possible on a
         # case-sensitive file system) map to one file here: the first wins
         if ($ruleDestsLc.Contains($ruleName)) {
-            LogError "Skipped duplicate: $ruleName (a harness rule whose name differs only in case was already deployed)"
+            Write-AitError "claude rules" "failed: $ruleName" "a harness rule whose name differs only in case was already deployed"
             Record-DeployOutcome -Outcome "failed" -ToolName "claude rules" -ItemName $ruleName
             continue
         }
@@ -539,7 +538,7 @@ if ($rulesGo) {
         try {
             $ruleContent = [System.IO.File]::ReadAllText($src.FullName, [System.Text.UTF8Encoding]::new($false))
         } catch {
-            LogError "Cannot read harness rule $($src.FullName): $_"
+            Write-AitError "claude rules" "failed: $ruleName" (Get-AitErrorReason -ErrorRecord $_)
             Record-DeployOutcome -Outcome "failed" -ToolName "claude rules" -ItemName $ruleName
             continue
         }
@@ -547,11 +546,11 @@ if ($rulesGo) {
         switch ($ruleResult) {
             { $_ -in @("created", "updated", "verified", "accept & adopt", "skipped", "failed") } {
                 # The library wrote LOCAL and the adopt target itself (it commits
-                # and pushes a dotprofile adopt target, N-Q2); the tracker records
-                # every outcome (failed -> ERROR row, skipped -> WARN row).
+                # and pushes a dotprofile adopt target, N-Q2) and recorded a
+                # failed or skipped file once; the tracker counts every outcome.
             }
             default {
-                LogError "Unexpected deploy result for ${ruleName}: $ruleResult"
+                Write-AitError "claude rules" "failed: $ruleName" "unexpected deploy result: $ruleResult"
                 $ruleResult = "failed"
             }
         }
@@ -575,7 +574,7 @@ if ($rulesGo) {
                     if ([string]::Equals([System.IO.Path]::GetFileName($f), $rmName, [System.StringComparison]::OrdinalIgnoreCase)) { $rmPath = $f; break }
                 }
             } catch {
-                LogWarn "Cannot list $rulesDest for retired rule ${rmName}: $_"
+                Write-AitWarn "claude rules" "cannot list $rulesDest for retired rule ${rmName}: $_"
             }
         }
         if (-not $rmPath) { continue }
@@ -583,7 +582,7 @@ if ($rulesGo) {
         try {
             $null = [System.IO.File]::ReadAllBytes($rmPath)
         } catch {
-            LogError "Cannot read $rmPath (retired rule not removed): $_"
+            Write-AitError "claude rules" "retired rule $rmFile not removed" (Get-AitErrorReason -ErrorRecord $_)
             Record-DeployOutcome -Outcome "failed" -ToolName "claude rules" -ItemName $rmFile
             continue
         }
@@ -595,7 +594,7 @@ if ($rulesGo) {
                 Sort-Object -Property { [System.IO.Path]::GetFileName($_) } -CaseSensitive)
             foreach ($b in $rmBaks) { $rmCands.Add($b) }
         } catch {
-            LogWarn "Cannot list the backups of $rmName in ${rulesSrc}: $_"
+            Write-AitWarn "claude rules" "cannot list the backups of $rmName in ${rulesSrc}: $_"
         }
         $rmWhy = ""
         foreach ($rmCand in $rmCands) {
@@ -605,10 +604,10 @@ if ($rulesGo) {
                 $rmWhy = "same text as $([System.IO.Path]::GetFileName($rmCand))"
                 break
             }
-            if ($rmRc -ne 1) { LogWarn "Cannot compare $rmPath with $rmCand" }
+            if ($rmRc -ne 1) { Write-AitWarn "claude rules" "cannot compare $rmPath with $rmCand" }
         }
         if (-not $rmWhy) {
-            LogWarn "Kept ${rmFile}: the rules manifest retires $rmName, but this file matches no harness copy (it may be your own) -- Claude Code still loads it; delete it if it is an old fan-out copy"
+            Write-AitWarn "claude rules" "kept ${rmFile}: the rules manifest retires $rmName, but it matches no harness copy -- delete it if it is an old fan-out copy"
             $rmKept.Add($rmFile)
             continue
         }
@@ -616,35 +615,34 @@ if ($rulesGo) {
             Log "[DRY RUN] Would back up and remove $rmFile (retired rule; $rmWhy)"
             continue
         }
-        Backup-File -FilePath $rmPath
-        # Belt and braces: remove only when a backup with the same text exists
-        # beside it (a backup step that reports success without a copy must not
-        # lose the file)
-        $rmBacked = $false
-        if ($script:BackupFileOk) {
-            try {
-                foreach ($b in @([System.IO.Directory]::GetFiles($rulesDest) |
-                        Where-Object { [System.IO.Path]::GetFileName($_).StartsWith("$rmFile.bak.", [System.StringComparison]::Ordinal) })) {
-                    if ((Test-FanoutTextEqual $rmPath $b) -eq 0) { $rmBacked = $true; break }
-                }
-            } catch {
-                LogWarn "Cannot list the backups of $rmFile in ${rulesDest}: $_"
-            }
-        }
-        if (-not $rmBacked) {
-            LogError "Not removed: $rmFile (retired rule): backup failed"
+        # The file is removed only with a backup, so this script makes its own
+        # copy (not Backup-File, which warns and proceeds): one failure is one
+        # error (the G3 rule for retired-rule backups). Belt and braces: the
+        # copy must exist and hold the same text (a copy that reports success
+        # without writing must not lose the file). Parity: setup-user-claude.sh.
+        $rmBak = "$rmPath.bak.$((Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHHmmssZ'))"
+        try {
+            Copy-Item -LiteralPath $rmPath -Destination $rmBak -Force -ErrorAction Stop
+        } catch {
+            Write-AitError "claude rules" "retired rule $rmFile not removed" "backup failed: $(Get-AitErrorReason -ErrorRecord $_)"
             Record-DeployOutcome -Outcome "failed" -ToolName "claude rules" -ItemName $rmFile
             continue
         }
+        if (-not (Test-Path -LiteralPath $rmBak -PathType Leaf) -or (Test-FanoutTextEqual $rmPath $rmBak) -ne 0) {
+            Write-AitError "claude rules" "retired rule $rmFile not removed" "backup failed: $rmBak missing or different after the copy"
+            Record-DeployOutcome -Outcome "failed" -ToolName "claude rules" -ItemName $rmFile
+            continue
+        }
+        Log "Backed up $rmPath"
         try {
             Remove-Item -LiteralPath $rmPath -Force -ErrorAction Stop
         } catch {
-            LogError "Cannot remove $rmPath (retired rule): $_"
+            Write-AitError "claude rules" "cannot remove retired rule $rmFile" (Get-AitErrorReason -ErrorRecord $_)
             Record-DeployOutcome -Outcome "failed" -ToolName "claude rules" -ItemName $rmFile
             continue
         }
         if (Test-Path -LiteralPath $rmPath) {
-            LogError "Cannot remove $rmPath (retired rule): still present"
+            Write-AitError "claude rules" "cannot remove retired rule $rmFile" "still present after Remove-Item"
             Record-DeployOutcome -Outcome "failed" -ToolName "claude rules" -ItemName $rmFile
             continue
         }
@@ -656,11 +654,8 @@ if ($rulesGo) {
     }
 
     if ($DryRun) {
-        if ($script:dtFailed -gt 0) {
-            Write-Summary "ERROR" "claude rules" "$($script:dtFailed) failed (dry run)"
-        } else {
-            Write-Summary "OK" "claude rules" "dry run (no files written)"
-        }
+        # Each failed item already recorded its own error
+        Write-Summary "OK" "claude rules" "dry run (no files written)"
     } else {
         # Preserved: rules in .claude\rules not fanned out this run
         $destEntries = @()
@@ -670,7 +665,7 @@ if ($rulesGo) {
             # (a.md before A.md), the .sh glob by LC_COLLATE, so they could disagree
             [Array]::Sort($destEntries, [Comparison[object]]{ param($x, $y) [string]::CompareOrdinal($x.Name, $y.Name) })
         } catch {
-            LogWarn "Cannot list $rulesDest for the preserved report: $_"
+            Write-AitWarn "claude rules" "cannot list $rulesDest for the preserved report: $_"
         }
         foreach ($existing in $destEntries) {
             if ((Get-RuleNameKind $existing.Name) -ne "rule") { continue }
@@ -685,19 +680,17 @@ if ($rulesGo) {
         foreach ($ruleName in $ruleDests) {
             $destFile = Join-Path $rulesDest $ruleName
             if ((Test-Path -LiteralPath $destFile -PathType Leaf) -and (Get-Item -LiteralPath $destFile).Length -eq 0) {
-                LogError "Validation failed: $ruleName is empty after deploy"
+                Write-AitError "claude rules" "validation failed: $ruleName" "empty after deploy"
             }
         }
 
-        if ($script:dtFailed -gt 0) {
-            # Write-DeployTrackerSummary writes the ERROR row ("N failed")
-            Write-DeployTrackerSummary -ToolName "claude rules"
-            Log "Rules: $($script:deployTrackerText), $($script:dtPreserved) preserved in $rulesDest"
-        } elseif ($errors -eq $errorsBefore) {
-            Write-DeployTrackerSummary -ToolName "claude rules"
+        # The tracker writes the OK status (its counts include "N failed");
+        # every failure, validation included, is already its own error record
+        Write-DeployTrackerSummary -ToolName "claude rules"
+        if ($script:dtFailed -eq 0 -and $errors -eq $errorsBefore) {
             LogOk "Rules: $($script:deployTrackerText), $($script:dtPreserved) preserved in $rulesDest"
         } else {
-            Write-Summary "ERROR" "claude rules" "validation failed"
+            Log "Rules: $($script:deployTrackerText), $($script:dtPreserved) preserved in $rulesDest"
         }
     }
 }
