@@ -1,6 +1,6 @@
 exit 1
 -- summary rows
-ERROR|profile.json|invalid (see log)
+ERROR|profile.json|profile.json unusable|<TMP>/home/repos/aitools-nobul-jose/profile.json is invalid JSON: <PARSE-ERROR>
 ACTION||Fix profile.json in the dotprofile (details in deploy.log)
 OK|aitools config|updated
 DETAIL|aitools config|version updated

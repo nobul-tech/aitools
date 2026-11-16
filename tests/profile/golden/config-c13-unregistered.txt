@@ -3,6 +3,7 @@ exit 0
 OK|aitools config|updated
 DETAIL|aitools config|version updated
 DETAIL|aitools config|githubUser updated
+WARN|aitools config|profile "nobul-mac" has no machine.id (matched by alias) -- run: aitools user init
 ACTION||Run: aitools user init (registers this machine)
 -- config.json
 {

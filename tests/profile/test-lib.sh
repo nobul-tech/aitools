@@ -38,6 +38,11 @@
 # the relay adds no child warning to the parent's count, records a failed
 # child as "<label> failed (exit N)" with a reason, and names a child relayed
 # without a summary tool after its script.
+# Summary-warn-reporting I5: log_warn and log_error always record (each child
+# warning is the child's own WARN record), write_summary takes no WARN or
+# ERROR, a warning line is never a failed child's reason (RFI 5899-31), and a
+# user abort is recorded once: by the child when it recorded it, else by the
+# relay.
 #
 # Platform targeting (plans/ci-platform-targeting.md; commander 2026-11-14:
 # "sh scripts and tests should only run on linux/mac and ps1 on windows"):
@@ -73,7 +78,7 @@ case "${BASH_VERSINFO[5]:-}" in
 esac
 
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
-    perl -ne 'print if $. >= 2 && $. <= 57' "$0"
+    perl -ne 'print if $. >= 2 && $. <= 62' "$0"
     exit 0
 fi
 
@@ -288,10 +293,12 @@ run_case eget-none eget "rc=0
 found=false method= path=
 warnings=0 errors=0" ""
 
+# The warning is a WARN record under the script's name (log_warn records:
+# logging.md 8.2)
 fixture none
 run_case eget-unavailable eget "rc=1
 found=false method= path=
-warnings=1 errors=0" ""
+warnings=1 errors=0" "WARN|test-lib|tool exceptions unavailable (no dotprofile)"
 
 # No remote: the push fails -> warning (a WARN record under the script's name) + ACTION
 fixture with-id
@@ -363,7 +370,7 @@ ACTION||Run: aitools user init (pick or register this machine's profile)" "AITOO
 
 run_case broken-silent0-eget eget "rc=1
 found=false method= path=
-warnings=1 errors=0" "" "AITOOLS_PROFILE_SH=$WORK/silent0.sh"
+warnings=1 errors=0" "WARN|test-lib|tool exceptions unavailable (resolver exited 0 without result lines (see deploy.log))" "AITOOLS_PROFILE_SH=$WORK/silent0.sh"
 
 run_case broken-silent0-eset eset "rc=1
 result=failed pushed=false
@@ -456,7 +463,7 @@ ACTION||Run: aitools user init (pick or register this machine's profile)" "$X"
     run_case "exit$n-eget" eget "rc=1
 found=false method= path=
 warnings=1 errors=0
-notes=1" "" "$X"
+notes=1" "WARN|test-lib|tool exceptions unavailable (stub says no) ($note)" "$X"
 done
 fixture with-id
 run_case exit3-eset eset "rc=3
@@ -545,26 +552,34 @@ printf '  skip via-pwsh-* (the Git Bash -> pwsh branch runs on Windows only)\n'
 # Re-key batch 3, item 4: child-log relay helpers (deploy.jsonl)
 # ---------------------------------------------------------------------------
 # Children that log through the lib: info, a warning with a quote, a backslash
-# and a tab, a second warning, then by CHILD_FAIL:
+# and a tab, a second warning (each warning is a WARN record of the child:
+# log_warn records, logging.md 8.2), then by CHILD_FAIL:
 #   0  the standard exit footer, exit 0
-#   1  an error, its own ERROR row "child tool|child failed", footer, exit 1
-#   2  an error, no row, exit 0 anyway (a child bug)
+#   1  an error with its own record (write_error "child tool" "child failed"
+#      "child error"), footer, exit 1
+#   2  an error line printed without the library (no record, as a writer
+#      outside the library prints it: logging.md 8.1), exit 0 anyway (a child bug)
 #   3  dies before any row or footer: `false` under set -e
 #   4  exit 127: runs a missing command
-#   5  a user abort: "Aborted by user", exit 2 (D-TS13)
+#   5  a user abort the child records itself (log_error "Aborted by user"
+#      records), exit 2 (D-TS13)
 #   7  makes RO_DIR read-only (it holds the relay's exit-code file, made by the
 #      mktemp stub in $WORK/mkro: the file cannot be removed), then footer, exit 0
+#   8  a user abort through the library's abort path (_managed_abort: logged and
+#      counted, not recorded) right after "child info", before the warnings, so
+#      the child records nothing and the relay records the abort (8.3)
 # (The PowerShell child, which also throws (6), is in test-lib.ps1.)
 cat > "$WORK/child.sh" <<'CHILD'
 set -euo pipefail
 source "$REPO/scripts/aitools-lib.sh"
 logging_init "child-sh"
 log "child info"
+if [ "${CHILD_FAIL:-0}" = "8" ]; then _managed_abort; fi
 log_warn "quote \" back \\ tab"$'\t'"end"
 log_warn "second warning"
 case "${CHILD_FAIL:-0}" in
-    1) log_error "child error"; write_summary ERROR "child tool" "child failed" ;;
-    2) log_error "child error" ;;
+    1) write_error "child tool" "child failed" "child error" ;;
+    2) printf '[2026-01-01T00:00:00Z] [child-sh] [error] child error\n' ;;
     3) false ;;
     4) aitools-test-no-such-command ;;
     5) log_error "Aborted by user"; exit 2 ;;
@@ -584,8 +599,10 @@ set -euo pipefail
 if [ -n "${FAKEBIN:-}" ]; then PATH="$FAKEBIN:$PATH"; fi
 source "$REPO/scripts/aitools-lib.sh"
 logging_init "test-relay"
-# PRE_ROW=1: an earlier step's ERROR row is in the summary before the child runs
-if [ "${PRE_ROW:-}" = "1" ]; then write_summary ERROR "earlier step" "failed before"; fi
+# PRE_ROW=1: an earlier step's ERROR record is in the summary before the child
+# runs (written directly, as another script of the run would have recorded it;
+# write_summary takes no ERROR: logging.md 8.2)
+if [ "${PRE_ROW:-}" = "1" ]; then printf 'ERROR|earlier step|failed before|\n' >> "$AITOOLS_SUMMARY_FILE"; fi
 rc=0
 case "$RMODE" in
     record) jsonl_record 2026-01-01T00:00:00Z test-relay warn "q \" b \\ t"$'\t'"n"$'\n'"l"$'\r'" e"$'\033'"[0m x José ✓" ;;
@@ -650,7 +667,8 @@ relay_case() {
     fi
     if [ "$wrec" = "skip" ]; then return 0; fi
     if [ "$mode" != "record" ]; then
-        if printf '%s\n' "$out" | grep -F "second warning" >/dev/null; then ok "$name ($impl): child lines on the console"
+        # "child info": the one line every child prints (CHILD_FAIL 8 aborts before its warnings)
+        if printf '%s\n' "$out" | grep -F "child info" >/dev/null; then ok "$name ($impl): child lines on the console"
         else bad "$name ($impl): child lines not on the console"; fi
     fi
     got=$(perl "$WORK/check-jsonl.pl" "$jl" "$WARN_MSG")
@@ -676,42 +694,62 @@ else
     bad "relay-record: no deploy.jsonl record to compare"
 fi
 # The child's two warnings are counted in cw only, never in the parent's
-# warnings (logging.md 8.3: each script counts its own warnings)
+# warnings (logging.md 8.3: each script counts its own warnings); they are the
+# child's own WARN records (recorded at the source), in every run case below
+W_CHILD="WARN|child-sh|$WARN_MSG
+WARN|child-sh|second warning"
 relay_case relay-run-ok run 0 "rc=0 child_rc=0
 cw=2 ce=0 warnings=0 errors=0" "records=4 invalid=0
-msg-ok"
-# A failed child that wrote its own ERROR row gets no second one (FIX-1, A-3)
+msg-ok" "$W_CHILD"
+# A failed child that wrote its own ERROR record gets no second one (FIX-1, A-3)
 relay_case relay-run-fail run 1 "rc=1 child_rc=1
 cw=2 ce=1 warnings=0 errors=1" "records=5 invalid=0
-msg-ok" "ERROR|child tool|child failed"
-# A child that logged an error but exited 0 and wrote no row: one ERROR row,
-# WHAT "<label> failed (exit 0)", REASON from the child's stderr (8.3)
+msg-ok" "$W_CHILD
+ERROR|child tool|child failed|child error"
+# A child that printed an error line but exited 0 and recorded no error: one
+# ERROR record, WHAT "<label> failed (exit 0)", REASON from the child's last
+# line that is not a warning line (8.3)
 relay_case relay-run-error-exit0 run 2 "rc=1 child_rc=0
 cw=2 ce=1 warnings=0 errors=1" "records=5 invalid=0
-msg-ok" "ERROR|child tool|child step failed (exit 0)|child error"
-# A-3: a child that died before its own rows (set -e abort / exit 1, exit 127)
-# is in the panel as ERROR; a user abort (exit 2) too. The crash's reason is the
-# last non-empty line of the child's stderr (8.3 rule 4: no error marker in it)
+msg-ok" "$W_CHILD
+ERROR|child tool|child step failed (exit 0)|child error"
+# A-3: a child that died before its own error record (set -e abort / exit 1,
+# exit 127) is in the panel as ERROR. The crash's reason: its stderr is empty, so
+# the child's last stdout line that is not a warning line (8.3 rule 4: no error
+# marker in it; a warning line is never the reason, RFI 5899-31)
 relay_case relay-run-crash run 3 "rc=1 child_rc=1
 cw=2 ce=0 warnings=0 errors=1" "records=3 invalid=0
-msg-ok" "ERROR|child tool|child step failed (exit 1)|second warning"
+msg-ok" "$W_CHILD
+ERROR|child tool|child step failed (exit 1)|child info"
 relay_case relay-run-exit127 run 4 "rc=1 child_rc=127
 cw=2 ce=0 warnings=0 errors=1" "records=3 invalid=0
-msg-ok" "ERROR|child tool|child step failed (exit 127)|$WORK/child.sh: line 11: aitools-test-no-such-command: command not found"
+msg-ok" "$W_CHILD
+ERROR|child tool|child step failed (exit 127)|$WORK/child.sh: line 12: aitools-test-no-such-command: command not found"
+# A user abort (exit 2) the child recorded itself: the relay counts it and
+# records nothing more (8.3 "A user abort": recorded once)
 relay_case relay-run-abort run 5 "rc=1 child_rc=2
 cw=2 ce=1 warnings=0 errors=1" "records=4 invalid=0
-msg-ok" "ERROR|child tool|child step failed (exit 2)|aborted by user"
-# Review A m1: the dedupe compares with the rows before the child, not with zero:
-# an earlier step's ERROR row does not hide the crashed child's row
+msg-ok" "$W_CHILD
+ERROR|child-sh|Aborted by user|"
+# A user abort through the library's abort path (logged, not recorded) by a child
+# that recorded nothing: the relay records it once, ERROR "<label> failed (exit 2)"
+# with the reason "aborted by user" (8.3). The child printed no warning line.
+relay_case relay-run-abort-unrecorded run 8 "rc=1 child_rc=2
+cw=0 ce=1 warnings=0 errors=1" "records=2 invalid=0
+msg-missing: $WARN_MSG" "ERROR|child tool|child step failed (exit 2)|aborted by user"
+# Review A m1: the dedupe compares with the records before the child, not with
+# zero: an earlier step's ERROR record does not hide the crashed child's record
 relay_case relay-run-crash-prior-row run 3 "rc=1 child_rc=1
 cw=2 ce=0 warnings=0 errors=1" "records=3 invalid=0
-msg-ok" "ERROR|earlier step|failed before
-ERROR|child tool|child step failed (exit 1)|second warning" "PRE_ROW=1"
-# Without a summary tool: the row is named after the child's script (8.3 "Its
+msg-ok" "ERROR|earlier step|failed before|
+$W_CHILD
+ERROR|child tool|child step failed (exit 1)|child info" "PRE_ROW=1"
+# Without a summary tool: the record is named after the child's script (8.3 "Its
 # name": the base name of the first argument ending in .sh, child.sh -> child)
 relay_case relay-run-crash-notool run-notool 3 "rc=1 child_rc=1
 cw=2 ce=0 warnings=0 errors=1" "records=3 invalid=0
-msg-ok" "ERROR|child|child step failed (exit 1)|second warning"
+msg-ok" "$W_CHILD
+ERROR|child|child step failed (exit 1)|child info"
 # (PowerShell: a throw and a parse error, in-process, are one LogError and a row:
 # relay-run-throw and relay-run-parse in test-lib.ps1)
 # Review m3: no command is a failure, not a silent success; with a tool, a row
@@ -733,14 +771,14 @@ if [ "$(id -u)" -eq 0 ]; then
 else
     relay_case relay-run-rm-fail run 7 "rc=0 child_rc=0
 cw=2 ce=0 warnings=0 errors=0" "records=4 invalid=0
-msg-ok" "" "FAKEBIN=$WORK/mkro RO_DIR=$WORK/tmpro"
+msg-ok" "$W_CHILD" "FAKEBIN=$WORK/mkro RO_DIR=$WORK/tmpro"
     chmod 755 "$WORK/tmpro"
     if grep -qF "[detail] child step: could not remove temp file $WORK/tmpro/rc.tmp" "$H/.aitools/logs/deploy.log"; then ok "relay-run-rm-fail (bash): detail line in deploy.log"
     else bad "relay-run-rm-fail (bash): no 'could not remove temp file' detail line"; fi
 fi
 relay_case relay-captured captured 0 "rc=0 child_rc=0
 cw=2 ce=0 warnings=0 errors=0" "records=4 invalid=0
-msg-ok"
+msg-ok" "$W_CHILD"
 
 printf '\n%s passed, %s failed\n' "$PASS" "$FAIL"
 if [ "$FAIL" -gt 0 ]; then exit 1; fi

@@ -1,5 +1,6 @@
 exit 0
 -- summary rows
+WARN|aitools config|machine id unavailable: no machine id (test value)
 OK|aitools config|verified
 -- config.json
 {
